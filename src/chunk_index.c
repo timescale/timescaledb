@@ -7,6 +7,8 @@
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_index.h>
+#include <catalog/pg_depend.h>
+#include <catalog/dependency.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/objectaddress.h>
 #include <catalog/namespace.h>
@@ -551,6 +553,58 @@ typedef struct ChunkIndexDeleteData
 	bool drop_index;
 } ChunkIndexDeleteData;
 
+/* Find all internal dependencies to be able to delete all the objects in one
+ * go. We do this by scanning the dependency table and keeping all the tables
+ * in our internal schema. */
+static void
+chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
+{
+	Relation depRel = heap_open(DependRelationId, RowExclusiveLock);
+	ScanKeyData scankey[2];
+	SysScanDesc scan;
+	HeapTuple tup;
+
+	add_exact_object_address(relobj, objects);
+
+	ScanKeyInit(&scankey[0],
+				Anum_pg_depend_classid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(RelationRelationId));
+	ScanKeyInit(&scankey[1],
+				Anum_pg_depend_objid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relobj->objectId));
+
+	scan = systable_beginscan(depRel,
+							  DependDependerIndexId,
+							  true,
+							  NULL,
+							  sizeof(scankey) / sizeof(*scankey),
+							  scankey);
+
+	while (HeapTupleIsValid(tup = systable_getnext(scan)))
+	{
+		Form_pg_depend record = (Form_pg_depend) GETSTRUCT(tup);
+		ObjectAddress refobj = { .classId = record->refclassid, .objectId = record->refobjid };
+
+		switch (record->deptype)
+		{
+			case DEPENDENCY_INTERNAL:
+#if PG11
+			case DEPENDENCY_INTERNAL_AUTO:
+#endif
+				add_exact_object_address(&refobj, objects);
+				break;
+			default:
+				continue; /* Do nothing */
+		}
+	}
+	systable_endscan(scan);
+	heap_close(depRel, RowExclusiveLock);
+}
+
 static ScanTupleResult
 chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
@@ -568,7 +622,27 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 		};
 
 		if (OidIsValid(idxobj.objectId))
-			performDeletion(&idxobj, DROP_RESTRICT, 0);
+		{
+			/* If we use performDeletion here it will fail if there are
+			 * internal dependencies on the object since we are restricting
+			 * the cascade.
+			 *
+			 * If we automatically cascade here, we might drop user-defined
+			 * dependencies, which we do not want, so instead we collect the
+			 * internal dependencies and use the function
+			 * performMultipleDeletions.
+			 *
+			 * The function performMultipleDeletions accept a list of objects
+			 * and if there are dependencies between any of the objects given
+			 * to the function, it will not generate an error for that but
+			 * rather proceed with the deletion. If there are any dependencies
+			 * (internal or not) outside this set of objects, it will still
+			 * abort the deletion and print an error. */
+			ObjectAddresses *objects = new_object_addresses();
+			chunk_collect_objects_for_deletion(&idxobj, objects);
+			performMultipleDeletions(objects, DROP_RESTRICT, 0);
+			free_object_addresses(objects);
+		}
 	}
 
 	return SCAN_CONTINUE;
