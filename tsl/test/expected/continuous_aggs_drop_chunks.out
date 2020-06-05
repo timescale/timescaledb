@@ -1,0 +1,143 @@
+\c :TEST_DBNAME :ROLE_SUPERUSER
+--
+-- Check that drop chunks with a unique constraint works as expected.
+--
+CREATE TABLE clients (
+       id SERIAL PRIMARY KEY,
+       name TEXT NOT NULL,
+       UNIQUE(name)
+);
+CREATE TABLE records (
+    time TIMESTAMPTZ NOT NULL, 
+    clientId INT NOT NULL REFERENCES clients(id),
+    value DOUBLE PRECISION,
+    UNIQUE(time, clientId)
+);
+SELECT * FROM create_hypertable('records', 'time',
+       chunk_time_interval => INTERVAL '1h');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | records    | t
+(1 row)
+
+CREATE VIEW records_monthly 
+    WITH (timescaledb.continuous)
+    AS 
+        SELECT time_bucket('1d', time) as bucket, 
+            clientId, 
+            avg(value) as value_avg,
+            max(value)-min(value) as value_spread 
+        FROM records GROUP BY bucket, clientId;
+NOTICE:  adding index _materialized_hypertable_2_clientid_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(clientid, bucket)
+INSERT INTO clients(name) VALUES ('test-client');
+INSERT INTO records
+SELECT generate_series('2000-03-01'::timestamptz,'2000-04-01','1 day'),1,3.14;
+SET timescaledb.current_timestamp_mock = '2000-04-01';
+SELECT * FROM records_monthly;
+            bucket            | clientid | value_avg | value_spread 
+------------------------------+----------+-----------+--------------
+ Mon Mar 27 16:00:00 2000 PST |        1 |      3.14 |            0
+ Fri Mar 10 16:00:00 2000 PST |        1 |      3.14 |            0
+ Tue Mar 07 16:00:00 2000 PST |        1 |      3.14 |            0
+ Fri Mar 24 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sun Mar 19 16:00:00 2000 PST |        1 |      3.14 |            0
+ Wed Mar 29 16:00:00 2000 PST |        1 |      3.14 |            0
+ Wed Mar 15 16:00:00 2000 PST |        1 |      3.14 |            0
+ Fri Mar 31 16:00:00 2000 PST |        1 |      3.14 |            0
+ Mon Mar 20 16:00:00 2000 PST |        1 |      3.14 |            0
+ Thu Mar 30 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sat Mar 11 16:00:00 2000 PST |        1 |      3.14 |            0
+ Mon Mar 13 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sun Mar 12 16:00:00 2000 PST |        1 |      3.14 |            0
+ Tue Mar 28 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sun Mar 26 16:00:00 2000 PST |        1 |      3.14 |            0
+ Wed Mar 22 16:00:00 2000 PST |        1 |      3.14 |            0
+ Thu Mar 16 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sat Mar 25 16:00:00 2000 PST |        1 |      3.14 |            0
+ Thu Mar 23 16:00:00 2000 PST |        1 |      3.14 |            0
+ Thu Mar 02 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sat Mar 18 16:00:00 2000 PST |        1 |      3.14 |            0
+ Mon Mar 06 16:00:00 2000 PST |        1 |      3.14 |            0
+ Tue Feb 29 16:00:00 2000 PST |        1 |      3.14 |            0
+ Fri Mar 17 16:00:00 2000 PST |        1 |      3.14 |            0
+ Tue Mar 14 16:00:00 2000 PST |        1 |      3.14 |            0
+ Wed Mar 08 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sat Mar 04 16:00:00 2000 PST |        1 |      3.14 |            0
+ Sun Mar 05 16:00:00 2000 PST |        1 |      3.14 |            0
+ Tue Mar 21 16:00:00 2000 PST |        1 |      3.14 |            0
+ Wed Mar 01 16:00:00 2000 PST |        1 |      3.14 |            0
+ Thu Mar 09 16:00:00 2000 PST |        1 |      3.14 |            0
+ Fri Mar 03 16:00:00 2000 PST |        1 |      3.14 |            0
+(32 rows)
+
+ALTER VIEW records_monthly SET (
+   timescaledb.ignore_invalidation_older_than = '15 days'
+);
+SELECT chunk_table, ranges FROM chunk_relation_size('records_monthly');
+ chunk_table | ranges 
+-------------+--------
+(0 rows)
+
+SELECT chunk_table, ranges FROM chunk_relation_size('records');
+               chunk_table               |                ranges                 
+-----------------------------------------+---------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk  | {"[951897600000000,951901200000000)"}
+ _timescaledb_internal._hyper_1_2_chunk  | {"[951984000000000,951987600000000)"}
+ _timescaledb_internal._hyper_1_3_chunk  | {"[952070400000000,952074000000000)"}
+ _timescaledb_internal._hyper_1_4_chunk  | {"[952156800000000,952160400000000)"}
+ _timescaledb_internal._hyper_1_5_chunk  | {"[952243200000000,952246800000000)"}
+ _timescaledb_internal._hyper_1_6_chunk  | {"[952329600000000,952333200000000)"}
+ _timescaledb_internal._hyper_1_7_chunk  | {"[952416000000000,952419600000000)"}
+ _timescaledb_internal._hyper_1_8_chunk  | {"[952502400000000,952506000000000)"}
+ _timescaledb_internal._hyper_1_9_chunk  | {"[952588800000000,952592400000000)"}
+ _timescaledb_internal._hyper_1_10_chunk | {"[952675200000000,952678800000000)"}
+ _timescaledb_internal._hyper_1_11_chunk | {"[952761600000000,952765200000000)"}
+ _timescaledb_internal._hyper_1_12_chunk | {"[952848000000000,952851600000000)"}
+ _timescaledb_internal._hyper_1_13_chunk | {"[952934400000000,952938000000000)"}
+ _timescaledb_internal._hyper_1_14_chunk | {"[953020800000000,953024400000000)"}
+ _timescaledb_internal._hyper_1_15_chunk | {"[953107200000000,953110800000000)"}
+ _timescaledb_internal._hyper_1_16_chunk | {"[953193600000000,953197200000000)"}
+ _timescaledb_internal._hyper_1_17_chunk | {"[953280000000000,953283600000000)"}
+ _timescaledb_internal._hyper_1_18_chunk | {"[953366400000000,953370000000000)"}
+ _timescaledb_internal._hyper_1_19_chunk | {"[953452800000000,953456400000000)"}
+ _timescaledb_internal._hyper_1_20_chunk | {"[953539200000000,953542800000000)"}
+ _timescaledb_internal._hyper_1_21_chunk | {"[953625600000000,953629200000000)"}
+ _timescaledb_internal._hyper_1_22_chunk | {"[953712000000000,953715600000000)"}
+ _timescaledb_internal._hyper_1_23_chunk | {"[953798400000000,953802000000000)"}
+ _timescaledb_internal._hyper_1_24_chunk | {"[953884800000000,953888400000000)"}
+ _timescaledb_internal._hyper_1_25_chunk | {"[953971200000000,953974800000000)"}
+ _timescaledb_internal._hyper_1_26_chunk | {"[954057600000000,954061200000000)"}
+ _timescaledb_internal._hyper_1_27_chunk | {"[954144000000000,954147600000000)"}
+ _timescaledb_internal._hyper_1_28_chunk | {"[954230400000000,954234000000000)"}
+ _timescaledb_internal._hyper_1_29_chunk | {"[954316800000000,954320400000000)"}
+ _timescaledb_internal._hyper_1_30_chunk | {"[954403200000000,954406800000000)"}
+ _timescaledb_internal._hyper_1_31_chunk | {"[954489600000000,954493200000000)"}
+ _timescaledb_internal._hyper_1_32_chunk | {"[954576000000000,954579600000000)"}
+(32 rows)
+
+REFRESH MATERIALIZED VIEW records_monthly;
+WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
+REFRESH MATERIALIZED VIEW records_monthly;
+\set VERBOSITY default
+SELECT drop_chunks('2000-03-16'::timestamptz, 'records',
+       cascade_to_materializations => FALSE);
+NOTICE:  making sure all invalidations for public.records_monthly have been processed prior to dropping chunks
+               drop_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_10_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_12_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_14_chunk
+ _timescaledb_internal._hyper_1_15_chunk
+(15 rows)
+
