@@ -1,0 +1,137 @@
+name: Regression Linux
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+  pull_request:
+jobs:
+  matrixbuilder:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      fail-fast: ${{ steps.set-matrix.outputs.fail-fast }}
+    steps:
+    - uses: actions/checkout@v2
+
+    - id: set-matrix
+      run: python scripts/gh_matrix_builder.py ${{ github.event_name }}
+
+  regress_linux:
+    name: PG${{ matrix.pg }} ${{ matrix.name }}
+    needs: matrixbuilder
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
+      fail-fast: ${{ fromJson(needs.matrixbuilder.outputs.fail-fast) }}
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+      MAKE_JOBS: 6
+      CLANG: ${{ matrix.clang }}
+      CC: ${{ matrix.cc }}
+
+    steps:
+    - name: Install Dependencies
+      run: sudo apt install flex bison lcov systemd-coredump gdb ${{ matrix.extra_packages }}
+
+    # we cache the build directory instead of the install directory here
+    # because extension installation will write files to install directory
+    # leading to a tainted cache
+    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+      id: cache-postgresql
+      uses: actions/cache@v2
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ runner.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
+
+    - name: Build PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        cd ~/$PG_SRC_DIR
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR ${{ matrix.pg_build_args }} --with-llvm LLVM_CONFIG=${{ matrix.llvm_config }} --with-openssl --without-readline --without-zlib
+        make -j $MAKE_JOBS
+        make -j $MAKE_JOBS -C src/test/isolation
+        make -j $MAKE_JOBS -C contrib/postgres_fdw
+
+    - name: Install PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+      run: |
+        make -C ~/$PG_SRC_DIR install
+        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Test telemetry without OpenSSL
+      if: github.event_name != 'pull_request' && matrix.build_type == 'Debug'
+      run: |
+        BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DUSE_OPENSSL=false
+        make -j $MAKE_JOBS -C nossl
+        make -C nossl install
+        make -C nossl installcheck TESTS=telemetry
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }}
+        make -j $MAKE_JOBS -C build
+        make -C build install
+
+    - name: Check exported symbols
+      run: ./build/scripts/export_prefix_check.sh
+
+    - name: make installcheck
+      id: installcheck
+      run: make -k -C build installcheck
+
+    - name: coverage
+      if: matrix.coverage
+      run: make -j $MAKE_JOBS -k -C build coverage
+
+    - name: Upload coverage report
+      if: matrix.coverage
+      uses: codecov/codecov-action@v1
+      with:
+        file: ./build/codecov/timescaledb-codecov.info
+
+    - name: Show regression diffs
+      if: failure()
+      run: |
+        find . -name regression.diffs -exec cat {} + > regression.log
+        find . -name postmaster.log -exec cat {} + > postgres.log
+        cat regression.log
+
+    - name: Save regression diffs
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: Regression diff
+        path: regression.log
+
+    - name: Save postmaster.log
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: PostgreSQL log
+        path: postgres.log
+
+    - name: Stack trace
+      if: failure()
+      run: |
+        sleep 10 # wait for in progress coredumps to finish
+        echo "bt" | sudo coredumpctl gdb
+
+    - name: Slack Notification
+      if: failure() && github.event_name != 'pull_request'
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_COLOR: '#ff0000'
+        SLACK_USERNAME: GitHub Action
+        SLACK_TITLE: Regression ${{ matrix.os }} PG${{ matrix.pg }} ${{ matrix.name }} ${{ job.status }}
+        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
+      uses: rtCamp/action-slack-notify@v2.0.2
+
