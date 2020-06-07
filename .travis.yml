@@ -19,42 +19,7 @@ notifications:
 env:
   global:
     - RETRY_PREFIX=$(if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then echo "travis_retry"; else echo ""; fi)
-    - CODECOV_FLAGS="-F cron"
     - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
-before_install:
-  # We need the PostgreSQL source for running the standard PostgreSQL regression tests
-  - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
-install:
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev openssl && mkdir -p /build/debug /build/debug-nossl /postgres"
-  - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted lcov"
-  # We need the PostgreSQL source for running the standard PostgreSQL regression tests
-  - docker exec -it pgbuild /bin/sh -c "wget -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v\$PG_VERSION/postgresql-\$PG_VERSION.tar.bz2 && tar --extract --file postgresql.tar.bz2 --directory /postgres --strip-components 1"
-  # We set /usr/local as prefix so the regression tools will be able to find
-  # initdb, psql, and postgres
-  - docker exec -it pgbuild /bin/sh -c "cd /postgres && ./configure --prefix=/usr/local --enable-debug --enable-cassert --without-readline --without-zlib --with-openssl"
-  # We only need to build the regress and isolation stuff
-  - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/regress"
-  - docker exec -it pgbuild /bin/sh -c "make -C /postgres/src/test/isolation"
-  # Ensure postgres user has permissions
-  - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /build/"
-  - docker exec -it pgbuild /bin/bash -c "chown -R postgres:postgres /postgres/"
-script:
-  # First build without OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
-  # Run only telemetry test to see that it works without OpenSSL
-  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug-nossl installcheck TESTS=telemetry PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
-  # Now build with OpenSSL
-  - docker exec -it pgbuild /bin/sh -c "cd /build/debug &&  cmake .. -DCMAKE_BUILD_TYPE=Debug -DUSE_OPENSSL=true -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} && make install && chown -R postgres:postgres /build/debug/"
-  # Now run all tests
-  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -k -C /build/debug installcheck IGNORES='${IGNORES}' PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
-  # Run the PG regression tests too
-  - ${RETRY_PREFIX} docker exec -u postgres -it pgbuild /bin/sh -c "make -C /build/debug pginstallcheck PG_REGRESS_OPTS='--temp-instance=/tmp/pgdata'"
-after_failure:
-  - docker exec -u postgres -it pgbuild find /build -name regression.diffs -exec cat {} +
-  - docker exec -u postgres -it pgbuild find /build -name postmaster.log -exec cat {} +
-after_success:
-after_script:
-  - docker rm -f pgbuild
 
 jobs:
   include:
@@ -108,44 +73,6 @@ jobs:
       after_script:
         - docker rm -f docker_arm_emulator
 
-    # cron and prerelease runs regression tests on earliest and latest for each major version either with or without CodeCov
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      stage: test
-      name: "Regression 11.0"
-      env:
-        - PG_VERSION=11.0
-        - IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
-
-    - if: (type = cron) OR (branch = prerelease_test)
-      stage: test
-      name: "CodeCov 11.8"
-      env:
-        - PG_VERSION=11.8
-        - OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DCODECOVERAGE=ON -DCMAKE_C_FLAGS='-DNDEBUG'"
-        - CODECOV_FLAGS="-F cron"
-      after_success:
-        - ci_env=`bash <(curl -s https://codecov.io/env)`
-        - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
-
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      stage: test
-      name: "Regression 12.0"
-      env:
-        - PG_VERSION=12.0
-        - IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
-
-    #get codecov info, we only run 12.3 on PRs and the rest in cron
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      stage: test
-      name: "CodeCov 12.3"
-      env:
-        - PG_VERSION=12.3
-        - OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug -DCODECOVERAGE=ON -DCMAKE_C_FLAGS='-DNDEBUG'"
-        - CODECOV_FLAGS="-F pr"
-      after_success:
-        - ci_env=`bash <(curl -s https://codecov.io/env)`
-        - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
-
     # This tests the ability to upgrade to the latest version on pg 11
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       stage: test
@@ -191,28 +118,6 @@ jobs:
       after_script:
       script:
         - PG_MAJOR=12 PG_MINOR_COMPILE=0 bash -x ./scripts/docker-run-abi-test.sh
-
-    # ApacheOnly regression tests
-    - if: (type = cron) OR (branch = prerelease_test)
-      stage: test
-      name: "ApacheOnly regression tests 12.0"
-      env: PG_VERSION=12.0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
-
-    - if: (type = cron) OR (branch = prerelease_test)
-      stage: test
-      name: "ApacheOnly regression tests 11.0"
-      env: PG_VERSION=11.0 OTHER_CMAKE_FLAGS="-DAPACHE_ONLY=true"
-
-    # Release mode regression tests
-    - if: (type = cron) OR (branch = prerelease_test)
-      stage: test
-      name: "Release regression tests 12.3"
-      env: PG_VERSION=12.3 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
-
-    - if: (type = cron) OR (branch = prerelease_test)
-      stage: test
-      name: "Release regression tests 11.8"
-      env: PG_VERSION=11.8 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
