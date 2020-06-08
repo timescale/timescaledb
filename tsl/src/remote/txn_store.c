@@ -30,7 +30,6 @@ remote_txn_store_create(MemoryContext mctx)
 								 &ctl,
 								 HASH_ELEM | HASH_BLOBS | HASH_CONTEXT),
 		.mctx = mctx,
-		.cache = remote_connection_cache_pin(),
 	};
 	return store;
 }
@@ -53,7 +52,7 @@ remote_txn_store_get(RemoteTxnStore *store, TSConnectionId id, bool *found_out)
 		 * aren't remade for existing transactions. Always getting a connection
 		 * from the cache avoids having to redo the same checks here and we can
 		 * keep connection validation in one place. */
-		conn = remote_connection_cache_get_connection(store->cache, id);
+		conn = remote_connection_cache_get_connection(id);
 
 		if (found)
 		{
@@ -87,7 +86,7 @@ remote_txn_store_remove(RemoteTxnStore *store, TSConnectionId id)
 
 	hash_search(store->hashtable, &id, HASH_REMOVE, &found);
 	Assert(found);
-	remote_connection_cache_remove(store->cache, id);
+	remote_connection_cache_remove(id);
 }
 
 void
@@ -99,6 +98,4 @@ remote_txn_store_destroy(RemoteTxnStore *store)
 #endif
 	hash_destroy(store->hashtable);
 	store->hashtable = NULL;
-	ts_cache_release(store->cache);
-	store->cache = NULL;
 }

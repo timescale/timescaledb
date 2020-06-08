@@ -19,7 +19,7 @@
 #include <compat.h>
 #include "connection_cache.h"
 
-static Cache *connection_cache_current = NULL;
+static Cache *connection_cache = NULL;
 
 typedef struct ConnectionCacheEntry
 {
@@ -97,7 +97,7 @@ connection_should_be_remade(const ConnectionCacheEntry *entry)
 		 * of a transition and now we don't know the state of the remote
 		 * endpoint. It is not safe to continue on such a connection, so we
 		 * remove (and close) the connection and raise an error. */
-		remote_connection_cache_remove(cache, entry->id);
+		remote_connection_cache_remove(entry->id);
 		ereport(ERROR,
 				(errcode(ERRCODE_CONNECTION_EXCEPTION),
 				 errmsg("connection to data node \"%s\" was lost", NameStr(nodename))));
@@ -170,7 +170,7 @@ connection_cache_update_entry(Cache *cache, CacheQuery *query)
 }
 
 static Cache *
-connection_cache_create()
+connection_cache_create(void)
 {
 	MemoryContext ctx =
 		AllocSetContextCreate(CacheMemoryContext, "Connection cache", ALLOCSET_DEFAULT_SIZES);
@@ -201,25 +201,19 @@ connection_cache_create()
 	return cache;
 }
 
-Cache *
-remote_connection_cache_pin()
-{
-	return ts_cache_pin(connection_cache_current);
-}
-
 TSConnection *
-remote_connection_cache_get_connection(Cache *cache, TSConnectionId id)
+remote_connection_cache_get_connection(TSConnectionId id)
 {
 	CacheQuery query = { .data = &id };
-	ConnectionCacheEntry *entry = ts_cache_fetch(cache, &query);
+	ConnectionCacheEntry *entry = ts_cache_fetch(connection_cache, &query);
 
 	return entry->conn;
 }
 
 bool
-remote_connection_cache_remove(Cache *cache, TSConnectionId id)
+remote_connection_cache_remove(TSConnectionId id)
 {
-	return ts_cache_remove(cache, &id);
+	return ts_cache_remove(connection_cache, &id);
 }
 
 /*
@@ -239,7 +233,7 @@ remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashv
 	if (cacheid != FOREIGNSERVEROID)
 		return;
 
-	hash_seq_init(&scan, connection_cache_current->htab);
+	hash_seq_init(&scan, connection_cache->htab);
 
 	while ((entry = hash_seq_search(&scan)) != NULL)
 	{
@@ -299,7 +293,7 @@ remote_connection_cache_dropped_db_callback(const char *dbname)
 	HASH_SEQ_STATUS scan;
 	ConnectionCacheEntry *entry;
 
-	hash_seq_init(&scan, connection_cache_current->htab);
+	hash_seq_init(&scan, connection_cache->htab);
 
 	while ((entry = hash_seq_search(&scan)) != NULL)
 	{
@@ -308,7 +302,7 @@ remote_connection_cache_dropped_db_callback(const char *dbname)
 		/* Remove the connection if it is local and connects to a DB with the
 		 * same name as the one being dropped. */
 		if (strcmp(dbname, PQdb(pgconn)) == 0 && is_local_connection(pgconn))
-			remote_connection_cache_remove(connection_cache_current, entry->id);
+			remote_connection_cache_remove(entry->id);
 	}
 }
 
@@ -414,7 +408,7 @@ remote_connection_cache_show(PG_FUNCTION_ARGS)
 							"that cannot accept type record")));
 
 		info = palloc0(sizeof(ConnCacheShowState));
-		info->cache = remote_connection_cache_pin();
+		info->cache = ts_cache_pin(connection_cache);
 		hash_seq_init(&info->scan, info->cache->htab);
 		funcctx->user_fctx = info;
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
@@ -440,12 +434,12 @@ remote_connection_cache_show(PG_FUNCTION_ARGS)
 void
 _remote_connection_cache_init(void)
 {
-	connection_cache_current = connection_cache_create();
+	connection_cache = connection_cache_create();
 }
 
 void
 _remote_connection_cache_fini(void)
 {
-	ts_cache_invalidate(connection_cache_current);
-	connection_cache_current = NULL;
+	ts_cache_invalidate(connection_cache);
+	connection_cache = NULL;
 }

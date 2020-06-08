@@ -19,10 +19,8 @@ That means unpinning on aborts has to be done by the caller. This is because thi
 is used by xact callbacks.
 */
 
-extern Cache *remote_connection_cache_pin(void);
-
-extern TSConnection *remote_connection_cache_get_connection(Cache *cache, TSConnectionId id);
-extern bool remote_connection_cache_remove(Cache *cache, TSConnectionId id);
+extern TSConnection *remote_connection_cache_get_connection(TSConnectionId id);
+extern bool remote_connection_cache_remove(TSConnectionId id);
 
 extern void remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashvalue);
 extern void remote_connection_cache_dropped_db_callback(const char *dbname);
