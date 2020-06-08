@@ -43,7 +43,6 @@ test_basic_cache()
 	pid_t pid_1;
 	pid_t pid_2;
 	pid_t pid_prime;
-	Cache *cache;
 
 	remote_connection_id_set(&id_1,
 							 GetForeignServerByName("loopback_1", false)->serverid,
@@ -52,31 +51,19 @@ test_basic_cache()
 							 GetForeignServerByName("loopback_2", false)->serverid,
 							 GetUserId());
 
-	cache = remote_connection_cache_pin();
-
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_1 = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
-	conn_2 = remote_connection_cache_get_connection(cache, id_2);
+	conn_2 = remote_connection_cache_get_connection(id_2);
 	pid_2 = remote_connecton_get_remote_pid(conn_2);
 	TestAssertTrue(pid_2 != 0);
 
 	TestAssertTrue(pid_1 != pid_2);
 
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 == pid_prime);
-
-	ts_cache_release(cache);
-
-	/* since there was no invalidation should be same across cache pins */
-	cache = remote_connection_cache_pin();
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
-	pid_prime = remote_connecton_get_remote_pid(conn_1);
-	TestAssertTrue(pid_1 == pid_prime);
-
-	ts_cache_release(cache);
 }
 
 static void
@@ -151,15 +138,13 @@ test_invalidate_server()
 	TSConnection *conn_1;
 	pid_t pid_1;
 	pid_t pid_prime;
-	Cache *cache;
 	char *original_application_name;
 
 	remote_connection_id_set(&id_1,
 							 GetForeignServerByName("loopback_1", false)->serverid,
 							 GetUserId());
 
-	cache = remote_connection_cache_pin();
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_1 = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
@@ -168,7 +153,7 @@ test_invalidate_server()
 
 	/* Should get a different connection since we invalidated the foreign
 	 * server and didn't yet start a transaction on the remote node. */
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != pid_prime);
 
@@ -182,7 +167,7 @@ test_invalidate_server()
 	remote_txn_begin_on_connection(conn_1);
 	invalidate_server();
 
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
 
 	/* Connection should be the same despite invalidation since we're in a
@@ -195,12 +180,10 @@ test_invalidate_server()
 
 	/* After rollback, we're still in a remote transaction. Connection should
 	 * be the same. */
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 == pid_prime);
 	pid_1 = pid_prime;
-
-	ts_cache_release(cache);
 }
 
 static void
@@ -210,35 +193,30 @@ test_remove()
 	TSConnection *conn_1;
 	pid_t pid_1;
 	pid_t pid_prime;
-	Cache *cache;
 
 	remote_connection_id_set(&id_1,
 							 GetForeignServerByName("loopback_1", false)->serverid,
 							 GetUserId());
 
-	cache = remote_connection_cache_pin();
-
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_1 = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != 0);
 
-	remote_connection_cache_remove(cache, id_1);
+	remote_connection_cache_remove(id_1);
 
 	/* even using the same pin, get new connection */
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != pid_prime);
 
 	pid_1 = pid_prime;
 
 	/* test the by_oid variant */
-	remote_connection_cache_remove(cache, id_1);
+	remote_connection_cache_remove(id_1);
 
-	conn_1 = remote_connection_cache_get_connection(cache, id_1);
+	conn_1 = remote_connection_cache_get_connection(id_1);
 	pid_prime = remote_connecton_get_remote_pid(conn_1);
 	TestAssertTrue(pid_1 != pid_prime);
-
-	ts_cache_release(cache);
 }
 
 Datum

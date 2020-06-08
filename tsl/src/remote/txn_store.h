@@ -22,8 +22,6 @@ typedef struct RemoteTxnStore
 	HTAB *hashtable;
 	MemoryContext mctx;
 	HASH_SEQ_STATUS scan;
-
-	Cache *cache;
 } RemoteTxnStore;
 
 extern RemoteTxnStore *remote_txn_store_create(MemoryContext mctx);

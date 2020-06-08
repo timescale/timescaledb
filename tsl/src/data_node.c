@@ -231,8 +231,6 @@ data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption co
 {
 	const ForeignServer *server;
 	TSConnectionId id;
-	TSConnection *conn;
-	Cache *conn_cache;
 
 	Assert(data_node != NULL);
 	server = data_node_get_foreign_server(data_node, ACL_NO_CHECK, false, false);
@@ -241,10 +239,7 @@ data_node_get_connection(const char *const data_node, RemoteTxnPrepStmtOption co
 	if (transactional)
 		return remote_dist_txn_get_connection(id, ps_opt);
 
-	conn_cache = remote_connection_cache_pin();
-	conn = remote_connection_cache_get_connection(conn_cache, id);
-	ts_cache_release(conn_cache);
-	return conn;
+	return remote_connection_cache_get_connection(id);
 }
 
 /* Attribute numbers for datum returned by create_data_node() */
@@ -1278,7 +1273,6 @@ data_node_delete(PG_FUNCTION_ARGS)
 	};
 	Node *parsetree = NULL;
 	TSConnectionId cid;
-	Cache *conn_cache;
 	ForeignServer *server;
 
 	/* Need USAGE to detach. Further owner check done when executing the DROP
@@ -1295,9 +1289,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 
 	/* close any pending connections */
 	remote_connection_id_set(&cid, server->serverid, GetUserId());
-	conn_cache = remote_connection_cache_pin();
-	remote_connection_cache_remove(conn_cache, cid);
-	ts_cache_release(conn_cache);
+	remote_connection_cache_remove(cid);
 
 	/* detach data node */
 	hypertable_data_nodes =

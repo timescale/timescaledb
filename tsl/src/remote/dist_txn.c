@@ -35,11 +35,6 @@ void (*testing_callback_call_hook)(const char *event) = NULL;
 	} while (0)
 #endif
 
-/* prototypes of private functions */
-static void dist_txn_xact_callback(XactEvent event, void *arg);
-static void dist_txn_subxact_callback(SubXactEvent event, SubTransactionId mySubid,
-									  SubTransactionId parentSubid, void *arg);
-
 static RemoteTxnStore *store = NULL;
 
 /*
