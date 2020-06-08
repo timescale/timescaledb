@@ -195,7 +195,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 {
 	float8 jitter = calculate_jitter_percent();
 	/* consecutive failures includes this failure */
-	TimestampTz res;
+	TimestampTz res = 0;
 	volatile bool res_set = false;
 	TimestampTz last_finish = finish_time;
 	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
