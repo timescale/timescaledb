@@ -692,7 +692,7 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 										   int64 invalidate_prior_to_time)
 {
 	bool found = false;
-	InternalTimeRange invalidation_range;
+	InternalTimeRange invalidation_range = { 0 };
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 								AccessShareLock,
