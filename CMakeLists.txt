@@ -339,13 +339,13 @@ file(READ ${PG_INCLUDEDIR}/pg_config.h PG_CONFIG_H)
 string(REGEX MATCH "#define USE_ASSERT_CHECKING 1" PG_USE_ASSERT_CHECKING ${PG_CONFIG_H})
 
 if (PG_USE_ASSERT_CHECKING AND NOT ASSERTIONS)
-  message(NOTICE "Assertion checks are OFF although enabled in PostgreSQL build (pg_config.h).\n"
+  message("Assertion checks are OFF although enabled in PostgreSQL build (pg_config.h). "
     "The PostgreSQL setting for assertions will take precedence.")
 elseif (ASSERTIONS)
   message(STATUS "Assertion checks are ON")
   add_compile_definitions(USE_ASSERT_CHECKING=1)
 elseif (CMAKE_BUILD_TYPE MATCHES Debug)
-  message(NOTICE "Assertion checks are OFF in Debug build. Set -DASSERTIONS=ON to enable assertions.")
+  message("Assertion checks are OFF in Debug build. Set -DASSERTIONS=ON to enable assertions.")
 else ()
   message(STATUS "Assertion checks are OFF")
 endif ()
