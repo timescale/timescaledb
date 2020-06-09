@@ -7,6 +7,7 @@
 #include <access/xact.h>
 #include <utils/builtins.h>
 #include <utils/snapmgr.h>
+#include <libpq-fe.h>
 
 #include "compat.h"
 #if PG12_LT
@@ -220,7 +221,6 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 	 * be too long.
 	 */
 	end_time = TimestampTzPlusMilliseconds(GetCurrentTimestamp(), DEFAULT_EXEC_CLEANUP_TIMEOUT_MS);
-
 	/*
 	 * Submit a query.  Since we don't use non-blocking mode, this also can
 	 * block.  But its risk is relatively small, so we ignore that for now.
@@ -231,7 +231,7 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 
 	async_request_set_add(set, req);
 
-	response = async_request_set_wait_any_response_deadline(set, WARNING, end_time);
+	response = async_request_set_wait_any_response_deadline(set, end_time);
 	Assert(response != NULL);
 
 	switch (async_response_get_type(response))
@@ -242,6 +242,10 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 			break;
 		case RESPONSE_COMMUNICATION_ERROR:
 			elog(DEBUG3, "abort processing: communication error executing %s", query);
+			success = false;
+			break;
+		case RESPONSE_ERROR:
+			elog(DEBUG3, "abort processing: error while executing %s", query);
 			success = false;
 			break;
 		case RESPONSE_RESULT:
@@ -269,16 +273,17 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 		async_response_close(response);
 
 		/* that should have been the last response from the set */
-		response = async_request_set_wait_any_response_deadline(set, WARNING, end_time);
+		response = async_request_set_wait_any_response_deadline(set, end_time);
 		Assert(response == NULL);
 	}
 	else
 	{
 		async_response_report_error(response, WARNING);
+		async_response_close(response);
 
 		/* drain the set until empty of all possibly queued errors */
-		while ((response = async_request_set_wait_any_response_deadline(set, WARNING, end_time)))
-			;
+		while ((response = async_request_set_wait_any_response_deadline(set, end_time)))
+			async_response_close(response);
 	}
 	return success;
 }
@@ -309,7 +314,10 @@ remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry)
 				elog(WARNING, "leak check: connection leaked prepared statement");
 		}
 		else
+		{
+			remote_result_close(res);
 			elog(ERROR, "leak check: incorrect number of rows or columns returned");
+		}
 	}
 	else
 		elog(WARNING, "leak check: unexpected result \"%s\"", PQresultErrorMessage(res));
@@ -426,27 +434,11 @@ remote_txn_deallocate_prepared_stmts_if_needed(RemoteTxn *entry)
 	{
 		AsyncRequestSet *set = async_request_set_create();
 		AsyncResponse *response;
-		AsyncResponseResult *result;
 
 		async_request_set_add(set, async_request_send(entry->conn, "DEALLOCATE ALL"));
-
-		response = async_request_set_wait_any_response(set, WARNING);
-
-		switch (async_response_get_type(response))
-		{
-			case RESPONSE_RESULT:
-				result = (AsyncResponseResult *) response;
-				if (PQresultStatus(async_response_result_get_pg_result(result)) == PGRES_COMMAND_OK)
-				{
-					async_response_close(response);
-					break;
-				}
-				/* fallthrough */
-			default:
-				async_response_report_error(response, WARNING);
-		}
-
-		response = async_request_set_wait_any_response(set, WARNING);
+		response = async_request_set_wait_any_response(set);
+		async_response_report_error_or_close(response, WARNING);
+		response = async_request_set_wait_any_response(set);
 		Assert(response == NULL);
 	}
 	entry->have_prep_stmt = false;

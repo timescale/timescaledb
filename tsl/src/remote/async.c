@@ -87,6 +87,12 @@ typedef struct AsyncResponseCommunicationError
 	AsyncRequest *request;
 } AsyncResponseCommunicationError;
 
+typedef struct AsyncResponseError
+{
+	AsyncResponse base;
+	const char *errmsg;
+} AsyncResponseError;
+
 typedef struct AsyncRequestSet
 {
 	List *requests;
@@ -152,7 +158,8 @@ static AsyncRequest *
 async_request_send_internal(AsyncRequest *req, int elevel)
 {
 	if (req->state != DEFERRED)
-		elog(ERROR, "can't send async request in state \"%d\"", req->state);
+		elog(elevel, "can't send async request in state \"%d\"", req->state);
+
 	if (remote_connection_is_processing(req->conn))
 		return req;
 
@@ -319,6 +326,19 @@ async_response_timeout_create()
 	return ares;
 }
 
+static AsyncResponse *
+async_response_error_create(const char *errmsg)
+{
+	AsyncResponseError *ares = palloc0(sizeof(AsyncResponseError));
+
+	*ares = (AsyncResponseError){
+		.base = { .type = RESPONSE_ERROR },
+		.errmsg = pstrdup(errmsg),
+	};
+
+	return &ares->base;
+}
+
 void
 async_response_result_close(AsyncResponseResult *res)
 {
@@ -333,6 +353,7 @@ async_response_close(AsyncResponse *res)
 	switch (res->type)
 	{
 		case RESPONSE_RESULT:
+		case RESPONSE_ROW:
 			async_response_result_close((AsyncResponseResult *) res);
 			break;
 		default:
@@ -385,15 +406,53 @@ async_response_report_error(AsyncResponse *res, int elevel)
 	{
 		case RESPONSE_RESULT:
 		case RESPONSE_ROW:
-			remote_result_elog(((AsyncResponseResult *) res)->result, elevel);
+		{
+			AsyncResponseResult *aresult = (AsyncResponseResult *) res;
+			ExecStatusType status = PQresultStatus(aresult->result);
+
+			switch (status)
+			{
+				case PGRES_COMMAND_OK:
+				case PGRES_TUPLES_OK:
+				case PGRES_SINGLE_TUPLE:
+					break;
+				case PGRES_NONFATAL_ERROR:
+				case PGRES_FATAL_ERROR:
+					/* result is closed by remote_result_elog in case it throws
+					 * error */
+					remote_result_elog(aresult->result, elevel);
+					break;
+				default:
+					PG_TRY();
+					{
+						elog(elevel, "unexpected response status %u", status);
+					}
+					PG_CATCH();
+					{
+						async_response_close(res);
+						PG_RE_THROW();
+					}
+					PG_END_TRY();
+			}
 			break;
+		}
 		case RESPONSE_COMMUNICATION_ERROR:
 			remote_connection_elog(((AsyncResponseCommunicationError *) res)->request->conn,
 								   elevel);
 			break;
+		case RESPONSE_ERROR:
+			elog(elevel, "%s", ((AsyncResponseError *) res)->errmsg);
+			break;
 		case RESPONSE_TIMEOUT:
 			elog(elevel, "async operation timed out");
 	}
+}
+
+void
+async_response_report_error_or_close(AsyncResponse *res, int elevel)
+{
+	async_response_report_error(res, elevel);
+	async_response_close(res);
 }
 
 /*
@@ -407,7 +466,6 @@ async_request_wait_any_result(AsyncRequest *req)
 	AsyncResponseResult *result;
 
 	async_request_set_add(&set, req);
-
 	result = async_request_set_wait_any_result(&set);
 
 	/* Should expect exactly one response */
@@ -415,8 +473,24 @@ async_request_wait_any_result(AsyncRequest *req)
 		elog(ERROR, "remote request failed");
 
 	/* Make sure to drain the connection only if we've retrieved complete result set */
-	if (result->base.type == RESPONSE_RESULT && async_request_set_wait_any_result(&set) != NULL)
-		elog(ERROR, "request must be for one sql statement");
+	if (result->base.type == RESPONSE_RESULT)
+	{
+		AsyncResponseResult *extra;
+		bool got_extra = false;
+
+		/* Must drain any remaining result until NULL */
+		while ((extra = async_request_set_wait_any_result(&set)))
+		{
+			async_response_result_close(extra);
+			got_extra = true;
+		}
+
+		if (got_extra)
+		{
+			async_response_result_close(result);
+			elog(ERROR, "request must be for one sql statement");
+		}
+	}
 
 	return result;
 }
@@ -488,16 +562,18 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 		PGconn *pg_conn = remote_connection_get_pg_conn(req->conn);
 
 		if (remote_connection_is_processing(req->conn) && req->state == DEFERRED)
-			elog(ERROR,
-				 "can't get a response because previous request hasn't completed. Aborted SQL "
-				 "statement: %s",
-				 req->sql);
+			return async_response_error_create("request already in process");
 
 		if (req->state == DEFERRED)
-			async_request_send_internal(req, ERROR);
+		{
+			req = async_request_send_internal(req, WARNING);
+
+			if (req == NULL)
+				return async_response_error_create("failed to send deferred request");
+		}
 
 		if (req->state != EXECUTING)
-			elog(ERROR, "can't get a response for a request that's not currently executing");
+			return async_response_error_create("no request currently executing");
 
 		if (!PQisBusy(pg_conn))
 		{
@@ -528,7 +604,7 @@ get_single_response_nonblocking(AsyncRequestSet *set)
  * Returns NULL on success or an "error" AsyncResponse
  */
 static AsyncResponse *
-wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
+wait_to_consume_data(AsyncRequestSet *set, TimestampTz end_time)
 {
 	/*
 	 * Looks like there is no good way to modify a WaitEventSet so we have to
@@ -562,8 +638,6 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 
 	we_set = CreateWaitEventSet(CurrentMemoryContext, list_length(set->requests) + 1);
 
-	/* TODO optimize single-member set with WaitLatchOrSocket? */
-
 	/* always wait for my latch */
 	AddWaitEventToSet(we_set, WL_LATCH_SET, PGINVALID_SOCKET, (Latch *) MyLatch, NULL);
 
@@ -585,8 +659,6 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 
 		if (rc == 0)
 		{
-			/* often an error, not always */
-			elog(elevel, "unexpected timeout");
 			result = async_response_timeout_create();
 			break;
 		}
@@ -602,9 +674,6 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 
 			if (0 == PQconsumeInput(remote_connection_get_pg_conn(wait_req->conn)))
 			{
-				/* This is often an error but not always */
-				remote_connection_elog(wait_req->conn, elevel);
-
 				/* remove connection from set */
 				set->requests = list_delete_ptr(set->requests, wait_req);
 				result = &async_response_communication_error_create(wait_req)->base;
@@ -614,7 +683,10 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 			break;
 		}
 		else
-			elog(FATAL, "unexpected event");
+		{
+			result = async_response_error_create("unexpected event");
+			break;
+		}
 	}
 
 	FreeWaitEventSet(we_set);
@@ -623,7 +695,7 @@ wait_to_consume_data(AsyncRequestSet *set, int elevel, TimestampTz end_time)
 
 /* Return NULL when nothing more to do in set */
 AsyncResponse *
-async_request_set_wait_any_response_deadline(AsyncRequestSet *set, int elevel, TimestampTz endtime)
+async_request_set_wait_any_response_deadline(AsyncRequestSet *set, TimestampTz endtime)
 {
 	AsyncResponse *response;
 
@@ -638,7 +710,7 @@ async_request_set_wait_any_response_deadline(AsyncRequestSet *set, int elevel, T
 			/* nothing to wait on anymore */
 			return NULL;
 
-		response = wait_to_consume_data(set, elevel, endtime);
+		response = wait_to_consume_data(set, endtime);
 
 		if (response != NULL)
 			break;
@@ -661,6 +733,7 @@ async_request_set_wait_any_response_deadline(AsyncRequestSet *set, int elevel, T
 			case RESPONSE_COMMUNICATION_ERROR:
 				requests = list_make1(((AsyncResponseCommunicationError *) response)->request);
 				break;
+			case RESPONSE_ERROR:
 			case RESPONSE_TIMEOUT:
 				requests = set->requests;
 				break;
@@ -681,7 +754,7 @@ async_request_set_wait_any_response_deadline(AsyncRequestSet *set, int elevel, T
 AsyncResponseResult *
 async_request_set_wait_any_result(AsyncRequestSet *set)
 {
-	AsyncResponse *res = async_request_set_wait_any_response(set, ERROR);
+	AsyncResponse *res = async_request_set_wait_any_response(set);
 
 	if (res == NULL)
 		return NULL;
@@ -696,12 +769,14 @@ AsyncResponseResult *
 async_request_set_wait_ok_result(AsyncRequestSet *set)
 {
 	AsyncResponseResult *response_result = async_request_set_wait_any_result(set);
+	ExecStatusType status;
 
 	if (response_result == NULL)
 		return NULL;
 
-	if (PQresultStatus(response_result->result) != PGRES_TUPLES_OK &&
-		PQresultStatus(response_result->result) != PGRES_COMMAND_OK)
+	status = PQresultStatus(response_result->result);
+
+	if (status != PGRES_TUPLES_OK && status != PGRES_COMMAND_OK)
 	{
 		async_response_report_error(&response_result->base, ERROR);
 		Assert(false);
@@ -713,14 +788,36 @@ async_request_set_wait_ok_result(AsyncRequestSet *set)
 void
 async_request_set_wait_all_ok_commands(AsyncRequestSet *set)
 {
-	AsyncResponseResult *ar;
+	AsyncResponse *rsp;
+	AsyncResponse *bad_rsp = NULL;
 
-	while ((ar = async_request_set_wait_ok_result(set)))
+	/* Drain all responses and record the first error */
+	while ((rsp = async_request_set_wait_any_response(set)))
 	{
-		if (PQresultStatus(async_response_result_get_pg_result(ar)) != PGRES_COMMAND_OK)
-			elog(ERROR, "unexpected tuple received while expecting a command");
-		async_response_result_close(ar);
+		switch (async_response_get_type(rsp))
+		{
+			case RESPONSE_RESULT:
+			case RESPONSE_ROW:
+			{
+				AsyncResponseResult *ar = (AsyncResponseResult *) rsp;
+				ExecStatusType status = PQresultStatus(async_response_result_get_pg_result(ar));
+
+				if (status != PGRES_COMMAND_OK && bad_rsp == NULL)
+					bad_rsp = rsp;
+				else
+					async_response_result_close(ar);
+				break;
+			}
+			default:
+				if (bad_rsp == NULL)
+					bad_rsp = rsp;
+				break;
+		}
 	}
+
+	/* Throw error once request set is drained */
+	if (bad_rsp != NULL)
+		async_response_report_error(bad_rsp, ERROR);
 }
 
 void
