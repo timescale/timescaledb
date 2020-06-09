@@ -186,10 +186,10 @@ test_request_set()
 
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
-	response = async_request_set_wait_any_response_deadline(set, ERROR, TS_NO_TIMEOUT);
+	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
 	async_response_close(response);
-	response = async_request_set_wait_any_response_deadline(set, ERROR, TS_NO_TIMEOUT);
+	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(response == NULL);
 
 	remote_connection_close(conn);
@@ -211,7 +211,7 @@ test_node_death()
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "SELECT 1");
 	remote_node_killer_kill(rnk);
-	response = async_request_set_wait_any_response_deadline(set, ERROR, TS_NO_TIMEOUT);
+	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_RESULT);
 	result = (AsyncResponseResult *) response;
 	pg_res = async_response_result_get_pg_result(result);
@@ -219,11 +219,11 @@ test_node_death()
 	async_response_close(response);
 
 	/* This will throw if elevel == ERROR so set to DEBUG1 */
-	response = async_request_set_wait_any_response_deadline(set, DEBUG1, TS_NO_TIMEOUT);
+	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_COMMUNICATION_ERROR);
 	elog(WARNING, "Expect warning about communication error:");
 	async_response_report_error(response, WARNING);
-	response = async_request_set_wait_any_response_deadline(set, ERROR, TS_NO_TIMEOUT);
+	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(response == NULL);
 	/* No socket error */
 	TestEnsureError(remote_connection_cancel_query(conn));
@@ -283,11 +283,11 @@ test_timeout()
 	set = async_request_set_create();
 	async_request_set_add_sql(set, conn, "LOCK \"S 1\".\"T 1\"");
 	response = async_request_set_wait_any_response_deadline(
-		set, DEBUG1, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 100));
+		set, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 100));
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_TIMEOUT);
 
 	/* try again, use timeout instead of deadline interface */
-	response = async_request_set_wait_any_response_timeout(set, DEBUG1, 100);
+	response = async_request_set_wait_any_response_timeout(set, 100);
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_TIMEOUT);
 
 	/* cancel the locked query and do another query */

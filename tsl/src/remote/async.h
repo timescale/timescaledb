@@ -28,12 +28,15 @@ typedef enum AsyncResponseType
 	RESPONSE_COMMUNICATION_ERROR,
 	/* Timeout while waiting for response */
 	RESPONSE_TIMEOUT,
+	/* Unexpected event or other error */
+	RESPONSE_ERROR,
 } AsyncResponseType;
 
 /* Base type for all responses */
 typedef struct AsyncResponse AsyncResponse;
 typedef struct AsyncResponseResult AsyncResponseResult;
 typedef struct AsyncResponseCommunicationError AsyncResponseCommunicationError;
+typedef struct AsyncResponseError AsyncResponseError;
 typedef struct AsyncRequestSet AsyncRequestSet;
 
 typedef struct PreparedStmt PreparedStmt;
@@ -111,6 +114,8 @@ extern PreparedStmt *async_request_wait_prepared_statement(AsyncRequest *request
 /* Async Response */
 extern void async_response_close(AsyncResponse *res);
 extern void async_response_report_error(AsyncResponse *res, int elevel);
+extern void async_response_report_error_or_close(AsyncResponse *res, int elevel);
+
 extern AsyncResponseType async_response_get_type(AsyncResponse *res);
 extern void async_response_result_close(AsyncResponseResult *res);
 extern PGresult *async_response_result_get_pg_result(AsyncResponseResult *res);
@@ -125,15 +130,15 @@ extern void async_request_set_add(AsyncRequestSet *set, AsyncRequest *req);
 	async_request_set_add(set, async_request_send(conn, sql))
 
 /* Return any response, including communication errors and timeouts */
-extern AsyncResponse *async_request_set_wait_any_response_deadline(AsyncRequestSet *set, int elevel,
+extern AsyncResponse *async_request_set_wait_any_response_deadline(AsyncRequestSet *set,
 																   TimestampTz endtime);
 
-#define async_request_set_wait_any_response_timeout(set, elevel, timeout_ms)                       \
+#define async_request_set_wait_any_response_timeout(set, timeout_ms)                               \
 	async_request_set_wait_any_response_deadline(                                                  \
-		set, elevel, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), timeout_ms))
+		set, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), timeout_ms))
 
-#define async_request_set_wait_any_response(set, elevel)                                           \
-	async_request_set_wait_any_response_timeout(set, elevel, DEFAULT_TIMEOUT_MS)
+#define async_request_set_wait_any_response(set)                                                   \
+	async_request_set_wait_any_response_timeout(set, DEFAULT_TIMEOUT_MS)
 
 /* Return only successful results, throwing errors otherwise */
 extern AsyncResponseResult *async_request_set_wait_ok_result(AsyncRequestSet *set);

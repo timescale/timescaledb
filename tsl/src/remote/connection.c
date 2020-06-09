@@ -748,26 +748,35 @@ remote_result_elog(PGresult *res, int elevel)
 	TSConnection *conn;
 	int code;
 
-	if (NULL == entry)
-		elog(ERROR, "unexpected result object in error handler");
+	PG_TRY();
+	{
+		if (NULL == entry)
+			elog(ERROR, "unexpected result object in error handler");
 
-	conn = entry->conn;
-	Assert(NULL != conn);
+		conn = entry->conn;
+		Assert(NULL != conn);
 
-	if (sqlstate && strlen(sqlstate) == 5)
-		code = MAKE_SQLSTATE(sqlstate[0], sqlstate[1], sqlstate[2], sqlstate[3], sqlstate[4]);
-	else
-		code = ERRCODE_CONNECTION_FAILURE;
+		if (sqlstate && strlen(sqlstate) == 5)
+			code = MAKE_SQLSTATE(sqlstate[0], sqlstate[1], sqlstate[2], sqlstate[3], sqlstate[4]);
+		else
+			code = ERRCODE_CONNECTION_FAILURE;
 
-	/*
-	 * If we don't get a message from the PGresult, try the PGconn.  This
-	 * is needed because for connection-level failures, PQexec may just
-	 * return NULL, not a PGresult at all.
-	 */
-	if (primary == NULL)
-		primary = pchomp(PQerrorMessage(conn->pg_conn));
+		/*
+		 * If we don't get a message from the PGresult, try the PGconn.  This
+		 * is needed because for connection-level failures, PQexec may just
+		 * return NULL, not a PGresult at all.
+		 */
+		if (primary == NULL)
+			primary = pchomp(PQerrorMessage(conn->pg_conn));
 
-	remote_elog(elevel, code, NameStr(conn->node_name), primary, detail, hint, context, stmt);
+		remote_elog(elevel, code, NameStr(conn->node_name), primary, detail, hint, context, stmt);
+	}
+	PG_CATCH();
+	{
+		PQclear(res);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 }
 
 /*

@@ -186,7 +186,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: pre-commit
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: terminating connection due to administrator command
 -- Failed connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -231,7 +231,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: waiting-commit
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: terminating connection due to administrator command
 --connection failed during commit, so should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -276,8 +276,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
 ROLLBACK;
 WARNING:  kill event: pre-abort
 WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: SSL connection has been closed unexpectedly
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback" failed
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
  count 
 -------
@@ -429,7 +428,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: pre-prepare-transaction
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: SSL connection has been closed unexpectedly
 --the connection was killed, so should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -466,7 +465,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-0
 
 COMMIT;
 WARNING:  kill event: waiting-prepare-transaction
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: SSL connection has been closed unexpectedly
 --the connection should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -521,7 +520,6 @@ COMMIT;
 WARNING:  kill event: post-prepare-transaction
 WARNING:  [loopback]: terminating connection due to administrator command
 WARNING:  [loopback]: SSL connection has been closed unexpectedly
-WARNING:  error while performing second phase of 2-pc
 --connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -603,7 +601,6 @@ COMMIT;
 WARNING:  kill event: pre-commit-prepared
 WARNING:  [loopback]: terminating connection due to administrator command
 WARNING:  [loopback]: SSL connection has been closed unexpectedly
-WARNING:  error while performing second phase of 2-pc
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
@@ -672,7 +669,6 @@ COMMIT;
 WARNING:  kill event: waiting-commit-prepared
 WARNING:  [loopback]: terminating connection due to administrator command
 WARNING:  [loopback]: SSL connection has been closed unexpectedly
-WARNING:  error while performing second phase of 2-pc
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state
@@ -802,7 +798,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-0
 (1 row)
 
 COMMIT;
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 --connection should be removed since PREPARE TRANSACTION failed
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -846,7 +842,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 (2 rows)
 
 COMMIT;
-WARNING:  failure aborting remote transaction during local abort
+WARNING:  transaction rollback on data node "loopback2" failed
 ERROR:  [loopback2]: duplicate key value violates unique constraint "t1_pkey"
 --one connection should remain and be idle
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing

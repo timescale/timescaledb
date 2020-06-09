@@ -103,7 +103,6 @@ dist_txn_xact_callback_1pc_pre_commit()
 
 	/* async collect all the replies */
 	async_request_set_wait_all_ok_commands(ars);
-
 	dist_txn_deallocate_prepared_stmts_if_needed();
 }
 
@@ -118,7 +117,9 @@ dist_txn_xact_callback_abort()
 	remote_txn_store_foreach(store, remote_txn)
 	{
 		if (remote_txn_is_ongoing(remote_txn) && !remote_txn_abort(remote_txn))
-			elog(WARNING, "failure aborting remote transaction during local abort");
+			elog(WARNING,
+				 "transaction rollback on data node \"%s\" failed",
+				 remote_connection_node_name(remote_txn_get_connection(remote_txn)));
 	}
 }
 
@@ -242,7 +243,7 @@ dist_txn_send_prepare_transaction()
 	RemoteTxn *remote_txn;
 	AsyncRequestSet *ars = async_request_set_create();
 	AsyncResponse *error_response = NULL;
-	AsyncResponseResult *response_result;
+	AsyncResponse *res;
 
 	testing_callback_call("pre-prepare-transaction");
 
@@ -266,18 +267,36 @@ dist_txn_send_prepare_transaction()
 	 * not errors in results.
 	 */
 	error_response = NULL;
-	while ((response_result = async_request_set_wait_any_result(ars)))
+	while ((res = async_request_set_wait_any_response(ars)))
 	{
-		bool success = PQresultStatus(async_response_result_get_pg_result(response_result)) ==
-					   PGRES_COMMAND_OK;
-
-		if (!success)
+		switch (async_response_get_type(res))
 		{
-			/* save first error, warn about subsequent errors */
-			if (error_response == NULL)
-				error_response = (AsyncResponse *) response_result;
-			else
-				async_response_report_error((AsyncResponse *) response_result, WARNING);
+			case RESPONSE_COMMUNICATION_ERROR:
+			case RESPONSE_ERROR:
+			case RESPONSE_ROW:
+			case RESPONSE_TIMEOUT:
+				elog(DEBUG3, "error during second phase of two-phase commit");
+				async_response_report_error(res, ERROR);
+				continue;
+			case RESPONSE_RESULT:
+			{
+				AsyncResponseResult *response_result = (AsyncResponseResult *) res;
+				bool success =
+					PQresultStatus(async_response_result_get_pg_result(response_result)) ==
+					PGRES_COMMAND_OK;
+
+				if (!success)
+				{
+					/* save first error, warn about subsequent errors */
+					if (error_response == NULL)
+						error_response = (AsyncResponse *) response_result;
+					else
+						async_response_report_error((AsyncResponse *) response_result, WARNING);
+				}
+				else
+					async_response_close(res);
+				break;
+			}
 		}
 	}
 
@@ -306,7 +325,7 @@ dist_txn_send_commit_prepared_transaction()
 
 		if (req == NULL)
 		{
-			elog(WARNING, "error while performing second phase of 2-pc");
+			elog(DEBUG3, "error during second phase of two-phase commit");
 			continue;
 		}
 
@@ -316,7 +335,7 @@ dist_txn_send_commit_prepared_transaction()
 	testing_callback_call("waiting-commit-prepared");
 
 	/* async collect the replies */
-	while ((res = async_request_set_wait_any_response(ars, WARNING)))
+	while ((res = async_request_set_wait_any_response(ars)))
 	{
 		/* throw WARNINGS not ERRORS here */
 		/*
@@ -329,9 +348,11 @@ dist_txn_send_commit_prepared_transaction()
 		switch (async_response_get_type(res))
 		{
 			case RESPONSE_COMMUNICATION_ERROR:
+			case RESPONSE_ERROR:
 			case RESPONSE_ROW:
 			case RESPONSE_TIMEOUT:
-				elog(WARNING, "error while performing second phase of 2-pc");
+				elog(DEBUG3, "error during second phase of two-phase commit");
+				async_response_report_error(res, WARNING);
 				continue;
 			case RESPONSE_RESULT:
 				response_result = (AsyncResponseResult *) res;
