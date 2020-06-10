@@ -41,7 +41,7 @@
 
 /*
  * Deparse a table into a set of SQL commands that can be used to recreate it.
- * Together with column definiton it deparses constraints, indexes, triggers
+ * Together with column definition it deparses constraints, indexes, triggers
  * and rules as well.  There are some table types that are not supported:
  * temporary, partitioned, foreign, inherited and a table that uses
  * options. Row security is also not supported.
@@ -639,7 +639,7 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 
 	/*
 	 * Backend is assumed to not have any preexisting conflicting table or hypertable.  Any default
-	 * indicies will have already been created by the frontend.
+	 * indices will have already been created by the frontend.
 	 */
 	appendStringInfoString(hypertable_cmd, ", if_not_exists => FALSE");
 	appendStringInfoString(hypertable_cmd, ", migrate_data => FALSE");

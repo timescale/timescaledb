@@ -24,7 +24,7 @@ To enable binaries which only contain Apache-Licensed code,
 we dynamically link in Timescale-Licensed code on license key activation,
 and handle all function calls into the module via function pointers.
 
-The registry in `ts_cm_functions` of type `CrossModuleFunctions` (decalared in
+The registry in `ts_cm_functions` of type `CrossModuleFunctions` (declared in
 [`cross_module_fn.h`](/src/cross_module_fn.h) and defined in
 [`cross_module_fn.c`](/src/cross_module_fn.c)) stores all of the cross-module
 functions. To add a new cross-module function you must:
@@ -37,7 +37,7 @@ To call a cross-module functions use `ts_cm_functions-><function name>(args)`.
 ## License Validation ##
 
 We want to keep all license verification code under the Timescale License;
-code under the Apache License is freely modifieable, and if we include our
+code under the Apache License is freely modifiable, and if we include our
 license-verification code there it may be possible to remove without violating
 the license (_using_ the module without a valid license would still be in
 violation).

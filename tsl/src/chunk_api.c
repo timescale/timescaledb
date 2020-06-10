@@ -865,7 +865,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 	if (NULL == rel)
 		ereport(ERROR,
 				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-				 errmsg("unable to aquire table lock to update column statistics on \"%s\"",
+				 errmsg("unable to acquire table lock to update column statistics on \"%s\"",
 						NameStr(chunk->fd.table_name))));
 
 	sd = relation_open(StatisticRelationId, RowExclusiveLock);

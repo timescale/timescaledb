@@ -846,8 +846,8 @@ find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
 }
 
 /* Continuous aggregate materialization hypertables inherit integer_now func
- * from the raw hypertable (unless it was explictly reset for cont. aggregate.
- * Walk the materialzation hyperatable ->raw hypertable tree till
+ * from the raw hypertable (unless it was explicitly reset for cont. aggregate.
+ * Walk the materialization hypertable ->raw hypertable tree till
  * we find a hypertable that has integer_now_func set.
  */
 TSDLLEXPORT Dimension *

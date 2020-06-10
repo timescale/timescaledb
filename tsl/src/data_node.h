@@ -32,7 +32,7 @@ extern List *data_node_get_node_name_list_with_aclcheck(AclMode mode, bool fail_
 extern List *data_node_get_filtered_node_name_list(ArrayType *nodearr, AclMode mode,
 												   bool fail_on_aclcheck);
 extern List *data_node_get_node_name_list(void);
-extern List *data_node_array_to_node_name_list_with_aclcheck(ArrayType *noderarr, AclMode mode,
+extern List *data_node_array_to_node_name_list_with_aclcheck(ArrayType *nodearr, AclMode mode,
 															 bool fail_on_aclcheck);
 extern List *data_node_array_to_node_name_list(ArrayType *nodearr);
 extern List *data_node_oids_to_node_name_list(List *data_node_oids, AclMode mode);

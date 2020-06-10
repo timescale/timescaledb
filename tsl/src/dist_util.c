@@ -94,7 +94,7 @@ dist_util_set_as_frontend()
 	/*
 	 * Set security label to mark current database as the access node database.
 	 *
-	 * Presence of this label is used as a flag to send NOTICE messsage
+	 * Presence of this label is used as a flag to send NOTICE message
 	 * after a DROP DATABASE operation completion.
 	 */
 	seclabel_set_dist_uuid(MyDatabaseId, local_get_dist_id(NULL));

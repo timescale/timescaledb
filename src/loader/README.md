@@ -63,7 +63,7 @@ it has not seen before.
 `CREATE EXTENSION`: the create script sends a `restart` message. It does not use
 the `start` message because we need to wait waiting on the vxid of the process
 that is running `CREATE EXTENSION`. There is also the possibility that the
-idepotency of the `start` action, even if it waited on a vxid, would cause race
+idempotency of the `start` action, even if it waited on a vxid, would cause race
 conditions in cases where the server has just started or the database has been
 created. 
 
@@ -126,14 +126,14 @@ Transitions that happen upon getting a STOP MESSAGE:
 * `DISABLED->DISABLED`: No Action
 
 Transitions that happen upon getting a START MESSAGE
-* Database not yet registed: Register, set to ENABLED and take ENABLED action below.
+* Database not yet registered: Register, set to ENABLED and take ENABLED action below.
 * `ENABLED->ENABLED`: Try automatic transitions
 * `ALLOCATED->ALLOCATED`: Try automatic transitions
 * `STARTED->STARTED`: No action
 * `DISABLED->ENABLED`: Try automatic transitions
 
 Transitions that happen upon getting a RESTART MESSAGE
-* Database not yet registed: Register it set to ENABLED, take ENABLED actions
+* Database not yet registered: Register it set to ENABLED, take ENABLED actions
 * `ENABLED->ENABLED`: Set vxid, try automatic transitions
 * `ALLOCATED->ALLOCATED`: Set vxid, try automatic transitions
 * `STARTED->ALLOCATED`: Terminate scheduler, do /not/ release slot, set vxid, then try automatic transitions
