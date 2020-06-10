@@ -136,6 +136,8 @@ typedef struct RowCompressor
 	/* cached arrays used to build the HeapTuple */
 	Datum *compressed_values;
 	bool *compressed_is_null;
+	int64 rowcnt_pre_compression;
+	int64 num_compressed_rows;
 } RowCompressor;
 
 static int16 *compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns,
@@ -212,12 +214,13 @@ truncate_relation(Oid table_oid)
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, 0);
 }
 
-void
+CompressionStats
 compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column_compression_info,
 			   int num_compression_infos)
 {
 	int n_keys;
 	const ColumnCompressionInfo **keys;
+	CompressionStats cstat;
 
 	/* We want to prevent other compressors from compressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our compression.
@@ -269,6 +272,9 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
+	cstat.rowcnt_pre_compression = row_compressor.rowcnt_pre_compression;
+	cstat.rowcnt_post_compression = row_compressor.num_compressed_rows;
+	return cstat;
 }
 
 static int16 *
@@ -482,6 +488,8 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
 		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
 		.rows_compressed_into_current_value = 0,
+		.rowcnt_pre_compression = 0,
+		.num_compressed_rows = 0,
 		.sequence_num = SEQUENCE_NUM_GAP,
 	};
 
@@ -823,7 +831,8 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
 	}
-
+	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
+	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
 	MemoryContextReset(row_compressor->per_row_ctx);
 }

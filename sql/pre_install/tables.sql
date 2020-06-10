@@ -358,6 +358,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_chunk_size (
     compressed_heap_size BIGINT NOT NULL,
     compressed_toast_size BIGINT NOT NULL,
     compressed_index_size BIGINT NOT NULL,
+    numrows_pre_compression BIGINT,
+    numrows_post_compression BIGINT,
     PRIMARY KEY(chunk_id, compressed_chunk_id)
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');

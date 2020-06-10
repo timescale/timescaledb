@@ -58,6 +58,11 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', ''
 GRANT SELECT ON _timescaledb_catalog.remote_txn TO PUBLIC;
 
 -- Update drop_chunks policy table
+
+--since we are recreating the bgw_policy_drop_chunks table, it has to be explicitly
+-- removed from the extension as it was configured to be dumped by pg_extension_config_dump.
+-- So remove it from the extension first and then recreate a new table.
+
 CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp (
     job_id INTEGER PRIMARY KEY
     	   REFERENCES _timescaledb_config.bgw_job(id)
@@ -80,7 +85,6 @@ INSERT INTO _timescaledb_config.bgw_policy_drop_chunks_tmp (
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_drop_chunks;
 DROP VIEW IF EXISTS timescaledb_information.policy_stats;
-DROP VIEW IF EXISTS timescaledb_information.policy_stats;
 DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
 DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
 
@@ -102,3 +106,15 @@ INSERT INTO _timescaledb_config.bgw_policy_drop_chunks (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
 DROP TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp;
 GRANT SELECT ON _timescaledb_config.bgw_policy_drop_chunks TO PUBLIC;
+
+DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
+DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
+
+-- all existing compressed chunks have NULL value for the new columns
+ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF NOT EXISTS numrows_pre_compression BIGINT;
+ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF NOT EXISTS numrows_post_compression BIGINT;
+
+--rewrite catalog table to not break catalog scans on tables with missingval optimization
+CLUSTER  _timescaledb_catalog.compression_chunk_size USING compression_chunk_size_pkey;
+ALTER TABLE _timescaledb_catalog.compression_chunk_size SET WITHOUT CLUSTER;
+

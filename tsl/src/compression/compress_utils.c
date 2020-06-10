@@ -80,7 +80,8 @@ compute_chunk_size(Oid chunk_relid)
 
 static void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
-									  int32 compress_chunk_id, ChunkSize *compress_size)
+									  int32 compress_chunk_id, ChunkSize *compress_size,
+									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -111,6 +112,10 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 		Int64GetDatum(compress_size->toast_size);
 	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)] =
 		Int64GetDatum(compress_size->index_size);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_pre_compression)] =
+		Int64GetDatum(rowcnt_pre_compression);
+	values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_post_compression)] =
+		Int64GetDatum(rowcnt_post_compression);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -214,6 +219,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	const ColumnCompressionInfo **colinfo_array;
 	int i = 0, htcols_listlen;
 	ChunkSize before_size, after_size;
+	CompressionStats cstat;
 
 	hcache = ts_hypertable_cache_pin();
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
@@ -241,10 +247,10 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		colinfo_array[i++] = fd;
 	}
 	before_size = compute_chunk_size(cxt.srcht_chunk->table_id);
-	compress_chunk(cxt.srcht_chunk->table_id,
-				   compress_ht_chunk->table_id,
-				   colinfo_array,
-				   htcols_listlen);
+	cstat = compress_chunk(cxt.srcht_chunk->table_id,
+						   compress_ht_chunk->table_id,
+						   colinfo_array,
+						   htcols_listlen);
 
 	/* Copy chunk constraints (including fkey) to compressed chunk.
 	 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
@@ -267,7 +273,9 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &before_size,
 										  compress_ht_chunk->fd.id,
-										  &after_size);
+										  &after_size,
+										  cstat.rowcnt_pre_compression,
+										  cstat.rowcnt_post_compression);
 
 	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id, false);
 	ts_cache_release(hcache);
