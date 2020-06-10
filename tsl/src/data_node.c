@@ -1310,6 +1310,9 @@ data_node_delete(PG_FUNCTION_ARGS)
 										   repartition,
 										   OP_DELETE);
 
+	/* clean up persistent transaction records */
+	remote_txn_persistent_record_delete_for_data_node(server->serverid);
+
 	stmt = (DropStmt){
 		.type = T_DropStmt,
 		.objects = list_make1(makeString(pstrdup(node_name))),
