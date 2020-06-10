@@ -4,6 +4,7 @@ set -e
 set -o pipefail
 
 SCRIPT_DIR=$(dirname $0)
+echo $SCRIPT_DIR
 
 TAGS="1.7.0-pg12 1.7.1-pg12"
 TEST_VERSION="v6"

@@ -157,6 +157,14 @@ SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
 SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
 
 \x
+SELECT chunk_id, numrows_pre_compression, numrows_post_compression 
+FROM _timescaledb_catalog.chunk srcch,
+      _timescaledb_catalog.compression_chunk_size map,
+     _timescaledb_catalog.hypertable srcht
+WHERE map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
+       and srcht.table_name like 'conditions'
+order by chunk_id;
+
 select * from timescaledb_information.compressed_chunk_stats
 where hypertable_name::text like 'conditions'
 order by hypertable_name, chunk_name;

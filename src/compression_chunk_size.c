@@ -47,17 +47,41 @@ ts_compression_chunk_size_totals()
 
 	ts_scanner_foreach(&iterator)
 	{
+		bool nulls[Natts_compression_chunk_size];
+		Datum values[Natts_compression_chunk_size];
+		FormData_compression_chunk_size fd;
+
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		FormData_compression_chunk_size *fd = STRUCT_FROM_TUPLE(ti->tuple,
-																ti->mctx,
-																FormData_compression_chunk_size,
-																FormData_compression_chunk_size);
-		sizes.uncompressed_heap_size += fd->uncompressed_heap_size;
-		sizes.uncompressed_index_size += fd->uncompressed_index_size;
-		sizes.uncompressed_toast_size += fd->uncompressed_toast_size;
-		sizes.compressed_heap_size += fd->compressed_heap_size;
-		sizes.compressed_index_size += fd->compressed_index_size;
-		sizes.compressed_toast_size += fd->compressed_toast_size;
+		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+		memset(&fd, 0, sizeof(FormData_compression_chunk_size));
+
+		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)]);
+		Assert(
+			!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_index_size)]);
+		Assert(
+			!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_toast_size)]);
+		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)]);
+		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)]);
+		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)]);
+		fd.uncompressed_heap_size = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)]);
+		fd.uncompressed_index_size = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_index_size)]);
+		fd.uncompressed_toast_size = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_toast_size)]);
+		fd.compressed_heap_size = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)]);
+		fd.compressed_index_size = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)]);
+		fd.compressed_toast_size = DatumGetInt64(
+			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)]);
+
+		sizes.uncompressed_heap_size += fd.uncompressed_heap_size;
+		sizes.uncompressed_index_size += fd.uncompressed_index_size;
+		sizes.uncompressed_toast_size += fd.uncompressed_toast_size;
+		sizes.compressed_heap_size += fd.compressed_heap_size;
+		sizes.compressed_index_size += fd.compressed_index_size;
+		sizes.compressed_toast_size += fd.compressed_toast_size;
 	}
 
 	return sizes;

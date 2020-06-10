@@ -1241,6 +1241,8 @@ typedef enum Anum_compression_chunk_size
 	Anum_compression_chunk_size_compressed_heap_size,
 	Anum_compression_chunk_size_compressed_toast_size,
 	Anum_compression_chunk_size_compressed_index_size,
+	Anum_compression_chunk_size_numrows_pre_compression,
+	Anum_compression_chunk_size_numrows_post_compression,
 	_Anum_compression_chunk_size_max,
 } Anum_compression_chunk_size;
 
@@ -1256,6 +1258,8 @@ typedef struct FormData_compression_chunk_size
 	int64 compressed_heap_size;
 	int64 compressed_toast_size;
 	int64 compressed_index_size;
+	int64 numrows_pre_compression;
+	int64 numrows_post_compression;
 } FormData_compression_chunk_size;
 
 typedef FormData_compression_chunk_size *Form_compression_chunk_size;
