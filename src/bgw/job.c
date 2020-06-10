@@ -519,6 +519,9 @@ ts_bgw_job_execute(BgwJob *job)
 		case JOB_TYPE_VERSION_CHECK:
 		{
 			bool next_start_set;
+			if (!ts_telemetry_on())
+				/* If telemetry is off, the job trivially succeeds. */
+				return true;
 			/*
 			 * In the first 12 hours, we want telemetry to ping every
 			 * hour. After that initial period, we default to the
