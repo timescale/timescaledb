@@ -505,9 +505,6 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	bool started = false;
 	const char *volatile json = NULL;
 
-	if (!ts_telemetry_on())
-		return true;
-
 	if (!IsTransactionOrTransactionBlock())
 	{
 		started = true;
