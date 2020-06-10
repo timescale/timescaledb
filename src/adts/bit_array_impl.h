@@ -220,7 +220,7 @@ bit_array_append(BitArray *array, uint8 num_bits, uint64 bits)
 		return;
 	}
 
-	/* When splitting an interger across buckets, the low-order bits go into the first bucket and
+	/* When splitting an integer across buckets, the low-order bits go into the first bucket and
 	 * the high-order bits go into the second bucket  */
 	num_bits_for_new_bucket = num_bits - bits_remaining_in_last_bucket;
 	if (bits_remaining_in_last_bucket > 0)

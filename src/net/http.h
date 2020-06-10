@@ -68,7 +68,7 @@ extern void ts_http_request_set_uri(HttpRequest *req, const char *uri);
 extern void ts_http_request_set_version(HttpRequest *req, HttpVersion version);
 
 /* Assume that name and value are null-terminated */
-extern void ts_http_request_set_header(HttpRequest *req, const char *name, const char *valuue);
+extern void ts_http_request_set_header(HttpRequest *req, const char *name, const char *value);
 extern void ts_http_request_set_body(HttpRequest *req, const char *body, size_t body_len);
 
 /*  Serialize the request into char *dst. Return the length of request in optional size pointer*/

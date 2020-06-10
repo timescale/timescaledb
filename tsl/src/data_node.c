@@ -156,7 +156,7 @@ data_node_get_foreign_server_by_oid(Oid server_oid, AclMode mode)
 {
 	ForeignServer *server = GetForeignServer(server_oid);
 	bool PG_USED_FOR_ASSERTS_ONLY valid = validate_foreign_server(server, mode, true);
-	Assert(valid); /* Sould always be valid since we should see error otherwise */
+	Assert(valid); /* Should always be valid since we should see error otherwise */
 	return server;
 }
 

@@ -36,7 +36,7 @@ for a job. This is so that we are conservative and never miss a crash and fail t
 use the appropriate backoff logic. There is some complexity
 in ensuring that all crashes are counted. A crash in Postgres causes /all/
 processes to quit immediately therefore we cannot write anything to the database once
-any process has crashed. Thus, we must be able to deduce that a crash occured
+any process has crashed. Thus, we must be able to deduce that a crash occurred
 from a commit that happened before any crash. We accomplish
 this by committing a changes to the stats table before a job starts and
 undoing the change after it finishes. If a job crashed, it will be left

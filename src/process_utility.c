@@ -666,7 +666,7 @@ relation_should_recurse(RangeVar *rv)
 	return rv->inh;
 }
 
-/* handle forwading TRUNCATEs to the chunks of a hypertable */
+/* handle forwarding TRUNCATEs to the chunks of a hypertable */
 static void
 handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hypertable *ht)
 {
@@ -691,7 +691,7 @@ process_truncate(ProcessUtilityArgs *args)
 	List *hypertables = NIL;
 	List *relations = NIL;
 
-	/* For all hypertables, we drop the now empty chunks. We also propogate the
+	/* For all hypertables, we drop the now empty chunks. We also propagate the
 	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
 	 */
 	/* Preprocess and filter out distributed hypertables */
@@ -771,7 +771,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 		handle_truncate_hypertable(args, stmt, ht);
 
-		/* propogate to the compressed hypertable */
+		/* propagate to the compressed hypertable */
 		if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
 		{
 			Hypertable *compressed_ht =
@@ -836,7 +836,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 							 "instead.")));
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
-			 *  it would be blocked if there are depenent objects */
+			 *  it would be blocked if there are dependent objects */
 			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 			{
 				Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
@@ -2180,7 +2180,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		if (list_length(chunk_indexes) > 0)
 		{
 			/* Sort the mappings on chunk OID. This makes the verbose output more
-			 * predictible in tests, but isn't strictly necessary. We could also do
+			 * predictable in tests, but isn't strictly necessary. We could also do
 			 * it only for "verbose" output, but this doesn't seem worth it as the
 			 * cost of sorting is quickly amortized over the actual work to cluster
 			 * the chunks. */

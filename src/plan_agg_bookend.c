@@ -666,7 +666,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		 * inheritance-relations are expanded, and thus query_planner will
 		 * try to expand our hypertables if they are marked as
 		 * inheritance-relations. Since we do not want this, we must mark
-		 * hypertabls as non-inheritance now.
+		 * hypertables as non-inheritance now.
 		 */
 		foreach (lc, subroot->parse->rtable)
 		{

@@ -252,9 +252,9 @@ init_scan_by_job_id(ScanIterator *iterator, int32 job_id)
 }
 
 /* Lock a job tuple using an advisory lock. Advisory job locks are
- *  used to lock the job row while a job is running to prevent a job from being
- *  modified while in the middle of a run. This lock should be taken before
- *  bgw_job table lock to avoid deadlocks.
+ * used to lock the job row while a job is running to prevent a job from being
+ * modified while in the middle of a run. This lock should be taken before
+ * bgw_job table lock to avoid deadlocks.
  *
  * We use an advisory lock instead of a tuple lock because we want the lock on the job id
  * and not on the tid of the row (in case it is vacuumed or updated in some way). We don't
@@ -262,7 +262,7 @@ init_scan_by_job_id(ScanIterator *iterator, int32 job_id)
  * to be able to send a signal to the PID of the running job. This is used by delete because,
  * a job deletion sends a SIGINT to the running job to cancel it.
  *
- * We aquire a SHARE lock on the job during scheduling and when the job is running so that it
+ * We acquire a SHARE lock on the job during scheduling and when the job is running so that it
  * cannot be deleted during those times and an EXCLUSIVE lock when deleting.
  *
  * returns whether or not the lock was obtained (false return only possible if block==false)
