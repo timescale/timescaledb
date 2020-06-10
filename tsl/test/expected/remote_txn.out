@@ -797,3 +797,35 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-0
 
 PREPARE TRANSACTION 'test-1';
 ERROR:  cannot prepare a transaction that modified remote tables
+-- test remote_txn cleanup on data node delete
+--
+SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loopback' or data_node_name = 'loopback2';
+ count 
+-------
+     2
+(1 row)
+
+SELECT * FROM delete_data_node('loopback');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loopback';
+ count 
+-------
+     0
+(1 row)
+
+SELECT * FROM delete_data_node('loopback2');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loopback2';
+ count 
+-------
+     0
+(1 row)
+

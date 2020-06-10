@@ -325,3 +325,13 @@ SELECT count(*) FROM pg_prepared_xacts;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 PREPARE TRANSACTION 'test-1';
+
+-- test remote_txn cleanup on data node delete
+--
+SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loopback' or data_node_name = 'loopback2';
+
+SELECT * FROM delete_data_node('loopback');
+SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loopback';
+
+SELECT * FROM delete_data_node('loopback2');
+SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loopback2';
