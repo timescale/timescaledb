@@ -361,7 +361,7 @@ bit_array_append_bucket(BitArray *array, uint8 bits_used, uint64 bucket)
 static uint64
 bit_array_low_bits_mask(uint8 bits_used)
 {
-	if (bits_used == 64)
+	if (bits_used >= 64)
 		return PG_UINT64_MAX;
 	else
 		return (UINT64CONST(1) << bits_used) - UINT64CONST(1);
