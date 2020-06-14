@@ -1,4 +1,4 @@
-name: Linux 32-bit x86
+name: Regression Linux i386
 on:
   schedule:
     # run daily 20:00 on master branch
@@ -78,6 +78,9 @@ jobs:
       if: failure()
       env:
         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_COLOR: '#ff0000'
+        SLACK_USERNAME: GitHub Action
         SLACK_TITLE: Regression 32-bit PG${{ matrix.pg }} ${{ job.status }}
+        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
       uses: rtCamp/action-slack-notify@v2.0.2
 
