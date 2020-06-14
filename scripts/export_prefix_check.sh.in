@@ -37,6 +37,9 @@ exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
         -e '^_end$' \
         -e '^_fini$' \
         -e '^_init$' \
+        -e '^flush_fn_list$' \
+        -e '^writeout_fn_list$' \
+        -e '^lprofDirMode$' \
         -e '^_\?ts_' \
         -e '^_\?tsl_license_update_check$' \
         -e '^_\?pg_finfo' \
