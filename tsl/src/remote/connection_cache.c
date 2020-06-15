@@ -374,7 +374,7 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 		Int32GetDatum(remote_connection_xact_depth_get(entry->conn));
 	values[AttrNumberGetAttrOffset(Anum_show_conn_processing)] =
 		BoolGetDatum(remote_connection_is_processing(entry->conn));
-	values[AttrNumberGetAttrOffset(Anum_show_conn_processing)] = BoolGetDatum(entry->invalidated);
+	values[AttrNumberGetAttrOffset(Anum_show_conn_invalidated)] = BoolGetDatum(entry->invalidated);
 
 	return heap_form_tuple(tupdesc, values, nulls);
 }

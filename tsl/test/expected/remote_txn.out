@@ -368,11 +368,11 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-0
 (1 row)
 
     --connection in transaction
-    SELECT node_name, user_name, host, database, connection_status, transaction_status, transaction_depth, processing
+    SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
- node_name | user_name  |   host    |   database    | connection_status | transaction_status | transaction_depth | processing 
------------+------------+-----------+---------------+-------------------+--------------------+-------------------+------------
- loopback  | super_user | localhost | db_remote_txn | OK                | INTRANS            |                 1 | f
+ node_name | connection_status | transaction_status | transaction_depth | processing 
+-----------+-------------------+--------------------+-------------------+------------
+ loopback  | OK                | INTRANS            |                 1 | f
 (1 row)
 
 ROLLBACK;
@@ -1085,7 +1085,7 @@ BEGIN;
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
 -----------+-------------------+--------------------+-------------------+------------
- loopback  | BAD               | UNKNOWN            |                 1 | f
+ loopback  | BAD               | UNKNOWN            |                 1 | t
  loopback2 | OK                | INTRANS            |                 1 | f
 (2 rows)
 

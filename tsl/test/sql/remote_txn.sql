@@ -193,7 +193,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     --connection in transaction
-    SELECT node_name, user_name, host, database, connection_status, transaction_status, transaction_depth, processing
+    SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 ROLLBACK;
 
