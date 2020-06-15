@@ -958,8 +958,8 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 	if (HeapTupleIsValid(oldtup))
 	{
 		stup = heap_modify_tuple(oldtup, RelationGetDescr(sd), values, nulls, replaces);
+		CatalogTupleUpdate(sd, &oldtup->t_self, stup);
 		ReleaseSysCache(oldtup);
-		CatalogTupleUpdate(sd, &stup->t_self, stup);
 	}
 	else
 	{
@@ -970,13 +970,78 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 	heap_freetuple(stup);
 
 	relation_close(sd, RowExclusiveLock);
-
 	relation_close(rel, ShareUpdateExclusiveLock);
 }
 
+/*
+ * StatsProcessContext filters out duplicate stats from replica chunks.
+ *
+ * When processing chunk stats from data nodes, we might receive the same
+ * stats from multiple data nodes when native replication is enabled. With the
+ * StatsProcessContext we can filter out the duplicates, and ensure we only
+ * add the stats once. Without the filtering, we will get errors (e.g., unique
+ * violations).
+ *
+ * We could elide the filtering if we requested stats only for the chunks that
+ * are "primary", but that requires the ability to specify the specific remote
+ * chunks to retrieve stats for rather than specifying "all chunks" for the
+ * given hypertable.
+ */
+typedef struct ChunkAttKey
+{
+	Oid chunk_relid;
+	Index attnum;
+} ChunkAttKey;
+
+typedef struct StatsProcessContext
+{
+	HTAB *htab;
+} StatsProcessContext;
+
 static void
-chunk_process_remote_colstats_row(TupleFactory *tf, TupleDesc tupdesc, PGresult *res, int row,
-								  const char *node_name)
+stats_process_context_init(StatsProcessContext *ctx, long nstats)
+{
+	HASHCTL ctl;
+
+	MemSet(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(ChunkAttKey);
+	ctl.entrysize = sizeof(ChunkAttKey);
+
+	ctl.hcxt = CurrentMemoryContext;
+	ctx->htab =
+		hash_create("StatsProcessContext", nstats, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
+
+static bool
+stats_process_context_add_chunk_attributed(StatsProcessContext *ctx, Oid relid, Index attnum)
+{
+	ChunkAttKey key = {
+		.chunk_relid = relid,
+		.attnum = attnum,
+	};
+	ChunkAttKey *entry;
+	bool found;
+
+	entry = hash_search(ctx->htab, &key, HASH_ENTER, &found);
+
+	if (!found)
+	{
+		entry->chunk_relid = relid;
+		entry->attnum = attnum;
+	}
+
+	return found;
+}
+
+static void
+stats_process_context_finish(StatsProcessContext *ctx)
+{
+	hash_destroy(ctx->htab);
+}
+
+static void
+chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, TupleDesc tupdesc,
+								  PGresult *res, int row, const char *node_name)
 {
 	Datum values[_Anum_chunk_colstats_max];
 	bool nulls[_Anum_chunk_colstats_max] = { false };
@@ -1017,6 +1082,12 @@ chunk_process_remote_colstats_row(TupleFactory *tf, TupleDesc tupdesc, PGresult 
 	slot_kinds = (int *) ARR_DATA_PTR(kind_array);
 	os_idx = 1;
 	vt_idx = 1;
+
+	/* Filter out chunk cols we've already added. This happens when there are
+	 * replica chunks */
+	if (stats_process_context_add_chunk_attributed(ctx, chunk->table_id, col_id))
+		return;
+
 	for (i = 0; i < STATISTIC_NUM_SLOTS; ++i)
 	{
 		Datum strings[STRINGS_PER_OP_OID];
@@ -1173,10 +1244,13 @@ chunk_process_remote_relstats_row(TupleFactory *tf, TupleDesc tupdesc, PGresult 
 static void
 fetch_remote_chunk_stats(Hypertable *ht, FunctionCallInfo fcinfo, bool col_stats)
 {
+	StatsProcessContext statsctx;
 	DistCmdResult *cmdres;
 	TupleDesc tupdesc;
 	TupleFactory *tf;
 	Size i;
+	long num_rows;
+	long num_stats;
 
 	Assert(hypertable_is_distributed(ht));
 
@@ -1187,9 +1261,17 @@ fetch_remote_chunk_stats(Hypertable *ht, FunctionCallInfo fcinfo, bool col_stats
 						"that cannot accept type record")));
 
 	cmdres = ts_dist_cmd_invoke_func_call_on_all_data_nodes(fcinfo);
+
 	/* Expect TEXT response format since dist command API currently defaults
 	 * to requesting TEXT */
 	tf = tuplefactory_create_for_tupdesc(tupdesc, true);
+	num_rows = ts_dist_cmd_total_row_count(cmdres);
+	/* Estimate the number of non-duplicate stats to use for initial size of
+	 * StatsProcessContext. Use slightly bigger than strictly necessary to
+	 * avoid a resize. */
+	num_stats = (5 * num_rows) / (ht->fd.replication_factor * 4);
+
+	stats_process_context_init(&statsctx, num_stats);
 
 	for (i = 0; /* exit when res == NULL below */; i++)
 	{
@@ -1204,12 +1286,17 @@ fetch_remote_chunk_stats(Hypertable *ht, FunctionCallInfo fcinfo, bool col_stats
 
 		if (col_stats)
 			for (row = 0; row < PQntuples(res); row++)
-				chunk_process_remote_colstats_row(tf, tupdesc, res, row, node_name);
+				chunk_process_remote_colstats_row(&statsctx, tf, tupdesc, res, row, node_name);
 		else
 			for (row = 0; row < PQntuples(res); row++)
 				chunk_process_remote_relstats_row(tf, tupdesc, res, row, node_name);
+
+		/* Early cleanup of PGresult protects against ballooning memory usage
+		 * when there are a lot of rows */
+		ts_dist_cmd_clear_result_by_index(cmdres, i);
 	}
 
+	stats_process_context_finish(&statsctx);
 	ts_dist_cmd_close_response(cmdres);
 }
 

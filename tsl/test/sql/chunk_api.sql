@@ -15,7 +15,8 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
-FROM show_chunks('chunkapi');
+FROM show_chunks('chunkapi')
+ORDER BY chunk_id;
 
 -- Creating a chunk with the constraints of an existing chunk should
 -- return the existing chunk
@@ -51,7 +52,8 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
 
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
-FROM show_chunks('chunkapi');
+FROM show_chunks('chunkapi')
+ORDER BY chunk_id;
 
 -- Show the new chunks
 \dt public.*
@@ -60,24 +62,30 @@ FROM show_chunks('chunkapi');
 -- Make ANALYZE deterministic
 SELECT setseed(1);
 
-
--- Test getting relation stats for chunk.  First get stats
+-- Test getting relation stats for chunks.  First get stats
 -- chunk-by-chunk. Note that the table isn't ANALYZED, so no stats
 -- present yet.
 SELECT (_timescaledb_internal.get_chunk_relstats(show_chunks)).*
-FROM show_chunks('chunkapi');
+FROM show_chunks('chunkapi')
+ORDER BY chunk_id;
 SELECT (_timescaledb_internal.get_chunk_colstats(show_chunks)).*
-FROM show_chunks('chunkapi');
+FROM show_chunks('chunkapi')
+ORDER BY chunk_id;
 
 -- Get the same stats but by giving the hypertable as input
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('chunkapi'))
+ORDER BY relname;
+
 SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
 FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('chunkapi'))
+ORDER BY tablename, attname;
 
 -- Show stats after analyze
 ANALYZE chunkapi;
@@ -85,10 +93,15 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('chunkapi'))
+ORDER BY relname;
+
 SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
 FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('chunkapi'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+FROM show_chunks('chunkapi'))
+ORDER BY tablename, attname;
 
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -122,9 +135,12 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
+ORDER BY relname;
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
 
 -- Run ANALYZE on data node 1
@@ -132,18 +148,24 @@ SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
 
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'));
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
 
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
+ORDER BY relname;
+
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
 
 -- Test that user without table permissions can't get column stats
@@ -151,17 +173,29 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
 SET ROLE :ROLE_1;
 
--- Run ANALYZE again, but on both nodes
-SELECT * FROM distributed_exec('ANALYZE disttable');
+-- Run ANALYZE again, but on both nodes.
+ANALYZE disttable;
 
 -- Now expect stats from all data node chunks
 SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
 
+-- Test ANALYZE with a replica chunk. We'd like to ensure the
+-- stats-fetching functions handle duplicate stats from different (but
+-- identical) replica chunks.
+SELECT set_replication_factor('disttable', 2);
+INSERT INTO disttable VALUES ('2019-01-01 05:00:00-8', 1, 23.4, 'green');
+-- Run twice to test that stats-fetching functions handle replica chunks.
+ANALYZE disttable;
+ANALYZE disttable;
+
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'));
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
+ORDER BY relname;
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable'))
+(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+ FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
 
 -- Check underlying pg_statistics table (looking at all columns except
