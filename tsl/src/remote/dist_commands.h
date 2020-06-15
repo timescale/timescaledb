@@ -29,8 +29,9 @@ extern PGresult *ts_dist_cmd_get_result_by_node_name(DistCmdResult *response,
 													 const char *node_name);
 extern PGresult *ts_dist_cmd_get_result_by_index(DistCmdResult *response, Size index,
 												 const char **node_name);
+extern void ts_dist_cmd_clear_result_by_index(DistCmdResult *response, Size index);
 extern Size ts_dist_cmd_response_count(DistCmdResult *result);
-
+extern long ts_dist_cmd_total_row_count(DistCmdResult *result);
 extern void ts_dist_cmd_close_response(DistCmdResult *response);
 
 #define ts_dist_cmd_run_on_data_nodes(command, nodes)                                              \

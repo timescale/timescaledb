@@ -254,6 +254,22 @@ ts_dist_cmd_response_count(DistCmdResult *result)
 	return result->num_responses;
 }
 
+long
+ts_dist_cmd_total_row_count(DistCmdResult *result)
+{
+	int i;
+	long num_rows = 0;
+
+	for (i = 0; i < result->num_responses; ++i)
+	{
+		DistCmdResponse *resp = &result->responses[i];
+
+		num_rows += PQntuples(async_response_result_get_pg_result(resp->result));
+	}
+
+	return num_rows;
+}
+
 /*
  * Convert an expected scalar return value.
  *
@@ -306,17 +322,35 @@ ts_dist_cmd_get_single_scalar_result_by_index(DistCmdResult *result, Size index,
 }
 
 void
+ts_dist_cmd_clear_result_by_index(DistCmdResult *response, Size index)
+{
+	DistCmdResponse *resp;
+
+	if (index >= response->num_responses)
+		elog(ERROR, "no response for index %zu", index);
+
+	resp = &response->responses[index];
+
+	if (resp->result != NULL)
+	{
+		async_response_result_close(resp->result);
+		resp->result = NULL;
+	}
+
+	if (resp->data_node != NULL)
+	{
+		pfree((char *) resp->data_node);
+		resp->data_node = NULL;
+	}
+}
+
+void
 ts_dist_cmd_close_response(DistCmdResult *response)
 {
-	int i;
+	Size i;
 
 	for (i = 0; i < response->num_responses; ++i)
-	{
-		DistCmdResponse *resp = &response->responses[i];
-
-		async_response_result_close(resp->result);
-		pfree((char *) resp->data_node);
-	}
+		ts_dist_cmd_clear_result_by_index(response, i);
 
 	pfree(response);
 }
