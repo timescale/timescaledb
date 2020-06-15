@@ -31,15 +31,15 @@ exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
     | xargs -0 @NM@ ${DEFINED_ONLY} ${EXTERN_ONLY} \
     | sed -e 's:^/.*$::' -e '/^$/d' -e 's/^[a-f0-9]* [A-Za-z] //' \
     | grep -v \
-        -e '^__gcov_' \
+        -e '^_\?__gcov_' \
         -e '^__bss_start$' \
         -e '^_edata$' \
         -e '^_end$' \
         -e '^_fini$' \
         -e '^_init$' \
-        -e '^flush_fn_list$' \
-        -e '^writeout_fn_list$' \
-        -e '^lprofDirMode$' \
+        -e '^_\?flush_fn_list$' \
+        -e '^_\?writeout_fn_list$' \
+        -e '^_\?lprofDirMode$' \
         -e '^_\?ts_' \
         -e '^_\?tsl_license_update_check$' \
         -e '^_\?pg_finfo' \
