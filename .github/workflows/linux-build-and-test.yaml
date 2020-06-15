@@ -1,4 +1,4 @@
-name: Regression Linux
+name: Regression
 on:
   schedule:
     # run daily 20:00 on master branch
@@ -19,8 +19,8 @@ jobs:
     - id: set-matrix
       run: python scripts/gh_matrix_builder.py ${{ github.event_name }}
 
-  regress_linux:
-    name: PG${{ matrix.pg }} ${{ matrix.name }}
+  regress:
+    name: PG${{ matrix.pg }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
     runs-on: ${{ matrix.os }}
     strategy:
@@ -32,9 +32,11 @@ jobs:
       MAKE_JOBS: 6
       CLANG: ${{ matrix.clang }}
       CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
 
     steps:
     - name: Install Dependencies
+      if: runner.os == 'Linux'
       run: sudo apt install flex bison lcov systemd-coredump gdb ${{ matrix.extra_packages }}
 
     # we cache the build directory instead of the install directory here
@@ -68,7 +70,7 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Test telemetry without OpenSSL
-      if: github.event_name != 'pull_request' && matrix.build_type == 'Debug'
+      if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DUSE_OPENSSL=false
         make -j $MAKE_JOBS -C nossl
@@ -86,7 +88,7 @@ jobs:
 
     - name: make installcheck
       id: installcheck
-      run: make -k -C build installcheck
+      run: make -k -C build installcheck ${{ matrix.installcheck_args }}
 
     - name: coverage
       if: matrix.coverage
@@ -120,7 +122,7 @@ jobs:
         path: postgres.log
 
     - name: Stack trace
-      if: failure()
+      if: failure() && runner.os == 'Linux'
       run: |
         sleep 10 # wait for in progress coredumps to finish
         echo "bt" | sudo coredumpctl gdb
@@ -134,4 +136,3 @@ jobs:
         SLACK_TITLE: Regression ${{ matrix.os }} PG${{ matrix.pg }} ${{ matrix.name }} ${{ job.status }}
         SLACK_MESSAGE: ${{ github.event.head_commit.message }}
       uses: rtCamp/action-slack-notify@v2.0.2
-
