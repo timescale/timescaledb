@@ -22,6 +22,11 @@ import sys
 # github event type which is either push, pull_request or schedule
 event_type = sys.argv[1]
 
+PG11_EARLIEST = "11.0"
+PG11_LATEST = "11.8"
+PG12_EARLIEST = "12.0"
+PG12_LATEST = "12.3"
+
 m = {"include": [],}
 
 # helper functions to generate matrix entries
@@ -37,10 +42,11 @@ def build_debug_config(overrides):
     "pg_build_args": "--enable-debug --enable-cassert",
     "tsdb_build_args": "-DCODECOVERAGE=ON",
     "coverage": True,
-    "llvm_config": "/usr/bin/llvm-config-9",
+    "llvm_config": "llvm-config-9",
     "clang": "clang-9",
     "os": "ubuntu-18.04",
     "cc": "gcc",
+    "cxx": "g++",
   })
   base_config.update(overrides)
   return base_config
@@ -72,8 +78,23 @@ def build_apache_config(overrides):
   return base_config
 
 # always test debug build on latest pg11 and latest pg12
-m["include"].append(build_debug_config({"pg":"11.8"}))
-m["include"].append(build_debug_config({"pg":"12.3"}))
+m["include"].append(build_debug_config({"pg":PG11_LATEST}))
+m["include"].append(build_debug_config({"pg":PG12_LATEST}))
+
+macos_config = {
+  "pg": PG12_LATEST,
+  "os": "macos-10.15",
+  "cc": "clang",
+  "cxx": "clang++",
+  "clang": "clang",
+  "pg_build_args": "--enable-debug --enable-cassert --with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
+  "tsdb_build_args": "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
+  "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
+  "coverage": False,
+  "installcheck_args": "IGNORES='bgw_db_scheduler'"
+}
+
+m["include"].append(build_debug_config(macos_config))
 
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
@@ -84,7 +105,7 @@ if event_type != "pull_request":
   # there is a problem when building PG 11.0 on ubuntu
   # with llvm-9 so we use llvm-8 instead
   pg11_debug_earliest = {
-    "pg": "11.0",
+    "pg": PG11_EARLIEST,
     "llvm_config": "/usr/bin/llvm-config-8",
     "clang": "clang-8",
     "extra_packages": "llvm-8 llvm-8-dev llvm-8-tools",
@@ -92,15 +113,15 @@ if event_type != "pull_request":
   m["include"].append(build_debug_config(pg11_debug_earliest))
 
   # add debug test for first supported PG12 version
-  m["include"].append(build_debug_config({"pg":"12.0"}))
+  m["include"].append(build_debug_config({"pg":PG12_EARLIEST}))
 
   # add release test for latest pg11 and latest pg12
-  m["include"].append(build_release_config({"pg":"11.8"}))
-  m["include"].append(build_release_config({"pg":"12.3"}))
+  m["include"].append(build_release_config({"pg":PG11_LATEST}))
+  m["include"].append(build_release_config({"pg":PG12_LATEST}))
 
   # add apache only test for latest pg11 and latest pg 12
-  m["include"].append(build_apache_config({"pg":"11.8"}))
-  m["include"].append(build_apache_config({"pg":"12.3"}))
+  m["include"].append(build_apache_config({"pg":PG11_LATEST}))
+  m["include"].append(build_apache_config({"pg":PG12_LATEST}))
 
 
 # generate command to set github action variable
