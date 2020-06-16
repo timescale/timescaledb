@@ -5,6 +5,9 @@ on:
     branches:
       - prerelease_test
   pull_request:
+defaults:
+  run:
+    shell: cmd
 jobs:
   build:
     name: PG${{ matrix.pg }} [${{ matrix.build_type }}]
