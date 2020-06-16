@@ -48,6 +48,7 @@ jobs:
       run: cmake --build ${{ matrix.build_type }} --config ${{ matrix.build_type }}
     - name: Install [${{ matrix.build_type }}]
       run: cmake --install ${{ matrix.build_type }} --config ${{ matrix.build_type }}
+    - run: ls $HOME\PostgreSQL
     - name: Create DB
       run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\initdb -U postgres -A trust
     - name: Start PostgreSQL
