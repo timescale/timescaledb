@@ -653,13 +653,17 @@ SELECT view_name, refresh_lag, max_interval_per_job
     FROM timescaledb_information.continuous_aggregates ORDER BY 1;
 
 -- test timezone is respected when materializing cagg with TIMESTAMP time column
-RESET timescaledb.current_timestamp_mock;
 RESET client_min_messages;
 SET SESSION timezone TO 'GMT+5';
 
+\set NOW_TEST 'timestamptz \'2019-09-09 01:01:01 UTC\''
+
 CREATE TABLE timezone_test(time timestamp NOT NULL);
 SELECT table_name FROM create_hypertable('timezone_test','time');
-INSERT INTO timezone_test VALUES (now() - '30m'::interval), (now()), (now() + '30m'::interval);
+INSERT INTO timezone_test VALUES
+    (:NOW_TEST - '30m'::interval),
+    (:NOW_TEST),
+    (:NOW_TEST + '30m'::interval);
 
 CREATE VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
@@ -678,7 +682,10 @@ SET SESSION timezone TO 'GMT-5';
 
 CREATE TABLE timezone_test(time timestamp NOT NULL);
 SELECT table_name FROM create_hypertable('timezone_test','time');
-INSERT INTO timezone_test VALUES (now() - '30m'::interval), (now()), (now() + '30m'::interval);
+INSERT INTO timezone_test VALUES
+    (:NOW_TEST - '30m'::interval),
+    (:NOW_TEST),
+    (:NOW_TEST + '30m'::interval);
 
 CREATE VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
@@ -691,6 +698,9 @@ REFRESH MATERIALIZED VIEW timezone_test_summary;
 -- this must return 1 as only 1 row is in the materialization interval
 SELECT count(*) FROM timezone_test_summary;
 DROP TABLE timezone_test CASCADE;
+
+\unset NOW_TEST
+RESET timescaledb.current_timestamp_mock;
 
 -- TESTS for integer based table to verify watermark limited by max value of time column and not by now
 CREATE TABLE continuous_agg_int(time BIGINT, data BIGINT);
