@@ -1417,3 +1417,24 @@ SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 
 DROP TABLE test_1702;
+
+--
+-- Test that creating a hypertable with a space dimension and
+-- if_not_exists works as expected, that is, the second call does not
+-- generate an error (and does not crash).
+--
+
+CREATE TABLE whatever (
+    timestamp TIMESTAMPTZ NOT NULL,
+    user_id   INT         NOT NULL,
+    data      JSONB
+);
+
+SELECT * FROM create_distributed_hypertable('whatever', 'timestamp', 'user_id',
+                                            if_not_exists => true, chunk_time_interval => INTERVAL '1 day');
+-- Check the hypertable sequence before and after call to ensure that
+-- the hypertable sequence was not increased with the second call.
+SELECT  * FROM _timescaledb_catalog.hypertable_id_seq;
+SELECT * FROM create_distributed_hypertable('whatever', 'timestamp', 'user_id',
+                                            if_not_exists => true, chunk_time_interval => INTERVAL '1 day');
+SELECT  * FROM _timescaledb_catalog.hypertable_id_seq;
