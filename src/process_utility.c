@@ -582,8 +582,13 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	VacuumCtx *ctx = (VacuumCtx *) arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	VacuumRelation *chunk_vacuum_rel;
-	RangeVar *chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
+	RangeVar *chunk_range_var;
 
+	/* Skip vacuuming compressed chunks */
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		return;
+
+	chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
 	chunk_range_var->relname = NameStr(chunk->fd.table_name);
 	chunk_range_var->schemaname = NameStr(chunk->fd.schema_name);
 	chunk_vacuum_rel =

@@ -132,7 +132,7 @@ step A2: COMMIT;
 step C1: <... completed>
 compress_chunk 
 
-_timescaledb_internal._hyper_7_13_chunk
+_timescaledb_internal._hyper_7_12_chunk
 step Cc: COMMIT;
 
 starting permutation: LockChunk1 C1 D1 UnlockChunk Cc Dc
@@ -165,12 +165,12 @@ step D1:
   WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
   ORDER BY ch.id LIMIT 1;
 
-ERROR:  chunk "_hyper_9_17_chunk" is not compressed
+ERROR:  chunk "_hyper_9_16_chunk" is not compressed
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
 compress_chunk 
 
-_timescaledb_internal._hyper_9_17_chunk
+_timescaledb_internal._hyper_9_16_chunk
 step Cc: COMMIT;
 step Dc: COMMIT;
 
@@ -204,7 +204,7 @@ step UnlockChunk: ROLLBACK;
 step C1: <... completed>
 compress_chunk 
 
-_timescaledb_internal._hyper_11_21_chunk
+_timescaledb_internal._hyper_11_20_chunk
 step Cc: COMMIT;
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks   number_compressed_chunks
@@ -241,7 +241,7 @@ step UnlockChunk: ROLLBACK;
 step C1: <... completed>
 compress_chunk 
 
-_timescaledb_internal._hyper_13_25_chunk
+_timescaledb_internal._hyper_13_24_chunk
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks   number_compressed_chunks
 
