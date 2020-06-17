@@ -47,13 +47,15 @@ jobs:
       # able to realize interdependencies between targets, which leads
       # to linker failures when a target finished before another one
       # it depends on.
+    - name: ls
+      run: ls .\
     - name: Build [${{ matrix.build_type }}]
       run: cmake --build ${{ matrix.build_type }} --config ${{ matrix.build_type }}
     - name: Install [${{ matrix.build_type }}]
       run: cmake --install ${{ matrix.build_type }} --config ${{ matrix.build_type }}
     - name: Create DB
-      run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\initdb -U postgres -A trust
+      run: PostgreSQL\${{ matrix.pg }}\bin\initdb -U postgres -A trust
     - name: Start PostgreSQL
-      run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\pg_ctl start -o "-cshared_preload_libraries=timescaledb"
+      run: PostgreSQL\${{ matrix.pg }}\bin\pg_ctl start -o "-cshared_preload_libraries=timescaledb"
     - name: Test CREATE EXTENSION
-      run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\psql -U postgres -d postgres -c 'CREATE EXTENSION timescaledb'
+      run: PostgreSQL\${{ matrix.pg }}\bin\psql -U postgres -d postgres -c 'CREATE EXTENSION timescaledb'
