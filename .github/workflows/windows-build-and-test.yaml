@@ -48,14 +48,14 @@ jobs:
       # to linker failures when a target finished before another one
       # it depends on.
     - name: ls
-      run: ls .\
+      run: ls $HOME
     - name: Build [${{ matrix.build_type }}]
       run: cmake --build ${{ matrix.build_type }} --config ${{ matrix.build_type }}
     - name: Install [${{ matrix.build_type }}]
       run: cmake --install ${{ matrix.build_type }} --config ${{ matrix.build_type }}
     - name: Create DB
-      run: PostgreSQL\${{ matrix.pg }}\bin\initdb -U postgres -A trust
+      run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\initdb -U postgres -A trust
     - name: Start PostgreSQL
-      run: PostgreSQL\${{ matrix.pg }}\bin\pg_ctl start -o "-cshared_preload_libraries=timescaledb"
+      run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\pg_ctl start -o "-cshared_preload_libraries=timescaledb"
     - name: Test CREATE EXTENSION
-      run: PostgreSQL\${{ matrix.pg }}\bin\psql -U postgres -d postgres -c 'CREATE EXTENSION timescaledb'
+      run: $HOME\PostgreSQL\${{ matrix.pg }}\bin\psql -U postgres -d postgres -c 'CREATE EXTENSION timescaledb'
