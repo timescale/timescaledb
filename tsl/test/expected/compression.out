@@ -1247,3 +1247,102 @@ ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compr
 \set ON_ERROR_STOP 1
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;
+-- Test that pg_stats for uncompressed chunks are frozen at compression time
+CREATE TABLE stattest(time TIMESTAMPTZ NOT NULL, c1 int);
+SELECT create_hypertable('stattest', 'time');
+   create_hypertable    
+------------------------
+ (27,public,stattest,t)
+(1 row)
+
+INSERT INTO stattest SELECT '2020/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(0,25) v;
+SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'stattest');
+\set statchunk '(select table_name from temptable)'
+SELECT * FROM pg_stats WHERE tablename = :statchunk;
+ schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogram_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
+------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+------------------+-------------+-------------------+------------------------+----------------------
+(0 rows)
+
+ALTER TABLE stattest SET (timescaledb.compress);
+SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_27_55_chunk
+(1 row)
+
+SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
+                                                       histogram_bounds                                                        
+-------------------------------------------------------------------------------------------------------------------------------
+ {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
+(1 row)
+
+-- Now verify stats are not changed when we analyze the hypertable
+ANALYZE stattest;
+SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
+                                                       histogram_bounds                                                        
+-------------------------------------------------------------------------------------------------------------------------------
+ {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
+(1 row)
+
+-- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
+SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
+ histogram_bounds 
+------------------
+(0 rows)
+
+-- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
+-- to hide WARNINGs for skipped tables
+SET client_min_messages TO ERROR;
+ANALYZE;
+SET client_min_messages TO NOTICE;
+SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
+                                                       histogram_bounds                                                        
+-------------------------------------------------------------------------------------------------------------------------------
+ {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
+(1 row)
+
+-- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
+SELECT reloptions FROM pg_class WHERE relname = :statchunk;
+         reloptions         
+----------------------------
+ {autovacuum_enabled=false}
+(1 row)
+
+SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
+             decompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_27_55_chunk
+(1 row)
+
+SELECT reloptions FROM pg_class WHERE relname = :statchunk;
+        reloptions         
+---------------------------
+ {autovacuum_enabled=true}
+(1 row)
+
+SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_27_55_chunk
+(1 row)
+
+SELECT reloptions FROM pg_class WHERE relname = :statchunk;
+         reloptions         
+----------------------------
+ {autovacuum_enabled=false}
+(1 row)
+
+ALTER TABLE stattest SET (autovacuum_enabled = false);
+SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
+             decompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_27_55_chunk
+(1 row)
+
+SELECT reloptions FROM pg_class WHERE relname = :statchunk;
+         reloptions         
+----------------------------
+ {autovacuum_enabled=false}
+(1 row)
+
+DROP TABLE stattest;

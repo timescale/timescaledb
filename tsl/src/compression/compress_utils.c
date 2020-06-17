@@ -9,6 +9,7 @@
  */
 #include <postgres.h>
 #include <catalog/dependency.h>
+#include <commands/tablecmds.h>
 #include <commands/trigger.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
@@ -209,6 +210,66 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 }
 
 static void
+preserve_uncompressed_chunk_stats(Oid chunk_relid)
+{
+	AlterTableCmd at_cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_SetRelOptions,
+		.def = (Node *) list_make1(
+			makeDefElem("autovacuum_enabled", (Node *) makeString("false"), -1)),
+	};
+	VacuumRelation vr = {
+		.type = T_VacuumRelation,
+		.relation = NULL,
+		.oid = chunk_relid,
+		.va_cols = NIL,
+	};
+	VacuumStmt vs = {
+		.type = T_VacuumStmt,
+		.rels = list_make1(&vr),
+#if PG12_GE
+		.is_vacuumcmd = false,
+		.options = NIL,
+#else
+		.options = VACOPT_ANALYZE,
+#endif
+	};
+
+#if PG12_GE
+	ExecVacuum(NULL, &vs, true);
+#else
+	ExecVacuum(&vs, true);
+#endif
+	AlterTableInternal(chunk_relid, list_make1(&at_cmd), false);
+}
+
+/* This function is intended to undo the disabling of autovacuum done when we compressed a chunk.
+ * Note that we do not cache the previous value for this (as we don't expect users to toggle this
+ * for individual chunks), so we use the hypertable's setting to determine whether to enable this on
+ * the decompressed chunk.
+ */
+static void
+restore_autovacuum_on_decompress(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid)
+{
+	Relation tablerel = table_open(uncompressed_hypertable_relid, AccessShareLock);
+	bool ht_autovac_enabled =
+		tablerel->rd_options ? ((StdRdOptions *) (tablerel)->rd_options)->autovacuum.enabled : true;
+
+	table_close(tablerel, AccessShareLock);
+	if (ht_autovac_enabled)
+	{
+		AlterTableCmd at_cmd = {
+			.type = T_AlterTableCmd,
+			.subtype = AT_SetRelOptions,
+			.def = (Node *) list_make1(
+				makeDefElem("autovacuum_enabled", (Node *) makeString("true"), -1)),
+		};
+
+		AlterTableInternal(uncompressed_chunk_relid, list_make1(&at_cmd), false);
+	}
+}
+
+static void
 compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 {
 	CompressChunkCxt cxt;
@@ -227,7 +288,10 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
-	LockRelationOid(cxt.srcht_chunk->table_id, AccessShareLock); /*upgrade when needed */
+	LockRelationOid(cxt.srcht_chunk->table_id, ShareLock);
+
+	/* Perform an analyze on the chunk to get up-to-date stats before compressing */
+	preserve_uncompressed_chunk_stats(chunk_relid);
 
 	/* aquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
@@ -338,6 +402,8 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
+	/* reenable autovacuum if necessary */
+	restore_autovacuum_on_decompress(uncompressed_hypertable_relid, uncompressed_chunk_relid);
 
 	ts_cache_release(hcache);
 	return true;
