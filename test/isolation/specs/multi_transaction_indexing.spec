@@ -19,16 +19,16 @@ step "F" { SET client_min_messages TO 'error'; }
 step "CI"	{ CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); }
 
 session "RELEASE BARRIER"
-setup		{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms'; LOCK TABLE barrier;}
+setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms'; LOCK TABLE barrier;}
 step "Bc"   { ROLLBACK; }
 
 session "SELECT"
-setup		{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms'; }
+setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms'; }
 step "S1"	{ SELECT * FROM ts_index_test; }
 step "Sc"	{ COMMIT; }
 
 session "INSERT CHUNK"
-setup		{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms'; }
+setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms'; }
 step "I1"	{ INSERT INTO ts_index_test VALUES (31, 6.4, 1); }
 step "Ic"	{ COMMIT; }
 
