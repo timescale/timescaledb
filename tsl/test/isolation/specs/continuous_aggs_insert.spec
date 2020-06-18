@@ -20,17 +20,17 @@ teardown {
 }
 
 session "I"
-step "Ib"	{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "Ib"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
 step "I1"	{ INSERT INTO ts_continuous_test VALUES (1, 1); }
 step "Ic"	{ COMMIT; }
 
 session "Ip"
-step "Ipb"	{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "Ipb"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
 step "Ip1"	{ INSERT INTO ts_continuous_test VALUES (29, 29); }
 step "Ipc"	{ COMMIT; }
 
 session "S"
-step "Sb"	{ BEGIN; SET LOCAL lock_timeout = '50ms'; SET LOCAL deadlock_timeout = '10ms';}
+step "Sb"	{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
 step "S1"	{ SELECT count(*) FROM ts_continuous_test; }
 step "Sc"	{ COMMIT; }
 
@@ -46,7 +46,7 @@ setup { SET client_min_messages TO LOG; }
 step "Refresh1"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 
 session "R2"
-setup { SET lock_timeout = '50ms'; SET deadlock_timeout = '10ms'; }
+setup { SET lock_timeout = '500ms'; SET deadlock_timeout = '10ms'; }
 step "Refresh2"	{ REFRESH MATERIALIZED VIEW continuous_view; }
 teardown { SET lock_timeout TO default; SET deadlock_timeout to default; }
 

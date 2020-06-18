@@ -83,7 +83,7 @@ RETURNS VOID
 AS '@TS_MODULE_PATHNAME@'
 LANGUAGE C VOLATILE STRICT;
 
-SET lock_timeout = '50ms';
+SET lock_timeout = '500ms';
 SET  role default_perm_user;
 SET client_min_messages =  WARNING;
 }
