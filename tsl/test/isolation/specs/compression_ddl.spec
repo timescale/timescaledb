@@ -28,11 +28,27 @@ step "SH" { SELECT total_chunks, number_compressed_chunks from timescaledb_infor
 step "Sc" {COMMIT;}
 
 session "LC"
-step "LockChunk1"   { BEGIN; select lock_chunktable (q.chname) from (select ch.schema_name || '.' || ch.table_name as chname from _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch where ch.hypertable_id = ht.id and ht.table_name like 'ts_device_table' order by ch.id limit 1 ) q; }
+step "LockChunk1" {
+  BEGIN;
+  SELECT
+    lock_chunktable(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+}
 step "UnlockChunk" {ROLLBACK;}
 
 session "C"
-step "C1"   { BEGIN; SELECT compress_chunk(q.chname) from (select ch.schema_name || '.' || ch.table_name as chname from _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch where ch.hypertable_id = ht.id and ht.table_name like 'ts_device_table' order by ch.id limit 1 ) q; }
+step "C1"   {
+  BEGIN;
+  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL deadlock_timeout = '10ms';
+  SELECT
+    compress_chunk(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+}
 step "Cc"   { COMMIT; }
 
 session "A"
@@ -40,7 +56,14 @@ step "A1" { BEGIN; ALTER TABLE ts_device_table SET ( fillfactor = 80); }
 step "A2" { COMMIT; }
 
 session "D"
-step "D1"   { BEGIN; SELECT decompress_chunk(q.chname) from (select ch.schema_name || '.' || ch.table_name as chname from _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch where ch.hypertable_id = ht.id and ht.table_name like 'ts_device_table' order by ch.id limit 1 ) q; }
+step "D1"   {
+  BEGIN;
+  SELECT
+    decompress_chunk(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+}
 step "Dc"   { COMMIT; }
 
 #if insert in progress, compress  is blocked
