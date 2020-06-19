@@ -13,16 +13,22 @@ jobs:
   misc_checks:
     name: Check formatting, license and git hooks
     runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
     steps:
     - name: Checkout source
+      if: always()
       uses: actions/checkout@v2
     - name: Check license
+      if: always()
       run: ./scripts/check_license_all.sh
     - name: Check git commit hooks
+      if: always()
       run: |
         python2 ./scripts/githooks/commit_msg_tests.py
         python3 ./scripts/githooks/commit_msg_tests.py
     - name: Check code formatting
+      if: always()
       run: |
         sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-8 100
         sudo update-alternatives --set clang-format /usr/bin/clang-format-8
