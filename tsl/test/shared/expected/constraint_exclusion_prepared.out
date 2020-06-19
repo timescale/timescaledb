@@ -10,17 +10,8 @@ SELECT
 SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed results" %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') as "DIFF_CMD"
 \gset
 -- get EXPLAIN output for all variations
--- look at postgres version to decide whether we run with analyze or without
-SELECT
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
-    ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX",
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-    ELSE 'EXPLAIN (costs off, verbose)'
-  END AS "PREFIX_VERBOSE"
-\gset
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
 \set TEST_TABLE 'metrics'

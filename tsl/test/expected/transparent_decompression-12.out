@@ -127,17 +127,8 @@ ANALYZE metrics_space;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
--- look at postgres version to decide whether we run with analyze or without
-SELECT
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
-    ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX",
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-    ELSE 'EXPLAIN (costs off, verbose)'
-  END AS "PREFIX_VERBOSE"
-\gset
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
 -- will be not stable and differ depending on worker assignment
 SET max_parallel_workers_per_gather TO 0;
@@ -7624,17 +7615,8 @@ ORDER BY c.id;
 \set ECHO none 
 -- diff compressed and uncompressed results
 :DIFF_CMD_IDX
--- look at postgres version to decide whether we run with analyze or without
-SELECT
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
-    ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX",
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-    ELSE 'EXPLAIN (costs off, verbose)'
-  END AS "PREFIX_VERBOSE"
-\gset
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
 -- will be not stable and differ depending on worker assignment
 SET max_parallel_workers_per_gather TO 0;
