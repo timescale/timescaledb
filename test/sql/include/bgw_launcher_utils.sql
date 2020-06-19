@@ -21,7 +21,7 @@ r INTEGER;
 BEGIN
 FOR i in 1..10
 LOOP
-SELECT COUNT(*) from worker_counts where (launcher = launcher_ct OR current_setting('server_version_num')::int < 100000)
+SELECT COUNT(*) from worker_counts where launcher = launcher_ct
 	AND single_scheduler = scheduler1_ct AND single_2_scheduler = scheduler2_ct and template1_scheduler = template1_ct into r;
 if(r < 1) THEN
   PERFORM pg_sleep(0.1);

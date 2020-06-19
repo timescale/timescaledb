@@ -146,13 +146,11 @@ FROM pg_stat_activity
 WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 
-SELECT coalesce(
-  (SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher'),
-  (SELECT current_setting('server_version_num')::int < 100000));
+SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
 
 SELECT wait_worker_counts(1,0,1,0);
 
-SELECT ((current_setting('server_version_num')::int < 100000) OR wait_greater(:'orig_backend_start', :'TEST_DBNAME_2')) as wait_greater;
+SELECT wait_greater(:'orig_backend_start', :'TEST_DBNAME_2');
 
 -- Make sure running pre_restore function stops background workers
 SELECT timescaledb_pre_restore();

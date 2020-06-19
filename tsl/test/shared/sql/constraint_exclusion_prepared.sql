@@ -12,17 +12,8 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \gset
 
 -- get EXPLAIN output for all variations
--- look at postgres version to decide whether we run with analyze or without
-SELECT
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
-    ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX",
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-    ELSE 'EXPLAIN (costs off, verbose)'
-  END AS "PREFIX_VERBOSE"
-\gset
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 
 set work_mem to '64MB';
 

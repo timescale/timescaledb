@@ -113,17 +113,8 @@ SET client_min_messages TO error;
 RESET client_min_messages;
 \set ECHO all
 
--- look at postgres version to decide whether we run with analyze or without
-SELECT
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
-    ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX",
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-    ELSE 'EXPLAIN (costs off, verbose)'
-  END AS "PREFIX_VERBOSE"
-\gset
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
 -- will be not stable and differ depending on worker assignment
@@ -201,17 +192,8 @@ RESET client_min_messages;
 :DIFF_CMD_IDX
 
 
--- look at postgres version to decide whether we run with analyze or without
-SELECT
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off)'
-    ELSE 'EXPLAIN (costs off)'
-  END AS "PREFIX",
-  CASE WHEN current_setting('server_version_num')::int >= 100000
-    THEN 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-    ELSE 'EXPLAIN (costs off, verbose)'
-  END AS "PREFIX_VERBOSE"
-\gset
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
 -- will be not stable and differ depending on worker assignment
