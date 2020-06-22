@@ -1,1 +1,2 @@
+/constify_timestamptz_op_interval-*.sql
 /ordered_append-*.sql

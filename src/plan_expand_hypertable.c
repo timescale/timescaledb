@@ -21,6 +21,7 @@
 #include <partitioning/partbounds.h>
 #include <utils/date.h>
 #include <utils/errcodes.h>
+#include <utils/fmgrprotos.h>
 #include <utils/syscache.h>
 
 #include "compat.h"
@@ -93,6 +94,32 @@ is_time_bucket_function(Expr *node)
 	return false;
 }
 
+/*
+ * Pre-check to determine if an expression is eligible for constification.
+ * A more thorough check is in constify_timestamptz_op_interval.
+ */
+static bool
+is_timestamptz_op_interval(Expr *expr)
+{
+	OpExpr *op;
+	Const *c1, *c2;
+
+	if (!IsA(expr, OpExpr))
+		return false;
+
+	op = castNode(OpExpr, expr);
+
+	if (op->opresulttype != TIMESTAMPTZOID || op->args->length != 2 ||
+		!IsA(linitial(op->args), Const) || !IsA(llast(op->args), Const))
+		return false;
+
+	c1 = linitial_node(Const, op->args);
+	c2 = llast_node(Const, op->args);
+
+	return (c1->consttype == TIMESTAMPTZOID && c2->consttype == INTERVALOID) ||
+		   (c1->consttype == INTERVALOID && c2->consttype == TIMESTAMPTZOID);
+}
+
 static int64
 const_datum_get_int(Const *cnst)
 {
@@ -113,6 +140,116 @@ const_datum_get_int(Const *cnst)
 			 errmsg("can only use const_datum_get_int with integer types")));
 
 	pg_unreachable();
+}
+
+/*
+ * Constify expressions of the following form in WHERE clause:
+ *
+ * column OP timestamptz - interval
+ * column OP timestamptz + interval
+ * column OP interval + timestamptz
+ *
+ * Iff interval has no month component.
+ *
+ * Since the operators for timestamptz OP interval are marked
+ * as stable they will not be constified during planning.
+ * However, intervals without a month component can be safely
+ * constified during planning as the result of those calculations
+ * do not depend on the timezone setting.
+ */
+static OpExpr *
+constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
+{
+	Expr *left, *right;
+	OpExpr *op;
+	bool var_on_left = false;
+	Interval *interval;
+	Const *c_ts, *c_int;
+	Datum constified;
+	PGFunction opfunc;
+	Oid ts_pl_int, ts_mi_int, int_pl_ts;
+
+	/* checked in caller already so only asserting */
+	Assert(constraint->args->length == 2);
+
+	left = linitial(constraint->args);
+	right = llast(constraint->args);
+
+	if (IsA(left, Var) && IsA(right, OpExpr))
+	{
+		op = castNode(OpExpr, right);
+		var_on_left = true;
+	}
+	else if (IsA(left, OpExpr) && IsA(right, Var))
+	{
+		op = castNode(OpExpr, left);
+	}
+	else
+		return constraint;
+
+	ts_pl_int = ts_get_operator("+", PG_CATALOG_NAMESPACE, TIMESTAMPTZOID, INTERVALOID);
+	ts_mi_int = ts_get_operator("-", PG_CATALOG_NAMESPACE, TIMESTAMPTZOID, INTERVALOID);
+	int_pl_ts = ts_get_operator("+", PG_CATALOG_NAMESPACE, INTERVALOID, TIMESTAMPTZOID);
+
+	if (op->opno == ts_pl_int)
+	{
+		/* TIMESTAMPTZ + INTERVAL */
+		opfunc = timestamptz_pl_interval;
+		c_ts = linitial_node(Const, op->args);
+		c_int = llast_node(Const, op->args);
+	}
+	else if (op->opno == ts_mi_int)
+	{
+		/* TIMESTAMPTZ - INTERVAL */
+		opfunc = timestamptz_mi_interval;
+		c_ts = linitial_node(Const, op->args);
+		c_int = llast_node(Const, op->args);
+	}
+	else if (op->opno == int_pl_ts)
+	{
+		/* INTERVAL + TIMESTAMPTZ */
+		opfunc = timestamptz_pl_interval;
+		c_int = linitial_node(Const, op->args);
+		c_ts = llast_node(Const, op->args);
+	}
+	else
+		return constraint;
+
+	/*
+	 * arg types should match operator and were checked in precheck
+	 * so only asserting here
+	 */
+	Assert(c_ts->consttype == TIMESTAMPTZOID);
+	Assert(c_int->consttype == INTERVALOID);
+	if (c_ts->constisnull || c_int->constisnull)
+		return constraint;
+
+	interval = DatumGetIntervalP(c_int->constvalue);
+
+	/*
+	 * constification is only safe when the interval has no month component
+	 * because month length is variable and calculation depends on local timezone
+	 */
+	if (interval->month != 0)
+		return constraint;
+
+	constified = DirectFunctionCall2(opfunc, c_ts->constvalue, c_int->constvalue);
+
+	c_ts = copyObject(c_ts);
+	c_ts->constvalue = constified;
+
+	if (var_on_left)
+		right = (Expr *) c_ts;
+	else
+		left = (Expr *) c_ts;
+
+	return (OpExpr *) make_opclause(constraint->opno,
+									constraint->opresulttype,
+									constraint->opretset,
+									left,
+									right,
+									constraint->opcollid,
+									constraint->inputcollid);
 }
 
 /*
@@ -483,6 +620,13 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 			OpExpr *op = castNode(OpExpr, qual);
 			Expr *left = linitial(op->args);
 			Expr *right = lsecond(op->args);
+
+			/*
+			 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
+			 */
+			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
+				(IsA(right, Var) && is_timestamptz_op_interval(left)))
+				qual = (Expr *) constify_timestamptz_op_interval(ctx->root, op);
 
 			/*
 			 * check for time_bucket comparisons
