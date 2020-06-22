@@ -638,6 +638,8 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	bool PG_USED_FOR_ASSERTS_ONLY result;
 	DbInfo database;
 
+	PreventCommandIfReadOnly("add_data_node()");
+
 	namestrcpy(&database.name, dbname);
 
 	if (host == NULL)
@@ -780,6 +782,8 @@ data_node_attach(PG_FUNCTION_ARGS)
 	List *result;
 	int num_nodes;
 	ListCell *lc;
+
+	PreventCommandIfReadOnly("attach_data_node()");
 
 	if (PG_ARGISNULL(1))
 		ereport(ERROR,
@@ -1203,6 +1207,8 @@ data_node_allow_new_chunks(PG_FUNCTION_ARGS)
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 
+	PreventCommandIfReadOnly("allow_new_chunks()");
+
 	return data_node_block_or_allow_new_chunks(node_name, table_id, false, false);
 }
 
@@ -1212,6 +1218,8 @@ data_node_block_new_chunks(PG_FUNCTION_ARGS)
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+
+	PreventCommandIfReadOnly("block_new_chunks()");
 
 	return data_node_block_or_allow_new_chunks(node_name, table_id, force, true);
 }
@@ -1226,8 +1234,11 @@ data_node_detach(PG_FUNCTION_ARGS)
 	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
-	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
+	ForeignServer *server;
 
+	PreventCommandIfReadOnly("detach_data_node()");
+
+	server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
 	Assert(NULL != server);
 
 	if (OidIsValid(table_id))
@@ -1274,6 +1285,8 @@ data_node_delete(PG_FUNCTION_ARGS)
 	Node *parsetree = NULL;
 	TSConnectionId cid;
 	ForeignServer *server;
+
+	PreventCommandIfReadOnly("delete_data_node()");
 
 	/* Need USAGE to detach. Further owner check done when executing the DROP
 	 * statement. */

@@ -256,6 +256,8 @@ hypertable_set_replication_factor(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	Hypertable *ht;
 
+	PreventCommandIfReadOnly("set_replication_factor()");
+
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

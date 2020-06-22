@@ -3487,6 +3487,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	List *data_node_oids = NIL;
 	Cache *hcache;
 
+	PreventCommandIfReadOnly("drop_chunks()");
+
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
 	 * so we just return the next chunk in the list of dropped chunks.

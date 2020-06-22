@@ -54,6 +54,7 @@ set(TEST_FILES_DEBUG
   telemetry_distributed.sql
   transparent_decompression_queries.sql
   tsl_tables.sql
+  read_only.sql
 )
 
 set(TEST_TEMPLATES
