@@ -1009,6 +1009,8 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
 	int16 num_slices;
 
+	PreventCommandIfReadOnly("set_number_partitions()");
+
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -1054,6 +1056,8 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 	Datum interval = PG_GETARG_DATUM(1);
 	Oid intervaltype = InvalidOid;
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+
+	PreventCommandIfReadOnly("set_chunk_time_interval()");
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1331,6 +1335,8 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
 	};
 	Datum retval = 0;
+
+	PreventCommandIfReadOnly("add_dimension()");
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,

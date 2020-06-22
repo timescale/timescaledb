@@ -437,6 +437,8 @@ ts_tablespace_attach(PG_FUNCTION_ARGS)
 	Oid hypertable_oid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
+	PreventCommandIfReadOnly("attach_tablespace()");
+
 	if (PG_NARGS() < 2 || PG_NARGS() > 3)
 		elog(ERROR, "invalid number of arguments");
 
@@ -585,6 +587,8 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 	Oid tspcoid;
 	int ret;
 
+	PreventCommandIfReadOnly("detach_tablespace()");
+
 	if (PG_NARGS() < 1 || PG_NARGS() > 3)
 		elog(ERROR, "invalid number of arguments");
 
@@ -615,6 +619,8 @@ TS_FUNCTION_INFO_V1(ts_tablespace_detach_all_from_hypertable);
 Datum
 ts_tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 {
+	PreventCommandIfReadOnly("detach_tablespaces()");
+
 	if (PG_NARGS() != 1)
 		elog(ERROR, "invalid number of arguments");
 
