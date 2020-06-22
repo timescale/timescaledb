@@ -1,0 +1,282 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+-- Following tests checks that API functions which modify data (including catalog)
+-- properly recognize read-only transaction state
+--
+-- create_hypertable()
+--
+CREATE TABLE test_table(time bigint NOT NULL, device int);
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM create_hypertable('test_table', 'time');
+ERROR:  cannot execute create_hypertable() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM create_hypertable('test_table', 'time', chunk_time_interval => 1000000::bigint);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | test_table | t
+(1 row)
+
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+-- set_chunk_time_interval()
+--
+SELECT * FROM set_chunk_time_interval('test_table', 2000000000::bigint);
+ERROR:  cannot execute set_chunk_time_interval() in a read-only transaction
+-- set_number_partitions()
+--
+SELECT * FROM set_number_partitions('test_table', 2);
+ERROR:  cannot execute set_number_partitions() in a read-only transaction
+-- set_adaptive_chunking()
+--
+SELECT * FROM set_adaptive_chunking('test_table', '2MB');
+ERROR:  cannot execute set_adaptive_chunking() in a read-only transaction
+-- drop_chunks()
+--
+SELECT * FROM drop_chunks('test_table', older_than => 10);
+ERROR:  cannot execute drop_chunks() in a read-only transaction
+SELECT * FROM drop_chunks('test_table', older_than => 10, cascade_to_materializations => true);
+ERROR:  cannot execute drop_chunks() in a read-only transaction
+-- add_dimension()
+--
+SELECT * FROM add_dimension('test_table', 'device', chunk_time_interval => 100);
+ERROR:  cannot execute add_dimension() in a read-only transaction
+\set ON_ERROR_STOP 1
+-- tablespaces
+--
+SET default_transaction_read_only TO off;
+SET client_min_messages TO error;
+DROP TABLESPACE IF EXISTS tablespace1;
+RESET client_min_messages;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_CLUSTER_SUPERUSER LOCATION :TEST_TABLESPACE1_PATH;
+SET default_transaction_read_only TO on;
+-- attach_tablespace()
+--
+\set ON_ERROR_STOP 0
+SELECT * FROM attach_tablespace('tablespace1', 'test_table');
+ERROR:  cannot execute attach_tablespace() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM attach_tablespace('tablespace1', 'test_table');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+-- detach_tablespace()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM detach_tablespace('tablespace1', 'test_table');
+ERROR:  cannot execute detach_tablespace() in a read-only transaction
+\set ON_ERROR_STOP 1
+-- detach_tablespaces()
+--
+\set ON_ERROR_STOP 0
+SELECT * FROM detach_tablespaces('test_table');
+ERROR:  cannot execute detach_tablespaces() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM detach_tablespaces('test_table');
+ detach_tablespaces 
+--------------------
+                  1
+(1 row)
+
+DROP TABLESPACE tablespace1;
+-- drop hypertable
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+DROP TABLE test_table;
+ERROR:  cannot execute DROP TABLE in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+DROP TABLE test_table;
+-- data nodes
+--
+CREATE TABLE disttable(time timestamptz NOT NULL, device int);
+-- add_data_node()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1');
+ERROR:  cannot execute add_data_node() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+(1 row)
+
+-- create_distributed_hypertable()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => '{data_node_1}');
+ERROR:  cannot execute create_distributed_hypertable() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => '{data_node_1}');
+WARNING:  only one data node was assigned to the hypertable
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | disttable  | t
+(1 row)
+
+-- attach_data_node()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM attach_data_node('data_node_2', 'disttable');
+ERROR:  cannot execute attach_data_node() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM attach_data_node('data_node_2', 'disttable');
+NOTICE:  the number of partitions in dimension "device" was increased to 2
+ hypertable_id | node_hypertable_id |  node_name  
+---------------+--------------------+-------------
+             2 |                  1 | data_node_2
+(1 row)
+
+-- detach_data_node()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM detach_data_node('data_node_2', 'disttable');
+ERROR:  cannot execute detach_data_node() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM detach_data_node('data_node_2', 'disttable');
+NOTICE:  the number of partitions in dimension "device" was decreased to 1
+ detach_data_node 
+------------------
+                1
+(1 row)
+
+-- delete_data_node()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM delete_data_node('data_node_2');
+ERROR:  cannot execute delete_data_node() in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+SELECT * FROM delete_data_node('data_node_2');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+-- set_replication_factor()
+--
+SET default_transaction_read_only TO on;
+\set ON_ERROR_STOP 0
+SELECT * FROM set_replication_factor('disttable', 2);
+ERROR:  cannot execute set_replication_factor() in a read-only transaction
+\set ON_ERROR_STOP 1
+-- drop distributed hypertable
+--
+\set ON_ERROR_STOP 0
+DROP TABLE disttable;
+ERROR:  cannot execute DROP TABLE in a read-only transaction
+\set ON_ERROR_STOP 1
+SET default_transaction_read_only TO off;
+DROP TABLE disttable;
+-- Test some read-only cases of DDL operations
+-- 
+CREATE TABLE test_table(time bigint NOT NULL, device int);
+SELECT * FROM create_hypertable('test_table', 'time', chunk_time_interval => 1000000::bigint);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | test_table | t
+(1 row)
+
+INSERT INTO test_table VALUES (0, 1), (1, 1), (2, 2);
+SET default_transaction_read_only TO on;
+-- CREATE INDEX
+--
+\set ON_ERROR_STOP 0
+CREATE INDEX test_table_device_idx ON test_table(device);
+ERROR:  cannot execute CREATE INDEX in a read-only transaction
+\set ON_ERROR_STOP 1
+-- TRUNCATE
+--
+\set ON_ERROR_STOP 0
+TRUNCATE test_table;
+ERROR:  cannot execute TRUNCATE TABLE in a read-only transaction
+\set ON_ERROR_STOP 1
+-- ALTER TABLE
+--
+\set ON_ERROR_STOP 0
+ALTER TABLE test_table DROP COLUMN device;
+ERROR:  cannot execute ALTER TABLE in a read-only transaction
+ALTER TABLE test_table ADD CONSTRAINT device_check CHECK (device > 0);
+ERROR:  cannot execute ALTER TABLE in a read-only transaction
+\set ON_ERROR_STOP 1
+-- VACUUM
+--
+\set ON_ERROR_STOP 0
+VACUUM test_table;
+ERROR:  cannot execute VACUUM in a read-only transaction
+\set ON_ERROR_STOP 1
+-- CLUSTER
+--
+\set ON_ERROR_STOP 0
+CLUSTER test_table USING test_table_time_idx;
+ERROR:  cannot execute CLUSTER in a read-only transaction
+\set ON_ERROR_STOP 1
+-- COPY FROM
+--
+\set ON_ERROR_STOP 0
+COPY test_table (time, device) FROM STDIN DELIMITER ',';
+ERROR:  cannot execute COPY FROM in a read-only transaction
+\set ON_ERROR_STOP 1
+-- COPY TO (expect to be working in read-only mode)
+--
+COPY (SELECT * FROM test_Table ORDER BY time) TO STDOUT;
+0	1
+1	1
+2	2
+-- Test Continuous Aggregates
+-- 
+SET default_transaction_read_only TO off;
+CREATE TABLE test_contagg (
+  observation_time  TIMESTAMPTZ       NOT NULL,
+  device_id         TEXT              NOT NULL,
+  metric            DOUBLE PRECISION  NOT NULL,
+  PRIMARY KEY(observation_time, device_id)
+);
+SELECT create_hypertable('test_contagg', 'observation_time');
+     create_hypertable     
+---------------------------
+ (4,public,test_contagg,t)
+(1 row)
+
+SET default_transaction_read_only TO on;
+-- CREATE VIEW
+--
+\set ON_ERROR_STOP 0
+CREATE VIEW test_contagg_view
+WITH (timescaledb.continuous)
+AS
+SELECT
+  time_bucket('1 hour', observation_time) as bucket,
+  device_id,
+  avg(metric) as metric_avg,
+  max(metric)-min(metric) as metric_spread
+FROM
+  test_contagg
+GROUP BY bucket, device_id;
+ERROR:  cannot execute CREATE VIEW in a read-only transaction
+\set ON_ERROR_STOP 1

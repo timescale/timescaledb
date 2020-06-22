@@ -1848,6 +1848,9 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	uint32 flags = 0;
 	List *data_nodes = NIL;
 
+	PreventCommandIfReadOnly(is_dist_call ? "create_distributed_hypertable()" :
+											"create_hypertable()");
+
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
