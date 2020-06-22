@@ -51,9 +51,10 @@ EOF
 trap cleanup EXIT
 
 # setup clusterwide settings on first run
-if [[ ! -f ${TEST_OUTPUT_DIR}/.pg_init ]]; then
-    touch ${TEST_OUTPUT_DIR}/.pg_init
-    cat <<EOF | ${PSQL} $@ -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1
+# we use mkdir here because it is an atomic operation unlike existance of a lockfile
+# where creating and checking are 2 separate operations
+if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
+  cat <<EOF | ${PSQL} $@ -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1
     SET client_min_messages=ERROR;
     ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_CLUSTER_SUPERUSER} WITH SUPERUSER;
@@ -62,7 +63,12 @@ if [[ ! -f ${TEST_OUTPUT_DIR}/.pg_init ]]; then
     ALTER USER ${TEST_ROLE_3} WITH CREATEDB PASSWORD '${TEST_ROLE_3_PASS}';
 EOF
   ${PSQL} $@ -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
+  touch ${TEST_OUTPUT_DIR}/.pg_init/done
 fi
+
+# we need to wait for cluster setup to finish cause with parallel schedule
+# multiple instances will be running and mkdir will only succeed on the first runner
+while [ ! -f ${TEST_OUTPUT_DIR}/.pg_init/done ]; do sleep 0.2; done
 
 cd ${EXE_DIR}/sql
 

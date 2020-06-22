@@ -11,6 +11,10 @@ TEST_PGUSER=${TEST_PGUSER:-postgres}
 TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 
+# Read the extension version from version.config
+read -r VERSION < ${CURRENT_DIR}/../version.config
+EXT_VERSION=${VERSION##version = }
+
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test (PG 10 and 11 only)
 TEST_BASE_NAME=${PGAPPNAME##pg_regress/}
@@ -31,11 +35,17 @@ TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2:-default_perm_user
 shift
 
 # setup clusterwide settings on first run
-if [[ ! -f ${TEST_OUTPUT_DIR}/.pg_init ]]; then
-  touch ${TEST_OUTPUT_DIR}/.pg_init
+# we use mkdir here because it is an atomic operation unlike existance of a lockfile
+# where creating and checking are 2 separate operations
+if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
   ${PSQL} $@ -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
   ${PSQL} $@ -U $TEST_PGUSER -d ${TEST_DBNAME} -v ECHO=none < ${TEST_INPUT_DIR}/shared/sql/include/shared_setup.sql >/dev/null
+  touch ${TEST_OUTPUT_DIR}/.pg_init/done
 fi
+
+# we need to wait for cluster setup to finish cause with parallel schedule
+# multiple instances will be running and mkdir will only succeed on the first runner
+while [ ! -f ${TEST_OUTPUT_DIR}/.pg_init/done ]; do sleep 0.2; done
 
 cd ${EXE_DIR}/sql
 
@@ -51,4 +61,6 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER} \
      -v ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
+     -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
+     -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      $@ -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!'
