@@ -111,14 +111,14 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: Regression diff
+        name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: PostgreSQL log
+        name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postgres.log
 
     - name: Stack trace

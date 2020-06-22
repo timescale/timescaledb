@@ -65,14 +65,14 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@v1
       with:
-        name: Regression diff
+        name: Regression diff ${{ matrix.pg }}
         path: regression.diffs
 
     - name: Save postmaster.log
       if: failure()
       uses: actions/upload-artifact@v1
       with:
-        name: PostgreSQL log
+        name: PostgreSQL log ${{ matrix.pg }}
         path: postmaster.log
 
     - name: Slack Notification
