@@ -1647,6 +1647,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	if (migrate_data)
 		flags |= HYPERTABLE_CREATE_MIGRATE_DATA;
 
+	PreventCommandIfReadOnly("create_hypertable()");
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

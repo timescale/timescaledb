@@ -336,7 +336,7 @@ process_alterviewschema(ProcessUtilityArgs *args)
 }
 
 /* Change the schema of a hypertable or a chunk */
-static void
+static bool
 process_alterobjectschema(ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
@@ -350,8 +350,10 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 			process_alterviewschema(args);
 			break;
 		default:
-			return;
+			break;
 	};
+
+	return false;
 }
 
 static bool
@@ -400,6 +402,8 @@ process_copy(ProcessUtilityArgs *args)
 			ts_cache_release(hcache);
 		return false;
 	}
+
+	PreventCommandIfReadOnly("COPY FROM");
 
 	/* Performs acl check in here inside `copy_security_check` */
 	timescaledb_DoCopy(stmt, args->query_string, &processed, ht);
@@ -946,7 +950,7 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
  * through process_ddl_sql_drop */
-static void
+static bool
 process_drop_tablespace(ProcessUtilityArgs *args)
 {
 	DropTableSpaceStmt *stmt = (DropTableSpaceStmt *) args->parsetree;
@@ -959,6 +963,8 @@ process_drop_tablespace(ProcessUtilityArgs *args)
 						stmt->tablespacename,
 						count),
 				 errhint("Detach the tablespace from all hypertables before removing it.")));
+
+	return false;
 }
 
 /*
@@ -1063,8 +1069,8 @@ block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, D
 	}
 }
 
-static void
-process_drop(ProcessUtilityArgs *args)
+static bool
+process_drop_start(ProcessUtilityArgs *args)
 {
 	DropStmt *stmt = (DropStmt *) args->parsetree;
 
@@ -1083,6 +1089,8 @@ process_drop(ProcessUtilityArgs *args)
 		default:
 			break;
 	}
+
+	return false;
 }
 
 static void
@@ -1375,7 +1383,7 @@ process_rename_constraint(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Re
 	}
 }
 
-static void
+static bool
 process_rename(ProcessUtilityArgs *args)
 {
 	RenameStmt *stmt = (RenameStmt *) args->parsetree;
@@ -1387,7 +1395,7 @@ process_rename(ProcessUtilityArgs *args)
 	{
 		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 		if (!OidIsValid(relid))
-			return;
+			return false;
 	}
 	else
 	{
@@ -1395,7 +1403,7 @@ process_rename(ProcessUtilityArgs *args)
 		 * stmt->relation never be NULL unless we are renaming a schema
 		 */
 		if (stmt->renameType != OBJECT_SCHEMA)
-			return;
+			return false;
 	}
 
 	hcache = ts_hypertable_cache_pin();
@@ -1425,6 +1433,7 @@ process_rename(ProcessUtilityArgs *args)
 	}
 
 	ts_cache_release(hcache);
+	return false;
 }
 
 static void
@@ -2928,16 +2937,17 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	return true;
 }
 
-static void
+static bool
 process_create_rule_start(ProcessUtilityArgs *args)
 {
 	RuleStmt *stmt = (RuleStmt *) args->parsetree;
 
 	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
-		return;
+		return false;
 
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
+	return false;
 }
 
 static void
@@ -3037,9 +3047,9 @@ process_viewstmt(ProcessUtilityArgs *args)
 }
 
 static bool
-process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
+process_refresh_mat_view_start(ProcessUtilityArgs *args)
 {
-	RefreshMatViewStmt *stmt = castNode(RefreshMatViewStmt, parsetree);
+	RefreshMatViewStmt *stmt = castNode(RefreshMatViewStmt, args->parsetree);
 	Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	int32 materialization_id = -1;
 	ScanIterator continuous_aggregate_iter;
@@ -3108,73 +3118,81 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args, Node *parsetree)
 static bool
 process_ddl_command_start(ProcessUtilityArgs *args)
 {
-	bool handled = false;
+	bool check_read_only = true;
+	ts_process_utility_handler_t handler;
 
 	switch (nodeTag(args->parsetree))
 	{
 		case T_AlterObjectSchemaStmt:
-			process_alterobjectschema(args);
+			handler = process_alterobjectschema;
 			break;
 		case T_TruncateStmt:
-			handled = process_truncate(args);
+			handler = process_truncate;
 			break;
 		case T_AlterTableStmt:
-			handled = process_altertable_start(args);
+			handler = process_altertable_start;
 			break;
 		case T_RenameStmt:
-			process_rename(args);
+			handler = process_rename;
 			break;
 		case T_IndexStmt:
-			handled = process_index_start(args);
+			handler = process_index_start;
 			break;
 		case T_CreateTrigStmt:
-			handled = process_create_trigger_start(args);
+			handler = process_create_trigger_start;
 			break;
 		case T_RuleStmt:
-			process_create_rule_start(args);
+			handler = process_create_rule_start;
 			break;
 		case T_DropStmt:
-
 			/*
 			 * Drop associated metadata/chunks but also continue on to drop
 			 * the main table. Because chunks are deleted before the main
 			 * table is dropped, the drop respects CASCADE in the expected
 			 * way.
 			 */
-			process_drop(args);
+			handler = process_drop_start;
 			break;
 		case T_DropTableSpaceStmt:
-			process_drop_tablespace(args);
+			handler = process_drop_tablespace;
 			break;
 		case T_GrantStmt:
-			handled = process_grant_and_revoke(args);
+			handler = process_grant_and_revoke;
 			break;
 		case T_GrantRoleStmt:
-			handled = process_grant_and_revoke_role(args);
+			handler = process_grant_and_revoke_role;
 			break;
 		case T_CopyStmt:
-			handled = process_copy(args);
+			check_read_only = false;
+			handler = process_copy;
 			break;
 		case T_VacuumStmt:
-			handled = process_vacuum(args);
+			handler = process_vacuum;
 			break;
 		case T_ReindexStmt:
-			handled = process_reindex(args);
+			handler = process_reindex;
 			break;
 		case T_ClusterStmt:
-			handled = process_cluster_start(args);
+			handler = process_cluster_start;
 			break;
 		case T_ViewStmt:
-			handled = process_viewstmt(args);
+			handler = process_viewstmt;
 			break;
 		case T_RefreshMatViewStmt:
-			handled = process_refresh_mat_view_start(args, args->parsetree);
+			handler = process_refresh_mat_view_start;
 			break;
 		default:
+			handler = NULL;
 			break;
 	}
 
-	return handled;
+	if (handler == NULL)
+		return false;
+
+	if (check_read_only)
+		PreventCommandIfReadOnly(CreateCommandTag(args->parsetree));
+
+	return handler(args);
 }
 
 /*

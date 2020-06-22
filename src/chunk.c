@@ -3042,6 +3042,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	int elevel;
 	bool user_supplied_table_name = true;
 
+	PreventCommandIfReadOnly("drop_chunks()");
+
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
 	 * so we just return the next chunk in the list of dropped chunks.

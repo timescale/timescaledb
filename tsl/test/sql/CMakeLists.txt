@@ -19,6 +19,7 @@ set(TEST_FILES_DEBUG
   continuous_aggs_usage.sql
   ddl_hook.sql
   tsl_tables.sql
+  read_only.sql
 )
 
 set(TEST_TEMPLATES
