@@ -3,6 +3,7 @@ set(TEST_FILES_SHARED
 )
 
 set(TEST_TEMPLATES_SHARED
+  constify_timestamptz_op_interval.sql.in
   ordered_append.sql.in
 )
 
