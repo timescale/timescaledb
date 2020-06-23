@@ -78,7 +78,7 @@ SELECT
     dim.integer_now_func,
     dim.num_slices as num_partitions
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.dimension dim
-where dim.hypertable_id = ht.id
+WHERE dim.hypertable_id = ht.id
 ;
 
 -- chunks metadata view, shows information about the primary dimension column
@@ -94,7 +94,7 @@ WITH chtab as
          pgtab.spcname as table_space
  FROM _timescaledb_catalog.chunk srcch INNER JOIN
        ( SELECT relname, reltablespace, nspname as tablespace_name 
-         FROM pg_class , pg_namespace where
+         FROM pg_class , pg_namespace WHERE
                 pg_class.relnamespace = pg_namespace.oid) cl 
        ON srcch.table_name = cl.relname and srcch.schema_name = cl.tablespace_name
        LEFT OUTER JOIN pg_tablespace pgtab
@@ -165,7 +165,7 @@ SELECT
     chq.node_list
 FROM  chq,
      ( SELECT * FROM _timescaledb_catalog.hypertable
-       where compressed = false) ht ,
+       WHERE compressed = false) ht ,
      _timescaledb_catalog.chunk_constraint chcons,
      _timescaledb_catalog.dimension dim,
      _timescaledb_catalog.dimension_slice dimsl
@@ -184,3 +184,215 @@ SELECT hypertable, chunk, schema_name, chunk_name,
 FROM finalq
 WHERE chunk_dimension_num = 1;
  ;
+
+---variant of chunks --check which is more performant ---
+--- this variation expliclty fetches the primary dimension and joins that
+-- against the other tables
+CREATE OR REPLACE VIEW  timescaledb_new.chunks2
+AS
+WITH chtab as
+(
+  SELECT srcch.hypertable_id as hypertable_id,
+         srcch.id as chunk_id,
+         srcch.schema_name,
+         srcch.table_name as chunk_name,
+         srcch.compressed_chunk_id, 
+         pgtab.spcname as table_space
+ FROM _timescaledb_catalog.chunk srcch INNER JOIN
+       ( SELECT relname, reltablespace, nspname as tablespace_name 
+         FROM pg_class , pg_namespace WHERE
+                pg_class.relnamespace = pg_namespace.oid) cl 
+       ON srcch.table_name = cl.relname and srcch.schema_name = cl.tablespace_name
+       LEFT OUTER JOIN pg_tablespace pgtab
+       ON pgtab.oid = reltablespace
+ WHERE srcch.dropped is false ---->check WHEN is this true
+),
+primdimq as
+(
+--get primary dimension information --
+   SELECT hypertable_id, primdim, column_name, column_type
+   FROM (
+         SELECT hypertable_id, first_value(id) over(partition by hypertable_id order by id) as primdim,
+                id, column_name, column_type 
+         FROM _timescaledb_catalog.dimension
+         ) pq 
+  WHERE pq.primdim = id 
+),
+chq as
+(
+--- query to get correct tablespace for chunk from chtab ---
+SELECT
+ --src.chunk_id,
+ src.*, 
+ CASE WHEN src.compressed_chunk_id is null THEN src.table_space
+      else comp.table_space
+ END as chunk_table_space,
+ node_list
+ FROM chtab src left outer join chtab comp
+      on src.compressed_chunk_id = comp.chunk_id
+      left outer join (
+               SELECT chunk_id, array_agg(node_name ORDER BY node_name) as node_list
+                            FROM _timescaledb_catalog.chunk_data_node
+                            GROUP BY chunk_id) chdn
+      on src.chunk_id = chdn.chunk_id 
+)
+SELECT
+    format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable,
+    format('%1$I.%2$I', chq.schema_name, chq.chunk_name)::regclass as chunk,
+    chq.schema_name as schema_name,
+    chq.chunk_name as chunk_name,
+--       chcons.constraint_name,
+    dim.column_name as primary_dimension,
+    dim.column_type as primary_dimension_type,
+    row_number() over(partition by chcons.chunk_id order by chcons.dimension_slice_id) as chunk_dimension_num,
+---chcons.dimension_slice_id as chunk_dimension_id,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN _timescaledb_internal.to_timestamp(dimsl.range_start)
+        ELSE NULL
+    END as range_start,
+    CASE
+         WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+                dim.column_type = 'TIMESTAMPTZ'::regtype OR
+                dim.column_type = 'DATE'::regtype )
+         THEN _timescaledb_internal.to_timestamp(dimsl.range_end)
+         ELSE NULL
+    END as range_end,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN NULL
+        ELSE dimsl.range_start
+    END as integer_range_start,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN NULL
+        ELSE dimsl.range_end
+    END as integer_range_end,
+    CASE WHEN chq.compressed_chunk_id is not null THEN 'true'
+         ELSE 'false'
+    END as is_compressed,
+    chq.chunk_table_space,
+    chq.node_list
+FROM  chq,
+     ( SELECT * FROM _timescaledb_catalog.hypertable
+       WHERE compressed = false) ht ,
+     _timescaledb_catalog.chunk_constraint chcons,
+     primdimq dim,
+     _timescaledb_catalog.dimension_slice dimsl
+WHERE   chq.chunk_id = chcons.chunk_id and ht.id = chq.hypertable_id
+    and chq.hypertable_id = dim.hypertable_id
+    and chcons.dimension_slice_id = dimsl.id
+    and dim.primdim = dimsl.dimension_id and dim.hypertable_id = ht.id
+;
+
+---identical to chunks2 EXCEPT instead of hypertable::regclass
+-- we specifically print the hypertable name ---
+CREATE OR REPLACE VIEW  timescaledb_new.chunks3
+AS
+WITH chtab as
+(
+  SELECT srcch.hypertable_id as hypertable_id,
+         srcch.id as chunk_id,
+         srcch.schema_name,
+         srcch.table_name as chunk_name,
+         srcch.compressed_chunk_id, 
+         pgtab.spcname as table_space
+ FROM _timescaledb_catalog.chunk srcch INNER JOIN
+       ( SELECT relname, reltablespace, nspname as tablespace_name 
+         FROM pg_class , pg_namespace WHERE
+                pg_class.relnamespace = pg_namespace.oid) cl 
+       ON srcch.table_name = cl.relname and srcch.schema_name = cl.tablespace_name
+       LEFT OUTER JOIN pg_tablespace pgtab
+       ON pgtab.oid = reltablespace
+ WHERE srcch.dropped is false ---->check WHEN is this true
+),
+primdimq as
+(
+--get primary dimension information --
+   SELECT hypertable_id, primdim, column_name, column_type
+   FROM (
+         SELECT hypertable_id, first_value(id) over(partition by hypertable_id order by id) as primdim,
+                id, column_name, column_type 
+         FROM _timescaledb_catalog.dimension
+         ) pq 
+  WHERE pq.primdim = id 
+),
+chq as
+(
+--- query to get correct tablespace for chunk from chtab ---
+SELECT
+ --src.chunk_id,
+ src.*, 
+ CASE WHEN src.compressed_chunk_id is null THEN src.table_space
+      else comp.table_space
+ END as chunk_table_space,
+ node_list
+ FROM chtab src left outer join chtab comp
+      on src.compressed_chunk_id = comp.chunk_id
+      left outer join (
+               SELECT chunk_id, array_agg(node_name ORDER BY node_name) as node_list
+                            FROM _timescaledb_catalog.chunk_data_node
+                            GROUP BY chunk_id) chdn
+      on src.chunk_id = chdn.chunk_id 
+)
+SELECT
+    ht.schema_name, 
+    ht.table_name as hypertable_name,
+    format('%1$I.%2$I', chq.schema_name, chq.chunk_name)::regclass as chunk,
+--    chq.schema_name as schema_name,
+    chq.chunk_name as chunk_name,
+--       chcons.constraint_name,
+    dim.column_name as primary_dimension,
+    dim.column_type as primary_dimension_type,
+    row_number() over(partition by chcons.chunk_id order by chcons.dimension_slice_id) as chunk_dimension_num,
+---chcons.dimension_slice_id as chunk_dimension_id,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN _timescaledb_internal.to_timestamp(dimsl.range_start)
+        ELSE NULL
+    END as range_start,
+    CASE
+         WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+                dim.column_type = 'TIMESTAMPTZ'::regtype OR
+                dim.column_type = 'DATE'::regtype )
+         THEN _timescaledb_internal.to_timestamp(dimsl.range_end)
+         ELSE NULL
+    END as range_end,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN NULL
+        ELSE dimsl.range_start
+    END as integer_range_start,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN NULL
+        ELSE dimsl.range_end
+    END as integer_range_end,
+    CASE WHEN chq.compressed_chunk_id is not null THEN 'true'
+         ELSE 'false'
+    END as is_compressed,
+    chq.chunk_table_space,
+    chq.node_list
+FROM  chq, 
+      _timescaledb_catalog.hypertable ht,
+     _timescaledb_catalog.chunk_constraint chcons,
+     primdimq dim,
+     _timescaledb_catalog.dimension_slice dimsl
+WHERE   chq.chunk_id = chcons.chunk_id and ht.id = chq.hypertable_id
+    and chq.hypertable_id = dim.hypertable_id
+    and chcons.dimension_slice_id = dimsl.id
+    and dim.primdim = dimsl.dimension_id and dim.hypertable_id = ht.id
+    and ht.compressed is false
+;
