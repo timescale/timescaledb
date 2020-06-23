@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\ir debugsupport.sql
+
 -- Cleanup from other tests that might have created these databases
 SET client_min_messages TO ERROR;
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -16,11 +18,6 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost',
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
                             database => 'data_node_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
-
--- Function for testing push down of time-related functions (e.g., now())
-CREATE OR REPLACE FUNCTION test.override_current_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz'
-LANGUAGE C VOLATILE STRICT;
 
 SET ROLE :ROLE_1;
 

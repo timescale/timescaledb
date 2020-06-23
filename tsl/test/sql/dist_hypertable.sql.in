@@ -7,9 +7,9 @@
 
 \unset ECHO
 \o /dev/null
+\ir include/debugsupport.sql
 \ir include/filter_exec.sql
 \ir include/remote_exec.sql
-\ir utils/testsupport.sql
 \o
 \set ECHO all
 
@@ -990,7 +990,7 @@ SELECT * FROM create_distributed_hypertable('hyper_estimate', 'time', 'device', 
 SET timescaledb.enable_per_data_node_queries = false;
 
 -- Estimating chunk progress uses current timestamp so we override it for test purposes
-SELECT ts_test_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
+SELECT test.tsl_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
 
 -- Test estimates when backfilling. 3 chunks should be historical and 3 should be considered current when estimating.
 -- Note that estimate numbers are way off since we are using shared buffer size as starting point. This will not be

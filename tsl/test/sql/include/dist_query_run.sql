@@ -165,7 +165,7 @@ GROUP BY 1,2
 -----------------------------------------------------------------
 \set TEST_DESC '\n######### Constification and runtime push down of time-related functions\n'
 \qecho :TEST_DESC
-SELECT test.override_current_timestamptz('2018-06-01 00:00'::timestamptz);
+SELECT test.tsl_override_current_timestamptz('2018-06-01 00:00'::timestamptz);
 
 :PREFIX
 SELECT time, device, avg(temp)
@@ -190,7 +190,7 @@ GROUP BY 1, 2
 
 :PREFIX
 EXECUTE :prepared_stmt;
-SELECT test.override_current_timestamptz('2019-10-15 00:00'::timestamptz);
+SELECT test.tsl_override_current_timestamptz('2019-10-15 00:00'::timestamptz);
 
 :PREFIX
 EXECUTE :prepared_stmt;

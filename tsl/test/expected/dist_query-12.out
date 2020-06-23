@@ -24,6 +24,12 @@ SET client_min_messages TO notice;
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\ir debugsupport.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE OR REPLACE FUNCTION test.tsl_override_current_timestamptz(new_value TIMESTAMPTZ)
+RETURNS VOID AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz' LANGUAGE C VOLATILE STRICT;
 -- Cleanup from other tests that might have created these databases
 SET client_min_messages TO ERROR;
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -52,10 +58,6 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
--- Function for testing push down of time-related functions (e.g., now())
-CREATE OR REPLACE FUNCTION test.override_current_timestamptz(new_value TIMESTAMPTZ) RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz'
-LANGUAGE C VOLATILE STRICT;
 SET ROLE :ROLE_1;
 -- Create a "normal" PG table as reference, one two-dimensional
 -- distributed hypertable, and a one-dimensional distributed
@@ -637,8 +639,8 @@ GROUP BY 1,2
 
 ######### Constification and runtime push down of time-related functions
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -696,8 +698,8 @@ GROUP BY 1,2
                      Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
 (23 rows)
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -1493,8 +1495,8 @@ ORDER BY 1,2
 
 ######### Constification and runtime push down of time-related functions
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -1554,8 +1556,8 @@ ORDER BY 1,2
                      Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
 (24 rows)
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -2166,8 +2168,8 @@ ORDER BY 1,2
 
 ######### Constification and runtime push down of time-related functions
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -2191,8 +2193,8 @@ ORDER BY 1,2
    Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device = 1)) GROUP BY 1, 2 ORDER BY "time" ASC NULLS LAST
 (6 rows)
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -2993,8 +2995,8 @@ LIMIT 10
 
 ######### Constification and runtime push down of time-related functions
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -3054,8 +3056,8 @@ LIMIT 10
                            Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
 (24 rows)
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -3888,8 +3890,8 @@ ORDER BY 1,2
 
 ######### Constification and runtime push down of time-related functions
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -3945,8 +3947,8 @@ ORDER BY 1,2
                Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY "time" ASC NULLS LAST, device ASC NULLS LAST
 (22 rows)
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -4778,8 +4780,8 @@ GROUP BY 1,2
 
 ######### Constification and runtime push down of time-related functions
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
@@ -4833,8 +4835,8 @@ GROUP BY 1,2
                Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
 (21 rows)
 
- override_current_timestamptz 
-------------------------------
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
