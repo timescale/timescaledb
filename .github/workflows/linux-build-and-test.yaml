@@ -125,7 +125,7 @@ jobs:
       if: failure() && runner.os == 'Linux'
       run: |
         sleep 10 # wait for in progress coredumps to finish
-        echo "bt" | sudo coredumpctl gdb
+        echo "bt full" | sudo coredumpctl gdb
 
     - name: Slack Notification
       if: failure() && github.event_name != 'pull_request'
