@@ -6,7 +6,6 @@
 \unset ECHO
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-psql:utils/testsupport.sql:8: NOTICE:  schema "test" already exists, skipping
 -- Cleanup from other potential tests that created these databases
 SET client_min_messages TO ERROR;
 DROP DATABASE IF EXISTS data_node_1;
@@ -3289,9 +3288,9 @@ NOTICE:  adding not-null constraint to column "time"
 -- This will enable us to more easily see estimates per chunk
 SET timescaledb.enable_per_data_node_queries = false;
 -- Estimating chunk progress uses current timestamp so we override it for test purposes
-SELECT ts_test_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
- ts_test_override_current_timestamptz 
---------------------------------------
+SELECT test.tsl_override_current_timestamptz('2019-11-11 00:00'::timestamptz);
+ tsl_override_current_timestamptz 
+----------------------------------
  
 (1 row)
 
