@@ -1,0 +1,134 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\set TEST_BASE_NAME transparent_decompression_ordered_index
+SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('%s/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNCOMPRESSED",
+    format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_COMPRESSED" \gset
+
+SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') AS "DIFF_CMD" \gset
+
+-- Testing Index Scan backwards ----
+-- We want more than 1 segment in atleast 1 of the chunks
+
+CREATE TABLE metrics_ordered_idx (
+    time timestamptz NOT NULL,
+    device_id int,
+    device_id_peer int,
+    v0 int
+);
+
+SELECT create_hypertable ('metrics_ordered_idx', 'time', chunk_time_interval => '2days'::interval);
+
+ALTER TABLE metrics_ordered_idx SET (timescaledb.compress, timescaledb.compress_orderby = 'time ASC', timescaledb.compress_segmentby = 'device_id,device_id_peer');
+
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT time,
+    device_id,
+    0,
+    device_id
+FROM generate_series('2000-01-13 0:00:00+0'::timestamptz, '2000-01-15 23:55:00+0', '15m') gtime (time),
+    generate_series(1, 5, 1) gdevice (device_id);
+
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz, '2000-01-20 11:55:00+0', '15m'),
+    3,
+    3,
+    generate_series(1, 5, 1);
+
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT generate_series('2018-01-20 0:00:00+0'::timestamptz, '2018-01-20 11:55:00+0', '15m'),
+    4,
+    5,
+    generate_series(1, 5, 1);
+
+INSERT INTO metrics_ordered_idx (time, device_id, device_id_peer, v0)
+SELECT '2020-01-01 0:00:00+0',
+    generate_series(4, 7, 1),
+    5,
+    generate_series(1, 5, 1);
+
+-- misisng values device_id = 7
+CREATE TABLE device_tbl (
+    device_id int,
+    descr text
+);
+
+INSERT INTO device_tbl
+SELECT generate_series(1, 6, 1),
+    'devicex';
+
+INSERT INTO device_tbl
+SELECT 8,
+    'device8';
+
+ANALYZE device_tbl;
+
+-- table for joins ---
+CREATE TABLE nodetime (
+    node int,
+    start_time timestamp,
+    stop_time timestamp
+);
+
+INSERT INTO nodetime
+    VALUES (4, '2018-01-06 00:00'::timestamp, '2018-12-02 12:00'::timestamp);
+
+-- run queries on uncompressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+SET client_min_messages TO error;
+
+\o :TEST_RESULTS_UNCOMPRESSED
+\ir include/transparent_decompression_ordered_index.sql
+\ir include/transparent_decompression_constraintaware.sql
+\o
+RESET client_min_messages;
+
+\set ECHO all
+--compress all chunks for metrics_ordered_idx table --
+SELECT compress_chunk (c.schema_name || '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c
+    INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id = ht.id
+WHERE ht.table_name = 'metrics_ordered_idx'
+ORDER BY c.id;
+
+-- run queries on compressed hypertable and store result
+\set PREFIX ''
+\set PREFIX_VERBOSE ''
+\set ECHO none
+SET client_min_messages TO error;
+
+SET enable_seqscan = FALSE;
+
+\o :TEST_RESULTS_COMPRESSED
+\ir include/transparent_decompression_ordered_index.sql
+\ir include/transparent_decompression_constraintaware.sql
+SET enable_seqscan = TRUE;
+
+\o
+RESET client_min_messages;
+
+\set ECHO all
+-- diff compressed and uncompressed results
+:DIFF_CMD
+
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+-- we disable parallelism here otherwise EXPLAIN ANALYZE output
+-- will be not stable and differ depending on worker assignment
+
+SET max_parallel_workers_per_gather TO 0;
+
+SET enable_seqscan = FALSE;
+
+-- get explain for queries on hypertable with compression
+\ir include/transparent_decompression_ordered_indexplan.sql
+SET enable_seqscan = FALSE;
+
+\ir include/transparent_decompression_ordered_index.sql
+SET enable_seqscan = TRUE;
+
+\ir include/transparent_decompression_constraintaware.sql
