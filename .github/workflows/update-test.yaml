@@ -1,0 +1,43 @@
+name: Update test
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+  pull_request:
+jobs:
+  update_test:
+    name: Update test PG${{ matrix.pg }}
+    runs-on: 'ubuntu-18.04'
+    strategy:
+      matrix:
+        pg: ["11.0","12.0"]
+        include:
+          - pg: "11.0"
+            pg_major: 11
+          - pg: "12.0"
+            pg_major: 12
+      fail-fast: false
+    env:
+      PG_VERSION: ${{ matrix.pg }}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Update tests ${{ matrix.pg }}
+      run: |
+        ./scripts/test_updates_pg${{ matrix.pg_major}}.sh
+
+    - name: Slack Notification
+      if: failure() && github.event_name != 'pull_request'
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_COLOR: '#ff0000'
+        SLACK_USERNAME: GitHub Action
+        SLACK_TITLE: Update test PG${{ matrix.pg }} ${{ job.status }}
+        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
+      uses: rtCamp/action-slack-notify@v2.0.2
+

@@ -73,6 +73,12 @@ docker_exec() {
     docker exec $1 /bin/bash -c "$2"
 }
 
+docker_logs() {
+    # Echo to stderr
+    >&2 echo -e "\033[1m$1\033[0m: $2"
+    docker logs $1
+}
+
 docker_pgcmd() {
     docker_exec $1 "psql -h localhost -U postgres -d single -c \"$2\""
 }
@@ -120,6 +126,8 @@ wait_for_pg() {
             set -e
             return 0
         fi
+        docker_logs $1
+
     done
     exit 1
 }
