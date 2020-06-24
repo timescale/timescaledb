@@ -4,6 +4,7 @@
 /continuous_aggs_union_view-*.sql
 /plan_gapfill-*.sql
 /transparent_decompression-*.sql
+/transparent_decompression_ordered_index-*.sql
 /compression_permissions-*.sql
 /compression_qualpushdown-*.sql
 /hypertable_distributed-*.sql

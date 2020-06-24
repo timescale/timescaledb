@@ -63,6 +63,7 @@ set(TEST_TEMPLATES
   move.sql.in
   reorder.sql.in
   transparent_decompression.sql.in
+  transparent_decompression_ordered_index.sql.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
