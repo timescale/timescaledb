@@ -1,0 +1,41 @@
+test=# \o exp_hypertables2.out
+test=# explain analyze select * from timescaledb_new.hypertables where table_name = 'ht5' and schema_name = 'public';                                                                                         
+
+QUERY PLAN                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join  (cost=8.87..169.48 rows=1 width=274) (actual time=0.362..0.367 rows=1 loops=1)
+   Merge Cond: (srcht.id = hypertable_data_node.hypertable_id)
+   ->  Nested Loop  (cost=8.72..94.00 rows=1 width=176) (actual time=0.141..0.144 rows=1 loops=1)
+         Join Filter: (c.relnamespace = n.oid)
+         ->  Nested Loop  (cost=8.59..85.83 rows=1 width=180) (actual time=0.131..0.134 rows=1 loops=1)
+               ->  Merge Left Join  (cost=8.31..77.53 rows=1 width=172) (actual time=0.112..0.113 rows=1 loops=1)
+                     Merge Cond: (srcht.id = tablespace.hypertable_id)
+                     ->  Sort  (cost=8.16..8.17 rows=1 width=140) (actual time=0.040..0.041 rows=1 loops=1)
+                           Sort Key: srcht.id
+                           Sort Method: quicksort  Memory: 25kB
+                           ->  Index Scan using hypertable_schema_name_table_name_key on hypertable srcht  (cost=0.13..8.15 rows=1 width=140) (actual time=0.024..0.026 rows=1 loops=1)
+                                 Index Cond: ((schema_name = 'public'::name) AND (table_name = 'ht5'::name))
+                                 Filter: (compressed IS FALSE)
+                     ->  GroupAggregate  (cost=0.15..66.85 rows=200 width=36) (actual time=0.066..0.066 rows=1 loops=1)
+                           Group Key: tablespace.hypertable_id
+                           ->  Index Scan using tablespace_hypertable_id_tablespace_name_key on tablespace  (cost=0.15..60.30 rows=810 width=72) (actual time=0.021..0.022 rows=2 loops=1)
+               ->  Index Scan using pg_class_relname_nsp_index on pg_class c  (cost=0.28..8.29 rows=1 width=76) (actual time=0.016..0.017 rows=1 loops=1)
+                     Index Cond: (relname = 'ht5'::name)
+                     Filter: (relkind = ANY ('{r,p}'::"char"[]))
+         ->  Index Scan using pg_namespace_nspname_index on pg_namespace n  (cost=0.13..8.15 rows=1 width=68) (actual time=0.006..0.006 rows=1 loops=1)
+               Index Cond: (nspname = 'public'::name)
+   ->  GroupAggregate  (cost=0.15..66.65 rows=200 width=36) (actual time=0.146..0.146 rows=1 loops=1)
+         Group Key: hypertable_data_node.hypertable_id
+         ->  Index Only Scan using hypertable_data_node_hypertable_id_node_name_key on hypertable_data_node  (cost=0.15..60.15 rows=800 width=68) (actual time=0.038..0.042 rows=3 loops=1)
+               Heap Fetches: 3
+   SubPlan 1
+     ->  Aggregate  (cost=6.30..6.31 rows=1 width=8) (actual time=0.032..0.032 rows=1 loops=1)
+           ->  Bitmap Heap Scan on chunk ch  (cost=4.19..6.28 rows=7 width=0) (actual time=0.020..0.022 rows=3 loops=1)
+                 Recheck Cond: (hypertable_id = srcht.id)
+                 Heap Blocks: exact=1
+                 ->  Bitmap Index Scan on chunk_hypertable_id_idx  (cost=0.00..4.19 rows=7 width=0) (actual time=0.008..0.008 rows=3 loops=1)
+                       Index Cond: (hypertable_id = srcht.id)
+ Planning Time: 4.479 ms
+ Execution Time: 0.750 ms
+(34 rows)
+
