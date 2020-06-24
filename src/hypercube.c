@@ -10,6 +10,7 @@
 #include "export.h"
 #include "hypercube.h"
 #include "dimension_vector.h"
+#include "debug_assert.h"
 
 /*
  * A hypercube represents the partition bounds of a hypertable chunk.
@@ -179,7 +180,8 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
 			slice = ts_dimension_slice_scan_by_id(cc->fd.dimension_slice_id, mctx);
-			Assert(slice != NULL);
+			AssertOr(ERROR, slice != NULL);
+			AssertOr(ERROR, hc->num_slices < hc->capacity);
 			hc->slices[hc->num_slices++] = slice;
 		}
 	}
