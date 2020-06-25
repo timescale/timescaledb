@@ -27,7 +27,13 @@ typedef struct ProcessUtilityArgs
 	char *completion_tag;
 } ProcessUtilityArgs;
 
-typedef bool (*ts_process_utility_handler_t)(ProcessUtilityArgs *args);
+typedef enum
+{
+	DDL_CONTINUE,
+	DDL_DONE
+} DDLResult;
+
+typedef DDLResult (*ts_process_utility_handler_t)(ProcessUtilityArgs *args);
 
 extern void ts_process_utility_set_expect_chunk_modification(bool expect);
 

@@ -7,13 +7,14 @@
 #define TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H
 #include <postgres.h>
 
+#include <process_utility.h>
 #include "with_clause_parser.h"
 #include "continuous_agg.h"
 
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
 
-bool tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
-										 WithClauseResult *with_clause_options);
+DDLResult tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
+											  WithClauseResult *with_clause_options);
 
 void cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 								 WithClauseResult *with_clause_options);

@@ -1754,7 +1754,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
  * step 1 : validate query
  * step 2: create underlying tables and views
  */
-bool
+DDLResult
 tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
 									WithClauseResult *with_clause_options)
 {
@@ -1779,13 +1779,13 @@ tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, vo
 				 errmsg("continuous aggregate query \"%s\" already exists", stmt->view->relname),
 				 errhint("drop and recreate if needed.  This will drop the underlying "
 						 "materialization")));
-		return true;
+		return DDL_DONE;
 	}
 
 	timebucket_exprinfo = cagg_validate_query(query);
 
 	cagg_create(stmt, query, &timebucket_exprinfo, with_clause_options);
-	return true;
+	return DDL_DONE;
 }
 
 /*
