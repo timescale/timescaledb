@@ -6,6 +6,7 @@ CREATE SCHEMA IF NOT EXISTS timescaledb_new;
 drop view timescaledb_new.hypertables cascade;
 drop view timescaledb_new.chunks cascade;
 
+CREATE UNIQUE INDEX hypertable_oid ON _timescaledb_catalog.hypertable( format('%1$I.%2$I', schema_name, table_name)::regclass );
 ---hypertable metadata vew ---
 CREATE OR REPLACE VIEW timescaledb_new.hypertables AS
 WITH ht as (
