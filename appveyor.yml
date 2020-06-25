@@ -82,6 +82,8 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "autovacuum=false"
 
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "fsync=false"
+
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "random_page_cost=1.0"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "extra_float_digits=0"
