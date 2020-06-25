@@ -75,8 +75,8 @@ typedef struct CrossModuleFunctions
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
 	PGFunction finalize_agg_ffunc;
-	bool (*process_cagg_viewstmt)(ViewStmt *stmt, const char *query_string, void *pstmt,
-								  WithClauseResult *with_clause_options);
+	DDLResult (*process_cagg_viewstmt)(ViewStmt *stmt, const char *query_string, void *pstmt,
+									   WithClauseResult *with_clause_options);
 	void (*continuous_agg_drop_chunks_by_chunk_id)(int32 raw_hypertable_id, Chunk **chunks,
 												   Size num_chunks, Datum older_than_datum,
 												   Datum newer_than_datum, Oid older_than_type,

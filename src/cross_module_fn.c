@@ -509,7 +509,7 @@ error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-static bool
+static DDLResult
 process_cagg_viewstmt_default(ViewStmt *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
 {

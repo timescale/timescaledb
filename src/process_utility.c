@@ -72,8 +72,8 @@ void _process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
-static bool process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
-static bool process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
+static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
@@ -266,7 +266,7 @@ block_on_foreign_server(const char *const server_name)
 	return false;
 }
 
-static bool
+static DDLResult
 process_create_foreign_server_start(ProcessUtilityArgs *args)
 {
 	CreateForeignServerStmt *stmt = (CreateForeignServerStmt *) args->parsetree;
@@ -278,7 +278,7 @@ process_create_foreign_server_start(ProcessUtilityArgs *args)
 				 errhint("Use add_data_node() to add data nodes to a "
 						 "TimescaleDB distributed database.")));
 
-	return false;
+	return DDL_CONTINUE;
 }
 
 static void
@@ -300,7 +300,7 @@ process_drop_foreign_server_start(DropStmt *stmt)
 	}
 }
 
-static bool
+static DDLResult
 process_create_foreign_table_start(ProcessUtilityArgs *args)
 {
 	CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) args->parsetree;
@@ -312,10 +312,10 @@ process_create_foreign_table_start(ProcessUtilityArgs *args)
 				 errdetail(
 					 "It is not possible to create stand-alone TimescaleDB foreign tables.")));
 
-	return false;
+	return DDL_CONTINUE;
 }
 
-static bool
+static DDLResult
 process_alter_foreign_server(ProcessUtilityArgs *args)
 {
 	AlterForeignServerStmt *stmt = (AlterForeignServerStmt *) args->parsetree;
@@ -325,10 +325,10 @@ process_alter_foreign_server(ProcessUtilityArgs *args)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("alter server not supported on a TimescaleDB data node")));
 
-	return false;
+	return DDL_CONTINUE;
 }
 
-static bool
+static DDLResult
 process_alter_owner(ProcessUtilityArgs *args)
 {
 	AlterOwnerStmt *stmt = (AlterOwnerStmt *) args->parsetree;
@@ -341,7 +341,7 @@ process_alter_owner(ProcessUtilityArgs *args)
 				 errmsg("alter owner not supported on a TimescaleDB data node")));
 	}
 
-	return false;
+	return DDL_CONTINUE;
 }
 
 static void
@@ -405,7 +405,7 @@ process_alterviewschema(ProcessUtilityArgs *args)
 }
 
 /* Change the schema of a hypertable or a chunk */
-static bool
+static DDLResult
 process_alterobjectschema(ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
@@ -422,10 +422,10 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 			break;
 	};
 
-	return false;
+	return DDL_CONTINUE;
 }
 
-static bool
+static DDLResult
 process_copy(ProcessUtilityArgs *args)
 {
 	CopyStmt *stmt = (CopyStmt *) args->parsetree;
@@ -443,14 +443,14 @@ process_copy(ProcessUtilityArgs *args)
 		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 		if (!OidIsValid(relid))
-			return false;
+			return DDL_CONTINUE;
 
 		ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
 		if (ht == NULL)
 		{
 			ts_cache_release(hcache);
-			return false;
+			return DDL_CONTINUE;
 		}
 	}
 
@@ -469,7 +469,8 @@ process_copy(ProcessUtilityArgs *args)
 							 "hypertable, or copy each chunk individually.")));
 		if (hcache)
 			ts_cache_release(hcache);
-		return false;
+
+		return DDL_CONTINUE;
 	}
 
 	PreventCommandIfReadOnly("COPY FROM");
@@ -484,7 +485,7 @@ process_copy(ProcessUtilityArgs *args)
 
 	ts_cache_release(hcache);
 
-	return true;
+	return DDL_DONE;
 }
 
 typedef void (*process_chunk_t)(Hypertable *ht, Oid chunk_relid, void *arg);
@@ -581,7 +582,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 }
 
 /* Vacuums a hypertable and all of it's chunks */
-static bool
+static DDLResult
 process_vacuum(ProcessUtilityArgs *args)
 {
 	VacuumStmt *stmt = (VacuumStmt *) args->parsetree;
@@ -598,7 +599,7 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	if (stmt->rels == NIL)
 		/* Vacuum is for all tables */
-		return false;
+		return DDL_CONTINUE;
 
 	hcache = ts_hypertable_cache_pin();
 	foreach (lc, stmt->rels)
@@ -638,7 +639,7 @@ process_vacuum(ProcessUtilityArgs *args)
 	ts_cache_release(hcache);
 
 	if (!affects_hypertable)
-		return false;
+		return DDL_CONTINUE;
 
 	stmt->rels = list_concat(ctx.chunk_rels, vacuum_rels);
 
@@ -657,7 +658,7 @@ process_vacuum(ProcessUtilityArgs *args)
 			is_toplevel);
 	}
 
-	return true;
+	return DDL_DONE;
 }
 
 static void
@@ -694,7 +695,7 @@ handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hyperta
 /*
  * Truncate a hypertable.
  */
-static bool
+static DDLResult
 process_truncate(ProcessUtilityArgs *args)
 {
 	TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
@@ -803,7 +804,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 	ts_cache_release(hcache);
 
-	return true;
+	return DDL_DONE;
 }
 
 static void
@@ -865,12 +866,12 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
  * when dropping hypertables to maintain correct semantics wrt CASCADE modifiers.
  * Also block dropping compressed hypertables directly.
  */
-static bool
+static DDLResult
 process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
-	bool handled = false;
+	DDLResult result = DDL_CONTINUE;
 
 	foreach (lc, stmt->objects)
 	{
@@ -918,13 +919,13 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				}
 			}
 
-			handled = true;
+			result = DDL_DONE;
 		}
 	}
 
 	ts_cache_release(hcache);
 
-	return handled;
+	return result;
 }
 
 /*
@@ -971,7 +972,7 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
  * through process_ddl_sql_drop */
-static bool
+static DDLResult
 process_drop_tablespace(ProcessUtilityArgs *args)
 {
 	DropTableSpaceStmt *stmt = (DropTableSpaceStmt *) args->parsetree;
@@ -985,7 +986,7 @@ process_drop_tablespace(ProcessUtilityArgs *args)
 						count),
 				 errhint("Detach the tablespace from all hypertables before removing it.")));
 
-	return false;
+	return DDL_CONTINUE;
 }
 
 /*
@@ -993,16 +994,16 @@ process_drop_tablespace(ProcessUtilityArgs *args)
  *
  * A revoke is a GrantStmt with 'is_grant' set to false.
  */
-static bool
+static DDLResult
 process_grant_and_revoke(ProcessUtilityArgs *args)
 {
 	GrantStmt *stmt = (GrantStmt *) args->parsetree;
-	bool handled = false;
+	DDLResult result = DDL_CONTINUE;
 
 	/* We let the calling function handle anything that is not
 	 * ACL_TARGET_OBJECT (currently only ACL_TARGET_ALL_IN_SCHEMA) */
 	if (stmt->targtype != ACL_TARGET_OBJECT)
-		return false;
+		return DDL_CONTINUE;
 
 	switch (stmt->objtype)
 	{
@@ -1013,7 +1014,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 			 */
 			prev_ProcessUtility(args);
 			ts_tablespace_validate_revoke(stmt);
-			handled = true;
+			result = DDL_DONE;
 			break;
 		case OBJECT_TABLE:
 			/*
@@ -1043,10 +1044,10 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 			break;
 	}
 
-	return handled;
+	return result;
 }
 
-static bool
+static DDLResult
 process_grant_and_revoke_role(ProcessUtilityArgs *args)
 {
 	GrantRoleStmt *stmt = (GrantRoleStmt *) args->parsetree;
@@ -1059,11 +1060,11 @@ process_grant_and_revoke_role(ProcessUtilityArgs *args)
 
 	/* We only care about revokes and setting privileges on a specific object */
 	if (stmt->is_grant)
-		return true;
+		return DDL_DONE;
 
 	ts_tablespace_validate_revoke_role(stmt);
 
-	return true;
+	return DDL_DONE;
 }
 
 /* Force the use of CASCADE to drop continuous aggregates */
@@ -1105,7 +1106,7 @@ block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, D
 	}
 }
 
-static bool
+static DDLResult
 process_drop_start(ProcessUtilityArgs *args)
 {
 	DropStmt *stmt = (DropStmt *) args->parsetree;
@@ -1129,7 +1130,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			break;
 	}
 
-	return false;
+	return DDL_CONTINUE;
 }
 
 static void
@@ -1164,23 +1165,23 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
  * Reindex a hypertable and all its chunks. Currently works only for REINDEX
  * TABLE.
  */
-static bool
+static DDLResult
 process_reindex(ProcessUtilityArgs *args)
 {
 	ReindexStmt *stmt = (ReindexStmt *) args->parsetree;
 	Oid relid;
 	Cache *hcache;
 	Hypertable *ht;
-	bool ret = false;
+	DDLResult result = DDL_CONTINUE;
 
 	if (NULL == stmt->relation)
 		/* Not a case we are interested in */
-		return false;
+		return DDL_CONTINUE;
 
 	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
-		return false;
+		return DDL_CONTINUE;
 
 	hcache = ts_hypertable_cache_pin();
 
@@ -1195,7 +1196,7 @@ process_reindex(ProcessUtilityArgs *args)
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
-					ret = true;
+					result = DDL_DONE;
 
 				process_add_hypertable(args, ht);
 			}
@@ -1229,7 +1230,7 @@ process_reindex(ProcessUtilityArgs *args)
 
 	ts_cache_release(hcache);
 
-	return ret;
+	return result;
 }
 
 /*
@@ -1422,7 +1423,7 @@ process_rename_constraint(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Re
 	}
 }
 
-static bool
+static DDLResult
 process_rename(ProcessUtilityArgs *args)
 {
 	RenameStmt *stmt = (RenameStmt *) args->parsetree;
@@ -1434,7 +1435,7 @@ process_rename(ProcessUtilityArgs *args)
 	{
 		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 		if (!OidIsValid(relid))
-			return false;
+			return DDL_CONTINUE;
 	}
 	else
 	{
@@ -1450,7 +1451,7 @@ process_rename(ProcessUtilityArgs *args)
 					 errmsg("rename not supported on a TimescaleDB data node")));
 		}
 		if (stmt->renameType != OBJECT_SCHEMA)
-			return false;
+			return DDL_CONTINUE;
 	}
 
 	hcache = ts_hypertable_cache_pin();
@@ -1480,7 +1481,7 @@ process_rename(ProcessUtilityArgs *args)
 	}
 
 	ts_cache_release(hcache);
-	return false;
+	return DDL_CONTINUE;
 }
 
 static void
@@ -1898,7 +1899,7 @@ multitransaction_create_index_mark_valid(CreateIndexInfo info)
  * created on all of the hypertable's chunks, and to ensure that locks on all
  * of said chunks are acquired at the correct time.
  */
-static bool
+static DDLResult
 process_index_start(ProcessUtilityArgs *args)
 {
 	IndexStmt *stmt = (IndexStmt *) args->parsetree;
@@ -1928,7 +1929,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 * we don't deal with them so we will just return immediately
 	 */
 	if (NULL == stmt->relation)
-		return false;
+		return DDL_CONTINUE;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
@@ -1936,7 +1937,7 @@ process_index_start(ProcessUtilityArgs *args)
 	if (NULL == ht)
 	{
 		ts_cache_release(hcache);
-		return false;
+		return DDL_CONTINUE;
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -1990,7 +1991,7 @@ process_index_start(ProcessUtilityArgs *args)
 	if (hypertable_is_distributed(ht))
 	{
 		ts_cache_release(hcache);
-		return true;
+		return DDL_DONE;
 	}
 
 	/* collect information required for per chunk index creation */
@@ -2023,7 +2024,7 @@ process_index_start(ProcessUtilityArgs *args)
 		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(hcache);
 
-		return true;
+		return DDL_DONE;
 	}
 
 	/* create chunk indexes using a separate transaction for each chunk */
@@ -2079,7 +2080,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	UnlockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
 
-	return true;
+	return DDL_DONE;
 }
 
 static int
@@ -2100,19 +2101,19 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
  * each subtable is clustered in its own transaction. This will release all
  * locks on subtables once they are done.
  */
-static bool
+static DDLResult
 process_cluster_start(ProcessUtilityArgs *args)
 {
 	ClusterStmt *stmt = (ClusterStmt *) args->parsetree;
 	Cache *hcache;
 	Hypertable *ht;
-	bool handled = false;
+	DDLResult result = DDL_CONTINUE;
 
 	Assert(IsA(stmt, ClusterStmt));
 
 	/* If this is a re-cluster on all tables, there is nothing we need to do */
 	if (NULL == stmt->relation)
-		return false;
+		return DDL_CONTINUE;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
@@ -2156,7 +2157,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		{
 			/* Let regular process utility handle */
 			ts_cache_release(hcache);
-			return false;
+			return DDL_CONTINUE;
 		}
 
 		/*
@@ -2265,11 +2266,11 @@ process_cluster_start(ProcessUtilityArgs *args)
 		MemoryContextDelete(mcxt);
 
 		UnlockRelationIdForSession(&cluster_index_lockid, AccessShareLock);
-		handled = true;
+		result = DDL_DONE;
 	}
 
 	ts_cache_release(hcache);
-	return handled;
+	return result;
 }
 
 /*
@@ -2469,7 +2470,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	ts_cache_release(hcache);
 }
 
-static bool
+static DDLResult
 process_altertable_start_table(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
@@ -2477,11 +2478,11 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	ListCell *lc;
-	bool handled = false;
+	DDLResult result = DDL_CONTINUE;
 	int num_cmds;
 
 	if (!OidIsValid(relid))
-		return false;
+		return DDL_CONTINUE;
 
 	check_chunk_alter_table_operation_allowed(relid, stmt);
 
@@ -2581,7 +2582,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				if (ht != NULL)
 				{
-					handled = process_altertable_set_options(cmd, ht);
+					result = process_altertable_set_options(cmd, ht);
 				}
 				break;
 			}
@@ -2595,7 +2596,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	}
 
 	ts_cache_release(hcache);
-	return handled;
+	return result;
 }
 
 static void
@@ -2631,7 +2632,7 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 	}
 }
 
-static bool
+static DDLResult
 process_altertable_start_view(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
@@ -2643,14 +2644,14 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	ContinuousAggViewType vtyp;
 
 	if (!OidIsValid(view_relid))
-		return false;
+		return DDL_CONTINUE;
 
 	namestrcpy(&view_name, get_rel_name(view_relid));
 	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(view_relid)));
 	cagg = ts_continuous_agg_find_by_view_name(NameStr(view_schema), NameStr(view_name));
 
 	if (cagg == NULL)
-		return false;
+		return DDL_CONTINUE;
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
@@ -2681,10 +2682,10 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 		}
 	}
 	/* All commands processed by us, nothing for postgres to do.*/
-	return true;
+	return DDL_DONE;
 }
 
-static bool
+static DDLResult
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
@@ -2695,7 +2696,7 @@ process_altertable_start(ProcessUtilityArgs *args)
 		case OBJECT_VIEW:
 			return process_altertable_start_view(args);
 		default:
-			return false;
+			return DDL_CONTINUE;
 	}
 }
 
@@ -2970,7 +2971,7 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 	}
 }
 
-static bool
+static DDLResult
 process_create_trigger_start(ProcessUtilityArgs *args)
 {
 	CreateTrigStmt *stmt = (CreateTrigStmt *) args->parsetree;
@@ -2979,14 +2980,14 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	ObjectAddress PG_USED_FOR_ASSERTS_ONLY address;
 
 	if (!stmt->row)
-		return false;
+		return DDL_CONTINUE;
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 	if (ht == NULL)
 	{
 		ts_cache_release(hcache);
-		return false;
+		return DDL_CONTINUE;
 	}
 
 	process_add_hypertable(args, ht);
@@ -2994,24 +2995,25 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	Assert(OidIsValid(address.objectId));
 
 	ts_cache_release(hcache);
-	return true;
+	return DDL_DONE;
 }
 
-static bool
+static DDLResult
 process_create_rule_start(ProcessUtilityArgs *args)
 {
 	RuleStmt *stmt = (RuleStmt *) args->parsetree;
 
 	if (ts_hypertable_relid(stmt->relation) == InvalidOid)
-		return false;
+		return DDL_CONTINUE;
 
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
-	return false;
+
+	return DDL_CONTINUE;
 }
 
 /* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
-static bool
+static DDLResult
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 {
 	List *pg_options = NIL, *compress_options = NIL;
@@ -3031,7 +3033,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 							"compression")));
 	}
 	else
-		return false;
+		return DDL_CONTINUE;
 
 	if (pg_options != NIL)
 		ereport(ERROR,
@@ -3039,10 +3041,10 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
 						"parameters for hypertable")));
 	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
-	return true;
+	return DDL_DONE;
 }
 
-static bool
+static DDLResult
 process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 {
 	List *pg_options = NIL, *compress_options = NIL;
@@ -3057,10 +3059,10 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("compression options cannot be reset")));
 
-	return false;
+	return DDL_CONTINUE;
 }
 
-static bool
+static DDLResult
 process_viewstmt(ProcessUtilityArgs *args)
 {
 	WithClauseResult *parse_results = NULL;
@@ -3078,7 +3080,7 @@ process_viewstmt(ProcessUtilityArgs *args)
 	}
 
 	if (!is_cagg)
-		return false;
+		return DDL_CONTINUE;
 
 	if (pg_options != NIL)
 		ereport(ERROR,
@@ -3092,7 +3094,7 @@ process_viewstmt(ProcessUtilityArgs *args)
 												  parse_results);
 }
 
-static bool
+static DDLResult
 process_refresh_mat_view_start(ProcessUtilityArgs *args)
 {
 	RefreshMatViewStmt *stmt = castNode(RefreshMatViewStmt, args->parsetree);
@@ -3105,7 +3107,7 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	ContinuousAggMatOptions mat_options;
 
 	if (!OidIsValid(view_relid))
-		return false;
+		return DDL_CONTINUE;
 
 	namestrcpy(&view_name, get_rel_name(view_relid));
 	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(view_relid)));
@@ -3133,7 +3135,7 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	}
 
 	if (materialization_id == -1)
-		return false;
+		return DDL_CONTINUE;
 
 	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
 
@@ -3155,13 +3157,13 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	}
 
 	StartTransactionCommand();
-	return true;
+	return DDL_DONE;
 }
 
 /*
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
-static bool
+static DDLResult
 process_ddl_command_start(ProcessUtilityArgs *args)
 {
 	bool check_read_only = true;
@@ -3458,7 +3460,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 								.hypertable_list = NIL };
 
 	bool altering_timescaledb = false;
-	bool handled;
+	DDLResult result;
 
 	args.parse_state->p_sourcetext = query_string;
 
@@ -3483,7 +3485,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 	 * Process Utility/DDL operation locally then pass it on for
 	 * execution in TSL.
 	 */
-	handled = process_ddl_command_start(&args);
+	result = process_ddl_command_start(&args);
 
 	/*
 	 * We need to run tsl-side ddl_command_start hook before
@@ -3493,7 +3495,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 	if (ts_cm_functions->ddl_command_start)
 		ts_cm_functions->ddl_command_start(&args);
 
-	if (!handled)
+	if (result == DDL_CONTINUE)
 		prev_ProcessUtility(&args);
 }
 
