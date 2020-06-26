@@ -102,7 +102,9 @@ endif()
 # the following tests will run by itself before the parallel
 # tests because they fail or are flaky when run in parallel
 set(SOLO_TESTS
+  bgw_reorder_drop_chunks
   chunk_api
+  compress_bgw_reorder_drop_chunks
   continuous_aggs_bgw
   continuous_aggs_dump
   data_fetcher
@@ -118,7 +120,9 @@ set(SOLO_TESTS
   dist_partial_agg
   issues
   read_only
+  remote_connection_cache
   remote_copy
+  remote_txn
   remote_txn_resolve
   reorder-11
   reorder-12
