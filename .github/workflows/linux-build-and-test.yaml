@@ -46,7 +46,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ runner.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
+        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
 
     - name: Build PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
