@@ -226,7 +226,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 		{
 			ictx->tinfo.count++;
 
-			if (ctx->tuplock.enabled)
+			if (ctx->tuplock)
 			{
 				Buffer buffer;
 				TM_FailureData hufd;
@@ -234,8 +234,8 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 				ictx->tinfo.lockresult = heap_lock_tuple(ictx->tablerel,
 														 ictx->tinfo.tuple,
 														 GetCurrentCommandId(false),
-														 ctx->tuplock.lockmode,
-														 ctx->tuplock.waitpolicy,
+														 ctx->tuplock->lockmode,
+														 ctx->tuplock->waitpolicy,
 														 false,
 														 &buffer,
 														 &hufd);
