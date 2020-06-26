@@ -13,8 +13,6 @@
 # harder to browse because the workflow will have lots of entries and
 # only by navigating into the individual jobs would it be visible
 # if a job was actually run.
-# Additionally we set fail-fast to true for pull requests and false
-# for other event types.
 
 import json
 import sys
@@ -127,5 +125,4 @@ if event_type != "pull_request":
 
 # generate command to set github action variable
 print(str.format("::set-output name=matrix::{0}",json.dumps(m)))
-print(str.format("::set-output name=fail-fast::{0}",json.dumps(event_type == "pull_request")))
 
