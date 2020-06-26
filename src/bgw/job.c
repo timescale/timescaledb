@@ -864,6 +864,10 @@ static bool
 bgw_job_update_scan(ScanKeyData *scankey, void *data)
 {
 	Catalog *catalog = ts_catalog_get();
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
 	ScannerCtx scanctx = { .table = catalog_get_table_id(catalog, BGW_JOB),
 						   .index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
 						   .nkeys = 1,
@@ -874,11 +878,7 @@ bgw_job_update_scan(ScanKeyData *scankey, void *data)
 						   .lockmode = RowExclusiveLock,
 						   .scandirection = ForwardScanDirection,
 						   .result_mctx = CurrentMemoryContext,
-						   .tuplock = {
-							   .waitpolicy = LockWaitBlock,
-							   .lockmode = LockTupleExclusive,
-							   .enabled = false,
-						   } };
+						   .tuplock = &scantuplock };
 
 	return ts_scanner_scan(&scanctx);
 }

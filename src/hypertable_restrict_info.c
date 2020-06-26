@@ -245,7 +245,8 @@ dimension_restrict_info_open_slices(DimensionRestrictInfoOpen *dri)
 											   dri->upper_bound,
 											   dri->lower_strategy,
 											   dri->lower_bound,
-											   0);
+											   0,
+											   NULL);
 }
 
 static DimensionVec *
@@ -266,7 +267,8 @@ dimension_restrict_info_closed_slices(DimensionRestrictInfoClosed *dri)
 																	partition,
 																	BTGreaterEqualStrategyNumber,
 																	partition,
-																	0);
+																	0,
+																	NULL);
 
 			for (i = 0; i < tmp->num_slices; i++)
 				dim_vec = ts_dimension_vec_add_unique_slice(&dim_vec, tmp->slices[i]);
@@ -280,7 +282,8 @@ dimension_restrict_info_closed_slices(DimensionRestrictInfoClosed *dri)
 											   -1,
 											   InvalidStrategy,
 											   -1,
-											   0);
+											   0,
+											   NULL);
 }
 
 static DimensionVec *

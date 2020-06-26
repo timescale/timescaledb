@@ -1,0 +1,15 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1a s2a s1b s2b s1c
+step s1a: INSERT INTO insert_dropchunks_race_t1 VALUES ('2020-01-03 10:30', 3, 33.4);
+step s2a: SELECT COUNT(*) FROM drop_chunks('insert_dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
+step s1b: COMMIT;
+step s2a: <... completed>
+count          
+
+2              
+step s2b: COMMIT;
+step s1c: SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint LEFT JOIN _timescaledb_catalog.dimension_slice sl ON dimension_slice_id = sl.id WHERE sl.id IS NULL;
+count          
+
+0              

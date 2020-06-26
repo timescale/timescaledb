@@ -178,7 +178,7 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 			DimensionSlice *slice;
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
-			slice = ts_dimension_slice_scan_by_id(cc->fd.dimension_slice_id, mctx);
+			slice = ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id, NULL, mctx);
 			Assert(slice != NULL);
 			hc->slices[hc->num_slices++] = slice;
 		}
@@ -212,7 +212,7 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
  * hypercubes. This happens in a later step.
  */
 Hypercube *
-ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p)
+ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock)
 {
 	Hypercube *cube;
 	int i;
@@ -237,7 +237,7 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p)
 		{
 			DimensionVec *vec;
 
-			vec = ts_dimension_slice_scan_limit(dim->fd.id, value, 1);
+			vec = ts_dimension_slice_scan_limit(dim->fd.id, value, 1, tuplock);
 
 			if (vec->num_slices > 0)
 			{
@@ -258,6 +258,9 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p)
 			 * Check if there's already an existing slice with the calculated
 			 * range. If a slice already exists, use that slice's ID instead
 			 * of a new one.
+			 *
+			 * The tuples are already locked in
+			 * `chunk_create_from_point_after_lock`, so nothing to do here.
 			 */
 			ts_dimension_slice_scan_for_existing(cube->slices[i]);
 		}
