@@ -52,28 +52,30 @@ jobs:
 
     - name: make installcheck
       id: installcheck
-      run: sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.installcheck_ignores }}"
+      run: sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.installcheck_ignores }}" | tee installcheck.log
 
-    - name: Regression diffs
-      if: failure()
+    - name: Show regression diffs
+      if: always()
+      id: collectlogs
       run: |
-        find build -name regression.diffs -exec cat {} + > regression.diffs
-        find build -name postmaster.log -exec cat {} + > postmaster.log
-        cat regression.diffs
+        find . -name regression.diffs -exec cat {} + > regression.log
+        find . -name postmaster.log -exec cat {} + > postgres.log
+        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        cat regression.log
 
     - name: Save regression diffs
-      if: failure()
+      if: always()
       uses: actions/upload-artifact@v1
       with:
         name: Regression diff ${{ matrix.pg }}
-        path: regression.diffs
+        path: regression.log
 
     - name: Save postmaster.log
-      if: failure()
+      if: always()
       uses: actions/upload-artifact@v1
       with:
         name: PostgreSQL log ${{ matrix.pg }}
-        path: postmaster.log
+        path: postgres.log
 
     - name: Slack Notification
       if: failure()

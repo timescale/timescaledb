@@ -12,7 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-      fail-fast: ${{ steps.set-matrix.outputs.fail-fast }}
     steps:
     - uses: actions/checkout@v2
 
@@ -25,7 +24,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
-      fail-fast: ${{ fromJson(needs.matrixbuilder.outputs.fail-fast) }}
+      fail-fast: false
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
@@ -88,7 +87,7 @@ jobs:
 
     - name: make installcheck
       id: installcheck
-      run: make -k -C build installcheck ${{ matrix.installcheck_args }}
+      run: make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
 
     - name: coverage
       if: matrix.coverage
@@ -101,31 +100,35 @@ jobs:
         file: ./build/codecov/timescaledb-codecov.info
 
     - name: Show regression diffs
-      if: failure()
+      if: always()
+      id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
+        if [[ "${{ runner.os }}" == "Linux" ]] && coredumpctl -q list >/dev/null; then echo "::set-output name=coredumps::true"; fi
+        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
-      if: failure()
+      if: always()
       uses: actions/upload-artifact@v2
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
-      if: failure()
+      if: always()
       uses: actions/upload-artifact@v2
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postgres.log
 
     - name: Stack trace
-      if: failure() && runner.os == 'Linux'
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
         sleep 10 # wait for in progress coredumps to finish
         echo "bt full" | sudo coredumpctl gdb
+        false
 
     - name: Slack Notification
       if: failure() && github.event_name != 'pull_request'
