@@ -145,7 +145,8 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 extern TSDLLEXPORT Chunk *
 ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,
-								  MemoryContext mctx, uint64 *num_chunks_returned);
+								  MemoryContext mctx, uint64 *num_chunks_returned,
+								  ScanTupLock *tuplock);
 
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);

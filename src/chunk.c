@@ -711,6 +711,10 @@ chunk_create_metadata_after_lock(Hypertable *ht, Point *p, const char *schema, c
 	CatalogSecurityContext sec_ctx;
 	Hypercube *cube;
 	Chunk *chunk;
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleKeyShare,
+		.waitpolicy = LockWaitBlock,
+	};
 
 	/*
 	 * If the user has enabled adaptive chunking, call the function to
@@ -718,8 +722,15 @@ chunk_create_metadata_after_lock(Hypertable *ht, Point *p, const char *schema, c
 	 */
 	calculate_and_set_new_chunk_interval(ht, p);
 
-	/* Calculate the hypercube for a new chunk that covers the tuple's point */
-	cube = ts_hypercube_calculate_from_point(hs, p);
+	/* Calculate the hypercube for a new chunk that covers the tuple's point.
+	 *
+	 * We lock the tuple in KEY SHARE mode since we are concerned with
+	 * ensuring that it is not deleted (or the key value changed) while we are
+	 * adding chunk constraints in `ts_chunk_constraints_insert_metadata`.
+	 *
+	 * The range of a dimension slice does not change, but we should use the
+	 * weakest lock possible to not unnecessarily block other operations. */
+	cube = ts_hypercube_calculate_from_point(hs, p, &tuplock);
 
 	/* Resolve collisions with other chunks by cutting the new hypercube */
 	chunk_collision_resolve(hs, cube, p);
@@ -1048,7 +1059,10 @@ chunk_point_scan(ChunkScanCtx *scanctx, Point *p)
 	{
 		DimensionVec *vec;
 
-		vec = dimension_slice_scan(scanctx->space->dimensions[i].fd.id, p->coordinates[i]);
+		vec = ts_dimension_slice_scan_limit(scanctx->space->dimensions[i].fd.id,
+											p->coordinates[i],
+											0,
+											NULL);
 
 		dimension_slice_and_chunk_constraint_join(scanctx, vec);
 	}
@@ -1337,7 +1351,7 @@ ts_chunk_find(Hypertable *ht, Point *p)
 static ChunkScanCtx *
 chunks_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim, StrategyNumber start_strategy,
 							   int64 start_value, StrategyNumber end_strategy, int64 end_value,
-							   int limit, uint64 *num_found)
+							   int limit, uint64 *num_found, ScanTupLock *tuplock)
 {
 	ChunkScanCtx *ctx = palloc(sizeof(ChunkScanCtx));
 	DimensionVec *slices;
@@ -1352,7 +1366,8 @@ chunks_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim, StrategyNumb
 												 start_value,
 												 end_strategy,
 												 end_value,
-												 limit);
+												 limit,
+												 tuplock);
 
 	/* The scan context will keep the state accumulated during the scan */
 	chunk_scan_ctx_init(ctx, hs, NULL);
@@ -1407,7 +1422,7 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 											 Datum older_than_datum, Oid older_than_type,
 											 Datum newer_than_datum, Oid newer_than_type, int limit,
 											 MemoryContext multi_call_memory_ctx, char *caller_name,
-											 uint64 *num_found)
+											 uint64 *num_found, ScanTupLock *tuplock)
 {
 	ChunkScanCtx *chunk_ctx = NULL;
 	int64 older_than = -1;
@@ -1457,7 +1472,8 @@ chunks_typecheck_and_find_all_in_range_limit(Hyperspace *hs, Dimension *time_dim
 											   end_strategy,
 											   older_than,
 											   limit,
-											   num_found);
+											   num_found,
+											   tuplock);
 	MemoryContextSwitchTo(oldcontext);
 
 	return chunk_ctx;
@@ -1627,7 +1643,8 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 															   newer_than_type,
 															   "show_chunks",
 															   funcctx->multi_call_memory_ctx,
-															   &funcctx->max_calls);
+															   &funcctx->max_calls,
+															   NULL);
 	}
 
 	return chunks_return_srf(fcinfo);
@@ -1636,7 +1653,8 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 Chunk *
 ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,
-								  MemoryContext mctx, uint64 *num_chunks_returned)
+								  MemoryContext mctx, uint64 *num_chunks_returned,
+								  ScanTupLock *tuplock)
 {
 	ListCell *lc;
 	MemoryContext oldcontext;
@@ -1722,7 +1740,8 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 																				   -1,
 																				   mctx,
 																				   caller_name,
-																				   &num_chunks);
+																				   &num_chunks,
+																				   tuplock);
 	}
 
 	chunks = MemoryContextAllocZero(mctx, sizeof(Chunk) * num_chunks);
@@ -2211,11 +2230,35 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 			 * Delete the dimension slice if there are no remaining constraints
 			 * referencing it
 			 */
-			if (is_dimension_constraint(cc) &&
-				ts_chunk_constraint_scan_by_dimension_slice_id(cc->fd.dimension_slice_id,
-															   NULL,
-															   CurrentMemoryContext) == 0)
-				ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+			if (is_dimension_constraint(cc))
+			{
+				/*
+				 * Dimension slices are shared between chunk constraints and
+				 * subsequently between chunks as well. Since different chunks
+				 * can reference the same dimension slice (through the chunk
+				 * constraint), we must lock the dimension slice in FOR UPDATE
+				 * mode *prior* to scanning the chunk constraints table. If we
+				 * do not do that, we can have the following scenario:
+				 *
+				 * - T1: Prepares to create a chunk that uses an existing dimension slice X
+				 * - T2: Deletes a chunk and dimension slice X because it is not
+				 *   references by a chunk constraint.
+				 * - T1: Adds a chunk constraint referencing dimension
+				 *   slice X (which is about to be deleted by T2).
+				 */
+				ScanTupLock tuplock = {
+					.lockmode = LockTupleExclusive,
+					.waitpolicy = LockWaitBlock,
+				};
+				DimensionSlice *slice =
+					ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
+														   &tuplock,
+														   CurrentMemoryContext);
+				if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
+																   NULL,
+																   CurrentMemoryContext) == 0)
+					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+			}
 		}
 	}
 
@@ -2884,6 +2927,10 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	const char *schema_name, *table_name;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
 	bool has_continuous_aggs;
+	ScanTupLock tuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
 
 	Assert(OidIsValid(table_relid));
 
@@ -2928,7 +2975,8 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 											   newer_than_type,
 											   "drop_chunks",
 											   CurrentMemoryContext,
-											   &num_chunks);
+											   &num_chunks,
+											   &tuplock);
 
 	if (has_continuous_aggs)
 		ts_chunk_drop_process_materialization(table_relid,
