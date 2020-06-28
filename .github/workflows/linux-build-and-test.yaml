@@ -74,7 +74,7 @@ jobs:
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DUSE_OPENSSL=false
         make -j $MAKE_JOBS -C nossl
         make -C nossl install
-        make -C nossl installcheck TESTS=telemetry
+        make -C nossl regresscheck TESTS=telemetry
 
     - name: Build TimescaleDB
       run: |
@@ -108,11 +108,12 @@ jobs:
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
         if [[ "${{ runner.os }}" == "Linux" ]] && coredumpctl -q list >/dev/null; then echo "::set-output name=coredumps::true"; fi
+        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
-      if: always()
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@v2
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}

@@ -1,0 +1,89 @@
+name: APT packages
+on:
+  schedule:
+    # run daily 0:00 on master branch
+    - cron: '0 0 * * *'
+  push:
+    tags:
+    - '*'
+    branches:
+    - release_test
+jobs:
+  apt_tests:
+    name: ${{ matrix.image }} PG${{ matrix.pg }}
+    runs-on: ubuntu-18.04
+    container:
+      image: ${{ matrix.image }}
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    strategy:
+      fail-fast: false
+      matrix:
+        # Debian images:  8 (jessie), 9 (stretch), or 10 (buster)
+        # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal)
+        image: [ "debian:8-slim", "debian:9-slim", "debian:10-slim", "ubuntu:bionic", "ubuntu:eoan", "ubuntu:focal"]
+        pg: [ 9.6, 10, 11, 12 ]
+        exclude:
+          - image: "ubuntu:focal"
+            pg: 9.6
+          - image: "ubuntu:focal"
+            pg: 10
+
+    steps:
+    - name: Add repositories
+      run: |
+        apt-get update
+        apt-get install -y wget lsb-release gnupg apt-transport-https sudo
+        echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -c -s)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+        apt-get update
+        apt-get install -y wget lsb-release gnupg apt-transport-https sudo
+        image_type=$(lsb_release -i -s)
+        if [ "$image_type" = "Debian" ]; then
+          echo "deb https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        elif [ "$image_type" = "Ubuntu" ]; then
+          apt-get install -y software-properties-common
+          add-apt-repository ppa:timescale/timescaledb-ppa
+        fi
+
+    - name: Install timescaledb
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends timescaledb-postgresql-${{ matrix.pg }} timescaledb-tools
+        timescaledb-tune --quiet --yes
+
+    - name: List available versions
+      run: |
+        apt-cache show timescaledb-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
+
+    - name: Show files in package
+      run: |
+        dpkg -L timescaledb-postgresql-${{ matrix.pg }}
+
+    - uses: actions/checkout@v2
+
+    - name: Test Installation
+      run: |
+        pg_ctlcluster ${{ matrix.pg }} main start
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
+        # read expected version from version.config
+        if grep '^version = [0-9.]\+$' version.config; then
+          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
+        else
+          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+        fi
+        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        if [ "$version" != "$installed_version" ];then
+          false
+        fi
+
+    - name: Slack Notification
+      if: failure()
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_COLOR: '#ff0000'
+        SLACK_USERNAME: GitHub Action
+        SLACK_TITLE: APT Package ${{ matrix.image }} PG${{ matrix.pg }} {{ job.status }}
+        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
+      uses: rtCamp/action-slack-notify@v2.0.2
