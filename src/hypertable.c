@@ -1381,24 +1381,6 @@ table_has_replica_identity(Relation rel)
 static bool inline table_has_rules(Relation rel) { return rel->rd_rules != NULL; }
 
 bool
-ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode)
-{
-	ListCell *lc;
-	List *chunks = find_inheritance_children(table_relid, lockmode);
-
-	foreach (lc, chunks)
-	{
-		Oid chunk_relid = lfirst_oid(lc);
-
-		/* Chunks already locked by find_inheritance_children() */
-		if (table_has_tuples(chunk_relid, NoLock))
-			return true;
-	}
-
-	return false;
-}
-
-bool
 ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode)
 {
 	return find_inheritance_children(table_relid, lockmode) != NIL;
@@ -2303,70 +2285,6 @@ typedef struct AccumHypertable
 	Name schema_name;
 	Name table_name;
 } AccumHypertable;
-
-static ScanTupleResult
-hypertable_tuple_match_name(TupleInfo *ti, void *data)
-{
-	Oid relid;
-	FormData_hypertable fd;
-	AccumHypertable *accum = data;
-	Oid schema_oid;
-
-	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
-	schema_oid = get_namespace_oid(NameStr(fd.schema_name), true);
-
-	if (!OidIsValid(schema_oid))
-		return SCAN_CONTINUE;
-
-	relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
-
-	/* Only return relations visible in the search path, unless schema is
-	 * specifically specified */
-	if (!OidIsValid(relid) || (accum->schema_name == NULL && !RelationIsVisible(relid)))
-		return SCAN_CONTINUE;
-
-	if ((accum->schema_name == NULL ||
-		 DatumGetBool(DirectFunctionCall2Coll(nameeq,
-											  C_COLLATION_OID,
-											  NameGetDatum(accum->schema_name),
-											  NameGetDatum(&fd.schema_name)))) &&
-		(accum->table_name == NULL ||
-		 DatumGetBool(DirectFunctionCall2Coll(nameeq,
-											  C_COLLATION_OID,
-											  NameGetDatum(accum->table_name),
-											  NameGetDatum(&fd.table_name)))))
-		accum->ht_oids = lappend_oid(accum->ht_oids, relid);
-
-	return SCAN_CONTINUE;
-}
-
-/*
- * Used for drop_chunks. Either name can be NULL, which indicates matching on
- * all possible names visible in search path.
- */
-List *
-ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx)
-{
-	Catalog *catalog = ts_catalog_get();
-	AccumHypertable data = {
-		.ht_oids = NIL,
-		.schema_name = schema_name,
-		.table_name = table_name,
-	};
-
-	hypertable_scan_limit_internal(NULL,
-								   0,
-								   catalog_get_index(catalog, HYPERTABLE, INVALID_INDEXID),
-								   hypertable_tuple_match_name,
-								   &data,
-								   -1,
-								   AccessShareLock,
-								   false,
-								   mctx,
-								   NULL);
-
-	return data.ht_oids;
-}
 
 bool
 ts_is_partitioning_column(Hypertable *ht, Index column_attno)

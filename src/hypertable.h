@@ -137,10 +137,8 @@ extern Tablespace *ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 extern const char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
 extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id,
 															   Oid tablespace_oid, int16 offset);
-extern bool ts_hypertable_has_tuples(Oid table_relid, LOCKMODE lockmode);
 extern bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
-extern List *ts_hypertable_get_all_by_name(Name schema_name, Name table_name, MemoryContext mctx);
 extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
 extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
 														int32 compressed_hypertable_id);
