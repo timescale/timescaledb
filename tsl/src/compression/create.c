@@ -780,12 +780,6 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 								 errhint("Only segment by columns can be used in foreign key "
 										 "constraints on hypertables that are compressed.")));
 					}
-					else
-					{
-						Name conname = palloc0(NAMEDATALEN);
-						namecpy(conname, &form->conname);
-						conlist = lappend(conlist, conname);
-					}
 				}
 				else
 				{
@@ -802,6 +796,12 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 										 "and timescaledb.compress_orderby can be used in "
 										 "constraints on hypertables that are compressed.")));
 				}
+			}
+			if (form->contype == CONSTRAINT_FOREIGN)
+			{
+				Name conname = palloc0(NAMEDATALEN);
+				namecpy(conname, &form->conname);
+				conlist = lappend(conlist, conname);
 			}
 		}
 	}
