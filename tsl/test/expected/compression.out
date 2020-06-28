@@ -1106,3 +1106,21 @@ WHERE hypertable_name = 'ht5'::regclass;
  _timescaledb_internal._hyper_20_45_chunk
 (1 row)
 
+-- Test enabling compression for a table with compound foreign key 
+-- (Issue https://github.com/timescale/timescaledb/issues/2000)
+CREATE TABLE table2(col1 INT, col2 int, primary key (col1,col2));
+CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
+ALTER TABLE table1 ADD CONSTRAINT fk_table1 FOREIGN KEY (col1,col2) REFERENCES table2(col1,col2);
+SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
+  create_hypertable   
+----------------------
+ (22,public,table1,t)
+(1 row)
+
+-- Trying to list an incomplete set of fields of the compound key (should fail with a nice message) 
+ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
+ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compress_segmentby column for compression
+-- Listing all fields of the compound key should succeed:
+ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
+NOTICE:  adding index _compressed_hypertable_23_col1__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col1, _ts_meta_sequence_num)
+NOTICE:  adding index _compressed_hypertable_23_col2__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col2, _ts_meta_sequence_num)
