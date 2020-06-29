@@ -282,7 +282,7 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 
 	MemoryContext oldcontext = MemoryContextSwitchTo(state->mctx);
 	chunk_connections = palloc(sizeof(ChunkConnectionList));
-	chunk_connections->chunk = chunk;
+	chunk_connections->chunk = ts_chunk_copy(chunk);
 	chunk_connections->connections = NIL;
 	foreach (lc, chunk->data_nodes)
 	{
