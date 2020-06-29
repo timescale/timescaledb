@@ -228,10 +228,7 @@ remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashv
 	HASH_SEQ_STATUS scan;
 	ConnectionCacheEntry *entry;
 
-	/* Only care about foreign server invalidations. Ignore general
-	 * invalidation (cacheid == 0), as not relevant here. */
-	if (cacheid != FOREIGNSERVEROID)
-		return;
+	Assert(cacheid == FOREIGNSERVEROID);
 
 	hash_seq_init(&scan, connection_cache->htab);
 
