@@ -58,19 +58,6 @@ cache_invalidate_relcache_all(void)
 	ts_bgw_job_cache_invalidate_callback();
 }
 
-static inline void
-cache_invalidate_syscache_all(void)
-{
-	ts_cm_functions->cache_syscache_invalidate(PointerGetDatum(NULL), 0, 0);
-}
-
-static inline void
-cache_invalidate_all()
-{
-	cache_invalidate_relcache_all();
-	cache_invalidate_syscache_all();
-}
-
 /*
  * This function is called when any relcache is invalidated.
  * Should route the invalidation to the correct cache.
@@ -98,7 +85,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 		ts_bgw_job_cache_invalidate_callback();
 
 	if (relid == InvalidOid)
-		cache_invalidate_all();
+		cache_invalidate_relcache_all();
 }
 
 /* Registration for given cache ids happens at  */
@@ -142,7 +129,7 @@ cache_invalidate_xact_end(XactEvent event, void *arg)
 			 * change since the transaction hasn't been committed and other
 			 * backends cannot have the invalid state.
 			 */
-			cache_invalidate_all();
+			cache_invalidate_relcache_all();
 		default:
 			break;
 	}
@@ -160,7 +147,7 @@ cache_invalidate_subxact_end(SubXactEvent event, SubTransactionId mySubid,
 			 * Invalidate caches on aborted sub transactions. See notes above
 			 * in cache_invalidate_xact_end.
 			 */
-			cache_invalidate_all();
+			cache_invalidate_relcache_all();
 		default:
 			break;
 	}
