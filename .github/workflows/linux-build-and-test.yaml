@@ -87,7 +87,9 @@ jobs:
 
     - name: make installcheck
       id: installcheck
-      run: make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
+      run: |
+        set -o pipefail
+        make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
 
     - name: coverage
       if: matrix.coverage
@@ -128,7 +130,15 @@ jobs:
       run: |
         sleep 10 # wait for in progress coredumps to finish
         echo "bt full" | sudo coredumpctl gdb
+        ./scripts/bundle_coredumps.sh
         false
+
+    - name: Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v2
+      with:
+        name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: coredumps
 
     - name: Slack Notification
       if: failure() && github.event_name != 'pull_request'
