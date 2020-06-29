@@ -52,7 +52,9 @@ jobs:
 
     - name: make installcheck
       id: installcheck
-      run: sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.installcheck_ignores }}" | tee installcheck.log
+      run: |
+        set -o pipefail
+        sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.installcheck_ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
