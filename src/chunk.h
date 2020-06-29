@@ -119,7 +119,7 @@ extern Chunk **ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE 
 extern List *ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode);
 extern TSDLLEXPORT int ts_chunk_add_constraints(Chunk *chunk);
 
-extern Chunk *ts_chunk_copy(Chunk *chunk);
+extern TSDLLEXPORT Chunk *ts_chunk_copy(Chunk *chunk);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 																   const char *table_name,
 																   MemoryContext mctx,
