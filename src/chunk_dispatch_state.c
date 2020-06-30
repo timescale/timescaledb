@@ -72,16 +72,12 @@ on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 	 */
 	if (cis->arbiter_indexes != NIL)
 	{
-#if PG11
 		/*
 		 * In PG11 several fields were removed from the
 		 * ModifyTableState node and ExecInsert function nodes, as
 		 * they were redundant.
 		 */
 		mtplan->arbiterIndexes = cis->arbiter_indexes;
-#else
-		mtstate->mt_arbiterindexes = cis->arbiter_indexes;
-#endif
 	}
 
 	/* Update slot tuple descriptors to handle ON CONFLICT DO UPDATE for the
@@ -216,7 +212,7 @@ ts_chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
  * these slots are required when changing chunk.
  */
 #define setup_tuple_slots_for_on_conflict_handling(state)
-#elif PG11
+#else
 /*
  * In PG11, tuple table slots for ON CONFLICT handling are tied to the format of
  * the "root" table, unless partition routing is enabled (which isn't the case

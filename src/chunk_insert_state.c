@@ -321,11 +321,7 @@ get_default_existing_slot(ChunkInsertState *state, ChunkDispatch *dispatch)
 static TupleDesc
 get_default_confl_tupdesc(ChunkInsertState *state, ChunkDispatch *dispatch)
 {
-#if PG11
 	return get_hyper_rri(dispatch)->ri_onConflict->oc_ProjTupdesc;
-#else
-	return dispatch->dispatch_state->conflproj_tupdesc;
-#endif /* PG11 */
 }
 
 static TupleTableSlot *
