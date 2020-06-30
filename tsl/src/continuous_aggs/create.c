@@ -1800,7 +1800,6 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
-	relation_close(user_view_rel, AccessShareLock);
 
 	FinalizeQueryInfo fqi;
 	MatTableColumnInfo mattblinfo;
@@ -1821,7 +1820,6 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 	rtable = list_delete_first(rtable);
 	direct_query->rtable = list_delete_first(rtable);
 	OffsetVarNodes((Node *) direct_query, -2, 0);
-	relation_close(direct_view_rel, AccessShareLock);
 	Assert(list_length(direct_query->rtable) == 1);
 	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
 
@@ -1849,6 +1847,10 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 		user_tle = lfirst_node(TargetEntry, lc2);
 		view_tle->resname = user_tle->resname;
 	}
+
+	/* keep locks until end of transaction */
+	relation_close(direct_view_rel, NoLock);
+	relation_close(user_view_rel, NoLock);
 
 	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(user_view_oid, view_query, true);
