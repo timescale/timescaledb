@@ -14,6 +14,8 @@ DECLARE
     constraint_oid OID;
     check_sql TEXT;
     def TEXT;
+    indx_tablespace NAME;
+    tablespace_def TEXT;
 BEGIN
     SELECT * INTO STRICT chunk_row FROM _timescaledb_catalog.chunk c WHERE c.id = chunk_constraint_row.chunk_id;
     SELECT * INTO STRICT hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.id = chunk_row.hypertable_id;
@@ -26,10 +28,21 @@ BEGIN
             def := NULL;
         END IF;
     ELSIF chunk_constraint_row.hypertable_constraint_name IS NOT NULL THEN
+
         SELECT oid INTO STRICT constraint_oid FROM pg_constraint
         WHERE conname=chunk_constraint_row.hypertable_constraint_name AND
               conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
-        def := pg_get_constraintdef(constraint_oid);
+
+        SELECT T.spcname INTO indx_tablespace 
+        FROM pg_constraint C, pg_class I, pg_tablespace T
+        WHERE C.oid = constraint_oid AND I.oid = C.conindid AND I.reltablespace = T.oid;
+
+        IF indx_tablespace IS NOT NULL THEN
+            tablespace_def := format(' USING INDEX TABLESPACE %I', indx_tablespace);
+        ELSE
+            tablespace_def := '';
+        END IF;
+        def := pg_get_constraintdef(constraint_oid) || tablespace_def;
     ELSE
         RAISE 'unknown constraint type';
     END IF;
