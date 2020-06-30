@@ -250,6 +250,39 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
 SELECT detach_tablespace('pg_default', 'hyper_in_space');
 
 DROP TABLE hyper_in_space;
+
+-- test altering tablespace on index, issue #903
+CREATE TABLE series(
+  time timestamptz not null, 
+  device int, 
+  value float,
+  CONSTRAINT series_pk PRIMARY KEY (time, device) USING INDEX TABLESPACE tablespace1);
+SELECT create_hypertable('series', 'time', create_default_indexes => FALSE);
+
+INSERT INTO series VALUES ('2019-04-21 10:12', 1, 1.01);
+
+CREATE INDEX series_value ON series (value, time) TABLESPACE tablespace2;
+
+SELECT schemaname, tablename, indexname, tablespace 
+FROM pg_indexes 
+WHERE indexname LIKE '%series%' 
+ORDER BY indexname;
+
+ALTER INDEX series_pk SET TABLESPACE tablespace2;
+
+CREATE INDEX ON series (time) TABLESPACE tablespace1;
+
+ALTER INDEX series_value SET TABLESPACE pg_default;
+
+INSERT INTO series VALUES ('2019-04-29 10:12', 2, 1.31);
+
+SELECT schemaname, tablename, indexname, tablespace 
+FROM pg_indexes 
+WHERE indexname LIKE '%series%' 
+ORDER BY indexname;
+
+DROP TABLE series;
+
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 

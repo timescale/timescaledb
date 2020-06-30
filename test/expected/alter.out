@@ -501,6 +501,54 @@ SELECT detach_tablespace('pg_default', 'hyper_in_space');
 (1 row)
 
 DROP TABLE hyper_in_space;
+-- test altering tablespace on index, issue #903
+CREATE TABLE series(
+  time timestamptz not null, 
+  device int, 
+  value float,
+  CONSTRAINT series_pk PRIMARY KEY (time, device) USING INDEX TABLESPACE tablespace1);
+SELECT create_hypertable('series', 'time', create_default_indexes => FALSE);
+  create_hypertable  
+---------------------
+ (5,public,series,t)
+(1 row)
+
+INSERT INTO series VALUES ('2019-04-21 10:12', 1, 1.01);
+CREATE INDEX series_value ON series (value, time) TABLESPACE tablespace2;
+SELECT schemaname, tablename, indexname, tablespace 
+FROM pg_indexes 
+WHERE indexname LIKE '%series%' 
+ORDER BY indexname;
+      schemaname       |     tablename     |           indexname            | tablespace  
+-----------------------+-------------------+--------------------------------+-------------
+ _timescaledb_internal | _hyper_5_16_chunk | 16_1_series_pk                 | tablespace1
+ _timescaledb_internal | _hyper_5_16_chunk | _hyper_5_16_chunk_series_value | tablespace2
+ public                | series            | series_pk                      | tablespace1
+ public                | series            | series_value                   | tablespace2
+(4 rows)
+
+ALTER INDEX series_pk SET TABLESPACE tablespace2;
+CREATE INDEX ON series (time) TABLESPACE tablespace1;
+ALTER INDEX series_value SET TABLESPACE pg_default;
+INSERT INTO series VALUES ('2019-04-29 10:12', 2, 1.31);
+SELECT schemaname, tablename, indexname, tablespace 
+FROM pg_indexes 
+WHERE indexname LIKE '%series%' 
+ORDER BY indexname;
+      schemaname       |     tablename     |             indexname             | tablespace  
+-----------------------+-------------------+-----------------------------------+-------------
+ _timescaledb_internal | _hyper_5_16_chunk | 16_1_series_pk                    | tablespace2
+ _timescaledb_internal | _hyper_5_17_chunk | 17_2_series_pk                    | tablespace2
+ _timescaledb_internal | _hyper_5_16_chunk | _hyper_5_16_chunk_series_time_idx | tablespace1
+ _timescaledb_internal | _hyper_5_16_chunk | _hyper_5_16_chunk_series_value    | 
+ _timescaledb_internal | _hyper_5_17_chunk | _hyper_5_17_chunk_series_time_idx | tablespace1
+ _timescaledb_internal | _hyper_5_17_chunk | _hyper_5_17_chunk_series_value    | 
+ public                | series            | series_pk                         | tablespace2
+ public                | series            | series_time_idx                   | tablespace1
+ public                | series            | series_value                      | 
+(9 rows)
+
+DROP TABLE series;
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
 -- Make sure we handle ALTER SCHEMA RENAME for hypertable schemas
@@ -513,7 +561,7 @@ CREATE TABLE original_name.my_table (
 SELECT create_hypertable('original_name.my_table','date');
       create_hypertable       
 ------------------------------
- (5,original_name,my_table,t)
+ (6,original_name,my_table,t)
 (1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -537,19 +585,19 @@ CREATE TABLE regular_table (
 SELECT create_hypertable('original_name.my_table','date');
       create_hypertable       
 ------------------------------
- (6,original_name,my_table,t)
+ (7,original_name,my_table,t)
 (1 row)
 
 SELECT create_hypertable('original_name.my_table2','date');
        create_hypertable       
 -------------------------------
- (7,original_name,my_table2,t)
+ (8,original_name,my_table2,t)
 (1 row)
 
 SELECT create_hypertable('regular_table','date');
      create_hypertable      
 ----------------------------
- (8,public,regular_table,t)
+ (9,public,regular_table,t)
 (1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -571,15 +619,15 @@ CREATE TABLE original_name.my_table2 (
   quantity double precision
 );
 SELECT create_hypertable('original_name.my_table','date');
-      create_hypertable       
-------------------------------
- (9,original_name,my_table,t)
+       create_hypertable       
+-------------------------------
+ (10,original_name,my_table,t)
 (1 row)
 
 SELECT create_hypertable('original_name.my_table2','date');
        create_hypertable        
 --------------------------------
- (10,original_name,my_table2,t)
+ (11,original_name,my_table2,t)
 (1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -612,7 +660,7 @@ CREATE TABLE my_table (
 SELECT create_hypertable('my_table','date', associated_schema_name => 'my_associated_schema');
    create_hypertable    
 ------------------------
- (11,public,my_table,t)
+ (12,public,my_table,t)
 (1 row)
 
 INSERT INTO my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -622,14 +670,14 @@ INSERT INTO my_table (date, quantity) VALUES ('2018-08-10T23:00:00+00:00', 20);
 SELECT * from _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------
- 11 | public      | my_table   | new_associated_schema  | _hyper_11               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
+ 12 | public      | my_table   | new_associated_schema  | _hyper_12               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                         
 (1 row)
 
 SELECT * from _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped 
 ----+---------------+-----------------------+--------------------+---------------------+---------
- 22 |            11 | new_associated_schema | _hyper_11_22_chunk |                     | f
- 23 |            11 | new_associated_schema | _hyper_11_23_chunk |                     | f
+ 24 |            12 | new_associated_schema | _hyper_12_24_chunk |                     | f
+ 25 |            12 | new_associated_schema | _hyper_12_25_chunk |                     | f
 (2 rows)
 
 DROP TABLE my_table;
