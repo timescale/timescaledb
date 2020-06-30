@@ -83,12 +83,16 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 
 	if (rel->trigdesc != NULL)
 	{
-		TriggerDesc *trigdesc = rel->trigdesc;
 		int i;
 
-		for (i = 0; i < trigdesc->numtriggers; i++)
+		/*
+		 * The TriggerDesc from rel->trigdesc seems to be modified during
+		 * iterations of the loop and sometimes gets reallocated so we
+		 * access trigdesc only through rel->trigdesc.
+		 */
+		for (i = 0; i < rel->trigdesc->numtriggers; i++)
 		{
-			Trigger *trigger = &trigdesc->triggers[i];
+			Trigger *trigger = &rel->trigdesc->triggers[i];
 
 			if (!on_trigger(trigger, arg))
 				break;
