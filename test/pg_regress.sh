@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 
-# Wrapper around pg_regress to be able to control the schedule with environment variables
+# Wrapper around pg_regress and pg_isolation_regress to be able to control the schedule with environment variables
 #
 # The following control variables are supported:
 #
 # TESTS     only run tests from this list
 # IGNORES   failure of tests in this list will not lead to test failure
 # SKIPS     tests from this list are not run
-
-# This script and pg_isolation_regress.sh use the same environment variables
-# to decide which tests to run and should be kept in sync.
 
 CURRENT_DIR=$(dirname $0)
 EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
@@ -62,24 +59,30 @@ else
   # either TESTS or SKIPS was specified so we need to create a new schedule
   # based on those
 
-  if [[ -z ${TESTS} ]]; then
+  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
-    # get the tests from the test schedule, but ignore our IGNORES
-    while read t; do
-      if [[ t =~ ignore:* ]]; then
-        t=${t##ignore:* }
-        IGNORES="${t} ${IGNORES}"
-        continue
-      fi
-      t=${t##test: }
-      ## check each individual test in test group to see if it should be ignored
-      for el in ${t[@]}; do
-        if ! contains "${SKIPS}" "${el}"; then
-          TESTS="${TESTS} ${el}"
-        fi
-      done
-    done < ${TEST_SCHEDULE}
+  if [[ -z "${TESTS}" ]]; then
+    TESTS=${ALL_TESTS}
   fi
+
+  # build new test list in current_tests removing entries in SKIPS and
+  # validating against schedule as TESTS might contain tests from
+  # multiple suites and not apply to current run
+  current_tests=""
+  for t in ${TESTS}; do
+    if ! contains "${SKIPS}" "${t}"; then
+      if contains "${ALL_TESTS}" "${t}"; then
+        current_tests="${current_tests} ${t}"
+      fi
+    fi
+  done
+
+  # if none of the tests survived filtering we can exit early
+  if [[ -z "${current_tests}" ]]; then
+    exit 0
+  fi
+
+  TESTS=${current_tests}
 
   echo > ${TEMP_SCHEDULE}
 
