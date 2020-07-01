@@ -68,6 +68,19 @@ step "UnlockMat1" { ROLLBACK; }
 #alter the refresh_lag for continuous_view_1
 session "CVddl"
 step "AlterLag1" { alter view continuous_view_1 set (timescaledb.refresh_lag = 10); }
+
+#update the hypertable
+session "Upd"
+step "U1" { update ts_continuous_test SET val = 5555 where time < 10; } 
+step "U2" { update ts_continuous_test SET val = 5 where time > 15 and time < 25; } 
+
+#simulate an update to the invalidation threshold table that would lock the hypertable row
+#this would block refresh that needs to get a row lock for the hypertable
+session "LInv"
+step "LInvRow" { BEGIN; update _timescaledb_catalog.continuous_aggs_invalidation_threshold set watermark = 20 where hypertable_id in ( select raw_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1' ); 
+}
+step "UnlockInvRow" { ROLLBACK; }
+
  
 #refresh1, refresh2 can run concurrently
 permutation "Setup2" "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1"
@@ -75,6 +88,11 @@ permutation "Setup2" "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCom
 #refresh1 and refresh2 run concurrently and see the correct invalidation
 #test1 - both see the same invalidation
 permutation "Setup2" "Refresh1" "Refresh2" "LockCompleted" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+
 ##test2 - continuous_view_2 should see results from insert but not the other one.
 ## Refresh2 will complete first due to LockMat1 and write the invalidation logs out. 
 permutation "Setup2" "AlterLag1" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCompleted" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+
+#test3 - both see the updates i.e. the invalidations
+##Refresh1 and Refresh2 are blocked by LockInvRow, when that is unlocked, they should complete serially
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "U1" "U2" "LInvRow" "Refresh1" "Refresh2" "UnlockInvRow" "Refresh1_sel" "Refresh2_sel"   

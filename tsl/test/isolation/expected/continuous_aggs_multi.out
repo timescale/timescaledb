@@ -1,4 +1,4 @@
-Parsed test spec with 9 sessions
+Parsed test spec with 11 sessions
 
 starting permutation: Setup2 LockCompleted LockMat1 Refresh1 Refresh2 UnlockCompleted UnlockMat1
 step Setup2: 
@@ -130,3 +130,53 @@ bkt            maxl
 
 0              4              
 40             1000           
+
+starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel U1 U2 LInvRow Refresh1 Refresh2 UnlockInvRow Refresh1_sel Refresh2_sel
+step Setup2: 
+    CREATE VIEW continuous_view_1( bkt, cnt)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        AS SELECT time_bucket('5', time), COUNT(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE VIEW continuous_view_2(bkt, maxl)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        AS SELECT time_bucket('5', time), max(val)
+            FROM ts_continuous_test
+            GROUP BY 1;
+    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
+    BEGIN EXECUTE format( 'lock table %s', name);
+    END; $$ LANGUAGE plpgsql;
+
+R1: LOG:  materializing continuous aggregate public.continuous_view_1: nothing to invalidate, new range up to 30
+step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1;
+R2: LOG:  materializing continuous aggregate public.continuous_view_2: nothing to invalidate, new range up to 30
+step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2;
+step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
+bkt            cnt            
+
+0              5              
+step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
+bkt            maxl           
+
+0              4              
+step U1: update ts_continuous_test SET val = 5555 where time < 10;
+step U2: update ts_continuous_test SET val = 5 where time > 15 and time < 25;
+step LInvRow: BEGIN; update _timescaledb_catalog.continuous_aggs_invalidation_threshold set watermark = 20 where hypertable_id in ( select raw_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1' ); 
+
+step Refresh1: REFRESH MATERIALIZED VIEW continuous_view_1; <waiting ...>
+step Refresh2: REFRESH MATERIALIZED VIEW continuous_view_2; <waiting ...>
+step UnlockInvRow: ROLLBACK;
+R1: LOG:  new materialization range not found for public.ts_continuous_test (time column time): not enough new data past completion threshold of 30 as of 29
+R1: LOG:  materializing continuous aggregate public.continuous_view_1: processing invalidations, no new range
+step Refresh1: <... completed>
+R2: LOG:  new materialization range not found for public.ts_continuous_test (time column time): not enough new data past completion threshold of 30 as of 29
+R2: LOG:  materializing continuous aggregate public.continuous_view_2: processing invalidations, no new range
+step Refresh2: <... completed>
+step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
+bkt            cnt            
+
+0              5              
+step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
+bkt            maxl           
+
+0              5555           
