@@ -490,7 +490,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 	foreach (lc, info->chunk_rel->reltarget->exprs)
 	{
 		ListCell *lc2;
-		List *chunk_vars = pull_var_clause(lfirst(lc), 0);
+		List *chunk_vars = pull_var_clause(lfirst(lc), PVC_RECURSE_PLACEHOLDERS);
 		foreach (lc2, chunk_vars)
 		{
 			FormData_hypertable_compression *column_info;
