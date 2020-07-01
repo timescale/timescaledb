@@ -78,6 +78,7 @@ static int64 get_materialization_end_point_for_table(int32 raw_hypertable_id,
 													 int64 completed_threshold,
 													 bool *materializing_new_range,
 													 bool *truncated_materialization, bool verbose);
+static void lock_invalidation_threshold_hypertable_row(int32 raw_hypertable_id);
 static void drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out);
 static void insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 													 Relation rel);
@@ -197,8 +198,18 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 
 	catalog = ts_catalog_get();
 
-	/* copy over all the materializations from the raw hypertable to all the continuous aggs */
+	/* copy over all the materializations from the raw hypertable to all the continuous aggs
+	 */
 	caggs = ts_continuous_aggs_find_by_raw_table_id(cagg_data.raw_hypertable_id);
+
+	/* REFRESH cagg_1; REFRESH cagg_2 can try to read+delete the
+	 * invalidation logs for the same hypertable.
+	 * If both REFRESH jobs try to delete the
+	 * same set of rows, we run into "tuple concurrently deleted error".
+	 * (github issue 1940)
+	 * Prevent this by serializing on the raw hypertable row
+	 */
+	lock_invalidation_threshold_hypertable_row(cagg_data.raw_hypertable_id);
 	drain_invalidation_log(cagg_data.raw_hypertable_id, &invalidations);
 	materialization_invalidation_log_table_relation =
 		table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG),
@@ -660,6 +671,66 @@ scan_take_invalidation_tuple(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
+static ScanTupleResult
+invalidation_threshold_htid_found(TupleInfo *tinfo, void *data)
+{
+	if (tinfo->lockresult != TM_Ok)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not acquire lock for invalidation threshold row %d",
+						tinfo->lockresult),
+				 errhint("Retry the operation again")));
+	}
+	return SCAN_DONE;
+}
+
+/* lock row corresponding to hypertable id in
+ * continuous_aggs_invalidation_threshold table in AccessExclusive mode,
+ * block till lock is acquired.
+ */
+static void
+lock_invalidation_threshold_hypertable_row(int32 raw_hypertable_id)
+{
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[1];
+	int retcnt = 0;
+	ScannerCtx scanctx;
+
+	ScanKeyInit(&scankey[0],
+				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(raw_hypertable_id));
+
+	/* lock table in AccessShare mode and the row with AccessExclusive */
+	scanctx = (ScannerCtx){ .table = catalog_get_table_id(catalog,
+														  CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+							.index = catalog_get_index(catalog,
+													   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+													   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
+							.nkeys = 1,
+							.scankey = scankey,
+							.limit = 1,
+							.tuple_found = invalidation_threshold_htid_found,
+							.lockmode = AccessShareLock,
+							.scandirection = ForwardScanDirection,
+							.result_mctx = CurrentMemoryContext,
+							.tuplock = &scantuplock };
+	retcnt = ts_scanner_scan(&scanctx);
+	if (retcnt > 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("found multiple invalidation rows for hypertable %d", raw_hypertable_id)));
+	}
+}
+
+/* Read invalidation log table, copy entries and delete them from this table */
 static void
 drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out)
 {
@@ -793,6 +864,12 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 	return invalidation_range;
 }
 
+/* We already locked the materialization table in
+ * ShareRowExclusiveLock mode for the Session in the first txn.
+ * This implies that 2 concurrent refreshes on the same cont aggregate
+ * i.e. REFRESH cagg_1; REFRESH cagg_1
+ * are serialized. So 2 concurrent refresh on cagg_1  will not get here.
+ */
 static void
 materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange invalidation_range,
 											   int64 completed_threshold)
