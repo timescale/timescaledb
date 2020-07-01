@@ -1,5 +1,6 @@
 set(TEST_FILES_SHARED
   constraint_exclusion_prepared.sql
+  decompress_placeholdervar.sql
 )
 
 set(TEST_TEMPLATES_SHARED
