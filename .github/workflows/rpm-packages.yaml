@@ -1,0 +1,82 @@
+name: RPM packages
+on:
+  schedule:
+    # run daily 0:00 on master branch
+    - cron: '0 0 * * *'
+  push:
+    tags:
+    - '*'
+    branches:
+    - release_test
+jobs:
+  rpm_tests:
+    name: ${{ matrix.image }} PG${{ matrix.pg }}
+    runs-on: ubuntu-18.04
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ "centos:centos7", "centos:centos8" ]
+        pg: [ 9.6, 10, 11, 12 ]
+
+    steps:
+    - name: Add repositories
+      run: |
+        yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+        tee /etc/yum.repos.d/timescale_timescaledb.repo <<EOL
+        [timescale_timescaledb]
+        name=timescale_timescaledb
+        baseurl=https://packagecloud.io/timescale/timescaledb/el/7/\$basearch
+        repo_gpgcheck=1
+        gpgcheck=0
+        enabled=1
+        gpgkey=https://packagecloud.io/timescale/timescaledb/gpgkey
+        sslverify=1
+        sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+        metadata_expire=300
+        EOL
+
+    - name: Install timescaledb
+      run: |
+        yum update -y
+        if command -v dnf; then dnf -qy module disable postgresql; fi
+        yum install -y timescaledb-postgresql-${{ matrix.pg }} sudo
+        sudo -u postgres /usr/pgsql-${{ matrix.pg }}/bin/initdb -D /var/lib/pgsql/${{ matrix.pg }}/data
+        timescaledb-tune --quiet --yes --pg-config /usr/pgsql-${{ matrix.pg }}/bin/pg_config
+
+    - name: List available versions
+      run: |
+        yum --showduplicates list timescaledb-postgresql-${{ matrix.pg }}
+
+    - name: Show files in package
+      run: |
+        rpm -ql timescaledb-postgresql-${{ matrix.pg }}
+
+    - uses: actions/checkout@v2
+
+    - name: Test Installation
+      run: |
+        sudo -u postgres /usr/pgsql-${{ matrix.pg }}/bin/pg_ctl -D /var/lib/pgsql/${{ matrix.pg }}/data start
+        while ! /usr/pgsql-${{ matrix.pg }}/bin/pg_isready; do sleep 1; done
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
+        # read expected version from version.config
+        if grep '^version = [0-9.]\+$' version.config; then
+          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
+        else
+          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+        fi
+        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        if [ "$version" != "$installed_version" ];then
+          false
+        fi
+
+    - name: Slack Notification
+      if: failure()
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        SLACK_COLOR: '#ff0000'
+        SLACK_USERNAME: GitHub Action
+        SLACK_TITLE: RPM Package ${{ matrix.image }} PG${{ matrix.pg }} ${{ job.status }}
+        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
+      uses: rtCamp/action-slack-notify@v2.0.2
