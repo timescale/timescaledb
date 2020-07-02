@@ -14,6 +14,7 @@
 #include <utils/lsyscache.h>
 #include <catalog/pg_opfamily.h>
 #include <catalog/pg_type.h>
+#include <storage/lmgr.h>
 
 #include "bgw_policy/chunk_stats.h"
 #include "catalog.h"
@@ -665,39 +666,52 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 /*
  * Insert slices into the catalog.
  *
- * If only_non_existing is true, then only slices that don't already exists in
- * the catalog will be inserted. Otherwise, all slices will be inserted and a
- * unique exception will be raised if a slice already exists.
+ * Only slices that don't already exists in the catalog will be
+ * inserted.
  *
  * Returns the number of slices inserted.
  */
 int
-ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices, bool only_non_existing)
+ts_dimension_slice_insert_multi(DimensionSlice **slices, int num_slices)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
-	Size i, n = 0;
+	int i;
+	int slices_inserted = 0;
+	int slices_found = 0;
 
-	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
+	/* We open the table in access share mode since we only need to read
+	 * existing dimensions. */
+	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), AccessShareLock);
 
 	for (i = 0; i < num_slices; i++)
 	{
-		if (only_non_existing)
-		{
-			slices[i]->fd.id = 0;
-			slices[i] = ts_dimension_slice_scan_for_existing(slices[i]);
-		}
-
-		if (!only_non_existing || slices[i]->fd.id == 0)
-		{
-			dimension_slice_insert_relation(rel, slices[i]);
-			n++;
-		}
+		slices[i]->fd.id = 0;
+		ts_dimension_slice_scan_for_existing(slices[i]);
+		if (slices[i]->fd.id != 0)
+			++slices_found;
 	}
 
-	table_close(rel, RowExclusiveLock);
+	if (slices_found < num_slices)
+	{
+		/* We lock for inserts here since we either have discovered that we
+		 * need to add some slices and should make sure that we do not have
+		 * conflicting inserts. */
+		LockRelation(rel, RowExclusiveLock);
+		for (i = 0; i < num_slices; i++)
+		{
+			if (slices[i]->fd.id == 0)
+			{
+				dimension_slice_insert_relation(rel, slices[i]);
+				++slices_inserted;
+			}
+		}
+		UnlockRelation(rel, RowExclusiveLock);
+	}
 
-	return n;
+	table_close(rel, AccessShareLock);
+
+	return slices_inserted;
 }
 
 static ScanTupleResult
