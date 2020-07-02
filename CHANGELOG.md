@@ -4,19 +4,49 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 1.7.2 (2020-07-07)
+
+This maintenance release contains bugfixes since the 1.7.1 release. We deem it medium
+priority for upgrading.
+
+In particular the fixes contained in this maintenance release address bugs in continuous
+aggregates, drop_chunks and compression.
+
+**Features**
+* #1877 Add support for fast pruning of inlined functions
 
 **Bugfixes**
+* #1908 Fix drop_chunks with unique constraints when cascade_to_materializations is false
 * #1915 Check for database in extension_current_state
 * #1918 Unify chunk index creation
 * #1932 Change compression locking order
 * #1938 Fix gapfill locf treat_null_as_missing
+* #1982 Check for disabled telemetry earlier
+* #1984 Fix compression bit array left shift count
+* #1997 Add checks for read-only transactions
+* #2002 Reset restoring gucs rather than explicitly setting 'off'
+* #2028 Fix locking in drop_chunks
+* #2031 Enable compression for tables with compound foreign key
+* #2039 Fix segfault in create_trigger_handler
+* #2043 Fix segfault in cagg_update_view_definition
+* #2046 Use index tablespace during chunk creation
+* #2047 Better handling of chunk insert state destruction
+* #2049 Fix handling of PlaceHolderVar in DecompressChunk
+* #2051 Fix tuple concurrently deleted error with multiple continuous aggregates
 
 **Thanks**
+* @akamensky for reporting an issue with telemetry and an issue with drop_chunks
+* @darko408 for reporting an issue with decompression
 * @dmitri191 for reporting an issue with failing background workers
-* @nomanor for reporting an issue with expression index with table references
+* @eduardotsj for reporting an issue with indexes not inheriting tablespace settings
+* @fourseventy for reporting an issue with multiple continuous aggregrates
+* @fvannee for contributing optimizations for pruning inlined functions
+* @jflambert for reporting an issue with failing telemetry jobs
 * @nbouscal for reporting an issue with compression jobs locking referenced tables
 * @nicolai6120 for reporting an issue with locf and treat_null_as_missing
+* @nomanor for reporting an issue with expression index with table references
+* @olernov for contributing a fix for compressing tables with compound foreign keys
+* @werjo for reporting an issue with drop_chunks and unique constraints
 
 ## 1.7.1 (2020-05-18)
 
