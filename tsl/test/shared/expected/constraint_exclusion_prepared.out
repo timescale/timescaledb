@@ -16,6 +16,9 @@ set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test prepared statements
 -- executor startup exclusion with no chunks excluded
 PREPARE prep AS SELECT time FROM :TEST_TABLE WHERE time < now() AND device_id = 1 ORDER BY time;
@@ -496,6 +499,9 @@ DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test prepared statements
 -- executor startup exclusion with no chunks excluded
 PREPARE prep AS SELECT time FROM :TEST_TABLE WHERE time < now() AND device_id = 1 ORDER BY time;
@@ -1256,6 +1262,9 @@ DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test prepared statements
 -- executor startup exclusion with no chunks excluded
 PREPARE prep AS SELECT time FROM :TEST_TABLE WHERE time < now() AND device_id = 1 ORDER BY time;
@@ -1856,6 +1865,9 @@ DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test prepared statements
 -- executor startup exclusion with no chunks excluded
 PREPARE prep AS SELECT time FROM :TEST_TABLE WHERE time < now() AND device_id = 1 ORDER BY time;

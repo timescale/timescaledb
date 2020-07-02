@@ -15,6 +15,9 @@ set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test ASC for ordered chunks
 :PREFIX SELECT
   time
@@ -1298,6 +1301,9 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test ASC for ordered chunks
 :PREFIX SELECT
   time
@@ -3824,6 +3830,9 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test ASC for ordered chunks
 :PREFIX SELECT
   time
@@ -5267,6 +5276,9 @@ FROM :TEST_TABLE ORDER BY time LIMIT 3;
 
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- test ASC for ordered chunks
 :PREFIX SELECT
   time
