@@ -76,8 +76,9 @@ def build_apache_config(overrides):
   return base_config
 
 # always test debug build on latest pg11 and latest pg12
-m["include"].append(build_debug_config({"pg":PG11_LATEST}))
-m["include"].append(build_debug_config({"pg":PG12_LATEST}))
+for i in range(1,10):
+  m["include"].append(build_debug_config({"pg":PG11_LATEST, "name": "Debug {}".format(i)}))
+  m["include"].append(build_debug_config({"pg":PG12_LATEST, "name": "Debug {}".format(i)}))
 
 macos_config = {
   "pg": PG12_LATEST,
@@ -92,7 +93,7 @@ macos_config = {
   "installcheck_args": "IGNORES='bgw_db_scheduler'"
 }
 
-m["include"].append(build_debug_config(macos_config))
+#m["include"].append(build_debug_config(macos_config))
 
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional

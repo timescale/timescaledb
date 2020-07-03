@@ -55,7 +55,11 @@ post_analyze_hook(ParseState *pstate, Query *query)
 		 */
 #ifndef WIN32
 	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
+  {
+    abort();
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
+  }
+
 #endif
 	if (BROKEN && !creating_extension)
 		elog(ERROR, "mock broken " STR(TIMESCALEDB_VERSION_MOD));
@@ -78,7 +82,11 @@ _PG_init(void)
 	 */
 #ifndef WIN32
 	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
+  {
+    abort();
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
+  }
+
 #endif
 	post_parse_analyze_hook = post_analyze_hook;
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
