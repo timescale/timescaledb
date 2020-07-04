@@ -1150,14 +1150,29 @@ FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
 WHERE m1.time >=0 AND m1.time < 2
 GROUP BY 1;
 
+-- test outer join with constraints in join condition
+-- not usable as start/stop
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM metrics_int m1 LEFT OUTER JOIN metrics_int m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+
+\set ON_ERROR_STOP 1
+
+-- test subqueries
+-- subqueries will alter the shape of the plan and top-level constraints
+-- might not end up in top-level of jointree
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM metrics_int m1
+WHERE m1.time >=0 AND m1.time < 2 AND device_id IN (SELECT device_id FROM metrics_int)
+GROUP BY 1;
+
 -- test inner join with constraints in join condition
--- only toplevel where clause constraints are supported atm
 SELECT
   time_bucket_gapfill(1,m2.time)
 FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
 GROUP BY 1;
-
-\set ON_ERROR_STOP 1
 
 -- int32 time_bucket_gapfill with no start/finish
 SELECT
