@@ -217,12 +217,12 @@ SELECT
   time_bucket_gapfill(1,time,NULL,11)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 SELECT
   time_bucket_gapfill(1,time,1,NULL)
 FROM (VALUES (1),(2)) v(time)
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer finish boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
 -- test 0 bucket_width
 SELECT
   time_bucket_gapfill(0,time,1,11)
@@ -1701,21 +1701,21 @@ SELECT
 FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- NULL start/finish and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,NULL,NULL)
 FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- no start and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,finish:=1)
 FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- NULL start expression and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END,1)
@@ -1736,7 +1736,7 @@ SELECT
 FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- NULL finish expression and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,1,CASE WHEN length(version())>0 THEN NULL::int ELSE NULL::int END)
@@ -1757,21 +1757,21 @@ SELECT
 FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer finish boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
 -- NULL finish and no usable time constraints
 SELECT
   time_bucket_gapfill(1,t,1,NULL)
 FROM (VALUES (1),(2)) v(t)
 WHERE true AND true
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer finish boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer finish from WHERE clause
 -- expression with column reference on right side
 SELECT
   time_bucket_gapfill(1,t)
 FROM (VALUES (1),(2)) v(t)
 WHERE t > t AND t < 2
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- expression with cast
 SELECT
   time_bucket_gapfill(1,t1::int8)
@@ -1820,7 +1820,7 @@ SELECT
 FROM metrics_int
 WHERE time =0 AND time < 2
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- time_bucket_gapfill with constraints ORed
 SELECT
  time_bucket_gapfill(1::int8,t::int8)
@@ -1835,22 +1835,47 @@ SELECT
 FROM metrics_int m, metrics_int m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
 -- test inner join and where clause doesnt match gapfill argument
 SELECT
   time_bucket_gapfill(1,m2.time)
 FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
 WHERE m1.time >=0 AND m1.time < 2
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+-- test outer join with constraints in join condition
+-- not usable as start/stop
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM metrics_int m1 LEFT OUTER JOIN metrics_int m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+\set ON_ERROR_STOP 1
+-- test subqueries
+-- subqueries will alter the shape of the plan and top-level constraints
+-- might not end up in top-level of jointree
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM metrics_int m1
+WHERE m1.time >=0 AND m1.time < 2 AND device_id IN (SELECT device_id FROM metrics_int)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   0
+                   1
+(2 rows)
+
 -- test inner join with constraints in join condition
--- only toplevel where clause constraints are supported atm
 SELECT
   time_bucket_gapfill(1,m2.time)
 FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
 GROUP BY 1;
-ERROR:  invalid time_bucket_gapfill argument: could not infer start boundary from WHERE clause
-\set ON_ERROR_STOP 1
+ time_bucket_gapfill 
+---------------------
+                   0
+                   1
+(2 rows)
+
 -- int32 time_bucket_gapfill with no start/finish
 SELECT
   time_bucket_gapfill(1,t)
