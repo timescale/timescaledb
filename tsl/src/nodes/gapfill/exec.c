@@ -374,6 +374,99 @@ get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *exp
 	return gapfill_datum_get_internal(arg_value, state->gapfill_typid);
 }
 
+typedef struct CollectBoundaryContext
+{
+	List *quals;
+	Var *ts_var;
+} CollectBoundaryContext;
+
+/*
+ * expression references our gapfill time column and could be
+ * a boundary expression, more thorough check is in
+ * infer_gapfill_boundary
+ */
+static bool
+is_boundary_expr(Node *node, CollectBoundaryContext *context)
+{
+	OpExpr *op;
+	Node *left, *right;
+
+	if (!IsA(node, OpExpr))
+		return false;
+
+	op = castNode(OpExpr, node);
+
+	if (op->args->length != 2)
+		return false;
+
+	left = linitial(op->args);
+	right = llast(op->args);
+
+	/* Var OP Var is not useful here because we are not yet at a point
+	 * where we could evaluate them */
+	if (IsA(left, Var) && IsA(right, Var))
+		return false;
+
+	if (IsA(left, Var) && var_equal(castNode(Var, left), context->ts_var))
+		return true;
+
+	if (IsA(right, Var) && var_equal(castNode(Var, right), context->ts_var))
+		return true;
+
+	return false;
+}
+
+static bool
+collect_boundary_walker(Node *node, CollectBoundaryContext *context)
+{
+	Node *quals = NULL;
+
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FromExpr))
+	{
+		quals = castNode(FromExpr, node)->quals;
+	}
+	else if (IsA(node, JoinExpr))
+	{
+		JoinExpr *j = castNode(JoinExpr, node);
+
+		/* don't descend into outer join */
+		if (IS_OUTER_JOIN(j->jointype))
+			return false;
+
+		quals = j->quals;
+	}
+
+	if (quals)
+	{
+		ListCell *lc;
+
+		foreach (lc, castNode(List, quals))
+		{
+			if (is_boundary_expr(lfirst(lc), context))
+				context->quals = lappend(context->quals, lfirst(lc));
+		}
+	}
+
+	return expression_tree_walker(node, collect_boundary_walker, context);
+}
+
+/*
+ * traverse jointree to look for expressions referencing
+ * the time column of our gapfill call
+ */
+static List *
+collect_boundary_expressions(Node *node, Var *ts_var)
+{
+	CollectBoundaryContext context = { .quals = NIL, .ts_var = ts_var };
+
+	collect_boundary_walker(node, &context);
+
+	return context.quals;
+}
+
 static int64
 infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 {
@@ -385,6 +478,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 	TypeCacheEntry *tce = lookup_type_cache(state->gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
 	int strategy;
 	Oid lefttype, righttype;
+	List *quals;
 
 	int64 boundary_value = 0;
 	bool boundary_found = false;
@@ -403,18 +497,15 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 
 	ts_var = castNode(Var, lsecond(func->args));
 
-	foreach (lc, (List *) jt->quals)
+	quals = collect_boundary_expressions((Node *) jt, ts_var);
+
+	foreach (lc, quals)
 	{
-		OpExpr *opexpr;
+		OpExpr *opexpr = lfirst_node(OpExpr, lc);
 		Var *var;
 		Expr *expr;
 		Oid op;
 		int64 value;
-
-		if (!IsA(lfirst(lc), OpExpr))
-			continue;
-
-		opexpr = lfirst(lc);
 
 		if (IsA(linitial(opexpr->args), Var))
 		{
@@ -429,7 +520,11 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 			op = get_commutator(opexpr->opno);
 		}
 		else
+		{
+			/* collect_boundary_expressions has filtered those out already */
+			Assert(false);
 			continue;
+		}
 
 		if (!op_in_opfamily(op, tce->btree_opf))
 			continue;
@@ -483,8 +578,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 
 	ereport(ERROR,
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			 errmsg("invalid time_bucket_gapfill argument: could not infer %s boundary from WHERE "
-					"clause",
+			 errmsg("missing time_bucket_gapfill argument: could not infer %s from WHERE clause",
 					boundary == GAPFILL_START ? "start" : "finish"),
 			 errhint("You can either pass start and finish as arguments or in the WHERE clause")));
 	pg_unreachable();
