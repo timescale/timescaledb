@@ -149,7 +149,8 @@ SELECT * FROM distributed_exec('ANALYZE disttable', '{ "data_node_1" }');
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'));
+ FROM show_chunks('disttable'))
+ORDER BY relname;
 SELECT * FROM pg_stats WHERE tablename IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
