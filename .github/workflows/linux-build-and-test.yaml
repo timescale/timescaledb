@@ -38,6 +38,14 @@ jobs:
       if: runner.os == 'Linux'
       run: sudo apt install flex bison lcov systemd-coredump gdb ${{ matrix.extra_packages }}
 
+    # on macOS the path used is depending on the runner version leading to cache failure
+    # when the runner version changes so we extract runner version from path and add it
+    # as cache suffix
+    - name: Cache suffix
+      if: runner.os == 'macOS'
+      run: |
+        echo "::set-env name=CACHE_SUFFIX::-$(pwd | sed -e 's!^[^0-9]\{1,\}/\([0-9.]\{1,\}\)/[^0-9]\{1,\}!\1!')"
+
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
@@ -46,7 +54,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
+        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}${{ env.CACHE_SUFFIX }}
 
     - name: Build PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
