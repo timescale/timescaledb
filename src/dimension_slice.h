@@ -68,8 +68,7 @@ extern TSDLLEXPORT bool ts_dimension_slices_collide(DimensionSlice *slice1, Dime
 extern bool ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2);
 extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);
-extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices,
-										   bool only_non_existing);
+extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 

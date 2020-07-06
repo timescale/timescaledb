@@ -897,7 +897,7 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
 	/* Insert any new dimension slices */
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices, true);
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
 	/* Add metadata for dimensional and inheritable constraints */
 	ts_chunk_add_constraints(chunk);
