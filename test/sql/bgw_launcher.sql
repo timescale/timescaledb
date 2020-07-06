@@ -6,6 +6,7 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- start bgw since they are stopped for tests by default
+
 SELECT _timescaledb_internal.start_background_workers();
 
 CREATE DATABASE :TEST_DBNAME_2;
