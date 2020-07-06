@@ -70,7 +70,7 @@ AS
 SELECT 
     ht.schema_name as hypertable_schema, ht.table_name as hypertable_name,
     format('%1$I.%2$I', chq.schema_name, chq.table_name)::regclass as chunk,
-    chq.schema_name as schema_name,
+    chq.schema_name as chunk_schema,
     chq.table_name as chunk_name,
 --       chcons.constraint_name,
     dim.column_name as dimension_column,
