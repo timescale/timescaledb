@@ -13,223 +13,80 @@
 #include "guc.h"
 #include "bgw/job.h"
 
-TS_FUNCTION_INFO_V1(ts_add_drop_chunks_policy);
-TS_FUNCTION_INFO_V1(ts_add_reorder_policy);
-TS_FUNCTION_INFO_V1(ts_add_compress_chunks_policy);
-TS_FUNCTION_INFO_V1(ts_remove_drop_chunks_policy);
-TS_FUNCTION_INFO_V1(ts_remove_reorder_policy);
-TS_FUNCTION_INFO_V1(ts_remove_compress_chunks_policy);
-TS_FUNCTION_INFO_V1(ts_alter_job_schedule);
-TS_FUNCTION_INFO_V1(ts_reorder_chunk);
-TS_FUNCTION_INFO_V1(ts_move_chunk);
-TS_FUNCTION_INFO_V1(ts_partialize_agg);
-TS_FUNCTION_INFO_V1(ts_finalize_agg_sfunc);
-TS_FUNCTION_INFO_V1(ts_finalize_agg_ffunc);
-TS_FUNCTION_INFO_V1(ts_continuous_agg_invalidation_trigger);
-TS_FUNCTION_INFO_V1(ts_compress_chunk);
-TS_FUNCTION_INFO_V1(ts_decompress_chunk);
-TS_FUNCTION_INFO_V1(ts_compressed_data_decompress_forward);
-TS_FUNCTION_INFO_V1(ts_compressed_data_decompress_reverse);
+#define CROSSMODULE_WRAPPER(func)                                                                  \
+	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
+	Datum ts_##func(PG_FUNCTION_ARGS)                                           \
+	{                                                                                              \
+		PG_RETURN_DATUM(ts_cm_functions->func(fcinfo));                                            \
+	}
 
-TS_FUNCTION_INFO_V1(ts_compressed_data_send);
-TS_FUNCTION_INFO_V1(ts_compressed_data_recv);
-TS_FUNCTION_INFO_V1(ts_compressed_data_in);
-TS_FUNCTION_INFO_V1(ts_compressed_data_out);
+/* bgw policy functions */
+CROSSMODULE_WRAPPER(add_compress_chunks_policy);
+CROSSMODULE_WRAPPER(add_drop_chunks_policy);
+CROSSMODULE_WRAPPER(add_reorder_policy);
+CROSSMODULE_WRAPPER(alter_job_schedule);
+CROSSMODULE_WRAPPER(remove_compress_chunks_policy);
+CROSSMODULE_WRAPPER(remove_drop_chunks_policy);
+CROSSMODULE_WRAPPER(remove_reorder_policy);
+CROSSMODULE_WRAPPER(reorder_chunk);
+CROSSMODULE_WRAPPER(move_chunk);
 
-TS_FUNCTION_INFO_V1(ts_deltadelta_compressor_append);
-TS_FUNCTION_INFO_V1(ts_deltadelta_compressor_finish);
-TS_FUNCTION_INFO_V1(ts_gorilla_compressor_append);
-TS_FUNCTION_INFO_V1(ts_gorilla_compressor_finish);
-TS_FUNCTION_INFO_V1(ts_dictionary_compressor_append);
-TS_FUNCTION_INFO_V1(ts_dictionary_compressor_finish);
-TS_FUNCTION_INFO_V1(ts_array_compressor_append);
-TS_FUNCTION_INFO_V1(ts_array_compressor_finish);
+/* partialize/finalize aggregate */
+CROSSMODULE_WRAPPER(partialize_agg);
+CROSSMODULE_WRAPPER(finalize_agg_sfunc);
+CROSSMODULE_WRAPPER(finalize_agg_ffunc);
 
-TS_FUNCTION_INFO_V1(ts_data_node_add);
-TS_FUNCTION_INFO_V1(ts_data_node_delete);
-TS_FUNCTION_INFO_V1(ts_data_node_attach);
-TS_FUNCTION_INFO_V1(ts_data_node_ping);
-TS_FUNCTION_INFO_V1(ts_data_node_detach);
-TS_FUNCTION_INFO_V1(ts_data_node_block_new_chunks);
-TS_FUNCTION_INFO_V1(ts_data_node_allow_new_chunks);
-TS_FUNCTION_INFO_V1(ts_chunk_set_default_data_node);
-TS_FUNCTION_INFO_V1(ts_chunk_get_relstats);
-TS_FUNCTION_INFO_V1(ts_chunk_get_colstats);
-TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_handler);
-TS_FUNCTION_INFO_V1(ts_timescaledb_fdw_validator);
-TS_FUNCTION_INFO_V1(ts_remote_txn_id_in);
-TS_FUNCTION_INFO_V1(ts_remote_txn_id_out);
-TS_FUNCTION_INFO_V1(ts_remote_txn_heal_data_node);
-TS_FUNCTION_INFO_V1(ts_remote_connection_cache_show);
+/* compression functions */
+CROSSMODULE_WRAPPER(compressed_data_decompress_forward);
+CROSSMODULE_WRAPPER(compressed_data_decompress_reverse);
+CROSSMODULE_WRAPPER(compressed_data_send);
+CROSSMODULE_WRAPPER(compressed_data_recv);
+CROSSMODULE_WRAPPER(compressed_data_in);
+CROSSMODULE_WRAPPER(compressed_data_out);
+CROSSMODULE_WRAPPER(deltadelta_compressor_append);
+CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
+CROSSMODULE_WRAPPER(gorilla_compressor_append);
+CROSSMODULE_WRAPPER(gorilla_compressor_finish);
+CROSSMODULE_WRAPPER(dictionary_compressor_append);
+CROSSMODULE_WRAPPER(dictionary_compressor_finish);
+CROSSMODULE_WRAPPER(array_compressor_append);
+CROSSMODULE_WRAPPER(array_compressor_finish);
+CROSSMODULE_WRAPPER(compress_chunk);
+CROSSMODULE_WRAPPER(decompress_chunk);
+
+/* continous aggregate */
+CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
+
+CROSSMODULE_WRAPPER(data_node_ping);
+CROSSMODULE_WRAPPER(data_node_block_new_chunks);
+CROSSMODULE_WRAPPER(data_node_allow_new_chunks);
+CROSSMODULE_WRAPPER(data_node_add);
+CROSSMODULE_WRAPPER(data_node_delete);
+CROSSMODULE_WRAPPER(data_node_attach);
+CROSSMODULE_WRAPPER(data_node_detach);
+
+CROSSMODULE_WRAPPER(chunk_set_default_data_node);
+CROSSMODULE_WRAPPER(chunk_get_relstats);
+CROSSMODULE_WRAPPER(chunk_get_colstats);
+
+CROSSMODULE_WRAPPER(timescaledb_fdw_handler);
+CROSSMODULE_WRAPPER(timescaledb_fdw_validator);
+CROSSMODULE_WRAPPER(remote_txn_id_in);
+CROSSMODULE_WRAPPER(remote_txn_id_out);
+CROSSMODULE_WRAPPER(remote_txn_heal_data_node);
+CROSSMODULE_WRAPPER(remote_connection_cache_show);
+CROSSMODULE_WRAPPER(dist_remote_hypertable_info);
+CROSSMODULE_WRAPPER(distributed_exec);
+CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
+
 TS_FUNCTION_INFO_V1(ts_dist_set_id);
-TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
-TS_FUNCTION_INFO_V1(ts_dist_remote_hypertable_info);
-TS_FUNCTION_INFO_V1(ts_dist_validate_as_data_node);
-TS_FUNCTION_INFO_V1(ts_distributed_exec);
-TS_FUNCTION_INFO_V1(ts_hypertable_distributed_set_replication_factor);
-
-Datum
-ts_add_drop_chunks_policy(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->add_drop_chunks_policy(fcinfo));
-}
-
-Datum
-ts_add_reorder_policy(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->add_reorder_policy(fcinfo));
-}
-
-Datum
-ts_add_compress_chunks_policy(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->add_compress_chunks_policy(fcinfo));
-}
-
-Datum
-ts_remove_drop_chunks_policy(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remove_drop_chunks_policy(fcinfo));
-}
-
-Datum
-ts_remove_reorder_policy(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remove_reorder_policy(fcinfo));
-}
-
-Datum
-ts_remove_compress_chunks_policy(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->remove_compress_chunks_policy(fcinfo);
-}
-
-Datum
-ts_alter_job_schedule(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->alter_job_schedule(fcinfo));
-}
-
-Datum
-ts_reorder_chunk(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->reorder_chunk(fcinfo));
-}
-
-Datum
-ts_move_chunk(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->move_chunk(fcinfo);
-}
-
-Datum
-ts_continuous_agg_invalidation_trigger(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->continuous_agg_trigfn(fcinfo));
-}
-
-Datum
-ts_data_node_add(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->add_data_node(fcinfo));
-}
-
-Datum
-ts_data_node_delete(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->delete_data_node(fcinfo));
-}
-
-Datum
-ts_data_node_attach(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->attach_data_node(fcinfo));
-}
-
-Datum
-ts_data_node_ping(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->data_node_ping(fcinfo));
-}
-
-Datum
-ts_data_node_detach(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->detach_data_node(fcinfo));
-}
-
-Datum
-ts_data_node_block_new_chunks(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->data_node_block_new_chunks(fcinfo));
-}
-
-Datum
-ts_data_node_allow_new_chunks(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->data_node_allow_new_chunks(fcinfo));
-}
-
-Datum
-ts_chunk_set_default_data_node(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->set_chunk_default_data_node(fcinfo));
-}
-
-Datum
-ts_chunk_get_relstats(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->get_chunk_relstats(fcinfo));
-}
-
-Datum
-ts_chunk_get_colstats(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->get_chunk_colstats(fcinfo));
-}
-
-Datum
-ts_timescaledb_fdw_handler(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->timescaledb_fdw_handler(fcinfo));
-}
-
-Datum
-ts_timescaledb_fdw_validator(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->timescaledb_fdw_validator(fcinfo));
-}
-
-Datum
-ts_remote_txn_id_in(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_in(fcinfo));
-}
-
-Datum
-ts_remote_txn_id_out(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remote_txn_id_out(fcinfo));
-}
-
-Datum
-ts_remote_txn_heal_data_node(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remote_txn_heal_data_node(fcinfo));
-}
-
-Datum
-ts_remote_connection_cache_show(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remote_connection_cache_show(fcinfo));
-}
-
 Datum
 ts_dist_set_id(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_cm_functions->set_distributed_id(PG_GETARG_DATUM(0)));
 }
 
+TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
 Datum
 ts_dist_set_peer_id(PG_FUNCTION_ARGS)
 {
@@ -237,147 +94,12 @@ ts_dist_set_peer_id(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-Datum
-ts_dist_remote_hypertable_info(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->remote_hypertable_info(fcinfo));
-}
-
+TS_FUNCTION_INFO_V1(ts_dist_validate_as_data_node);
 Datum
 ts_dist_validate_as_data_node(PG_FUNCTION_ARGS)
 {
 	ts_cm_functions->validate_as_data_node();
 	PG_RETURN_VOID();
-}
-
-Datum
-ts_distributed_exec(PG_FUNCTION_ARGS)
-{
-	ts_cm_functions->distributed_exec(fcinfo);
-	PG_RETURN_VOID();
-}
-
-Datum
-ts_hypertable_distributed_set_replication_factor(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->set_replication_factor(fcinfo));
-}
-
-/*
- * stub function to trigger aggregate util functions.
- */
-Datum
-ts_partialize_agg(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->partialize_agg(fcinfo));
-}
-
-Datum
-ts_finalize_agg_sfunc(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->finalize_agg_sfunc(fcinfo));
-}
-
-Datum
-ts_finalize_agg_ffunc(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->finalize_agg_ffunc(fcinfo));
-}
-
-Datum
-ts_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->compressed_data_decompress_forward(fcinfo);
-}
-
-Datum
-ts_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->compressed_data_decompress_reverse(fcinfo);
-}
-
-Datum
-ts_compressed_data_send(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->compressed_data_send(fcinfo);
-}
-
-Datum
-ts_compressed_data_recv(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->compressed_data_recv(fcinfo);
-}
-
-Datum
-ts_compressed_data_in(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->compressed_data_in(fcinfo);
-}
-
-Datum
-ts_compressed_data_out(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->compressed_data_out(fcinfo);
-}
-
-Datum
-ts_deltadelta_compressor_append(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->deltadelta_compressor_append(fcinfo);
-}
-
-Datum
-ts_deltadelta_compressor_finish(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->deltadelta_compressor_finish(fcinfo);
-}
-
-Datum
-ts_gorilla_compressor_append(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->gorilla_compressor_append(fcinfo);
-}
-
-Datum
-ts_gorilla_compressor_finish(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->gorilla_compressor_finish(fcinfo);
-}
-
-Datum
-ts_dictionary_compressor_append(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->dictionary_compressor_append(fcinfo);
-}
-
-Datum
-ts_dictionary_compressor_finish(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->dictionary_compressor_finish(fcinfo);
-}
-
-Datum
-ts_array_compressor_append(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->array_compressor_append(fcinfo);
-}
-
-Datum
-ts_array_compressor_finish(PG_FUNCTION_ARGS)
-{
-	return ts_cm_functions->array_compressor_finish(fcinfo);
-}
-
-Datum
-ts_compress_chunk(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->compress_chunk(fcinfo));
-}
-
-Datum
-ts_decompress_chunk(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATUM(ts_cm_functions->decompress_chunk(fcinfo));
 }
 
 /*
@@ -593,18 +315,15 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.print_tsl_license_expiration_info_hook = NULL,
 	.module_shutdown_hook = NULL,
 	.add_tsl_telemetry_info = add_tsl_telemetry_info_default,
-	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
-	.continuous_agg_materialize = cagg_materialize_default_fn,
-	.add_drop_chunks_policy = error_no_default_fn_pg_community,
-	.add_reorder_policy = error_no_default_fn_pg_community,
-	.add_compress_chunks_policy = error_no_default_fn_pg_community,
-	.remove_drop_chunks_policy = error_no_default_fn_pg_community,
-	.remove_reorder_policy = error_no_default_fn_pg_community,
-	.remove_compress_chunks_policy = error_no_default_fn_pg_community,
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
 	.set_rel_pathlist = NULL,
+	.ddl_command_start = NULL,
+	.ddl_command_end = NULL,
+	.sql_drop = NULL,
+
+	/* gapfill */
 	.gapfill_marker = error_no_default_fn_pg_community,
 	.gapfill_int16_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_int32_time_bucket = error_no_default_fn_pg_community,
@@ -612,19 +331,29 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.gapfill_date_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_timestamp_time_bucket = error_no_default_fn_pg_community,
 	.gapfill_timestamptz_time_bucket = error_no_default_fn_pg_community,
+
+	/* bgw policies */
+	.add_compress_chunks_policy = error_no_default_fn_pg_community,
+	.add_drop_chunks_policy = error_no_default_fn_pg_community,
+	.add_reorder_policy = error_no_default_fn_pg_community,
 	.alter_job_schedule = error_no_default_fn_pg_community,
-	.reorder_chunk = error_no_default_fn_pg_community,
+	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
 	.move_chunk = error_no_default_fn_pg_enterprise,
-	.ddl_command_start = NULL,
-	.ddl_command_end = NULL,
-	.sql_drop = NULL,
+	.remove_compress_chunks_policy = error_no_default_fn_pg_community,
+	.remove_drop_chunks_policy = error_no_default_fn_pg_community,
+	.remove_reorder_policy = error_no_default_fn_pg_community,
+	.reorder_chunk = error_no_default_fn_pg_community,
+
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_drop_chunks_by_chunk_id = continuous_agg_drop_chunks_by_chunk_id_default,
-	.continuous_agg_trigfn = error_no_default_fn_pg_community,
+	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
+	.continuous_agg_materialize = cagg_materialize_default_fn,
+
+	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
 	.compressed_data_recv = error_no_default_fn_pg_community,
 	.compressed_data_in = error_no_default_fn_pg_community,
@@ -642,15 +371,16 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
-	.add_data_node = error_no_default_fn_pg_community,
-	.delete_data_node = error_no_default_fn_pg_community,
-	.attach_data_node = error_no_default_fn_pg_community,
+
+	.data_node_add = error_no_default_fn_pg_community,
+	.data_node_delete = error_no_default_fn_pg_community,
+	.data_node_attach = error_no_default_fn_pg_community,
 	.data_node_ping = error_no_default_fn_pg_community,
-	.detach_data_node = error_no_default_fn_pg_community,
+	.data_node_detach = error_no_default_fn_pg_community,
 	.data_node_allow_new_chunks = error_no_default_fn_pg_community,
 	.data_node_block_new_chunks = error_no_default_fn_pg_community,
 	.distributed_exec = error_no_default_fn_pg_community,
-	.set_chunk_default_data_node = error_no_default_fn_pg_community,
+	.chunk_set_default_data_node = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
 	.create_chunk_on_data_nodes = create_chunk_on_data_nodes_default,
@@ -669,12 +399,12 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_distributed_peer_id = set_distributed_peer_id_default,
 	.is_frontend_session = error_no_default_fn_bool_void_community,
 	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
-	.remote_hypertable_info = error_no_default_fn_pg_community,
+	.dist_remote_hypertable_info = error_no_default_fn_pg_community,
 	.validate_as_data_node = error_no_default_fn_community,
 	.func_call_on_data_nodes = func_call_on_data_nodes_default,
-	.get_chunk_relstats = error_no_default_fn_pg_community,
-	.get_chunk_colstats = error_no_default_fn_pg_community,
-	.set_replication_factor = error_no_default_fn_pg_community,
+	.chunk_get_relstats = error_no_default_fn_pg_community,
+	.chunk_get_colstats = error_no_default_fn_pg_community,
+	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;
