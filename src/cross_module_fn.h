@@ -81,7 +81,7 @@ typedef struct CrossModuleFunctions
 												   Size num_chunks, Datum older_than_datum,
 												   Datum newer_than_datum, Oid older_than_type,
 												   Oid newer_than_type, int32 log_level);
-	PGFunction continuous_agg_trigfn;
+	PGFunction continuous_agg_invalidation_trigger;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 
@@ -109,14 +109,15 @@ typedef struct CrossModuleFunctions
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
 
-	Datum (*add_data_node)(PG_FUNCTION_ARGS);
-	Datum (*delete_data_node)(PG_FUNCTION_ARGS);
-	Datum (*attach_data_node)(PG_FUNCTION_ARGS);
+	Datum (*data_node_add)(PG_FUNCTION_ARGS);
+	Datum (*data_node_delete)(PG_FUNCTION_ARGS);
+	Datum (*data_node_attach)(PG_FUNCTION_ARGS);
 	Datum (*data_node_ping)(PG_FUNCTION_ARGS);
-	Datum (*detach_data_node)(PG_FUNCTION_ARGS);
+	Datum (*data_node_detach)(PG_FUNCTION_ARGS);
 	Datum (*data_node_allow_new_chunks)(PG_FUNCTION_ARGS);
 	Datum (*data_node_block_new_chunks)(PG_FUNCTION_ARGS);
-	Datum (*set_chunk_default_data_node)(PG_FUNCTION_ARGS);
+
+	Datum (*chunk_set_default_data_node)(PG_FUNCTION_ARGS);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);
 	Datum (*show_chunk)(PG_FUNCTION_ARGS);
 	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);
@@ -137,13 +138,13 @@ typedef struct CrossModuleFunctions
 	void (*set_distributed_peer_id)(Datum id);
 	bool (*is_frontend_session)(void);
 	bool (*remove_from_distributed_db)(void);
-	PGFunction remote_hypertable_info;
+	PGFunction dist_remote_hypertable_info;
 	void (*validate_as_data_node)(void);
 	void (*func_call_on_data_nodes)(FunctionCallInfo fcinfo, List *data_node_oids);
 	PGFunction distributed_exec;
-	PGFunction get_chunk_relstats;
-	PGFunction get_chunk_colstats;
-	PGFunction set_replication_factor;
+	PGFunction chunk_get_relstats;
+	PGFunction chunk_get_colstats;
+	PGFunction hypertable_distributed_set_replication_factor;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
