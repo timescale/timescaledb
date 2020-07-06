@@ -34,28 +34,28 @@ create_base_container() {
   # Run a Postgres container
   docker run -u postgres -d --name $1 -v ${BASE_DIR}:/src -v ${COMPILE_VOLUME}:/compile $2
   # Install build dependencies
-  docker exec -u root -it $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev && mkdir -p /build/debug"
+  docker exec -u root $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev && mkdir -p /build/debug"
 
   # Copy the source files to build directory
-  docker exec -u root -it $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,tsl,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && make -C /build/debug install && chown -R postgres /build"
+  docker exec -u root $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,tsl,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && make -C /build/debug install && chown -R postgres /build"
 }
 
 create_base_container $CONTAINER_NAME_COMPILE $PG_IMAGE_TAG_COMPILE
 
-docker exec -u root -it  $CONTAINER_NAME_COMPILE /bin/bash -c "cp /build/debug/src/*.so /compile && cp /build/debug/src/loader/*.so /compile"
+docker exec -u root $CONTAINER_NAME_COMPILE /bin/bash -c "cp /build/debug/src/*.so /compile && cp /build/debug/src/loader/*.so /compile"
 docker rm -f $CONTAINER_NAME_COMPILE
 
 create_base_container $CONTAINER_NAME_RUN $PG_IMAGE_TAG_RUN
 
-docker exec -u root -it $CONTAINER_NAME_RUN /bin/bash -c "cp /compile/* \`pg_config --pkglibdir\`/"
+docker exec -u root $CONTAINER_NAME_RUN /bin/bash -c "cp /compile/* \`pg_config --pkglibdir\`/"
 
 
 # Run tests, allow continuation after error to get regressions.diffs
 set +e
-docker exec -u postgres -it ${CONTAINER_NAME_RUN} /bin/bash -c "make -C /build/debug regresscheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
+docker exec -u postgres ${CONTAINER_NAME_RUN} /bin/bash -c "make -C /build/debug regresscheck TEST_INSTANCE_OPTS='--temp-instance=/tmp/pgdata --temp-config=/build/test/postgresql.conf'"
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
-    docker exec -it ${CONTAINER_NAME_RUN} cat /build/debug/test/regression.diffs
+    docker exec ${CONTAINER_NAME_RUN} cat /build/debug/test/regression.diffs
 fi
 
 exit $EXIT_CODE
