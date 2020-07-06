@@ -1,0 +1,57 @@
+name: Additional tests
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+jobs:
+  abi_breakage:
+    name: ABI Breakage PG${{ matrix.pg }}
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [11, 12]
+    env:
+      PG_MAJOR: ${{ matrix.pg }}
+      PG_MINOR_COMPILE: 0
+
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: ABI Test
+      run: |
+        ./scripts/docker-run-abi-test.sh
+
+  sanitizer:
+    name: ASAN and UBSAN
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Sanitizer
+      run: |
+        ./scripts/test_sanitizers.sh
+
+  memory_leak:
+    name: Memory leak on insert
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+    env:
+      PG_VERSION: 12.3
+
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Memory test
+      run: |
+        ./scripts/docker-run-memory-test.sh
