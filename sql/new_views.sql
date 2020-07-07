@@ -251,3 +251,31 @@ WHERE   chq.chunk_id = chcons.chunk_id and ht.id = chq.hypertable_id
    and ht.compressed = false;
 ;
 
+---compression parameters information ---
+CREATE VIEW timescaledb_new.compression_settings
+AS
+  SELECT ht.schema_name, ht.table_name, ordq.hypertable_id, segq.segmentby_columns, ordq.orderby_columns
+  FROM
+  (
+    SELECT hypertable_id, CASE WHEN orderby_columns IS NOT NULL THEN orderby_columns ELSE NULL END as orderby_columns
+    FROM
+    (
+        SELECT hypertable_id, array_agg(attname order by orderby_column_index) orderby_columns
+        FROM (SELECT hypertable_id , attname, orderby_column_index FROM _timescaledb_catalog.hypertable_compression
+              where orderby_column_index is not null) foo GROUP BY hypertable_id
+    ) ordsubq
+  ) ordq
+  LEFT OUTER JOIN
+  (
+    SELECT hypertable_id, CASE WHEN segmentby_columns IS NOT NULL THEN segmentby_columns ELSE NULL END as segmentby_columns
+    FROM
+    (
+        SELECT hypertable_id, array_agg(attname order by segmentby_column_index) segmentby_columns
+        FROM (SELECT hypertable_id , attname, segmentby_column_index FROM _timescaledb_catalog.hypertable_compression
+              where segmentby_column_index is not null) foo GROUP BY hypertable_id
+    ) segsubq
+  ) segq
+ON segq.hypertable_id = ordq.hypertable_id
+JOIN _timescaledb_catalog.hypertable ht ON ordq.hypertable_id = ht.id;
+
+
