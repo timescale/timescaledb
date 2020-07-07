@@ -1,0 +1,308 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Test for the repair tables script in the upgrade directory. This
+-- will check that the repair script can successfully repair the
+-- dimension slice table.
+-- First, create some hypertables to get dimension slices added. We
+-- create tables so that we get slices for space- as well as
+-- time-dimensions.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/repair-tables.sql
+-- Queries for repairing tables that could have been broken in a
+-- previous version. This is split out into a separate file so that we
+-- can run tests on it.
+-- Recreate missing dimension slices that might be missing due to a
+-- bug that is fixed in this release. If the dimension slice table is
+-- broken and there are dimension slices missing from the table, we
+-- will repair it by:
+--
+--    1. Finding all chunk constraints that have missing dimension
+--       slices and extract the constraint expression from the
+--       associated constraint.
+--       
+--    2. Parse the constraint expression and extract the column name,
+--       and upper and lower range values as text.
+--       
+--    3. Use the column type to construct the range values (UNIX
+--       microseconds) from these values.
+CREATE PROCEDURE repair_dimension_slice()
+LANGUAGE SQL
+AS $BODY$
+INSERT INTO _timescaledb_catalog.dimension_slice
+WITH
+   -- All dimension slices that are mentioned in the chunk_constraint
+   -- table but are missing from the dimension_slice table.
+   missing_slices AS (
+      SELECT hypertable_id,
+      	     chunk_id,
+	     dimension_slice_id,
+	     constraint_name,
+	     attname AS column_name,
+	     pg_get_expr(conbin, conrelid) AS constraint_expr
+      FROM _timescaledb_catalog.chunk_constraint cc
+      JOIN _timescaledb_catalog.chunk ch ON cc.chunk_id = ch.id
+      JOIN pg_constraint ON conname = constraint_name
+      JOIN pg_namespace ns ON connamespace = ns.oid AND ns.nspname = ch.schema_name
+      JOIN pg_attribute ON attnum = conkey[1] AND attrelid = conrelid
+      WHERE
+	 dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice)
+   ),
+
+  -- Unparsed range start and end for each dimension slice id that
+  -- is missing.
+   unparsed_missing_slices AS (
+      SELECT di.id AS dimension_id,
+      	     dimension_slice_id,
+             constraint_name,
+	     column_type,
+	     column_name,
+	     (SELECT SUBSTRING(constraint_expr, $$>=\s*'?([\w\d\s:+-]+)'?$$)) AS range_start,
+	     (SELECT SUBSTRING(constraint_expr, $$<\s*'?([\w\d\s:+-]+)'?$$)) AS range_end
+	FROM missing_slices JOIN _timescaledb_catalog.dimension di USING (hypertable_id, column_name)
+   )
+SELECT DISTINCT
+       dimension_slice_id,
+       dimension_id,
+       CASE
+       WHEN column_type IN ('smallint'::regtype, 'bigint'::regtype, 'integer'::regtype) THEN
+       	    CASE
+	    WHEN range_start IS NULL
+	    THEN -9223372036854775808
+	    ELSE _timescaledb_internal.time_to_internal(range_start::bigint)
+	    END
+       WHEN column_type = 'timestamptz'::regtype THEN
+       	    _timescaledb_internal.time_to_internal(range_start::timestamptz)
+       WHEN column_type = 'timestamp'::regtype THEN
+       	    _timescaledb_internal.time_to_internal(range_start::timestamp)
+       WHEN column_type = 'date'::regtype THEN
+       	    _timescaledb_internal.time_to_internal(range_start::date)
+       ELSE
+	    NULL
+       END AS range_start,
+       CASE 
+       WHEN column_type IN ('smallint'::regtype, 'bigint'::regtype, 'integer'::regtype) THEN
+       	    CASE WHEN range_end IS NULL
+	    THEN 9223372036854775807
+	    ELSE _timescaledb_internal.time_to_internal(range_end::bigint)
+	    END
+       WHEN column_type = 'timestamptz'::regtype THEN
+       	    _timescaledb_internal.time_to_internal(range_end::timestamptz)
+       WHEN column_type = 'timestamp'::regtype THEN
+       	    _timescaledb_internal.time_to_internal(range_end::timestamp)
+       WHEN column_type = 'date'::regtype THEN
+       	    _timescaledb_internal.time_to_internal(range_end::date)
+       ELSE NULL
+       END AS range_end
+  FROM unparsed_missing_slices;
+$BODY$;
+CREATE VIEW missing_slices AS
+SELECT DISTINCT
+    dimension_slice_id,
+    constraint_name,
+    attname AS column_name,
+    pg_get_expr(conbin, conrelid) AS constraint_expr
+FROM
+    _timescaledb_catalog.chunk_constraint cc
+    JOIN _timescaledb_catalog.chunk ch ON cc.chunk_id = ch.id
+    JOIN pg_constraint ON conname = constraint_name
+    JOIN pg_namespace ns ON connamespace = ns.oid
+        AND ns.nspname = ch.schema_name
+    JOIN pg_attribute ON attnum = conkey[1]
+        AND attrelid = conrelid
+WHERE
+    dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
+CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_val ANYELEMENT)
+RETURNS BIGINT AS :MODULE_PATHNAME, 'ts_time_to_internal' LANGUAGE C VOLATILE STRICT;
+CREATE TABLE chunk_test_int(time integer, temp float8, tag integer, color integer);
+CREATE TABLE chunk_test_time(time timestamptz, temp float8, tag integer, color integer);
+SELECT create_hypertable('chunk_test_int', 'time', 'tag', 2, chunk_time_interval => 3);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (1,public,chunk_test_int,t)
+(1 row)
+
+SELECT create_hypertable('chunk_test_time', 'time', 'tag', 2, chunk_time_interval => '1 day'::interval);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable       
+------------------------------
+ (2,public,chunk_test_time,t)
+(1 row)
+
+INSERT INTO chunk_test_int VALUES
+       (4, 24.3, 1, 1),
+       (4, 24.3, 2, 1),
+       (10, 24.3, 2, 1);
+INSERT INTO chunk_test_time VALUES
+       ('2020-01-01 10:11:12', 24.3, 1, 1),
+       ('2020-01-01 10:11:13', 24.3, 2, 1),
+       ('2020-01-02 10:11:14', 24.3, 2, 1);
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
+ id | dimension_id |     range_start      |      range_end      
+----+--------------+----------------------+---------------------
+  1 |            1 |                    3 |                   6
+  2 |            2 | -9223372036854775808 |          1073741823
+  3 |            2 |           1073741823 | 9223372036854775807
+  4 |            1 |                    9 |                  12
+  5 |            3 |     1577836800000000 |    1577923200000000
+  6 |            4 | -9223372036854775808 |          1073741823
+  7 |            4 |           1073741823 | 9223372036854775807
+  8 |            3 |     1577923200000000 |    1578009600000000
+(8 rows)
+
+SELECT DISTINCT
+       chunk_id,
+       dimension_slice_id,
+       constraint_name,
+       pg_get_expr(conbin, conrelid) AS constraint_expr
+FROM _timescaledb_catalog.chunk_constraint,
+     LATERAL (
+     	     SELECT *
+	     FROM pg_constraint JOIN pg_namespace ns ON connamespace = ns.oid
+	     WHERE conname = constraint_name
+     ) AS con
+ORDER BY chunk_id, dimension_slice_id;
+ chunk_id | dimension_slice_id | constraint_name |                                                                constraint_expr                                                                 
+----------+--------------------+-----------------+------------------------------------------------------------------------------------------------------------------------------------------------
+        1 |                  1 | constraint_1    | (("time" >= 3) AND ("time" < 6))
+        1 |                  2 | constraint_2    | (_timescaledb_internal.get_partition_hash(tag) < 1073741823)
+        2 |                  1 | constraint_1    | (("time" >= 3) AND ("time" < 6))
+        2 |                  3 | constraint_3    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+        3 |                  3 | constraint_3    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+        3 |                  4 | constraint_4    | (("time" >= 9) AND ("time" < 12))
+        4 |                  5 | constraint_5    | (("time" >= 'Tue Dec 31 16:00:00 2019 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone))
+        4 |                  6 | constraint_6    | (_timescaledb_internal.get_partition_hash(tag) < 1073741823)
+        5 |                  5 | constraint_5    | (("time" >= 'Tue Dec 31 16:00:00 2019 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone))
+        5 |                  7 | constraint_7    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+        6 |                  7 | constraint_7    | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+        6 |                  8 | constraint_8    | (("time" >= 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone))
+(12 rows)
+
+-- Now, we remove some dimension slices to break the table. For that
+-- we need to remove some dimension slices. We could remove all, but
+-- that will not tell us if the script works even for partial results
+-- (which is the normal case), so we remove partial ones. In
+-- particular, we have some slices that are referenced by several
+-- chunks and we want to check that these works as well.
+--
+-- For each dimension, we will drop it, list the missing slices,
+-- repair the table, and check that the repair added the missing
+-- slices. Each test is preceeded by a comment to make diffs clearly
+-- distinguishable from each others.
+-- To drop rows from dimension_slice table, we need to remove some
+-- constraints.
+ALTER TABLE _timescaledb_catalog.chunk_constraint
+      DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
+-- Drop slice 1
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 1;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |         constraint_expr          
+--------------------+-----------------+-------------+----------------------------------
+                  1 | constraint_1    | time        | (("time" >= 3) AND ("time" < 6))
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 2
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 2;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |                       constraint_expr                        
+--------------------+-----------------+-------------+--------------------------------------------------------------
+                  2 | constraint_2    | tag         | (_timescaledb_internal.get_partition_hash(tag) < 1073741823)
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 3
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 3;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |                        constraint_expr                        
+--------------------+-----------------+-------------+---------------------------------------------------------------
+                  3 | constraint_3    | tag         | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 4
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 4;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |          constraint_expr          
+--------------------+-----------------+-------------+-----------------------------------
+                  4 | constraint_4    | time        | (("time" >= 9) AND ("time" < 12))
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 5
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 5;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |                                                                constraint_expr                                                                 
+--------------------+-----------------+-------------+------------------------------------------------------------------------------------------------------------------------------------------------
+                  5 | constraint_5    | time        | (("time" >= 'Tue Dec 31 16:00:00 2019 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone))
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 6
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 6;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |                       constraint_expr                        
+--------------------+-----------------+-------------+--------------------------------------------------------------
+                  6 | constraint_6    | tag         | (_timescaledb_internal.get_partition_hash(tag) < 1073741823)
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 7
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 7;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |                        constraint_expr                        
+--------------------+-----------------+-------------+---------------------------------------------------------------
+                  7 | constraint_7    | tag         | (_timescaledb_internal.get_partition_hash(tag) >= 1073741823)
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+
+-- Drop slice 8
+DELETE FROM _timescaledb_catalog.dimension_slice WHERE id = 8;
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name |                                                                constraint_expr                                                                 
+--------------------+-----------------+-------------+------------------------------------------------------------------------------------------------------------------------------------------------
+                  8 | constraint_8    | time        | (("time" >= 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone))
+(1 row)
+
+CALL repair_dimension_slice();
+SELECT * FROM missing_slices;
+ dimension_slice_id | constraint_name | column_name | constraint_expr 
+--------------------+-----------------+-------------+-----------------
+(0 rows)
+

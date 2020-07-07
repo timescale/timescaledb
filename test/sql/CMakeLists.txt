@@ -38,6 +38,7 @@ set(TEST_FILES
   reindex.sql
   relocate_extension.sql
   reloptions.sql
+  repair.sql
   size_utils.sql
   tablespace.sql
   timestamp.sql
