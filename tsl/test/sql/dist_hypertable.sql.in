@@ -195,7 +195,7 @@ SELECT * FROM disttable;
 $$);
 
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
-SELECT * FROM hypertable_data_node_relation_size('disttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
@@ -436,7 +436,7 @@ SELECT * FROM disttable;
 $$);
 
 -- The hypertable view also shows no chunks and no data
-SELECT * FROM timescaledb_information.hypertable
+SELECT * FROM timescaledb_information.hypertables
 ORDER BY table_schema, table_name;
 
 -- Test underreplicated chunk warning
@@ -495,7 +495,7 @@ CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
 \set ON_ERROR_STOP 1
 
-SELECT * FROM timescaledb_information.hypertable
+SELECT * FROM timescaledb_information.hypertables
 ORDER BY table_schema, table_name;
 
 -- Test distributed hypertable creation with many parameters

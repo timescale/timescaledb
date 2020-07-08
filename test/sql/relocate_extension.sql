@@ -72,13 +72,11 @@ SELECT * FROM test_tz ORDER BY time;
 SELECT * FROM test_dt ORDER BY time;
 -- testing drop_chunks END
 
--- testing hypertable_relation_size_pretty START
-SELECT * FROM "testSchema0".hypertable_relation_size_pretty('test_ts');
--- testing hypertable_relation_size_pretty END
+-- testing hypertable_detailed_size START
+SELECT * FROM "testSchema0".hypertable_detailed_size('test_ts');
+-- testing hypertable_detailed_size END
 
--- testing indexes_relation_size_pretty START
-SELECT * FROM "testSchema0".indexes_relation_size_pretty('test_ts') ORDER BY index_name;
--- testing indexes_relation_size_pretty END
+SELECT * FROM "testSchema0".indexes_relation_size('test_ts') ORDER BY index_name;
 
 CREATE SCHEMA "testSchema";
 

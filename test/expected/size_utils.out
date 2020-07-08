@@ -42,16 +42,10 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 (1257894000000000000, 'dev2', 1.5, 2);
 INSERT 0 1
 \set QUIET on
-SELECT * FROM hypertable_relation_size('"public"."two_Partitions"');
- table_bytes | index_bytes | toast_bytes | total_bytes 
--------------+-------------+-------------+-------------
-       32768 |      417792 |       32768 |      483328
-(1 row)
-
-SELECT * FROM hypertable_relation_size_pretty('"public"."two_Partitions"');
- table_size | index_size | toast_size | total_size 
-------------+------------+------------+------------
- 32 kB      | 408 kB     | 32 kB      | 472 kB
+SELECT * FROM hypertable_detailed_size('"public"."two_Partitions"');
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+       32768 |      417792 |       32768 |      483328 | 
 (1 row)
 
 SELECT * FROM chunk_relation_size('"public"."two_Partitions"');
@@ -84,17 +78,14 @@ SELECT * FROM indexes_relation_size('"public"."two_Partitions"');
  public."two_Partitions_timeCustom_series_bool_idx" |       49152
 (7 rows)
 
-SELECT * FROM indexes_relation_size_pretty('"public"."two_Partitions"');
-                     index_name                     | total_size 
-----------------------------------------------------+------------
- public."two_Partitions_device_id_timeCustom_idx"   | 64 kB
- public."two_Partitions_timeCustom_device_id_idx"   | 64 kB
- public."two_Partitions_timeCustom_idx"             | 64 kB
- public."two_Partitions_timeCustom_series_0_idx"    | 64 kB
- public."two_Partitions_timeCustom_series_1_idx"    | 64 kB
- public."two_Partitions_timeCustom_series_2_idx"    | 40 kB
- public."two_Partitions_timeCustom_series_bool_idx" | 48 kB
-(7 rows)
+SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk |        8192 |      114688 |        8192 |      131072 | 
+ _timescaledb_internal | _hyper_1_2_chunk |        8192 |      106496 |        8192 |      122880 | 
+ _timescaledb_internal | _hyper_1_3_chunk |        8192 |       98304 |        8192 |      114688 | 
+ _timescaledb_internal | _hyper_1_4_chunk |        8192 |       98304 |        8192 |      114688 | 
+(4 rows)
 
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
@@ -226,23 +217,13 @@ SELECT * FROM chunk_relation_size_pretty(NULL);
 ----------+-------------+----------------------+---------------------------+-----------------------------+--------+------------+------------+------------+------------
 (0 rows)
 
-SELECT * FROM hypertable_relation_size(NULL);
- table_bytes | index_bytes | toast_bytes | total_bytes 
--------------+-------------+-------------+-------------
-(0 rows)
-
-SELECT * FROM hypertable_relation_size_pretty(NULL);
- table_size | index_size | toast_size | total_size 
-------------+------------+------------+------------
+SELECT * FROM hypertable_detailed_size(NULL);
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
 (0 rows)
 
 SELECT * FROM indexes_relation_size(NULL);
  index_name | total_bytes 
 ------------+-------------
-(0 rows)
-
-SELECT * FROM indexes_relation_size_pretty(NULL);
- index_name | total_size 
-------------+------------
 (0 rows)
 

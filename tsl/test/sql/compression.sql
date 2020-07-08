@@ -176,7 +176,13 @@ vacuum full conditions;
 -- After vacuum, table_bytes is 0, but any associated index/toast storage is not
 -- completely reclaimed. Sets it at 8K (page size). So a chunk which has
 -- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
-select * from timescaledb_information.hypertable
+select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+from hypertable_detailed_size('foo');
+select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+from hypertable_detailed_size('conditions');
+select * from timescaledb_information.hypertables
 where table_name like 'foo' or table_name like 'conditions'
 order by table_name;
 \x

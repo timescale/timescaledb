@@ -1,3 +1,13 @@
+--Drop functions in size_utils and dependencies, ordering matters.
+-- Do not reorder
+DROP VIEW timescaledb_information.hypertable;
+DROP FUNCTION hypertable_relation_size_pretty;
+DROP FUNCTION  hypertable_relation_size;
+DROP FUNCTION indexes_relation_size_pretty;
+DROP FUNCTION  indexes_relation_size;
+DROP FUNCTION _timescaledb_internal.partitioning_column_to_pretty;
+-- end of do not reorder
+
 -- Add new function definitions, columns and tables for distributed hypertables
 DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
 DROP FUNCTION IF EXISTS add_drop_chunks_policy;

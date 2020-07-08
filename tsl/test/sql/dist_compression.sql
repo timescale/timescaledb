@@ -23,7 +23,6 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
 SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_1;
-SELECT setseed(1);
 
 CREATE TABLE compressed(time timestamptz, device int, temp float);
 -- Replicate twice to see that compress_chunk compresses all replica chunks
@@ -108,7 +107,14 @@ ORDER BY chunk
 LIMIT 1;
 
 \x
+SELECT * FROM timescaledb_information.hypertables
+WHERE table_name = 'compressed';
 SELECT * from timescaledb_information.chunks 
 ORDER BY hypertable_name, chunk_name;
 SELECT * from timescaledb_information.dimensions 
 ORDER BY hypertable_name, dimension_number;
+\x
+
+SELECT * FROM chunks_detailed_size('compressed'::regclass) 
+ORDER BY chunk_name, node_name;
+SELECT * FROM hypertable_detailed_size('compressed'::regclass) 

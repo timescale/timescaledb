@@ -1,9 +1,9 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-SELECT * FROM timescaledb_information.hypertable;
- table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
+SELECT * FROM timescaledb_information.hypertables;
+ table_schema | table_name | owner | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor | data_nodes | tablespaces 
+--------------+------------+-------+----------------+------------+---------------------+----------------+--------------------+------------+-------------
 (0 rows)
 
 -- create simple hypertable with 1 chunk
@@ -24,11 +24,11 @@ SELECT create_hypertable('ht2','time');
 (1 row)
 
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
-SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
- public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB      | f
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_schema, table_name;
+ table_schema | table_name |       owner       | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor | data_nodes | tablespaces 
+--------------+------------+-------------------+----------------+------------+---------------------+----------------+--------------------+------------+-------------
+ public       | ht1        | default_perm_user |              1 |          1 | f                   | f              |                    |            | 
+ public       | ht2        | default_perm_user |              1 |          1 | f                   | f              |                    |            | 
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -55,47 +55,118 @@ SELECT create_hypertable('closed.closed_ht','time');
 (1 row)
 
 INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
-SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
- closed       | closed_ht  | super_user        |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
- open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
- public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB      | f
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_schema, table_name;
+ table_schema | table_name |       owner       | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor | data_nodes | tablespaces 
+--------------+------------+-------------------+----------------+------------+---------------------+----------------+--------------------+------------+-------------
+ closed       | closed_ht  | super_user        |              1 |          1 | f                   | f              |                    |            | 
+ open         | open_ht    | super_user        |              1 |          3 | f                   | f              |                    |            | 
+ public       | ht1        | default_perm_user |              1 |          1 | f                   | f              |                    |            | 
+ public       | ht2        | default_perm_user |              1 |          1 | f                   | f              |                    |            | 
 (4 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
- closed       | closed_ht  | super_user        |              1 |          1 |            |            |            |            | f
- open         | open_ht    | super_user        |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
- public       | ht2        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      | 8192 bytes | 32 kB      | f
-(4 rows)
+\set ON_ERROR_STOP 0
+\x
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_schema,table_name;
+-[ RECORD 1 ]-------+------------------
+table_schema        | closed
+table_name          | closed_ht
+owner               | super_user
+num_dimensions      | 1
+num_chunks          | 1
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
+-[ RECORD 2 ]-------+------------------
+table_schema        | open
+table_name          | open_ht
+owner               | super_user
+num_dimensions      | 1
+num_chunks          | 3
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
+-[ RECORD 3 ]-------+------------------
+table_schema        | public
+table_name          | ht1
+owner               | default_perm_user
+num_dimensions      | 1
+num_chunks          | 1
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
+-[ RECORD 4 ]-------+------------------
+table_schema        | public
+table_name          | ht2
+owner               | default_perm_user
+num_dimensions      | 1
+num_chunks          | 1
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
 
 -- filter by schema
-SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed' ORDER BY table_schema, table_name;
- table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
- closed       | closed_ht  | super_user  |              1 |          1 |            |            |            |            | f
-(1 row)
+SELECT * FROM timescaledb_information.hypertables WHERE table_schema = 'closed' ORDER BY table_schema, table_name;
+-[ RECORD 1 ]-------+-----------
+table_schema        | closed
+table_name          | closed_ht
+owner               | super_user
+num_dimensions      | 1
+num_chunks          | 1
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
 
 -- filter by table name
-SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER BY table_schema, table_name;
- table_schema | table_name |    table_owner    | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------------+----------------+------------+------------+------------+------------+------------+-------------
- public       | ht1        | default_perm_user |              1 |          1 | 8192 bytes | 16 kB      |            | 24 kB      | f
-(1 row)
+SELECT * FROM timescaledb_information.hypertables WHERE table_name = 'ht1' ORDER BY table_schema, table_name;
+-[ RECORD 1 ]-------+------------------
+table_schema        | public
+table_name          | ht1
+owner               | default_perm_user
+num_dimensions      | 1
+num_chunks          | 1
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
 
 -- filter by owner
-SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
- table_schema | table_name | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
- closed       | closed_ht  | super_user  |              1 |          1 |            |            |            |            | f
- open         | open_ht    | super_user  |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
-(2 rows)
+SELECT * FROM timescaledb_information.hypertables WHERE owner = 'super_user' ORDER BY table_schema,table_name;
+-[ RECORD 1 ]-------+-----------
+table_schema        | closed
+table_name          | closed_ht
+owner               | super_user
+num_dimensions      | 1
+num_chunks          | 1
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
+-[ RECORD 2 ]-------+-----------
+table_schema        | open
+table_name          | open_ht
+owner               | super_user
+num_dimensions      | 1
+num_chunks          | 3
+compression_enabled | f
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
 
+\x
 ---Add integer table --
 CREATE TABLE test_table_int(time bigint, junk int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 10);

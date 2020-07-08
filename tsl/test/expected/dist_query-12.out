@@ -155,7 +155,7 @@ ANALYZE reference;
 ANALYZE hyper;
 ANALYZE hyper1d;
 SELECT table_schema, table_name, num_dimensions, num_chunks
-FROM timescaledb_information.hypertable
+FROM timescaledb_information.hypertables
 ORDER BY 1,2;
  table_schema | table_name | num_dimensions | num_chunks 
 --------------+------------+----------------+------------

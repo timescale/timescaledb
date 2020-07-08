@@ -165,6 +165,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.is_frontend_session = dist_util_is_frontend_session,
 	.remove_from_distributed_db = dist_util_remove_from_db,
 	.dist_remote_hypertable_info = dist_util_remote_hypertable_info,
+	.dist_remote_chunk_info = dist_util_remote_chunk_info,
 	.validate_as_data_node = validate_data_node_settings,
 	.distributed_exec = ts_dist_cmd_exec,
 	.func_call_on_data_nodes = ts_dist_cmd_func_call_on_data_nodes,

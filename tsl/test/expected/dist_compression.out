@@ -43,12 +43,6 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost',
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
 SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_1;
-SELECT setseed(1);
- setseed 
----------
- 
-(1 row)
-
 CREATE TABLE compressed(time timestamptz, device int, temp float);
 -- Replicate twice to see that compress_chunk compresses all replica chunks
 SELECT create_distributed_hypertable('compressed', 'time', 'device', replication_factor => 2);
@@ -395,6 +389,20 @@ NOTICE:  chunk "_dist_hyper_1_1_chunk" is not compressed
 (1 row)
 
 \x
+SELECT * FROM timescaledb_information.hypertables
+WHERE table_name = 'compressed';
+-[ RECORD 1 ]-------+--------------------------------------
+table_schema        | public
+table_name          | compressed
+owner               | test_role_1
+num_dimensions      | 2
+num_chunks          | 3
+compression_enabled | f
+is_distributed      | t
+replication_factor  | 2
+data_nodes          | {data_node_1,data_node_2,data_node_3}
+tablespaces         | 
+
 SELECT * from timescaledb_information.chunks 
 ORDER BY hypertable_name, chunk_name;
 -[ RECORD 1 ]----------+-----------------------------
@@ -464,4 +472,25 @@ time_interval     |
 integer_interval  | 
 integer_now_func  | 
 num_partitions    | 3
+
+\x
+SELECT * FROM chunks_detailed_size('compressed'::regclass) 
+ORDER BY chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
+ _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       32768 |           0 |       40960 | data_node_1
+ _timescaledb_internal | _dist_hyper_1_1_chunk |        8192 |       32768 |           0 |       40960 | data_node_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | data_node_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | data_node_3
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | data_node_1
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | data_node_3
+(6 rows)
+
+SELECT * FROM hypertable_detailed_size('compressed'::regclass) 
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+       16384 |       65536 |           0 |       81920 | data_node_1
+       16384 |       65536 |           0 |       81920 | data_node_3
+       16384 |       65536 |           0 |       81920 | data_node_2
+(3 rows)
 
