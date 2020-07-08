@@ -39,6 +39,7 @@ def build_debug_config(overrides):
     "build_type": "Debug",
     "pg_build_args": "--enable-debug --enable-cassert",
     "tsdb_build_args": "-DCODECOVERAGE=ON",
+    "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
     "llvm_config": "llvm-config-9",
     "clang": "clang-9",
@@ -89,7 +90,7 @@ macos_config = {
   "tsdb_build_args": "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
   "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
   "coverage": False,
-  "installcheck_args": "IGNORES='bgw_db_scheduler'"
+  "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection'",
 }
 
 m["include"].append(build_debug_config(macos_config))
