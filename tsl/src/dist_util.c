@@ -183,65 +183,34 @@ Datum
 dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 {
 	char *node_name;
-	FuncCallContext *funcctx;
-	PGresult *result;
-
-	Assert(!PG_ARGISNULL(0)); /* Strict function */
+	StringInfo query_str = makeStringInfo();
+	/* Strict function */
+	Assert(!PG_ARGISNULL(0) && !PG_ARGISNULL(1) && !PG_ARGISNULL(2));
+	Name schema_name = PG_GETARG_NAME(1);
+	Name table_name = PG_GETARG_NAME(2);
+	appendStringInfo(query_str,
+					 "SELECT * from _timescaledb_internal.hypertable_local_size( '%s', '%s'  );",
+					 quote_identifier(NameStr(*schema_name)),
+					 quote_identifier(NameStr(*table_name)));
 	node_name = PG_GETARG_NAME(0)->data;
+	return dist_util_remote_catalog_query(fcinfo, node_name, query_str->data);
+}
 
-	if (SRF_IS_FIRSTCALL())
-	{
-		MemoryContext oldcontext;
-		TupleDesc tupdesc;
-
-		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("function returning record called in context "
-							"that cannot accept type record")));
-
-		funcctx->user_fctx =
-			ts_dist_cmd_invoke_on_data_nodes("SELECT * FROM "
-											 "timescaledb_information.hypertable_size_info;",
-											 list_make1((void *) node_name),
-											 true);
-		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
-
-		MemoryContextSwitchTo(oldcontext);
-	}
-
-	funcctx = SRF_PERCALL_SETUP();
-	result = ts_dist_cmd_get_result_by_node_name(funcctx->user_fctx, node_name);
-
-	if (funcctx->call_cntr < PQntuples(result))
-	{
-		HeapTuple tuple;
-		char **fields = palloc(sizeof(char *) * PQnfields(result));
-		int i;
-
-		for (i = 0; i < PQnfields(result); ++i)
-		{
-			if (PQgetisnull(result, funcctx->call_cntr, i) != 1)
-			{
-				fields[i] = PQgetvalue(result, funcctx->call_cntr, i);
-
-				if (fields[i][0] == '\0')
-					fields[i] = NULL;
-			}
-			else
-				fields[i] = NULL;
-		}
-
-		tuple = BuildTupleFromCStrings(funcctx->attinmeta, fields);
-
-		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
-	}
-
-	ts_dist_cmd_close_response(funcctx->user_fctx);
-	SRF_RETURN_DONE(funcctx);
+Datum
+dist_util_remote_chunk_info(PG_FUNCTION_ARGS)
+{
+	char *node_name;
+	StringInfo query_str = makeStringInfo();
+	/* Strict function */
+	Assert(!PG_ARGISNULL(0) && !PG_ARGISNULL(1) && !PG_ARGISNULL(2));
+	Name schema_name = PG_GETARG_NAME(1);
+	Name table_name = PG_GETARG_NAME(2);
+	appendStringInfo(query_str,
+					 "SELECT * from _timescaledb_internal.chunk_local_size( '%s', '%s'  );",
+					 quote_identifier(NameStr(*schema_name)),
+					 quote_identifier(NameStr(*table_name)));
+	node_name = PG_GETARG_NAME(0)->data;
+	return dist_util_remote_catalog_query(fcinfo, node_name, query_str->data);
 }
 
 void
@@ -337,4 +306,65 @@ dist_util_is_compatible_version(const char *data_node_version, const char *acces
 		*is_old_version = (data_node_major < access_node_major);
 
 	return (data_node_major == access_node_major) && (data_node_minor <= access_node_minor);
+}
+
+/* Pass the fcinfo information from the original PG function
+ * args: node_name is NAME and sql_query is of TEXT type */
+// should be static Datum
+Datum
+dist_util_remote_catalog_query(FunctionCallInfo fcinfo, char *node_name, char *sql_query)
+{
+	FuncCallContext *funcctx;
+	PGresult *result;
+
+	Assert(node_name != NULL && sql_query != NULL);
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		TupleDesc tupdesc;
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+
+		funcctx->user_fctx =
+			ts_dist_cmd_invoke_on_data_nodes(sql_query, list_make1((void *) node_name), true);
+		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+	funcctx = SRF_PERCALL_SETUP();
+	result = ts_dist_cmd_get_result_by_node_name(funcctx->user_fctx, node_name);
+
+	if (funcctx->call_cntr < PQntuples(result))
+	{
+		HeapTuple tuple;
+		char **fields = palloc(sizeof(char *) * PQnfields(result));
+		int i;
+
+		for (i = 0; i < PQnfields(result); ++i)
+		{
+			if (PQgetisnull(result, funcctx->call_cntr, i) != 1)
+			{
+				fields[i] = PQgetvalue(result, funcctx->call_cntr, i);
+
+				if (fields[i][0] == '\0')
+					fields[i] = NULL;
+			}
+			else
+				fields[i] = NULL;
+		}
+
+		tuple = BuildTupleFromCStrings(funcctx->attinmeta, fields);
+
+		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
+	}
+
+	ts_dist_cmd_close_response(funcctx->user_fctx);
+	SRF_RETURN_DONE(funcctx);
 }

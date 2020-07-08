@@ -36,8 +36,6 @@ FROM
       _timescaledb_catalog.compression_chunk_size map 
       ON map.chunk_id = c.id ;
 
-GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
- 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_hypertable_info(
     node_name              NAME,
     schema_name_in name,
