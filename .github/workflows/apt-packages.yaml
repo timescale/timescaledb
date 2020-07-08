@@ -19,9 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Debian images:  8 (jessie), 9 (stretch), or 10 (buster)
+        # Debian images:  9 (stretch), or 10 (buster)
         # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal)
-        image: [ "debian:8-slim", "debian:9-slim", "debian:10-slim", "ubuntu:bionic", "ubuntu:eoan", "ubuntu:focal"]
+        image: [ "debian:9-slim", "debian:10-slim", "ubuntu:bionic", "ubuntu:eoan", "ubuntu:focal"]
         pg: [ 9.6, 10, 11, 12 ]
         exclude:
           - image: "ubuntu:focal"
