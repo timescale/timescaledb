@@ -101,6 +101,8 @@ endif()
 
 # the following tests will run by itself before the parallel
 # tests because they fail or are flaky when run in parallel
+# dist_views.sql sets some global information, so do not run it 
+# in parallel
 set(SOLO_TESTS
   bgw_reorder_drop_chunks
   chunk_api
@@ -119,6 +121,7 @@ set(SOLO_TESTS
   dist_hypertable_am
   dist_hypertable_with_oids
   dist_partial_agg
+  dist_views.sql
   issues
   read_only
   remote_connection_cache

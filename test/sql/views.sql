@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SELECT * FROM timescaledb_information.hypertable;
+SELECT * FROM timescaledb_information.hypertables;
 
 -- create simple hypertable with 1 chunk
 CREATE TABLE ht1(time TIMESTAMPTZ NOT NULL);
@@ -14,7 +14,7 @@ CREATE TABLE ht2(time TIMESTAMPTZ NOT NULL, data TEXT);
 SELECT create_hypertable('ht2','time');
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
 
-SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_schema, table_name;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
@@ -33,19 +33,22 @@ CREATE TABLE closed.closed_ht(time TIMESTAMPTZ NOT NULL);
 SELECT create_hypertable('closed.closed_ht','time');
 INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 
-SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema, table_name;
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_schema, table_name;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-SELECT * FROM timescaledb_information.hypertable ORDER BY table_schema,table_name;
+\set ON_ERROR_STOP 0
+\x
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_schema,table_name;
 
 -- filter by schema
-SELECT * FROM timescaledb_information.hypertable WHERE table_schema = 'closed' ORDER BY table_schema, table_name;
+SELECT * FROM timescaledb_information.hypertables WHERE table_schema = 'closed' ORDER BY table_schema, table_name;
 
 -- filter by table name
-SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER BY table_schema, table_name;
+SELECT * FROM timescaledb_information.hypertables WHERE table_name = 'ht1' ORDER BY table_schema, table_name;
 
 -- filter by owner
-SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
+SELECT * FROM timescaledb_information.hypertables WHERE owner = 'super_user' ORDER BY table_schema,table_name;
+\x
 
 ---Add integer table --
 CREATE TABLE test_table_int(time bigint, junk int);

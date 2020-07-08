@@ -78,6 +78,7 @@ CROSSMODULE_WRAPPER(remote_txn_id_out);
 CROSSMODULE_WRAPPER(remote_txn_heal_data_node);
 CROSSMODULE_WRAPPER(remote_connection_cache_show);
 CROSSMODULE_WRAPPER(dist_remote_hypertable_info);
+CROSSMODULE_WRAPPER(dist_remote_chunk_info);
 CROSSMODULE_WRAPPER(distributed_exec);
 CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
 
@@ -404,6 +405,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.is_frontend_session = error_no_default_fn_bool_void_community,
 	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
 	.dist_remote_hypertable_info = error_no_default_fn_pg_community,
+	.dist_remote_chunk_info = error_no_default_fn_pg_community,
 	.validate_as_data_node = error_no_default_fn_community,
 	.func_call_on_data_nodes = func_call_on_data_nodes_default,
 	.chunk_get_relstats = error_no_default_fn_pg_community,

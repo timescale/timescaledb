@@ -387,12 +387,12 @@ SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node
  data_node_3 | {host=localhost,port=55432,dbname=data_node_3}
 (3 rows)
 
-SELECT * FROM hypertable_data_node_relation_size('disttable');
-  node_name  | num_chunks | table_size | index_size | toast_size | total_size 
--------------+------------+------------+------------+------------+------------
- data_node_3 |          2 | 80 kB      | 96 kB      |            | 176 kB
- data_node_1 |          2 | 80 kB      | 96 kB      |            | 176 kB
- data_node_2 |          2 | 80 kB      | 96 kB      |            | 176 kB
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+       81920 |       98304 |           0 |      180224 | data_node_1
+       81920 |       98304 |           0 |      180224 | data_node_2
+       81920 |       98304 |           0 |      180224 | data_node_3
 (3 rows)
 
 -- Show what some queries would look like on the frontend
@@ -1415,12 +1415,12 @@ time|device|temp|Color
 (1 row)
 
 -- The hypertable view also shows no chunks and no data
-SELECT * FROM timescaledb_information.hypertable
+SELECT * FROM timescaledb_information.hypertables
 ORDER BY table_schema, table_name;
- table_schema |   table_name    | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+-----------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
- public       | disttable       | test_role_1 |              2 |          0 |            |            |            |            | t
- public       | underreplicated | test_role_1 |              1 |          0 |            |            |            |            | t
+ table_schema |   table_name    |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |              data_nodes               | tablespaces 
+--------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------+-------------
+ public       | disttable       | test_role_1 |              2 |          0 | f                   | t              |                  1 | {data_node_1,data_node_2,data_node_3} | 
+ public       | underreplicated | test_role_1 |              1 |          0 | f                   | t              |                  4 | {data_node_1,data_node_2,data_node_3} | 
 (2 rows)
 
 -- Test underreplicated chunk warning
@@ -1657,12 +1657,12 @@ CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
 ERROR:  invalid replication factor
 \set ON_ERROR_STOP 1
-SELECT * FROM timescaledb_information.hypertable
+SELECT * FROM timescaledb_information.hypertables
 ORDER BY table_schema, table_name;
- table_schema |   table_name    | table_owner | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+-----------------+-------------+----------------+------------+------------+------------+------------+------------+-------------
- public       | disttable       | test_role_1 |              2 |          0 |            |            |            |            | t
- public       | underreplicated | test_role_1 |              1 |          1 | 24 kB      | 48 kB      |            | 72 kB      | t
+ table_schema |   table_name    |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |              data_nodes               | tablespaces 
+--------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------+-------------
+ public       | disttable       | test_role_1 |              2 |          0 | f                   | t              |                  1 | {data_node_1,data_node_2,data_node_3} | 
+ public       | underreplicated | test_role_1 |              1 |          1 | f                   | t              |                  4 | {data_node_1,data_node_2,data_node_3} | 
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters

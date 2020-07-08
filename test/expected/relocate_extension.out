@@ -156,23 +156,21 @@ SELECT * FROM test_dt ORDER BY time;
 (0 rows)
 
 -- testing drop_chunks END
--- testing hypertable_relation_size_pretty START
-SELECT * FROM "testSchema0".hypertable_relation_size_pretty('test_ts');
- table_size | index_size | toast_size | total_size 
-------------+------------+------------+------------
- 16 kB      | 64 kB      | 16 kB      | 96 kB
+-- testing hypertable_detailed_size START
+SELECT * FROM "testSchema0".hypertable_detailed_size('test_ts');
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+       16384 |       65536 |       16384 |       98304 | 
 (1 row)
 
--- testing hypertable_relation_size_pretty END
--- testing indexes_relation_size_pretty START
-SELECT * FROM "testSchema0".indexes_relation_size_pretty('test_ts') ORDER BY index_name;
-           index_name           | total_size 
---------------------------------+------------
- public.test_ts_device_time_idx | 32 kB
- public.test_ts_time_idx        | 32 kB
+-- testing hypertable_detailed_size END
+SELECT * FROM "testSchema0".indexes_relation_size('test_ts') ORDER BY index_name;
+           index_name           | total_bytes 
+--------------------------------+-------------
+ public.test_ts_device_time_idx |       32768
+ public.test_ts_time_idx        |       32768
 (2 rows)
 
--- testing indexes_relation_size_pretty END
 CREATE SCHEMA "testSchema";
 \set ON_ERROR_STOP 0
 ALTER EXTENSION timescaledb SET SCHEMA "testSchema";

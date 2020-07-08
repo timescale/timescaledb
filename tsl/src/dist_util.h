@@ -31,6 +31,7 @@ void dist_util_set_peer_id(Datum dist_id);
 bool dist_util_is_frontend_session(void);
 
 Datum dist_util_remote_hypertable_info(PG_FUNCTION_ARGS);
+Datum dist_util_remote_chunk_info(PG_FUNCTION_ARGS);
 
 void validate_data_node_settings(void);
 bool dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version,

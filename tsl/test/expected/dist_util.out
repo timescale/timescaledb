@@ -242,41 +242,41 @@ INSERT INTO disttable VALUES
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
 SELECT * FROM timescaledb_information.data_node ORDER BY node_name;
-  node_name  |       owner        |                    options                     | node_up | num_dist_tables | num_dist_chunks | total_dist_size 
--------------+--------------------+------------------------------------------------+---------+-----------------+-----------------+-----------------
- data_node_1 | cluster_super_user | {host=localhost,port=55432,dbname=backend_2_1} | t       |               1 |               2 | 48 kB
- data_node_2 | cluster_super_user | {host=localhost,port=55432,dbname=backend_x_2} | t       |               1 |               1 | 24 kB
+  node_name  |       owner        |                    options                     
+-------------+--------------------+------------------------------------------------
+ data_node_1 | cluster_super_user | {host=localhost,port=55432,dbname=backend_2_1}
+ data_node_2 | cluster_super_user | {host=localhost,port=55432,dbname=backend_x_2}
 (2 rows)
 
-SELECT * FROM timescaledb_information.hypertable;
- table_schema |  table_name  |    table_owner     | num_dimensions | num_chunks | table_size | index_size | toast_size | total_size | distributed 
---------------+--------------+--------------------+----------------+------------+------------+------------+------------+------------+-------------
- public       | nondisttable | cluster_super_user |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
- public       | disttable    | cluster_super_user |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | t
+SELECT * FROM timescaledb_information.hypertables;
+ table_schema |  table_name  |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |        data_nodes         | tablespaces 
+--------------+--------------+--------------------+----------------+------------+---------------------+----------------+--------------------+---------------------------+-------------
+ public       | nondisttable | cluster_super_user |              1 |          3 | f                   | f              |                    |                           | 
+ public       | disttable    | cluster_super_user |              1 |          3 | f                   | t              |                  1 | {data_node_1,data_node_2} | 
 (2 rows)
 
-SELECT * FROM hypertable_relation_size('disttable');
- table_bytes | index_bytes | toast_bytes | total_bytes 
--------------+-------------+-------------+-------------
-       24576 |       49152 |             |       73728
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+       16384 |       32768 |           0 |       49152 | data_node_1
+        8192 |       16384 |           0 |       24576 | data_node_2
+(2 rows)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+       24576 |       49152 |           0 |       73728 | 
 (1 row)
 
-SELECT * FROM hypertable_relation_size('nondisttable');
- table_bytes | index_bytes | toast_bytes | total_bytes 
--------------+-------------+-------------+-------------
-       24576 |       49152 |             |       73728
+SELECT * FROM hypertable_size('disttable') ;
+ hypertable_size 
+-----------------
+           73728
 (1 row)
 
-SELECT * FROM hypertable_data_node_relation_size('disttable') ORDER BY node_name;
-  node_name  | num_chunks | table_size | index_size | toast_size | total_size 
--------------+------------+------------+------------+------------+------------
- data_node_1 |          2 | 16 kB      | 32 kB      |            | 48 kB
- data_node_2 |          1 | 8192 bytes | 16 kB      |            | 24 kB
-(2 rows)
-
-SELECT * FROM hypertable_data_node_relation_size('nondisttable') ORDER BY node_name;
-NOTICE:  calling hypertable_data_node_relation_size on a non-distributed hypertable
- node_name | num_chunks | table_size | index_size | toast_size | total_size 
------------+------------+------------+------------+------------+------------
-(0 rows)
+SELECT * FROM hypertable_size('nondisttable') ;
+ hypertable_size 
+-----------------
+           73728
+(1 row)
 

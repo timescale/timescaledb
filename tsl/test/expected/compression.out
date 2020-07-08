@@ -434,31 +434,49 @@ vacuum full conditions;
 -- After vacuum, table_bytes is 0, but any associated index/toast storage is not
 -- completely reclaimed. Sets it at 8K (page size). So a chunk which has
 -- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
-select * from timescaledb_information.hypertable
+select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+from hypertable_detailed_size('foo');
+-[ RECORD 1 ]--+-----------
+pg_size_pretty | 32 kB
+pg_size_pretty | 144 kB
+pg_size_pretty | 8192 bytes
+pg_size_pretty | 184 kB
+
+select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+from hypertable_detailed_size('conditions');
+-[ RECORD 1 ]--+------
+pg_size_pretty | 16 kB
+pg_size_pretty | 48 kB
+pg_size_pretty | 32 kB
+pg_size_pretty | 96 kB
+
+select * from timescaledb_information.hypertables
 where table_name like 'foo' or table_name like 'conditions'
 order by table_name;
--[ RECORD 1 ]--+------------------
-table_schema   | public
-table_name     | conditions
-table_owner    | default_perm_user
-num_dimensions | 1
-num_chunks     | 2
-table_size     | 16 kB
-index_size     | 48 kB
-toast_size     | 32 kB
-total_size     | 96 kB
-distributed    | f
--[ RECORD 2 ]--+------------------
-table_schema   | public
-table_name     | foo
-table_owner    | default_perm_user
-num_dimensions | 1
-num_chunks     | 4
-table_size     | 32 kB
-index_size     | 144 kB
-toast_size     | 8192 bytes
-total_size     | 184 kB
-distributed    | f
+-[ RECORD 1 ]-------+------------------
+table_schema        | public
+table_name          | conditions
+owner               | default_perm_user
+num_dimensions      | 1
+num_chunks          | 2
+compression_enabled | t
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
+-[ RECORD 2 ]-------+------------------
+table_schema        | public
+table_name          | foo
+owner               | default_perm_user
+num_dimensions      | 1
+num_chunks          | 4
+compression_enabled | t
+is_distributed      | f
+replication_factor  | 
+data_nodes          | 
+tablespaces         | 
 
 \x
 SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) AS chunk

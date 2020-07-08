@@ -26,7 +26,7 @@ SET client_min_messages TO notice;
 -- Load the data
 \ir :TEST_LOAD_NAME
 SELECT table_schema, table_name, num_dimensions, num_chunks
-FROM timescaledb_information.hypertable
+FROM timescaledb_information.hypertables
 ORDER BY 1,2;
 SELECT count(*) FROM hyper;
 

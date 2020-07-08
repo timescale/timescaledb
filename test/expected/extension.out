@@ -12,8 +12,8 @@ WHERE OID IN (
     deptype = 'e' and classid = 'pg_catalog.pg_proc'::regclass
 ) AND pronamespace = 'public'::regnamespace
 ORDER BY proname;
-              proname               
-------------------------------------
+             proname              
+----------------------------------
  add_compress_chunks_policy
  add_data_node
  add_dimension
@@ -26,10 +26,10 @@ ORDER BY proname;
  block_new_chunks
  chunk_relation_size
  chunk_relation_size_pretty
+ chunks_detailed_size
  compress_chunk
  create_distributed_hypertable
  create_hypertable
- data_node_hypertable_info
  decompress_chunk
  delete_data_node
  detach_data_node
@@ -41,11 +41,9 @@ ORDER BY proname;
  get_telemetry_report
  histogram
  hypertable_approximate_row_count
- hypertable_data_node_relation_size
- hypertable_relation_size
- hypertable_relation_size_pretty
+ hypertable_detailed_size
+ hypertable_size
  indexes_relation_size
- indexes_relation_size_pretty
  interpolate
  last
  locf
@@ -67,5 +65,5 @@ ORDER BY proname;
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(53 rows)
+(51 rows)
 
