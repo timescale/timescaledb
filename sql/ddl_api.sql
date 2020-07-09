@@ -211,5 +211,12 @@ AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION  set_replication_factor(
     hypertable              REGCLASS,
     replication_factor      INTEGER
-) RETURNS VOID 
+) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_set_replication_factor' LANGUAGE C VOLATILE;
+
+-- Refresh a continuous aggregate across the given window.
+CREATE OR REPLACE FUNCTION refresh_continuous_aggregate(
+    cagg                     REGCLASS,
+    window_start             "any",
+    window_end               "any"
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh' LANGUAGE C VOLATILE;

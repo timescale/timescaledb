@@ -5,5 +5,6 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/job.c
   ${CMAKE_CURRENT_SOURCE_DIR}/materialize.c
   ${CMAKE_CURRENT_SOURCE_DIR}/options.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/refresh.c
 )
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

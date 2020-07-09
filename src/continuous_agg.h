@@ -74,6 +74,7 @@ int64 ts_continuous_agg_get_completed_threshold(int32 materialization_id);
 
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name);
+extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_relid(Oid relid);
 
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_job_id(int32 job_id);
 extern void ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema,

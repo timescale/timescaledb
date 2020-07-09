@@ -36,24 +36,6 @@
 
 #include "continuous_aggs/materialize.h"
 
-/***********************
- * Time ranges
- ***********************/
-
-typedef struct InternalTimeRange
-{
-	Oid type;
-	int64 start; /* inclusive */
-	int64 end;   /* exclusive */
-} InternalTimeRange;
-
-typedef struct TimeRange
-{
-	Oid type;
-	Datum start;
-	Datum end;
-} TimeRange;
-
 static bool ranges_overlap(InternalTimeRange invalidation_range,
 						   InternalTimeRange new_materialization_range);
 static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
@@ -1039,10 +1021,6 @@ insert_materialization_invalidation_logs(List *caggs, List *invalidations,
  * materialization support *
  ***************************/
 
-static void update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-									Name time_column_name,
-									InternalTimeRange new_materialization_range, int64 bucket_width,
-									InternalTimeRange invalidation_range);
 static void spi_update_materializations(SchemaAndName partial_view,
 										SchemaAndName materialization_table, Name time_column_name,
 										TimeRange invalidation_range);
@@ -1142,13 +1120,12 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 	materialization_table_name.name = &materialization_table->fd.table_name;
 
 	/* to prevent deadlocks later on, lock the tables we will be inserting to now */
-
-	update_materializations(partial_view,
-							materialization_table_name,
-							&time_column_name,
-							new_materialization_range,
-							bucket_width,
-							new_invalidation_range);
+	continuous_agg_update_materialization(partial_view,
+										  materialization_table_name,
+										  &time_column_name,
+										  new_materialization_range,
+										  new_invalidation_range,
+										  bucket_width);
 
 	/* update the completed watermark */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -1292,9 +1269,10 @@ invalidation_threshold_get(int32 hypertable_id)
 }
 
 void
-update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-						Name time_column_name, InternalTimeRange new_materialization_range,
-						int64 bucket_width, InternalTimeRange invalidation_range)
+continuous_agg_update_materialization(SchemaAndName partial_view,
+									  SchemaAndName materialization_table, Name time_column_name,
+									  InternalTimeRange new_materialization_range,
+									  InternalTimeRange invalidation_range, int64 bucket_width)
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
@@ -1552,7 +1530,6 @@ spi_delete_materializations(SchemaAndName materialization_table, Name time_colum
 	char *invalidation_end;
 
 	getTypeOutputInfo(invalidation_range.type, &out_fn, &type_is_varlena);
-
 	invalidation_start = OidOutputFunctionCall(out_fn, invalidation_range.start);
 	invalidation_end = OidOutputFunctionCall(out_fn, invalidation_range.end);
 
@@ -1589,7 +1566,6 @@ spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materializ
 	char *materialization_end;
 
 	getTypeOutputInfo(materialization_range.type, &out_fn, &type_is_varlena);
-
 	materialization_start = OidOutputFunctionCall(out_fn, materialization_range.start);
 	materialization_end = OidOutputFunctionCall(out_fn, materialization_range.end);
 
@@ -1611,8 +1587,8 @@ spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materializ
 								NULL /*=Values*/,
 								NULL /*=Nulls*/,
 								false /*=read_only*/,
-								0 /*count*/
-	);
+								0 /*count*/);
+
 	if (res < 0)
 		elog(ERROR, "could materialize values into the materialization table");
 }
