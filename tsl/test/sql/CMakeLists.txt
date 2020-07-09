@@ -3,6 +3,7 @@ set(TEST_FILES
   continuous_aggs_errors.sql
   continuous_aggs_permissions.sql
   continuous_aggs_watermark.sql
+  continuous_aggs_refresh.sql
   edition.sql
   gapfill.sql
   partialize_finalize.sql
@@ -180,4 +181,3 @@ foreach(TEST_FILE ${TEST_FILES})
   endif()
 endforeach(TEST_FILE)
 file(APPEND ${TEST_SCHEDULE} "\n")
-

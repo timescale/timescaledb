@@ -58,6 +58,7 @@ CROSSMODULE_WRAPPER(decompress_chunk);
 
 /* continous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
+CROSSMODULE_WRAPPER(continuous_agg_refresh);
 
 CROSSMODULE_WRAPPER(data_node_ping);
 CROSSMODULE_WRAPPER(data_node_block_new_chunks);
@@ -355,6 +356,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_drop_chunks_by_chunk_id = continuous_agg_drop_chunks_by_chunk_id_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
+	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_materialize = cagg_materialize_default_fn,
 

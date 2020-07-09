@@ -25,6 +25,7 @@
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
+#include "continuous_aggs/refresh.h"
 #include "cross_module_fn.h"
 #include "data_node_dispatch.h"
 #include "data_node.h"
@@ -118,6 +119,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_drop_chunks_by_chunk_id = ts_continuous_agg_drop_chunks_by_chunk_id,
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_update_options = continuous_agg_update_options,
+	.continuous_agg_refresh = continuous_agg_refresh,
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
 	.compressed_data_send = tsl_compressed_data_send,

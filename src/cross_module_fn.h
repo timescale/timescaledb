@@ -88,6 +88,7 @@ typedef struct CrossModuleFunctions
 												   Datum newer_than_datum, Oid older_than_type,
 												   Oid newer_than_type, int32 log_level);
 	PGFunction continuous_agg_invalidation_trigger;
+	PGFunction continuous_agg_refresh;
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 

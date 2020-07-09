@@ -53,6 +53,7 @@ WHERE oid IN (
  last
  locf
  move_chunk
+ refresh_continuous_aggregate
  remove_compress_chunks_policy
  remove_drop_chunks_policy
  remove_reorder_policy
@@ -70,5 +71,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(51 rows)
+(52 rows)
 

@@ -473,6 +473,21 @@ ts_continuous_agg_find_userview_name(const char *schema, const char *name)
 	return ca;
 }
 
+/*
+ * Find a continuous agg object by the main relid.
+ *
+ * The relid is the user-facing object ID that represents the continuous
+ * aggregate (i.e., the query view's ID).
+ */
+ContinuousAgg *
+ts_continuous_agg_find_by_relid(Oid relid)
+{
+	const char *relname = get_rel_name(relid);
+	const char *schemaname = get_namespace_name(get_rel_namespace(relid));
+
+	return ts_continuous_agg_find_userview_name(schemaname, relname);
+}
+
 ContinuousAgg *
 ts_continuous_agg_find_by_job_id(int32 job_id)
 {
