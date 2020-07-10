@@ -138,7 +138,5 @@ INSERT INTO disttable VALUES
 
 SELECT * FROM timescaledb_information.data_node ORDER BY node_name;
 SELECT * FROM timescaledb_information.hypertable;
-SELECT * FROM hypertable_relation_size('disttable');
-SELECT * FROM hypertable_relation_size('nondisttable');
-SELECT * FROM hypertable_data_node_relation_size('disttable') ORDER BY node_name;
-SELECT * FROM hypertable_data_node_relation_size('nondisttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;

@@ -195,7 +195,7 @@ SELECT * FROM disttable;
 $$);
 
 SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
-SELECT * FROM hypertable_data_node_relation_size('disttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)
