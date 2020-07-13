@@ -33,7 +33,7 @@ ts_compression_chunk_size_delete(int32 uncompressed_chunk_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 	return count;
 }
@@ -50,9 +50,10 @@ ts_compression_chunk_size_totals()
 		bool nulls[Natts_compression_chunk_size];
 		Datum values[Natts_compression_chunk_size];
 		FormData_compression_chunk_size fd;
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, nulls);
 		memset(&fd, 0, sizeof(FormData_compression_chunk_size));
 
 		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)]);
@@ -82,6 +83,9 @@ ts_compression_chunk_size_totals()
 		sizes.compressed_heap_size += fd.compressed_heap_size;
 		sizes.compressed_index_size += fd.compressed_index_size;
 		sizes.compressed_toast_size += fd.compressed_toast_size;
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 
 	return sizes;

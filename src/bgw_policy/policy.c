@@ -3,8 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
-#include "bgw_policy/compress_chunks.h"
 #include <postgres.h>
 
 #include "policy.h"
@@ -44,7 +42,7 @@ ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, void *const data)
 	CatalogSecurityContext sec_ctx;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;

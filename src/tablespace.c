@@ -71,11 +71,16 @@ static ScanTupleResult
 tablespace_tuple_found(TupleInfo *ti, void *data)
 {
 	Tablespaces *tspcs = data;
-	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(tuple);
 	Oid tspcoid = get_tablespace_oid(NameStr(form->tablespace_name), true);
 
 	if (NULL != tspcs)
 		ts_tablespaces_add(tspcs, form, tspcoid);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return SCAN_CONTINUE;
 }
@@ -205,10 +210,20 @@ revoke_tuple_found(TupleInfo *ti, void *data)
 	TablespaceScanInfo *info = data;
 	GrantStmt *stmt = info->data;
 	ListCell *lc_role;
-	Form_tablespace form = (Form_tablespace) GETSTRUCT(ti->tuple);
-	Oid tspcoid = get_tablespace_oid(NameStr(form->tablespace_name), false);
-	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
-	Oid relowner = ts_rel_get_owner(ht->main_table_relid);
+	bool isnull;
+	Datum hyper_id;
+	Datum tablespace_name;
+	Oid tspcoid;
+	Hypertable *ht;
+	Oid relowner;
+
+	hyper_id = slot_getattr(ti->slot, Anum_tablespace_hypertable_id, &isnull);
+	Assert(!isnull);
+	tablespace_name = slot_getattr(ti->slot, Anum_tablespace_tablespace_name, &isnull);
+	Assert(!isnull);
+	tspcoid = get_tablespace_oid(NameStr(*DatumGetName(tablespace_name)), false);
+	ht = ts_hypertable_cache_get_entry_by_id(info->hcache, DatumGetInt32(hyper_id));
+	relowner = ts_rel_get_owner(ht->main_table_relid);
 
 	foreach (lc_role, stmt->grantees)
 	{
@@ -246,11 +261,21 @@ revoke_role_tuple_found(TupleInfo *ti, void *data)
 {
 	TablespaceScanInfo *info = data;
 	GrantRoleStmt *stmt = info->data;
-	Form_tablespace form = (Form_tablespace) GETSTRUCT(ti->tuple);
-	Oid tspcoid = get_tablespace_oid(NameStr(form->tablespace_name), false);
-	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
-	Oid relowner = ts_rel_get_owner(ht->main_table_relid);
+	bool isnull;
+	Datum hyper_id;
+	Datum tablespace_name;
+	Oid tspcoid;
+	Hypertable *ht;
+	Oid relowner;
 	ListCell *lc_role;
+
+	hyper_id = slot_getattr(ti->slot, Anum_tablespace_hypertable_id, &isnull);
+	Assert(!isnull);
+	tablespace_name = slot_getattr(ti->slot, Anum_tablespace_tablespace_name, &isnull);
+	Assert(!isnull);
+	tspcoid = get_tablespace_oid(NameStr(*DatumGetName(tablespace_name)), false);
+	ht = ts_hypertable_cache_get_entry_by_id(info->hcache, DatumGetInt32(hyper_id));
+	relowner = ts_rel_get_owner(ht->main_table_relid);
 
 	foreach (lc_role, stmt->grantee_roles)
 	{
@@ -321,7 +346,7 @@ tablespace_tuple_delete(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 
 	ts_catalog_database_info_become_owner(info->database_info, &sec_ctx);
-	ts_catalog_delete_only(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return (info->stopcount == 0 || ti->count < info->stopcount) ? SCAN_CONTINUE : SCAN_DONE;
@@ -370,19 +395,25 @@ static ScanFilterResult
 tablespace_tuple_owner_filter(TupleInfo *ti, void *data)
 {
 	TablespaceScanInfo *info = data;
-	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(ti->tuple);
+	bool isnull;
+	Datum hyper_id;
 	Hypertable *ht;
+	ScanFilterResult result;
 
-	ht = ts_hypertable_cache_get_entry_by_id(info->hcache, form->hypertable_id);
-
+	hyper_id = slot_getattr(ti->slot, Anum_tablespace_hypertable_id, &isnull);
+	Assert(!isnull);
+	ht = ts_hypertable_cache_get_entry_by_id(info->hcache, DatumGetInt32(hyper_id));
 	Assert(NULL != ht);
 
 	if (ts_hypertable_has_privs_of(ht->main_table_relid, info->userid))
-		return SCAN_INCLUDE;
+		result = SCAN_INCLUDE;
+	else
+	{
+		result = SCAN_EXCLUDE;
+		info->num_filtered++;
+	}
 
-	info->num_filtered++;
-
-	return SCAN_EXCLUDE;
+	return result;
 }
 
 static int

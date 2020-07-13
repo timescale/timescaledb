@@ -102,7 +102,9 @@ static ScanTupleResult
 chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 {
 	List **nodes = data;
-	Form_chunk_data_node form = (Form_chunk_data_node) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	Form_chunk_data_node form = (Form_chunk_data_node) GETSTRUCT(tuple);
 	ChunkDataNode *chunk_data_node;
 	ForeignServer *foreign_server = GetForeignServerByName(NameStr(form->node_name), false);
 	MemoryContext old;
@@ -113,6 +115,9 @@ chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 	chunk_data_node->foreign_server_oid = foreign_server->serverid;
 	*nodes = lappend(*nodes, chunk_data_node);
 	MemoryContextSwitchTo(old);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return SCAN_CONTINUE;
 }
@@ -245,7 +250,7 @@ chunk_data_node_tuple_delete(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;

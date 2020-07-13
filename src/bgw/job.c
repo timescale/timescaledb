@@ -185,9 +185,11 @@ get_job_type_from_name(Name job_type_name)
 }
 
 static BgwJob *
-bgw_job_from_tuple(TupleInfo *ti, size_t alloc_size)
+bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 {
 	BgwJob *job;
+	bool should_free;
+	HeapTuple tuple;
 	bool isnull;
 	MemoryContext old_ctx;
 	Datum value;
@@ -197,17 +199,21 @@ bgw_job_from_tuple(TupleInfo *ti, size_t alloc_size)
 	 * the STRUCT_FROM_TUPLE macro
 	 */
 	Assert(alloc_size >= sizeof(BgwJob));
-	job = (BgwJob *) MemoryContextAllocZero(ti->mctx, alloc_size);
-	memcpy(job, GETSTRUCT(ti->tuple), sizeof(FormData_bgw_job));
+	job = MemoryContextAllocZero(ti->mctx, alloc_size);
+	tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	/*
 	 * GETSTRUCT does not work with variable length types and NULLs so we have
 	 * to do special handling for hypertable_id and the jsonb column
 	 */
-	value = heap_getattr(ti->tuple, Anum_bgw_job_hypertable_id, ti->desc, &isnull);
+	value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
 	job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
 
-	value = heap_getattr(ti->tuple, Anum_bgw_job_config, ti->desc, &isnull);
+	value = slot_getattr(ti->slot, Anum_bgw_job_config, &isnull);
 	old_ctx = MemoryContextSwitchTo(ti->mctx);
 	job->fd.config = isnull ? NULL : DatumGetJsonbP(value);
 	MemoryContextSwitchTo(old_ctx);
@@ -227,7 +233,7 @@ static ScanTupleResult
 bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 {
 	AccumData *list_data = data;
-	BgwJob *job = bgw_job_from_tuple(ti, list_data->alloc_size);
+	BgwJob *job = bgw_job_from_tupleinfo(ti, list_data->alloc_size);
 	MemoryContext orig = MemoryContextSwitchTo(ti->mctx);
 
 	list_data->list = lappend(list_data->list, job);
@@ -240,7 +246,7 @@ static ScanFilterResult
 bgw_job_filter_scheduled(TupleInfo *ti, void *data)
 {
 	bool isnull;
-	Datum scheduled = heap_getattr(ti->tuple, Anum_bgw_job_scheduled, ti->desc, &isnull);
+	Datum scheduled = slot_getattr(ti->slot, Anum_bgw_job_scheduled, &isnull);
 	Assert(!isnull);
 
 	return DatumGetBool(scheduled);
@@ -443,8 +449,8 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 
 	ts_scanner_foreach(&iterator)
 	{
-		job = bgw_job_from_tuple(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
-
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		job = bgw_job_from_tupleinfo(ti, sizeof(BgwJob));
 		Assert(num_found == 0);
 		num_found++;
 	}
@@ -498,7 +504,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 	ts_scanner_foreach(&iterator)
 	{
 		Assert(num_found == 0);
-		job = bgw_job_from_tuple(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
+		job = bgw_job_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
 		num_found++;
 	}
 
@@ -556,7 +562,11 @@ static ScanTupleResult
 bgw_job_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
-	int32 job_id = ((FormData_bgw_job *) GETSTRUCT(ti->tuple))->id;
+	bool isnull;
+	Datum datum = slot_getattr(ti->slot, Anum_bgw_job_id, &isnull);
+	int32 job_id = DatumGetInt32(datum);
+
+	Assert(!isnull);
 
 	/* Also delete the bgw_stat entry */
 	ts_bgw_job_stat_delete(job_id);
@@ -570,7 +580,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(job_id);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
@@ -984,11 +994,17 @@ static ScanTupleResult
 bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 {
 	BgwJob *updated_job = (BgwJob *) data;
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_bgw_job *fd = (FormData_bgw_job *) GETSTRUCT(tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job *fd = (FormData_bgw_job *) GETSTRUCT(new_tuple);
 	TimestampTz next_start;
 
+	if (should_free)
+		heap_freetuple(tuple);
+
 	ts_bgw_job_permission_check(updated_job);
+
 	/* when we update the schedule interval, modify the next start time as well*/
 	if (!DatumGetBool(DirectFunctionCall2(interval_eq,
 										  IntervalPGetDatum(&fd->schedule_interval),
@@ -1013,8 +1029,9 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	fd->max_retries = updated_job->fd.max_retries;
 	fd->retry_period = updated_job->fd.retry_period;
 
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
 	return SCAN_DONE;
 }
 

@@ -4,7 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-
 #include <access/tupconvert.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
@@ -355,7 +354,15 @@ static ScanTupleResult
 continuous_agg_tuple_found(TupleInfo *ti, void *data)
 {
 	Form_continuous_agg *cagg = data;
-	*cagg = (Form_continuous_agg) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+
+	*cagg = MemoryContextAlloc(ti->mctx, sizeof(FormData_continuous_agg));
+	memcpy(*cagg, GETSTRUCT(tuple), sizeof(FormData_continuous_agg));
+
+	if (should_free)
+		heap_freetuple(tuple);
+
 	return SCAN_CONTINUE;
 }
 
@@ -650,23 +657,34 @@ static ScanTupleResult
 scan_take_invalidation_tuple(TupleInfo *ti, void *data)
 {
 	InvalidationScanState *scan_state = (InvalidationScanState *) data;
-
 	MemoryContext old_ctx = MemoryContextSwitchTo(scan_state->mctx);
-	Form_continuous_aggs_hypertable_invalidation_log invalidation_form =
-		((Form_continuous_aggs_hypertable_invalidation_log) GETSTRUCT(ti->tuple));
 	Invalidation *invalidation = palloc(sizeof(*invalidation));
+	Datum datum;
+	bool isnull;
 
-	invalidation->modification_time = invalidation_form->modification_time;
-	invalidation->lowest_modified_value = invalidation_form->lowest_modified_value;
-	invalidation->greatest_modified_value = invalidation_form->greatest_modified_value;
+	datum = slot_getattr(ti->slot,
+						 Anum_continuous_aggs_hypertable_invalidation_log_modification_time,
+						 &isnull);
+	Assert(!isnull);
+	invalidation->modification_time = DatumGetInt64(datum);
+
+	datum = slot_getattr(ti->slot,
+						 Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value,
+						 &isnull);
+	Assert(!isnull);
+	invalidation->lowest_modified_value = DatumGetInt64(datum);
+
+	datum = slot_getattr(ti->slot,
+						 Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value,
+						 &isnull);
+	Assert(!isnull);
+	invalidation->greatest_modified_value = DatumGetInt64(datum);
 
 	Assert(invalidation->lowest_modified_value <= invalidation->greatest_modified_value);
-
 	*scan_state->invalidations = lappend(*scan_state->invalidations, invalidation);
 
 	MemoryContextSwitchTo(old_ctx);
-
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 	return SCAN_CONTINUE;
 }
@@ -680,7 +698,7 @@ invalidation_threshold_htid_found(TupleInfo *tinfo, void *data)
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not acquire lock for invalidation threshold row %d",
 						tinfo->lockresult),
-				 errhint("Retry the operation again")));
+				 errhint("Retry the operation again.")));
 	}
 	return SCAN_DONE;
 }
@@ -781,22 +799,30 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 	/*  note: this scan is in ASC order of lowest_modified_value. This logic  depends on that. */
 	ts_scanner_foreach(&iterator)
 	{
-		Form_continuous_aggs_materialization_invalidation_log invalidation_form =
-			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(
-				iterator.tinfo->tuple));
-
+		bool lowest_isnull;
+		bool greatest_isnull;
+		Datum lowest_modified_value = slot_getattr(
+			ts_scan_iterator_slot(&iterator),
+			Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
+			&lowest_isnull);
+		Datum greatest_modified_value = slot_getattr(
+			ts_scan_iterator_slot(&iterator),
+			Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+			&greatest_isnull);
 		InternalTimeRange entry_range = {
 			.type = type,
-			.start = ts_time_bucket_by_type(bucket_width,
-											invalidation_form->lowest_modified_value,
-											type),
+			.start =
+				ts_time_bucket_by_type(bucket_width, DatumGetInt64(lowest_modified_value), type),
 			/* add a bucket width to cover the endpoint */
-			.end = int64_saturating_add(ts_time_bucket_by_type(bucket_width,
-															   invalidation_form
-																   ->greatest_modified_value,
-															   type),
-										bucket_width),
+			.end =
+				int64_saturating_add(ts_time_bucket_by_type(bucket_width,
+															DatumGetInt64(greatest_modified_value),
+															type),
+									 bucket_width),
 		};
+
+		Assert(!lowest_isnull);
+		Assert(!greatest_isnull);
 
 		/* don't process anything starting after the completed threshold; safe to break because
 		 * order is lowest_modified_value ASC */
@@ -890,11 +916,16 @@ materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange 
 
 	ts_scanner_foreach(&iterator)
 	{
-		HeapTuple tuple = heap_copytuple(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple = heap_copytuple(tuple);
 		Form_continuous_aggs_materialization_invalidation_log invalidation_form =
-			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(tuple));
+			((Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(new_tuple));
 		bool delete_entry = false;
 		bool modify_entry;
+
+		if (should_free)
+			heap_freetuple(tuple);
 
 		if (invalidation_form->lowest_modified_value >= completed_threshold)
 		{
@@ -926,13 +957,15 @@ materialization_invalidation_log_delete_or_cut(int32 cagg_id, InternalTimeRange 
 
 		/* don't need to modify the entry so continue; don't break because you may still be able to
 		 * delete entries above completion threshold. */
-		if (!modify_entry)
-			continue;
+		if (modify_entry)
+		{
+			if (delete_entry)
+				ts_catalog_delete(ts_scan_iterator_tuple_info(&iterator)->scanrel, new_tuple);
+			else
+				ts_catalog_update(ts_scan_iterator_tuple_info(&iterator)->scanrel, new_tuple);
+		}
 
-		if (delete_entry)
-			ts_catalog_delete(ts_scan_iterator_tuple_info(&iterator)->scanrel, tuple);
-		else
-			ts_catalog_update(ts_scan_iterator_tuple_info(&iterator)->scanrel, tuple);
+		heap_freetuple(new_tuple);
 	}
 	ts_scan_iterator_close(&iterator);
 }
@@ -1131,13 +1164,19 @@ static ScanTupleResult
 scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 {
 	int64 new_threshold = *(int64 *) data;
-	HeapTuple new_tuple = heap_copytuple(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	Form_continuous_aggs_invalidation_threshold form =
-		(Form_continuous_aggs_invalidation_threshold) GETSTRUCT(new_tuple);
+		(Form_continuous_aggs_invalidation_threshold) GETSTRUCT(tuple);
+
 	if (new_threshold > form->watermark)
 	{
+		HeapTuple new_tuple = heap_copytuple(tuple);
+		form = (Form_continuous_aggs_invalidation_threshold) GETSTRUCT(new_tuple);
+
 		form->watermark = new_threshold;
 		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
 	}
 	else
 	{
@@ -1148,6 +1187,10 @@ scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 			 form->watermark,
 			 new_threshold);
 	}
+
+	if (should_free)
+		heap_freetuple(tuple);
+
 	return SCAN_DONE;
 }
 
@@ -1213,7 +1256,13 @@ static ScanTupleResult
 invalidation_threshold_tuple_found(TupleInfo *ti, void *data)
 {
 	int64 *threshold = data;
-	*threshold = ((Form_continuous_aggs_invalidation_threshold) GETSTRUCT(ti->tuple))->watermark;
+	bool isnull;
+	Datum datum =
+		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_watermark, &isnull);
+
+	Assert(!isnull);
+	*threshold = DatumGetInt64(datum);
+
 	return SCAN_CONTINUE;
 }
 
@@ -1572,13 +1621,22 @@ static ScanTupleResult
 scan_update_completed_threshold(TupleInfo *ti, void *data)
 {
 	int64 new_threshold = *(int64 *) data;
-	HeapTuple new_tuple = heap_copytuple(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
 	Form_continuous_aggs_completed_threshold form =
 		(Form_continuous_aggs_completed_threshold) GETSTRUCT(new_tuple);
+
 	if (form->watermark > new_threshold)
 		elog(ERROR, "Internal Error: new completion threshold must not be less than the old one");
+
 	form->watermark = new_threshold;
 	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
 	return SCAN_DONE;
 }
 

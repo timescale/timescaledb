@@ -17,8 +17,10 @@ hypertable_compression_fill_from_tuple(FormData_hypertable_compression *fd, Tupl
 {
 	Datum values[Natts_hypertable_compression];
 	bool isnulls[Natts_hypertable_compression];
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, isnulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnulls);
 
 	Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_hypertable_id)]);
 	Assert(!isnulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)]);
@@ -52,6 +54,9 @@ hypertable_compression_fill_from_tuple(FormData_hypertable_compression *fd, Tupl
 		fd->orderby_nullsfirst = BoolGetDatum(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_orderby_nullsfirst)]);
 	}
+
+	if (should_free)
+		heap_freetuple(tuple);
 }
 
 TSDLLEXPORT void
@@ -113,13 +118,20 @@ ts_hypertable_compression_get(int32 htid)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 		FormData_hypertable_compression *data =
-			(FormData_hypertable_compression *) GETSTRUCT(ti->tuple);
+			(FormData_hypertable_compression *) GETSTRUCT(tuple);
+		MemoryContext oldmctx;
+
 		if (data->hypertable_id != htid)
 			continue;
+
+		oldmctx = MemoryContextSwitchTo(ts_scan_iterator_get_result_memory_context(&iterator));
 		colfd = palloc0(sizeof(FormData_hypertable_compression));
 		hypertable_compression_fill_from_tuple(colfd, ti);
 		fdlist = lappend(fdlist, colfd);
+		MemoryContextSwitchTo(oldmctx);
 	}
 	return fdlist;
 }
@@ -141,7 +153,7 @@ ts_hypertable_compression_delete_by_hypertable_id(int32 htid)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 		count++;
 	}
 	return count > 0;

@@ -3178,10 +3178,13 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 
 	ts_scanner_foreach(&continuous_aggregate_iter)
 	{
-		HeapTuple tuple = ts_scan_iterator_tuple(&continuous_aggregate_iter);
-		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
+		bool isnull;
+		Datum hyper_id = slot_getattr(ts_scan_iterator_slot(&continuous_aggregate_iter),
+									  Anum_continuous_agg_mat_hypertable_id,
+									  &isnull);
+		Assert(!isnull);
 		Assert(materialization_id == -1);
-		materialization_id = form->mat_hypertable_id;
+		materialization_id = DatumGetInt32(hyper_id);
 	}
 
 	if (materialization_id == -1)

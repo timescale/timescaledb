@@ -77,7 +77,7 @@ metadata_tuple_get_value(TupleInfo *ti, void *data)
 {
 	DatumValue *dv = data;
 
-	dv->value = heap_getattr(ti->tuple, Anum_metadata_value, ti->desc, &dv->isnull);
+	dv->value = slot_getattr(ti->slot, Anum_metadata_value, &dv->isnull);
 
 	if (!dv->isnull)
 		dv->value = convert_text_to_type(dv->value, dv->typeid);
@@ -178,7 +178,7 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 static ScanTupleResult
 metadata_tuple_delete(TupleInfo *ti, void *data)
 {
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 	return SCAN_CONTINUE;
 }

@@ -101,7 +101,7 @@ hypertable_data_node_tuple_delete(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
@@ -112,8 +112,13 @@ hypertable_data_node_tuple_update(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
 	HypertableDataNode *update = data;
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_hypertable_data_node *form = (FormData_hypertable_data_node *) GETSTRUCT(tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_hypertable_data_node *form = (FormData_hypertable_data_node *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	Assert(form->hypertable_id == update->fd.hypertable_id);
 	Assert(strcmp(NameStr(form->node_name), NameStr(update->fd.node_name)) == 0);
@@ -122,8 +127,10 @@ hypertable_data_node_tuple_update(TupleInfo *ti, void *data)
 	form->block_chunks = update->fd.block_chunks;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update(ti->scanrel, tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
+
+	heap_freetuple(new_tuple);
 
 	return SCAN_DONE;
 }
@@ -137,12 +144,14 @@ hypertable_data_node_create_from_tuple(TupleInfo *ti)
 	MemoryContext old;
 	Datum values[Natts_hypertable_data_node];
 	bool nulls[Natts_hypertable_data_node] = { false };
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
 	/*
 	 * Need to use heap_deform_tuple instead of GETSTRUCT since the tuple can
 	 * contain NULL values
 	 */
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	node_name =
 		DatumGetCString(values[AttrNumberGetAttrOffset(Anum_hypertable_data_node_node_name)]);
@@ -165,6 +174,9 @@ hypertable_data_node_create_from_tuple(TupleInfo *ti)
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_data_node_block_chunks)]);
 	hypertable_data_node->foreign_server_oid = foreign_server->serverid;
 	MemoryContextSwitchTo(old);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return hypertable_data_node;
 }

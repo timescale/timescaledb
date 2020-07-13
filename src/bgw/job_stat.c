@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <access/xact.h>
 #include <utils/fmgrprotos.h>
@@ -30,7 +29,7 @@ bgw_job_stat_tuple_found(TupleInfo *ti, void *const data)
 {
 	BgwJobStat **job_stat_pp = data;
 
-	*job_stat_pp = STRUCT_FROM_TUPLE(ti->tuple, ti->mctx, BgwJobStat, FormData_bgw_job_stat);
+	*job_stat_pp = STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwJobStat, FormData_bgw_job_stat);
 
 	/*
 	 * Return SCAN_CONTINUE because we check for multiple tuples as an error
@@ -96,7 +95,7 @@ ts_bgw_job_stat_find(int32 bgw_job_id)
 static ScanTupleResult
 bgw_job_stat_tuple_delete(TupleInfo *ti, void *const data)
 {
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 	return SCAN_CONTINUE;
 }
@@ -117,8 +116,13 @@ ts_bgw_job_stat_delete(int32 bgw_job_id)
 static ScanTupleResult
 bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 {
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	fd->last_start = ts_timer_get_current_timestamp();
 	fd->last_finish = DT_NOBEGIN;
@@ -144,8 +148,8 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	fd->total_crashes++;
 	fd->consecutive_crashes++;
 
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
 
 	return SCAN_DONE;
 }
@@ -276,9 +280,14 @@ static ScanTupleResult
 bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 {
 	JobResultCtx *result_ctx = data;
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
 	Interval *duration;
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	fd->last_finish = ts_timer_get_current_timestamp();
 
@@ -322,8 +331,8 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 															 result_ctx->job);
 	}
 
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
 
 	return SCAN_DONE;
 }
@@ -332,13 +341,17 @@ static ScanTupleResult
 bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 {
 	TimestampTz *next_start = data;
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	fd->next_start = *next_start;
-
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
 
 	return SCAN_DONE;
 }

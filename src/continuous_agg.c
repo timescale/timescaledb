@@ -26,6 +26,7 @@
 #include "continuous_agg.h"
 #include "hypertable.h"
 #include "scan_iterator.h"
+#include "catalog.h"
 
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 
@@ -181,8 +182,13 @@ ts_continuous_agg_get_completed_threshold(int32 materialization_id)
 	init_completed_threshold_scan_by_mat_id(&iterator, materialization_id);
 	ts_scanner_foreach(&iterator)
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		threshold = ((Form_continuous_aggs_completed_threshold) GETSTRUCT(ti->tuple))->watermark;
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_aggs_completed_threshold_watermark,
+								   &isnull);
+
+		Assert(!isnull);
+		threshold = DatumGetInt64(datum);
 		count++;
 	}
 	Assert(count <= 1);
@@ -201,7 +207,7 @@ completed_threshold_delete(int32 materialization_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 }
 
@@ -217,7 +223,7 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 }
 
@@ -233,7 +239,7 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 }
 
@@ -250,7 +256,7 @@ materialization_invalidation_log_delete(int32 materialization_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 }
 
@@ -269,13 +275,17 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 
 	ts_scanner_foreach(&iterator)
 	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 
 		if (data->raw_hypertable_id == hypertable_id)
 			status |= HypertableIsRawTable;
 		if (data->mat_hypertable_id == hypertable_id)
 			status |= HypertableIsMaterialization;
+
+		if (should_free)
+			heap_freetuple(tuple);
 
 		if (status == HypertableIsMaterializationAndRaw)
 		{
@@ -298,12 +308,19 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 	ts_scanner_foreach(&iterator)
 	{
 		ContinuousAgg *ca;
-		Form_continuous_agg data =
-			(Form_continuous_agg) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		Form_continuous_agg data = (Form_continuous_agg) GETSTRUCT(tuple);
+		MemoryContext oldmctx;
 
+		oldmctx = MemoryContextSwitchTo(ts_scan_iterator_get_result_memory_context(&iterator));
 		ca = palloc0(sizeof(*ca));
 		continuous_agg_init(ca, data);
 		continuous_aggs = lappend(continuous_aggs, ca);
+		MemoryContextSwitchTo(oldmctx);
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 
 	return continuous_aggs;
@@ -320,13 +337,18 @@ ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id,
 	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 
 		if (ignore_invalidation_older_than < data->ignore_invalidation_older_than)
 			ignore_invalidation_older_than = data->ignore_invalidation_older_than;
 		if (entry != NULL)
 			memcpy(entry, data, sizeof(*entry));
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 
 	return ignore_invalidation_older_than;
@@ -342,8 +364,9 @@ ts_continuous_aggs_min_completed_threshold(int32 raw_hypertable_id, FormData_con
 	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 		int64 completed_threshold =
 			ts_continuous_agg_get_completed_threshold(data->mat_hypertable_id);
 
@@ -351,6 +374,9 @@ ts_continuous_aggs_min_completed_threshold(int32 raw_hypertable_id, FormData_con
 			min_threshold = completed_threshold;
 		if (entry != NULL)
 			memcpy(entry, data, sizeof(*entry));
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 
 	return min_threshold;
@@ -388,15 +414,20 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 
 	ts_scanner_foreach(&iterator)
 	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 		ContinuousAggViewType vtyp = ts_continuous_agg_view_type(data, schema, name);
+
 		if (vtyp != ContinuousAggNone)
 		{
-			ca = palloc0(sizeof(*ca));
+			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
 			continuous_agg_init(ca, data);
 			count++;
 		}
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 	Assert(count <= 1);
 	return ca;
@@ -414,8 +445,10 @@ ts_continuous_agg_find_userview_name(const char *schema, const char *name)
 	ts_scanner_foreach(&iterator)
 	{
 		ContinuousAggViewType vtyp;
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
+
 		if (schema == NULL)
 		{
 			/* only user visible views will be returned */
@@ -428,10 +461,13 @@ ts_continuous_agg_find_userview_name(const char *schema, const char *name)
 		vtyp = ts_continuous_agg_view_type(data, chkschema, name);
 		if (vtyp == ContinuousAggUserView)
 		{
-			ca = palloc0(sizeof(*ca));
+			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
 			continuous_agg_init(ca, data);
 			count++;
 		}
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 	Assert(count <= 1);
 	return ca;
@@ -447,15 +483,19 @@ ts_continuous_agg_find_by_job_id(int32 job_id)
 
 	ts_scanner_foreach(&iterator)
 	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 
 		if (data->job_id == job_id)
 		{
-			ca = palloc0(sizeof(*ca));
+			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
 			continuous_agg_init(ca, data);
 			count++;
 		}
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 	Assert(count <= 1);
 	return ca;
@@ -572,10 +612,11 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		HeapTuple tuple = ti->tuple;
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
 
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 		/* delete all related rows */
 		if (!raw_hypertable_has_other_caggs)
@@ -587,6 +628,9 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 			invalidation_threshold_delete(form->raw_hypertable_id);
 		materialization_invalidation_log_delete(form->mat_hypertable_id);
 		count++;
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 	Assert(count == 1);
 
@@ -620,8 +664,10 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 
 	ts_scanner_foreach(&iterator)
 	{
-		FormData_continuous_agg *data =
-			(FormData_continuous_agg *) GETSTRUCT(ts_scan_iterator_tuple(&iterator));
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
+
 		if (data->raw_hypertable_id == hypertable_id)
 		{
 			continuous_agg_init(&ca, data);
@@ -632,6 +678,9 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 					 errmsg("cannot drop the materialized table because it is required by a "
 							"continuous aggregate")));
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 }
 
@@ -646,7 +695,7 @@ drop_internal_view(ContinuousAgg *agg)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 		count++;
 	}
 	if (count > 0)
@@ -729,29 +778,37 @@ ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *tinfo = ts_scan_iterator_tuple_info(&iterator);
-		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tinfo->tuple);
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 		HeapTuple new_tuple = NULL;
 
 		if (ts_continuous_agg_is_user_view_schema(data, old_schema))
 		{
-			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
 			namestrcpy(&new_data->user_view_schema, new_schema);
 		}
 
 		if (ts_continuous_agg_is_partial_view_schema(data, old_schema))
 		{
-			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
 			namestrcpy(&new_data->partial_view_schema, new_schema);
 		}
 
 		if (ts_continuous_agg_is_direct_view_schema(data, old_schema))
 		{
-			FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+			FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
 			namestrcpy(&new_data->direct_view_schema, new_schema);
 		}
 
 		if (new_tuple != NULL)
+		{
 			ts_catalog_update(tinfo->scanrel, new_tuple);
+			heap_freetuple(new_tuple);
+		}
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 	return;
 }
@@ -765,28 +822,30 @@ ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, ch
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *tinfo = ts_scan_iterator_tuple_info(&iterator);
-		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tinfo->tuple);
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 		HeapTuple new_tuple = NULL;
 		ContinuousAggViewType vtyp = ts_continuous_agg_view_type(data, old_schema, name);
 		switch (vtyp)
 		{
 			case ContinuousAggUserView:
 			{
-				FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+				FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
 				namestrcpy(&new_data->user_view_schema, new_schema);
 				namestrcpy(&new_data->user_view_name, new_name);
 				break;
 			}
 			case ContinuousAggPartialView:
 			{
-				FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+				FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
 				namestrcpy(&new_data->partial_view_schema, new_schema);
 				namestrcpy(&new_data->partial_view_name, new_name);
 				break;
 			}
 			case ContinuousAggDirectView:
 			{
-				FormData_continuous_agg *new_data = ensure_new_tuple(tinfo->tuple, &new_tuple);
+				FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
 				namestrcpy(&new_data->direct_view_schema, new_schema);
 				namestrcpy(&new_data->direct_view_name, new_name);
 				break;
@@ -796,7 +855,13 @@ ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, ch
 		}
 
 		if (new_tuple != NULL)
+		{
 			ts_catalog_update(tinfo->scanrel, new_tuple);
+			heap_freetuple(new_tuple);
+		}
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 	return;
 }
@@ -834,10 +899,13 @@ find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
 	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		HeapTuple tuple = ti->tuple;
-		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
-		htid = form->raw_hypertable_id;
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_agg_raw_hypertable_id,
+								   &isnull);
+
+		Assert(!isnull);
+		htid = DatumGetInt32(datum);
 		count++;
 	}
 	Assert(count <= 1);

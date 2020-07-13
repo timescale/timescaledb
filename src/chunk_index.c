@@ -494,20 +494,24 @@ chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func
 static ChunkIndexMapping *
 chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 {
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
 	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
 	Oid nspoid_chunk = get_rel_namespace(chunk->table_id);
 	Oid nspoid_hyper = get_rel_namespace(chunk->hypertable_relid);
 
 	if (cim == NULL)
-	{
-		cim = palloc(sizeof(ChunkIndexMapping));
-	}
+		cim = MemoryContextAllocZero(ti->mctx, sizeof(ChunkIndexMapping));
+
 	cim->chunkoid = chunk->table_id;
 	cim->indexoid = get_relname_relid(NameStr(chunk_index->index_name), nspoid_chunk);
 	cim->parent_indexoid =
 		get_relname_relid(NameStr(chunk_index->hypertable_index_name), nspoid_hyper);
 	cim->hypertableoid = chunk->hypertable_relid;
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return cim;
 }
@@ -516,9 +520,13 @@ static ScanTupleResult
 chunk_index_collect(TupleInfo *ti, void *data)
 {
 	List **mappings = data;
-	ChunkIndexMapping *cim = chunk_index_mapping_from_tuple(ti, NULL);
+	ChunkIndexMapping *cim;
+	MemoryContext oldmctx;
 
+	cim = chunk_index_mapping_from_tuple(ti, NULL);
+	oldmctx = MemoryContextSwitchTo(ti->mctx);
 	*mappings = lappend(*mappings, cim);
+	MemoryContextSwitchTo(oldmctx);
 
 	return SCAN_CONTINUE;
 }
@@ -565,7 +573,7 @@ typedef struct ChunkIndexDeleteData
 static void
 chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
 {
-	Relation depRel = heap_open(DependRelationId, RowExclusiveLock);
+	Relation deprel = table_open(DependRelationId, RowExclusiveLock);
 	ScanKeyData scankey[2];
 	SysScanDesc scan;
 	HeapTuple tup;
@@ -583,7 +591,7 @@ chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses 
 				F_OIDEQ,
 				ObjectIdGetDatum(relobj->objectId));
 
-	scan = systable_beginscan(depRel,
+	scan = systable_beginscan(deprel,
 							  DependDependerIndexId,
 							  true,
 							  NULL,
@@ -608,17 +616,19 @@ chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses 
 		}
 	}
 	systable_endscan(scan);
-	heap_close(depRel, RowExclusiveLock);
+	table_close(deprel, RowExclusiveLock);
 }
 
 static ScanTupleResult
 chunk_index_tuple_delete(TupleInfo *ti, void *data)
 {
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
 	Oid schemaid = chunk_index_get_schemaid(chunk_index, true);
 	ChunkIndexDeleteData *cid = data;
 
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 	if (cid->drop_index)
 	{
@@ -651,21 +661,30 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 		}
 	}
 
+	if (should_free)
+		heap_freetuple(tuple);
+
 	return SCAN_CONTINUE;
 }
 
 static ScanFilterResult
 chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 {
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
 	ChunkIndexDeleteData *cid = data;
+	ScanFilterResult result = SCAN_EXCLUDE;
 
 	if (namestrcmp(&chunk_index->index_name, cid->index_name) == 0)
 	{
 		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, false);
 
 		if (NULL != chunk && namestrcmp(&chunk->fd.schema_name, cid->schema) == 0)
-			return SCAN_INCLUDE;
+		{
+			result = SCAN_INCLUDE;
+			goto end_filter;
+		}
 	}
 
 	if (namestrcmp(&chunk_index->hypertable_index_name, cid->index_name) == 0)
@@ -675,10 +694,17 @@ chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
 		ht = ts_hypertable_get_by_id(chunk_index->hypertable_id);
 
 		if (NULL != ht && namestrcmp(&ht->fd.schema_name, cid->schema) == 0)
-			return SCAN_INCLUDE;
+		{
+			result = SCAN_INCLUDE;
+			goto end_filter;
+		}
 	}
 
-	return SCAN_EXCLUDE;
+end_filter:
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return result;
 }
 
 int
@@ -790,11 +816,15 @@ ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid, ChunkIndexM
 static ScanFilterResult
 chunk_hypertable_index_name_filter(TupleInfo *ti, void *data)
 {
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
 	ChunkIndexMapping *cim = data;
 	const char *hypertable_indexname = get_rel_name(cim->parent_indexoid);
+	bool isnull;
+	Datum hypertable_indexname_datum =
+		slot_getattr(ti->slot, Anum_chunk_index_hypertable_index_name, &isnull);
 
-	if (namestrcmp(&chunk_index->hypertable_index_name, hypertable_indexname) == 0)
+	Assert(!isnull);
+
+	if (namestrcmp(DatumGetName(hypertable_indexname_datum), hypertable_indexname) == 0)
 		return SCAN_INCLUDE;
 
 	return SCAN_EXCLUDE;
@@ -838,8 +868,13 @@ static ScanTupleResult
 chunk_index_tuple_rename(TupleInfo *ti, void *data)
 {
 	ChunkIndexRenameInfo *info = data;
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	if (info->isparent)
 	{
@@ -863,8 +898,8 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 	else
 		namestrcpy(&chunk_index->index_name, info->newname);
 
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
 
 	if (info->isparent)
 		return SCAN_CONTINUE;
@@ -935,7 +970,9 @@ static ScanTupleResult
 chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 {
 	char *tablespace = data;
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(ti->tuple);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
 	Oid schemaoid = chunk_index_get_schemaid(chunk_index, false);
 	Oid indexrelid = get_relname_relid(NameStr(chunk_index->index_name), schemaoid);
 	AlterTableCmd *cmd = makeNode(AlterTableCmd);
@@ -946,6 +983,9 @@ chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 	cmds = lappend(cmds, cmd);
 
 	AlterTableInternal(indexrelid, cmds, false);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return SCAN_CONTINUE;
 }

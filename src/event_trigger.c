@@ -58,16 +58,16 @@ ts_event_trigger_ddl_commands(void)
 
 	while (tuplestore_gettupleslot(rsinfo.setResult, true, false, slot))
 	{
-#if PG12_LT
-		HeapTuple tuple = ExecFetchSlotTuple(slot);
-#else
-		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
-#endif
+		bool should_free;
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
 		CollectedCommand *cmd;
 		Datum values[DDL_INFO_NATTS];
 		bool nulls[DDL_INFO_NATTS];
 
 		heap_deform_tuple(tuple, rsinfo.setDesc, values, nulls);
+
+		if (should_free)
+			heap_freetuple(tuple);
 
 		if (rsinfo.setDesc->natts > 8 && !nulls[8])
 		{
@@ -242,11 +242,8 @@ ts_event_trigger_dropped_objects(void)
 
 	while (tuplestore_gettupleslot(rsinfo.setResult, true, false, slot))
 	{
-#if PG12_LT
-		HeapTuple tuple = ExecFetchSlotTuple(slot);
-#else
-		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
-#endif
+		bool should_free;
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
 		Datum values[DROPPED_OBJECTS_NATTS];
 		bool nulls[DROPPED_OBJECTS_NATTS];
 		Oid class_id;
@@ -319,6 +316,9 @@ ts_event_trigger_dropped_objects(void)
 
 		if (NULL != eventobj)
 			objects = lappend(objects, eventobj);
+
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 
 	FreeExprContext(rsinfo.econtext, false);
