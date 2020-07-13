@@ -460,7 +460,7 @@ ts_type_is_int8_binary_compatible(Oid sourcetype)
  * that might have variable lengths.
  * Also note that the function assumes no NULLs in the tuple.
  */
-void *
+static void *
 ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
 							size_t copy_size)
 {
@@ -471,6 +471,20 @@ ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_si
 	memcpy(struct_ptr, GETSTRUCT(tuple), copy_size);
 
 	return struct_ptr;
+}
+
+void *
+ts_create_struct_from_slot(TupleTableSlot *slot, MemoryContext mctx, size_t alloc_size,
+						   size_t copy_size)
+{
+	bool should_free;
+	HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+	void *result = ts_create_struct_from_tuple(tuple, mctx, alloc_size, copy_size);
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return result;
 }
 
 bool

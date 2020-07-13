@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <executor/tuptable.h>
 
 #include "bgw/job.h"
 #include "catalog.h"
@@ -19,10 +20,8 @@ bgw_policy_chunk_stats_tuple_found(TupleInfo *ti, void *const data)
 {
 	BgwPolicyChunkStats **chunk_stats = data;
 
-	*chunk_stats = STRUCT_FROM_TUPLE(ti->tuple,
-									 ti->mctx,
-									 BgwPolicyChunkStats,
-									 FormData_bgw_policy_chunk_stats);
+	*chunk_stats =
+		STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwPolicyChunkStats, FormData_bgw_policy_chunk_stats);
 	return SCAN_CONTINUE;
 }
 
@@ -30,10 +29,13 @@ bgw_policy_chunk_stats_tuple_found(TupleInfo *ti, void *const data)
 static ScanTupleResult
 bgw_policy_chunk_stats_delete_via_job_tuple_found(TupleInfo *ti, void *const data)
 {
-	FormData_bgw_policy_chunk_stats *fd = (FormData_bgw_policy_chunk_stats *) GETSTRUCT(ti->tuple);
+	bool isnull;
+	Datum job_id = slot_getattr(ti->slot, Anum_bgw_policy_chunk_stats_job_id, &isnull);
 
+	Assert(!isnull);
 	/* This call will actually delete the row for us */
-	ts_bgw_job_delete_by_id(fd->job_id);
+	ts_bgw_job_delete_by_id(DatumGetInt32(job_id));
+
 	return SCAN_CONTINUE;
 }
 
@@ -154,17 +156,19 @@ static ScanTupleResult
 bgw_policy_chunk_stats_update_tuple_found(TupleInfo *ti, void *const data)
 {
 	TimestampTz *updated_last_time_job_run = data;
-	HeapTuple tuple = heap_copytuple(ti->tuple);
-	BgwPolicyChunkStats *chunk_stats = STRUCT_FROM_TUPLE(ti->tuple,
-														 ti->mctx,
-														 BgwPolicyChunkStats,
-														 FormData_bgw_policy_chunk_stats);
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple = heap_copytuple(tuple);
+	BgwPolicyChunkStats *chunk_stats = (BgwPolicyChunkStats *) GETSTRUCT(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	chunk_stats->fd.num_times_job_run++;
 	chunk_stats->fd.last_time_job_run = *updated_last_time_job_run;
 
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
 
 	return SCAN_CONTINUE;
 }

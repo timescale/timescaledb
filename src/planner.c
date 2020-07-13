@@ -29,12 +29,11 @@
 #include <tcop/tcopprot.h>
 #include <optimizer/plancat.h>
 #include <nodes/nodeFuncs.h>
-
 #include <parser/analyze.h>
-
 #include <catalog/pg_constraint.h>
-#include "compat.h"
 #include "compat-msvc-exit.h"
+
+#include "compat.h"
 
 #if PG11
 #include <optimizer/var.h>

@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <funcapi.h>
 
@@ -25,8 +24,10 @@ bgw_policy_compress_chunks_tuple_found(TupleInfo *ti, void *const data)
 	BgwPolicyCompressChunks **policy = data;
 	bool nulls[Natts_bgw_policy_compress_chunks];
 	Datum values[Natts_bgw_policy_compress_chunks];
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	*policy = MemoryContextAllocZero(ti->mctx, sizeof(BgwPolicyCompressChunks));
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_compress_chunks_job_id)]);
@@ -42,6 +43,9 @@ bgw_policy_compress_chunks_tuple_found(TupleInfo *ti, void *const data)
 	(*policy)->fd.older_than = *ts_interval_from_tuple(
 		values[AttrNumberGetAttrOffset(Anum_bgw_policy_compress_chunks_older_than)]);
 
+	if (should_free)
+		heap_freetuple(tuple);
+
 	return SCAN_CONTINUE;
 }
 
@@ -51,7 +55,7 @@ compress_policy_delete_row_tuple_found(TupleInfo *ti, void *const data)
 	CatalogSecurityContext sec_ctx;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;

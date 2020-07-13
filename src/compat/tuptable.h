@@ -8,12 +8,15 @@
 
 #include <postgres.h>
 #include <executor/tuptable.h>
+#include <utils/relcache.h>
+
+#include "export.h"
 
 #define ExecFetchSlotHeapTuple(slot, materialize, should_free)                                     \
 	ts_exec_fetch_slot_heap_tuple(slot, materialize, should_free)
 
-extern HeapTuple ts_exec_fetch_slot_heap_tuple(TupleTableSlot *slot, bool materialize,
-											   bool *should_free);
+extern TSDLLEXPORT HeapTuple ts_exec_fetch_slot_heap_tuple(TupleTableSlot *slot, bool materialize,
+														   bool *should_free);
 extern void ts_tuptableslot_set_table_oid(TupleTableSlot *slot, Oid table_oid);
 
 #endif /* TIMESCALEDB_COMPAT_TUPTABLE_H */

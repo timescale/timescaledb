@@ -107,12 +107,12 @@ hyperspace_get_num_dimensions_by_type(Hyperspace *hs, DimensionType type)
 static inline DimensionType
 dimension_type(TupleInfo *ti)
 {
-	if (heap_attisnull(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
-		!heap_attisnull(ti->tuple, Anum_dimension_num_slices, ti->desc))
+	if (slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		!slot_attisnull(ti->slot, Anum_dimension_num_slices))
 		return DIMENSION_TYPE_CLOSED;
 
-	if (!heap_attisnull(ti->tuple, Anum_dimension_interval_length, ti->desc) &&
-		heap_attisnull(ti->tuple, Anum_dimension_num_slices, ti->desc))
+	if (!slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		slot_attisnull(ti->slot, Anum_dimension_num_slices))
 		return DIMENSION_TYPE_OPEN;
 
 	elog(ERROR, "invalid partitioning dimension");
@@ -125,12 +125,14 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 {
 	Datum values[Natts_dimension];
 	bool isnull[Natts_dimension];
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
 	/*
 	 * With need to use heap_deform_tuple() rather than GETSTRUCT(), since
 	 * optional values may be omitted from the tuple.
 	 */
-	heap_deform_tuple(ti->tuple, ti->desc, values, isnull);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull);
 
 	d->type = dimension_type(ti);
 	d->fd.id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_dimension_id)]);
@@ -186,6 +188,9 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
 	d->main_table_relid = main_table_relid;
+
+	if (should_free)
+		heap_freetuple(tuple);
 }
 
 static Datum
@@ -532,8 +537,10 @@ dimension_find_hypertable_id_tuple_found(TupleInfo *ti, void *data)
 {
 	int32 *hypertable_id = data;
 	bool isnull = false;
+	Datum datum = slot_getattr(ti->slot, Anum_dimension_hypertable_id, &isnull);
 
-	*hypertable_id = heap_getattr(ti->tuple, Anum_dimension_hypertable_id, ti->desc, &isnull);
+	Assert(!isnull);
+	*hypertable_id = DatumGetInt32(datum);
 
 	return SCAN_DONE;
 }
@@ -605,7 +612,7 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
 	bool isnull;
-	Datum dimension_id = heap_getattr(ti->tuple, Anum_dimension_id, ti->desc, &isnull);
+	Datum dimension_id = slot_getattr(ti->slot, Anum_dimension_id, &isnull);
 	bool *delete_slices = data;
 
 	Assert(!isnull);
@@ -615,7 +622,7 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id), false);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
@@ -647,12 +654,14 @@ static ScanTupleResult
 dimension_tuple_update(TupleInfo *ti, void *data)
 {
 	Dimension *dim = data;
-	HeapTuple tuple;
 	Datum values[Natts_dimension];
 	bool nulls[Natts_dimension];
 	CatalogSecurityContext sec_ctx;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple;
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	Assert((dim->fd.num_slices <= 0 && dim->fd.interval_length > 0) ||
 		   (dim->fd.num_slices > 0 && dim->fd.interval_length <= 0));
@@ -687,11 +696,14 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
 			Int64GetDatum(dim->fd.interval_length);
 
-	tuple = heap_form_tuple(ti->desc, values, nulls);
-
+	new_tuple = heap_form_tuple(ts_scanner_get_tupledesc(ti), values, nulls);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, tuple);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return SCAN_DONE;
 }
@@ -1588,11 +1600,14 @@ dimension_rename_schema_name(TupleInfo *ti, void *data)
 	Datum values[Natts_dimension];
 	bool nulls[Natts_dimension];
 	bool doReplace[Natts_dimension] = { false };
-	HeapTuple tuple = ti->tuple;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple;
 	/* contains [old_name,new_name] in that order */
 	char **names = (char **) data;
 	Name schemaname;
-	heap_deform_tuple(tuple, ti->desc, values, nulls);
+
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] ||
 		   !nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)]);
 
@@ -1624,9 +1639,12 @@ dimension_rename_schema_name(TupleInfo *ti, void *data)
 		}
 	}
 
-	tuple = heap_modify_tuple(tuple, ti->desc, values, nulls, doReplace);
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, doReplace);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return SCAN_CONTINUE;
 }

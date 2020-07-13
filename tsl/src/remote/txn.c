@@ -695,7 +695,7 @@ remote_txn_persistent_record_exists(const RemoteTxnId *parsed)
 static ScanTupleResult
 persistent_record_tuple_delete(TupleInfo *ti, void *data)
 {
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	return SCAN_CONTINUE;
 }
 

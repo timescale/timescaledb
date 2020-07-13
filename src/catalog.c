@@ -258,12 +258,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY] = "continuous_aggs_invalidation_threshold_pkey",
 		},
 	},
-    [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
-        .length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
-        .names = (char *[]) {
-            [CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
-        },
-    },
+	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
+		.length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
+		},
+	},
 	[HYPERTABLE_COMPRESSION] = {
 		.length =  _MAX_HYPERTABLE_COMPRESSION_INDEX,
 		.names = (char *[]) {
@@ -685,7 +685,7 @@ ts_catalog_delete_tid(Relation rel, ItemPointer tid)
 	CommandCounterIncrement();
 }
 
-TSDLLEXPORT void
+void
 ts_catalog_delete(Relation rel, HeapTuple tuple)
 {
 	ts_catalog_delete_tid(rel, &tuple->t_self);
@@ -695,6 +695,12 @@ void
 ts_catalog_delete_only(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleDelete(rel, &tuple->t_self);
+}
+
+void
+ts_catalog_delete_tid_only(Relation rel, ItemPointer tid)
+{
+	CatalogTupleDelete(rel, tid);
 }
 
 /*

@@ -5,7 +5,9 @@
  */
 #ifndef TIMESCALEDB_SCAN_ITERATOR_H
 #define TIMESCALEDB_SCAN_ITERATOR_H
+
 #include <postgres.h>
+#include <utils/palloc.h>
 
 #include "scanner.h"
 
@@ -32,21 +34,39 @@ typedef struct ScanIterator
 	}
 
 static inline TupleInfo *
-ts_scan_iterator_tuple_info(ScanIterator *iterator)
+ts_scan_iterator_tuple_info(const ScanIterator *iterator)
 {
 	return iterator->tinfo;
 }
 
-static inline HeapTuple
-ts_scan_iterator_tuple(ScanIterator *iterator)
+static inline TupleTableSlot *
+ts_scan_iterator_slot(const ScanIterator *iterator)
 {
-	return iterator->tinfo->tuple;
+	return iterator->tinfo->slot;
+}
+
+static inline HeapTuple
+ts_scan_iterator_fetch_heap_tuple(const ScanIterator *iterator, bool materialize, bool *should_free)
+{
+	return ts_scanner_fetch_heap_tuple(iterator->tinfo, materialize, should_free);
 }
 
 static inline TupleDesc
-ts_scan_iterator_tupledesc(ScanIterator *iterator)
+ts_scan_iterator_tupledesc(const ScanIterator *iterator)
 {
-	return iterator->tinfo->desc;
+	return ts_scanner_get_tupledesc(iterator->tinfo);
+}
+
+static inline MemoryContext
+ts_scan_iterator_get_result_memory_context(const ScanIterator *iterator)
+{
+	return iterator->tinfo->mctx;
+}
+
+static inline void *
+ts_scan_iterator_alloc_result(const ScanIterator *iterator, Size size)
+{
+	return ts_scanner_alloc_result(iterator->tinfo, size);
 }
 
 void TSDLLEXPORT ts_scan_iterator_close(ScanIterator *iterator);

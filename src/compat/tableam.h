@@ -23,6 +23,7 @@
 #define table_beginscan_catalog(rel, nkeys, keys) heap_beginscan_catalog(rel, nkeys, keys)
 #define table_endscan(scan) heap_endscan(scan)
 
+#define table_slot_callbacks(rel) NULL
 #define table_slot_create(rel, reglist) ts_table_slot_create(rel, reglist)
 #define table_tuple_insert(rel, slot, cid, options, bistate)                                       \
 	ts_table_tuple_insert(rel, slot, cid, options, bistate)

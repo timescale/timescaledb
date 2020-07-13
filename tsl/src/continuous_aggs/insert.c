@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <executor/spi.h>
@@ -24,13 +25,13 @@
 
 #include "compat.h"
 
+#include "catalog.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "export.h"
 #include "partitioning.h"
-
 #include "utils.h"
 #include "time_bucket.h"
 
@@ -357,10 +358,14 @@ _continuous_aggs_cache_inval_fini(void)
 static ScanTupleResult
 invalidation_tuple_found(TupleInfo *ti, void *min)
 {
-	Form_continuous_aggs_invalidation_threshold invalidation =
-		(Form_continuous_aggs_invalidation_threshold) GETSTRUCT(ti->tuple);
-	if (invalidation->watermark < *(int64 *) min)
-		*(int64 *) min = invalidation->watermark;
+	bool isnull;
+	Datum watermark =
+		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_watermark, &isnull);
+
+	Assert(!isnull);
+
+	if (DatumGetInt64(watermark) < *((int64 *) min))
+		*((int64 *) min) = DatumGetInt64(watermark);
 
 	/*
 	 * Return SCAN_CONTINUE because we check for multiple tuples as an error

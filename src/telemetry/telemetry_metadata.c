@@ -35,11 +35,11 @@ ts_telemetry_metadata_add_values(JsonbParseState *state)
 	{
 		TupleInfo *ti = iterator.tinfo;
 
-		key = heap_getattr(ti->tuple, Anum_metadata_key, ti->desc, &key_isnull);
+		key = slot_getattr(ti->slot, Anum_metadata_key, &key_isnull);
+
 		include_entry =
 			!key_isnull &&
-			DatumGetBool(
-				heap_getattr(ti->tuple, Anum_metadata_include_in_telemetry, ti->desc, &key_isnull));
+			DatumGetBool(slot_getattr(ti->slot, Anum_metadata_include_in_telemetry, &key_isnull));
 
 		if (include_entry)
 		{
@@ -50,7 +50,7 @@ ts_telemetry_metadata_add_values(JsonbParseState *state)
 				namestrcmp(key_name, METADATA_EXPORTED_UUID_KEY_NAME) != 0 &&
 				namestrcmp(key_name, METADATA_TIMESTAMP_KEY_NAME) != 0)
 			{
-				value = heap_getattr(ti->tuple, Anum_metadata_value, ti->desc, &value_isnull);
+				value = slot_getattr(ti->slot, Anum_metadata_value, &value_isnull);
 
 				if (!value_isnull)
 					ts_jsonb_add_str(state, DatumGetCString(key), TextDatumGetCString(value));

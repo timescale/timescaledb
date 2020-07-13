@@ -139,16 +139,23 @@ update_refresh_lag(ContinuousAgg *agg, int64 new_lag)
 		bool nulls[Natts_continuous_agg];
 		Datum values[Natts_continuous_agg];
 		bool repl[Natts_continuous_agg] = { false };
-		HeapTuple new;
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple;
+		TupleDesc tupdesc = ts_scan_iterator_tupledesc(&iterator);
 
-		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+		heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = Int64GetDatum(new_lag);
 
-		new = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
 
-		ts_catalog_update(ti->scanrel, new);
+		if (should_free)
+			heap_freetuple(tuple);
+
 		break;
 	}
 	ts_scan_iterator_close(&iterator);
@@ -173,17 +180,25 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		bool nulls[Natts_continuous_agg];
 		Datum values[Natts_continuous_agg];
 		bool repl[Natts_continuous_agg] = { false };
-		HeapTuple new;
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple;
+		TupleDesc tupdesc = ts_scan_iterator_tupledesc(&iterator);
 
-		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+		heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 			BoolGetDatum(materialized_only);
 
-		new = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
 
-		ts_catalog_update(ti->scanrel, new);
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
 		break;
 	}
 	ts_scan_iterator_close(&iterator);
@@ -208,17 +223,25 @@ update_max_interval_per_job(ContinuousAgg *agg, int64 new_max)
 		bool nulls[Natts_continuous_agg];
 		Datum values[Natts_continuous_agg];
 		bool repl[Natts_continuous_agg] = { false };
-		HeapTuple new;
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple;
+		TupleDesc tupdesc = ts_scan_iterator_tupledesc(&iterator);
 
-		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+		heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_max_interval_per_job)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_max_interval_per_job)] =
 			Int64GetDatum(new_max);
 
-		new = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
 
-		ts_catalog_update(ti->scanrel, new);
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
 		break;
 	}
 	ts_scan_iterator_close(&iterator);
@@ -243,17 +266,25 @@ update_ignore_invalidation_older_than(ContinuousAgg *agg, int64 new_ignore_inval
 		bool nulls[Natts_continuous_agg];
 		Datum values[Natts_continuous_agg];
 		bool repl[Natts_continuous_agg] = { false };
-		HeapTuple new;
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple;
+		TupleDesc tupdesc = ts_scan_iterator_tupledesc(&iterator);
 
-		heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+		heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 		repl[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] =
 			Int64GetDatum(new_ignore_invalidation_older_than);
 
-		new = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
 
-		ts_catalog_update(ti->scanrel, new);
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
 		break;
 	}
 	ts_scan_iterator_close(&iterator);

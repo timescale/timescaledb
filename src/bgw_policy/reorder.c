@@ -26,7 +26,7 @@ bgw_policy_reorder_tuple_found(TupleInfo *ti, void *const data)
 {
 	BgwPolicyReorder **policy = data;
 
-	*policy = STRUCT_FROM_TUPLE(ti->tuple, ti->mctx, BgwPolicyReorder, FormData_bgw_policy_reorder);
+	*policy = STRUCT_FROM_SLOT(ti->slot, ti->mctx, BgwPolicyReorder, FormData_bgw_policy_reorder);
 
 	return SCAN_CONTINUE;
 }

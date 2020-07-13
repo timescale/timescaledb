@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <utils/builtins.h>
 #include <utils/timestamp.h>
@@ -29,11 +28,13 @@ bgw_policy_drop_chunks_tuple_found(TupleInfo *ti, void *const data)
 	BgwPolicyDropChunks **policy = data;
 	bool nulls[Natts_bgw_policy_drop_chunks];
 	Datum values[Natts_bgw_policy_drop_chunks];
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
 	/* cannot use STRUCT_FROM_TUPLE because bgw_policy_drop_chunks
 	 * includes a column(older_than) that has a composite data type
 	 */
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	*policy = MemoryContextAllocZero(ti->mctx, sizeof(BgwPolicyDropChunks));
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_job_id)]);
@@ -57,6 +58,9 @@ bgw_policy_drop_chunks_tuple_found(TupleInfo *ti, void *const data)
 				 Anum_bgw_policy_drop_chunks_cascade_to_materializations)]) ?
 				 CASCADE_TO_MATERIALIZATION_TRUE :
 				 CASCADE_TO_MATERIALIZATION_FALSE);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return SCAN_CONTINUE;
 }

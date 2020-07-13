@@ -154,13 +154,15 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 }
 
 static void
-chunk_formdata_fill(FormData_chunk *fd, const HeapTuple tuple, const TupleDesc desc)
+chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 {
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	bool nulls[Natts_chunk];
 	Datum values[Natts_chunk];
 
 	memset(fd, 0, sizeof(FormData_chunk));
-	heap_deform_tuple(tuple, desc, values, nulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
@@ -184,6 +186,9 @@ chunk_formdata_fill(FormData_chunk *fd, const HeapTuple tuple, const TupleDesc d
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)]);
 
 	fd->dropped = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
+
+	if (should_free)
+		heap_freetuple(tuple);
 }
 
 static void
@@ -1177,7 +1182,7 @@ chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub
 		*chunkptr = MemoryContextAllocZero(ti->mctx, sizeof(Chunk));
 
 	chunk = *chunkptr;
-	chunk_formdata_fill(&chunk->fd, ti->tuple, ti->desc);
+	chunk_formdata_fill(&chunk->fd, ti);
 
 	/*
 	 * When searching for the chunk stub matching the dimensional point, we only
@@ -1217,7 +1222,7 @@ chunk_tuple_dropped_filter(TupleInfo *ti, void *arg)
 {
 	ChunkStubScanCtx *stubctx = arg;
 	bool isnull;
-	Datum dropped = heap_getattr(ti->tuple, Anum_chunk_dropped, ti->desc, &isnull);
+	Datum dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
 
 	Assert(!isnull);
 	stubctx->is_dropped = DatumGetBool(dropped);
@@ -1559,8 +1564,8 @@ chunk_resurrect(Hypertable *ht, ChunkStub *stub)
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
-		new_tuple = chunk_formdata_make_tuple(&chunk->fd, ti->desc);
-		ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+		new_tuple = chunk_formdata_make_tuple(&chunk->fd, ts_scan_iterator_tupledesc(&iterator));
+		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 		heap_freetuple(new_tuple);
 		count++;
 
@@ -2387,7 +2392,7 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok)
 	ts_scanner_foreach(iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(iterator);
-		chunk_formdata_fill(form, ti->tuple, ti->desc);
+		chunk_formdata_fill(form, ti);
 
 		if (!form->dropped)
 			count++;
@@ -2586,7 +2591,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	ChunkDeleteResult res;
 	int i;
 
-	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+	chunk_formdata_fill(&form, ti);
 
 	if (preserve_chunk_catalog_row && form.dropped)
 		return CHUNK_ALREADY_MARKED_DROPPED;
@@ -2658,7 +2663,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 	if (!preserve_chunk_catalog_row)
 	{
-		ts_catalog_delete(ti->scanrel, ti->tuple);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 		if (form.dropped)
 			res = CHUNK_DELETED_DROPPED;
@@ -2672,8 +2677,8 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 		Assert(!form.dropped);
 
 		form.dropped = true;
-		new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
-		ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+		new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
+		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 		heap_freetuple(new_tuple);
 		res = CHUNK_MARKED_DROPPED;
 	}
@@ -2793,11 +2798,9 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		bool isnull;
-		heap_getattr(ts_scan_iterator_tuple_info(&iterator)->tuple,
-					 Anum_chunk_compressed_chunk_id,
-					 ts_scan_iterator_tuple_info(&iterator)->desc,
-					 &isnull);
+		bool isnull =
+			slot_attisnull(ts_scan_iterator_slot(&iterator), Anum_chunk_compressed_chunk_id);
+
 		if (!isnull)
 		{
 			found = true;
@@ -2821,29 +2824,34 @@ init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_
 }
 
 Chunk *
-ts_chunk_get_compressed_chunk_parent(Chunk *chunk)
+ts_chunk_get_compressed_chunk_parent(const Chunk *chunk)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	Oid parent_id = InvalidOid;
 
 	init_scan_by_compressed_chunk_id(&iterator, chunk->fd.id);
+
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum datum;
 		bool isnull;
 
 		Assert(!OidIsValid(parent_id));
-		parent_id = DatumGetObjectId(heap_getattr(ti->tuple, Anum_chunk_id, ti->desc, &isnull));
+		datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
+
+		if (!isnull)
+			parent_id = DatumGetObjectId(datum);
 	}
 
 	if (OidIsValid(parent_id))
-		return ts_chunk_get_by_id(DatumGetObjectId(parent_id), true);
+		return ts_chunk_get_by_id(parent_id, true);
 
 	return NULL;
 }
 
 bool
-ts_chunk_contains_compressed_data(Chunk *chunk)
+ts_chunk_contains_compressed_data(const Chunk *chunk)
 {
 	Chunk *parent_chunk = ts_chunk_get_compressed_chunk_parent(chunk);
 
@@ -2860,10 +2868,7 @@ ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 	ts_scanner_foreach(&iterator)
 	{
 		bool isnull;
-		Datum id = heap_getattr(ts_scan_iterator_tuple_info(&iterator)->tuple,
-								Anum_chunk_id,
-								ts_scan_iterator_tuple_info(&iterator)->desc,
-								&isnull);
+		Datum id = slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_id, &isnull);
 		if (!isnull)
 			chunkids = lappend_int(chunkids, DatumGetInt32(id));
 	}
@@ -2975,15 +2980,15 @@ chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 	HeapTuple new_tuple;
 
-	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+	chunk_formdata_fill(&form, ti);
 
 	namecpy(&form.schema_name, &update->schema_name);
 	namecpy(&form.table_name, &update->table_name);
 
-	new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
+	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	return SCAN_DONE;
@@ -3032,12 +3037,12 @@ chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 	int32 compressed_chunk_id = *((int32 *) data);
 
-	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+	chunk_formdata_fill(&form, ti);
 	form.compressed_chunk_id = compressed_chunk_id;
-	new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
+	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 
@@ -3079,13 +3084,13 @@ chunk_rename_schema_name(TupleInfo *ti, void *data)
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
 
-	chunk_formdata_fill(&form, ti->tuple, ti->desc);
+	chunk_formdata_fill(&form, ti);
 	/* Rename schema name */
 	namestrcpy(&form.schema_name, (char *) data);
-	new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
+	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	return SCAN_CONTINUE;
@@ -3730,15 +3735,14 @@ ts_chunk_can_be_compressed(int32 chunk_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool compressed_chunk_id_isnull, dropped_isnull;
+		bool dropped_isnull;
+		bool compressed_chunkid_isnull;
 		Datum dropped;
-		heap_getattr(ti->tuple,
-					 Anum_chunk_compressed_chunk_id,
-					 ti->desc,
-					 &compressed_chunk_id_isnull);
-		dropped = heap_getattr(ti->tuple, Anum_chunk_dropped, ti->desc, &dropped_isnull);
+
+		dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull);
+		compressed_chunkid_isnull = slot_attisnull(ti->slot, Anum_chunk_compressed_chunk_id);
 		Assert(!dropped_isnull);
-		can_be_compressed = compressed_chunk_id_isnull && !DatumGetBool(dropped);
+		can_be_compressed = !DatumGetBool(dropped) && compressed_chunkid_isnull;
 	}
 	ts_scan_iterator_close(&iterator);
 	return can_be_compressed;

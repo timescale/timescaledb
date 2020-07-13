@@ -1477,7 +1477,8 @@ extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc
 												 bool *nulls);
 extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_update(Relation rel, HeapTuple tuple);
-extern void ts_catalog_delete_tid(Relation rel, ItemPointer tid);
+extern TSDLLEXPORT void ts_catalog_delete_tid(Relation rel, ItemPointer tid);
+extern void ts_catalog_delete_tid_only(Relation rel, ItemPointer tid);
 extern TSDLLEXPORT void ts_catalog_delete(Relation rel, HeapTuple tuple);
 extern void ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation);
 

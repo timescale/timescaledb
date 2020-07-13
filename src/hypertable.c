@@ -172,12 +172,15 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 }
 
 static void
-hypertable_formdata_fill(FormData_hypertable *fd, const HeapTuple tuple, const TupleDesc desc)
+hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 {
 	bool nulls[Natts_hypertable];
 	Datum values[Natts_hypertable];
+	bool should_free;
+	HeapTuple tuple;
 
-	heap_deform_tuple(tuple, desc, values, nulls);
+	tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_id)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)]);
@@ -228,30 +231,28 @@ hypertable_formdata_fill(FormData_hypertable *fd, const HeapTuple tuple, const T
 	else
 		fd->replication_factor =
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)]);
+
+	if (should_free)
+		heap_freetuple(tuple);
 }
 
-static Hypertable *
-hypertable_from_tuple(HeapTuple tuple, MemoryContext mctx, TupleDesc desc)
+Hypertable *
+ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 {
 	Oid namespace_oid;
-	Hypertable *h = MemoryContextAllocZero(mctx, sizeof(Hypertable));
-	hypertable_formdata_fill(&h->fd, tuple, desc);
+	Hypertable *h = MemoryContextAllocZero(ti->mctx, sizeof(Hypertable));
 
+	hypertable_formdata_fill(&h->fd, ti);
 	namespace_oid = get_namespace_oid(NameStr(h->fd.schema_name), false);
 	h->main_table_relid = get_relname_relid(NameStr(h->fd.table_name), namespace_oid);
-	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, mctx);
+	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, ti->mctx);
 	h->chunk_cache =
-		ts_subspace_store_init(h->space, mctx, ts_guc_max_cached_chunks_per_hypertable);
+		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
 	h->max_ignore_invalidation_older_than = -1;
-	h->data_nodes = ts_hypertable_data_node_scan(h->fd.id, mctx);
+	h->data_nodes = ts_hypertable_data_node_scan(h->fd.id, ti->mctx);
 
 	return h;
-}
-Hypertable *
-ts_hypertable_from_tupleinfo(TupleInfo *ti)
-{
-	return hypertable_from_tuple(ti->tuple, ti->mctx, ti->desc);
 }
 
 static ScanTupleResult
@@ -261,8 +262,7 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 	FormData_hypertable fd;
 	Oid schema_oid;
 
-	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
-
+	hypertable_formdata_fill(&fd, ti);
 	schema_oid = get_namespace_oid(NameStr(fd.schema_name), true);
 
 	if (OidIsValid(schema_oid))
@@ -402,7 +402,8 @@ hypertable_tuple_add_stat(TupleInfo *ti, void *data)
 	bool isnull;
 	Datum datum;
 
-	datum = heap_getattr(ti->tuple, Anum_hypertable_replication_factor, ti->desc, &isnull);
+	datum = slot_getattr(ti->slot, Anum_hypertable_replication_factor, &isnull);
+
 	if (!isnull)
 	{
 		int16 replication_factor = DatumGetInt16(datum);
@@ -523,10 +524,10 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 		elog(ERROR, "hypertable_tuple_update chunk_sizing_function cannot be NULL");
 	}
 
-	new_tuple = hypertable_formdata_make_tuple(&ht->fd, ti->desc);
+	new_tuple = hypertable_formdata_make_tuple(&ht->fd, ts_scanner_get_tupledesc(ti));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
 	return SCAN_DONE;
@@ -693,12 +694,10 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 	bool isnull;
 	bool compressed_hypertable_id_isnull;
-	int hypertable_id =
-		DatumGetInt32(heap_getattr(ti->tuple, Anum_hypertable_id, ti->desc, &isnull));
+	int hypertable_id = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_id, &isnull));
 	int compressed_hypertable_id =
-		DatumGetInt32(heap_getattr(ti->tuple,
+		DatumGetInt32(slot_getattr(ti->slot,
 								   Anum_hypertable_compressed_hypertable_id,
-								   ti->desc,
 								   &compressed_hypertable_id_isnull));
 
 	ts_tablespace_delete(hypertable_id, NULL);
@@ -724,7 +723,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
@@ -779,15 +778,12 @@ reset_associated_tuple_found(TupleInfo *ti, void *data)
 	FormData_hypertable fd;
 	CatalogSecurityContext sec_ctx;
 
-	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
-
+	hypertable_formdata_fill(&fd, ti);
 	namestrcpy(&fd.associated_schema_name, INTERNAL_SCHEMA_NAME);
-
-	new_tuple = hypertable_formdata_make_tuple(&fd, ti->desc);
+	new_tuple = hypertable_formdata_make_tuple(&fd, ts_scanner_get_tupledesc(ti));
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
-
 	heap_freetuple(new_tuple);
 
 	return SCAN_CONTINUE;
@@ -872,7 +868,7 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("hypertable \"%s\" has already been updated by another transaction",
 							get_rel_name(table_relid)),
-					 errhint("Retry the operation again")));
+					 errhint("Retry the operation again.")));
 			pg_unreachable();
 			return false;
 		case TM_BeingModified:
@@ -880,7 +876,7 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 					 errmsg("hypertable \"%s\" is being updated by another transaction",
 							get_rel_name(table_relid)),
-					 errhint("Retry the operation again")));
+					 errhint("Retry the operation again.")));
 			pg_unreachable();
 			return false;
 		case TM_WouldBlock:
@@ -1065,7 +1061,7 @@ ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		hypertable_formdata_fill(form, ti->tuple, ti->desc);
+		hypertable_formdata_fill(form, ti);
 		ts_scan_iterator_close(&iterator);
 		return true;
 	}
@@ -1349,9 +1345,12 @@ static bool
 relation_has_tuples(Relation rel)
 {
 	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
-	bool hastuples = HeapTupleIsValid(heap_getnext(scandesc, ForwardScanDirection));
+	TupleTableSlot *slot =
+		MakeSingleTupleTableSlotCompat(RelationGetDescr(rel), table_slot_callbacks(rel));
+	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);
 
 	heap_endscan(scandesc);
+	ExecDropSingleTupleTableSlot(slot);
 	return hastuples;
 }
 
@@ -2225,7 +2224,7 @@ hypertable_rename_schema_name(TupleInfo *ti, void *data)
 	bool updated = false;
 	FormData_hypertable fd;
 
-	hypertable_formdata_fill(&fd, ti->tuple, ti->desc);
+	hypertable_formdata_fill(&fd, ti);
 
 	/*
 	 * Because we are doing a heap scan with no scankey, we don't know which
@@ -2250,8 +2249,8 @@ hypertable_rename_schema_name(TupleInfo *ti, void *data)
 	/* Only update the catalog if we explicitly something */
 	if (updated)
 	{
-		HeapTuple new_tuple = hypertable_formdata_make_tuple(&fd, ti->desc);
-		ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
+		HeapTuple new_tuple = hypertable_formdata_make_tuple(&fd, ts_scanner_get_tupledesc(ti));
+		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 		heap_freetuple(new_tuple);
 	}
 

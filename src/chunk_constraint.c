@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#include "scanner.h"
 #include <postgres.h>
 #include <access/heapam.h>
 #include <access/xact.h>
@@ -216,11 +217,14 @@ chunk_constraints_add_from_tuple(ChunkConstraints *ccs, TupleInfo *ti)
 {
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
+	ChunkConstraint *constraints;
 	int32 dimension_slice_id;
 	Name constraint_name;
 	Name hypertable_constraint_name;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	constraint_name =
 		DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]);
@@ -238,12 +242,18 @@ chunk_constraints_add_from_tuple(ChunkConstraints *ccs, TupleInfo *ti)
 		hypertable_constraint_name = DatumGetName(DirectFunctionCall1(namein, CStringGetDatum("")));
 	}
 
-	return chunk_constraints_add(ccs,
-								 DatumGetInt32(values[AttrNumberGetAttrOffset(
-									 Anum_chunk_constraint_chunk_id)]),
-								 dimension_slice_id,
-								 NameStr(*constraint_name),
-								 NameStr(*hypertable_constraint_name));
+	constraints =
+		chunk_constraints_add(ccs,
+							  DatumGetInt32(
+								  values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]),
+							  dimension_slice_id,
+							  NameStr(*constraint_name),
+							  NameStr(*hypertable_constraint_name));
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return constraints;
 }
 
 /*
@@ -436,16 +446,16 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 		ChunkScanEntry *entry;
 		bool found;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		int32 chunk_id = heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &found);
+		Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &found);
+		int32 chunk_id = DatumGetInt32(datum);
 
-		if (heap_attisnull(ts_scan_iterator_tuple(&iterator),
-						   Anum_chunk_constraint_dimension_slice_id,
-						   ts_scan_iterator_tupledesc(&iterator)))
+		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
+						   Anum_chunk_constraint_dimension_slice_id))
 			continue;
 
 		count++;
 
-		Assert(!heap_attisnull(ti->tuple, Anum_chunk_constraint_dimension_slice_id, ti->desc));
+		Assert(!slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id));
 
 		entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
 
@@ -493,20 +503,16 @@ ts_chunk_constraint_scan_by_dimension_slice_to_list(DimensionSlice *slice, List 
 	ts_scanner_foreach(&iterator)
 	{
 		bool is_null;
-		int32 chunk_id = heap_getattr(ts_scan_iterator_tuple(&iterator),
-									  Anum_chunk_constraint_chunk_id,
-									  ts_scan_iterator_tupledesc(&iterator),
-									  &is_null);
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum chunk_id;
 
-		if (heap_attisnull(ts_scan_iterator_tuple(&iterator),
-						   Anum_chunk_constraint_dimension_slice_id,
-						   ts_scan_iterator_tupledesc(&iterator)))
+		if (slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id))
 			continue;
 
 		count++;
-
+		chunk_id = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &is_null);
 		Assert(!is_null);
-		*list = lappend_int(*list, chunk_id);
+		*list = lappend_int(*list, DatumGetInt32(chunk_id));
 	}
 	return count;
 }
@@ -526,9 +532,8 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 	init_scan_by_dimension_slice_id(&iterator, dimension_slice_id);
 	ts_scanner_foreach(&iterator)
 	{
-		if (heap_attisnull(ts_scan_iterator_tuple(&iterator),
-						   Anum_chunk_constraint_dimension_slice_id,
-						   ts_scan_iterator_tupledesc(&iterator)))
+		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
+						   Anum_chunk_constraint_dimension_slice_id))
 			continue;
 
 		count++;
@@ -644,30 +649,34 @@ hypertable_constraint_matches_tuple(TupleInfo *ti, const char *hypertable_constr
 {
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	const char *constrname;
+	bool matches = false;
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	heap_deform_tuple(tuple, ti->slot->tts_tupleDescriptor, values, nulls);
 
-	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)])
-		return false;
+	if (!nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)])
+	{
+		constrname = NameStr(*DatumGetName(
+			values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]));
 
-	constrname = NameStr(*DatumGetName(
-		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]));
+		if (strcmp(hypertable_constraint_name, constrname) == 0)
+			matches = true;
+	}
 
-	if (strcmp(hypertable_constraint_name, constrname) == 0)
-		return true;
+	if (should_free)
+		heap_freetuple(tuple);
 
-	return false;
+	return matches;
 }
 
 static void
 chunk_constraint_delete_metadata(TupleInfo *ti)
 {
 	bool isnull;
-	Datum constrname =
-		heap_getattr(ti->tuple, Anum_chunk_constraint_constraint_name, ti->desc, &isnull);
-	int32 chunk_id =
-		DatumGetInt32(heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &isnull));
+	Datum constrname = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
+	int32 chunk_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
 	/* Get the chunk relid. Note that, at this point, the chunk table can be
 	 * deleted already */
 	Oid chunk_relid = ts_chunk_get_relid(chunk_id, true);
@@ -686,17 +695,15 @@ chunk_constraint_delete_metadata(TupleInfo *ti)
 			ts_chunk_index_delete(chunk_id, get_rel_name(index_relid), false);
 	}
 
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 }
 
 static void
 chunk_constraint_drop_constraint(TupleInfo *ti)
 {
 	bool isnull;
-	Datum constrname =
-		heap_getattr(ti->tuple, Anum_chunk_constraint_constraint_name, ti->desc, &isnull);
-	int32 chunk_id =
-		DatumGetInt32(heap_getattr(ti->tuple, Anum_chunk_constraint_chunk_id, ti->desc, &isnull));
+	Datum constrname = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
+	int32 chunk_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
 	/* Get the chunk relid. Note that, at this point, the chunk table can be
 	 * deleted already. */
 	Oid chunk_relid = ts_chunk_get_relid(chunk_id, true);
@@ -835,14 +842,16 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
 	bool repl[Natts_chunk_constraint] = { false };
-
-	HeapTuple tuple;
+	HeapTuple tuple, new_tuple;
+	TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
 	NameData new_hypertable_constraint_name;
 	NameData new_chunk_constraint_name;
 	Name old_chunk_constraint_name;
 	int32 chunk_id;
+	bool should_free;
 
-	heap_deform_tuple(ti->tuple, ti->desc, values, nulls);
+	tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	heap_deform_tuple(tuple, tupdesc, values, nulls);
 
 	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
 	namestrcpy(&new_hypertable_constraint_name, newname);
@@ -861,9 +870,12 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 										   NameStr(*old_chunk_constraint_name),
 										   NameStr(new_chunk_constraint_name));
 
-	tuple = heap_modify_tuple(ti->tuple, ti->desc, values, nulls, repl);
-	ts_catalog_update(ti->scanrel, tuple);
-	heap_freetuple(tuple);
+	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
+	ts_catalog_update(ti->scanrel, new_tuple);
+	heap_freetuple(new_tuple);
+
+	if (should_free)
+		heap_freetuple(tuple);
 }
 
 int
@@ -900,15 +912,15 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 	{
 		bool nulls[Natts_chunk_constraint];
 		Datum values[Natts_chunk_constraint];
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 
 		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator),
 												 hypertable_constraint_name))
 			continue;
 
-		heap_deform_tuple(ts_scan_iterator_tuple(&iterator),
-						  ts_scan_iterator_tupledesc(&iterator),
-						  values,
-						  nulls);
+		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, nulls);
+
 		ts_scan_iterator_close(&iterator);
 		return NameStr(
 			*DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]));

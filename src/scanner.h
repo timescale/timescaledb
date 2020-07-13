@@ -7,7 +7,6 @@
 #define TIMESCALEDB_SCANNER_H
 
 #include <postgres.h>
-
 #include <access/genam.h>
 #include <access/heapam.h>
 #include <nodes/lockoptions.h>
@@ -26,12 +25,12 @@ typedef struct ScanTupLock
 typedef struct TupleInfo
 {
 	Relation scanrel;
-	/* In PG12+, to avoid unnecessary materialization, we should use a TupleTableSlot (with type
-	 * pulled dynamically from the index) rather than a HeapTuple */
-	HeapTuple tuple;
-	TupleDesc desc;
-#if PG12_GE
 	TupleTableSlot *slot;
+#if PG12_LT
+	/* Stored tuple's TID. Kept here for backwards compatibility since the TID
+	 * is not available in the TupleTableSlot prior to PG12. Use
+	 * ts_scanner_get_tuple_tid() to access. */
+	ItemPointerData tid;
 #endif
 	/* return index tuple if it was requested -- only for index scans */
 	IndexTuple ituple;
@@ -113,7 +112,7 @@ typedef struct ScannerCtx
  * tuples. */
 extern TSDLLEXPORT int ts_scanner_scan(ScannerCtx *ctx);
 extern TSDLLEXPORT bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found,
-											char *item_type);
+											const char *item_type);
 
 /*
  * Internal types and functions below.
@@ -125,7 +124,7 @@ extern TSDLLEXPORT bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_fo
 typedef union ScanDesc
 {
 	IndexScanDesc index_scan;
-	TableScanDesc heap_scan;
+	TableScanDesc table_scan;
 } ScanDesc;
 /*
  * InternalScannerCtx is the context passed to Scanner functions.
@@ -143,8 +142,12 @@ typedef struct InternalScannerCtx
 } InternalScannerCtx;
 
 extern TSDLLEXPORT void ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
-
 extern TSDLLEXPORT void ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
 extern TSDLLEXPORT TupleInfo *ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx);
+extern TSDLLEXPORT ItemPointer ts_scanner_get_tuple_tid(TupleInfo *ti);
+extern TSDLLEXPORT HeapTuple ts_scanner_fetch_heap_tuple(const TupleInfo *ti, bool materialize,
+														 bool *should_free);
+extern TSDLLEXPORT TupleDesc ts_scanner_get_tupledesc(const TupleInfo *ti);
+extern TSDLLEXPORT void *ts_scanner_alloc_result(const TupleInfo *ti, Size size);
 
 #endif /* TIMESCALEDB_SCANNER_H */

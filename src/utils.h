@@ -82,8 +82,8 @@ extern TSDLLEXPORT Oid ts_get_function_oid(const char *funcname, const char *sch
 
 extern TSDLLEXPORT Oid ts_get_cast_func(Oid source, Oid target);
 
-extern void *ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_size,
-										 size_t copy_size);
+extern void *ts_create_struct_from_slot(TupleTableSlot *slot, MemoryContext mctx, size_t alloc_size,
+										size_t copy_size);
 
 extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti,
 													   bool missing_ok);
@@ -94,8 +94,8 @@ extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 
 extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 
-#define STRUCT_FROM_TUPLE(tuple, mctx, to_type, form_type)                                         \
-	(to_type *) ts_create_struct_from_tuple(tuple, mctx, sizeof(to_type), sizeof(form_type));
+#define STRUCT_FROM_SLOT(slot, mctx, to_type, form_type)                                           \
+	(to_type *) ts_create_struct_from_slot(slot, mctx, sizeof(to_type), sizeof(form_type));
 
 /* note PG10 has_superclass but PG96 does not so use this */
 #define is_inheritance_child(relid) (ts_inheritance_parent_relid(relid) != InvalidOid)

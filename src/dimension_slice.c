@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <stdlib.h>
 #include <postgres.h>
 #include <access/relscan.h>
 #include <access/xact.h>
@@ -50,9 +49,18 @@ dimension_slice_from_form_data(Form_dimension_slice fd)
 }
 
 static inline DimensionSlice *
-dimension_slice_from_tuple(HeapTuple tuple)
+dimension_slice_from_slot(TupleTableSlot *slot)
 {
-	return dimension_slice_from_form_data((Form_dimension_slice) GETSTRUCT(tuple));
+	bool should_free;
+	HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+	DimensionSlice *slice;
+
+	slice = dimension_slice_from_form_data((Form_dimension_slice) GETSTRUCT(tuple));
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return slice;
 }
 
 DimensionSlice *
@@ -134,7 +142,7 @@ static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionVec **slices = data;
-	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
 
 	lock_result_ok_or_abort(ti, slice);
 	*slices = ts_dimension_vec_add_slice(slices, slice);
@@ -447,7 +455,7 @@ static ScanTupleResult
 dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 {
 	bool isnull;
-	Datum dimension_slice_id = heap_getattr(ti->tuple, Anum_dimension_slice_id, ti->desc, &isnull);
+	Datum dimension_slice_id = slot_getattr(ti->slot, Anum_dimension_slice_id, &isnull);
 	bool *delete_constraints = data;
 	CatalogSecurityContext sec_ctx;
 
@@ -458,7 +466,7 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 		ts_chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_delete(ti->scanrel, ti->tuple);
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
 	return SCAN_CONTINUE;
@@ -513,8 +521,14 @@ static ScanTupleResult
 dimension_slice_fill(TupleInfo *ti, void *data)
 {
 	DimensionSlice **slice = data;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 
-	memcpy(&(*slice)->fd, GETSTRUCT(ti->tuple), sizeof(FormData_dimension_slice));
+	memcpy(&(*slice)->fd, GETSTRUCT(tuple), sizeof(FormData_dimension_slice));
+
+	if (should_free)
+		heap_freetuple(tuple);
+
 	return SCAN_DONE;
 }
 
@@ -568,7 +582,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 	lock_result_ok_or_abort(ti, *slice);
 
 	old = MemoryContextSwitchTo(ti->mctx);
-	*slice = dimension_slice_from_tuple(ti->tuple);
+	*slice = dimension_slice_from_slot(ti->slot);
 	MemoryContextSwitchTo(old);
 	return SCAN_DONE;
 }
@@ -760,7 +774,7 @@ dimension_slice_nth_tuple_found(TupleInfo *ti, void *data)
 	DimensionSlice **slice = data;
 	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
 
-	*slice = dimension_slice_from_tuple(ti->tuple);
+	*slice = dimension_slice_from_slot(ti->slot);
 	MemoryContextSwitchTo(old);
 	return SCAN_CONTINUE;
 }
@@ -807,7 +821,7 @@ static ScanTupleResult
 dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
 {
 	ListCell *lc;
-	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
 	List *chunk_ids = NIL;
 	ChunkStatInfo *info = data;
 
@@ -859,7 +873,7 @@ static ScanTupleResult
 dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *data)
 {
 	ListCell *lc;
-	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
 	List *chunk_ids = NIL;
 
 	ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
