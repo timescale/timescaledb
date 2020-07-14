@@ -53,7 +53,8 @@ endif ()
 
 install(
   TARGETS ${TSL_LIBRARY_NAME}
-  DESTINATION ${PG_PKGLIBDIR})
+  DESTINATION ${PG_PKGLIBDIR}
+  COMPONENT full)
 
 # if (WIN32)
 #   target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}-${PROJECT_VERSION_MOD}.lib)

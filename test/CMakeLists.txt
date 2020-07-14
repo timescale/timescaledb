@@ -19,72 +19,65 @@ find_program(PG_ISOLATION_REGRESS
 
 include(test-defs.cmake)
 
-if(PG_REGRESS)
-  message(STATUS "Using pg_regress ${PG_REGRESS}")
+if(REGRESS_CHECKS)
+  if(PG_REGRESS)
+    message(STATUS "Using pg_regress ${PG_REGRESS}")
 
-  add_custom_target(regresscheck
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_REGRESS_ENV}
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_REGRESS_OPTS_EXTRA}
-    ${PG_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_TEMP_INSTANCE}
-    USES_TERMINAL)
+    add_custom_target(regresscheck
+      COMMAND ${CMAKE_COMMAND} -E env
+      ${PG_REGRESS_ENV}
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE}
+      ${PG_REGRESS_OPTS_EXTRA}
+      ${PG_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      USES_TERMINAL)
 
-  add_custom_target(regresschecklocal
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_REGRESS_ENV}
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_REGRESS_OPTS_EXTRA}
-    ${PG_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
-    USES_TERMINAL)
+    add_custom_target(regresschecklocal
+      COMMAND ${CMAKE_COMMAND} -E env
+      ${PG_REGRESS_ENV}
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE}
+      ${PG_REGRESS_OPTS_EXTRA}
+      ${PG_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
+      USES_TERMINAL)
 
-  list(APPEND _local_install_checks regresschecklocal)
-  list(APPEND _install_checks regresscheck)
-elseif(REGRESS_CHECKS)
-  message(FATAL_ERROR
-    "Program 'pg_regress' not found, but regressions checks were required.\n"
-    "Skip regression checks using -DREGRESS_CHECKS=OFF")
-else()
-  message(STATUS "Skipping isolation regress checks since program 'pg_regress' was not found")
-endif()
+    list(APPEND _local_install_checks regresschecklocal)
+    list(APPEND _install_checks regresscheck)
+  else()
+    message(STATUS "Skipping isolation regress checks since program 'pg_regress' was not found")
+  endif()
 
-if(PG_ISOLATION_REGRESS)
-  message(STATUS "Using pg_isolation_regress ${PG_ISOLATION_REGRESS}")
+  if(PG_ISOLATION_REGRESS)
+    message(STATUS "Using pg_isolation_regress ${PG_ISOLATION_REGRESS}")
 
-  add_custom_target(isolationcheck
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_ISOLATION_REGRESS_ENV}
-    SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
-    ${PG_ISOLATION_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_TEMP_INSTANCE}
-    USES_TERMINAL)
+    add_custom_target(isolationcheck
+      COMMAND ${CMAKE_COMMAND} -E env
+      ${PG_ISOLATION_REGRESS_ENV}
+      SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE}
+      ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
+      ${PG_ISOLATION_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      USES_TERMINAL)
 
-  add_custom_target(isolationchecklocal
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_ISOLATION_REGRESS_ENV}
-    SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
-    ${PG_ISOLATION_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
-    USES_TERMINAL)
+    add_custom_target(isolationchecklocal
+      COMMAND ${CMAKE_COMMAND} -E env
+      ${PG_ISOLATION_REGRESS_ENV}
+      SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE}
+      ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
+      ${PG_ISOLATION_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
+      USES_TERMINAL)
 
-  list(APPEND _local_install_checks isolationchecklocal)
-  list(APPEND _install_checks isolationcheck)
-elseif(REGRESS_CHECKS)
-  message(FATAL_ERROR
-    "Program 'pg_isolation_regress' not found, but regressions checks were required.\n"
-    "Skip regression checks using -DREGRESS_CHECKS=OFF")
-else()
-  message(STATUS "Skipping isolation regress checks since program 'pg_isolation_regress' was not found")
+    list(APPEND _local_install_checks isolationchecklocal)
+    list(APPEND _install_checks isolationcheck)
+    message(STATUS "Skipping isolation regress checks since program 'pg_isolation_regress' was not found")
+  endif()
 endif()
 
 # installcheck starts up new temporary instances for testing code

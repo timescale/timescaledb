@@ -13,5 +13,6 @@ install(
         timescaledb--mock-5--mock-6.sql
         timescaledb--mock-broken--mock-5.sql
         timescaledb--0.0.0.sql
-  DESTINATION "${PG_SHAREDIR}/extension")
+	DESTINATION "${PG_SHAREDIR}/extension"
+	COMPONENT testing)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)

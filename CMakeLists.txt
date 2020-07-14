@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.11)
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+
 include(CheckCCompilerFlag)
 
 # Function to call pg_config and extract values.
@@ -54,7 +57,19 @@ else ()
 endif ()
 
 # Set project name, version, and language. Language needs to be set for compiler checks
-project(timescaledb VERSION ${VERSION} LANGUAGES C)
+project(timescaledb
+  VERSION ${VERSION}
+  LANGUAGES C
+  DESCRIPTION "An open-source time-series database packaged as a PostgreSQL extension.")
+
+# project(HOMEPAGE_URL) is not supported until CMake 3.12
+set(CMAKE_PROJECT_HOMEPAGE_URL "https://www.timescale.com"
+  CACHE STRING "Homepage URL for the project")
+
+# These need to be after the 'project' command above since system
+# names and other CMake variables are not set until then.
+include(CMakeDetermineDistro)
+include(CPackDependencies)
 
 if (NOT CMAKE_BUILD_TYPE)
   # Default to Release builds
@@ -168,7 +183,7 @@ elseif(UNIX)
 endif()
 
 find_program(PG_CONFIG pg_config
-  HINTS ${PG_PATH}
+  HINTS ${PG_PATH} $ENV{PG_PATH}
   PATH_SUFFIXES bin
   DOC "The path to the pg_config of the PostgreSQL version to compile against")
 
@@ -276,7 +291,8 @@ configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
 install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
-  DESTINATION "${PG_SHAREDIR}/extension")
+  DESTINATION "${PG_SHAREDIR}/extension"
+  COMPONENT loader)
 
 # We look for specific versions installed by distributions before the
 # default name since distros that have installed clang-format-9 will
@@ -430,6 +446,15 @@ if (USE_OPENSSL)
   endif()
   message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
+
+  # We make some assumptions on the package name here. Probably
+  # necessary to re-visit this.
+  if(NOT ${OPENSSL_VERSION} MATCHES "([0-9]+)\\.([0-9]+)\\.([0-9]+).*")
+    message(FATAL_ERROR "Could not parse OpenSSL version '${OPENSSL_VERSION}'")
+  endif()
+  tsdb_add_dependency(
+    "libssl${CMAKE_MATCH_1}.${CMAKE_MATCH_2}"
+    "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
 endif (USE_OPENSSL)
 
 if (CODECOVERAGE)
@@ -445,6 +470,16 @@ endif (CODECOVERAGE)
 if (UNIX)
   add_subdirectory(scripts)
 endif (UNIX)
+
+tsdb_add_dependency(
+  "postgresql-${PG_VERSION_MAJOR}"
+  "${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}")
+
+# Hard-coded for now. We probably need to figure this out. It is
+# straightforward to figure out the version number of libc6, but more
+# tricky to map the compiler to the library used so that both clang
+# and gcc are supported..
+tsdb_add_dependency("libc6" "2.30")
 
 add_subdirectory(sql)
 add_subdirectory(test)
@@ -469,3 +504,7 @@ endif ()
 if (IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)
   configure_file(${PROJECT_SOURCE_DIR}/scripts/githooks/commit_msg.py ${PROJECT_SOURCE_DIR}/.git/hooks/commit-msg COPYONLY)
 endif()
+
+# Packaging should be last since subdirectories fill in information
+# for the packaging, e.g., dependencies.
+add_subdirectory(packaging)

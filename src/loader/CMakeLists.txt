@@ -27,4 +27,5 @@ set_target_properties(${PROJECT_NAME}-loader PROPERTIES
 
 install(
   TARGETS ${PROJECT_NAME}-loader
-  DESTINATION ${PG_PKGLIBDIR})
+  DESTINATION ${PG_PKGLIBDIR}
+  COMPONENT loader)
