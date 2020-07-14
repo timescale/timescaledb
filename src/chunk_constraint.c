@@ -647,28 +647,10 @@ ts_chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid)
 static bool
 hypertable_constraint_matches_tuple(TupleInfo *ti, const char *hypertable_constraint_name)
 {
-	bool nulls[Natts_chunk_constraint];
-	Datum values[Natts_chunk_constraint];
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	const char *constrname;
-	bool matches = false;
+	bool isnull;
+	Datum name = slot_getattr(ti->slot, Anum_chunk_constraint_hypertable_constraint_name, &isnull);
 
-	heap_deform_tuple(tuple, ti->slot->tts_tupleDescriptor, values, nulls);
-
-	if (!nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)])
-	{
-		constrname = NameStr(*DatumGetName(
-			values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)]));
-
-		if (strcmp(hypertable_constraint_name, constrname) == 0)
-			matches = true;
-	}
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return matches;
+	return !isnull && namestrcmp(DatumGetName(name), hypertable_constraint_name) == 0;
 }
 
 static void
@@ -910,20 +892,24 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 	init_scan_by_chunk_id(&iterator, DatumGetInt32(chunk_id));
 	ts_scanner_foreach(&iterator)
 	{
-		bool nulls[Natts_chunk_constraint];
-		Datum values[Natts_chunk_constraint];
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		MemoryContext oldmctx;
+		bool isnull;
+		Datum datum;
+		char *name;
 
-		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator),
-												 hypertable_constraint_name))
+		if (!hypertable_constraint_matches_tuple(ti, hypertable_constraint_name))
 			continue;
 
-		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, nulls);
+		datum = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
+		Assert(!isnull);
 
+		oldmctx = MemoryContextSwitchTo(ti->mctx);
+		name = pstrdup(NameStr(*DatumGetName(datum)));
+		MemoryContextSwitchTo(oldmctx);
 		ts_scan_iterator_close(&iterator);
-		return NameStr(
-			*DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)]));
+
+		return name;
 	}
 	return NULL;
 }
