@@ -32,5 +32,6 @@ foreach(MOCK_VERSION mock-1 mock-2 mock-3 mock-4 mock-broken mock-5 mock-6)
 
   install(
     TARGETS ${PROJECT_NAME}-${MOCK_VERSION}
-    DESTINATION ${PG_PKGLIBDIR} OPTIONAL)
+    DESTINATION ${PG_PKGLIBDIR} OPTIONAL
+    COMPONENT testing)
 endforeach(MOCK_VERSION)

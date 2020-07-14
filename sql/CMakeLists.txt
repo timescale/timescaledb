@@ -230,6 +230,6 @@ add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})
 
 # Install target for the extension file and update scripts
 install(
-  FILES ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
-  ${UPDATE_SCRIPTS}
-  DESTINATION "${PG_SHAREDIR}/extension")
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE} ${UPDATE_SCRIPTS}
+  DESTINATION "${PG_SHAREDIR}/extension"
+  COMPONENT basic)
