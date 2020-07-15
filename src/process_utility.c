@@ -132,6 +132,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_ClusterOn:
 				case AT_EnableRowSecurity:
 				case AT_DisableRowSecurity:
+				case AT_SetTableSpace:
 					/* allowed on chunks */
 					break;
 				default:
@@ -2470,6 +2471,30 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	ts_cache_release(hcache);
 }
 
+static inline void
+process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
+{
+	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+	if (chunk == NULL)
+		return;
+
+	if (ts_chunk_contains_compressed_data(chunk))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("changing tablespace of compressed chunk is not supported"),
+				 errhint("Please use the corresponding chunk on the uncompressed hypertable "
+						 "instead.")));
+
+	/* set tablespace for compressed chunk */
+	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+	{
+		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+
+		AlterTableInternal(compressed_chunk->table_id, list_make1(cmd), false);
+	}
+}
+
 static DDLResult
 process_altertable_start_table(ProcessUtilityArgs *args)
 {
@@ -2589,6 +2614,10 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			case AT_ResetRelOptions:
 			case AT_ReplaceRelOptions:
 				process_altertable_reset_options(cmd, ht);
+				break;
+			case AT_SetTableSpace:
+				if (NULL == ht)
+					process_altertable_chunk_set_tablespace(cmd, relid);
 				break;
 			default:
 				break;
