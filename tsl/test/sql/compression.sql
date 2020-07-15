@@ -29,6 +29,7 @@ SET timescaledb.enable_transparent_decompression to OFF;
 select id, schema_name, table_name, compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
 select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;
+select * from timescaledb_information.compression_settings ;
 
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
@@ -451,6 +452,7 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
+SELECT * FROM timescaledb_information.compression_settings ORDER BY table_name;
 
 -- test delete/update on non-compressed tables involving hypertables with compression
 CREATE TABLE uncompressed_ht (

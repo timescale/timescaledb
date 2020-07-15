@@ -259,5 +259,28 @@ CREATE OR REPLACE VIEW timescaledb_information.data_node AS
     LEFT OUTER JOIN LATERAL @extschema@.data_node_hypertable_info(CASE WHEN s.node_up THEN s.node_name ELSE NULL END) size ON TRUE
   GROUP BY s.node_name, s.node_up, s.owner, s.options;
 
+---compression parameters information ---
+CREATE VIEW timescaledb_information.compression_settings
+AS
+SELECT
+    ht.schema_name,
+    ht.table_name,
+    segq.attname,
+    segq.segmentby_column_index,
+    segq.orderby_column_index,
+    segq.orderby_asc,
+    segq.orderby_nullsfirst
+FROM
+    _timescaledb_catalog.hypertable_compression segq,
+    _timescaledb_catalog.hypertable ht
+WHERE
+    segq.hypertable_id = ht.id
+    AND ( segq.segmentby_column_index IS NOT NULL
+        OR segq.orderby_column_index IS NOT NULL)
+ORDER BY
+    table_name,
+    segmentby_column_index,
+    orderby_column_index;
+
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
