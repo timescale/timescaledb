@@ -1,0 +1,70 @@
+name: Coverity
+on:
+  schedule:
+    # run at 22:00 on every saturday
+    - cron: '0 22 * * SAT'
+  push:
+    branches:
+      - coverity_scan
+jobs:
+  coverity:
+    name: Coverity ${{ matrix.pg }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [11.8, 12.3]
+        os: [ubuntu-18.04]
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+      MAKE_JOBS: 4
+    steps:
+    - name: Install Dependencies
+      run: sudo apt install flex bison
+
+    # this workflow depends on the cached postgres build from the main regression
+    # workflow since that workflow runs daily there should always be a cache hit
+    - name: Cache PostgreSQL ${{ matrix.pg }}
+      id: cache-postgresql
+      uses: actions/cache@v2
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-gcc-Release
+
+    # we abort on cache miss otherwise we would have to reproduce most variables
+    # of the main regression build matrix in this workflow
+    - name: Abort on cache miss
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: false
+
+    - name: Install PostgreSQL ${{ matrix.pg }}
+      run: |
+        make -C ~/$PG_SRC_DIR install
+        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Coverity tools
+      run: |
+        wget https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.COVERITY_TOKEN }}&project=timescale%2Ftimescaledb" -O coverity_tool.tgz -q
+        tar xf coverity_tool.tgz
+        mv cov-analysis-linux64-* coverity
+
+    - name: Build TimescaleDB
+      run: |
+        PATH="$GITHUB_WORKSPACE/coverity/bin:$PATH"
+        ./bootstrap -DCMAKE_BUILD_TYPE=Release -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR
+        cov-build --dir cov-int make -C build
+
+    - name: Upload report
+      env:
+        FORM_EMAIL: --form email=ci@timescale.com
+        FORM_FILE: --form file=@timescaledb.tgz
+        FORM_DESC: --form description="CI"
+        FORM_TOKEN: --form token="${{ secrets.COVERITY_TOKEN }}"
+        COVERITY_URL: https://scan.coverity.com/builds?project=timescale%2Ftimescaledb
+      run: |
+        tar czf timescaledb.tgz cov-int
+        curl $FORM_TOKEN $FORM_EMAIL $FORM_DESC $FORM_FILE --form version="$(grep '^version' version.config | cut -b11-)-${{ matrix.pg }}" $COVERITY_URL
