@@ -91,11 +91,26 @@ INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = unco
 INNER JOIN _timescaledb_catalog.chunk uncomp_chunk ON (uncomp_chunk.compressed_chunk_id = comp_chunk.id)
 WHERE uncomp_hyper.table_name like 'test1' ORDER BY comp_chunk.id LIMIT 1\gset
 
-\set ON_ERROR_STOP 0
---set tablespace is blocked on chunks for now; if this ever changes we need
---to test that path to make sure it passes down the tablespace.
-ALTER TABLE :UNCOMPRESSED_CHUNK_NAME SET TABLESPACE tablespace1;
+-- ensure compression chunk cannot be moved directly
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
 
+\set ON_ERROR_STOP 0
+ALTER TABLE :COMPRESSED_CHUNK_NAME SET TABLESPACE tablespace1;
+\set ON_ERROR_STOP 1
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+
+-- ensure that both compressed and uncompressed chunks moved
+ALTER TABLE :UNCOMPRESSED_CHUNK_NAME SET TABLESPACE tablespace1;
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+
+ALTER TABLE test1 SET TABLESPACE tablespace2;
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+
+\set ON_ERROR_STOP 0
 SELECT move_chunk(chunk=>:'UNCOMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."_hyper_1_1_chunk_test1_Time_idx"');
 \set ON_ERROR_STOP 1
 

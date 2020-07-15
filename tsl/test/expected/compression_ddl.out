@@ -115,11 +115,41 @@ INNER JOIN _timescaledb_catalog.hypertable comp_hyper ON (comp_chunk.hypertable_
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 INNER JOIN _timescaledb_catalog.chunk uncomp_chunk ON (uncomp_chunk.compressed_chunk_id = comp_chunk.id)
 WHERE uncomp_hyper.table_name like 'test1' ORDER BY comp_chunk.id LIMIT 1\gset
+-- ensure compression chunk cannot be moved directly
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+ tablename 
+-----------
+(0 rows)
+
 \set ON_ERROR_STOP 0
---set tablespace is blocked on chunks for now; if this ever changes we need
---to test that path to make sure it passes down the tablespace.
+ALTER TABLE :COMPRESSED_CHUNK_NAME SET TABLESPACE tablespace1;
+ERROR:  changing tablespace of compressed chunk is not supported
+\set ON_ERROR_STOP 1
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+ tablename 
+-----------
+(0 rows)
+
+-- ensure that both compressed and uncompressed chunks moved
 ALTER TABLE :UNCOMPRESSED_CHUNK_NAME SET TABLESPACE tablespace1;
-ERROR:  operation not supported on chunk tables
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+         tablename         
+---------------------------
+ compress_hyper_2_28_chunk
+ _hyper_1_1_chunk
+(2 rows)
+
+ALTER TABLE test1 SET TABLESPACE tablespace2;
+SELECT tablename
+FROM pg_tables WHERE tablespace = 'tablespace1';
+ tablename 
+-----------
+(0 rows)
+
+\set ON_ERROR_STOP 0
 SELECT move_chunk(chunk=>:'UNCOMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."_hyper_1_1_chunk_test1_Time_idx"');
 WARNING:  Timescale License expired
 ERROR:  "_hyper_1_1_chunk" is a compressed chunk

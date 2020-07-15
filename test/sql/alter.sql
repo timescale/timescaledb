@@ -116,10 +116,9 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
--- Test that we cannot directly change chunk tablespace
-\set ON_ERROR_STOP 0
+-- Test that we can directly change chunk tablespace
 ALTER TABLE public.new_chunk_name SET TABLESPACE tablespace1;
-\set ON_ERROR_STOP 1
+SELECT tablespace FROM pg_tables WHERE tablename = 'new_chunk_name';
 
 -- drop all tables to make checking the tests below easier
 DROP TABLE alter_before;
