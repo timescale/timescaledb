@@ -63,6 +63,15 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
              1 | d       |                        4 |                        |                    2 | t           | f
 (4 rows)
 
+select * from timescaledb_information.compression_settings ;
+ schema_name | table_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------+------------+---------+------------------------+----------------------+-------------+--------------------
+ public      | foo        | a       |                      1 |                      |             | 
+ public      | foo        | b       |                      2 |                      |             | 
+ public      | foo        | c       |                        |                    1 | f           | t
+ public      | foo        | d       |                        |                    2 | t           | f
+(4 rows)
+
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
              compress_chunk             
@@ -1124,6 +1133,32 @@ ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compre
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
 NOTICE:  adding index _compressed_hypertable_23_col1__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col1, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_23_col2__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col2, _ts_meta_sequence_num)
+SELECT * FROM timescaledb_information.compression_settings ORDER BY table_name;
+ schema_name |   table_name   |   attname   | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------+----------------+-------------+------------------------+----------------------+-------------+--------------------
+ public      | conditions     | location    |                      1 |                      |             | 
+ public      | conditions     | time        |                        |                    1 | t           | f
+ public      | datatype_test  | time        |                        |                    1 | f           | t
+ public      | foo            | a           |                      1 |                      |             | 
+ public      | foo            | b           |                      2 |                      |             | 
+ public      | foo            | c           |                        |                    1 | f           | t
+ public      | foo            | d           |                        |                    2 | t           | f
+ public      | ht5            | time        |                        |                    1 | f           | t
+ public      | hyper          | device_id   |                      1 |                      |             | 
+ public      | hyper          | time        |                        |                    1 | t           | f
+ public      | metrics        | time        |                        |                    1 | f           | t
+ public      | plan_inval     | time        |                        |                    1 | f           | t
+ public      | rescan_test    | id          |                      1 |                      |             | 
+ public      | rescan_test    | t           |                        |                    1 | f           | t
+ public      | table1         | col1        |                      1 |                      |             | 
+ public      | table1         | col2        |                      2 |                      |             | 
+ public      | test_collation | device_id   |                      1 |                      |             | 
+ public      | test_collation | device_id_2 |                      2 |                      |             | 
+ public      | test_collation | val_1       |                        |                    1 | t           | f
+ public      | test_collation | val_2       |                        |                    2 | t           | f
+ public      | test_collation | time        |                        |                    3 | t           | f
+(21 rows)
+
 -- test delete/update on non-compressed tables involving hypertables with compression
 CREATE TABLE uncompressed_ht (
   time timestamptz NOT NULL,
