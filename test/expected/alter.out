@@ -221,11 +221,14 @@ SET client_min_messages = NOTICE;
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
--- Test that we cannot directly change chunk tablespace
-\set ON_ERROR_STOP 0
+-- Test that we can directly change chunk tablespace
 ALTER TABLE public.new_chunk_name SET TABLESPACE tablespace1;
-ERROR:  operation not supported on chunk tables
-\set ON_ERROR_STOP 1
+SELECT tablespace FROM pg_tables WHERE tablename = 'new_chunk_name';
+ tablespace  
+-------------
+ tablespace1
+(1 row)
+
 -- drop all tables to make checking the tests below easier
 DROP TABLE alter_before;
 DROP TABLE alter_after;
