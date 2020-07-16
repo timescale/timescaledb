@@ -242,3 +242,22 @@ DROP INDEX tableref_idx;
 -- try creating index on hypertable with existing chunks
 CREATE INDEX tableref_idx ON idx_tableref_test(tableref_func(idx_tableref_test));
 
+-- test index creation with if not exists
+CREATE TABLE idx_exists(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('idx_exists', 'time');
+-- should be skipped since this index was already created by create_hypertable
+CREATE INDEX IF NOT EXISTS idx_exists_time_idx ON idx_exists(time DESC);
+-- should create index
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+-- should be skipped since it was created in previous command
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+DROP INDEX idx_exists_time_asc_idx;
+
+INSERT INTO idx_exists VALUES ('2000-01-01'),('2001-01-01');
+-- should create index
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+-- should be skipped since it was created in previous command
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+
+
+

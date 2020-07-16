@@ -1933,6 +1933,16 @@ process_index_start(ProcessUtilityArgs *args)
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
 														   info.extended_options.multitransaction);
+
+	/* root_table_index will have 0 objectId if the index already exists
+	 * and if_not_exists is true. In that case there is nothing else
+	 * to do here. */
+	if (!OidIsValid(root_table_index.objectId) && stmt->if_not_exists)
+	{
+		ts_cache_release(hcache);
+		return true;
+	}
+	Assert(OidIsValid(root_table_index.objectId));
 	info.obj.objectId = root_table_index.objectId;
 
 	/* collect information required for per chunk index creation */

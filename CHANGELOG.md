@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #2090 Fix index creation with IF NOT EXISTS for existing indexes
+
+**Thanks**
+* @PichetGoulu for reporting an issue with index creation and IF NOT EXISTS
+
 ## 1.7.2 (2020-07-07)
 
 This maintenance release contains bugfixes since the 1.7.1 release. We deem it medium

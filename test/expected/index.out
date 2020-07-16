@@ -526,3 +526,26 @@ INSERT INTO idx_tableref_test SELECT '2000-01-01';
 DROP INDEX tableref_idx;
 -- try creating index on hypertable with existing chunks
 CREATE INDEX tableref_idx ON idx_tableref_test(tableref_func(idx_tableref_test));
+-- test index creation with if not exists
+CREATE TABLE idx_exists(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('idx_exists', 'time');
+ table_name 
+------------
+ idx_exists
+(1 row)
+
+-- should be skipped since this index was already created by create_hypertable
+CREATE INDEX IF NOT EXISTS idx_exists_time_idx ON idx_exists(time DESC);
+NOTICE:  relation "idx_exists_time_idx" already exists, skipping
+-- should create index
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+-- should be skipped since it was created in previous command
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+NOTICE:  relation "idx_exists_time_asc_idx" already exists, skipping
+DROP INDEX idx_exists_time_asc_idx;
+INSERT INTO idx_exists VALUES ('2000-01-01'),('2001-01-01');
+-- should create index
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+-- should be skipped since it was created in previous command
+CREATE INDEX IF NOT EXISTS idx_exists_time_asc_idx ON idx_exists(time ASC);
+NOTICE:  relation "idx_exists_time_asc_idx" already exists, skipping
