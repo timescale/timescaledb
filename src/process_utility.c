@@ -1986,6 +1986,16 @@ process_index_start(ProcessUtilityArgs *args)
 														   args->query_string,
 														   info.extended_options.multitransaction,
 														   hypertable_is_distributed(ht));
+
+	/* root_table_index will have 0 objectId if the index already exists
+	 * and if_not_exists is true. In that case there is nothing else
+	 * to do here. */
+	if (!OidIsValid(root_table_index.objectId) && stmt->if_not_exists)
+	{
+		ts_cache_release(hcache);
+		return DDL_DONE;
+	}
+	Assert(OidIsValid(root_table_index.objectId));
 	info.obj.objectId = root_table_index.objectId;
 
 	/* CREATE INDEX on the chunks, unless this is a distributed hypertable */
