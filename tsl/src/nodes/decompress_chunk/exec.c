@@ -188,7 +188,7 @@ constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 		 * we doublecheck system columns here because projection will
 		 * segfault if any system columns get through
 		 */
-		if (var->varattno < 0)
+		if (var->varattno < SelfItemPointerAttributeNumber)
 			elog(ERROR, "transparent decompression only supports tableoid system column");
 
 		return node;

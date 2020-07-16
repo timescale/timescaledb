@@ -726,6 +726,15 @@ valid_hook_call(void)
 	return ts_extension_is_loaded() && planner_hcache_exists();
 }
 
+static bool
+dml_involves_hypertable(PlannerInfo *root, Hypertable *ht, Index rti)
+{
+	Index result_rti = root->parse->resultRelation;
+	RangeTblEntry *result_rte = planner_rt_fetch(result_rti, root);
+
+	return result_rti == rti || ht->main_table_relid == result_rte->relid;
+}
+
 static void
 timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
@@ -763,7 +772,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
 			/* Check for UPDATE/DELETE (DLM) on compressed chunks */
-			if (IS_UPDL_CMD(root->parse))
+			if (IS_UPDL_CMD(root->parse) && dml_involves_hypertable(root, ht, rti))
 			{
 				if (ts_cm_functions->set_rel_pathlist_dml != NULL)
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);

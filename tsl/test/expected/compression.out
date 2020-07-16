@@ -1124,3 +1124,70 @@ ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compre
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
 NOTICE:  adding index _compressed_hypertable_23_col1__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col1, _ts_meta_sequence_num)
 NOTICE:  adding index _compressed_hypertable_23_col2__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col2, _ts_meta_sequence_num)
+-- test delete/update on non-compressed tables involving hypertables with compression
+CREATE TABLE uncompressed_ht (
+  time timestamptz NOT NULL,
+  value double precision,
+  series_id integer
+);
+SELECT table_name FROM create_hypertable ('uncompressed_ht', 'time');
+   table_name    
+-----------------
+ uncompressed_ht
+(1 row)
+
+INSERT INTO uncompressed_ht
+  VALUES ('2020-04-20 01:01', 100, 1), ('2020-05-20 01:01', 100, 1), ('2020-04-20 01:01', 200, 2);
+CREATE TABLE compressed_ht (
+  time timestamptz NOT NULL,
+  value double precision,
+  series_id integer
+);
+SELECT table_name FROM create_hypertable ('compressed_ht', 'time');
+  table_name   
+---------------
+ compressed_ht
+(1 row)
+
+ALTER TABLE compressed_ht SET (timescaledb.compress);
+INSERT INTO compressed_ht
+  VALUES ('2020-04-20 01:01', 100, 1), ('2020-05-20 01:01', 100, 1);
+SELECT compress_chunk (ch1.schema_name || '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1,
+  _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id
+  AND ht.table_name LIKE 'compressed_ht'
+ORDER BY ch1.id;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_25_51_chunk
+ _timescaledb_internal._hyper_25_52_chunk
+(2 rows)
+
+BEGIN;
+WITH compressed AS (
+  SELECT series_id
+  FROM compressed_ht
+  WHERE time >= '2020-04-17 17:14:24.161989+00'
+)
+DELETE FROM uncompressed_ht
+WHERE series_id IN (SELECT series_id FROM compressed);
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- test delete inside CTE is blocked
+WITH compressed AS (
+  DELETE FROM compressed_ht RETURNING series_id
+)
+SELECT * FROM uncompressed_ht
+WHERE series_id IN (SELECT series_id FROM compressed);
+ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compressed
+-- test update inside CTE is blocked
+WITH compressed AS (
+  UPDATE compressed_ht SET value = 0.2 RETURNING *
+)
+SELECT * FROM uncompressed_ht
+WHERE series_id IN (SELECT series_id FROM compressed);
+ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compressed
+\set ON_ERROR_STOP 1
+DROP TABLE compressed_ht;
+DROP TABLE uncompressed_ht;
