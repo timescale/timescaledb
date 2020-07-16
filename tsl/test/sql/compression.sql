@@ -444,3 +444,64 @@ ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = '
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
 
+-- test delete/update on non-compressed tables involving hypertables with compression
+CREATE TABLE uncompressed_ht (
+  time timestamptz NOT NULL,
+  value double precision,
+  series_id integer
+);
+
+SELECT table_name FROM create_hypertable ('uncompressed_ht', 'time');
+
+INSERT INTO uncompressed_ht
+  VALUES ('2020-04-20 01:01', 100, 1), ('2020-05-20 01:01', 100, 1), ('2020-04-20 01:01', 200, 2);
+
+CREATE TABLE compressed_ht (
+  time timestamptz NOT NULL,
+  value double precision,
+  series_id integer
+);
+
+SELECT table_name FROM create_hypertable ('compressed_ht', 'time');
+
+ALTER TABLE compressed_ht SET (timescaledb.compress);
+
+INSERT INTO compressed_ht
+  VALUES ('2020-04-20 01:01', 100, 1), ('2020-05-20 01:01', 100, 1);
+
+SELECT compress_chunk (ch1.schema_name || '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1,
+  _timescaledb_catalog.hypertable ht
+WHERE ch1.hypertable_id = ht.id
+  AND ht.table_name LIKE 'compressed_ht'
+ORDER BY ch1.id;
+
+BEGIN;
+WITH compressed AS (
+  SELECT series_id
+  FROM compressed_ht
+  WHERE time >= '2020-04-17 17:14:24.161989+00'
+)
+DELETE FROM uncompressed_ht
+WHERE series_id IN (SELECT series_id FROM compressed);
+ROLLBACK;
+
+\set ON_ERROR_STOP 0
+-- test delete inside CTE is blocked
+WITH compressed AS (
+  DELETE FROM compressed_ht RETURNING series_id
+)
+SELECT * FROM uncompressed_ht
+WHERE series_id IN (SELECT series_id FROM compressed);
+
+-- test update inside CTE is blocked
+WITH compressed AS (
+  UPDATE compressed_ht SET value = 0.2 RETURNING *
+)
+SELECT * FROM uncompressed_ht
+WHERE series_id IN (SELECT series_id FROM compressed);
+
+\set ON_ERROR_STOP 1
+
+DROP TABLE compressed_ht;
+DROP TABLE uncompressed_ht;
