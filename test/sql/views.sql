@@ -46,3 +46,17 @@ SELECT * FROM timescaledb_information.hypertable WHERE table_name = 'ht1' ORDER 
 
 -- filter by owner
 SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user' ORDER BY table_schema,table_name;
+
+---Add integer table --
+CREATE TABLE test_table_int(time bigint, junk int);
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 10);
+CREATE OR REPLACE function table_int_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+SELECT set_integer_now_func('test_table_int', 'table_int_now');
+INSERT into test_table_int SELECT generate_series( 1, 20), 100;
+
+ SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'ht1' ORDER BY chunk_name;
+ SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORDER BY chunk_name;
+
+\x 
+SELECT * FROM timescaledb_information.dimensions ORDER BY hypertable_name, dimension_number;
+\x 

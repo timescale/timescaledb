@@ -259,6 +259,125 @@ CREATE OR REPLACE VIEW timescaledb_information.data_node AS
     LEFT OUTER JOIN LATERAL @extschema@.data_node_hypertable_info(CASE WHEN s.node_up THEN s.node_name ELSE NULL END) size ON TRUE
   GROUP BY s.node_name, s.node_up, s.owner, s.options;
 
+-- chunks metadata view, shows information about the primary dimension column
+-- query plans with CTEs are not always optimized by PG. So use in-line
+-- tables.
+CREATE OR REPLACE VIEW  timescaledb_information.chunks
+AS
+SELECT 
+       hypertable_schema, hypertable_name,
+       schema_name as chunk_schema , chunk_name ,
+       primary_dimension, primary_dimension_type,
+       range_start, range_end,
+       integer_range_start as range_start_integer,
+       integer_range_end as range_end_integer,
+       is_compressed,
+       chunk_table_space as chunk_tablespace,
+       node_list as data_nodes
+       from
+(
+SELECT
+    ht.schema_name as hypertable_schema,
+    ht.table_name as hypertable_name,
+    srcch.schema_name as schema_name,
+    srcch.table_name as chunk_name,
+    dim.column_name as primary_dimension,
+    dim.column_type as primary_dimension_type,
+    row_number() over(partition by chcons.chunk_id order by chcons.dimension_slice_id) as chunk_dimension_num,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN _timescaledb_internal.to_timestamp(dimsl.range_start)
+        ELSE NULL
+    END as range_start,
+    CASE
+         WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+                dim.column_type = 'TIMESTAMPTZ'::regtype OR
+                dim.column_type = 'DATE'::regtype )
+         THEN _timescaledb_internal.to_timestamp(dimsl.range_end)
+         ELSE NULL
+    END as range_end,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN NULL
+        ELSE dimsl.range_start
+    END as integer_range_start,
+    CASE
+        WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
+               dim.column_type = 'TIMESTAMPTZ'::regtype OR
+               dim.column_type = 'DATE'::regtype )
+        THEN NULL
+        ELSE dimsl.range_end
+    END as integer_range_end,
+    CASE WHEN srcch.compressed_chunk_id is not null THEN 'true'
+         ELSE 'false'
+    END as is_compressed,
+    pgtab.spcname as chunk_table_space,
+    chdn.node_list
+FROM _timescaledb_catalog.chunk srcch 
+      INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
+      INNER JOIN _timescaledb_catalog.chunk_constraint chcons ON srcch.id = chcons.chunk_id
+      INNER JOIN _timescaledb_catalog.dimension dim ON srcch.hypertable_id = dim.hypertable_id
+      INNER JOIN _timescaledb_catalog.dimension_slice dimsl ON dim.id = dimsl.dimension_id
+                                and chcons.dimension_slice_id = dimsl.id
+      INNER JOIN
+       ( SELECT relname, reltablespace, nspname as schema_name 
+                FROM pg_class , pg_namespace WHERE
+                pg_class.relnamespace = pg_namespace.oid) cl 
+       ON srcch.table_name = cl.relname and srcch.schema_name = cl.schema_name
+       LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
+       left outer join (
+               SELECT chunk_id, array_agg(node_name ORDER BY node_name) as node_list
+                            FROM _timescaledb_catalog.chunk_data_node
+                            GROUP BY chunk_id) chdn
+       ON srcch.id = chdn.chunk_id 
+ WHERE srcch.dropped is false 
+      and ht.compressed = false ) finalq
+WHERE chunk_dimension_num = 1
+;
+
+-- hypertable's dimension information
+-- CTEs aren't used in the query as PG does not always optimize them
+-- as expected.
+CREATE OR REPLACE VIEW timescaledb_information.dimensions
+AS
+SELECT 
+    ht.schema_name as hypertable_schema,
+    ht.table_name as hypertable_name,
+    rank() over(partition by hypertable_id order by dim.id) as dimension_number,
+    dim.column_name,
+    dim.column_type,
+    CASE WHEN dim.interval_length is NULL 
+         THEN 'Space' 
+         ELSE 'Time' 
+    END as dimension_type,
+    CASE WHEN dim.interval_length is NOT NULL THEN
+              CASE 
+              WHEN dim.column_type = 'TIMESTAMP'::regtype OR 
+                   dim.column_type = 'TIMESTAMPTZ'::regtype OR 
+                   dim.column_type = 'DATE'::regtype 
+              THEN _timescaledb_internal.to_interval(dim.interval_length) 
+              ELSE NULL 
+              END
+    END as time_interval, 
+    CASE WHEN dim.interval_length is NOT NULL THEN
+              CASE 
+              WHEN dim.column_type = 'TIMESTAMP'::regtype OR 
+                   dim.column_type = 'TIMESTAMPTZ'::regtype OR 
+                   dim.column_type = 'DATE'::regtype 
+              THEN  NULL
+              ELSE dim.interval_length 
+              END
+    END as integer_interval, 
+    dim.integer_now_func,
+    dim.num_slices as num_partitions
+FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.dimension dim
+WHERE dim.hypertable_id = ht.id
+;
+
 ---compression parameters information ---
 CREATE VIEW timescaledb_information.compression_settings
 AS
@@ -284,3 +403,5 @@ ORDER BY
 
 GRANT USAGE ON SCHEMA timescaledb_information TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
+
+

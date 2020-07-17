@@ -394,3 +394,74 @@ NOTICE:  chunk "_dist_hyper_1_1_chunk" is not compressed
  
 (1 row)
 
+\x
+SELECT * from timescaledb_information.chunks 
+ORDER BY hypertable_name, chunk_name;
+-[ RECORD 1 ]----------+-----------------------------
+hypertable_schema      | public
+hypertable_name        | compressed
+chunk_schema           | _timescaledb_internal
+chunk_name             | _dist_hyper_1_1_chunk
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+range_start            | Wed Feb 28 16:00:00 2018 PST
+range_end              | Wed Mar 07 16:00:00 2018 PST
+range_start_integer    | 
+range_end_integer      | 
+is_compressed          | false
+chunk_tablespace       | 
+data_nodes             | {data_node_1,data_node_2}
+-[ RECORD 2 ]----------+-----------------------------
+hypertable_schema      | public
+hypertable_name        | compressed
+chunk_schema           | _timescaledb_internal
+chunk_name             | _dist_hyper_1_2_chunk
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+range_start            | Wed Feb 28 16:00:00 2018 PST
+range_end              | Wed Mar 07 16:00:00 2018 PST
+range_start_integer    | 
+range_end_integer      | 
+is_compressed          | false
+chunk_tablespace       | 
+data_nodes             | {data_node_2,data_node_3}
+-[ RECORD 3 ]----------+-----------------------------
+hypertable_schema      | public
+hypertable_name        | compressed
+chunk_schema           | _timescaledb_internal
+chunk_name             | _dist_hyper_1_3_chunk
+primary_dimension      | time
+primary_dimension_type | timestamp with time zone
+range_start            | Wed Feb 28 16:00:00 2018 PST
+range_end              | Wed Mar 07 16:00:00 2018 PST
+range_start_integer    | 
+range_end_integer      | 
+is_compressed          | false
+chunk_tablespace       | 
+data_nodes             | {data_node_1,data_node_3}
+
+SELECT * from timescaledb_information.dimensions 
+ORDER BY hypertable_name, dimension_number;
+-[ RECORD 1 ]-----+-------------------------
+hypertable_schema | public
+hypertable_name   | compressed
+dimension_number  | 1
+column_name       | time
+column_type       | timestamp with time zone
+dimension_type    | Time
+time_interval     | @ 7 days
+integer_interval  | 
+integer_now_func  | 
+num_partitions    | 
+-[ RECORD 2 ]-----+-------------------------
+hypertable_schema | public
+hypertable_name   | compressed
+dimension_number  | 2
+column_name       | device
+column_type       | integer
+dimension_type    | Space
+time_interval     | 
+integer_interval  | 
+integer_now_func  | 
+num_partitions    | 3
+
