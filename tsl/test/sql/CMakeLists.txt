@@ -110,6 +110,7 @@ set(SOLO_TESTS
   data_fetcher
   data_node
   debug_notice
+  dist_api_calls.sql
   dist_commands
   dist_compression
   dist_ddl

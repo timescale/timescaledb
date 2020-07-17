@@ -1,0 +1,207 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Basic testing of API functions on distributed hypertable
+-- Need to be super user to create extension and add data nodes
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+-- Support for execute_sql_and_filter_server_name_on_error()
+\unset ECHO
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+-- Cleanup from other potential tests that created these databases
+SET client_min_messages TO ERROR;
+DROP DATABASE IF EXISTS data_node_1;
+DROP DATABASE IF EXISTS data_node_2;
+DROP DATABASE IF EXISTS data_node_3;
+SET client_min_messages TO NOTICE;
+-- Add data nodes
+SELECT * FROM add_data_node('data_node_1', host => 'localhost',
+                            database => 'data_node_1');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost',
+                            database => 'data_node_2');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_3', host => 'localhost',
+                            database => 'data_node_3');
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
+(1 row)
+
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+-- Create a distributed hypertable with data
+SET ROLE :ROLE_1;
+CREATE TABLE disttable(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | disttable  | t
+(1 row)
+
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.2),
+       ('2017-01-01 09:11', 3, 4.3),
+       ('2017-01-01 08:01', 1, 7.3),
+       ('2017-01-02 08:01', 2, 0.23),
+       ('2018-07-02 08:01', 87, 0.0),
+       ('2018-07-01 06:01', 13, 3.1),
+       ('2018-07-01 09:11', 90, 10303.12),
+       ('2018-07-01 08:01', 29, 64);
+SELECT * FROM disttable ORDER BY time;
+             time             | device |  value   
+------------------------------+--------+----------
+ Sun Jan 01 06:01:00 2017 PST |      1 |      1.2
+ Sun Jan 01 08:01:00 2017 PST |      1 |      7.3
+ Sun Jan 01 09:11:00 2017 PST |      3 |      4.3
+ Mon Jan 02 08:01:00 2017 PST |      2 |     0.23
+ Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+ Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+ Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+ Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+(8 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_1]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_1_chunk
+_timescaledb_internal._dist_hyper_1_4_chunk
+(2 rows)
+
+
+NOTICE:  [data_node_2]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_2]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_3_chunk
+_timescaledb_internal._dist_hyper_1_5_chunk
+(2 rows)
+
+
+NOTICE:  [data_node_3]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_3]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_2_chunk
+_timescaledb_internal._dist_hyper_1_6_chunk
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Test APIs on the distributed hypertable
+-- Call drop_chunks
+SELECT drop_chunks('disttable', timestamptz '2017-03-01 00:00');
+                 drop_chunks                 
+---------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+ _timescaledb_internal._dist_hyper_1_2_chunk
+ _timescaledb_internal._dist_hyper_1_3_chunk
+(3 rows)
+
+SELECT * FROM disttable ORDER BY time;
+             time             | device |  value   
+------------------------------+--------+----------
+ Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+ Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+ Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+ Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+(4 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_1]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_4_chunk
+(1 row)
+
+
+NOTICE:  [data_node_2]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_2]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_5_chunk
+(1 row)
+
+
+NOTICE:  [data_node_3]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_3]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_6_chunk
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Restore the state
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.2),
+       ('2017-01-01 09:11', 3, 4.3),
+       ('2017-01-01 08:01', 1, 7.3),
+       ('2017-01-02 08:01', 2, 0.23);
+SELECT * FROM disttable ORDER BY time;
+             time             | device |  value   
+------------------------------+--------+----------
+ Sun Jan 01 06:01:00 2017 PST |      1 |      1.2
+ Sun Jan 01 08:01:00 2017 PST |      1 |      7.3
+ Sun Jan 01 09:11:00 2017 PST |      3 |      4.3
+ Mon Jan 02 08:01:00 2017 PST |      2 |     0.23
+ Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+ Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+ Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+ Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+(8 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_1]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_4_chunk
+_timescaledb_internal._dist_hyper_1_7_chunk
+(2 rows)
+
+
+NOTICE:  [data_node_2]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_2]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_5_chunk
+_timescaledb_internal._dist_hyper_1_9_chunk
+(2 rows)
+
+
+NOTICE:  [data_node_3]:  SELECT show_chunks('disttable')
+NOTICE:  [data_node_3]:
+show_chunks                                
+-------------------------------------------
+_timescaledb_internal._dist_hyper_1_6_chunk
+_timescaledb_internal._dist_hyper_1_8_chunk
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
