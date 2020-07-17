@@ -12,7 +12,6 @@ set(TEST_FILES
 set(TEST_FILES_DEBUG
   bgw_policy.sql
   bgw_reorder_drop_chunks.sql
-  chunk_api.sql
   compress_bgw_reorder_drop_chunks.sql
   compression_algos.sql
   compression_bgw.sql
@@ -58,6 +57,7 @@ set(TEST_FILES_DEBUG
 )
 
 set(TEST_TEMPLATES
+  chunk_api.sql.in
   compression_qualpushdown.sql.in
   continuous_aggs_union_view.sql.in
   move.sql.in

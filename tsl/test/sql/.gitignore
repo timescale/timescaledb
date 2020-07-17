@@ -1,3 +1,4 @@
+/chunk_api-*.sql
 /continuous_aggs_ddl-*.sql
 /continuous_aggs_permissions-*.sql
 /continuous_aggs_query-*.sql

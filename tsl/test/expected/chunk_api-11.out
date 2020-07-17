@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
-GRANT CREATE ON DATABASE :TEST_DBNAME TO :ROLE_DEFAULT_PERM_USER;
+GRANT CREATE ON DATABASE :"TEST_DBNAME" TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE SCHEMA "ChunkSchema";
 CREATE TABLE chunkapi (time timestamptz, device int, temp float);
@@ -137,8 +137,8 @@ ORDER BY chunk_id;
 SELECT (_timescaledb_internal.get_chunk_colstats(show_chunks)).*
 FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
 -- Get the same stats but by giving the hypertable as input
@@ -150,8 +150,8 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
 (2 rows)
 
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
@@ -183,11 +183,11 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
 (2 rows)
 
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+-------------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
-        1 |             1 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}            |              |              |              |              |              | {}                  |             |             |             |             | 
-        1 |             1 |       2 |        0 |     4 |          -1 | {0,0,0,0,0} | {}            |              |              |              |              |              | {}                  |             |             |             |             | 
-        1 |             1 |       3 |        0 |     8 |          -1 | {0,0,0,0,0} | {}            |              |              |              |              |              | {}                  |             |             |             |             | 
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+-------------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+        1 |             1 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}            | {0,0,0,0,0}    |              |              |              |              |              | {}                  |             |             |             |             | 
+        1 |             1 |       2 |        0 |     4 |          -1 | {0,0,0,0,0} | {}            | {0,0,0,0,0}    |              |              |              |              |              | {}                  |             |             |             |             | 
+        1 |             1 |       3 |        0 |     8 |          -1 | {0,0,0,0,0} | {}            | {0,0,0,0,0}    |              |              |              |              |              | {}                  |             |             |             |             | 
 (3 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
@@ -263,8 +263,8 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 (2 rows)
 
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
@@ -319,12 +319,12 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 (2 rows)
 
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
-        3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
-        3 |             2 |       2 |        0 |     4 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,int4,pg_catalog,int4,pg_catalog,<,pg_catalog,int4,pg_catalog,int4,pg_catalog}                             | {1}          | {1}          |              |              |              | {int4,pg_catalog}        | {1}                                                             |             |             |             | 
-        3 |             2 |       3 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,float8,pg_catalog,float8,pg_catalog,<,pg_catalog,float8,pg_catalog,float8,pg_catalog}                     |              | {-1}         |              |              |              | {float8,pg_catalog}      | {21.1,23.4}                                                     |             |             |             | 
-        3 |             2 |       4 |        0 |     6 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,text,pg_catalog,text,pg_catalog,<,pg_catalog,text,pg_catalog,text,pg_catalog}                             | {1}          | {1}          |              |              |              | {text,pg_catalog}        | {green}                                                         |             |             |             | 
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+----------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
+        3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} | {0,0,0,0,0}    |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
+        3 |             2 |       2 |        0 |     4 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,int4,pg_catalog,int4,pg_catalog,<,pg_catalog,int4,pg_catalog,int4,pg_catalog}                             | {0,0,0,0,0}    | {1}          | {1}          |              |              |              | {int4,pg_catalog}        | {1}                                                             |             |             |             | 
+        3 |             2 |       3 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,float8,pg_catalog,float8,pg_catalog,<,pg_catalog,float8,pg_catalog,float8,pg_catalog}                     | {0,0,0,0,0}    |              | {-1}         |              |              |              | {float8,pg_catalog}      | {21.1,23.4}                                                     |             |             |             | 
+        3 |             2 |       4 |        0 |     6 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,text,pg_catalog,text,pg_catalog,<,pg_catalog,text,pg_catalog,text,pg_catalog}                             | {0,0,0,0,0}    | {1}          | {1}          |              |              |              | {text,pg_catalog}        | {green}                                                         |             |             |             | 
 (4 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
@@ -352,8 +352,8 @@ ORDER BY 1,2,3;
 -- Test that user without table permissions can't get column stats
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+----------+---------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
 SET ROLE :ROLE_1;
@@ -368,16 +368,16 @@ SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
 (2 rows)
 
 SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
- chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
-----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
-        3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
-        3 |             2 |       2 |        0 |     4 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,int4,pg_catalog,int4,pg_catalog,<,pg_catalog,int4,pg_catalog,int4,pg_catalog}                             | {1}          | {1}          |              |              |              | {int4,pg_catalog}        | {1}                                                             |             |             |             | 
-        3 |             2 |       3 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,float8,pg_catalog,float8,pg_catalog,<,pg_catalog,float8,pg_catalog,float8,pg_catalog}                     |              | {-1}         |              |              |              | {float8,pg_catalog}      | {21.1,23.4}                                                     |             |             |             | 
-        3 |             2 |       4 |        0 |     6 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,text,pg_catalog,text,pg_catalog,<,pg_catalog,text,pg_catalog,text,pg_catalog}                             | {1}          | {1}          |              |              |              | {text,pg_catalog}        | {green}                                                         |             |             |             | 
-        4 |             2 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
-        4 |             2 |       2 |        0 |     4 |          -1 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
-        4 |             2 |       3 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
-        4 |             2 |       4 |        1 |     0 |           0 | {0,0,0,0,0} | {}                                                                                                                      |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+ chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
+----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+----------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
+        3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} | {0,0,0,0,0}    |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
+        3 |             2 |       2 |        0 |     4 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,int4,pg_catalog,int4,pg_catalog,<,pg_catalog,int4,pg_catalog,int4,pg_catalog}                             | {0,0,0,0,0}    | {1}          | {1}          |              |              |              | {int4,pg_catalog}        | {1}                                                             |             |             |             | 
+        3 |             2 |       3 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,float8,pg_catalog,float8,pg_catalog,<,pg_catalog,float8,pg_catalog,float8,pg_catalog}                     | {0,0,0,0,0}    |              | {-1}         |              |              |              | {float8,pg_catalog}      | {21.1,23.4}                                                     |             |             |             | 
+        3 |             2 |       4 |        0 |     6 |        -0.5 | {1,3,0,0,0} | {=,pg_catalog,text,pg_catalog,text,pg_catalog,<,pg_catalog,text,pg_catalog,text,pg_catalog}                             | {0,0,0,0,0}    | {1}          | {1}          |              |              |              | {text,pg_catalog}        | {green}                                                         |             |             |             | 
+        4 |             2 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                                                                                      | {0,0,0,0,0}    |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+        4 |             2 |       2 |        0 |     4 |          -1 | {0,0,0,0,0} | {}                                                                                                                      | {0,0,0,0,0}    |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+        4 |             2 |       3 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                                                                                      | {0,0,0,0,0}    |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
+        4 |             2 |       4 |        1 |     0 |           0 | {0,0,0,0,0} | {}                                                                                                                      | {0,0,0,0,0}    |              |              |              |              |              | {}                       |                                                                 |             |             |             | 
 (8 rows)
 
 -- Test ANALYZE with a replica chunk. We'd like to ensure the

@@ -52,6 +52,9 @@
 #define INT4_TYPELEN sizeof(int32)
 #define INT4_TYPEBYVAL true
 #define INT4_TYPEALIGN 'i'
+#define OID_TYPELEN sizeof(Oid)
+#define OID_TYPEBYVAL true
+#define OID_TYPEALIGN 'i'
 #define CSTRING_ARY_TYPELEN -1
 
 /*
@@ -532,6 +535,7 @@ enum Anum_chunk_colstats
 	Anum_chunk_colstats_distinct,
 	Anum_chunk_colstats_slot_kinds,
 	Anum_chunk_colstats_slot_op_strings,
+	Anum_chunk_colstats_slot_collations,
 	Anum_chunk_colstats_slot1_numbers,
 	Anum_chunk_colstats_slot2_numbers,
 	Anum_chunk_colstats_slot3_numbers,
@@ -679,6 +683,7 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 	int i;
 	Datum slotkind[STATISTIC_NUM_SLOTS];
 	Datum op_strings[STRINGS_PER_OP_OID * STATISTIC_NUM_SLOTS];
+	Datum slot_collation[STATISTIC_NUM_SLOTS];
 	Datum value_type_strings[STRINGS_PER_TYPE_OID * STATISTIC_NUM_SLOTS];
 	ArrayType *array;
 	int nopstrings = 0;
@@ -692,6 +697,12 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 		int slot_fields;
 		const int numbers_idx = AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_numbers) + i;
 		const int values_idx = AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_values) + i;
+
+#if PG12_GE
+		slot_collation[i] = ObjectIdGetDatum(((Oid *) &formdata->stacoll1)[i]);
+#else
+		slot_collation[i] = 0;
+#endif
 
 		slotkind[i] = ObjectIdGetDatum(kind);
 		if (kind == InvalidOid)
@@ -777,6 +788,13 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 							CSTRING_TYPEBYVAL,
 							CSTRING_TYPEALIGN);
 	values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot_op_strings)] = PointerGetDatum(array);
+	array = construct_array(slot_collation,
+							STATISTIC_NUM_SLOTS,
+							OIDOID,
+							OID_TYPELEN,
+							OID_TYPEBYVAL,
+							OID_TYPEALIGN);
+	values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot_collations)] = PointerGetDatum(array);
 	array = construct_array(value_type_strings,
 							nvalstrings,
 							CSTRINGOID,
@@ -845,8 +863,8 @@ chunk_get_single_colstats_tuple(Chunk *chunk, int column, TupleDesc tupdesc)
 
 static void
 chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, float distinct,
-					  ArrayType *kind_array, Oid *slot_ops, ArrayType **slot_numbers,
-					  Oid *value_kinds, ArrayType **slot_values)
+					  ArrayType *kind_array, ArrayType *collations, Oid *slot_ops,
+					  ArrayType **slot_numbers, Oid *value_kinds, ArrayType **slot_values)
 {
 	Relation rel;
 	Relation sd;
@@ -884,6 +902,12 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 	slot_kinds = (int *) ARR_DATA_PTR(kind_array);
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
 		values[i++] = Int16GetDatum(slot_kinds[k]); /* stakindN */
+
+#if PG12_GE
+	i = AttrNumberGetAttrOffset(Anum_pg_statistic_stacoll1);
+	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
+		values[i++] = ObjectIdGetDatum(((Oid *) ARR_DATA_PTR(collations))[k]); /* stacollN */
+#endif
 
 	i = AttrNumberGetAttrOffset(Anum_pg_statistic_staop1);
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
@@ -1054,6 +1078,7 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 	int32 width;
 	float distinct;
 	ArrayType *kind_array;
+	ArrayType *collation_array;
 	Datum op_strings;
 	Oid op_oids[STATISTIC_NUM_SLOTS];
 	ArrayType *number_arrays[STATISTIC_NUM_SLOTS];
@@ -1076,6 +1101,8 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 	distinct = DatumGetFloat4(values[AttrNumberGetAttrOffset(Anum_chunk_colstats_distinct)]);
 	kind_array =
 		DatumGetArrayTypeP(values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot_kinds)]);
+	collation_array =
+		DatumGetArrayTypeP(values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot_collations)]);
 	op_strings = values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot_op_strings)];
 	valtype_strings = values[AttrNumberGetAttrOffset(Anum_chunk_colstats_slot_valtype_strings)];
 
@@ -1153,6 +1180,7 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 						  width,
 						  distinct,
 						  kind_array,
+						  collation_array,
 						  op_oids,
 						  number_arrays,
 						  valtype_oids,
