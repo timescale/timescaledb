@@ -106,3 +106,9 @@ SELECT decompress_chunk(chunk, if_compressed => true)
 FROM show_chunks('compressed') AS chunk
 ORDER BY chunk
 LIMIT 1;
+
+\x
+SELECT * from timescaledb_information.chunks 
+ORDER BY hypertable_name, chunk_name;
+SELECT * from timescaledb_information.dimensions 
+ORDER BY hypertable_name, dimension_number;

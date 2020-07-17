@@ -96,3 +96,93 @@ SELECT * FROM timescaledb_information.hypertable WHERE table_owner = 'super_user
  open         | open_ht    | super_user  |              1 |          3 | 24 kB      | 48 kB      |            | 72 kB      | f
 (2 rows)
 
+---Add integer table --
+CREATE TABLE test_table_int(time bigint, junk int);
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 10);
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (5,public,test_table_int,t)
+(1 row)
+
+CREATE OR REPLACE function table_int_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+SELECT set_integer_now_func('test_table_int', 'table_int_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+INSERT into test_table_int SELECT generate_series( 1, 20), 100;
+ SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'ht1' ORDER BY chunk_name;
+ hypertable_schema | hypertable_name |     chunk_schema      |    chunk_name    | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace | data_nodes 
+-------------------+-----------------+-----------------------+------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+------------
+ public            | ht1             | _timescaledb_internal | _hyper_1_1_chunk | time              | timestamp with time zone | Wed Dec 29 16:00:00 1999 PST | Wed Jan 05 16:00:00 2000 PST |                     |                   | false         |                  | 
+(1 row)
+
+ SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORDER BY chunk_name;
+ hypertable_schema | hypertable_name |     chunk_schema      |    chunk_name    | primary_dimension | primary_dimension_type | range_start | range_end | range_start_integer | range_end_integer | is_compressed | chunk_tablespace | data_nodes 
+-------------------+-----------------+-----------------------+------------------+-------------------+------------------------+-------------+-----------+---------------------+-------------------+---------------+------------------+------------
+ public            | test_table_int  | _timescaledb_internal | _hyper_5_7_chunk | time              | bigint                 |             |           |                   0 |                10 | false         |                  | 
+ public            | test_table_int  | _timescaledb_internal | _hyper_5_8_chunk | time              | bigint                 |             |           |                  10 |                20 | false         |                  | 
+ public            | test_table_int  | _timescaledb_internal | _hyper_5_9_chunk | time              | bigint                 |             |           |                  20 |                30 | false         |                  | 
+(3 rows)
+
+\x 
+SELECT * FROM timescaledb_information.dimensions ORDER BY hypertable_name, dimension_number;
+-[ RECORD 1 ]-----+-------------------------
+hypertable_schema | closed
+hypertable_name   | closed_ht
+dimension_number  | 1
+column_name       | time
+column_type       | timestamp with time zone
+dimension_type    | Time
+time_interval     | @ 7 days
+integer_interval  | 
+integer_now_func  | 
+num_partitions    | 
+-[ RECORD 2 ]-----+-------------------------
+hypertable_schema | public
+hypertable_name   | ht1
+dimension_number  | 1
+column_name       | time
+column_type       | timestamp with time zone
+dimension_type    | Time
+time_interval     | @ 7 days
+integer_interval  | 
+integer_now_func  | 
+num_partitions    | 
+-[ RECORD 3 ]-----+-------------------------
+hypertable_schema | public
+hypertable_name   | ht2
+dimension_number  | 1
+column_name       | time
+column_type       | timestamp with time zone
+dimension_type    | Time
+time_interval     | @ 7 days
+integer_interval  | 
+integer_now_func  | 
+num_partitions    | 
+-[ RECORD 4 ]-----+-------------------------
+hypertable_schema | open
+hypertable_name   | open_ht
+dimension_number  | 1
+column_name       | time
+column_type       | timestamp with time zone
+dimension_type    | Time
+time_interval     | @ 7 days
+integer_interval  | 
+integer_now_func  | 
+num_partitions    | 
+-[ RECORD 5 ]-----+-------------------------
+hypertable_schema | public
+hypertable_name   | test_table_int
+dimension_number  | 1
+column_name       | time
+column_type       | bigint
+dimension_type    | Time
+time_interval     | 
+integer_interval  | 10
+integer_now_func  | table_int_now
+num_partitions    | 
+
+\x 
