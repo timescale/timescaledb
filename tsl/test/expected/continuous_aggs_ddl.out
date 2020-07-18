@@ -573,7 +573,7 @@ AS SELECT time_bucket('5', time), max(data)
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 \set ON_ERROR_STOP 0
 SELECT drop_chunks('drop_chunks_table', older_than => 13, cascade_to_materializations => false);
-ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
+ERROR:  the continuous aggregate public.drop_chunks_view is too far behind
 ALTER VIEW drop_chunks_view SET (timescaledb.ignore_invalidation_older_than = 9);
 -- 9 is too small (less than timescaledb.ignore_invalidation_older_than)
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-8), cascade_to_materializations => false);

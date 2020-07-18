@@ -3192,7 +3192,8 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 														 ignore_invalidation_older_than);
 
 	/* minimum_invalidation_time is inclusive; older_than_time is exclusive */
-	if (minimum_invalidation_time < older_than_time)
+	if (ignore_invalidation_older_than != PG_INT64_MAX /* if this parameter is set for cagg*/
+		&& minimum_invalidation_time < older_than_time)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("older_than must be greater than the "

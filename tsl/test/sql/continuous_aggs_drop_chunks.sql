@@ -2,8 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-
 --
 -- Check that drop chunks with a unique constraint works as expected.
 --
@@ -52,6 +50,40 @@ REFRESH MATERIALIZED VIEW records_monthly;
 REFRESH MATERIALIZED VIEW records_monthly;
 
 \set VERBOSITY default
-SELECT drop_chunks('2000-03-16'::timestamptz, 'records',
+SELECT drop_chunks('records', '2000-03-16'::timestamptz,
        cascade_to_materializations => FALSE);
+
+-- Issue #1921 (https://github.com/timescale/timescaledb/issues/1921)
+-- drop_chunks() Fails against hypertable with cagg defined with no ignore_invalidation_older set 
+CREATE TABLE conditions (
+    time       TIMESTAMPTZ       NOT NULL,
+    temperature DOUBLE PRECISION  NULL
+);
+
+SELECT table_name FROM create_hypertable( 'conditions', 'time');
+
+CREATE VIEW conditions_cagg( timec, maxt)
+    WITH ( timescaledb.continuous, timescaledb.refresh_lag='-1day',
+        timescaledb.max_interval_per_job='260 day')
+AS
+SELECT time_bucket('1day', time), max(temperature)
+FROM conditions
+GROUP BY time_bucket('1day', time);
+
+INSERT INTO conditions VALUES ('2020-06-10', '1');
+INSERT INTO conditions VALUES ('2020-06-10', '2');
+INSERT INTO conditions VALUES ('2020-05-15', '3');
+INSERT INTO conditions VALUES ('2020-05-15', '6');
+INSERT INTO conditions VALUES ('2020-04-23', '10');
+INSERT INTO conditions VALUES ('2020-04-23', '11');
+
+SET timescaledb.current_timestamp_mock = '2020-07-01';
+
+REFRESH MATERIALIZED VIEW conditions_cagg;
+SELECT * FROM conditions_cagg;
+-- No error on this statement
+SELECT drop_chunks('conditions', '2020-06-01'::timestamptz, cascade_to_materializations => FALSE);
+-- No changes to cagg since cascade_to_materialization is FALSE
+SELECT * FROM conditions_cagg;
+
 
