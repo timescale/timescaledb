@@ -4,7 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <catalog.h>
@@ -31,6 +30,7 @@
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <utils/syscache.h>
+#include <fmgr.h>
 
 #include "fdw/fdw.h"
 #include "remote/async.h"
@@ -893,7 +893,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 /* Only used for generating proper error message */
 typedef enum OperationType
 {
-	OP_BLOCK,
+	OP_CORDON,
 	OP_DETACH,
 	OP_DELETE
 } OperationType;
@@ -903,8 +903,8 @@ get_operation_type_message(OperationType op_type)
 {
 	switch (op_type)
 	{
-		case OP_BLOCK:
-			return "blocking new chunks on";
+		case OP_CORDON:
+			return "cordoning";
 		case OP_DETACH:
 			return "detaching";
 		case OP_DELETE:
@@ -926,22 +926,22 @@ check_replication_for_new_data(const char *node_name, Hypertable *ht, bool force
 
 	if (!force)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_HYPERTABLE_UNDERREPLICATED),
 				 errmsg("%s data node \"%s\" risks making new data for hypertable \"%s\" "
 						"under-replicated",
 						operation,
 						node_name,
 						NameStr(ht->fd.table_name)),
-				 errhint("Call function with force => true to force this operation.")));
+				 errhint("Call the function with force => true to force this operation.")));
 
 	ereport(WARNING,
-			(errcode(ERRCODE_TS_INTERNAL_ERROR),
+			(errcode(ERRCODE_TS_HYPERTABLE_UNDERREPLICATED),
 			 errmsg("new data for hypertable \"%s\" will be under-replicated due to %s data "
-					"node "
-					"\"%s\"",
+					"node \"%s\"",
 					NameStr(ht->fd.table_name),
 					operation,
-					node_name)));
+					node_name),
+			 errhint("Attach or uncordon data nodes on the hypertable.")));
 }
 
 static bool
@@ -974,21 +974,22 @@ data_node_detach_validate(const char *node_name, Hypertable *ht, bool force, Ope
 
 	if (has_non_replicated_chunks)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("%s data node \"%s\" would mean a data-loss for hypertable "
-						"\"%s\" since data node has the only data replica",
+				(errcode(ERRCODE_TS_HYPERTABLE_UNDERREPLICATED),
+				 errmsg("%s data node \"%s\" would cause data loss on hypertable \"%s\"",
 						operation,
 						node_name,
-						NameStr(ht->fd.table_name)),
-				 errhint("Ensure the data node \"%s\" has no non-replicated data before %s it.",
-						 node_name,
+						get_rel_name(ht->main_table_relid)),
+				 errdetail("The data node has the only replica of some data"
+						   " and therefore cannot be %s",
+						   operation),
+				 errhint("Make sure all chunks are replicated before %s the data node.",
 						 operation)));
 
 	if (list_length(chunk_data_nodes) > 0)
 	{
 		if (force)
 			ereport(WARNING,
-					(errcode(ERRCODE_WARNING),
+					(errcode(ERRCODE_TS_HYPERTABLE_UNDERREPLICATED),
 					 errmsg("hypertable \"%s\" has under-replicated chunks due to %s "
 							"data node \"%s\"",
 							NameStr(ht->fd.table_name),
@@ -1011,8 +1012,8 @@ data_node_detach_validate(const char *node_name, Hypertable *ht, bool force, Ope
 
 static int
 data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
-									   bool all_hypertables, OperationType op_type,
-									   bool block_chunks, bool force, bool repartition)
+									   bool all_hypertables, OperationType op_type, bool cordon,
+									   bool force, bool repartition)
 {
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc;
@@ -1089,23 +1090,21 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 		else
 		{
 			/*  set block new chunks */
-			if (block_chunks)
+			if (cordon)
 			{
-				if (node->fd.block_chunks)
+				if (node->fd.cordoned)
 				{
 					ereport(NOTICE,
-							(errcode(ERRCODE_TS_INTERNAL_ERROR),
-							 errmsg("new chunks already blocked on data node \"%s\" for "
-									"hypertable "
-									"\"%s\"",
+							(errcode(ERRCODE_TS_DATA_NODE_ALREADY_CORDONED),
+							 errmsg("data node \"%s\" already cordoned for hypertable \"%s\"",
 									NameStr(node->fd.node_name),
 									get_rel_name(relid))));
 					continue;
 				}
 
-				check_replication_for_new_data(node_name, ht, force, OP_BLOCK);
+				check_replication_for_new_data(node_name, ht, force, OP_CORDON);
 			}
-			node->fd.block_chunks = block_chunks;
+			node->fd.cordoned = cordon;
 			removed += ts_hypertable_data_node_update(node);
 		}
 	}
@@ -1114,14 +1113,14 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 }
 
 static int
-data_node_block_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
-									  bool all_hypertables, bool block_chunks, bool force)
+data_node_cordon_hypertable_data_nodes(const char *node_name, List *hypertable_data_nodes,
+									   bool all_hypertables, bool cordon, bool force)
 {
 	return data_node_modify_hypertable_data_nodes(node_name,
 												  hypertable_data_nodes,
 												  all_hypertables,
-												  OP_BLOCK,
-												  block_chunks,
+												  OP_CORDON,
+												  cordon,
 												  force,
 												  false);
 }
@@ -1173,8 +1172,7 @@ get_hypertable_data_node(Oid table_id, const char *node_name, bool ownercheck)
 }
 
 static Datum
-data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, bool force,
-									bool block_chunks)
+data_node_cordon_or_uncordon(const char *node_name, Oid const table_id, bool force, bool cordon)
 {
 	int affected = 0;
 	bool all_hypertables = table_id == InvalidOid ? true : false;
@@ -1192,40 +1190,40 @@ data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, b
 	}
 	else
 	{
-		/* block or allow for all hypertables */
+		/* cordon or uncordon for all hypertables */
 		hypertable_data_nodes =
 			ts_hypertable_data_node_scan_by_node_name(server->servername, CurrentMemoryContext);
 	}
 
-	affected = data_node_block_hypertable_data_nodes(server->servername,
-													 hypertable_data_nodes,
-													 all_hypertables,
-													 block_chunks,
-													 force);
+	affected = data_node_cordon_hypertable_data_nodes(server->servername,
+													  hypertable_data_nodes,
+													  all_hypertables,
+													  cordon,
+													  force);
 	return Int32GetDatum(affected);
 }
 
 Datum
-data_node_allow_new_chunks(PG_FUNCTION_ARGS)
+data_node_uncordon(PG_FUNCTION_ARGS)
 {
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 
-	PreventCommandIfReadOnly("allow_new_chunks()");
+	PreventCommandIfReadOnly("uncordon_data_node()");
 
-	return data_node_block_or_allow_new_chunks(node_name, table_id, false, false);
+	return data_node_cordon_or_uncordon(node_name, table_id, false, false);
 }
 
 Datum
-data_node_block_new_chunks(PG_FUNCTION_ARGS)
+data_node_cordon(PG_FUNCTION_ARGS)
 {
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
-	PreventCommandIfReadOnly("block_new_chunks()");
+	PreventCommandIfReadOnly("cordon_data_node()");
 
-	return data_node_block_or_allow_new_chunks(node_name, table_id, force, true);
+	return data_node_cordon_or_uncordon(node_name, table_id, force, true);
 }
 
 Datum

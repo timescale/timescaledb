@@ -24,13 +24,12 @@ WHERE oid IN (
  add_dimension
  add_reorder_policy
  add_retention_policy
- allow_new_chunks
  alter_job_schedule
  attach_data_node
  attach_tablespace
- block_new_chunks
  chunks_detailed_size
  compress_chunk
+ cordon_data_node
  create_distributed_hypertable
  create_hypertable
  decompress_chunk
@@ -69,5 +68,6 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
+ uncordon_data_node
 (50 rows)
 

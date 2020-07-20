@@ -16,6 +16,8 @@ DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,a
 DROP FUNCTION IF EXISTS add_drop_chunks_policy;
 DROP FUNCTION IF EXISTS remove_drop_chunks_policy;
 DROP FUNCTION IF EXISTS drop_chunks;
+DROP FUNCTION IF EXISTS block_new_chunks;
+DROP FUNCTION IF EXISTS allow_new_chunks;
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
@@ -24,7 +26,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
     node_hypertable_id   INTEGER NULL,
     node_name            NAME NOT NULL,
-    block_chunks           BOOLEAN NOT NULL,
+    cordoned             BOOLEAN NOT NULL,
     UNIQUE(node_hypertable_id, node_name),
     UNIQUE(hypertable_id, node_name)
 );
@@ -78,20 +80,16 @@ GRANT SELECT ON _timescaledb_catalog.remote_txn TO PUBLIC;
 -- So remove it from the extension first and then recreate a new table.
 
 CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp (
-    job_id INTEGER PRIMARY KEY
-    	   REFERENCES _timescaledb_config.bgw_job(id)
-	   ON DELETE CASCADE,
-    hypertable_id INTEGER UNIQUE NOT NULL
-    		  REFERENCES _timescaledb_catalog.hypertable(id)
-		  ON DELETE CASCADE,
+    job_id INTEGER PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id INTEGER UNIQUE NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     older_than _timescaledb_catalog.ts_interval NOT NULL,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 
 INSERT INTO _timescaledb_config.bgw_policy_drop_chunks_tmp (
     SELECT job_id,
-    	   hypertable_id,
-	   older_than
+           hypertable_id,
+       older_than
       FROM _timescaledb_config.bgw_policy_drop_chunks
 );
 
@@ -101,12 +99,8 @@ DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
 DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
 
 CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks (
-    job_id INTEGER PRIMARY KEY
-    	   REFERENCES _timescaledb_config.bgw_job(id)
-	   ON DELETE CASCADE,
-    hypertable_id INTEGER UNIQUE NOT NULL
-    		  REFERENCES _timescaledb_catalog.hypertable(id)
-		  ON DELETE CASCADE,
+    job_id INTEGER PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id INTEGER UNIQUE NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     older_than _timescaledb_catalog.ts_interval NOT NULL,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
@@ -192,4 +186,3 @@ DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_compress_chunks CASCADE;
 
 DROP FUNCTION IF EXISTS add_compress_chunks_policy;
 DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
-

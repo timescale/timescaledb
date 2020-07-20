@@ -2508,12 +2508,13 @@ ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube)
 
 	if (list_length(chunk_data_nodes) < ht->fd.replication_factor)
 		ereport(WARNING,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("new chunks for hypertable \"%s\" will be under-replicated due to "
-						"insufficient available data nodes, lacks %d data node(s)",
-						NameStr(ht->fd.table_name),
-						ht->fd.replication_factor - list_length(chunk_data_nodes)),
-				 errhint("attach more data nodes or allow new chunks on blocked data nodes")));
+				(errcode(ERRCODE_TS_HYPERTABLE_UNDERREPLICATED),
+				 errmsg("new chunks on hypertable \"%s\" will be under-replicated due to "
+						"lack of available data nodes",
+						NameStr(ht->fd.table_name)),
+				 errdetail("The hypertable lacks %d data nodes.",
+						   ht->fd.replication_factor - list_length(chunk_data_nodes)),
+				 errhint("Attach or uncordon data nodes on the hypertable.")));
 
 #if defined(USE_ASSERT_CHECKING)
 	assert_chunk_data_nodes_is_a_set(chunk_data_nodes);
@@ -2525,9 +2526,9 @@ ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube)
 typedef bool (*hypertable_data_node_filter)(HypertableDataNode *hdn);
 
 static bool
-filter_non_blocked_data_nodes(HypertableDataNode *node)
+filter_non_cordoned_data_nodes(HypertableDataNode *node)
 {
-	return !node->fd.block_chunks;
+	return !node->fd.cordoned;
 }
 
 typedef void *(*get_value)(HypertableDataNode *hdn);
@@ -2570,17 +2571,15 @@ List *
 ts_hypertable_get_available_data_nodes(Hypertable *ht, bool error_if_missing)
 {
 	List *available_nodes = get_hypertable_data_node_values(ht,
-															filter_non_blocked_data_nodes,
+															filter_non_cordoned_data_nodes,
 															get_hypertable_data_node);
 	if (available_nodes == NIL && error_if_missing)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_NO_DATA_NODES),
-				 (errmsg("no available data nodes (detached or blocked for new chunks) for "
-						 "hypertable \"%s\"",
+				 (errmsg("no data nodes available for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)),
-				  errhint("attach more data nodes or allow new chunks for existing data nodes for "
-						  "hypertable \"%s\"",
-						  get_rel_name(ht->main_table_relid)))));
+				  errhint("Attach or uncordon data nodes on the hypertable."))));
+
 	return available_nodes;
 }
 
@@ -2609,7 +2608,7 @@ ts_hypertable_get_data_node_serverids_list(Hypertable *ht)
 List *
 ts_hypertable_get_available_data_node_server_oids(Hypertable *ht)
 {
-	return get_hypertable_data_node_ids(ht, filter_non_blocked_data_nodes);
+	return get_hypertable_data_node_ids(ht, filter_non_cordoned_data_nodes);
 }
 
 HypertableType

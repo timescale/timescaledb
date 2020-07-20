@@ -62,8 +62,8 @@ CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 
 CROSSMODULE_WRAPPER(data_node_ping);
-CROSSMODULE_WRAPPER(data_node_block_new_chunks);
-CROSSMODULE_WRAPPER(data_node_allow_new_chunks);
+CROSSMODULE_WRAPPER(data_node_cordon);
+CROSSMODULE_WRAPPER(data_node_uncordon);
 CROSSMODULE_WRAPPER(data_node_add);
 CROSSMODULE_WRAPPER(data_node_delete);
 CROSSMODULE_WRAPPER(data_node_attach);
@@ -386,8 +386,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.data_node_attach = error_no_default_fn_pg_community,
 	.data_node_ping = error_no_default_fn_pg_community,
 	.data_node_detach = error_no_default_fn_pg_community,
-	.data_node_allow_new_chunks = error_no_default_fn_pg_community,
-	.data_node_block_new_chunks = error_no_default_fn_pg_community,
+	.data_node_cordon = error_no_default_fn_pg_community,
+	.data_node_uncordon = error_no_default_fn_pg_community,
 	.distributed_exec = error_no_default_fn_pg_community,
 	.chunk_set_default_data_node = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,

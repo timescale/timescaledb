@@ -120,8 +120,8 @@ CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE FUNCTION test_trigger();
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              1 |                  1 | data_node_1 | f
              1 |                  1 | data_node_2 | f
              1 |                  1 | data_node_3 | f
@@ -1426,7 +1426,7 @@ ORDER BY table_schema, table_name;
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
-WARNING:  new chunks for hypertable "underreplicated" will be under-replicated due to insufficient available data nodes, lacks 1 data node(s)
+WARNING:  new chunks on hypertable "underreplicated" will be under-replicated due to lack of available data nodes
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
  chunk_id | node_chunk_id |  node_name  
 ----------+---------------+-------------

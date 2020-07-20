@@ -122,8 +122,8 @@ typedef struct CrossModuleFunctions
 	Datum (*data_node_attach)(PG_FUNCTION_ARGS);
 	Datum (*data_node_ping)(PG_FUNCTION_ARGS);
 	Datum (*data_node_detach)(PG_FUNCTION_ARGS);
-	Datum (*data_node_allow_new_chunks)(PG_FUNCTION_ARGS);
-	Datum (*data_node_block_new_chunks)(PG_FUNCTION_ARGS);
+	PGFunction data_node_cordon;
+	PGFunction data_node_uncordon;
 
 	Datum (*chunk_set_default_data_node)(PG_FUNCTION_ARGS);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);

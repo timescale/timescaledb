@@ -439,11 +439,11 @@ CREATE TABLE devices(device int, name text);
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 
--- Block one data node for specific hypertable
-SELECT * FROM block_new_chunks('data_node_1', 'disttable');
+-- Cordon one data node for specific hypertable
+SELECT * FROM cordon_data_node('data_node_1', 'disttable');
 
--- Block one data node for all hypertables
-SELECT * FROM block_new_chunks('data_node_1');
+-- Cordon one data node for all hypertables
+SELECT * FROM cordon_data_node('data_node_1');
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 
@@ -459,37 +459,37 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 -- some ERROR cases
 \set ON_ERROR_STOP 0
 -- Will error due to under-replication
-SELECT * FROM block_new_chunks('data_node_2');
--- can't block/allow non-existing data node
-SELECT * FROM block_new_chunks('data_node_12345', 'disttable');
-SELECT * FROM allow_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM cordon_data_node('data_node_2');
+-- can't cordon and uncordon a non-existing data node
+SELECT * FROM cordon_data_node('data_node_12345', 'disttable');
+SELECT * FROM uncordon_data_node('data_node_12345', 'disttable');
 -- NULL data node
-SELECT * FROM block_new_chunks(NULL, 'disttable');
-SELECT * FROM allow_new_chunks(NULL, 'disttable');
--- can't block/allow on non hypertable
-SELECT * FROM block_new_chunks('data_node_1', 'devices');
-SELECT * FROM allow_new_chunks('data_node_1', 'devices');
+SELECT * FROM cordon_data_node(NULL, 'disttable');
+SELECT * FROM uncordon_data_node(NULL, 'disttable');
+-- can't cordon and uncordon on non hypertable
+SELECT * FROM cordon_data_node('data_node_1', 'devices');
+SELECT * FROM uncordon_data_node('data_node_1', 'devices');
 \set ON_ERROR_STOP 1
 
--- Force block all data nodes
-SELECT * FROM block_new_chunks('data_node_2', force => true);
-SELECT * FROM block_new_chunks('data_node_1', force => true);
-SELECT * FROM block_new_chunks('data_node_3', force => true);
+-- Force cordon of all data nodes
+SELECT * FROM cordon_data_node('data_node_2', force => true);
+SELECT * FROM cordon_data_node('data_node_1', force => true);
+SELECT * FROM cordon_data_node('data_node_3', force => true);
 
--- All data nodes are blocked
+-- All data nodes are cordoned
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 
 \set ON_ERROR_STOP 0
--- insert should fail b/c all data nodes are blocked
+-- insert should fail b/c all data nodes are cordoned
 INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
 \set ON_ERROR_STOP 1
 
--- unblock data nodes for all hypertables
-SELECT * FROM allow_new_chunks('data_node_1');
-SELECT * FROM allow_new_chunks('data_node_2');
-SELECT * FROM allow_new_chunks('data_node_3');
+-- uncordon data nodes for all hypertables
+SELECT * FROM uncordon_data_node('data_node_1');
+SELECT * FROM uncordon_data_node('data_node_2');
+SELECT * FROM uncordon_data_node('data_node_3');
 
-SELECT table_name, node_name, block_chunks
+SELECT table_name, node_name, cordoned
 FROM _timescaledb_catalog.hypertable_data_node dn,
 _timescaledb_catalog.hypertable h
 WHERE dn.hypertable_id = h.id
@@ -525,7 +525,7 @@ SELECT * FROM detach_data_node('data_node_3', 'disttable', force => true);
 
 -- chunk and hypertable metadata should be deleted as well
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
-SELECT table_name, node_name, block_chunks
+SELECT table_name, node_name, cordoned
 FROM _timescaledb_catalog.hypertable_data_node dn,
 _timescaledb_catalog.hypertable h
 WHERE dn.hypertable_id = h.id
@@ -566,8 +566,8 @@ SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_f
 \set ON_ERROR_STOP 0
 -- error due to missing permissions
 SELECT * FROM detach_data_node('data_node_4', 'disttable_3');
-SELECT * FROM block_new_chunks('data_node_4', 'disttable_3');
-SELECT * FROM allow_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM cordon_data_node('data_node_4', 'disttable_3');
+SELECT * FROM uncordon_data_node('data_node_4', 'disttable_3');
 \set ON_ERROR_STOP 1
 
 -- detach table(s) where user has permissions, otherwise show NOTICE

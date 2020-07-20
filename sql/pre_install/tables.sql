@@ -62,9 +62,9 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
-    node_hypertable_id   INTEGER NULL,
-    node_name            NAME NOT NULL,
-    block_chunks           BOOLEAN NOT NULL,
+    node_hypertable_id     INTEGER NULL,
+    node_name              NAME NOT NULL,
+    cordoned               BOOLEAN NOT NULL,
     UNIQUE (node_hypertable_id, node_name),
     UNIQUE (hypertable_id, node_name)
 );
@@ -230,9 +230,9 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 
 --Now we define the argument tables for available BGW policies.
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
-    job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-    hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
+    job_id                      INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
+    hypertable_id               INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    older_than      _timescaledb_catalog.ts_interval    NOT NULL,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
@@ -325,22 +325,22 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
  *  the algorithms. This table is NOT dumped.
 */
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm(
-	id SMALLINT PRIMARY KEY,
-	version SMALLINT NOT NULL,
-	name NAME NOT NULL,
-	description TEXT
+    id SMALLINT PRIMARY KEY,
+    version SMALLINT NOT NULL,
+    name NAME NOT NULL,
+    description TEXT
 );
 
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
-	hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-	attname NAME NOT NULL,
-	compression_algorithm_id SMALLINT REFERENCES _timescaledb_catalog.compression_algorithm(id),
-	segmentby_column_index SMALLINT ,
-	orderby_column_index SMALLINT,
-	orderby_asc BOOLEAN,
-	orderby_nullsfirst BOOLEAN,
-	PRIMARY KEY (hypertable_id, attname),
+    hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    attname NAME NOT NULL,
+    compression_algorithm_id SMALLINT REFERENCES _timescaledb_catalog.compression_algorithm(id),
+    segmentby_column_index SMALLINT ,
+    orderby_column_index SMALLINT,
+    orderby_asc BOOLEAN,
+    orderby_nullsfirst BOOLEAN,
+    PRIMARY KEY (hypertable_id, attname),
     UNIQUE (hypertable_id, segmentby_column_index),
     UNIQUE (hypertable_id, orderby_column_index)
 );

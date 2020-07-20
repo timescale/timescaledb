@@ -333,8 +333,8 @@ SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node
 DROP TABLE disttable;
 -- data node mappings should be cleaned up
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id | node_name | block_chunks 
----------------+--------------------+-----------+--------------
+ hypertable_id | node_hypertable_id | node_name | cordoned 
+---------------+--------------------+-----------+----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -395,8 +395,8 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              3 |                  3 | data_node_2 | f
              3 |                  2 | data_node_3 | f
 (2 rows)
@@ -533,8 +533,8 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              3 |                  2 | data_node_3 | f
 (1 row)
 
@@ -548,7 +548,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 \set ON_ERROR_STOP 0
 -- can't delete b/c it's last data replica
 SELECT * FROM delete_data_node('data_node_3', force => true);
-ERROR:  deleting data node "data_node_3" would mean a data-loss for hypertable "disttable" since data node has the only data replica
+ERROR:  deleting data node "data_node_3" would cause data loss on hypertable "disttable"
 \set ON_ERROR_STOP 1
 -- Removing all data allows us to delete the data node by force, but
 -- with WARNING that new data will be under-replicated
@@ -566,8 +566,8 @@ SELECT * FROM test.show_subtables('disttable');
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id | node_name | block_chunks 
----------------+--------------------+-----------+--------------
+ hypertable_id | node_hypertable_id | node_name | cordoned 
+---------------+--------------------+-----------+----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -589,8 +589,8 @@ SELECT * FROM attach_data_node('data_node_1', 'disttable');
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              3 |                  3 | data_node_1 | f
 (1 row)
 
@@ -731,8 +731,8 @@ SELECT * FROM test.show_subtables('disttable');
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id | node_name | block_chunks 
----------------+--------------------+-----------+--------------
+ hypertable_id | node_hypertable_id | node_name | cordoned 
+---------------+--------------------+-----------+----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
@@ -819,8 +819,8 @@ SELECT * FROM _timescaledb_catalog.chunk;
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              5 |                  1 | data_node_1 | f
              5 |                  1 | data_node_2 | f
              5 |                  1 | data_node_3 | f
@@ -849,8 +849,8 @@ WARNING:  the number of partitions in dimension "device" is too low to make use 
 
 CREATE TABLE devices(device int, name text);
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              5 |                  1 | data_node_1 | f
              5 |                  1 | data_node_2 | f
              5 |                  1 | data_node_3 | f
@@ -859,24 +859,24 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
              6 |                  2 | data_node_3 | f
 (6 rows)
 
--- Block one data node for specific hypertable
-SELECT * FROM block_new_chunks('data_node_1', 'disttable');
- block_new_chunks 
+-- Cordon one data node for specific hypertable
+SELECT * FROM cordon_data_node('data_node_1', 'disttable');
+ cordon_data_node 
 ------------------
                 1
 (1 row)
 
--- Block one data node for all hypertables
-SELECT * FROM block_new_chunks('data_node_1');
-NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "disttable"
- block_new_chunks 
+-- Cordon one data node for all hypertables
+SELECT * FROM cordon_data_node('data_node_1');
+NOTICE:  data node "data_node_1" already cordoned for hypertable "disttable"
+ cordon_data_node 
 ------------------
                 1
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              5 |                  1 | data_node_2 | f
              5 |                  1 | data_node_3 | f
              6 |                  2 | data_node_2 | f
@@ -911,53 +911,53 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 -- some ERROR cases
 \set ON_ERROR_STOP 0
 -- Will error due to under-replication
-SELECT * FROM block_new_chunks('data_node_2');
-ERROR:  blocking new chunks on data node "data_node_2" risks making new data for hypertable "disttable" under-replicated
--- can't block/allow non-existing data node
-SELECT * FROM block_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM cordon_data_node('data_node_2');
+ERROR:  cordoning data node "data_node_2" risks making new data for hypertable "disttable" under-replicated
+-- can't cordon and uncordon a non-existing data node
+SELECT * FROM cordon_data_node('data_node_12345', 'disttable');
 ERROR:  server "data_node_12345" does not exist
-SELECT * FROM allow_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM uncordon_data_node('data_node_12345', 'disttable');
 ERROR:  server "data_node_12345" does not exist
 -- NULL data node
-SELECT * FROM block_new_chunks(NULL, 'disttable');
+SELECT * FROM cordon_data_node(NULL, 'disttable');
 ERROR:  invalid node_name: cannot be NULL
-SELECT * FROM allow_new_chunks(NULL, 'disttable');
+SELECT * FROM uncordon_data_node(NULL, 'disttable');
 ERROR:  invalid node_name: cannot be NULL
--- can't block/allow on non hypertable
-SELECT * FROM block_new_chunks('data_node_1', 'devices');
+-- can't cordon and uncordon on non hypertable
+SELECT * FROM cordon_data_node('data_node_1', 'devices');
 ERROR:  table "devices" is not a hypertable
-SELECT * FROM allow_new_chunks('data_node_1', 'devices');
+SELECT * FROM uncordon_data_node('data_node_1', 'devices');
 ERROR:  table "devices" is not a hypertable
 \set ON_ERROR_STOP 1
--- Force block all data nodes
-SELECT * FROM block_new_chunks('data_node_2', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on data node "data_node_2"
-WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on data node "data_node_2"
- block_new_chunks 
+-- Force cordon of all data nodes
+SELECT * FROM cordon_data_node('data_node_2', force => true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to cordoning data node "data_node_2"
+WARNING:  new data for hypertable "disttable_2" will be under-replicated due to cordoning data node "data_node_2"
+ cordon_data_node 
 ------------------
                 2
 (1 row)
 
-SELECT * FROM block_new_chunks('data_node_1', force => true);
-NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "disttable"
-NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "disttable_2"
- block_new_chunks 
+SELECT * FROM cordon_data_node('data_node_1', force => true);
+NOTICE:  data node "data_node_1" already cordoned for hypertable "disttable"
+NOTICE:  data node "data_node_1" already cordoned for hypertable "disttable_2"
+ cordon_data_node 
 ------------------
                 0
 (1 row)
 
-SELECT * FROM block_new_chunks('data_node_3', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on data node "data_node_3"
-WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on data node "data_node_3"
- block_new_chunks 
+SELECT * FROM cordon_data_node('data_node_3', force => true);
+WARNING:  new data for hypertable "disttable" will be under-replicated due to cordoning data node "data_node_3"
+WARNING:  new data for hypertable "disttable_2" will be under-replicated due to cordoning data node "data_node_3"
+ cordon_data_node 
 ------------------
                 2
 (1 row)
 
--- All data nodes are blocked
+-- All data nodes are cordoned
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              5 |                  1 | data_node_1 | t
              6 |                  2 | data_node_1 | t
              5 |                  1 | data_node_2 | t
@@ -967,36 +967,36 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 (6 rows)
 
 \set ON_ERROR_STOP 0
--- insert should fail b/c all data nodes are blocked
+-- insert should fail b/c all data nodes are cordoned
 INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
-ERROR:  no available data nodes (detached or blocked for new chunks) for hypertable "disttable"
+ERROR:  no data nodes available for hypertable "disttable"
 \set ON_ERROR_STOP 1
--- unblock data nodes for all hypertables
-SELECT * FROM allow_new_chunks('data_node_1');
- allow_new_chunks 
-------------------
-                2
+-- uncordon data nodes for all hypertables
+SELECT * FROM uncordon_data_node('data_node_1');
+ uncordon_data_node 
+--------------------
+                  2
 (1 row)
 
-SELECT * FROM allow_new_chunks('data_node_2');
- allow_new_chunks 
-------------------
-                2
+SELECT * FROM uncordon_data_node('data_node_2');
+ uncordon_data_node 
+--------------------
+                  2
 (1 row)
 
-SELECT * FROM allow_new_chunks('data_node_3');
- allow_new_chunks 
-------------------
-                2
+SELECT * FROM uncordon_data_node('data_node_3');
+ uncordon_data_node 
+--------------------
+                  2
 (1 row)
 
-SELECT table_name, node_name, block_chunks
+SELECT table_name, node_name, cordoned
 FROM _timescaledb_catalog.hypertable_data_node dn,
 _timescaledb_catalog.hypertable h
 WHERE dn.hypertable_id = h.id
 ORDER BY table_name;
- table_name  |  node_name  | block_chunks 
--------------+-------------+--------------
+ table_name  |  node_name  | cordoned 
+-------------+-------------+----------
  disttable   | data_node_1 | f
  disttable   | data_node_2 | f
  disttable   | data_node_3 | f
@@ -1077,13 +1077,13 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
        10 |             6 | data_node_2
 (8 rows)
 
-SELECT table_name, node_name, block_chunks
+SELECT table_name, node_name, cordoned
 FROM _timescaledb_catalog.hypertable_data_node dn,
 _timescaledb_catalog.hypertable h
 WHERE dn.hypertable_id = h.id
 ORDER BY table_name;
- table_name  |  node_name  | block_chunks 
--------------+-------------+--------------
+ table_name  |  node_name  | cordoned 
+-------------+-------------+----------
  disttable   | data_node_1 | f
  disttable   | data_node_2 | f
  disttable_2 | data_node_1 | f
@@ -1173,9 +1173,9 @@ NOTICE:  adding not-null constraint to column "time"
 -- error due to missing permissions
 SELECT * FROM detach_data_node('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
-SELECT * FROM block_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM cordon_data_node('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
-SELECT * FROM allow_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM uncordon_data_node('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
 \set ON_ERROR_STOP 1
 -- detach table(s) where user has permissions, otherwise show NOTICE

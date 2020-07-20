@@ -49,7 +49,7 @@ hypertable_valid_ts_interval(PG_FUNCTION_ARGS)
 
 static List *
 data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
-				 int32 node_hypertable_id, bool block_chunks)
+				 int32 node_hypertable_id, bool cordon)
 {
 	ForeignServer *server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, true, false);
 	HypertableDataNode *hdn = palloc0(sizeof(HypertableDataNode));
@@ -58,7 +58,7 @@ data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
 	namestrcpy(&hdn->fd.node_name, node_name);
 	hdn->fd.node_hypertable_id = node_hypertable_id;
 	hdn->foreign_server_oid = server->serverid;
-	hdn->fd.block_chunks = block_chunks;
+	hdn->fd.cordoned = cordon;
 
 	return lappend(data_nodes, hdn);
 }

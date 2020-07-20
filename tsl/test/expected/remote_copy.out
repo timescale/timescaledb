@@ -170,8 +170,8 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 (32 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
- hypertable_id | node_hypertable_id |  node_name  | block_chunks 
----------------+--------------------+-------------+--------------
+ hypertable_id | node_hypertable_id |  node_name  | cordoned 
+---------------+--------------------+-------------+----------
              1 |                  1 | data_node_1 | f
              1 |                  1 | data_node_2 | f
              1 |                  1 | data_node_3 | f

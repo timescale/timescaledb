@@ -175,7 +175,7 @@ enum Anum_hypertable_data_node
 	Anum_hypertable_data_node_hypertable_id = 1,
 	Anum_hypertable_data_node_node_hypertable_id,
 	Anum_hypertable_data_node_node_name,
-	Anum_hypertable_data_node_block_chunks,
+	Anum_hypertable_data_node_cordoned,
 	_Anum_hypertable_data_node_max,
 };
 
@@ -186,7 +186,7 @@ typedef struct FormData_hypertable_data_node
 	int32 hypertable_id;
 	int32 node_hypertable_id;
 	NameData node_name;
-	bool block_chunks;
+	bool cordoned;
 } FormData_hypertable_data_node;
 
 typedef FormData_hypertable_data_node *Form_hypertable_data_node;

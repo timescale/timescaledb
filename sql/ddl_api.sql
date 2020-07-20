@@ -191,15 +191,25 @@ CREATE OR REPLACE FUNCTION detach_data_node(
 ) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
--- Block new chunk creation on a data node for a distributed hypertable. NULL hypertable means it will block
--- chunks for all distributed hypertables
-CREATE OR REPLACE FUNCTION block_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
+-- Cordon a data node across all distributed hypertables or a specific
+-- one if a hypertable is specified. A cordoned node will not have any
+-- new chunks placed on it. The force parameter allows cordoning a
+-- node even if it makes a distributed hypertable under-replicated.
+CREATE OR REPLACE FUNCTION cordon_data_node(
+    node_name NAME,
+    hypertable REGCLASS = NULL,
+    force BOOLEAN = FALSE
+) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_cordon' LANGUAGE C VOLATILE;
 
--- Reallow chunk creations on a blocked data node for a distributed hypertable. NULL hypertable means it will
--- allow chunks for all distributed hypertables
-CREATE OR REPLACE FUNCTION allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
+-- Uncordon a data node across all distributed hypertables or a
+-- specific one when a hypertable is specified. If the data node was
+-- previously cordoned, it will again be used to place new chunks on.
+CREATE OR REPLACE FUNCTION uncordon_data_node(
+    node_name NAME,
+    hypertable REGCLASS = NULL
+) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_uncordon' LANGUAGE C VOLATILE;
 
 -- Execute query on a specified list of data nodes. By default node_list is NULL, which means
 -- to execute the query on every data node
