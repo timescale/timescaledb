@@ -604,7 +604,7 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 	if (!OidIsValid(tspcoid))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("tablespace \"%s\" doss not exist", NameStr(*tspcname))));
+				 errmsg("tablespace \"%s\" does not exist", NameStr(*tspcname))));
 
 	if (OidIsValid(hypertable_oid))
 		ret = tablespace_detach_one(hypertable_oid, NameStr(*tspcname), tspcoid, if_attached);
