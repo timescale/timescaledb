@@ -29,18 +29,23 @@ check_file() {
             LICENSE_STRING=`get_c_license ${LICENSE_FILE}`
             FIRST_COMMENT=`get_c_license ${FILE}`
             ;;
+        ('-i')
+            LICENSE_FILE="${SCRIPTPATH}/license_apache.spec"
+            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
+            FIRST_COMMENT=`get_sql_license ${FILE}`
+            ;;
+        ('-j')
+            LICENSE_FILE="${SCRIPTPATH}/license_tsl.spec"
+            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
+            FIRST_COMMENT=`get_sql_license ${FILE}`
+            ;;
         ('-s')
-            LICENSE_FILE="${SCRIPTPATH}/sql_license.sql"
+            LICENSE_FILE="${SCRIPTPATH}/sql_license_apache.sql"
             LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
             FIRST_COMMENT=`get_sql_license ${FILE}`
             ;;
         ('-t')
-            LICENSE_FILE=${SCRIPTPATH}/test_license.sql
-            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_sql_license ${FILE}`
-            ;;
-        ('-u')
-            LICENSE_FILE=${SCRIPTPATH}/ts_test_license.sql
+            LICENSE_FILE="${SCRIPTPATH}/sql_license_tsl.sql"
             LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
             FIRST_COMMENT=`get_sql_license ${FILE}`
             ;;
@@ -62,10 +67,10 @@ check_file() {
     fi
 }
 
-args=`getopt "c:e:s:t:u:" $*`; errcode=$?; set -- $args
+args=`getopt "c:e:i:j:s:t:" $*`; errcode=$?; set -- $args
 
 if [[ ${errcode} != 0 ]]; then
-        echo 'Usage: check_file_license ((-c|-e|-s|-t|-u) <filename> ...)'
+        echo 'Usage: check_file_license ((-c|-e|-i|-j|-s|-t) <filename> ...)'
         return 2
 fi
 
