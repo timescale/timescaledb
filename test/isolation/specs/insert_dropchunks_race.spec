@@ -1,3 +1,7 @@
+# This file and its contents are licensed under the Apache License 2.0.
+# Please see the included NOTICE for copyright information and
+# LICENSE-APACHE for a copy of the license.
+
 # Race condition between insert and drop_chunks
 #
 # If an insert need to create a new chunk, it will look for existing
