@@ -4,7 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <c.h>
 #include <utils/builtins.h>
 
 #include <hypertable_cache.h>
@@ -66,6 +65,7 @@ ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refr
 {
 	NameData application_name;
 	NameData job_type;
+	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 
 	namestrcpy(&job_type, "continuous_aggregate");
@@ -75,12 +75,23 @@ ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refr
 		refresh_interval =
 			continuous_agg_job_get_default_schedule_interval(raw_table_id, bucket_width);
 
+	namestrcpy(&proc_name, "");
+	namestrcpy(&proc_schema, "");
+	namestrcpy(&owner, "");
+
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&job_type,
 										refresh_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
-										refresh_interval);
+										refresh_interval,
+										&proc_name,
+										&proc_schema,
+										&owner,
+										true,
+										0,
+										NULL);
+
 	return job_id;
 }
 

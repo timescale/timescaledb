@@ -53,8 +53,8 @@ SELECT ts_bgw_params_create();
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period 
-----+------------------+----------+-------------------+-------------+-------------+--------------
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
 SELECT * FROM timescaledb_information.policy_stats;
@@ -107,9 +107,9 @@ SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_i
 SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
 -- job was created
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
-------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
+  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
 (1 row)
 
 -- create 10 time buckets
@@ -145,9 +145,9 @@ SELECT * FROM sorted_bgw_log;
 (2 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
-------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
+  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ 1000 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
 (1 row)
 
 -- job ran once, successfully
@@ -432,9 +432,9 @@ SELECT * FROM sorted_bgw_log;
 (6 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period 
-------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------
- 1001 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours
+  id  |          application_name           |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+------+-------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ 1001 | Continuous Aggregate Background Job | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
 (1 row)
 
 -- job ran again, fast restart

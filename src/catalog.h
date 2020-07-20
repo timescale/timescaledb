@@ -7,7 +7,7 @@
 #define TIMESCALEDB_CATALOG_H
 
 #include <postgres.h>
-
+#include <utils/jsonb.h>
 #include <utils/rel.h>
 #include <nodes/nodes.h>
 #include <access/heapam.h>
@@ -649,6 +649,12 @@ enum Anum_bgw_job
 	Anum_bgw_job_max_runtime,
 	Anum_bgw_job_max_retries,
 	Anum_bgw_job_retry_period,
+	Anum_bgw_job_proc_name,
+	Anum_bgw_job_proc_schema,
+	Anum_bgw_job_owner,
+	Anum_bgw_job_scheduled,
+	Anum_bgw_job_hypertable_id,
+	Anum_bgw_job_config,
 	_Anum_bgw_job_max,
 };
 
@@ -663,6 +669,12 @@ typedef struct FormData_bgw_job
 	Interval max_runtime;
 	int32 max_retries;
 	Interval retry_period;
+	NameData proc_name;
+	NameData proc_schema;
+	NameData owner;
+	bool scheduled;
+	int32 hypertable_id;
+	Jsonb *config;
 } FormData_bgw_job;
 
 typedef FormData_bgw_job *Form_bgw_job;

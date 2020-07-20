@@ -18,7 +18,7 @@
 
 static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value);
 
-TSDLLEXPORT void
+void
 ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
 {
 	JsonbValue json_value;
@@ -29,7 +29,7 @@ ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
 	ts_jsonb_add_value(state, key, &json_value);
 }
 
-TSDLLEXPORT void
+void
 ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 {
 	JsonbValue json_value;
@@ -41,6 +41,24 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 	json_value.type = jbvString;
 	json_value.val.string.val = (char *) value;
 	json_value.val.string.len = strlen(value);
+
+	ts_jsonb_add_value(state, key, &json_value);
+}
+
+void
+ts_jsonb_add_int32(JsonbParseState *state, const char *key, const int32 int_value)
+{
+	Numeric value;
+
+	value = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(int_value)));
+
+	ts_jsonb_add_numeric(state, key, value);
+}
+
+void
+ts_jsonb_add_numeric(JsonbParseState *state, const char *key, const Numeric value)
+{
+	JsonbValue json_value = { .type = jbvNumeric, .val.numeric = value };
 
 	ts_jsonb_add_value(state, key, &json_value);
 }
@@ -73,7 +91,7 @@ ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
 	pushJsonbValue(&state, WJB_VALUE, value);
 }
 
-TSDLLEXPORT text *
+text *
 ts_jsonb_get_text_field(Jsonb *json, text *field_name)
 {
 	/*
@@ -96,7 +114,7 @@ ts_jsonb_get_text_field(Jsonb *json, text *field_name)
 	return DatumGetTextP(result);
 }
 
-TSDLLEXPORT char *
+char *
 ts_jsonb_get_str_field(Jsonb *license, text *field_name)
 {
 	text *text_str = ts_jsonb_get_text_field(license, field_name);
@@ -107,7 +125,7 @@ ts_jsonb_get_str_field(Jsonb *license, text *field_name)
 	return text_to_cstring(text_str);
 }
 
-TSDLLEXPORT TimestampTz
+TimestampTz
 ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
 {
 	Datum time_datum;
@@ -126,4 +144,22 @@ ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
 
 	*field_found = true;
 	return DatumGetTimestampTz(time_datum);
+}
+
+int32
+ts_jsonb_get_int32_field(Jsonb *json, text *field_name, bool *field_found)
+{
+	Datum int_datum;
+	char *int_str = ts_jsonb_get_str_field(json, field_name);
+
+	if (int_str == NULL)
+	{
+		*field_found = false;
+		return 0;
+	}
+
+	int_datum = DirectFunctionCall1(int4in, CStringGetDatum(int_str));
+
+	*field_found = true;
+	return DatumGetInt32(int_datum);
 }

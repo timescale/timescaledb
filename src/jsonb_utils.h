@@ -15,11 +15,17 @@
 extern TSDLLEXPORT void ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean);
 extern TSDLLEXPORT void ts_jsonb_add_str(JsonbParseState *state, const char *key,
 										 const char *value);
+extern TSDLLEXPORT void ts_jsonb_add_int32(JsonbParseState *state, const char *key,
+										   const int32 value);
+extern TSDLLEXPORT void ts_jsonb_add_numeric(JsonbParseState *state, const char *key,
+											 const Numeric value);
+
 extern void ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value);
 
 extern TSDLLEXPORT text *ts_jsonb_get_text_field(Jsonb *json, text *field_name);
 extern TSDLLEXPORT char *ts_jsonb_get_str_field(Jsonb *license, text *field_name);
 extern TSDLLEXPORT TimestampTz ts_jsonb_get_time_field(Jsonb *license, text *field_name,
 													   bool *field_found);
+extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(Jsonb *json, text *field_name, bool *field_found);
 
 #endif /* TIMESCALEDB_JSONB_UTILS_H */

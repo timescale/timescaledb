@@ -403,7 +403,13 @@ ts_test_bgw_job_insert_relation(PG_FUNCTION_ARGS)
 							   PG_GETARG_INTERVAL_P(2),
 							   PG_GETARG_INTERVAL_P(3),
 							   PG_GETARG_INT32(4),
-							   PG_GETARG_INTERVAL_P(5));
+							   PG_GETARG_INTERVAL_P(5),
+							   PG_GETARG_NAME(6),
+							   PG_GETARG_NAME(7),
+							   PG_GETARG_NAME(8),
+							   PG_GETARG_BOOL(9),
+							   PG_GETARG_INT32(10),
+							   PG_GETARG_JSONB_P(11));
 
 	PG_RETURN_NULL();
 }

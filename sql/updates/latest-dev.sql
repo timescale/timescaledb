@@ -117,3 +117,18 @@ ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF 
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_catalog.compression_chunk_size USING compression_chunk_size_pkey;
 ALTER TABLE _timescaledb_catalog.compression_chunk_size SET WITHOUT CLUSTER;
+
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_name NAME NOT NULL DEFAULT '';
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_schema NAME NOT NULL DEFAULT '';
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN owner NAME NOT NULL DEFAULT CURRENT_ROLE;
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN scheduled BOOL NOT NULL DEFAULT true;
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN config JSONB;
+
+ALTER TABLE _timescaledb_config.bgw_job DROP CONSTRAINT valid_job_type;
+ALTER TABLE _timescaledb_config.bgw_job ADD CONSTRAINT valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks', 'custom'));
+
+--rewrite catalog table to not break catalog scans on tables with missingval optimization
+CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
+ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
+
