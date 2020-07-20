@@ -60,6 +60,7 @@ compress_chunks_add_policy(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
 	NameData compress_chunks_name;
+	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	BgwPolicyCompressChunks *existing;
 	Oid ht_oid = PG_GETARG_OID(0);
@@ -137,12 +138,22 @@ compress_chunks_add_policy(PG_FUNCTION_ARGS)
 	/* insert a new job into jobs table */
 	namestrcpy(&application_name, "Compress Chunks Background Job");
 	namestrcpy(&compress_chunks_name, "compress_chunks");
+	namestrcpy(&proc_name, "");
+	namestrcpy(&proc_schema, "");
+	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
+
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&compress_chunks_name,
 										default_schedule_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
-										DEFAULT_RETRY_PERIOD);
+										DEFAULT_RETRY_PERIOD,
+										&proc_name,
+										&proc_schema,
+										&owner,
+										true,
+										hypertable->fd.id,
+										NULL);
 
 	policy = (BgwPolicyCompressChunks){ .fd = {
 											.job_id = job_id,

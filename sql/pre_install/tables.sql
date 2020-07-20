@@ -195,9 +195,15 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
     job_type            NAME        NOT NULL,
     schedule_interval   INTERVAL    NOT NULL,
     max_runtime         INTERVAL    NOT NULL,
-    max_retries         INT         NOT NULL,
+    max_retries         INTEGER     NOT NULL,
     retry_period        INTERVAL    NOT NULL,
-    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks'))
+    proc_name           NAME        NOT NULL DEFAULT '',
+    proc_schema         NAME        NOT NULL DEFAULT '',
+    owner               NAME        NOT NULL DEFAULT CURRENT_ROLE,
+    scheduled           BOOL        NOT NULL DEFAULT true,
+    hypertable_id       INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    config              JSONB,
+    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks', 'custom'))
 );
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
 

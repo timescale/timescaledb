@@ -54,9 +54,9 @@ select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_con
 
 \gset
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';
-  id  |        application_name        |    job_type     | schedule_interval  | max_runtime | max_retries | retry_period 
-------+--------------------------------+-----------------+--------------------+-------------+-------------+--------------
- 1000 | Compress Chunks Background Job | compress_chunks | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour
+  id  |        application_name        |    job_type     | schedule_interval  | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
+------+--------------------------------+-----------------+--------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
+ 1000 | Compress Chunks Background Job | compress_chunks | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     |           |             | default_perm_user | t         |             1 | 
 (1 row)
 
 select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
@@ -66,9 +66,9 @@ select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';
-  id  |        application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period 
-------+--------------------------------+-----------------+-------------------+-------------+-------------+--------------
- 1000 | Compress Chunks Background Job | compress_chunks | @ 1 sec           | @ 0         |          -1 | @ 1 hour
+  id  |        application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
+------+--------------------------------+-----------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
+ 1000 | Compress Chunks Background Job | compress_chunks | @ 1 sec           | @ 0         |          -1 | @ 1 hour     |           |             | default_perm_user | t         |             1 | 
 (1 row)
 
 insert into conditions

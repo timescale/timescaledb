@@ -5,14 +5,14 @@
  */
 
 #include <postgres.h>
+#include <access/xact.h>
 #include <catalog/pg_type.h>
+#include <miscadmin.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
-#include <miscadmin.h>
 
 #include <hypertable_cache.h>
-#include <access/xact.h>
 
 #include "bgw/job.h"
 #include "bgw_policy/drop_chunks.h"
@@ -188,12 +188,23 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Drop Chunks Background Job");
 	namestrcpy(&drop_chunks_name, "drop_chunks");
+	NameData proc_name, proc_schema, owner;
+	namestrcpy(&proc_name, "");
+	namestrcpy(&proc_schema, "");
+	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
+
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&drop_chunks_name,
 										DEFAULT_SCHEDULE_INTERVAL,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
-										DEFAULT_RETRY_PERIOD);
+										DEFAULT_RETRY_PERIOD,
+										&proc_name,
+										&proc_schema,
+										&owner,
+										true,
+										meta.ht->fd.id,
+										NULL);
 
 	policy = (BgwPolicyDropChunks){
 		.job_id = job_id,

@@ -20,6 +20,7 @@
 #include <storage/procarray.h>
 #include <storage/sinvaladt.h>
 #include <utils/elog.h>
+#include <utils/jsonb.h>
 
 #include "job.h"
 #include "scanner.h"
@@ -184,16 +185,33 @@ get_job_type_from_name(Name job_type_name)
 }
 
 static BgwJob *
-bgw_job_from_tuple(HeapTuple tuple, size_t alloc_size, MemoryContext mctx)
+bgw_job_from_tuple(TupleInfo *ti, size_t alloc_size)
 {
 	BgwJob *job;
+	bool isnull;
+	MemoryContext old_ctx;
+	Datum value;
 
 	/*
 	 * allow for embedding with arbitrary alloc_size, which means we can't use
 	 * the STRUCT_FROM_TUPLE macro
 	 */
 	Assert(alloc_size >= sizeof(BgwJob));
-	job = (BgwJob *) ts_create_struct_from_tuple(tuple, mctx, alloc_size, sizeof(FormData_bgw_job));
+	job = (BgwJob *) MemoryContextAllocZero(ti->mctx, alloc_size);
+	memcpy(job, GETSTRUCT(ti->tuple), sizeof(FormData_bgw_job));
+
+	/*
+	 * GETSTRUCT does not work with variable length types and NULLs so we have
+	 * to do special handling for hypertable_id and the jsonb column
+	 */
+	value = heap_getattr(ti->tuple, Anum_bgw_job_hypertable_id, ti->desc, &isnull);
+	job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
+
+	value = heap_getattr(ti->tuple, Anum_bgw_job_config, ti->desc, &isnull);
+	old_ctx = MemoryContextSwitchTo(ti->mctx);
+	job->fd.config = isnull ? NULL : DatumGetJsonbP(value);
+	MemoryContextSwitchTo(old_ctx);
+
 	job->bgw_type = get_job_type_from_name(&job->fd.job_type);
 
 	return job;
@@ -209,7 +227,7 @@ static ScanTupleResult
 bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 {
 	AccumData *list_data = data;
-	BgwJob *job = bgw_job_from_tuple(ti->tuple, list_data->alloc_size, ti->mctx);
+	BgwJob *job = bgw_job_from_tuple(ti, list_data->alloc_size);
 	MemoryContext orig = MemoryContextSwitchTo(ti->mctx);
 
 	list_data->list = lappend(list_data->list, job);
@@ -300,8 +318,7 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 
 	ts_scanner_foreach(&iterator)
 	{
-		HeapTuple heap = ts_scan_iterator_tuple(&iterator);
-		job = bgw_job_from_tuple(heap, sizeof(BgwJob), mctx);
+		job = bgw_job_from_tuple(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
 
 		Assert(num_found == 0);
 		num_found++;
@@ -356,7 +373,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 	ts_scanner_foreach(&iterator)
 	{
 		Assert(num_found == 0);
-		job = bgw_job_from_tuple(ts_scan_iterator_tuple(&iterator), sizeof(BgwJob), mctx);
+		job = bgw_job_from_tuple(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
 		num_found++;
 	}
 
@@ -792,7 +809,9 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 
 int
 ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval,
-						   Interval *max_runtime, int32 max_retries, Interval *retry_period)
+						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
+						   Name proc_name, Name proc_schema, Name owner, bool scheduled,
+						   int32 hypertable_id, Jsonb *config)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -811,6 +830,20 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = IntervalPGetDatum(max_runtime);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)] = NameGetDatum(proc_name);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)] = NameGetDatum(proc_schema);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
+	if (hypertable_id == 0)
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = Int32GetDatum(hypertable_id);
+
+	if (config == NULL)
+		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = JsonbPGetDatum(config);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] =

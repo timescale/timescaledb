@@ -71,6 +71,7 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
 	NameData reorder_name;
+	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	BgwPolicyReorder *existing;
 	Dimension *dim;
@@ -135,6 +136,9 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Reorder Background Job");
 	namestrcpy(&reorder_name, "reorder");
+	namestrcpy(&proc_name, "");
+	namestrcpy(&proc_schema, "");
+	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	/*
 	 * Try to see if the hypertable has a specified chunk length for the
@@ -159,7 +163,13 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 										default_schedule_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
-										DEFAULT_RETRY_PERIOD);
+										DEFAULT_RETRY_PERIOD,
+										&proc_name,
+										&proc_schema,
+										&owner,
+										true,
+										hypertable_id,
+										NULL);
 
 	/* Now, insert a new row in the reorder args table */
 	policy.fd.job_id = job_id;
