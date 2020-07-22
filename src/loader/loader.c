@@ -4,7 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <pg_config.h>
+
 #include <access/xact.h>
 #include <access/heapam.h>
 #include "../compat-msvc-enter.h"

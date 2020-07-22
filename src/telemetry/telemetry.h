@@ -7,7 +7,6 @@
 #define TIMESCALEDB_TELEMETRY_TELEMETRY_H
 #include <postgres.h>
 #include <fmgr.h>
-#include <pg_config.h> // To get USE_OPENSSL from postgres build
 #include <utils/builtins.h>
 
 #include "compat.h"

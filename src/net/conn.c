@@ -4,7 +4,6 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <pg_config.h>
 
 #include "conn_internal.h"
 

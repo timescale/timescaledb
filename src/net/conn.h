@@ -6,7 +6,7 @@
 #ifndef TIMESCALEDB_NET_CONN_H
 #define TIMESCALEDB_NET_CONN_H
 
-#include <pg_config.h>
+#include <postgres.h>
 
 typedef struct ConnOps ConnOps;
 
