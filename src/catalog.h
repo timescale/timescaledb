@@ -156,8 +156,8 @@ enum Anum_hypertable_pkey_idx
 /* Hypertable name (schema,table) index attribute numbers */
 enum Anum_hypertable_name_idx
 {
-	Anum_hypertable_name_idx_schema = 1,
-	Anum_hypertable_name_idx_table,
+	Anum_hypertable_name_idx_table = 1,
+	Anum_hypertable_name_idx_schema,
 	_Anum_hypertable_name_max,
 };
 

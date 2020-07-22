@@ -130,7 +130,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_HYPERTABLE_INDEX,
 		.names = (char *[]) {
 			[HYPERTABLE_ID_INDEX] = "hypertable_pkey",
-			[HYPERTABLE_NAME_INDEX] = "hypertable_schema_name_table_name_key",
+			[HYPERTABLE_NAME_INDEX] = "hypertable_table_name_schema_name_key",
 		},
 	},
 	[HYPERTABLE_DATA_NODE] = {
