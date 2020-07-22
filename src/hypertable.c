@@ -568,15 +568,15 @@ ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 
 	/* Perform an index scan on schema and table. */
 	ScanKeyInit(&scankey[0],
-				Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				NameGetDatum(&schema_name));
-	ScanKeyInit(&scankey[1],
 				Anum_hypertable_name_idx_table,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
 				NameGetDatum(&table_name));
+	ScanKeyInit(&scankey[1],
+				Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				NameGetDatum(&schema_name));
 
 	return hypertable_scan_limit_internal(scankey,
 										  2,
@@ -736,17 +736,16 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 	ScanKeyData scankey[2];
 
 	ScanKeyInit(&scankey[0],
-				Anum_hypertable_name_idx_schema,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
-
-	ScanKeyInit(&scankey[1],
 				Anum_hypertable_name_idx_table,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
 				DirectFunctionCall1(namein, CStringGetDatum(table_name)));
 
+	ScanKeyInit(&scankey[1],
+				Anum_hypertable_name_idx_schema,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
 	return hypertable_scan_limit_internal(scankey,
 										  2,
 										  HYPERTABLE_NAME_INDEX,
@@ -1035,16 +1034,16 @@ hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const char *
 	iterator->ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_NAME_INDEX);
 
 	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_hypertable_name_idx_schema,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   CStringGetDatum(schema));
-
-	ts_scan_iterator_scan_key_init(iterator,
 								   Anum_hypertable_name_idx_table,
 								   BTEqualStrategyNumber,
 								   F_NAMEEQ,
 								   CStringGetDatum(name));
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_hypertable_name_idx_schema,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(schema));
 }
 
 /*

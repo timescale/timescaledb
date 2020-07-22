@@ -37,7 +37,8 @@
 -- configurable number of slices. The number of slices can be
 -- reconfigured, but the new partitioning only affects newly created
 -- chunks.
---
+-- The unique constraint is table_name +schema_name. The ordering is
+-- important as we want index access when we filter by table_name
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     id                       SERIAL    PRIMARY KEY,
     schema_name              NAME      NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
@@ -51,9 +52,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
     compressed               BOOLEAN   NOT NULL DEFAULT false,
     compressed_hypertable_id INTEGER   REFERENCES _timescaledb_catalog.hypertable(id),
     replication_factor       SMALLINT  NULL CHECK (replication_factor > 0),
-    UNIQUE (id, schema_name),
-    UNIQUE (schema_name, table_name),
     UNIQUE (associated_schema_name, associated_table_prefix),
+    constraint hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
     constraint hypertable_dim_compress_check check ( num_dimensions > 0  or compressed = true ),
    constraint hypertable_compress_check check ( compressed = false or (compressed = true and compressed_hypertable_id is null ))
 );

@@ -132,3 +132,7 @@ ALTER TABLE _timescaledb_config.bgw_job ADD CONSTRAINT valid_job_type CHECK (job
 CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
 ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
 
+---Clean up constraints on hypertable catalog table ---
+ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_table_name_schema_name_key UNIQUE(table_name, schema_name);
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_schema_name_table_name_key;
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_id_schema_name_key;
