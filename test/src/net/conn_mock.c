@@ -10,7 +10,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <postgres.h>
-#include <pg_config.h>
 
 #include "conn_internal.h"
 #include "conn_mock.h"

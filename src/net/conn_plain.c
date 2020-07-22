@@ -5,7 +5,7 @@
  */
 #include <unistd.h>
 #include <postgres.h>
-#include <pg_config.h>
+
 #include <sys/socket.h>
 #include <sys/time.h>
 
