@@ -40,7 +40,7 @@ extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *function, const c
 
 extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job, Oid user_oid);
 
-extern List *ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx);
+extern List *ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx);
 
 extern bool ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx);
 
