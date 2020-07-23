@@ -641,12 +641,12 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature;
 
-SELECT alter_job_schedule(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h');
-SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 
@@ -696,7 +696,7 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
-SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';

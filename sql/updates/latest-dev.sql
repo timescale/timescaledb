@@ -20,6 +20,7 @@ DROP FUNCTION IF EXISTS remove_drop_chunks_policy;
 DROP FUNCTION IF EXISTS drop_chunks;
 DROP FUNCTION IF EXISTS add_compress_chunks_policy;
 DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
+DROP FUNCTION IF EXISTS alter_job_schedule;
 
 DROP VIEW IF EXISTS timescaledb_information.policy_stats;
 DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;

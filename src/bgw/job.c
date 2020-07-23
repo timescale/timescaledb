@@ -648,7 +648,7 @@ ts_bgw_job_execute(BgwJob *job)
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 		case JOB_TYPE_COMPRESS_CHUNKS:
 		case JOB_TYPE_CUSTOM:
-			return ts_cm_functions->bgw_policy_job_execute(job);
+			return ts_cm_functions->job_execute(job);
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)
 				return unknown_job_type_hook(job);

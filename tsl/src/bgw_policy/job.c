@@ -46,15 +46,17 @@
 #include "reorder.h"
 #include "utils.h"
 
-#define ALTER_JOB_SCHEDULE_NUM_COLS 6
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
 
 static void
 enable_fast_restart(int32 job_id, const char *job_name)
 {
 	BgwJobStat *job_stat = ts_bgw_job_stat_find(job_id);
+	if (job_stat != NULL)
+		ts_bgw_job_stat_set_next_start(job_id, job_stat->fd.last_start);
+	else
+		ts_bgw_job_stat_upsert_next_start(job_id, GetCurrentTransactionStartTimestamp());
 
-	ts_bgw_job_stat_set_next_start(job_id, job_stat->fd.last_start);
 	elog(DEBUG1, "the %s job is scheduled to run again immediately", job_name);
 }
 
@@ -197,18 +199,11 @@ get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 }
 
 bool
-policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool fast_continue)
+policy_reorder_execute(int32 job_id, Jsonb *config)
 {
 	int chunk_id;
-	bool started = false;
 	Hypertable *ht;
 	Chunk *chunk;
-
-	if (!IsTransactionOrTransactionBlock())
-	{
-		started = true;
-		StartTransactionCommand();
-	}
 
 	ht = ts_hypertable_get_by_id(policy_reorder_get_hypertable_id(config));
 
@@ -221,7 +216,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool f
 			 "no chunks need reordering for hypertable %s.%s",
 			 ht->fd.schema_name.data,
 			 ht->fd.table_name.data);
-		goto commit;
+		return true;
 	}
 
 	/*
@@ -230,15 +225,15 @@ policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool f
 	 * chunk.
 	 */
 	chunk = ts_chunk_get_by_id(chunk_id, false);
-	elog(LOG, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
-	reorder(chunk->table_id,
-			get_relname_relid(policy_reorder_get_index_name(config),
-							  get_namespace_oid(NameStr(ht->fd.schema_name), false)),
-			false,
-			InvalidOid,
-			InvalidOid,
-			InvalidOid);
-	elog(LOG,
+	elog(DEBUG1, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
+	reorder_chunk(chunk->table_id,
+				  get_relname_relid(policy_reorder_get_index_name(config),
+									get_namespace_oid(NameStr(ht->fd.schema_name), false)),
+				  false,
+				  InvalidOid,
+				  InvalidOid,
+				  InvalidOid);
+	elog(DEBUG1,
 		 "completed reordering chunk %s.%s",
 		 chunk->fd.schema_name.data,
 		 chunk->fd.table_name.data);
@@ -246,13 +241,9 @@ policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool f
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
 
-	if (fast_continue && get_chunk_id_to_reorder(job_id, ht) != -1)
+	if (get_chunk_id_to_reorder(job_id, ht) != -1)
 		enable_fast_restart(job_id, "reorder");
 
-commit:
-	if (started)
-		CommitTransactionCommand();
-	elog(LOG, "job %d completed reordering", job_id);
 	return true;
 }
 
@@ -351,6 +342,8 @@ policy_continuous_aggregate_execute(int32 job_id, Jsonb *config)
 	if (IsTransactionOrTransactionBlock())
 	{
 		committed = true;
+		if (ActiveSnapshotSet())
+			PopActiveSnapshot();
 		CommitTransactionCommand();
 	}
 
@@ -453,10 +446,10 @@ job_execute_procedure(FuncExpr *funcexpr)
 }
 
 bool
-tsl_bgw_policy_job_execute(BgwJob *job)
+job_execute(BgwJob *job)
 {
 	Const *arg1, *arg2;
-	bool started;
+	bool started = false;
 	char prokind;
 	Oid proc;
 	Oid proc_args[] = { INT4OID, JSONBOID };
@@ -468,6 +461,8 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 	{
 		started = true;
 		StartTransactionCommand();
+		/* executing sql functions requires snapshot */
+		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
 	name = list_make2(makeString(NameStr(job->fd.proc_schema)),
@@ -508,80 +503,12 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 	}
 
 	if (started)
-		CommitTransactionCommand();
-
-	return true;
-}
-
-Datum
-bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
-{
-	BgwJob *job;
-	BgwJobStat *stat;
-	TupleDesc tupdesc;
-	Datum values[ALTER_JOB_SCHEDULE_NUM_COLS];
-	bool nulls[ALTER_JOB_SCHEDULE_NUM_COLS] = { false };
-	HeapTuple tuple;
-	TimestampTz next_start;
-
-	int job_id = PG_GETARG_INT32(0);
-	bool if_exists = PG_GETARG_BOOL(5);
-
-	/* First get the job */
-	job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
-
-	if (!job)
 	{
-		if (if_exists)
-		{
-			ereport(NOTICE,
-					(errmsg("cannot alter policy schedule, policy #%d not found, skipping",
-							job_id)));
-			PG_RETURN_NULL();
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
+		/* if job does its own transaction handling it might not have set a snapshot */
+		if (ActiveSnapshotSet())
+			PopActiveSnapshot();
+		CommitTransactionCommand();
 	}
 
-	ts_bgw_job_permission_check(job);
-
-	if (!PG_ARGISNULL(1))
-		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);
-	if (!PG_ARGISNULL(2))
-		job->fd.max_runtime = *PG_GETARG_INTERVAL_P(2);
-	if (!PG_ARGISNULL(3))
-		job->fd.max_retries = PG_GETARG_INT32(3);
-	if (!PG_ARGISNULL(4))
-		job->fd.retry_period = *PG_GETARG_INTERVAL_P(4);
-
-	ts_bgw_job_update_by_id(job_id, job);
-
-	if (!PG_ARGISNULL(6))
-		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(6));
-
-	/* Now look up the job and return it */
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("function returning record called in context "
-						"that cannot accept type record")));
-
-	stat = ts_bgw_job_stat_find(job_id);
-	if (stat != NULL)
-		next_start = stat->fd.next_start;
-	else
-		next_start = DT_NOBEGIN;
-
-	tupdesc = BlessTupleDesc(tupdesc);
-	values[0] = Int32GetDatum(job->fd.id);
-	values[1] = IntervalPGetDatum(&job->fd.schedule_interval);
-	values[2] = IntervalPGetDatum(&job->fd.max_runtime);
-	values[3] = Int32GetDatum(job->fd.max_retries);
-	values[4] = IntervalPGetDatum(&job->fd.retry_period);
-	values[5] = TimestampTzGetDatum(next_start);
-
-	tuple = heap_form_tuple(tupdesc, values, nulls);
-	return HeapTupleGetDatum(tuple);
+	return true;
 }

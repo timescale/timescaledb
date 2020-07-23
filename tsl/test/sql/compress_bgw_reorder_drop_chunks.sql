@@ -55,7 +55,7 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
 SELECT add_retention_policy('test_retention_table', INTERVAL '4 months') as retention_job_id \gset
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
-SELECT alter_job_schedule(:retention_job_id, schedule_interval => INTERVAL '1 second');
+SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');
 SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
 
 --turn on compression and compress all chunks

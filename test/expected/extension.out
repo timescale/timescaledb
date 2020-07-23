@@ -22,10 +22,11 @@ WHERE oid IN (
  add_compression_policy
  add_data_node
  add_dimension
+ add_job
  add_reorder_policy
  add_retention_policy
  allow_new_chunks
- alter_job_schedule
+ alter_job
  attach_data_node
  attach_tablespace
  block_new_chunks
@@ -36,6 +37,7 @@ WHERE oid IN (
  create_hypertable
  decompress_chunk
  delete_data_node
+ delete_job
  detach_data_node
  detach_tablespace
  detach_tablespaces
@@ -58,6 +60,7 @@ WHERE oid IN (
  remove_reorder_policy
  remove_retention_policy
  reorder_chunk
+ run_job
  set_adaptive_chunking
  set_chunk_time_interval
  set_integer_now_func
@@ -71,5 +74,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(52 rows)
+(55 rows)
 

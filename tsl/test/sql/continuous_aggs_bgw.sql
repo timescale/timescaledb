@@ -183,7 +183,7 @@ SELECT wait_for_job_to_run(:job_id, 2);
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+1, true);
 
 --alter the refresh interval and check if next_scheduled_run is altered
-SELECT alter_job_schedule(:job_id, schedule_interval => '1m', retry_period => '1m');
+SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
 SELECT job_id, next_start- last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id;;
@@ -201,7 +201,7 @@ WHERE job_id=:job_id;
 SELECT (next_start - '30s'::interval) AS "NEW_NEXT_START"
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id \gset
-SELECT alter_job_schedule(:job_id, next_start => :'NEW_NEXT_START');
+SELECT alter_job(:job_id, next_start => :'NEW_NEXT_START');
 
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute 30 seconds')::bigint * 1000000), true);
 SELECT wait_for_job_to_run(:job_id, 4);

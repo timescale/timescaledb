@@ -625,7 +625,7 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reo
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
--- Now test if alter_job_schedule works
+-- Now test if alter_job works
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
  select * from _timescaledb_config.bgw_job where id=:job_id;
   id  |   application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
@@ -634,73 +634,73 @@ select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
 (1 row)
 
 -- No change
-select * from alter_job_schedule(:job_id);
- job_id | schedule_interval | max_runtime | max_retries | retry_period | next_start 
---------+-------------------+-------------+-------------+--------------+------------
-   1014 | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | -infinity
+select * from alter_job(:job_id);
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
 -- Changes expected
-select * from alter_job_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
- job_id | schedule_interval | max_runtime | max_retries |  retry_period   | next_start 
---------+-------------------+-------------+-------------+-----------------+------------
-   1014 | @ 3 years         | @ 5 mins    |           5 | @ 2 mins 3 secs | -infinity
+select * from alter_job(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
+ job_id | schedule_interval | max_runtime | max_retries |  retry_period   | scheduled |                          config                           | next_start 
+--------+-------------------+-------------+-------------+-----------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 3 years         | @ 5 mins    |           5 | @ 2 mins 3 secs | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, INTERVAL '123 years');
- job_id | schedule_interval | max_runtime | max_retries |  retry_period   | next_start 
---------+-------------------+-------------+-------------+-----------------+------------
-   1014 | @ 123 years       | @ 5 mins    |           5 | @ 2 mins 3 secs | -infinity
+select * from alter_job(:job_id, INTERVAL '123 years');
+ job_id | schedule_interval | max_runtime | max_retries |  retry_period   | scheduled |                          config                           | next_start 
+--------+-------------------+-------------+-------------+-----------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 5 mins    |           5 | @ 2 mins 3 secs | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, retry_period => INTERVAL '33 hours');
- job_id | schedule_interval | max_runtime | max_retries | retry_period | next_start 
---------+-------------------+-------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 5 mins    |           5 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, retry_period => INTERVAL '33 hours');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 5 mins    |           5 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, max_runtime => INTERVAL '456 sec');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 7 mins 36 secs |           5 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, max_runtime => INTERVAL '456 sec');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 7 mins 36 secs |           5 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, max_retries => 0);
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 7 mins 36 secs |           0 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, max_retries => 0);
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 7 mins 36 secs |           0 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, max_retries => -1);
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 7 mins 36 secs |          -1 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, max_retries => -1);
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 7 mins 36 secs |          -1 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, max_retries => 20);
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, max_retries => 20);
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
 -- No change
-select * from alter_job_schedule(:job_id, max_runtime => NULL);
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, max_runtime => NULL);
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
-select * from alter_job_schedule(:job_id, max_retries => NULL);
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, max_retries => NULL);
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
 --change schedule_interval when bgw_job_stat does not exist
-select * from alter_job_schedule(:job_id, schedule_interval=>'1 min');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 1 min           | @ 7 mins 36 secs |          20 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, schedule_interval=>'1 min');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 1 min           | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
 select count(*) = 0 from _timescaledb_internal.bgw_job_stat where job_id = :job_id;
@@ -710,24 +710,24 @@ select count(*) = 0 from _timescaledb_internal.bgw_job_stat where job_id = :job_
 (1 row)
 
 --set next_start when bgw_job_stat does not exist
-select * from alter_job_schedule(:job_id, next_start=>'2001-01-01 01:01:01');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period |          next_start          
---------+-------------------+------------------+-------------+--------------+------------------------------
-   1014 | @ 1 min           | @ 7 mins 36 secs |          20 | @ 33 hours   | Mon Jan 01 01:01:01 2001 PST
+select * from alter_job(:job_id, next_start=>'2001-01-01 01:01:01');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------
+   1014 | @ 1 min           | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Mon Jan 01 01:01:01 2001 PST
 (1 row)
 
 --change schedule_interval when no last_finish set
-select * from alter_job_schedule(:job_id, schedule_interval=>'10 min');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 10 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | -infinity
+select * from alter_job(:job_id, schedule_interval=>'10 min');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 10 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity
 (1 row)
 
 --next_start overrides any schedule_interval changes
-select * from alter_job_schedule(:job_id, schedule_interval=>'20 min', next_start=>'2002-01-01 01:01:01');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period |          next_start          
---------+-------------------+------------------+-------------+--------------+------------------------------
-   1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | Tue Jan 01 01:01:01 2002 PST
+select * from alter_job(:job_id, schedule_interval=>'20 min', next_start=>'2002-01-01 01:01:01');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------
+   1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Tue Jan 01 01:01:01 2002 PST
 (1 row)
 
 --set the last_finish manually
@@ -735,35 +735,35 @@ select * from alter_job_schedule(:job_id, schedule_interval=>'20 min', next_star
 UPDATE _timescaledb_internal.bgw_job_stat SET last_finish = '2003-01-01:01:01:01' WHERE job_id = :job_id;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --not changing the interval doesn't change the next_start
-select * from alter_job_schedule(:job_id, schedule_interval=>'20 min');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period |          next_start          
---------+-------------------+------------------+-------------+--------------+------------------------------
-   1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | Tue Jan 01 01:01:01 2002 PST
+select * from alter_job(:job_id, schedule_interval=>'20 min');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------
+   1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Tue Jan 01 01:01:01 2002 PST
 (1 row)
 
 --changing the interval changes next_start
-select * from alter_job_schedule(:job_id, schedule_interval=>'30 min');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period |          next_start          
---------+-------------------+------------------+-------------+--------------+------------------------------
-   1014 | @ 30 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | Wed Jan 01 01:31:01 2003 PST
+select * from alter_job(:job_id, schedule_interval=>'30 min');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------
+   1014 | @ 30 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Wed Jan 01 01:31:01 2003 PST
 (1 row)
 
 --explicit next start overrides.
-select * from alter_job_schedule(:job_id, schedule_interval=>'40 min', next_start=>'2004-01-01 01:01:01');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period |          next_start          
---------+-------------------+------------------+-------------+--------------+------------------------------
-   1014 | @ 40 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | Thu Jan 01 01:01:01 2004 PST
+select * from alter_job(:job_id, schedule_interval=>'40 min', next_start=>'2004-01-01 01:01:01');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------
+   1014 | @ 40 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Thu Jan 01 01:01:01 2004 PST
 (1 row)
 
 --test pausing
-select * from alter_job_schedule(:job_id, next_start=>'infinity');
- job_id | schedule_interval |   max_runtime    | max_retries | retry_period | next_start 
---------+-------------------+------------------+-------------+--------------+------------
-   1014 | @ 40 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | infinity
+select * from alter_job(:job_id, next_start=>'infinity');
+ job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start 
+--------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------
+   1014 | @ 40 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | infinity
 (1 row)
 
 --test that you can use now() to unpause
-select next_start = now() from alter_job_schedule(:job_id, next_start=>now());
+select next_start = now() from alter_job(:job_id, next_start=>now());
  ?column? 
 ----------
  t
@@ -771,20 +771,20 @@ select next_start = now() from alter_job_schedule(:job_id, next_start=>now());
 
 \set ON_ERROR_STOP 0
 -- negative infinity disallowed (used as special value)
-select * from alter_job_schedule(:job_id, next_start=>'-infinity');
+select * from alter_job(:job_id, next_start=>'-infinity');
 ERROR:  cannot set next start to -infinity
 \set ON_ERROR_STOP 1
 -- Check if_exists boolean works correctly
-select * from alter_job_schedule(1234, if_exists => TRUE);
-NOTICE:  cannot alter policy schedule, policy #1234 not found, skipping
- job_id | schedule_interval | max_runtime | max_retries | retry_period | next_start 
---------+-------------------+-------------+-------------+--------------+------------
-        |                   |             |             |              | 
+select * from alter_job(1234, if_exists => TRUE);
+NOTICE:  cannot alter job, job #1234 not found, skipping
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled | config | next_start 
+--------+-------------------+-------------+-------------+--------------+-----------+--------+------------
+        |                   |             |             |              |           |        | 
 (1 row)
 
 \set ON_ERROR_STOP 0
-select * from alter_job_schedule(1234);
-ERROR:  cannot alter policy schedule, policy #1234 not found
+select * from alter_job(1234);
+ERROR:  cannot alter job, job #1234 not found
 \set ON_ERROR_STOP 1
 select remove_reorder_policy('test_table');
  remove_reorder_policy 
@@ -796,15 +796,15 @@ select remove_reorder_policy('test_table');
 set session timescaledb.license_key='Community';
 -- Test for failure cases
 \set ON_ERROR_STOP 0
-select alter_job_schedule(12345);
-ERROR:  cannot alter policy schedule, policy #12345 not found
+select alter_job(12345);
+ERROR:  cannot alter job, job #12345 not found
 \set ON_ERROR_STOP 1
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
-select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
+select from alter_job(:reorder_job_id, max_runtime => NULL);
 ERROR:  insufficient permissions to alter job 1015
-select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
+select from alter_job(:drop_chunks_job_id, max_runtime => NULL);
 ERROR:  insufficient permissions to alter job 1016
 \set ON_ERROR_STOP 1

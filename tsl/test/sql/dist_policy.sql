@@ -11,11 +11,6 @@
 \o
 \set ECHO all
 
-CREATE OR REPLACE FUNCTION test_retention(job_id INTEGER)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_test_auto_drop_chunks'
-LANGUAGE C VOLATILE STRICT;
-
 -- Add data nodes
 \x on
 SELECT * FROM add_data_node('dist_policy_data_node_1', host => 'localhost',
@@ -72,7 +67,7 @@ SELECT show_chunks('conditions');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('conditions'); $$);
 UPDATE time_table SET time = 20;
 SELECT * FROM test.remote_exec(NULL, $$ UPDATE time_table SET time = 20; $$);
-SELECT test_retention(:retention_job_id);
+CALL run_job(:retention_job_id);
 SELECT show_chunks('conditions');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('conditions'); $$);
 

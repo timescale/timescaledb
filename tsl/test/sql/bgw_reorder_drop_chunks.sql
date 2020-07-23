@@ -216,7 +216,7 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 SELECT add_retention_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
 
-SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
+SELECT alter_job(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 
@@ -291,7 +291,7 @@ CREATE VIEW tdc_view
 
 SELECT show_chunks('test_drop_chunks_table');
 
-SELECT alter_job_schedule(:drop_chunks_job_id, max_retries => 0);
+SELECT alter_job(:drop_chunks_job_id, max_retries => 0);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
 
 SELECT * FROM sorted_bgw_log;

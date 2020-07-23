@@ -5,10 +5,6 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-CREATE OR REPLACE FUNCTION test_retention(job_id INTEGER)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_test_auto_drop_chunks'
-LANGUAGE C VOLATILE STRICT;
 -- Add data nodes
 \x on
 SELECT * FROM add_data_node('dist_policy_data_node_1', host => 'localhost',
@@ -225,12 +221,7 @@ NOTICE:  [dist_policy_data_node_3]:  UPDATE time_table SET time = 20
  
 (1 row)
 
-SELECT test_retention(:retention_job_id);
- test_retention 
-----------------
- 
-(1 row)
-
+CALL run_job(:retention_job_id);
 SELECT show_chunks('conditions');
                  show_chunks                  
 ----------------------------------------------

@@ -45,7 +45,6 @@ typedef struct CrossModuleFunctions
 	void (*print_tsl_license_expiration_info_hook)(void);
 	void (*module_shutdown_hook)(void);
 	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
-	bool (*bgw_policy_job_execute)(BgwJob *job);
 	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
 
 	PGFunction policy_compression_add;
@@ -58,6 +57,12 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_retention_add;
 	PGFunction policy_retention_proc;
 	PGFunction policy_retention_remove;
+
+	PGFunction job_add;
+	PGFunction job_alter;
+	PGFunction job_delete;
+	PGFunction job_run;
+	bool (*job_execute)(BgwJob *job);
 
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 									TsRelType input_reltype, Hypertable *ht, void *extra);
@@ -75,7 +80,6 @@ typedef struct CrossModuleFunctions
 	PGFunction gapfill_timestamp_time_bucket;
 	PGFunction gapfill_timestamptz_time_bucket;
 
-	PGFunction alter_job_schedule;
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
 	void (*ddl_command_start)(ProcessUtilityArgs *args);

@@ -862,10 +862,10 @@ group by time_bucket('1day', timec), location, humidity, temperature;
 NOTICE:  adding index _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_5_5, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_6_6, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_7_7, timec)
-SELECT alter_job_schedule(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
-                alter_job_schedule                 
----------------------------------------------------
- (1012,"@ 1 hour","@ 0",-1,"@ 48 hours",-infinity)
+SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
+                                     alter_job                                     
+-----------------------------------------------------------------------------------
+ (1012,"@ 1 hour","@ 0",-1,"@ 48 hours",t,"{""mat_hypertable_id"": 20}",-infinity)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -881,10 +881,10 @@ SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.
 (1 row)
 
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h');
-SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-                 alter_job_schedule                 
-----------------------------------------------------
- (1012,"@ 2 hours","@ 0",-1,"@ 48 hours",-infinity)
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+                                     alter_job                                      
+------------------------------------------------------------------------------------
+ (1012,"@ 2 hours","@ 0",-1,"@ 48 hours",t,"{""mat_hypertable_id"": 20}",-infinity)
 (1 row)
 
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
@@ -962,10 +962,10 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
-SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-                 alter_job_schedule                 
-----------------------------------------------------
- (1014,"@ 2 hours","@ 0",-1,"@ 12 hours",-infinity)
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+                                     alter_job                                      
+------------------------------------------------------------------------------------
+ (1014,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""mat_hypertable_id"": 23}",-infinity)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;

@@ -1,7 +1,6 @@
 set(SOURCES
   data_node.c
   deparse.c
-  test_auto_policy.c
   test_chunk_stats.c
   test_compression.c
   test_continuous_aggs.c

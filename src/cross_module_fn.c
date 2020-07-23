@@ -21,7 +21,6 @@
 	}
 
 /* bgw policy functions */
-CROSSMODULE_WRAPPER(alter_job_schedule);
 CROSSMODULE_WRAPPER(policy_compression_add);
 CROSSMODULE_WRAPPER(policy_compression_proc);
 CROSSMODULE_WRAPPER(policy_compression_remove);
@@ -32,6 +31,11 @@ CROSSMODULE_WRAPPER(policy_reorder_remove);
 CROSSMODULE_WRAPPER(policy_retention_add);
 CROSSMODULE_WRAPPER(policy_retention_proc);
 CROSSMODULE_WRAPPER(policy_retention_remove);
+
+CROSSMODULE_WRAPPER(job_add);
+CROSSMODULE_WRAPPER(job_delete);
+CROSSMODULE_WRAPPER(job_run);
+CROSSMODULE_WRAPPER(job_alter);
 
 CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
@@ -172,9 +176,9 @@ add_tsl_telemetry_info_default(JsonbParseState **parse_state)
 }
 
 static bool
-bgw_policy_job_execute_default_fn(BgwJob *job)
+job_execute_default_fn(BgwJob *job)
 {
-	error_no_default_fn_enterprise();
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
@@ -353,8 +357,11 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_retention_proc = error_no_default_fn_pg_community,
 	.policy_retention_remove = error_no_default_fn_pg_community,
 
-	.alter_job_schedule = error_no_default_fn_pg_community,
-	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
+	.job_add = error_no_default_fn_pg_community,
+	.job_alter = error_no_default_fn_pg_community,
+	.job_delete = error_no_default_fn_pg_community,
+	.job_run = error_no_default_fn_pg_community,
+	.job_execute = job_execute_default_fn,
 
 	.move_chunk = error_no_default_fn_pg_enterprise,
 	.reorder_chunk = error_no_default_fn_pg_community,
