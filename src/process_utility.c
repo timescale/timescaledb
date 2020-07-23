@@ -251,6 +251,16 @@ process_add_hypertable(ProcessUtilityArgs *args, Hypertable *ht)
 	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
 }
 
+static void
+add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
+{
+	ProcessUtilityArgs *args = vargs;
+	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	RangeVar *rv = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+	stmt->objects = lappend(stmt->objects, rv);
+}
+
 static bool
 block_on_foreign_server(const char *const server_name)
 {
@@ -1035,6 +1045,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 					{
 						/* Here we know that there is at least one hypertable */
 						process_add_hypertable(args, ht);
+						foreach_chunk(ht, add_chunk_oid, args);
 					}
 				}
 

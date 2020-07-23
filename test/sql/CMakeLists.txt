@@ -22,6 +22,7 @@ set(TEST_FILES
   extension.sql
   gapfill.sql
   generated_as_identity.sql
+  grant_hypertable.sql
   hash.sql
   histogram_test.sql
   index.sql

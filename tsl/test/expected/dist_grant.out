@@ -496,3 +496,175 @@ t     |f     |t
  
 (1 row)
 
+DROP TABLE conditions;
+DROP TABLE no_grants;
+-- Check that grants and revokes are copied properly to the chunks and
+-- that newly created chunks have the right privileges.
+CREATE TABLE conditions(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+-- Create a hypertable and show that it does not have any privileges
+SELECT * FROM create_hypertable('conditions', 'time', chunk_time_interval => '5 days'::interval);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | conditions | t
+(1 row)
+
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-10 00:00'::timestamp, '1h') AS time;
+\z conditions
+                               Access privileges
+ Schema |    Name    | Type  | Access privileges | Column privileges | Policies 
+--------+------------+-------+-------------------+-------------------+----------
+ public | conditions | table |                   |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                          Access privileges
+        Schema         |       Name        | Type  | Access privileges | Column privileges | Policies 
+-----------------------+-------------------+-------+-------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table |                   |                   | 
+ _timescaledb_internal | _hyper_3_36_chunk | table |                   |                   | 
+ _timescaledb_internal | _hyper_3_37_chunk | table |                   |                   | 
+(3 rows)
+
+-- Add privileges and show that they propagate to the chunks
+GRANT SELECT, INSERT ON conditions TO PUBLIC;
+\z conditions
+                                             Access privileges
+ Schema |    Name    | Type  |               Access privileges               | Column privileges | Policies 
+--------+------------+-------+-----------------------------------------------+-------------------+----------
+ public | conditions | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+        |            |       | =ar/cluster_super_user                        |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+ _timescaledb_internal | _hyper_3_36_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+ _timescaledb_internal | _hyper_3_37_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+(3 rows)
+
+-- Create some more chunks and show that they also get the privileges.
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-10 00:00'::timestamp, '2018-12-20 00:00'::timestamp, '1h') AS time;
+\z conditions
+                                             Access privileges
+ Schema |    Name    | Type  |               Access privileges               | Column privileges | Policies 
+--------+------------+-------+-----------------------------------------------+-------------------+----------
+ public | conditions | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+        |            |       | =ar/cluster_super_user                        |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+ _timescaledb_internal | _hyper_3_36_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+ _timescaledb_internal | _hyper_3_37_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+ _timescaledb_internal | _hyper_3_38_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+ _timescaledb_internal | _hyper_3_39_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =ar/cluster_super_user                        |                   | 
+(5 rows)
+
+-- Revoke one of the privileges and show that it propagate to the
+-- chunks.
+REVOKE INSERT ON conditions FROM PUBLIC;
+\z conditions
+                                             Access privileges
+ Schema |    Name    | Type  |               Access privileges               | Column privileges | Policies 
+--------+------------+-------+-----------------------------------------------+-------------------+----------
+ public | conditions | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+        |            |       | =r/cluster_super_user                         |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_36_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_37_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_38_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_39_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+(5 rows)
+
+-- Add some more chunks and show that it inherits the grants from the
+-- hypertable.
+INSERT INTO conditions
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-20 00:00'::timestamp, '2018-12-30 00:00'::timestamp, '1h') AS time;
+\z conditions
+                                             Access privileges
+ Schema |    Name    | Type  |               Access privileges               | Column privileges | Policies 
+--------+------------+-------+-----------------------------------------------+-------------------+----------
+ public | conditions | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+        |            |       | =r/cluster_super_user                         |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_36_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_37_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_38_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_39_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_40_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+ _timescaledb_internal | _hyper_3_41_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+(7 rows)
+
+-- Change grants of one chunk explicitly and check that it is possible
+\z _timescaledb_internal._hyper_3_35_chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =r/cluster_super_user                         |                   | 
+(1 row)
+
+GRANT UPDATE ON _timescaledb_internal._hyper_3_35_chunk TO PUBLIC;
+\z _timescaledb_internal._hyper_3_35_chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =rw/cluster_super_user                        |                   | 
+(1 row)
+
+REVOKE SELECT ON _timescaledb_internal._hyper_3_35_chunk FROM PUBLIC;
+\z _timescaledb_internal._hyper_3_35_chunk
+                                                        Access privileges
+        Schema         |       Name        | Type  |               Access privileges               | Column privileges | Policies 
+-----------------------+-------------------+-------+-----------------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_3_35_chunk | table | cluster_super_user=arwdDxt/cluster_super_user+|                   | 
+                       |                   |       | =w/cluster_super_user                         |                   | 
+(1 row)
+
