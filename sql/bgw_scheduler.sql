@@ -21,6 +21,17 @@ INSERT INTO _timescaledb_config.bgw_job (id, application_name, job_type, schedul
 (1, 'Telemetry Reporter [1]', 'telemetry_and_version_check_if_enabled', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h', '_timescaledb_internal', 'policy_telemetry_proc', CURRENT_ROLE, true)
 ON CONFLICT (id) DO NOTHING;
 
+CREATE OR REPLACE FUNCTION add_job(
+  proc REGPROC,
+  schedule_interval INTERVAL,
+  config JSONB DEFAULT NULL,
+  initial_start TIMESTAMPTZ DEFAULT NULL,
+  scheduled BOOL DEFAULT true
+) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_job_delete' LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE PROCEDURE run_job(job_id INTEGER) AS '@MODULE_PATHNAME@', 'ts_job_run' LANGUAGE C;
+
 -- Add a retention policy to a hypertable or continuous aggregate.
 -- The retention_window (typically an INTERVAL) determines the
 -- window beyond which data is dropped at the time
@@ -78,15 +89,17 @@ AS '@MODULE_PATHNAME@', 'ts_policy_continuous_aggregate_proc'
 LANGUAGE C;
 
 -- Returns the updated job schedule values
-CREATE OR REPLACE FUNCTION alter_job_schedule(
+CREATE OR REPLACE FUNCTION alter_job(
     job_id INTEGER,
     schedule_interval INTERVAL = NULL,
     max_runtime INTERVAL = NULL,
     max_retries INTEGER = NULL,
     retry_period INTERVAL = NULL,
-    if_exists BOOL = FALSE,
-    next_start TIMESTAMPTZ = NULL
+    scheduled BOOL = NULL,
+    config JSONB = NULL,
+    next_start TIMESTAMPTZ = NULL,
+    if_exists BOOL = FALSE
 )
-RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, next_start TIMESTAMPTZ)
-AS '@MODULE_PATHNAME@', 'ts_alter_job_schedule'
+RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ)
+AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;

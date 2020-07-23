@@ -10,6 +10,7 @@
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/retention_api.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/job_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "chunk_api.h"
 #include "chunk.h"
@@ -91,8 +92,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.print_tsl_license_expiration_info_hook = license_print_expiration_info,
 	.module_shutdown_hook = module_shutdown,
 	.add_tsl_telemetry_info = tsl_telemetry_add_info,
-	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.continuous_agg_materialize = continuous_agg_materialize,
+
+	.create_upper_paths_hook = tsl_create_upper_paths_hook,
+	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
+	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
@@ -106,9 +110,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_retention_proc = policy_retention_proc,
 	.policy_retention_remove = policy_retention_remove,
 
-	.create_upper_paths_hook = tsl_create_upper_paths_hook,
-	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
-	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
+	.job_add = job_add,
+	.job_alter = job_alter,
+	.job_delete = job_delete,
+	.job_run = job_run,
+	.job_execute = job_execute,
 
 	/* gapfill */
 	.gapfill_marker = gapfill_marker,
@@ -119,7 +125,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_timestamp_time_bucket = gapfill_timestamp_time_bucket,
 	.gapfill_timestamptz_time_bucket = gapfill_timestamptz_time_bucket,
 
-	.alter_job_schedule = bgw_policy_alter_job_schedule,
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,
 	.partialize_agg = tsl_partialize_agg,

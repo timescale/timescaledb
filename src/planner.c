@@ -282,6 +282,17 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	PlannedStmt *stmt;
 	ListCell *lc;
 
+	/*
+	 * If we are in an aborted transaction, reject all queries.
+	 * While this state will not happen during normal operation it
+	 * can happen when executing plpgsql procedures.
+	 */
+	if (IsAbortedTransactionBlockState())
+		ereport(ERROR,
+				(errcode(ERRCODE_IN_FAILED_SQL_TRANSACTION),
+				 errmsg("current transaction is aborted, "
+						"commands ignored until end of transaction block")));
+
 	planner_hcache_push();
 
 	PG_TRY();

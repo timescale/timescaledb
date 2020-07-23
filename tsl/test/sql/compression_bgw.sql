@@ -4,11 +4,6 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE OR REPLACE FUNCTION test_compress_chunks_policy(job_id INTEGER)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_test_auto_compress_chunks'
-LANGUAGE C VOLATILE STRICT;
-
 CREATE ROLE NOLOGIN_ROLE WITH nologin noinherit;
 GRANT NOLOGIN_ROLE TO :ROLE_DEFAULT_PERM_USER WITH ADMIN OPTION;
 
@@ -39,14 +34,14 @@ select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 \gset
 
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
-select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
+select * from alter_job(:compressjob_id, schedule_interval=>'1s');
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';
 insert into conditions
 select now()::timestamp, 'TOK', 'sony', 55, 75;
 
 -- TEST3 --
 --only the old chunks will get compressed when policy is executed--
-select test_compress_chunks_policy(:compressjob_id);
+CALL run_job(:compressjob_id);
 select chunk_name, pg_size_pretty(before_compression_total_bytes) before_total,
 pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
@@ -67,7 +62,7 @@ select count(*) from _timescaledb_config.bgw_job WHERE id>=1000;
 --TEST 6 --
 -- try to execute the policy after it has been dropped --
 \set ON_ERROR_STOP 0
-select test_compress_chunks_policy(:compressjob_id);
+CALL run_job(:compressjob_id);
 \set ON_ERROR_STOP 1
 
 -- We're done with the table, so drop it.
@@ -87,8 +82,8 @@ select add_compression_policy('test_table_int', 2::int) AS compressjob_id
 
 select * from _timescaledb_config.bgw_job where id=:compressjob_id;
 \gset
-select test_compress_chunks_policy(:compressjob_id);
-select test_compress_chunks_policy(:compressjob_id);
+CALL run_job(:compressjob_id);
+CALL run_job(:compressjob_id);
 select chunk_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
 
@@ -148,4 +143,4 @@ SELECT COUNT(*) AS dropped_chunks_count
 
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
-SELECT test_compress_chunks_policy(:job_id);
+CALL run_job(:job_id);

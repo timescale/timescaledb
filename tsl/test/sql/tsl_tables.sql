@@ -261,33 +261,33 @@ select remove_reorder_policy('test_table');
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
--- Now test if alter_job_schedule works
+-- Now test if alter_job works
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
  select * from _timescaledb_config.bgw_job where id=:job_id;
 -- No change
-select * from alter_job_schedule(:job_id);
+select * from alter_job(:job_id);
 -- Changes expected
-select * from alter_job_schedule(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
-select * from alter_job_schedule(:job_id, INTERVAL '123 years');
-select * from alter_job_schedule(:job_id, retry_period => INTERVAL '33 hours');
-select * from alter_job_schedule(:job_id, max_runtime => INTERVAL '456 sec');
-select * from alter_job_schedule(:job_id, max_retries => 0);
-select * from alter_job_schedule(:job_id, max_retries => -1);
-select * from alter_job_schedule(:job_id, max_retries => 20);
+select * from alter_job(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
+select * from alter_job(:job_id, INTERVAL '123 years');
+select * from alter_job(:job_id, retry_period => INTERVAL '33 hours');
+select * from alter_job(:job_id, max_runtime => INTERVAL '456 sec');
+select * from alter_job(:job_id, max_retries => 0);
+select * from alter_job(:job_id, max_retries => -1);
+select * from alter_job(:job_id, max_retries => 20);
 
 -- No change
-select * from alter_job_schedule(:job_id, max_runtime => NULL);
-select * from alter_job_schedule(:job_id, max_retries => NULL);
+select * from alter_job(:job_id, max_runtime => NULL);
+select * from alter_job(:job_id, max_retries => NULL);
 
 --change schedule_interval when bgw_job_stat does not exist
-select * from alter_job_schedule(:job_id, schedule_interval=>'1 min');
+select * from alter_job(:job_id, schedule_interval=>'1 min');
 select count(*) = 0 from _timescaledb_internal.bgw_job_stat where job_id = :job_id;
 --set next_start when bgw_job_stat does not exist
-select * from alter_job_schedule(:job_id, next_start=>'2001-01-01 01:01:01');
+select * from alter_job(:job_id, next_start=>'2001-01-01 01:01:01');
 --change schedule_interval when no last_finish set
-select * from alter_job_schedule(:job_id, schedule_interval=>'10 min');
+select * from alter_job(:job_id, schedule_interval=>'10 min');
 --next_start overrides any schedule_interval changes
-select * from alter_job_schedule(:job_id, schedule_interval=>'20 min', next_start=>'2002-01-01 01:01:01');
+select * from alter_job(:job_id, schedule_interval=>'20 min', next_start=>'2002-01-01 01:01:01');
 
 --set the last_finish manually
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -295,26 +295,26 @@ UPDATE _timescaledb_internal.bgw_job_stat SET last_finish = '2003-01-01:01:01:01
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --not changing the interval doesn't change the next_start
-select * from alter_job_schedule(:job_id, schedule_interval=>'20 min');
+select * from alter_job(:job_id, schedule_interval=>'20 min');
 --changing the interval changes next_start
-select * from alter_job_schedule(:job_id, schedule_interval=>'30 min');
+select * from alter_job(:job_id, schedule_interval=>'30 min');
 --explicit next start overrides.
-select * from alter_job_schedule(:job_id, schedule_interval=>'40 min', next_start=>'2004-01-01 01:01:01');
+select * from alter_job(:job_id, schedule_interval=>'40 min', next_start=>'2004-01-01 01:01:01');
 --test pausing
-select * from alter_job_schedule(:job_id, next_start=>'infinity');
+select * from alter_job(:job_id, next_start=>'infinity');
 --test that you can use now() to unpause
-select next_start = now() from alter_job_schedule(:job_id, next_start=>now());
+select next_start = now() from alter_job(:job_id, next_start=>now());
 
 \set ON_ERROR_STOP 0
 -- negative infinity disallowed (used as special value)
-select * from alter_job_schedule(:job_id, next_start=>'-infinity');
+select * from alter_job(:job_id, next_start=>'-infinity');
 \set ON_ERROR_STOP 1
 
 -- Check if_exists boolean works correctly
-select * from alter_job_schedule(1234, if_exists => TRUE);
+select * from alter_job(1234, if_exists => TRUE);
 
 \set ON_ERROR_STOP 0
-select * from alter_job_schedule(1234);
+select * from alter_job(1234);
 \set ON_ERROR_STOP 1
 
 select remove_reorder_policy('test_table');
@@ -324,7 +324,7 @@ set session timescaledb.license_key='Community';
 
 -- Test for failure cases
 \set ON_ERROR_STOP 0
-select alter_job_schedule(12345);
+select alter_job(12345);
 \set ON_ERROR_STOP 1
 
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
@@ -332,6 +332,6 @@ select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chu
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
-select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);
-select from alter_job_schedule(:drop_chunks_job_id, max_runtime => NULL);
+select from alter_job(:reorder_job_id, max_runtime => NULL);
+select from alter_job(:drop_chunks_job_id, max_runtime => NULL);
 \set ON_ERROR_STOP 1

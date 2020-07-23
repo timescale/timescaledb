@@ -97,7 +97,7 @@ REVOKE EXECUTE ON FUNCTION get_constant() FROM PUBLIC;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
-select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
+select from alter_job(:cagg_job_id, max_runtime => NULL);
 
 --make sure that commands fail
 

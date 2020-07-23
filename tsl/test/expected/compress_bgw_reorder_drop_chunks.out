@@ -80,10 +80,10 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
  "1"
 (1 row)
 
-SELECT alter_job_schedule(:retention_job_id, schedule_interval => INTERVAL '1 second');
-                 alter_job_schedule                  
------------------------------------------------------
- (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",-infinity)
+SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');
+                                                     alter_job                                                      
+--------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""hypertable_id"": 1, ""retention_window"": ""@ 4 mons""}",-infinity)
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;

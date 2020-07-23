@@ -66,7 +66,7 @@ SELECT * FROM timescaledb_information.continuous_aggregate_stats;
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
-SELECT alter_job_schedule(1000, schedule_interval := '1h');
+SELECT alter_job(1000, schedule_interval := '1h');
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 

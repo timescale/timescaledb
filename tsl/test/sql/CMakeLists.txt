@@ -1,23 +1,24 @@
 set(TEST_FILES
+  bgw_custom.sql
+  bgw_policy.sql
+  compression_bgw.sql
   compression_permissions.sql
   continuous_aggs_errors.sql
-  continuous_aggs_permissions.sql
-  continuous_aggs_watermark.sql
-  continuous_aggs_refresh.sql
   continuous_aggs_invalidation.sql
+  continuous_aggs_permissions.sql
+  continuous_aggs_refresh.sql
+  continuous_aggs_watermark.sql
+  dist_views.sql
   edition.sql
   gapfill.sql
   partialize_finalize.sql
   plan_gapfill.sql
-  dist_views.sql
 )
 
 set(TEST_FILES_DEBUG
-  bgw_policy.sql
   bgw_reorder_drop_chunks.sql
   compress_bgw_reorder_drop_chunks.sql
   compression_algos.sql
-  compression_bgw.sql
   compression_ddl.sql
   compression_errors.sql
   compression_hypertable.sql
@@ -25,9 +26,9 @@ set(TEST_FILES_DEBUG
   compression.sql
   compress_table.sql
   continuous_aggs_bgw_drop_chunks.sql
-  continuous_aggs_drop_chunks.sql
   continuous_aggs_bgw.sql
   continuous_aggs_ddl.sql
+  continuous_aggs_drop_chunks.sql
   continuous_aggs_dump.sql
   continuous_aggs_materialize.sql
   continuous_aggs_multi.sql
@@ -40,6 +41,7 @@ set(TEST_FILES_DEBUG
   debug_notice.sql
   deparse_fail.sql
   deparse.sql
+  dist_api_calls.sql
   dist_commands.sql
   dist_compression.sql
   dist_ddl.sql
@@ -48,6 +50,7 @@ set(TEST_FILES_DEBUG
   dist_policy.sql
   dist_util.sql
   issues.sql
+  read_only.sql
   remote_connection_cache.sql
   remote_connection.sql
   remote_copy.sql
@@ -58,8 +61,6 @@ set(TEST_FILES_DEBUG
   telemetry_distributed.sql
   transparent_decompression_queries.sql
   tsl_tables.sql
-  read_only.sql
-  dist_api_calls.sql
 )
 
 set(TEST_TEMPLATES

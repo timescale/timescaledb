@@ -115,10 +115,10 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 (1 row)
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
-SELECT alter_job_schedule(1000, schedule_interval := '1h');
-                alter_job_schedule                
---------------------------------------------------
- (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",-infinity)
+SELECT alter_job(1000, schedule_interval := '1h');
+                                    alter_job                                    
+---------------------------------------------------------------------------------
+ (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""mat_hypertable_id"": 2}",-infinity)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;

@@ -1,0 +1,110 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE custom_log(job_id int, args jsonb, extra text, runner NAME DEFAULT CURRENT_ROLE);
+CREATE OR REPLACE FUNCTION custom_func(jobid int, args jsonb) RETURNS VOID LANGUAGE SQL AS
+$$
+  INSERT INTO custom_log VALUES($1, $2, 'custom_func');
+$$;
+CREATE OR REPLACE FUNCTION custom_func_definer(jobid int, args jsonb) RETURNS VOID LANGUAGE SQL AS
+$$
+  INSERT INTO custom_log VALUES($1, $2, 'security definer');
+$$ SECURITY DEFINER;
+CREATE OR REPLACE PROCEDURE custom_proc(job_id int, args jsonb) LANGUAGE SQL AS
+$$
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc');
+$$;
+-- procedure with transaction handling
+CREATE OR REPLACE PROCEDURE custom_proc2(job_id int, args jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc 1 COMMIT');
+  COMMIT;
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc 2 ROLLBACK');
+  ROLLBACK;
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc 3 COMMIT');
+  COMMIT;
+END
+$$;
+SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb);
+ add_job 
+---------
+    1000
+(1 row)
+
+SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb);
+ add_job 
+---------
+    1001
+(1 row)
+
+SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
+ add_job 
+---------
+    1002
+(1 row)
+
+SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
+ add_job 
+---------
+    1003
+(1 row)
+
+SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
+ add_job 
+---------
+    1004
+(1 row)
+
+CALL run_job(1000);
+CALL run_job(1001);
+CALL run_job(1002);
+CALL run_job(1003);
+CALL run_job(1004);
+SELECT * FROM custom_log ORDER BY job_id, extra;
+ job_id |         args          |        extra         |      runner       
+--------+-----------------------+----------------------+-------------------
+   1000 | {"type": "function"}  | custom_func          | default_perm_user
+   1001 | {"type": "procedure"} | custom_proc          | default_perm_user
+   1002 | {"type": "procedure"} | custom_proc 1 COMMIT | default_perm_user
+   1002 | {"type": "procedure"} | custom_proc 3 COMMIT | default_perm_user
+   1003 | {"type": "function"}  | custom_func          | default_perm_user
+   1004 | {"type": "function"}  | security definer     | default_perm_user
+(6 rows)
+
+SELECT delete_job(1000);
+ delete_job 
+------------
+ 
+(1 row)
+
+SELECT delete_job(1001);
+ delete_job 
+------------
+ 
+(1 row)
+
+SELECT delete_job(1002);
+ delete_job 
+------------
+ 
+(1 row)
+
+SELECT delete_job(1003);
+ delete_job 
+------------
+ 
+(1 row)
+
+SELECT delete_job(1004);
+ delete_job 
+------------
+ 
+(1 row)
+
+-- check jobs got removed
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+(0 rows)
+
