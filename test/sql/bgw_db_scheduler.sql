@@ -24,10 +24,15 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME, job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, proc_name NAME DEFAULT '', proc_schema NAME DEFAULT '', owner NAME DEFAULT '', hypertable_id INTEGER DEFAULT 0, scheduled BOOL DEFAULT true, config JSONB DEFAULT '{}')
+CREATE OR REPLACE FUNCTION insert_job(application_name NAME, job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, proc_name NAME DEFAULT '', proc_schema NAME DEFAULT '', owner NAME DEFAULT '', scheduled BOOL DEFAULT true, hypertable_id INTEGER DEFAULT 0, config JSONB DEFAULT '{}')
 RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_test_bgw_job_insert_relation'
 LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION test_toggle_scheduled(job_id INTEGER) RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS
+$$
+  UPDATE _timescaledb_config.bgw_job SET scheduled = NOT scheduled WHERE id = $1;
+$$;
 
 CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER)
 RETURNS VOID
@@ -104,10 +109,29 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
 --
+-- Test running the scheduler with a job marked as unscheduled
+--
+
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time();
+SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s',scheduled:= false);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
+-- empty
+SELECT * FROM _timescaledb_internal.bgw_job_stat;
+
+SELECT test_toggle_scheduled(1000);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
+SELECT * FROM _timescaledb_internal.bgw_job_stat;
+SELECT * FROM sorted_bgw_log;
+
+SELECT delete_job(1000);
+
+--
 -- Test running a normal job
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
+ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq RESTART;
 SELECT ts_bgw_params_reset_time();
 INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
 ('test_job_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');

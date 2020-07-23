@@ -402,7 +402,7 @@ terminate_and_cleanup_job(ScheduledBgwJob *sjob)
 List *
 ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 {
-	List *new_jobs = ts_bgw_job_get_all(sizeof(ScheduledBgwJob), mctx);
+	List *new_jobs = ts_bgw_job_get_scheduled(sizeof(ScheduledBgwJob), mctx);
 	ListCell *new_ptr = list_head(new_jobs);
 	ListCell *cur_ptr = list_head(cur_jobs_list);
 

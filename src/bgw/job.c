@@ -236,9 +236,21 @@ bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
-extern List *
-ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
+static ScanFilterResult
+bgw_job_filter_scheduled(TupleInfo *ti, void *data)
 {
+	bool isnull;
+	Datum scheduled = heap_getattr(ti->tuple, Anum_bgw_job_scheduled, ti->desc, &isnull);
+	Assert(!isnull);
+
+	return DatumGetBool(scheduled);
+}
+
+List *
+ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
+{
+	/* the scheduler which uses this function requires jobs to be sorted by id
+	 * which is guaranteed by the index scan on the primary key */
 	Catalog *catalog = ts_catalog_get();
 	AccumData list_data = {
 		.list = NIL,
@@ -246,9 +258,10 @@ ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 	};
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, BGW_JOB),
-		.index = InvalidOid,
+		.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX),
 		.data = &list_data,
 		.tuple_found = bgw_job_accum_tuple_found,
+		.filter = bgw_job_filter_scheduled,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = mctx,
