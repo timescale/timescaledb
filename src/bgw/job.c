@@ -65,6 +65,7 @@ static const char *job_type_names[_MAX_JOB_TYPE] = {
 	[JOB_TYPE_DROP_CHUNKS] = "drop_chunks",
 	[JOB_TYPE_CONTINUOUS_AGGREGATE] = "continuous_aggregate",
 	[JOB_TYPE_COMPRESS_CHUNKS] = "compress_chunks",
+	[JOB_TYPE_CUSTOM] = "custom",
 	[JOB_TYPE_UNKNOWN] = "unknown",
 };
 
@@ -109,10 +110,6 @@ ts_bgw_job_owner(BgwJob *job)
 	{
 		case JOB_TYPE_VERSION_CHECK:
 			return ts_catalog_database_info_get()->owner_uid;
-		case JOB_TYPE_REORDER:
-		{
-			return get_role_oid(NameStr(job->fd.owner), false);
-		}
 		case JOB_TYPE_DROP_CHUNKS:
 		{
 			BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_job(job->fd.id);
@@ -138,6 +135,11 @@ ts_bgw_job_owner(BgwJob *job)
 				elog(ERROR, "compress chunks policy for job with id \"%d\" not found", job->fd.id);
 			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->fd.hypertable_id));
 		}
+
+		case JOB_TYPE_REORDER:
+		case JOB_TYPE_CUSTOM:
+			return get_role_oid(NameStr(job->fd.owner), false);
+
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_owner_hook != NULL)
 				return unknown_job_type_owner_hook(job);
@@ -693,6 +695,7 @@ ts_bgw_job_execute(BgwJob *job)
 		case JOB_TYPE_DROP_CHUNKS:
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 		case JOB_TYPE_COMPRESS_CHUNKS:
+		case JOB_TYPE_CUSTOM:
 			return ts_cm_functions->bgw_policy_job_execute(job);
 		case JOB_TYPE_UNKNOWN:
 			if (unknown_job_type_hook != NULL)

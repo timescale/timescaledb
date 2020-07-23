@@ -5,19 +5,20 @@
  */
 
 #include <postgres.h>
-#include <funcapi.h>
-
-#include <utils/timestamp.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
-#include <utils/lsyscache.h>
-#include <utils/builtins.h>
-#include <hypertable_cache.h>
-#include <utils/snapmgr.h>
-#include <nodes/primnodes.h>
-#include <nodes/pg_list.h>
 #include <continuous_agg.h>
+#include <funcapi.h>
+#include <hypertable_cache.h>
+#include <nodes/makefuncs.h>
+#include <nodes/pg_list.h>
+#include <nodes/primnodes.h>
+#include <parser/parse_func.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
 #include "bgw/timer.h"
 #include "bgw/job.h"
@@ -362,6 +363,7 @@ bgw_policy_job_check_enterprise_license(BgwJob *job)
 		case JOB_TYPE_DROP_CHUNKS:
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 		case JOB_TYPE_COMPRESS_CHUNKS:
+		case JOB_TYPE_CUSTOM:
 			required = false;
 			break;
 		default:
@@ -379,6 +381,93 @@ bgw_policy_job_check_enterprise_license(BgwJob *job)
 	return required;
 }
 
+static void
+job_execute_function(FuncExpr *funcexpr)
+{
+	bool isnull;
+
+	EState *estate = CreateExecutorState();
+	ExprContext *econtext = CreateExprContext(estate);
+
+	ExprState *es = ExecPrepareExpr((Expr *) funcexpr, estate);
+	ExecEvalExpr(es, econtext, &isnull);
+
+	FreeExprContext(econtext, true);
+	FreeExecutorState(estate);
+}
+
+static void
+job_execute_procedure(FuncExpr *funcexpr)
+{
+	CallStmt *call = makeNode(CallStmt);
+	call->funcexpr = funcexpr;
+	DestReceiver *dest = CreateDestReceiver(DestNone);
+	/* we don't need to create proper param list cause we pass in all arguments as Const */
+#ifdef PG11
+	ParamListInfo params = palloc0(offsetof(ParamListInfoData, params));
+#else
+	ParamListInfo params = makeParamList(0);
+#endif
+	ExecuteCallStmt(call, params, false, dest);
+}
+
+static bool
+job_execute(BgwJob *job)
+{
+	Const *arg1, *arg2;
+	bool started;
+	char prokind;
+	Oid proc;
+	Oid proc_args[] = { INT4OID, JSONBOID };
+	List *name;
+	FuncExpr *funcexpr;
+
+	if (!IsTransactionOrTransactionBlock())
+	{
+		started = true;
+		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
+
+	name = list_make2(makeString(NameStr(job->fd.proc_schema)),
+					  makeString(NameStr(job->fd.proc_name)));
+	proc = LookupFuncName(name, 2, proc_args, false);
+
+	prokind = get_func_prokind(proc);
+
+	arg1 = makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(job->fd.id), false, true);
+	arg2 = makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(job->fd.config), false, false);
+
+	funcexpr = makeFuncExpr(proc,
+							VOIDOID,
+							list_make2(arg1, arg2),
+							InvalidOid,
+							InvalidOid,
+							COERCE_EXPLICIT_CALL);
+
+	switch (prokind)
+	{
+		case PROKIND_FUNCTION:
+			job_execute_function(funcexpr);
+			break;
+		case PROKIND_PROCEDURE:
+			job_execute_procedure(funcexpr);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("unsupported function type")));
+			break;
+	}
+
+	if (started)
+	{
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+	}
+
+	return true;
+}
+
 bool
 tsl_bgw_policy_job_execute(BgwJob *job)
 {
@@ -386,14 +475,17 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 
 	switch (job->bgw_type)
 	{
-		case JOB_TYPE_REORDER:
-			return execute_reorder_policy(job->fd.id, job->fd.config, reorder_chunk, true);
 		case JOB_TYPE_DROP_CHUNKS:
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return execute_materialize_continuous_aggregate(job);
 		case JOB_TYPE_COMPRESS_CHUNKS:
 			return execute_compress_chunks_policy(job);
+
+		case JOB_TYPE_REORDER:
+		case JOB_TYPE_CUSTOM:
+			return job_execute(job);
+
 		default:
 			elog(ERROR,
 				 "scheduler tried to run an invalid job type: \"%s\"",
