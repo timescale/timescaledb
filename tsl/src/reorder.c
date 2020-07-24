@@ -121,6 +121,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 		PG_ARGISNULL(2) ? InvalidOid : get_tablespace_oid(PG_GETARG_NAME(2)->data, false);
 	Oid index_id = PG_ARGISNULL(3) ? InvalidOid : PG_GETARG_OID(3);
 	bool verbose = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
+	Chunk *chunk;
 
 	/* used for debugging purposes only see finish_heap_swaps */
 	Oid wait_id = PG_NARGS() < 6 || PG_ARGISNULL(5) ? InvalidOid : PG_GETARG_OID(5);
@@ -148,12 +149,55 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 				 errmsg("valid chunk, destination_tablespace, and index_destination_tablespaces "
 						"are required")));
 
-	reorder_chunk(chunk_id,
-				  index_id,
-				  verbose,
-				  wait_id,
-				  destination_tablespace,
-				  index_destination_tablespace);
+	chunk = ts_chunk_get_by_relid(chunk_id, false);
+
+	if (NULL == chunk)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
+
+	if (ts_chunk_contains_compressed_data(chunk))
+	{
+		Chunk *chunk_parent = ts_chunk_get_compressed_chunk_parent(chunk);
+
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot directly move internal compression data"),
+				 errdetail("Chunk \"%s\" contains compressed data for chunk \"%s\" and cannot be "
+						   "moved directly.",
+						   get_rel_name(chunk_id),
+						   get_rel_name(chunk_parent->table_id)),
+				 errhint("Moving chunk \"%s\" will also move the compressed data.",
+						 get_rel_name(chunk_parent->table_id))));
+	}
+
+	/* If chunk is compressed move it by altering tablespace on both chunks */
+	if (OidIsValid(chunk->fd.compressed_chunk_id))
+	{
+		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		AlterTableCmd cmd = { .type = T_AlterTableCmd,
+							  .subtype = AT_SetTableSpace,
+							  .name = get_tablespace_name(destination_tablespace) };
+
+		if (OidIsValid(index_id))
+			ereport(NOTICE,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("Ignoring index parameter"),
+					 errdetail("Chunk will not be reordered as it has compressed data.")));
+
+		AlterTableInternal(chunk_id, list_make1(&cmd), false);
+		AlterTableInternal(compressed_chunk->table_id, list_make1(&cmd), false);
+	}
+	else
+	{
+		reorder_chunk(chunk_id,
+					  index_id,
+					  verbose,
+					  wait_id,
+					  destination_tablespace,
+					  index_destination_tablespace);
+	}
+
 	PG_RETURN_VOID();
 }
 
@@ -177,11 +221,6 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
-
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("\"%s\" is a compressed chunk", get_rel_name(chunk_id))));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
