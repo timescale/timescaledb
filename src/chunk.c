@@ -2765,19 +2765,34 @@ init_scan_by_compressed_chunk_id(ScanIterator *iterator, int32 compressed_chunk_
 								   Int32GetDatum(compressed_chunk_id));
 }
 
-bool
-ts_chunk_contains_compressed_data(Chunk *chunk)
+Chunk *
+ts_chunk_get_compressed_chunk_parent(Chunk *chunk)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	bool found = false;
+	Oid parent_id = InvalidOid;
 
 	init_scan_by_compressed_chunk_id(&iterator, chunk->fd.id);
 	ts_scanner_foreach(&iterator)
 	{
-		Assert(!found);
-		found = true;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+
+		Assert(!OidIsValid(parent_id));
+		parent_id = DatumGetObjectId(heap_getattr(ti->tuple, Anum_chunk_id, ti->desc, &isnull));
 	}
-	return found;
+
+	if (OidIsValid(parent_id))
+		return ts_chunk_get_by_id(DatumGetObjectId(parent_id), true);
+
+	return NULL;
+}
+
+bool
+ts_chunk_contains_compressed_data(Chunk *chunk)
+{
+	Chunk *parent_chunk = ts_chunk_get_compressed_chunk_parent(chunk);
+
+	return parent_chunk != NULL;
 }
 
 List *
