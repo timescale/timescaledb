@@ -147,7 +147,11 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,
 								  MemoryContext mctx, uint64 *num_chunks_returned,
 								  ScanTupLock *tuplock);
-
+extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc,
+															   const char *schema_name,
+															   const char *table_name,
+															   bool *created);
+extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
