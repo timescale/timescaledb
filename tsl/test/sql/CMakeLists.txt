@@ -4,6 +4,7 @@ set(TEST_FILES
   continuous_aggs_permissions.sql
   continuous_aggs_watermark.sql
   continuous_aggs_refresh.sql
+  continuous_aggs_invalidation.sql
   edition.sql
   gapfill.sql
   partialize_finalize.sql

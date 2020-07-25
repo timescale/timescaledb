@@ -606,10 +606,16 @@ ts_catalog_restore_user(CatalogSecurityContext *sec_ctx)
  * Insert a new row into a catalog table.
  */
 void
-ts_catalog_insert(Relation rel, HeapTuple tuple)
+ts_catalog_insert_only(Relation rel, HeapTuple tuple)
 {
 	CatalogTupleInsert(rel, tuple);
 	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_INSERT);
+}
+
+void
+ts_catalog_insert(Relation rel, HeapTuple tuple)
+{
+	ts_catalog_insert_only(rel, tuple);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -626,11 +632,17 @@ ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *n
 	heap_freetuple(tuple);
 }
 
-TSDLLEXPORT void
-ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
+void
+ts_catalog_update_tid_only(Relation rel, ItemPointer tid, HeapTuple tuple)
 {
 	CatalogTupleUpdate(rel, tid, tuple);
 	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_UPDATE);
+}
+
+void
+ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple)
+{
+	ts_catalog_update_tid_only(rel, tid, tuple);
 	/* Make changes visible */
 	CommandCounterIncrement();
 }
@@ -642,29 +654,29 @@ ts_catalog_update(Relation rel, HeapTuple tuple)
 }
 
 void
-ts_catalog_delete_tid(Relation rel, ItemPointer tid)
+ts_catalog_delete_tid_only(Relation rel, ItemPointer tid)
 {
 	CatalogTupleDelete(rel, tid);
 	ts_catalog_invalidate_cache(RelationGetRelid(rel), CMD_DELETE);
+}
+
+void
+ts_catalog_delete_tid(Relation rel, ItemPointer tid)
+{
+	ts_catalog_delete_tid_only(rel, tid);
 	CommandCounterIncrement();
+}
+
+void
+ts_catalog_delete_only(Relation rel, HeapTuple tuple)
+{
+	ts_catalog_delete_tid_only(rel, &tuple->t_self);
 }
 
 void
 ts_catalog_delete(Relation rel, HeapTuple tuple)
 {
 	ts_catalog_delete_tid(rel, &tuple->t_self);
-}
-
-void
-ts_catalog_delete_only(Relation rel, HeapTuple tuple)
-{
-	CatalogTupleDelete(rel, &tuple->t_self);
-}
-
-void
-ts_catalog_delete_tid_only(Relation rel, ItemPointer tid)
-{
-	CatalogTupleDelete(rel, tid);
 }
 
 /*
