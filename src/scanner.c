@@ -13,6 +13,7 @@
 #include <storage/procarray.h>
 #include <utils/rel.h>
 #include <utils/palloc.h>
+#include <utils/snapmgr.h>
 
 #include "scanner.h"
 
@@ -105,7 +106,6 @@ index_scanner_beginscan(InternalScannerCtx *ctx)
 
 	ctx->scan.index_scan =
 		index_beginscan(ctx->tablerel, ctx->indexrel, sctx->snapshot, sctx->nkeys, sctx->norderbys);
-
 	ctx->scan.index_scan->xs_want_itup = ctx->sctx->want_itup;
 	index_rescan(ctx->scan.index_scan, sctx->scankey, sctx->nkeys, NULL, sctx->norderbys);
 	return ctx->scan;

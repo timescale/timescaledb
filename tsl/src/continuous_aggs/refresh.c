@@ -20,6 +20,7 @@
 
 #include "refresh.h"
 #include "materialize.h"
+#include "invalidation.h"
 
 typedef struct CaggRefreshState
 {
@@ -365,6 +366,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 				 errmsg("invalid refresh window"),
 				 errhint("The start of the window must be before the end.")));
 
+	continuous_agg_invalidation_process(cagg, &refresh_window);
 	continuous_agg_refresh_with_window(cagg, &refresh_window);
 
 	PG_RETURN_VOID();
