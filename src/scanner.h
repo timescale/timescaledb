@@ -10,9 +10,9 @@
 #include <access/genam.h>
 #include <access/heapam.h>
 #include <nodes/lockoptions.h>
-#include <utils.h>
 #include <utils/fmgroids.h>
 
+#include "utils.h"
 #include "compat.h"
 
 typedef struct ScanTupLock
@@ -74,13 +74,16 @@ typedef struct ScannerCtx
 	int nkeys, norderbys, limit; /* Limit on number of tuples to return. 0 or
 								  * less means no limit */
 	bool want_itup;
+	bool keeplock; /* Keep the table lock after the scan finishes */
 	LOCKMODE lockmode;
 	MemoryContext result_mctx; /* The memory context to allocate the result
 								* on */
 	ScanTupLock *tuplock;
 	ScanDirection scandirection;
-	void *data; /* User-provided data passed on to filter()
-				 * and tuple_found() */
+	Snapshot snapshot; /* Snapshot requested by the caller. Set automatically
+						* when NULL */
+	void *data;		   /* User-provided data passed on to filter()
+						* and tuple_found() */
 
 	/*
 	 * Optional handler called before a scan starts, but relation locks are
@@ -138,6 +141,7 @@ typedef struct InternalScannerCtx
 	TupleInfo tinfo;
 	ScanDesc scan;
 	ScannerCtx *sctx;
+	bool registered_snapshot;
 	bool closed;
 } InternalScannerCtx;
 

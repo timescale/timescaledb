@@ -10,6 +10,7 @@
 #include <executor/tuptable.h>
 #include <storage/lmgr.h>
 #include <storage/bufmgr.h>
+#include <storage/procarray.h>
 #include <utils/rel.h>
 #include <utils/palloc.h>
 
@@ -46,7 +47,9 @@ table_scanner_beginscan(InternalScannerCtx *ctx)
 {
 	ScannerCtx *sctx = ctx->sctx;
 
-	ctx->scan.table_scan = table_beginscan(ctx->tablerel, SnapshotSelf, sctx->nkeys, sctx->scankey);
+	ctx->scan.table_scan =
+		table_beginscan(ctx->tablerel, sctx->snapshot, sctx->nkeys, sctx->scankey);
+
 	return ctx->scan;
 }
 
@@ -81,7 +84,9 @@ table_scanner_endscan(InternalScannerCtx *ctx)
 static void
 table_scanner_close(InternalScannerCtx *ctx)
 {
-	table_close(ctx->tablerel, ctx->sctx->lockmode);
+	LOCKMODE lockmode = ctx->sctx->keeplock ? NoLock : ctx->sctx->lockmode;
+
+	table_close(ctx->tablerel, lockmode);
 }
 
 /* Functions implementing index scans */
@@ -99,7 +104,8 @@ index_scanner_beginscan(InternalScannerCtx *ctx)
 	ScannerCtx *sctx = ctx->sctx;
 
 	ctx->scan.index_scan =
-		index_beginscan(ctx->tablerel, ctx->indexrel, SnapshotSelf, sctx->nkeys, sctx->norderbys);
+		index_beginscan(ctx->tablerel, ctx->indexrel, sctx->snapshot, sctx->nkeys, sctx->norderbys);
+
 	ctx->scan.index_scan->xs_want_itup = ctx->sctx->want_itup;
 	index_rescan(ctx->scan.index_scan, sctx->scankey, sctx->nkeys, NULL, sctx->norderbys);
 	return ctx->scan;
@@ -139,7 +145,9 @@ index_scanner_endscan(InternalScannerCtx *ctx)
 static void
 index_scanner_close(InternalScannerCtx *ctx)
 {
-	table_close(ctx->tablerel, ctx->sctx->lockmode);
+	LOCKMODE lockmode = ctx->sctx->keeplock ? NoLock : ctx->sctx->lockmode;
+
+	table_close(ctx->tablerel, lockmode);
 	index_close(ctx->indexrel, ctx->sctx->lockmode);
 }
 
@@ -187,10 +195,42 @@ ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 	ictx->sctx = ctx;
 	ictx->closed = false;
+	ictx->registered_snapshot = false;
 
 	scanner = scanner_ctx_get_scanner(ctx);
 
 	scanner->openscan(ictx);
+
+	if (ctx->snapshot == NULL)
+	{
+		/*
+		 * We use SnapshotSelf by default, for historical reasons mostly, but
+		 * we probably want to move to an MVCC snapshot as the default. The
+		 * difference is that a Self snapshot is an "instant" snapshot and can
+		 * see its own changes. More importantly, however, unlike an MVCC
+		 * snapshot, a Self snapshot is not subject to the strictness of
+		 * SERIALIZABLE isolation mode.
+		 *
+		 * This is important in case of, e.g., concurrent chunk creation by
+		 * two transactions; we'd like a transaction to use a new chunk as
+		 * soon as the creating transaction commits, so that there aren't
+		 * multiple transactions creating the same chunk and all but one fails
+		 * with a conflict. However, under SERIALIZABLE mode a transaction is
+		 * only allowed to read data from transactions that were committed
+		 * prior to transaction start. This means that two or more
+		 * transactions that create the same chunk must have all but the first
+		 * committed transaction fail.
+		 *
+		 * Therefore, we probably want to exempt internal bookkeeping metadata
+		 * from full SERIALIZABLE semantics (at least in the case of chunk
+		 * creation), or otherwise the INSERT behavior will be different for
+		 * hypertables compared to regular tables under SERIALIZABLE
+		 * mode.
+		 */
+		ctx->snapshot = RegisterSnapshot(GetSnapshotData(SnapshotSelf));
+		ictx->registered_snapshot = true;
+	}
+
 	scanner->beginscan(ictx);
 
 	tuple_desc = RelationGetDescr(ictx->tablerel);
@@ -224,8 +264,14 @@ ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 		ictx->sctx->postscan(ictx->tinfo.count, ictx->sctx->data);
 
 	scanner->endscan(ictx);
-	scanner->closescan(ictx);
 
+	if (ictx->registered_snapshot)
+	{
+		UnregisterSnapshot(ctx->snapshot);
+		ctx->snapshot = NULL;
+	}
+
+	scanner->closescan(ictx);
 	ExecDropSingleTupleTableSlot(ictx->tinfo.slot);
 	ictx->closed = true;
 }
