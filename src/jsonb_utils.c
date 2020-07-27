@@ -57,6 +57,26 @@ ts_jsonb_add_int32(JsonbParseState *state, const char *key, const int32 int_valu
 }
 
 void
+ts_jsonb_add_int64(JsonbParseState *state, const char *key, const int64 int_value)
+{
+	Numeric value;
+
+	value = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int64GetDatum(int_value)));
+
+	ts_jsonb_add_numeric(state, key, value);
+}
+
+void
+ts_jsonb_add_interval(JsonbParseState *state, const char *key, Interval *interval)
+{
+	char *value;
+
+	value = DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(interval)));
+
+	ts_jsonb_add_str(state, key, value);
+}
+
+void
 ts_jsonb_add_numeric(JsonbParseState *state, const char *key, const Numeric value)
 {
 	JsonbValue json_value = { .type = jbvNumeric, .val.numeric = value };
@@ -152,4 +172,36 @@ ts_jsonb_get_int32_field(Jsonb *json, const char *key, bool *field_found)
 
 	*field_found = true;
 	return DatumGetInt32(int_datum);
+}
+
+int64
+ts_jsonb_get_int64_field(Jsonb *json, const char *key, bool *field_found)
+{
+	Datum int_datum;
+	char *int_str = ts_jsonb_get_str_field(json, key);
+
+	if (int_str == NULL)
+	{
+		*field_found = false;
+		return 0;
+	}
+
+	int_datum = DirectFunctionCall1(int8in, CStringGetDatum(int_str));
+
+	*field_found = true;
+	return DatumGetInt64(int_datum);
+}
+
+Interval *
+ts_jsonb_get_interval_field(Jsonb *json, const char *key)
+{
+	Datum interval_datum;
+	char *interval_str = ts_jsonb_get_str_field(json, key);
+
+	if (interval_str == NULL)
+		return NULL;
+
+	interval_datum = DirectFunctionCall3(interval_in, CStringGetDatum("1 day"), InvalidOid, -1);
+
+	return DatumGetIntervalP(interval_datum);
 }

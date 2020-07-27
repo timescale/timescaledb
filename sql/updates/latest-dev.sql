@@ -118,6 +118,12 @@ ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF 
 CLUSTER  _timescaledb_catalog.compression_chunk_size USING compression_chunk_size_pkey;
 ALTER TABLE _timescaledb_catalog.compression_chunk_size SET WITHOUT CLUSTER;
 
+---Clean up constraints on hypertable catalog table ---
+ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_table_name_schema_name_key UNIQUE(table_name, schema_name);
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_schema_name_table_name_key;
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_id_schema_name_key;
+
+-- add fields for custom jobs/generic configuration to bgw_job table
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_name NAME NOT NULL DEFAULT '';
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_schema NAME NOT NULL DEFAULT '';
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN owner NAME NOT NULL DEFAULT CURRENT_ROLE;
@@ -128,13 +134,29 @@ ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN config JSONB;
 ALTER TABLE _timescaledb_config.bgw_job DROP CONSTRAINT valid_job_type;
 ALTER TABLE _timescaledb_config.bgw_job ADD CONSTRAINT valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks', 'custom'));
 
+-- migrate reorder jobs
+UPDATE
+  _timescaledb_config.bgw_job job
+SET proc_name = 'policy_reorder',
+  proc_schema = '_timescaledb_internal',
+  config = jsonb_build_object('hypertable_id', reorder.hypertable_id, 'index_name', reorder.hypertable_index_name),
+  hypertable_id = reorder.hypertable_id,
+  OWNER = (
+    SELECT relowner::regrole::text
+    FROM _timescaledb_catalog.hypertable ht,
+      pg_class cl
+    WHERE ht.id = reorder.hypertable_id
+      AND cl.oid = format('%I.%I', schema_name, table_name)::regclass)
+FROM _timescaledb_config.bgw_policy_reorder reorder
+WHERE job_type = 'reorder'
+  AND job.id = reorder.job_id;
+
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
 ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
 
 CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_name,proc_schema,hypertable_id);
 
----Clean up constraints on hypertable catalog table ---
-ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_table_name_schema_name_key UNIQUE(table_name, schema_name);
-ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_schema_name_table_name_key;
-ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_id_schema_name_key;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
+DROP TABLE _timescaledb_config.bgw_policy_reorder CASCADE;
+

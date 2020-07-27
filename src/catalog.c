@@ -71,10 +71,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = METADATA_TABLE_NAME,
 	},
-	[BGW_POLICY_REORDER] = {
-		.schema_name = CONFIG_SCHEMA_NAME,
-		.table_name = BGW_POLICY_REORDER_TABLE_NAME,
-	},
 	[BGW_POLICY_DROP_CHUNKS] = {
 		.schema_name = CONFIG_SCHEMA_NAME,
 		.table_name = BGW_POLICY_DROP_CHUNKS_TABLE_NAME,
@@ -210,13 +206,6 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[METADATA_PKEY_IDX] = "metadata_pkey",
 		},
 	},
-	[BGW_POLICY_REORDER] = {
-		.length = _MAX_BGW_POLICY_REORDER_INDEX,
-		.names = (char *[]) {
-			[BGW_POLICY_REORDER_PKEY_IDX] = "bgw_policy_reorder_pkey",
-			[BGW_POLICY_REORDER_HYPERTABLE_ID_IDX] = "bgw_policy_reorder_hypertable_id_key",
-		},
-	},
 	[BGW_POLICY_DROP_CHUNKS] = {
 		.length = _MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
 		.names = (char *[]) {
@@ -304,7 +293,6 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
-	[BGW_POLICY_REORDER] = NULL,
 	[BGW_POLICY_DROP_CHUNKS] = NULL,
 	[CONTINUOUS_AGGS_COMPLETED_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,

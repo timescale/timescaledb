@@ -10,7 +10,11 @@
 #include <postgres.h>
 
 /* User-facing API functions */
-extern Datum reorder_add_policy(PG_FUNCTION_ARGS);
-extern Datum reorder_remove_policy(PG_FUNCTION_ARGS);
+extern Datum policy_reorder_add(PG_FUNCTION_ARGS);
+extern Datum policy_reorder_remove(PG_FUNCTION_ARGS);
+extern Datum policy_reorder_proc(PG_FUNCTION_ARGS);
+
+extern int32 policy_reorder_get_hypertable_id(Jsonb *config);
+extern char *policy_reorder_get_index_name(Jsonb *config);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_REORDER_API_H */

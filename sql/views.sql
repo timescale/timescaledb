@@ -77,17 +77,23 @@ CREATE OR REPLACE VIEW timescaledb_information.drop_chunks_policies as
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.reorder_policies as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.hypertable_index_name, p.job_id, j.schedule_interval,
-    j.max_runtime, j.max_retries, j.retry_period
-  FROM _timescaledb_config.bgw_policy_reorder p
-    INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
-    INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
+CREATE OR REPLACE VIEW timescaledb_information.reorder_policies AS
+SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+  jsonb_object_field_text (j.config, 'index_name') AS hypertable_index_name,
+  j.id AS job_id,
+  j.schedule_interval,
+  j.max_runtime,
+  j.max_retries,
+  j.retry_period
+FROM _timescaledb_config.bgw_job j
+  INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
+WHERE job_type = 'reorder';
+
 
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
   SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
     js.total_runs, js.total_failures
-  FROM (SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_reorder
+  FROM (SELECT id AS job_id, hypertable_id FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder')
         UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks
         UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_compress_chunks
         UNION SELECT job_id, raw_hypertable_id FROM _timescaledb_catalog.continuous_agg) p

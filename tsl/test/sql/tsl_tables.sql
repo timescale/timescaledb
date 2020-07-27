@@ -16,7 +16,7 @@ LANGUAGE C VOLATILE STRICT;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
-select * from _timescaledb_config.bgw_policy_reorder;
+select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
 
 CREATE TABLE test_table(time timestamptz, junk int);
 CREATE TABLE test_table_int(time bigint, junk int);
@@ -43,7 +43,7 @@ select add_reorder_policy('test_table', 'second_index');
 select add_reorder_policy('test_table', 'third_index');
 \set ON_ERROR_STOP 1
 
-select * from _timescaledb_config.bgw_policy_reorder where job_id=:job_id;
+select * from _timescaledb_config.bgw_job where id=:job_id;
 
 -- Now check that default scheduling interval for reorder policy is calculated correctly
 -- Should be 1/2 default chunk interval length
@@ -51,11 +51,11 @@ CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time', chunk_time_interval=>INTERVAL '1 day');
 select add_reorder_policy('test_table2', 'test_table2_time_idx');
 
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
 DROP TABLE test_table2;
 -- Make sure that test_table2 reorder policy gets dropped
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
 \set ON_ERROR_STOP 0
@@ -108,8 +108,7 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
 select remove_reorder_policy('test_table');
 
-select * from _timescaledb_config.bgw_policy_reorder;
-select r.job_id,r.hypertable_id,r.hypertable_index_name from _timescaledb_config.bgw_policy_reorder as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
+select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 month');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -152,7 +151,6 @@ select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
 
 select delete_job(:job_id);
 
@@ -160,12 +158,10 @@ select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 -- Job args should be gone
 select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
 -- Job args should still be there
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
+select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 
 select delete_job(:reorder_job_id);
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
--- Job args should be gone
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
 
 -- Now make sure policy args have correct job deletion dependency
 select add_drop_chunks_policy('test_table', INTERVAL '2 month') as job_id \gset
@@ -174,15 +170,13 @@ select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
-select * from _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
 
 DROP TABLE test_table;
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
 
 -- Check that we can't add policies on non-hypertables
 CREATE TABLE non_hypertable(junk int, more_junk int);
@@ -270,17 +264,17 @@ select add_drop_chunks_policy('test_table', INTERVAL '2 days', true);
 
 select ts_test_chunk_stats_insert(:job_id, 123, 1);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
 select remove_drop_chunks_policy('test_table');
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
 select remove_reorder_policy('test_table');
 -- Row should be gone
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
 -- Now test if alter_job_schedule works
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset

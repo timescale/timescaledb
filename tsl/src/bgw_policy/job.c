@@ -25,7 +25,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/compress_chunks.h"
-#include "bgw_policy/reorder.h"
+#include "bgw_policy/reorder_api.h"
 #include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/job.h"
@@ -104,14 +104,12 @@ get_chunk_to_compress(Hypertable *ht, FormData_ts_interval *older_than)
 }
 
 bool
-execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
+execute_reorder_policy(int32 job_id, Jsonb *config, reorder_func reorder, bool fast_continue)
 {
 	int chunk_id;
 	bool started = false;
-	BgwPolicyReorder *args;
 	Hypertable *ht;
 	Chunk *chunk;
-	int32 job_id = job->fd.id;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -119,19 +117,10 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 		StartTransactionCommand();
 	}
 
-	/* Get the arguments from the reorder_policy table */
-	args = ts_bgw_policy_reorder_find_by_job(job_id);
-
-	if (args == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("could not run reorder policy #%d because no args in policy table",
-						job_id)));
-
-	ht = ts_hypertable_get_by_id(args->fd.hypertable_id);
+	ht = ts_hypertable_get_by_id(policy_reorder_get_hypertable_id(config));
 
 	/* Find a chunk to reorder in the selected hypertable */
-	chunk_id = get_chunk_id_to_reorder(args->fd.job_id, ht);
+	chunk_id = get_chunk_id_to_reorder(job_id, ht);
 
 	if (chunk_id == -1)
 	{
@@ -150,7 +139,7 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 	chunk = ts_chunk_get_by_id(chunk_id, false);
 	elog(LOG, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
 	reorder(chunk->table_id,
-			get_relname_relid(NameStr(args->fd.hypertable_index_name),
+			get_relname_relid(policy_reorder_get_index_name(config),
 							  get_namespace_oid(NameStr(ht->fd.schema_name), false)),
 			false,
 			InvalidOid,
@@ -162,12 +151,13 @@ execute_reorder_policy(BgwJob *job, reorder_func reorder, bool fast_continue)
 		 chunk->fd.table_name.data);
 
 	/* Now update chunk_stats table */
-	ts_bgw_policy_chunk_stats_record_job_run(args->fd.job_id,
-											 chunk_id,
-											 ts_timer_get_current_timestamp());
+	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
 
-	if (fast_continue && get_chunk_id_to_reorder(args->fd.job_id, ht) != -1)
+	if (fast_continue && get_chunk_id_to_reorder(job_id, ht) != -1)
+	{
+		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
 		enable_fast_restart(job, "reorder");
+	}
 
 commit:
 	if (started)
@@ -397,7 +387,7 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 	switch (job->bgw_type)
 	{
 		case JOB_TYPE_REORDER:
-			return execute_reorder_policy(job, reorder_chunk, true);
+			return execute_reorder_policy(job->fd.id, job->fd.config, reorder_chunk, true);
 		case JOB_TYPE_DROP_CHUNKS:
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:

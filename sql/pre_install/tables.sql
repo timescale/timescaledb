@@ -229,13 +229,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 --the statistics probably aren't very meaningful across instances.
 
 --Now we define the argument tables for available BGW policies.
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_reorder (
-    job_id                  INTEGER     PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-    hypertable_id           INTEGER     UNIQUE NOT NULL    REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    hypertable_index_name	NAME		NOT NULL
-);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_reorder', '');
-
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
     job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
     hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
