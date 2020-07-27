@@ -34,6 +34,7 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 {
 	JsonbValue json_value;
 
+	Assert(value != NULL);
 	/* If there is a null entry, don't add it to the JSON */
 	if (value == NULL)
 		return;
@@ -91,8 +92,8 @@ ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
 	pushJsonbValue(&state, WJB_VALUE, value);
 }
 
-text *
-ts_jsonb_get_text_field(Jsonb *json, text *field_name)
+char *
+ts_jsonb_get_str_field(Jsonb *jsonb, const char *key)
 {
 	/*
 	 * `jsonb_object_field_text` returns NULL when the field is not found so
@@ -103,33 +104,22 @@ ts_jsonb_get_text_field(Jsonb *json, text *field_name)
 
 	InitFunctionCallInfoData(*fcinfo, NULL, 2, InvalidOid, NULL, NULL);
 
-	FC_SET_ARG(fcinfo, 0, PointerGetDatum(json));
-	FC_SET_ARG(fcinfo, 1, PointerGetDatum(field_name));
+	FC_SET_ARG(fcinfo, 0, PointerGetDatum(jsonb));
+	FC_SET_ARG(fcinfo, 1, PointerGetDatum(cstring_to_text(key)));
 
 	result = jsonb_object_field_text(fcinfo);
 
 	if (fcinfo->isnull)
 		return NULL;
 
-	return DatumGetTextP(result);
-}
-
-char *
-ts_jsonb_get_str_field(Jsonb *license, text *field_name)
-{
-	text *text_str = ts_jsonb_get_text_field(license, field_name);
-
-	if (text_str == NULL)
-		return NULL;
-
-	return text_to_cstring(text_str);
+	return text_to_cstring(DatumGetTextP(result));
 }
 
 TimestampTz
-ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
+ts_jsonb_get_time_field(Jsonb *jsonb, const char *key, bool *field_found)
 {
 	Datum time_datum;
-	text *time_str = ts_jsonb_get_text_field(license, field_name);
+	char *time_str = ts_jsonb_get_str_field(jsonb, key);
 
 	if (time_str == NULL)
 	{
@@ -138,7 +128,7 @@ ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
 	}
 
 	time_datum = DirectFunctionCall3(timestamptz_in,
-									 /* str= */ CStringGetDatum(text_to_cstring(time_str)),
+									 /* str= */ CStringGetDatum(time_str),
 									 /* unused */ Int32GetDatum(-1),
 									 /* typmod= */ Int32GetDatum(-1));
 
@@ -147,10 +137,10 @@ ts_jsonb_get_time_field(Jsonb *license, text *field_name, bool *field_found)
 }
 
 int32
-ts_jsonb_get_int32_field(Jsonb *json, text *field_name, bool *field_found)
+ts_jsonb_get_int32_field(Jsonb *json, const char *key, bool *field_found)
 {
 	Datum int_datum;
-	char *int_str = ts_jsonb_get_str_field(json, field_name);
+	char *int_str = ts_jsonb_get_str_field(json, key);
 
 	if (int_str == NULL)
 	{

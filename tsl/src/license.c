@@ -264,21 +264,20 @@ license_info_init_from_jsonb(Jsonb *json_license, LicenseInfo *out)
 static char *
 json_get_id(Jsonb *license)
 {
-	return ts_jsonb_get_str_field(license, cstring_to_text(ID_FIELD));
+	return ts_jsonb_get_str_field(license, ID_FIELD);
 }
 
 static char *
 json_get_kind(Jsonb *license)
 {
-	return ts_jsonb_get_str_field(license, cstring_to_text(KIND_FIELD));
+	return ts_jsonb_get_str_field(license, KIND_FIELD);
 }
 
 static TimestampTz
 json_get_start_time(Jsonb *license)
 {
 	bool found = false;
-	TimestampTz start_time =
-		ts_jsonb_get_time_field(license, cstring_to_text(START_TIME_FIELD), &found);
+	TimestampTz start_time = ts_jsonb_get_time_field(license, START_TIME_FIELD, &found);
 
 	if (!found)
 		elog(ERRCODE_FEATURE_NOT_SUPPORTED, FIELD_NOT_FOUND_ERRSTRING, START_TIME_FIELD);
@@ -289,8 +288,7 @@ static TimestampTz
 json_get_end_time(Jsonb *license)
 {
 	bool found = false;
-	TimestampTz end_time =
-		ts_jsonb_get_time_field(license, cstring_to_text(END_TIME_FIELD), &found);
+	TimestampTz end_time = ts_jsonb_get_time_field(license, END_TIME_FIELD, &found);
 
 	if (!found)
 		elog(ERRCODE_FEATURE_NOT_SUPPORTED, FIELD_NOT_FOUND_ERRSTRING, END_TIME_FIELD);
