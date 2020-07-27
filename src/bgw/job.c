@@ -272,6 +272,118 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 }
 
 static void
+init_scan_by_proc_name(ScanKeyData *scankey, const char *proc_name)
+{
+	ScanKeyInit(scankey,
+				Anum_bgw_job_proc_hypertable_id_idx_proc_name,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				CStringGetDatum(proc_name));
+}
+
+static void
+init_scan_by_proc_schema(ScanKeyData *scankey, const char *proc_schema)
+{
+	ScanKeyInit(scankey,
+				Anum_bgw_job_proc_hypertable_id_idx_proc_schema,
+				BTEqualStrategyNumber,
+				F_NAMEEQ,
+				CStringGetDatum(proc_schema));
+}
+
+static void
+init_scan_by_hypertable_id(ScanKeyData *scankey, int32 hypertable_id)
+{
+	ScanKeyInit(scankey,
+				Anum_bgw_job_proc_hypertable_id_idx_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+}
+
+List *
+ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name, const char *proc_schema,
+										  int32 hypertable_id)
+{
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[3];
+	AccumData list_data = {
+		.list = NIL,
+		.alloc_size = sizeof(BgwJob),
+	};
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PROC_HYPERTABLE_ID_IDX),
+		.data = &list_data,
+		.scankey = scankey,
+		.nkeys = sizeof(scankey) / sizeof(*scankey),
+		.tuple_found = bgw_job_accum_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	init_scan_by_proc_name(&scankey[0], proc_name);
+	init_scan_by_proc_schema(&scankey[1], proc_schema);
+	init_scan_by_hypertable_id(&scankey[2], hypertable_id);
+
+	ts_scanner_scan(&scanctx);
+	return list_data.list;
+}
+
+List *
+ts_bgw_job_find_by_proc(const char *proc_name, const char *proc_schema)
+{
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[2];
+	AccumData list_data = {
+		.list = NIL,
+		.alloc_size = sizeof(BgwJob),
+	};
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PROC_HYPERTABLE_ID_IDX),
+		.data = &list_data,
+		.scankey = scankey,
+		.nkeys = sizeof(scankey) / sizeof(*scankey),
+		.tuple_found = bgw_job_accum_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	init_scan_by_proc_name(&scankey[0], proc_name);
+	init_scan_by_proc_schema(&scankey[1], proc_schema);
+
+	ts_scanner_scan(&scanctx);
+	return list_data.list;
+}
+
+List *
+ts_bgw_job_find_by_hypertable_id(int32 hypertable_id)
+{
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[1];
+	AccumData list_data = {
+		.list = NIL,
+		.alloc_size = sizeof(BgwJob),
+	};
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PROC_HYPERTABLE_ID_IDX),
+		.data = &list_data,
+		.scankey = scankey,
+		.nkeys = sizeof(scankey) / sizeof(*scankey),
+		.tuple_found = bgw_job_accum_tuple_found,
+		.lockmode = AccessShareLock,
+		.scandirection = ForwardScanDirection,
+	};
+
+	init_scan_by_hypertable_id(&scankey[0], hypertable_id);
+
+	ts_scanner_scan(&scanctx);
+	return list_data.list;
+}
+
+static void
 init_scan_by_job_id(ScanIterator *iterator, int32 job_id)
 {
 	iterator->ctx.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX);

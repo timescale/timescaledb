@@ -682,6 +682,7 @@ typedef FormData_bgw_job *Form_bgw_job;
 enum
 {
 	BGW_JOB_PKEY_IDX = 0,
+	BGW_JOB_PROC_HYPERTABLE_ID_IDX,
 	_MAX_BGW_JOB_INDEX,
 };
 
@@ -692,6 +693,16 @@ enum Anum_bgw_job_pkey_idx
 };
 
 #define Natts_bjw_job_pkey_idx (_Anum_bgw_job_pkey_idx_max - 1)
+
+enum Anum_bgw_job_proc_hypertable_id_idx
+{
+	Anum_bgw_job_proc_hypertable_id_idx_proc_name = 1,
+	Anum_bgw_job_proc_hypertable_id_idx_proc_schema,
+	Anum_bgw_job_proc_hypertable_id_idx_hypertable_id,
+	_Anum_bgw_job_proc_hypertable_id_idx_max,
+};
+
+#define Natts_bgw_job_proc_hypertable_id_idx (_Anum_bgw_job_proc_hypertable_id_idx_max - 1)
 
 /************************************
  *

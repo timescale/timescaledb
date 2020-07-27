@@ -42,6 +42,12 @@ extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job, Oid user_oid);
 
 extern List *ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx);
 
+extern TSDLLEXPORT List *ts_bgw_job_find_by_proc(const char *proc_name, const char *proc_schema);
+extern TSDLLEXPORT List *ts_bgw_job_find_by_hypertable_id(int32 hypertable_id);
+extern TSDLLEXPORT List *ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name,
+																   const char *proc_schema,
+																   int32 hypertable_id);
+
 extern bool ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx);
 
 TSDLLEXPORT BgwJob *ts_bgw_job_find(int job_id, MemoryContext mctx, bool fail_if_not_found);

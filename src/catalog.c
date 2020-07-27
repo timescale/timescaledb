@@ -195,6 +195,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_BGW_JOB_INDEX,
 		.names = (char *[]) {
 			[BGW_JOB_PKEY_IDX] = "bgw_job_pkey",
+			[BGW_JOB_PROC_HYPERTABLE_ID_IDX] = "bgw_job_proc_hypertable_id_idx",
 		},
 	},
 	[BGW_JOB_STAT] = {
