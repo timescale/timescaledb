@@ -14,16 +14,17 @@
 #include <utils/syscache.h>
 #include <miscadmin.h>
 
+#include <compat.h>
 #include <dimension.h>
-
-#include "compat.h"
+#include <jsonb_utils.h>
 
 #include "bgw/job.h"
-#include "bgw_policy/reorder.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/reorder_api.h"
 #include "errors.h"
 #include "hypertable.h"
 #include "license.h"
-#include "reorder_api.h"
+#include "reorder.h"
 #include "utils.h"
 
 /*
@@ -32,7 +33,10 @@
  * the default is 4 days, which is approximately 1/2 of the default chunk size, 7 days.
  */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("4 days"), InvalidOid, -1))
+	{                                                                                              \
+		.day = 4                                                                                   \
+	}
+
 /* Default max runtime for a reorder job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
@@ -41,6 +45,41 @@
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
+
+#define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
+#define CONFIG_KEY_INDEX_NAME "index_name"
+
+#define POLICY_REORDER_PROC_NAME "policy_reorder"
+
+int32
+policy_reorder_get_hypertable_id(Jsonb *config)
+{
+	bool found;
+	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
+
+	if (!found)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find hypertable_id in config for job")));
+
+	return hypertable_id;
+}
+
+char *
+policy_reorder_get_index_name(Jsonb *config)
+{
+	char *index_name = NULL;
+
+	if (config != NULL)
+		index_name = ts_jsonb_get_str_field(config, CONFIG_KEY_INDEX_NAME);
+
+	if (index_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find index_name in config for job")));
+
+	return index_name;
+}
 
 static void
 check_valid_index(Hypertable *ht, Name index_name)
@@ -67,16 +106,26 @@ check_valid_index(Hypertable *ht, Name index_name)
 }
 
 Datum
-reorder_add_policy(PG_FUNCTION_ARGS)
+policy_reorder_proc(PG_FUNCTION_ARGS)
+{
+	int32 job_id = PG_GETARG_INT32(0);
+	Jsonb *config = PG_GETARG_JSONB_P(1);
+
+	execute_reorder_policy(job_id, config, reorder_chunk, true);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+policy_reorder_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
 	NameData reorder_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
-	BgwPolicyReorder *existing;
 	Dimension *dim;
 
-	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
+	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Oid ht_oid = PG_GETARG_OID(0);
 	Name index_name = PG_GETARG_NAME(1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
@@ -84,11 +133,7 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
 	Oid partitioning_type;
 	Oid owner_id;
-
-	BgwPolicyReorder policy = { .fd = {
-									.hypertable_id = hypertable_id,
-									.hypertable_index_name = *index_name,
-								} };
+	List *jobs;
 
 	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 
@@ -105,11 +150,16 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	/* Verify that the hypertable owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner_id, JOB_TYPE_REORDER);
 
-	/* Make sure that an existing policy doesn't exist on this hypertable */
-	existing = ts_bgw_policy_reorder_find_by_hypertable(ts_hypertable_relid_to_id(ht_oid));
+	/* Make sure that an existing reorder policy doesn't exist on this hypertable */
+	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
+													 INTERNAL_SCHEMA_NAME,
+													 ht->fd.id);
 
-	if (existing != NULL)
+	if (jobs != NIL)
 	{
+		BgwJob *existing = linitial(jobs);
+		Assert(list_length(jobs) == 1);
+
 		if (!if_not_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
@@ -118,7 +168,8 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 
 		if (!DatumGetBool(DirectFunctionCall2Coll(nameeq,
 												  C_COLLATION_OID,
-												  NameGetDatum(&existing->fd.hypertable_index_name),
+												  CStringGetDatum(policy_reorder_get_index_name(
+													  existing->fd.config)),
 												  NameGetDatum(index_name))))
 		{
 			elog(WARNING,
@@ -136,8 +187,8 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Reorder Background Job");
 	namestrcpy(&reorder_name, "reorder");
-	namestrcpy(&proc_name, "");
-	namestrcpy(&proc_schema, "");
+	namestrcpy(&proc_name, POLICY_REORDER_PROC_NAME);
+	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	/*
@@ -148,19 +199,23 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 
 	partitioning_type = ts_dimension_get_partition_type(dim);
 	if (dim && IS_TIMESTAMP_TYPE(partitioning_type))
-		default_schedule_interval = DatumGetIntervalP(
-			DirectFunctionCall7(make_interval,
-								Int32GetDatum(0),
-								Int32GetDatum(0),
-								Int32GetDatum(0),
-								Int32GetDatum(0),
-								Int32GetDatum(0),
-								Int32GetDatum(0),
-								Float8GetDatum(dim->fd.interval_length / 2000000)));
+	{
+		schedule_interval.time = dim->fd.interval_length / 2;
+		schedule_interval.day = 0;
+		schedule_interval.month = 0;
+	}
+
+	JsonbParseState *parseState = NULL;
+
+	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(parseState, CONFIG_KEY_HYPERTABLE_ID, ht->fd.id);
+	ts_jsonb_add_str(parseState, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
+	JsonbValue *result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&reorder_name,
-										default_schedule_interval,
+										&schedule_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
 										DEFAULT_RETRY_PERIOD,
@@ -169,26 +224,24 @@ reorder_add_policy(PG_FUNCTION_ARGS)
 										&owner,
 										true,
 										hypertable_id,
-										NULL);
-
-	/* Now, insert a new row in the reorder args table */
-	policy.fd.job_id = job_id;
-	ts_bgw_policy_reorder_insert(&policy);
+										config);
 
 	PG_RETURN_INT32(job_id);
 }
 
 Datum
-reorder_remove_policy(PG_FUNCTION_ARGS)
+policy_reorder_remove(PG_FUNCTION_ARGS)
 {
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 
 	/* Remove the job, then remove the policy */
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
-	BgwPolicyReorder *policy = ts_bgw_policy_reorder_find_by_hypertable(ht_id);
 
-	if (policy == NULL)
+	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
+														   INTERNAL_SCHEMA_NAME,
+														   ht_id);
+	if (jobs == NIL)
 	{
 		if (!if_exists)
 			ereport(ERROR,
@@ -208,10 +261,12 @@ reorder_remove_policy(PG_FUNCTION_ARGS)
 			PG_RETURN_NULL();
 		}
 	}
+	Assert(list_length(jobs) == 1);
+	BgwJob *job = linitial(jobs);
 
 	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
-	ts_bgw_job_delete_by_id(policy->fd.job_id);
+	ts_bgw_job_delete_by_id(job->fd.id);
 
 	PG_RETURN_NULL();
 }

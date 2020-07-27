@@ -78,9 +78,6 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 select add_reorder_policy('test_reorder_table', 'test_reorder_table_time_idx') as reorder_job_id \gset
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_reorder_policies');
 
--- policy was created
-select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
-
 -- job was created
 SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
 
@@ -169,8 +166,6 @@ SELECT * FROM timescaledb_information.policy_stats;
 
 -- test deleting the policy
 SELECT remove_reorder_policy('test_reorder_table');
-
-select * from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
 

@@ -25,7 +25,7 @@
 #include "jsonb_utils.h"
 #include "license_guc.h"
 #include "bgw_policy/drop_chunks.h"
-#include "bgw_policy/reorder.h"
+#include "bgw_policy/policy.h"
 #include "compression_chunk_size.h"
 
 #include "cross_module_fn.h"

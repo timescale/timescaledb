@@ -15,9 +15,9 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 --------+---------------+------------+-----------------------------
 (0 rows)
 
-select * from _timescaledb_config.bgw_policy_reorder;
- job_id | hypertable_id | hypertable_index_name 
---------+---------------+-----------------------
+select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
 CREATE TABLE test_table(time timestamptz, junk int);
@@ -74,10 +74,10 @@ ERROR:  reorder policy already exists for hypertable "test_table"
 select add_reorder_policy('test_table', 'third_index');
 ERROR:  reorder policy already exists for hypertable "test_table"
 \set ON_ERROR_STOP 1
-select * from _timescaledb_config.bgw_policy_reorder where job_id=:job_id;
- job_id | hypertable_id | hypertable_index_name 
---------+---------------+-----------------------
-   1000 |             1 | test_table_time_idx
+select * from _timescaledb_config.bgw_job where id=:job_id;
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
+ 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1}
 (1 row)
 
 -- Now check that default scheduling interval for reorder policy is calculated correctly
@@ -96,19 +96,19 @@ select add_reorder_policy('test_table2', 'test_table2_time_idx');
                1001
 (1 row)
 
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+------------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             1 | 
- 1001 | Reorder Background Job | reorder  | @ 12 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             3 | 
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                           config                           
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------------
+ 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1}
+ 1001 | Reorder Background Job | reorder  | @ 12 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             3 | {"index_name": "test_table2_time_idx", "hypertable_id": 3}
 (2 rows)
 
 DROP TABLE test_table2;
 -- Make sure that test_table2 reorder policy gets dropped
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+------------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             1 | 
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
+ 1000 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1}
 (1 row)
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
@@ -245,14 +245,9 @@ select remove_reorder_policy('test_table');
  
 (1 row)
 
-select * from _timescaledb_config.bgw_policy_reorder;
- job_id | hypertable_id | hypertable_index_name 
---------+---------------+-----------------------
-(0 rows)
-
-select r.job_id,r.hypertable_id,r.hypertable_index_name from _timescaledb_config.bgw_policy_reorder as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
- job_id | hypertable_id | hypertable_index_name 
---------+---------------+-----------------------
+select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
 select add_drop_chunks_policy('test_table', INTERVAL '3 month');
@@ -380,12 +375,6 @@ select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:jo
      1
 (1 row)
 
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
- count 
--------
-     1
-(1 row)
-
 select delete_job(:job_id);
  delete_job 
 ------------
@@ -406,7 +395,7 @@ select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:jo
 (1 row)
 
 -- Job args should still be there
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
+select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
      1
@@ -419,13 +408,6 @@ select delete_job(:reorder_job_id);
 (1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
- count 
--------
-     0
-(1 row)
-
--- Job args should be gone
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
  count 
 -------
      0
@@ -452,18 +434,12 @@ select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:jo
      1
 (1 row)
 
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
- count 
--------
-     1
-(1 row)
-
-select * from _timescaledb_config.bgw_job;
-  id  |      application_name      |                job_type                | schedule_interval |   max_runtime   | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+----------------------------+----------------------------------------+-------------------+-----------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
-    1 | Telemetry Reporter         | telemetry_and_version_check_if_enabled | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     |           |             | super_user        | t         |               | 
- 1007 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             1 | 
- 1008 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             1 | 
+SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
+  id  |      application_name      |                job_type                | schedule_interval |   max_runtime   | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                      config                       
+------+----------------------------+----------------------------------------+-------------------+-----------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+---------------------------------------------------
+    1 | Telemetry Reporter         | telemetry_and_version_check_if_enabled | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     |                |                       | super_user        | t         |               | 
+ 1007 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 5 mins     |                |                       | default_perm_user | t         |             1 | 
+ 1008 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             1 | {"index_name": "third_index", "hypertable_id": 1}
 (3 rows)
 
 DROP TABLE test_table;
@@ -480,12 +456,6 @@ select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 (1 row)
 
 select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
- count 
--------
-     0
-(1 row)
-
-select count(*) from _timescaledb_config.bgw_policy_reorder where job_id=:reorder_job_id;
  count 
 -------
      0
@@ -626,9 +596,9 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type='reorder';
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+------------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             6 | 
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                       config                       
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+----------------------------------------------------
+ 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             6 | {"index_name": "second_index", "hypertable_id": 6}
 (1 row)
 
 -- Deleting a chunk that has nothing to do with the job should do nothing
@@ -642,9 +612,9 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type='reorder';
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+------------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             6 | 
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                       config                       
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+----------------------------------------------------
+ 1011 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             6 | {"index_name": "second_index", "hypertable_id": 6}
 (1 row)
 
 -- Dropping the hypertable should drop the chunk, which should drop the reorder policy
@@ -687,11 +657,11 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
    1012 |      123 |                 1
 (1 row)
 
-select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
-  id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+----------------------------+-------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1012 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             7 | 
- 1013 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             7 | 
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+  id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
+------+----------------------------+-------------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
+ 1012 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7}
+ 1013 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     |                |                       | default_perm_user | t         |             7 | 
 (2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
@@ -707,10 +677,10 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
    1012 |      123 |                 1
 (1 row)
 
-select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+------------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1012 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             7 | 
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
+ 1012 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7}
 (1 row)
 
 select remove_reorder_policy('test_table');
@@ -725,7 +695,7 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 --------+----------+-------------------
 (0 rows)
 
-select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
  id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
@@ -733,9 +703,9 @@ select * from _timescaledb_config.bgw_job where job_type in ('drop_chunks', 'reo
 -- Now test if alter_job_schedule works
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
  select * from _timescaledb_config.bgw_job where id=:job_id;
-  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+------------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1014 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             7 | 
+  id  |    application_name    | job_type | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
+------+------------------------+----------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
+ 1014 | Reorder Background Job | reorder  | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7}
 (1 row)
 
 -- No change

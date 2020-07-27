@@ -31,8 +31,16 @@ RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_add_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_add_reorder_policy'
+AS '@MODULE_PATHNAME@', 'ts_policy_reorder_add'
 LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_policy_reorder_remove'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_reorder(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_reorder_proc'
+LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION add_compress_chunks_policy(hypertable REGCLASS, older_than "any", if_not_exists BOOL = false)
 RETURNS INTEGER
@@ -43,11 +51,7 @@ CREATE OR REPLACE FUNCTION remove_drop_chunks_policy(hypertable REGCLASS, if_exi
 AS '@MODULE_PATHNAME@', 'ts_remove_drop_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_remove_reorder_policy'
-LANGUAGE C VOLATILE STRICT;
-
-CREATE OR REPLACE FUNCTION remove_compress_chunks_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL 
+CREATE OR REPLACE FUNCTION remove_compress_chunks_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_remove_compress_chunks_policy'
 LANGUAGE C VOLATILE STRICT;
 

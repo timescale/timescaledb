@@ -47,18 +47,23 @@ typedef struct CrossModuleFunctions
 	void (*add_tsl_telemetry_info)(JsonbParseState **parseState);
 	bool (*bgw_policy_job_execute)(BgwJob *job);
 	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
-	Datum (*add_drop_chunks_policy)(PG_FUNCTION_ARGS);
-	Datum (*add_reorder_policy)(PG_FUNCTION_ARGS);
-	Datum (*add_compress_chunks_policy)(PG_FUNCTION_ARGS);
-	Datum (*remove_drop_chunks_policy)(PG_FUNCTION_ARGS);
-	Datum (*remove_reorder_policy)(PG_FUNCTION_ARGS);
-	Datum (*remove_compress_chunks_policy)(PG_FUNCTION_ARGS);
+
+	PGFunction add_drop_chunks_policy;
+	PGFunction policy_reorder_add;
+	PGFunction policy_reorder_proc;
+	PGFunction policy_reorder_remove;
+	PGFunction add_compress_chunks_policy;
+	PGFunction remove_drop_chunks_policy;
+	PGFunction remove_compress_chunks_policy;
+
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 									TsRelType input_reltype, Hypertable *ht, void *extra);
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
 	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+
+	/* gapfill */
 	PGFunction gapfill_marker;
 	PGFunction gapfill_int16_time_bucket;
 	PGFunction gapfill_int32_time_bucket;
@@ -66,6 +71,7 @@ typedef struct CrossModuleFunctions
 	PGFunction gapfill_date_time_bucket;
 	PGFunction gapfill_timestamp_time_bucket;
 	PGFunction gapfill_timestamptz_time_bucket;
+
 	PGFunction alter_job_schedule;
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;

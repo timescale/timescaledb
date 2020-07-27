@@ -33,7 +33,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/compress_chunks.h"
-#include "bgw_policy/reorder.h"
+#include "bgw_policy/policy.h"
 #include "scan_iterator.h"
 
 #include <cross_module_fn.h>
@@ -111,12 +111,7 @@ ts_bgw_job_owner(BgwJob *job)
 			return ts_catalog_database_info_get()->owner_uid;
 		case JOB_TYPE_REORDER:
 		{
-			BgwPolicyReorder *policy = ts_bgw_policy_reorder_find_by_job(job->fd.id);
-
-			if (policy == NULL)
-				elog(ERROR, "reorder policy for job with id \"%d\" not found", job->fd.id);
-
-			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->fd.hypertable_id));
+			return get_role_oid(NameStr(job->fd.owner), false);
 		}
 		case JOB_TYPE_DROP_CHUNKS:
 		{
@@ -572,7 +567,6 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	ts_bgw_job_stat_delete(job_id);
 
 	/* Delete any policy args associated with this job */
-	ts_bgw_policy_reorder_delete_row_only_by_job_id(job_id);
 	ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(job_id);
 	ts_bgw_policy_compress_chunks_delete_row_only_by_job_id(job_id);
 
