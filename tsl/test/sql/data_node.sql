@@ -639,11 +639,21 @@ $BODY$;
 
 CREATE EXTENSION timescaledb VERSION '0.0.0';
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
                             bootstrap => false);
+
+-- Testing that it is not possible to use oneself as a data node. This
+-- is not allowed since it would create a cycle.
+--
+-- We need to use the same owner for this connection as the extension
+-- owner here to avoid triggering another error.
+--
+-- We cannot use default verbosity here for debugging since the
+-- version number is printed in some of the notices.
+SELECT * FROM add_data_node('data_node_99', host => 'localhost');
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
