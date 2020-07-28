@@ -535,6 +535,10 @@ data_node_bootstrap_extension(TSConnection *conn)
 	}
 }
 
+/* Add dist_uuid on the remote node.
+ *
+ * If the remote node is set to use the current database, `set_dist_id` will report an error and not
+ * set it. */
 static void
 add_distributed_id_to_data_node(TSConnection *conn)
 {

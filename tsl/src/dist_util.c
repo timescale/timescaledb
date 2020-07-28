@@ -34,6 +34,8 @@ static Datum dist_util_remote_srf_query(FunctionCallInfo fcinfo, const char *nod
 /* UUID associated with remote connection */
 static pg_uuid_t *peer_dist_id = NULL;
 
+static bool dist_util_set_id_with_uuid_check(Datum dist_uuid, bool check_uuid);
+
 /* Requires non-null arguments */
 static bool
 uuid_matches(Datum a, Datum b)
@@ -92,7 +94,7 @@ seclabel_set_dist_uuid(Oid dbid, Datum dist_uuid)
 void
 dist_util_set_as_frontend()
 {
-	dist_util_set_id(ts_telemetry_metadata_get_uuid());
+	dist_util_set_id_with_uuid_check(ts_telemetry_metadata_get_uuid(), false);
 
 	/*
 	 * Set security label to mark current database as the access node database.
@@ -106,6 +108,12 @@ dist_util_set_as_frontend()
 bool
 dist_util_set_id(Datum dist_id)
 {
+	return dist_util_set_id_with_uuid_check(dist_id, true);
+}
+
+static bool
+dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid)
+{
 	if (dist_util_membership() != DIST_MEMBER_NONE)
 	{
 		if (uuid_matches(dist_id, dist_util_get_id()))
@@ -115,6 +123,16 @@ dist_util_set_id(Datum dist_id)
 					(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
 					 (errmsg("database is already a member of a distributed database"))));
 	}
+
+	if (check_uuid && uuid_matches(dist_id, ts_telemetry_metadata_get_uuid()))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 (errmsg("cannot add the current database as a data node to itself"),
+				  errdetail("Adding the current database as a data node to itself would create a "
+							"cycle. Use a different instance or database for the data node."),
+				  errhint("Check that the 'port' parameter is given and refer to a different "
+						  "instance or that the 'database' parameter is given and refer to a "
+						  "different database."))));
 
 	ts_metadata_insert(CStringGetDatum(METADATA_DISTRIBUTED_UUID_KEY_NAME),
 					   CSTRINGOID,
