@@ -162,6 +162,23 @@ FROM _timescaledb_config.bgw_policy_reorder reorder
 WHERE job_type = 'reorder'
   AND job.id = reorder.job_id;
 
+-- migrate compression jobs
+UPDATE
+  _timescaledb_config.bgw_job job
+SET proc_name = 'policy_compression',
+  proc_schema = '_timescaledb_internal',
+  config = jsonb_build_object('hypertable_id', c.hypertable_id, 'older_than', CASE WHEN (older_than).is_time_interval THEN (older_than).time_interval::text ELSE (older_than).integer_interval::text END),
+  hypertable_id = c.hypertable_id,
+  OWNER = (
+    SELECT relowner::regrole::text
+    FROM _timescaledb_catalog.hypertable ht,
+      pg_class cl
+    WHERE ht.id = c.hypertable_id
+      AND cl.oid = format('%I.%I', schema_name, table_name)::regclass)
+FROM _timescaledb_config.bgw_policy_compress_chunks c
+WHERE job_type = 'compress_chunks'
+  AND job.id = c.job_id;
+
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
 ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
@@ -169,5 +186,10 @@ ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
 CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_name,proc_schema,hypertable_id);
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
-DROP TABLE _timescaledb_config.bgw_policy_reorder CASCADE;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_compress_chunks;
+DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_reorder CASCADE;
+DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_compress_chunks CASCADE;
+
+DROP FUNCTION IF EXISTS add_compress_chunks_policy;
+DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
 

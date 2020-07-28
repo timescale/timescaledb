@@ -38,6 +38,12 @@ CREATE OR REPLACE FUNCTION add_retention_policy(
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_add_retention_policy'
 LANGUAGE C VOLATILE STRICT;
 
+-- Remove the retention policy from a hypertable
+CREATE OR REPLACE FUNCTION remove_retention_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_remove_retention_policy'
+LANGUAGE C VOLATILE STRICT;
+
+/* reorder policy */
 CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_add'
 LANGUAGE C VOLATILE STRICT;
@@ -50,19 +56,19 @@ CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_reorder(job_id INTEGER,
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_proc'
 LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION add_compress_chunks_policy(hypertable REGCLASS, older_than "any", if_not_exists BOOL = false)
+/* compression policy */
+CREATE OR REPLACE FUNCTION add_compression_policy(hypertable REGCLASS, older_than "any", if_not_exists BOOL = false)
 RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_add_compress_chunks_policy'
+AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
 LANGUAGE C VOLATILE STRICT;
 
--- Remove the retention policy from a hypertable
-CREATE OR REPLACE FUNCTION remove_retention_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_remove_retention_policy'
+CREATE OR REPLACE FUNCTION remove_compression_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policy_compression_remove'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_compress_chunks_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
-AS '@MODULE_PATHNAME@', 'ts_remove_compress_chunks_policy'
-LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_compression(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_compression_proc'
+LANGUAGE C;
 
 -- Returns the updated job schedule values
 CREATE OR REPLACE FUNCTION alter_job_schedule(

@@ -49,12 +49,13 @@ typedef struct CrossModuleFunctions
 	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
 
 	PGFunction add_retention_policy;
+	PGFunction remove_retention_policy;
+	PGFunction policy_compression_add;
+	PGFunction policy_compression_proc;
+	PGFunction policy_compression_remove;
 	PGFunction policy_reorder_add;
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_remove;
-	PGFunction add_compress_chunks_policy;
-	PGFunction remove_retention_policy;
-	PGFunction remove_compress_chunks_policy;
 
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 									TsRelType input_reltype, Hypertable *ht, void *extra);

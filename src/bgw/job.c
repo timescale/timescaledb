@@ -32,7 +32,6 @@
 #include "telemetry/telemetry.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
-#include "bgw_policy/compress_chunks.h"
 #include "bgw_policy/policy.h"
 #include "scan_iterator.h"
 
@@ -128,14 +127,8 @@ ts_bgw_job_owner(BgwJob *job)
 
 			return ts_rel_get_owner(ts_continuous_agg_get_user_view_oid(ca));
 		}
-		case JOB_TYPE_COMPRESS_CHUNKS:
-		{
-			BgwPolicyCompressChunks *policy = ts_bgw_policy_compress_chunks_find_by_job(job->fd.id);
-			if (policy == NULL)
-				elog(ERROR, "compress chunks policy for job with id \"%d\" not found", job->fd.id);
-			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->fd.hypertable_id));
-		}
 
+		case JOB_TYPE_COMPRESS_CHUNKS:
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_CUSTOM:
 			return get_role_oid(NameStr(job->fd.owner), false);
@@ -570,7 +563,6 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Delete any policy args associated with this job */
 	ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(job_id);
-	ts_bgw_policy_compress_chunks_delete_row_only_by_job_id(job_id);
 
 	/* Delete any stats in bgw_policy_chunk_stats related to this job */
 	ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(job_id);

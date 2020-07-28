@@ -364,15 +364,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_chunk_size (
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_compress_chunks(
-    job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-    hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
-    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_compress_chunks', '');
-
 --This stores commit decisions for 2pc remote txns. Abort decisions are never stored.
 --If a PREPARE TRANSACTION fails for any data node then the entire
 --frontend transaction will be rolled back and no rows will be stored.

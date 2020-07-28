@@ -263,7 +263,7 @@ ts_interval_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 	ReleaseSysCache(tuple);
 }
 
-static Datum
+Datum
 ts_interval_from_now_func_get_datum(int64 interval, Oid time_dim_type, Oid now_func)
 {
 	Datum now;
@@ -314,8 +314,8 @@ noarg_integer_now_func_filter(Form_pg_proc form, void *arg)
 /* maybe this can be exported later if other parts of the code need
  * to access the integer_now_func
  */
-static Oid
-get_integer_now_func(Dimension *open_dim)
+Oid
+ts_get_integer_now_func(Dimension *open_dim)
 {
 	Oid rettype;
 	Oid now_func;
@@ -344,7 +344,7 @@ ts_get_now_internal(Dimension *open_dim)
 	if (IS_INTEGER_TYPE(dim_post_part_type))
 	{
 		Datum now_datum;
-		Oid now_func = get_integer_now_func(open_dim);
+		Oid now_func = ts_get_integer_now_func(open_dim);
 		ts_interval_now_func_validate(now_func, dim_post_part_type);
 		now_datum = OidFunctionCall0(now_func);
 		return ts_time_value_to_internal(now_datum, dim_post_part_type);
@@ -430,7 +430,7 @@ ts_interval_subtract_from_now(FormData_ts_interval *invl, Dimension *open_dim)
 	}
 	else
 	{
-		Oid now_func = get_integer_now_func(open_dim);
+		Oid now_func = ts_get_integer_now_func(open_dim);
 		ts_interval_now_func_validate(now_func, type_oid);
 
 		if (InvalidOid == now_func)

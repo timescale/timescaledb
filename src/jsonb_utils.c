@@ -113,7 +113,7 @@ ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
 }
 
 char *
-ts_jsonb_get_str_field(Jsonb *jsonb, const char *key)
+ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key)
 {
 	/*
 	 * `jsonb_object_field_text` returns NULL when the field is not found so
@@ -136,7 +136,7 @@ ts_jsonb_get_str_field(Jsonb *jsonb, const char *key)
 }
 
 TimestampTz
-ts_jsonb_get_time_field(Jsonb *jsonb, const char *key, bool *field_found)
+ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key, bool *field_found)
 {
 	Datum time_datum;
 	char *time_str = ts_jsonb_get_str_field(jsonb, key);
@@ -157,7 +157,7 @@ ts_jsonb_get_time_field(Jsonb *jsonb, const char *key, bool *field_found)
 }
 
 int32
-ts_jsonb_get_int32_field(Jsonb *json, const char *key, bool *field_found)
+ts_jsonb_get_int32_field(const Jsonb *json, const char *key, bool *field_found)
 {
 	Datum int_datum;
 	char *int_str = ts_jsonb_get_str_field(json, key);
@@ -175,7 +175,7 @@ ts_jsonb_get_int32_field(Jsonb *json, const char *key, bool *field_found)
 }
 
 int64
-ts_jsonb_get_int64_field(Jsonb *json, const char *key, bool *field_found)
+ts_jsonb_get_int64_field(const Jsonb *json, const char *key, bool *field_found)
 {
 	Datum int_datum;
 	char *int_str = ts_jsonb_get_str_field(json, key);
@@ -193,7 +193,7 @@ ts_jsonb_get_int64_field(Jsonb *json, const char *key, bool *field_found)
 }
 
 Interval *
-ts_jsonb_get_interval_field(Jsonb *json, const char *key)
+ts_jsonb_get_interval_field(const Jsonb *json, const char *key)
 {
 	Datum interval_datum;
 	char *interval_str = ts_jsonb_get_str_field(json, key);
@@ -201,7 +201,8 @@ ts_jsonb_get_interval_field(Jsonb *json, const char *key)
 	if (interval_str == NULL)
 		return NULL;
 
-	interval_datum = DirectFunctionCall3(interval_in, CStringGetDatum("1 day"), InvalidOid, -1);
+	interval_datum =
+		DirectFunctionCall3(interval_in, CStringGetDatum(interval_str), InvalidOid, -1);
 
 	return DatumGetIntervalP(interval_datum);
 }

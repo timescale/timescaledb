@@ -26,11 +26,13 @@ extern TSDLLEXPORT void ts_jsonb_add_numeric(JsonbParseState *state, const char 
 
 extern void ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value);
 
-extern TSDLLEXPORT char *ts_jsonb_get_str_field(Jsonb *jsonb, const char *key);
-extern TSDLLEXPORT Interval *ts_jsonb_get_interval_field(Jsonb *jsonb, const char *key);
-extern TSDLLEXPORT TimestampTz ts_jsonb_get_time_field(Jsonb *jsonb, const char *key,
+extern TSDLLEXPORT char *ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key);
+extern TSDLLEXPORT Interval *ts_jsonb_get_interval_field(const Jsonb *jsonb, const char *key);
+extern TSDLLEXPORT TimestampTz ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key,
 													   bool *field_found);
-extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(Jsonb *json, const char *key, bool *field_found);
-extern TSDLLEXPORT int64 ts_jsonb_get_int64_field(Jsonb *json, const char *key, bool *field_found);
+extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(const Jsonb *json, const char *key,
+												  bool *field_found);
+extern TSDLLEXPORT int64 ts_jsonb_get_int64_field(const Jsonb *json, const char *key,
+												  bool *field_found);
 
 #endif /* TIMESCALEDB_JSONB_UTILS_H */

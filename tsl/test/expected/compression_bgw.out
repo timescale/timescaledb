@@ -31,7 +31,7 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 --TEST 1--
 --cannot set policy without enabling compression --
 \set ON_ERROR_STOP 0
-select add_compress_chunks_policy('conditions', '60d'::interval);
+select add_compression_policy('conditions', '60d'::interval);
 ERROR:  can add compress_chunks policy only on hypertables with compression enabled
 \set ON_ERROR_STOP 1
 -- TEST2 --
@@ -40,23 +40,12 @@ alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby
 NOTICE:  adding index _compressed_hypertable_2_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(location, _ts_meta_sequence_num)
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
-select add_compress_chunks_policy('conditions', '60d'::interval);
- add_compress_chunks_policy 
-----------------------------
-                       1000
-(1 row)
-
-select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks;
- compressjob_id | hypertable_id |    older_than    
-----------------+---------------+------------------
-           1000 |             1 | (t,"@ 60 days",)
-(1 row)
-
+select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 \gset
-select * from _timescaledb_config.bgw_job where job_type like 'compress%';
-  id  |        application_name        |    job_type     | schedule_interval  | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+--------------------------------+-----------------+--------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1000 | Compress Chunks Background Job | compress_chunks | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     |           |             | default_perm_user | t         |             1 | 
+select * from _timescaledb_config.bgw_job where id = :compressjob_id;
+  id  |        application_name        |    job_type     | schedule_interval  | max_runtime | max_retries | retry_period |     proc_name      |      proc_schema      |       owner       | scheduled | hypertable_id |                     config                      
+------+--------------------------------+-----------------+--------------------+-------------+-------------+--------------+--------------------+-----------------------+-------------------+-----------+---------------+-------------------------------------------------
+ 1000 | Compress Chunks Background Job | compress_chunks | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | policy_compression | _timescaledb_internal | default_perm_user | t         |             1 | {"older_than": "@ 60 days", "hypertable_id": 1}
 (1 row)
 
 select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
@@ -66,9 +55,9 @@ select * from alter_job_schedule(:compressjob_id, schedule_interval=>'1s');
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type like 'compress%';
-  id  |        application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+--------------------------------+-----------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1000 | Compress Chunks Background Job | compress_chunks | @ 1 sec           | @ 0         |          -1 | @ 1 hour     |           |             | default_perm_user | t         |             1 | 
+  id  |        application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period |     proc_name      |      proc_schema      |       owner       | scheduled | hypertable_id |                     config                      
+------+--------------------------------+-----------------+-------------------+-------------+-------------+--------------+--------------------+-----------------------+-------------------+-----------+---------------+-------------------------------------------------
+ 1000 | Compress Chunks Background Job | compress_chunks | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | policy_compression | _timescaledb_internal | default_perm_user | t         |             1 | {"older_than": "@ 60 days", "hypertable_id": 1}
 (1 row)
 
 insert into conditions
@@ -90,35 +79,36 @@ select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_b
 -- TEST 4 --
 --cannot set another policy
 \set ON_ERROR_STOP 0
-select add_compress_chunks_policy('conditions', '60d'::interval, if_not_exists=>true);
+select add_compression_policy('conditions', '60d'::interval, if_not_exists=>true);
 NOTICE:  compress chunks policy already exists on hypertable "conditions", skipping
- add_compress_chunks_policy 
-----------------------------
-                         -1
+ add_compression_policy 
+------------------------
+                     -1
 (1 row)
 
-select add_compress_chunks_policy('conditions', '60d'::interval);
+select add_compression_policy('conditions', '60d'::interval);
 ERROR:  compress chunks policy already exists for hypertable "conditions"
-select add_compress_chunks_policy('conditions', '30d'::interval, if_not_exists=>true);
+select add_compression_policy('conditions', '30d'::interval, if_not_exists=>true);
 WARNING:  could not add compress_chunks policy due to existing policy on hypertable with different arguments
- add_compress_chunks_policy 
-----------------------------
-                         -1
+ add_compression_policy 
+------------------------
+                     -1
 (1 row)
 
 \set ON_ERROR_STOP 1
 --TEST 5 --
 -- drop the policy --
-select remove_compress_chunks_policy('conditions');
- remove_compress_chunks_policy 
--------------------------------
+select remove_compression_policy('conditions');
+ remove_compression_policy 
+---------------------------
  t
 (1 row)
 
-select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks;
- compressjob_id | hypertable_id | older_than 
-----------------+---------------+------------
-(0 rows)
+select count(*) from _timescaledb_config.bgw_job WHERE id>=1000;
+ count 
+-------
+     0
+(1 row)
 
 --TEST 6 --
 -- try to execute the policy after it has been dropped --
@@ -148,17 +138,12 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 
 insert into test_table_int select generate_series(1,5), 10;
 alter table test_table_int set (timescaledb.compress);
-select add_compress_chunks_policy('test_table_int', 2::int);
- add_compress_chunks_policy 
-----------------------------
-                       1001
-(1 row)
-
-select job_id as compressjob_id, hypertable_id, older_than from _timescaledb_config.bgw_policy_compress_chunks
-where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name like 'test_table_int');
- compressjob_id | hypertable_id | older_than 
-----------------+---------------+------------
-           1001 |             3 | (f,,2)
+select add_compression_policy('test_table_int', 2::int) AS compressjob_id
+\gset
+select * from _timescaledb_config.bgw_job where id=:compressjob_id;
+  id  |        application_name        |    job_type     | schedule_interval | max_runtime | max_retries | retry_period |     proc_name      |      proc_schema      |       owner       | scheduled | hypertable_id |                config                 
+------+--------------------------------+-----------------+-------------------+-------------+-------------+--------------+--------------------+-----------------------+-------------------+-----------+---------------+---------------------------------------
+ 1001 | Compress Chunks Background Job | compress_chunks | @ 1 day           | @ 0         |          -1 | @ 1 hour     | policy_compression | _timescaledb_internal | default_perm_user | t         |             3 | {"older_than": 2, "hypertable_id": 3}
 (1 row)
 
 \gset
@@ -203,7 +188,7 @@ SELECT set_integer_now_func('test_table_nologin', 'dummy_now');
 
 ALTER TABLE test_table_nologin set (timescaledb.compress);
 \set ON_ERROR_STOP 0
-SELECT add_compress_chunks_policy('test_table_nologin', 2::int);
+SELECT add_compression_policy('test_table_nologin', 2::int);
 ERROR:  permission denied to start compress_chunks background process as role "nologin_role"
 \set ON_ERROR_STOP 1
 RESET ROLE;
@@ -260,8 +245,8 @@ SELECT COUNT(*) AS dropped_chunks_count
                    14
 (1 row)
 
-SELECT add_compress_chunks_policy AS job_id
-  FROM add_compress_chunks_policy('conditions', INTERVAL '1 day') \gset
+SELECT add_compression_policy AS job_id
+  FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
 SELECT test_compress_chunks_policy(:job_id);
  test_compress_chunks_policy 
 -----------------------------

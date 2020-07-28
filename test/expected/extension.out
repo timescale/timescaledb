@@ -19,7 +19,7 @@ WHERE oid IN (
   ORDER BY proname;
              proname              
 ----------------------------------
- add_compress_chunks_policy
+ add_compression_policy
  add_data_node
  add_dimension
  add_reorder_policy
@@ -54,7 +54,7 @@ WHERE oid IN (
  locf
  move_chunk
  refresh_continuous_aggregate
- remove_compress_chunks_policy
+ remove_compression_policy
  remove_reorder_policy
  remove_retention_policy
  reorder_chunk

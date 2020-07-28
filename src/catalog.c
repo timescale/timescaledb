@@ -107,10 +107,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = COMPRESSION_CHUNK_SIZE_TABLE_NAME,
 	},
-	[BGW_POLICY_COMPRESS_CHUNKS] = {
-		.schema_name = CONFIG_SCHEMA_NAME,
-		.table_name = BGW_POLICY_COMPRESS_CHUNKS_TABLE_NAME,
-	},
 	[REMOTE_TXN] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = REMOTE_TXN_TABLE_NAME,
@@ -265,13 +261,6 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[COMPRESSION_CHUNK_SIZE_PKEY] = "compression_chunk_size_pkey",
 		},
 	},
-	[BGW_POLICY_COMPRESS_CHUNKS] = {
-		.length = _MAX_BGW_POLICY_COMPRESS_CHUNKS_INDEX,
-		.names = (char *[]) {
-			[BGW_POLICY_COMPRESS_CHUNKS_PKEY] = "bgw_policy_compress_chunks_pkey",
-			[BGW_POLICY_COMPRESS_CHUNKS_HYPERTABLE_ID_KEY] = "bgw_policy_compress_chunks_hypertable_id_key",
-		},
-	},
 	[REMOTE_TXN] = {
 		.length = _MAX_REMOTE_TXN_INDEX,
 		.names = (char *[]) {
@@ -300,7 +289,6 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
 	[HYPERTABLE_COMPRESSION] = NULL,
 	[COMPRESSION_CHUNK_SIZE] = NULL,
-	[BGW_POLICY_COMPRESS_CHUNKS] = NULL,
 	[REMOTE_TXN] = NULL,
 };
 
