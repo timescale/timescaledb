@@ -79,8 +79,8 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid, Oid older_than_ty
 		older_than = ts_interval_from_sql_input(meta->ht_oid,
 												older_than_datum,
 												older_than_type,
-												"older_than",
-												"add_drop_chunks_policy");
+												"retention_window",
+												"add_retention_policy");
 	}
 	else
 	{
@@ -109,8 +109,8 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid, Oid older_than_ty
 		older_than = ts_interval_from_sql_input_internal(open_dim,
 														 older_than_datum,
 														 older_than_type,
-														 "older_than",
-														 "add_drop_chunks_policy");
+														 "retention_window",
+														 "add_retention_policy");
 	}
 	Assert(meta->ht != NULL);
 	meta->older_than = older_than;

@@ -22,13 +22,13 @@
 
 /* bgw policy functions */
 CROSSMODULE_WRAPPER(add_compress_chunks_policy);
-CROSSMODULE_WRAPPER(add_drop_chunks_policy);
+CROSSMODULE_WRAPPER(add_retention_policy);
 CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
 CROSSMODULE_WRAPPER(policy_reorder_remove);
 CROSSMODULE_WRAPPER(alter_job_schedule);
 CROSSMODULE_WRAPPER(remove_compress_chunks_policy);
-CROSSMODULE_WRAPPER(remove_drop_chunks_policy);
+CROSSMODULE_WRAPPER(remove_retention_policy);
 
 CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
@@ -338,14 +338,14 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	/* bgw policies */
 	.add_compress_chunks_policy = error_no_default_fn_pg_community,
-	.add_drop_chunks_policy = error_no_default_fn_pg_community,
+	.add_retention_policy = error_no_default_fn_pg_community,
 	.policy_reorder_add = error_no_default_fn_pg_community,
 	.policy_reorder_proc = error_no_default_fn_pg_community,
 	.policy_reorder_remove = error_no_default_fn_pg_community,
 	.alter_job_schedule = error_no_default_fn_pg_community,
 	.bgw_policy_job_execute = bgw_policy_job_execute_default_fn,
 	.remove_compress_chunks_policy = error_no_default_fn_pg_community,
-	.remove_drop_chunks_policy = error_no_default_fn_pg_community,
+	.remove_retention_policy = error_no_default_fn_pg_community,
 
 	.move_chunk = error_no_default_fn_pg_enterprise,
 	.reorder_chunk = error_no_default_fn_pg_community,

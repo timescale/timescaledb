@@ -113,61 +113,61 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reo
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy();
-ERROR:  function add_drop_chunks_policy() does not exist at character 8
-select add_drop_chunks_policy('test_table');
-ERROR:  function add_drop_chunks_policy(unknown) does not exist at character 8
-select add_drop_chunks_policy(INTERVAL '3 hours');
-ERROR:  function add_drop_chunks_policy(interval) does not exist at character 8
-select add_drop_chunks_policy('test_table', INTERVAL 'haha');
-ERROR:  invalid input syntax for type interval: "haha" at character 54
-select add_drop_chunks_policy('test_table', 'haha');
-ERROR:  invalid type for parameter older_than in add_drop_chunks_policy
-select add_drop_chunks_policy('test_table', 42);
-ERROR:  invalid parameter value for older_than
-select add_drop_chunks_policy('fake_table', INTERVAL '3 month');
-ERROR:  relation "fake_table" does not exist at character 31
+select add_retention_policy();
+ERROR:  function add_retention_policy() does not exist at character 8
+select add_retention_policy('test_table');
+ERROR:  function add_retention_policy(unknown) does not exist at character 8
+select add_retention_policy(INTERVAL '3 hours');
+ERROR:  function add_retention_policy(interval) does not exist at character 8
+select add_retention_policy('test_table', INTERVAL 'haha');
+ERROR:  invalid input syntax for type interval: "haha" at character 52
+select add_retention_policy('test_table', 'haha');
+ERROR:  invalid type for parameter retention_window in add_retention_policy
+select add_retention_policy('test_table', 42);
+ERROR:  invalid parameter value for retention_window
+select add_retention_policy('fake_table', INTERVAL '3 month');
+ERROR:  relation "fake_table" does not exist at character 29
 \set ON_ERROR_STOP 1
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
- add_drop_chunks_policy 
-------------------------
-                   1002
+select add_retention_policy('test_table', INTERVAL '3 month', true);
+ add_retention_policy 
+----------------------
+                 1002
 (1 row)
 
 -- Should not add new policy with different parameters
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
+select add_retention_policy('test_table', INTERVAL '3 month', true);
 NOTICE:  drop chunks policy already exists on hypertable "test_table", skipping
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
-select add_drop_chunks_policy('test_table', INTERVAL '1 year', if_not_exists => true);
+select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => true);
 WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
+select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
+select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
+select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
 WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -177,11 +177,11 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 (1 row)
 
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy('test_table', INTERVAL '1 year');
+select add_retention_policy('test_table', INTERVAL '1 year');
 ERROR:  drop chunks policy already exists for hypertable "test_table"
-select add_drop_chunks_policy('test_table', INTERVAL '3 days');
+select add_retention_policy('test_table', INTERVAL '3 days');
 ERROR:  drop chunks policy already exists for hypertable "test_table"
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
+select add_retention_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
 ERROR:  drop chunks policy already exists for hypertable "test_table"
 \set ON_ERROR_STOP 1
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -196,13 +196,13 @@ select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy
    1002 |             1 | (t,"@ 3 mons",)
 (1 row)
 
-select remove_drop_chunks_policy('test_table');
- remove_drop_chunks_policy 
----------------------------
+select remove_retention_policy('test_table');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
--- Test set_integer_now_func and add_drop_chunks_policy with
+-- Test set_integer_now_func and add_retention_policy with
 -- hypertables that have integer time dimension
 select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | integer_now_func_schema | integer_now_func 
@@ -250,10 +250,10 @@ select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
-select add_drop_chunks_policy('test_table', INTERVAL '3 month');
- add_drop_chunks_policy 
-------------------------
-                   1003
+select add_retention_policy('test_table', INTERVAL '3 month');
+ add_retention_policy 
+----------------------
+                 1003
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -262,9 +262,9 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
    1003 |             1 | (t,"@ 3 mons",) | f
 (1 row)
 
-select remove_drop_chunks_policy('test_table');
- remove_drop_chunks_policy 
----------------------------
+select remove_retention_policy('test_table');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
@@ -273,10 +273,10 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 --------+---------------+------------+-----------------------------
 (0 rows)
 
-select add_drop_chunks_policy('test_table_int', 1);
- add_drop_chunks_policy 
-------------------------
-                   1004
+select add_retention_policy('test_table_int', 1);
+ add_retention_policy 
+----------------------
+                 1004
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -286,23 +286,23 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 (1 row)
 
 -- Should not add new policy with different parameters
-select add_drop_chunks_policy('test_table_int', 2, true);
+select add_retention_policy('test_table_int', 2, true);
 WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
-select add_drop_chunks_policy('test_table_int', 1, true, true);
+select add_retention_policy('test_table_int', 1, true, true);
 WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
- add_drop_chunks_policy 
-------------------------
-                     -1
+ add_retention_policy 
+----------------------
+                   -1
 (1 row)
 
-select remove_drop_chunks_policy('test_table_int');
- remove_drop_chunks_policy 
----------------------------
+select remove_retention_policy('test_table_int');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
@@ -312,10 +312,10 @@ select * from _timescaledb_config.bgw_policy_drop_chunks;
 (0 rows)
 
 -- Make sure remove works when there's nothing to remove
-select remove_drop_chunks_policy('test_table', true);
+select remove_retention_policy('test_table', true);
 NOTICE:  drop chunks policy does not exist on hypertable "test_table", skipping
- remove_drop_chunks_policy 
----------------------------
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
@@ -327,10 +327,10 @@ NOTICE:  reorder policy does not exist on hypertable "test_table", skipping
 (1 row)
 
 \set ON_ERROR_STOP 0
-select remove_drop_chunks_policy();
-ERROR:  function remove_drop_chunks_policy() does not exist at character 8
-select remove_drop_chunks_policy('fake_table');
-ERROR:  relation "fake_table" does not exist at character 34
+select remove_retention_policy();
+ERROR:  function remove_retention_policy() does not exist at character 8
+select remove_retention_policy('fake_table');
+ERROR:  relation "fake_table" does not exist at character 32
 select remove_reorder_policy();
 ERROR:  function remove_reorder_policy() does not exist at character 8
 select remove_reorder_policy('fake_table');
@@ -355,7 +355,7 @@ select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reo
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
-select add_drop_chunks_policy('test_table', INTERVAL '2 month') as job_id \gset
+select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
 select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 
@@ -414,7 +414,7 @@ select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 (1 row)
 
 -- Now make sure policy args have correct job deletion dependency
-select add_drop_chunks_policy('test_table', INTERVAL '2 month') as job_id \gset
+select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
 select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 
@@ -465,7 +465,7 @@ select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:jo
 CREATE TABLE non_hypertable(junk int, more_junk int);
 CREATE INDEX non_ht_index on non_hypertable(junk);
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy('non_hypertable', INTERVAL '2 month');
+select add_retention_policy('non_hypertable', INTERVAL '2 month');
 ERROR:  "non_hypertable" is not a hypertable or a continuous aggregate view
 select add_reorder_policy('non_hypertable', 'non_ht_index');
 ERROR:  could not add reorder policy because "non_hypertable" is not a hypertable
@@ -489,16 +489,16 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 CREATE INDEX junk_index on test_table2 (junk);
-select add_drop_chunks_policy('test_table', INTERVAL '2 days');
- add_drop_chunks_policy 
-------------------------
-                   1009
+select add_retention_policy('test_table', INTERVAL '2 days');
+ add_retention_policy 
+----------------------
+                 1009
 (1 row)
 
-select add_drop_chunks_policy('test_table2', INTERVAL '1 days');
- add_drop_chunks_policy 
-------------------------
-                   1010
+select add_retention_policy('test_table2', INTERVAL '1 days');
+ add_retention_policy 
+----------------------
+                 1010
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
@@ -639,10 +639,10 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
-select add_drop_chunks_policy('test_table', INTERVAL '2 days', true);
- add_drop_chunks_policy 
-------------------------
-                   1013
+select add_retention_policy('test_table', INTERVAL '2 days', true);
+ add_retention_policy 
+----------------------
+                 1013
 (1 row)
 
 select ts_test_chunk_stats_insert(:job_id, 123, 1);
@@ -665,9 +665,9 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reo
 (2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
-select remove_drop_chunks_policy('test_table');
- remove_drop_chunks_policy 
----------------------------
+select remove_retention_policy('test_table');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
@@ -875,7 +875,7 @@ select alter_job_schedule(12345);
 ERROR:  cannot alter policy schedule, policy #12345 not found
 \set ON_ERROR_STOP 1
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
+select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
 select from alter_job_schedule(:reorder_job_id, max_runtime => NULL);

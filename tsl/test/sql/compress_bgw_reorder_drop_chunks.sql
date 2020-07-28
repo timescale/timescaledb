@@ -54,7 +54,7 @@ SELECT show_chunks('test_drop_chunks_table');
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_drop_chunks_table';
 
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
-SELECT add_drop_chunks_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
+SELECT add_retention_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_drop_chunks_policies');
 SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
 select * from _timescaledb_config.bgw_policy_drop_chunks where job_id=:drop_chunks_job_id;

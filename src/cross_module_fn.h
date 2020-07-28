@@ -48,12 +48,12 @@ typedef struct CrossModuleFunctions
 	bool (*bgw_policy_job_execute)(BgwJob *job);
 	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
 
-	PGFunction add_drop_chunks_policy;
+	PGFunction add_retention_policy;
 	PGFunction policy_reorder_add;
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_remove;
 	PGFunction add_compress_chunks_policy;
-	PGFunction remove_drop_chunks_policy;
+	PGFunction remove_retention_policy;
 	PGFunction remove_compress_chunks_policy;
 
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,

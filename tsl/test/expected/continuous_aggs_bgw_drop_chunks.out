@@ -69,7 +69,7 @@ REFRESH MATERIALIZED VIEW drop_chunks_view1;
 --TEST1  specify drop chunks policy on mat. hypertable by
 -- directly does not work
 \set ON_ERROR_STOP 0
-SELECT add_drop_chunks_policy( '_timescaledb_internal._materialized_hypertable_2', older_than=> -50, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', retention_window=> -50, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
 ERROR:  cannot add drop chunks policy to materialized hypertable "_materialized_hypertable_2" 
 \set ON_ERROR_STOP 1
 --TEST2  specify drop chunks policy on cont. aggregate
@@ -94,7 +94,7 @@ ORDER BY ranges;
  _timescaledb_internal._hyper_2_43_chunk | {"[30,40)"}
 (4 rows)
 
-SELECT add_drop_chunks_policy( 'drop_chunks_view1', older_than=> 10, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
 SELECT alter_job_schedule(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
                  alter_job_schedule                  
 -----------------------------------------------------
@@ -113,15 +113,15 @@ SELECT count(c) from show_chunks('_timescaledb_internal._materialized_hypertable
      1
 (1 row)
 
-SELECT remove_drop_chunks_policy('drop_chunks_view1');
- remove_drop_chunks_policy 
----------------------------
+SELECT remove_retention_policy('drop_chunks_view1');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT remove_drop_chunks_policy('unknown');
-ERROR:  relation "unknown" does not exist at character 34
-SELECT remove_drop_chunks_policy('1');
+SELECT remove_retention_policy('unknown');
+ERROR:  relation "unknown" does not exist at character 32
+SELECT remove_retention_policy('1');
 ERROR:  OID 1 does not refer to a hypertable or continuous aggregate
 \set ON_ERROR_STOP 1

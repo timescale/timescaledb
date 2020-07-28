@@ -103,7 +103,3 @@ ADD CONSTRAINT valid_job_type CHECK (job_type IN ('telemetry_and_version_check_i
 ALTER TABLE _timescaledb_config.bgw_policy_drop_chunks
   ADD COLUMN cascade_to_materializations BOOLEAN;
 DROP FUNCTION IF EXISTS add_drop_chunks_policy(REGCLASS, INTERVAL, BOOL, BOOL);
-CREATE OR REPLACE FUNCTION add_drop_chunks_policy(hypertable REGCLASS, older_than INTERVAL, cascade BOOL = FALSE, if_not_exists BOOL = false, cascade_to_materializations BOOL = false)
-RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_add_drop_chunks_policy'
-LANGUAGE C VOLATILE STRICT;
