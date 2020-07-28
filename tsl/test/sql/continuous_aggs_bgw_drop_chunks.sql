@@ -66,7 +66,7 @@ REFRESH MATERIALIZED VIEW drop_chunks_view1;
 -- directly does not work
 
 \set ON_ERROR_STOP 0
-SELECT add_drop_chunks_policy( '_timescaledb_internal._materialized_hypertable_2', older_than=> -50, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', retention_window=> -50, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
 \set ON_ERROR_STOP 1
 
 --TEST2  specify drop chunks policy on cont. aggregate
@@ -79,13 +79,13 @@ WHERE ht.id = d.hypertable_id;
 SELECT chunk_table, ranges FROM chunk_relation_size('_timescaledb_internal._materialized_hypertable_2')
 ORDER BY ranges;
 
-SELECT add_drop_chunks_policy( 'drop_chunks_view1', older_than=> 10, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
 SELECT alter_job_schedule(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(2000000);
 SELECT count(c) from show_chunks('_timescaledb_internal._materialized_hypertable_2') as c ;
-SELECT remove_drop_chunks_policy('drop_chunks_view1');
+SELECT remove_retention_policy('drop_chunks_view1');
 
 \set ON_ERROR_STOP 0
-SELECT remove_drop_chunks_policy('unknown');
-SELECT remove_drop_chunks_policy('1');
+SELECT remove_retention_policy('unknown');
+SELECT remove_retention_policy('1');
 \set ON_ERROR_STOP 1

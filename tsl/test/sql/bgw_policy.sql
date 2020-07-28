@@ -102,7 +102,7 @@ select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy
 select remove_reorder_policy('test_table');
 
 -- Now do drop_chunks test
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
+select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
 
 SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table';
 
@@ -129,7 +129,7 @@ SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 -- Should be true
 select :before_count=:after_count;
 
-select remove_drop_chunks_policy('test_table');
+select remove_retention_policy('test_table');
 
 -- Now test reorder chunk selection when there is space partitioning
 TRUNCATE test_table;
@@ -229,7 +229,7 @@ SELECT create_hypertable('test_table_perm', 'time', chunk_time_interval => 1);
 
 \set ON_ERROR_STOP 0
 -- we cannot add a drop_chunks policy on a table whose open dimension is not time and no now_func is set
-select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
+select add_retention_policy('test_table_int', INTERVAL '4 months', true);
 \set ON_ERROR_STOP 1
 
 INSERT INTO test_table_int VALUES (-2, -2), (-1, -1), (0,0), (1, 1), (2, 2), (3, 3);
@@ -247,7 +247,7 @@ DROP USER unprivileged;
 select set_integer_now_func('test_table_int', 'dummy_now');
 select * from test_table_int;
 SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table_int';
-select add_drop_chunks_policy('test_table_int', 1, true) as drop_chunks_job_id \gset
+select add_retention_policy('test_table_int', 1, true) as drop_chunks_job_id \gset
 
 -- Now simulate drop_chunks running automatically by calling it explicitly
 select test_drop_chunks(:drop_chunks_job_id);
@@ -307,7 +307,7 @@ select :after_count=0;
 
 -- test the case when now()-interval overflows
 select set_integer_now_func('test_overflow_smallint', 'overflow_now');
-select add_drop_chunks_policy('test_overflow_smallint', -2) as drop_chunks_job_id \gset
+select add_retention_policy('test_overflow_smallint', -2) as drop_chunks_job_id \gset
 \set ON_ERROR_STOP 0
 select test_drop_chunks(:drop_chunks_job_id);
 \set ON_ERROR_STOP 1
@@ -335,10 +335,10 @@ insert into part_time_now_func values
 (1.1, 23.4), (2.2, 22.3), (3.3, 42.3);
 select * from part_time_now_func;
 select set_integer_now_func('part_time_now_func', 'dummy_now');
-select add_drop_chunks_policy('part_time_now_func', 0) as drop_chunks_job_id \gset
+select add_retention_policy('part_time_now_func', 0) as drop_chunks_job_id \gset
 select test_drop_chunks(:drop_chunks_job_id);
 select * from part_time_now_func;
-select remove_drop_chunks_policy('part_time_now_func');
+select remove_retention_policy('part_time_now_func');
 \c :TEST_DBNAME :ROLE_SUPERUSER
 alter function dummy_now() rename to dummy_now_renamed;
 alter schema public rename to new_public;
@@ -350,8 +350,8 @@ alter schema new_public rename to public;
 select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
 select remove_reorder_policy('test_table');
 
-select add_drop_chunks_policy('test_table_perm', INTERVAL '4 months', true);
-select remove_drop_chunks_policy('test_table');
+select add_retention_policy('test_table_perm', INTERVAL '4 months', true);
+select remove_retention_policy('test_table');
 
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

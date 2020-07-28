@@ -11,6 +11,7 @@ DROP FUNCTION _timescaledb_internal.partitioning_column_to_pretty;
 -- Add new function definitions, columns and tables for distributed hypertables
 DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
 DROP FUNCTION IF EXISTS add_drop_chunks_policy;
+DROP FUNCTION IF EXISTS remove_drop_chunks_policy;
 DROP FUNCTION IF EXISTS drop_chunks;
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);

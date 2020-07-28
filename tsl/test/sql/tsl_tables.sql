@@ -59,37 +59,37 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reo
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy();
-select add_drop_chunks_policy('test_table');
-select add_drop_chunks_policy(INTERVAL '3 hours');
-select add_drop_chunks_policy('test_table', INTERVAL 'haha');
-select add_drop_chunks_policy('test_table', 'haha');
-select add_drop_chunks_policy('test_table', 42);
-select add_drop_chunks_policy('fake_table', INTERVAL '3 month');
+select add_retention_policy();
+select add_retention_policy('test_table');
+select add_retention_policy(INTERVAL '3 hours');
+select add_retention_policy('test_table', INTERVAL 'haha');
+select add_retention_policy('test_table', 'haha');
+select add_retention_policy('test_table', 42);
+select add_retention_policy('fake_table', INTERVAL '3 month');
 \set ON_ERROR_STOP 1
 
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
+select add_retention_policy('test_table', INTERVAL '3 month', true);
 -- Should not add new policy with different parameters
-select add_drop_chunks_policy('test_table', INTERVAL '3 month', true);
-select add_drop_chunks_policy('test_table', INTERVAL '1 year', if_not_exists => true);
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
+select add_retention_policy('test_table', INTERVAL '3 month', true);
+select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => true);
+select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
+select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
+select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy('test_table', INTERVAL '1 year');
-select add_drop_chunks_policy('test_table', INTERVAL '3 days');
-select add_drop_chunks_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
+select add_retention_policy('test_table', INTERVAL '1 year');
+select add_retention_policy('test_table', INTERVAL '3 days');
+select add_retention_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
 \set ON_ERROR_STOP 1
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
 
-select remove_drop_chunks_policy('test_table');
+select remove_retention_policy('test_table');
 
--- Test set_integer_now_func and add_drop_chunks_policy with
+-- Test set_integer_now_func and add_retention_policy with
 -- hypertables that have integer time dimension
 
 select * from _timescaledb_catalog.dimension;
@@ -110,27 +110,27 @@ select remove_reorder_policy('test_table');
 
 select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
 
-select add_drop_chunks_policy('test_table', INTERVAL '3 month');
+select add_retention_policy('test_table', INTERVAL '3 month');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
-select remove_drop_chunks_policy('test_table');
+select remove_retention_policy('test_table');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
-select add_drop_chunks_policy('test_table_int', 1);
+select add_retention_policy('test_table_int', 1);
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 -- Should not add new policy with different parameters
-select add_drop_chunks_policy('test_table_int', 2, true);
-select add_drop_chunks_policy('test_table_int', 1, true, true);
+select add_retention_policy('test_table_int', 2, true);
+select add_retention_policy('test_table_int', 1, true, true);
 
-select remove_drop_chunks_policy('test_table_int');
+select remove_retention_policy('test_table_int');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 -- Make sure remove works when there's nothing to remove
-select remove_drop_chunks_policy('test_table', true);
+select remove_retention_policy('test_table', true);
 select remove_reorder_policy('test_table', true);
 
 \set ON_ERROR_STOP 0
-select remove_drop_chunks_policy();
-select remove_drop_chunks_policy('fake_table');
+select remove_retention_policy();
+select remove_retention_policy('fake_table');
 select remove_reorder_policy();
 select remove_reorder_policy('fake_table');
 \set ON_ERROR_STOP 1
@@ -145,7 +145,7 @@ select remove_reorder_policy(2);
 -- Now make sure policy args have correct job deletion dependency
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
 
-select add_drop_chunks_policy('test_table', INTERVAL '2 month') as job_id \gset
+select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
 select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
@@ -164,7 +164,7 @@ select delete_job(:reorder_job_id);
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 
 -- Now make sure policy args have correct job deletion dependency
-select add_drop_chunks_policy('test_table', INTERVAL '2 month') as job_id \gset
+select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
 select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
@@ -183,7 +183,7 @@ CREATE TABLE non_hypertable(junk int, more_junk int);
 CREATE INDEX non_ht_index on non_hypertable(junk);
 
 \set ON_ERROR_STOP 0
-select add_drop_chunks_policy('non_hypertable', INTERVAL '2 month');
+select add_retention_policy('non_hypertable', INTERVAL '2 month');
 select add_reorder_policy('non_hypertable', 'non_ht_index');
 \set ON_ERROR_STOP 1
 
@@ -196,8 +196,8 @@ CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time');
 CREATE INDEX junk_index on test_table2 (junk);
 
-select add_drop_chunks_policy('test_table', INTERVAL '2 days');
-select add_drop_chunks_policy('test_table2', INTERVAL '1 days');
+select add_retention_policy('test_table', INTERVAL '2 days');
+select add_retention_policy('test_table2', INTERVAL '1 days');
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -260,14 +260,14 @@ CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
 
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
-select add_drop_chunks_policy('test_table', INTERVAL '2 days', true);
+select add_retention_policy('test_table', INTERVAL '2 days', true);
 
 select ts_test_chunk_stats_insert(:job_id, 123, 1);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
-select remove_drop_chunks_policy('test_table');
+select remove_retention_policy('test_table');
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
 
@@ -343,7 +343,7 @@ select alter_job_schedule(12345);
 \set ON_ERROR_STOP 1
 
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
+select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0

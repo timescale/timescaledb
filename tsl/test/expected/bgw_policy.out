@@ -204,7 +204,7 @@ select remove_reorder_policy('test_table');
 (1 row)
 
 -- Now do drop_chunks test
-select add_drop_chunks_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
+select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
 SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_table';
  count 
 -------
@@ -258,9 +258,9 @@ select :before_count=:after_count;
  t
 (1 row)
 
-select remove_drop_chunks_policy('test_table');
- remove_drop_chunks_policy 
----------------------------
+select remove_retention_policy('test_table');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
@@ -436,7 +436,7 @@ WARNING:  unexpected interval: smaller than one second
 
 \set ON_ERROR_STOP 0
 -- we cannot add a drop_chunks policy on a table whose open dimension is not time and no now_func is set
-select add_drop_chunks_policy('test_table_int', INTERVAL '4 months', true);
+select add_retention_policy('test_table_int', INTERVAL '4 months', true);
 ERROR:  integer_now_func not set on hypertable "test_table_int"
 \set ON_ERROR_STOP 1
 INSERT INTO test_table_int VALUES (-2, -2), (-1, -1), (0,0), (1, 1), (2, 2), (3, 3);
@@ -474,7 +474,7 @@ SELECT count(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
      6
 (1 row)
 
-select add_drop_chunks_policy('test_table_int', 1, true) as drop_chunks_job_id \gset
+select add_retention_policy('test_table_int', 1, true) as drop_chunks_job_id \gset
 -- Now simulate drop_chunks running automatically by calling it explicitly
 select test_drop_chunks(:drop_chunks_job_id);
  test_drop_chunks 
@@ -627,7 +627,7 @@ select set_integer_now_func('test_overflow_smallint', 'overflow_now');
  
 (1 row)
 
-select add_drop_chunks_policy('test_overflow_smallint', -2) as drop_chunks_job_id \gset
+select add_retention_policy('test_overflow_smallint', -2) as drop_chunks_job_id \gset
 \set ON_ERROR_STOP 0
 select test_drop_chunks(:drop_chunks_job_id);
 ERROR:  ts_interval overflow
@@ -682,7 +682,7 @@ select set_integer_now_func('part_time_now_func', 'dummy_now');
  
 (1 row)
 
-select add_drop_chunks_policy('part_time_now_func', 0) as drop_chunks_job_id \gset
+select add_retention_policy('part_time_now_func', 0) as drop_chunks_job_id \gset
 select test_drop_chunks(:drop_chunks_job_id);
  test_drop_chunks 
 ------------------
@@ -696,9 +696,9 @@ select * from part_time_now_func;
   3.3 | 42.3
 (2 rows)
 
-select remove_drop_chunks_policy('part_time_now_func');
- remove_drop_chunks_policy 
----------------------------
+select remove_retention_policy('part_time_now_func');
+ remove_retention_policy 
+-------------------------
  
 (1 row)
 
@@ -723,9 +723,9 @@ select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
 ERROR:  must be owner of hypertable "test_table_perm"
 select remove_reorder_policy('test_table');
 ERROR:  must be owner of hypertable "test_table"
-select add_drop_chunks_policy('test_table_perm', INTERVAL '4 months', true);
+select add_retention_policy('test_table_perm', INTERVAL '4 months', true);
 ERROR:  must be owner of hypertable "test_table_perm"
-select remove_drop_chunks_policy('test_table');
+select remove_retention_policy('test_table');
 ERROR:  must be owner of hypertable "test_table"
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
