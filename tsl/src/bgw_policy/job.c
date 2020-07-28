@@ -25,8 +25,8 @@
 #include "bgw/job_stat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/drop_chunks.h"
-#include "bgw_policy/compress_chunks.h"
 #include "bgw_policy/reorder_api.h"
+#include "bgw_policy/compression_api.h"
 #include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/job.h"
@@ -89,14 +89,65 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 															 -1);
 }
 
+static int64
+get_compression_window_end_value(Dimension *dim, const Jsonb *config)
+{
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+
+	if (IS_INTEGER_TYPE(partitioning_type))
+	{
+		int64 lag = policy_compression_get_older_than_int(config);
+		Oid now_func = ts_get_integer_now_func(dim);
+
+		if (InvalidOid == now_func)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("integer_now function must be set")));
+
+		return ts_time_value_to_internal(ts_interval_from_now_func_get_datum(lag,
+																			 partitioning_type,
+																			 now_func),
+										 partitioning_type);
+	}
+	else
+	{
+		Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
+		Interval *lag = policy_compression_get_older_than_interval(config);
+
+		switch (partitioning_type)
+		{
+			case TIMESTAMPOID:
+				res = DirectFunctionCall1(timestamptz_timestamp, res);
+				res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
+
+				return ts_time_value_to_internal(res, partitioning_type);
+			case TIMESTAMPTZOID:
+				res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(lag));
+
+				return ts_time_value_to_internal(res, partitioning_type);
+			case DATEOID:
+				res = DirectFunctionCall1(timestamptz_timestamp, res);
+				res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
+				res = DirectFunctionCall1(timestamp_date, res);
+
+				return ts_time_value_to_internal(res, partitioning_type);
+			default:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("unknown time type OID %d", partitioning_type)));
+				pg_unreachable();
+		}
+	}
+}
+
 static int32
-get_chunk_to_compress(Hypertable *ht, FormData_ts_interval *older_than)
+get_chunk_to_compress(Hypertable *ht, const Jsonb *config)
 {
 	Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	StrategyNumber end_strategy = BTLessStrategyNumber;
-	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
-	int64 end_value = ts_time_value_to_internal(ts_interval_subtract_from_now(older_than, open_dim),
-												partitioning_type);
+
+	int64 end_value = get_compression_window_end_value(open_dim, config);
+
 	return ts_dimension_slice_get_chunkid_to_compress(open_dim->fd.id,
 													  InvalidStrategy, /*start_strategy*/
 													  -1,			   /*start_value*/
@@ -105,7 +156,7 @@ get_chunk_to_compress(Hypertable *ht, FormData_ts_interval *older_than)
 }
 
 bool
-execute_reorder_policy(int32 job_id, Jsonb *config, reorder_func reorder, bool fast_continue)
+policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool fast_continue)
 {
 	int chunk_id;
 	bool started = false;
@@ -156,8 +207,10 @@ execute_reorder_policy(int32 job_id, Jsonb *config, reorder_func reorder, bool f
 
 	if (fast_continue && get_chunk_id_to_reorder(job_id, ht) != -1)
 	{
-		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
-		enable_fast_restart(job, "reorder");
+		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
+
+		if (job != NULL)
+			enable_fast_restart(job, "reorder");
 	}
 
 commit:
@@ -289,16 +342,14 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 }
 
 bool
-execute_compress_chunks_policy(BgwJob *job)
+policy_compression_execute(int32 job_id, Jsonb *config)
 {
 	bool started = false;
-	BgwPolicyCompressChunks *args;
 	Oid table_relid;
 	Hypertable *ht;
 	Cache *hcache;
 	int32 chunkid;
 	Chunk *chunk = NULL;
-	int job_id = job->fd.id;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -307,19 +358,10 @@ execute_compress_chunks_policy(BgwJob *job)
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
-	/* Get the arguments from the compress_chunks_policy table */
-	args = ts_bgw_policy_compress_chunks_find_by_job(job_id);
-
-	if (args == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("could not run compress_chunks policy #%d because no args in policy table",
-						job_id)));
-
-	table_relid = ts_hypertable_id_to_relid(args->fd.hypertable_id);
+	table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
-	chunkid = get_chunk_to_compress(ht, &args->fd.older_than);
+	chunkid = get_chunk_to_compress(ht, config);
 	if (chunkid == INVALID_CHUNK_ID)
 	{
 		elog(NOTICE,
@@ -338,9 +380,14 @@ execute_compress_chunks_policy(BgwJob *job)
 			 NameStr(chunk->fd.table_name));
 	}
 
-	chunkid = get_chunk_to_compress(ht, &args->fd.older_than);
+	chunkid = get_chunk_to_compress(ht, config);
 	if (chunkid != INVALID_CHUNK_ID)
-		enable_fast_restart(job, "compress_chunks");
+	{
+		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
+
+		if (job != NULL)
+			enable_fast_restart(job, "compression");
+	}
 
 	ts_cache_release(hcache);
 	if (started)
@@ -479,9 +526,8 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return execute_materialize_continuous_aggregate(job);
-		case JOB_TYPE_COMPRESS_CHUNKS:
-			return execute_compress_chunks_policy(job);
 
+		case JOB_TYPE_COMPRESS_CHUNKS:
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_CUSTOM:
 			return job_execute(job);

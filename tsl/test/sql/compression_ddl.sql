@@ -301,8 +301,8 @@ WHERE hypertable.table_name like 'test1' ORDER BY hypertable.id LIMIT 1 \gset
 --before the drop there are 2 hypertables: the compressed and uncompressed ones
 SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 --add policy to make sure it's dropped later
-select add_compress_chunks_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
-SELECT count(*) FROM _timescaledb_config.bgw_policy_compress_chunks;
+select add_compression_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE job_type = 'compress_chunks';
 
 DROP TABLE :UNCOMPRESSED_HYPER_NAME;
 
@@ -311,7 +311,7 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
 
 --verify that the policy is gone
-SELECT count(*) FROM _timescaledb_config.bgw_policy_compress_chunks;
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE job_type = 'compress_chunks';
 
 ROLLBACK;
 
@@ -370,12 +370,12 @@ WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NOT NU
 )
 AS sub;
 
-select add_compress_chunks_policy('test1', interval '1 day');
+select add_compression_policy('test1', interval '1 day');
 \set ON_ERROR_STOP 0
 ALTER table test1 set (timescaledb.compress='f');
 \set ON_ERROR_STOP 1
 
-select remove_compress_chunks_policy('test1');
+select remove_compression_policy('test1');
 ALTER table test1 set (timescaledb.compress='f');
 
 --only one hypertable left
@@ -402,8 +402,6 @@ INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = 
 WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
 )
 AS sub;
-
-
 
 DROP TABLE test1 CASCADE;
 DROP TABLESPACE tablespace1;
@@ -446,9 +444,4 @@ SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1'  ORDER BY chunk.id ) as subq;
-
-
-
-
-
 

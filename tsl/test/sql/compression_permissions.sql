@@ -35,13 +35,13 @@ select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
 select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
-select add_compress_chunks_policy('conditions', '1day'::interval);
+select add_compression_policy('conditions', '1day'::interval);
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-select add_compress_chunks_policy('conditions', '1day'::interval);
+select add_compression_policy('conditions', '1day'::interval);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 --try dropping policy
-select remove_compress_chunks_policy('conditions', true);
+select remove_compression_policy('conditions', true);
 
 --Tests for GRANTS.
 -- as owner grant select , compress chunk and check SELECT works

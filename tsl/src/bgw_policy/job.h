@@ -18,10 +18,10 @@ typedef void (*reorder_func)(Oid tableOid, Oid indexOid, bool verbose, Oid wait_
 							 Oid destination_tablespace, Oid index_tablespace);
 
 /* Functions exposed only for testing */
-extern bool execute_reorder_policy(int32 job_id, Jsonb *config, reorder_func reorder,
+extern bool policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder,
 								   bool fast_continue);
 extern bool execute_drop_chunks_policy(int32 job_id);
-extern bool execute_compress_chunks_policy(BgwJob *job);
+extern bool policy_compression_execute(int32 job_id, Jsonb *config);
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);
 extern Datum bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS);
 

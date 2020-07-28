@@ -52,7 +52,7 @@ ts_test_auto_reorder(PG_FUNCTION_ARGS)
 						"that cannot accept type record")));
 	}
 
-	execute_reorder_policy(job->fd.id, job->fd.config, dummy_reorder_func, false);
+	policy_reorder_execute(job->fd.id, job->fd.config, dummy_reorder_func, false);
 
 	values[0] = ObjectIdGetDatum(chunk_oid);
 	values[1] = ObjectIdGetDatum(index_oid);
@@ -80,5 +80,5 @@ ts_test_auto_compress_chunks(PG_FUNCTION_ARGS)
 	/*since we didn't come through the scheduler, need to mark job
 	 * as started to create a job_stat record */
 	ts_bgw_job_stat_mark_start(job_id);
-	return execute_compress_chunks_policy(job);
+	return policy_compression_execute(job->fd.id, job->fd.config);
 }

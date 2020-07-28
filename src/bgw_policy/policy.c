@@ -7,7 +7,6 @@
 #include <postgres.h>
 
 #include "bgw/job.h"
-#include "bgw_policy/compress_chunks.h"
 #include "bgw_policy/drop_chunks.h"
 #include "policy.h"
 
@@ -27,11 +26,6 @@ ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id)
 
 	if (policy)
 		ts_bgw_job_delete_by_id(((BgwPolicyDropChunks *) policy)->job_id);
-
-	policy = ts_bgw_policy_compress_chunks_find_by_hypertable(hypertable_id);
-
-	if (policy)
-		ts_bgw_job_delete_by_id(((BgwPolicyCompressChunks *) policy)->fd.job_id);
 
 	jobs = ts_bgw_job_find_by_hypertable_id(hypertable_id);
 	foreach (lc, jobs)

@@ -6,7 +6,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-#include "bgw_policy/compress_chunks_api.h"
+#include "bgw_policy/compression_api.h"
 #include "bgw_policy/drop_chunks_api.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
@@ -93,15 +93,18 @@ CrossModuleFunctions tsl_cm_functions = {
 	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.continuous_agg_materialize = continuous_agg_materialize,
 	.add_retention_policy = drop_chunks_add_policy,
+	.remove_retention_policy = drop_chunks_remove_policy,
+	.policy_compression_add = policy_compression_add,
+	.policy_compression_proc = policy_compression_proc,
+	.policy_compression_remove = policy_compression_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_remove = policy_reorder_remove,
-	.add_compress_chunks_policy = compress_chunks_add_policy,
-	.remove_retention_policy = drop_chunks_remove_policy,
-	.remove_compress_chunks_policy = compress_chunks_remove_policy,
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
+
+	/* gapfill */
 	.gapfill_marker = gapfill_marker,
 	.gapfill_int16_time_bucket = gapfill_int16_time_bucket,
 	.gapfill_int32_time_bucket = gapfill_int32_time_bucket,
@@ -109,6 +112,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.gapfill_date_time_bucket = gapfill_date_time_bucket,
 	.gapfill_timestamp_time_bucket = gapfill_timestamp_time_bucket,
 	.gapfill_timestamptz_time_bucket = gapfill_timestamptz_time_bucket,
+
 	.alter_job_schedule = bgw_policy_alter_job_schedule,
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,

@@ -42,7 +42,6 @@
 #include "license.h"
 #include "trigger.h"
 #include "utils.h"
-#include "bgw_policy/compress_chunks.h"
 
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
@@ -815,25 +814,16 @@ static void
 check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
-	bool compression_has_policy;
 	bool compressed_chunks_exist;
 	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
 	compressed_chunks_exist =
 		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
-	compression_has_policy =
-		compression_already_enabled && ts_bgw_policy_compress_chunks_find_by_hypertable(ht->fd.id);
 
 	if (compressed_chunks_exist)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot change compression options as compressed chunks already exist for "
 						"this table")));
-
-	if (compression_has_policy)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot change compression options as a compression policy exists on the "
-						"table")));
 
 	/* Require both order by and segment by when altering if they were previously set because
 	 * otherwise it's not clear what the default value means: does it mean leave as-is or is it an

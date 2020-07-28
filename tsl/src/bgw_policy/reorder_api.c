@@ -52,7 +52,7 @@
 #define POLICY_REORDER_PROC_NAME "policy_reorder"
 
 int32
-policy_reorder_get_hypertable_id(Jsonb *config)
+policy_reorder_get_hypertable_id(const Jsonb *config)
 {
 	bool found;
 	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
@@ -66,7 +66,7 @@ policy_reorder_get_hypertable_id(Jsonb *config)
 }
 
 char *
-policy_reorder_get_index_name(Jsonb *config)
+policy_reorder_get_index_name(const Jsonb *config)
 {
 	char *index_name = NULL;
 
@@ -108,10 +108,10 @@ check_valid_index(Hypertable *ht, Name index_name)
 Datum
 policy_reorder_proc(PG_FUNCTION_ARGS)
 {
-	int32 job_id = PG_GETARG_INT32(0);
-	Jsonb *config = PG_GETARG_JSONB_P(1);
+	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+		PG_RETURN_VOID();
 
-	execute_reorder_policy(job_id, config, reorder_chunk, true);
+	policy_reorder_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1), reorder_chunk, true);
 
 	PG_RETURN_VOID();
 }
@@ -235,7 +235,6 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 
-	/* Remove the job, then remove the policy */
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
