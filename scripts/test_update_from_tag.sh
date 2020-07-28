@@ -93,11 +93,15 @@ docker_pgtest() {
 }
 
 docker_pgdiff() {
+    diff_file=update_test.diff.${UPDATE_FROM_TAG}
     >&2 echo -e "\033[1m$1 vs $2\033[0m: $2"
     docker_pgtest $1 $3
     docker_pgtest $2 $3
     echo "RUNNING:  diff ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out "
-    diff -u ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out | tee ${TEST_TMPDIR}/update_test.output
+    diff -u ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out | tee ${diff_file}
+    if [ ! -s ${diff_file} ]; then
+      rm ${diff_file}
+    fi
 }
 
 docker_run() {

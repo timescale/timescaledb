@@ -31,6 +31,18 @@ jobs:
       run: |
         ./scripts/test_updates_pg${{ matrix.pg_major}}.sh
 
+    - name: Update diff
+      if: failure()
+      run: |
+        find . -name "update_test.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+
+    - name: Upload Artifacts
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: Extension update diff ${{ matrix.pg }}
+        path: update_test.diff.*
+
     - name: Slack Notification
       if: failure() && github.event_name != 'pull_request'
       env:
