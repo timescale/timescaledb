@@ -11,11 +11,11 @@
 
 #include <storage/lock.h>
 
-/* Debug waitpoint tag for debug waitpoints.
+/* Tag for debug waitpoints.
  *
- * Debug waitpoints only exists in debug-built code and is intended to allow
- * more controlled testing of the code by creating wait-points where execution
- * will halt until explicitly released.
+ * Debug waitpoints only exist in debug code and are intended to allow
+ * more controlled testing of the code by creating waitpoints where execution
+ * will halt until the waitpoints are explicitly released.
  *
  * Each debug waitpoint is identified by a string that is hashed to a 8-byte
  * number and used with the normal advisory locks available in PostgreSQL.

@@ -254,6 +254,12 @@
 #define TUPLE_DESC_HAS_OIDS(desc) false
 #endif
 
+#if defined(__GNUC__)
+#define TS_ATTRIBUTE_NONNULL(X) __attribute__((nonnull X))
+#else
+#define TS_ATTRIBUTE_NONNULL(X)
+#endif
+
 /* Compatibility functions for table access method API introduced in PG12 */
 #if PG11
 #include "compat/tupconvert.h"

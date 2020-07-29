@@ -1,0 +1,33 @@
+# This file and its contents are licensed under the Apache License 2.0.
+# Please see the included NOTICE for copyright information and
+# LICENSE-APACHE for a copy of the license.
+
+setup {
+  DROP TABLE IF EXISTS dropchunks_race_t1;
+  CREATE TABLE dropchunks_race_t1 (time timestamptz, device int, temp float);
+  SELECT create_hypertable('dropchunks_race_t1', 'time', 'device', 2);
+  INSERT INTO dropchunks_race_t1 VALUES ('2020-01-03 10:30', 1, 32.2);
+
+  CREATE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+  AS '@TS_MODULE_PATHNAME@', 'ts_debug_waitpoint_enable';
+
+  CREATE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+  AS '@TS_MODULE_PATHNAME@', 'ts_debug_waitpoint_release';
+}
+
+teardown {
+  DROP TABLE dropchunks_race_t1;
+}
+
+session "s1"
+step "s1a"	{ SELECT COUNT(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); }
+
+session "s2"
+step "s2a"	{ SELECT COUNT(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); }
+
+session "s3"
+setup           { SELECT debug_waitpoint_enable('drop_chunks_chunks_found'); }
+step "s3a"      { SELECT debug_waitpoint_release('drop_chunks_chunks_found'); }
+step "s3b" 	{ SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice); }
+
+permutation "s1a" "s2a" "s3a" "s3b"

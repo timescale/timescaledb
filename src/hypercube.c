@@ -176,9 +176,21 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 		if (is_dimension_constraint(cc))
 		{
 			DimensionSlice *slice;
+			ScanTupLock tuplock = {
+				.lockmode = LockTupleKeyShare,
+				.waitpolicy = LockWaitBlock,
+#if PG12_GE
+				.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+#endif
+			};
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
-			slice = ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id, NULL, mctx);
+			/* When building the hypercube, we reference the dimension slices
+			 * to construct the hypercube. This means that we need to add a
+			 * tuple lock on the dimension slices to prevent them from being
+			 * removed by a concurrently executing operation. */
+			slice =
+				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id, &tuplock, mctx);
 			Assert(slice != NULL);
 			hc->slices[hc->num_slices++] = slice;
 		}

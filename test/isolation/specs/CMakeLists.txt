@@ -15,7 +15,8 @@ set(TEST_TEMPLATES
 )
 
 set(TEST_TEMPLATES_DEBUG
- bgw_job_delete.spec.in
+  bgw_job_delete.spec.in
+  dropchunks_race.spec.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

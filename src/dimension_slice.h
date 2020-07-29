@@ -53,7 +53,8 @@ extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id,
 extern bool ts_dimension_slice_scan_for_existing(DimensionSlice *slice);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
 															  ScanTupLock *tuplock,
-															  MemoryContext mctx);
+															  MemoryContext mctx)
+	TS_ATTRIBUTE_NONNULL((2));
 extern DimensionVec *ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit);
 extern DimensionVec *ts_dimension_slice_scan_by_dimension_before_point(int32 dimension_id,
 																	   int64 point, int limit,
