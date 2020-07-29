@@ -84,14 +84,15 @@ WHERE ht.id = d.hypertable_id;
              2 | _materialized_hypertable_2 | 
 (2 rows)
 
-SELECT chunk_table, ranges FROM chunk_relation_size('_timescaledb_internal._materialized_hypertable_2')
-ORDER BY ranges;
-               chunk_table               |   ranges    
------------------------------------------+-------------
- _timescaledb_internal._hyper_2_40_chunk | {"[0,10)"}
- _timescaledb_internal._hyper_2_41_chunk | {"[10,20)"}
- _timescaledb_internal._hyper_2_42_chunk | {"[20,30)"}
- _timescaledb_internal._hyper_2_43_chunk | {"[30,40)"}
+SELECT chunk_name, range_start_integer, range_end_integer 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = '_materialized_hypertable_2' ORDER BY range_start_integer;
+    chunk_name     | range_start_integer | range_end_integer 
+-------------------+---------------------+-------------------
+ _hyper_2_40_chunk |                   0 |                10
+ _hyper_2_41_chunk |                  10 |                20
+ _hyper_2_42_chunk |                  20 |                30
+ _hyper_2_43_chunk |                  30 |                40
 (4 rows)
 
 SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset

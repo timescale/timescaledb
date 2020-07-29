@@ -76,8 +76,9 @@ SELECT hypertable_id, table_name, integer_now_func
 FROM _timescaledb_catalog.dimension d,  _timescaledb_catalog.hypertable ht
 WHERE ht.id = d.hypertable_id;
 
-SELECT chunk_table, ranges FROM chunk_relation_size('_timescaledb_internal._materialized_hypertable_2')
-ORDER BY ranges;
+SELECT chunk_name, range_start_integer, range_end_integer 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = '_materialized_hypertable_2' ORDER BY range_start_integer;
 
 SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10, cascade_to_materializations=>false ) as drop_chunks_job_id1 \gset
 SELECT alter_job_schedule(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');

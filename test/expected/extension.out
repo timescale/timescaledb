@@ -29,8 +29,6 @@ WHERE oid IN (
  attach_data_node
  attach_tablespace
  block_new_chunks
- chunk_relation_size
- chunk_relation_size_pretty
  chunks_detailed_size
  compress_chunk
  create_distributed_hypertable
@@ -71,5 +69,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(52 rows)
+(50 rows)
 

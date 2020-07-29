@@ -45,8 +45,13 @@ ALTER VIEW records_monthly SET (
    timescaledb.ignore_invalidation_older_than = '15 days'
 );
 
-SELECT chunk_table, ranges FROM chunk_relation_size('records_monthly');
-SELECT chunk_table, ranges FROM chunk_relation_size('records');
+SELECT chunk_name, range_start, range_end 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'records_monthly' ORDER BY range_start;
+
+SELECT chunk_name, range_start, range_end 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'records' ORDER BY range_start;
 
 REFRESH MATERIALIZED VIEW records_monthly;
 REFRESH MATERIALIZED VIEW records_monthly;

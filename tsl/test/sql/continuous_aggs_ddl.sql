@@ -474,13 +474,18 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --no data but covers dropped chunks
 SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
 SELECT set_chunk_time_interval('drop_chunks_table', 1000);
-SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
+;
 --recreate the dropped chunk
 INSERT INTO drop_chunks_table VALUES (20, 20);
 --now sees the re-entered data
 SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
 --should show chunk with old name and old ranges
-SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
 
 -- TEST drop_chunks with cascade_to_materialization set to true (github 1644)
 -- This checks if chunks from mat. hypertable are actually dropped
@@ -505,17 +510,22 @@ REFRESH materialized view drop_chunks_view;
 REFRESH materialized view drop_chunks_view;
 --now we have chunks in both mat and raw hypertables
 select * from drop_chunks_view order by 1;
-SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table')
-ORDER BY ranges;
-SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
-ORDER BY ranges;
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
+
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
+
 --1 chunk from the mat. hypertable will be dropped and the other will
 --need deletes when the chunks from the raw hypertable are dropped.
 SELECT drop_chunks('drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
 SELECT * from drop_chunks_view ORDER BY 1;
 SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
-SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
-ORDER BY ranges;
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
 
 -- TEST drop chunks from continuous aggregates by specifying view name
 SELECT drop_chunks('drop_chunks_view',
@@ -526,8 +536,9 @@ SELECT drop_chunks('drop_chunks_view',
 -- hypertable
 INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-SELECT chunk_table, ranges
-  FROM chunk_relation_size(:'drop_chunks_mat_tablen');
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT drop_chunks(:'drop_chunks_mat_tablen', older_than => 60);

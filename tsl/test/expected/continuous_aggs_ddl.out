@@ -895,12 +895,15 @@ SELECT set_chunk_time_interval('drop_chunks_table', 1000);
  
 (1 row)
 
-SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_10_19_chunk | {"[50,60)"}
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_10_19_chunk |                  50 |                60
 (1 row)
 
+;
 --recreate the dropped chunk
 INSERT INTO drop_chunks_table VALUES (20, 20);
 --now sees the re-entered data
@@ -911,11 +914,13 @@ SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY ti
 (1 row)
 
 --should show chunk with old name and old ranges
-SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table');
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_10_15_chunk | {"[20,30)"}
- _timescaledb_internal._hyper_10_19_chunk | {"[50,60)"}
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_10_15_chunk |                  20 |                30
+ _hyper_10_19_chunk |                  50 |                60
 (2 rows)
 
 -- TEST drop_chunks with cascade_to_materialization set to true (github 1644)
@@ -981,22 +986,24 @@ select * from drop_chunks_view order by 1;
           35 | 100
 (8 rows)
 
-SELECT chunk_table, ranges FROM chunk_relation_size('drop_chunks_table')
-ORDER BY ranges;
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_10_13_chunk | {"[0,10)"}
- _timescaledb_internal._hyper_10_14_chunk | {"[10,20)"}
- _timescaledb_internal._hyper_10_20_chunk | {"[20,30)"}
- _timescaledb_internal._hyper_10_17_chunk | {"[30,40)"}
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_10_13_chunk |                   0 |                10
+ _hyper_10_14_chunk |                  10 |                20
+ _hyper_10_20_chunk |                  20 |                30
+ _hyper_10_17_chunk |                  30 |                40
 (4 rows)
 
-SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
-ORDER BY ranges;
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_11_21_chunk | {"[0,20)"}
- _timescaledb_internal._hyper_11_22_chunk | {"[20,40)"}
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_11_21_chunk |                   0 |                20
+ _hyper_11_22_chunk |                  20 |                40
 (2 rows)
 
 --1 chunk from the mat. hypertable will be dropped and the other will
@@ -1022,11 +1029,12 @@ SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
      1
 (1 row)
 
-SELECT chunk_table, ranges FROM chunk_relation_size(:'drop_chunks_mat_tablen')
-ORDER BY ranges;
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_11_22_chunk | {"[20,40)"}
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_11_22_chunk |                  20 |                40
 (1 row)
 
 -- TEST drop chunks from continuous aggregates by specifying view name
@@ -1045,11 +1053,12 @@ INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 55
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
-SELECT chunk_table, ranges
-  FROM chunk_relation_size(:'drop_chunks_mat_tablen');
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_11_24_chunk | {"[40,60)"}
+SELECT chunk_name, range_start_integer, range_end_integer
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_11_24_chunk |                  40 |                60
 (1 row)
 
 \set ON_ERROR_STOP 0

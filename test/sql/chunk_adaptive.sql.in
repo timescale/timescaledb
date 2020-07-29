@@ -126,7 +126,9 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
 
-SELECT chunk_id, chunk_table, partitioning_columns, partitioning_column_types, partitioning_hash_functions, ranges FROM chunk_relation_size('test_adaptive');
+SELECT chunk_name, primary_dimension, range_start, range_end 
+FROM  timescaledb_information.chunks
+WHERE hypertable_name = 'test_adaptive' ORDER BY chunk_name;
 
 -- Do same thing without an index on the time column. This affects
 -- both the calculation of fill-factor of the chunk and its size
@@ -144,8 +146,9 @@ SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
 generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
-
-SELECT chunk_id, chunk_table, partitioning_columns, partitioning_column_types, partitioning_hash_functions, ranges FROM chunk_relation_size('test_adaptive_no_index');
+SELECT chunk_name, primary_dimension, range_start, range_end 
+FROM  timescaledb_information.chunks
+WHERE hypertable_name = 'test_adaptive_no_index' ORDER BY chunk_name;
 
 -- Test added to check that the correct index (i.e. time index) is being used
 -- to find the min and max. Previously a bug selected the first index listed,
@@ -233,7 +236,9 @@ SELECT '2018-01-05T00:00:00+00'::timestamptz, val, val + 1 FROM
 generate_series(2001, 3000) as val;
 
 -- This should show 4 chunks, rather than 5
-SELECT COUNT(*) FROM chunk_relation_size_pretty('test_adaptive_correct_index');
+SELECT count(*)
+FROM  timescaledb_information.chunks
+WHERE hypertable_name = 'test_adaptive_correct_index';
 -- The interval_length should no longer be 86400000000 for our hypertable, so 3rd column so be true.
 -- Note: the exact interval_length is non-deterministic, so we can't use its actual value for tests
 SELECT id, hypertable_id, interval_length > 86400000000 FROM _timescaledb_catalog.dimension;
@@ -258,7 +263,16 @@ generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
 
-SELECT * FROM chunk_relation_size('test_adaptive_space');
+\x
+SELECT chunk_name, range_start, range_end 
+FROM  timescaledb_information.chunks
+WHERE hypertable_name = 'test_adaptive_space' ORDER BY chunk_name;
+SELECT *
+FROM  timescaledb_information.dimensions
+WHERE hypertable_name = 'test_adaptive_space' ORDER BY dimension_number;
+\x
+SELECT *
+FROM chunks_detailed_size('test_adaptive_space') ORDER BY chunk_name;
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
 
 -- A previous version stopped working as soon as hypertable_id stopped being
