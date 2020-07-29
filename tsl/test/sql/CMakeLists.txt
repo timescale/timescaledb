@@ -57,7 +57,6 @@ set(TEST_FILES_DEBUG
 )
 
 set(TEST_TEMPLATES
-  chunk_api.sql.in
   compression_qualpushdown.sql.in
   continuous_aggs_union_view.sql.in
   move.sql.in
@@ -69,6 +68,7 @@ set(TEST_TEMPLATES
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
     #current_timestamp_mock available only in debug mode
+    chunk_api.sql.in
     continuous_aggs_query.sql.in
     dist_hypertable.sql.in
     dist_query.sql.in
