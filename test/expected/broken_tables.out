@@ -74,10 +74,12 @@ SELECT * FROM missing_slices;
                   1 | constraint_1    | time        | (("time" >= 3) AND ("time" < 6))
 (1 row)
 
+-- Setting level to ERROR since warnings are printed in different
+-- order on PG11 and PG12.
+SET client_min_messages TO error;
 TRUNCATE TABLE chunk_test_int;
-WARNING:  dimension slice 1 was missing, proceeding anyway
-WARNING:  dimension slice 1 was missing, proceeding anyway
 DROP TABLE chunk_test_int;
+RESET client_min_messages;
 CREATE TABLE chunk_test_int(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test_int', 'time', 'tag', 2, chunk_time_interval => 3);
 NOTICE:  adding not-null constraint to column "time"
@@ -119,6 +121,8 @@ SELECT * FROM missing_slices;
                   5 | constraint_5    | time        | (("time" >= 3) AND ("time" < 6))
 (1 row)
 
+-- Setting level to ERROR since warnings are printed in different
+-- order on PG11 and PG12.
+SET client_min_messages TO error;
 DROP TABLE chunk_test_int;
-WARNING:  dimension slice 5 was missing, proceeding anyway
-WARNING:  dimension slice 5 was missing, proceeding anyway
+RESET client_min_messages;

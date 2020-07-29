@@ -812,6 +812,10 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 		case TM_Ok:
 			/* successfully locked */
 			return true;
+
+#if PG12_GE
+		case TM_Deleted:
+#endif
 		case TM_Updated:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
@@ -820,6 +824,7 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 					 errhint("Retry the operation again")));
 			pg_unreachable();
 			return false;
+
 		case TM_BeingModified:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),

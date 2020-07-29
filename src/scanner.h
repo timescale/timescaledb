@@ -20,6 +20,7 @@ typedef struct ScanTupLock
 {
 	LockTupleMode lockmode;
 	LockWaitPolicy waitpolicy;
+	bool follow_updates;
 } ScanTupLock;
 
 /* Tuple information passed on to handlers when scanning for tuples. */

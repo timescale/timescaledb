@@ -35,6 +35,7 @@
 #include <access/tupdesc.h>
 
 #include "export.h"
+#include "debug_wait.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "catalog.h"
@@ -933,18 +934,18 @@ chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub
 	chunk_formdata_fill(&chunk->fd, ti->tuple, ti->desc);
 
 	/*
-	 * When searching for the chunk stub matching the dimensional point, we only
-	 * scanned for dimensional constraints. We now need to rescan the
+	 * When searching for the chunk stub matching the dimensional point, we
+	 * only scanned for dimensional constraints. We now need to rescan the
 	 * constraints to also get the inherited constraints.
 	 */
 	chunk->constraints =
 		ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, num_constraints_hint, ti->mctx);
 
-	/* If a stub is provided then reuse its hypercube. Note that stubs that are
-	 * results of a point or range scan might be incomplete (in terms of number
-	 * of slices and constraints). Only a chunk stub that matches in all
-	 * dimensions will have a complete hypercube. Thus, we need to check the
-	 * validity of the stub before we can reuse it.
+	/* If a stub is provided then reuse its hypercube. Note that stubs that
+	 * are results of a point or range scan might be incomplete (in terms of
+	 * number of slices and constraints). Only a chunk stub that matches in
+	 * all dimensions will have a complete hypercube. Thus, we need to check
+	 * the validity of the stub before we can reuse it.
 	 */
 	if (chunk_stub_is_valid(stub, chunk->constraints->num_dimension_constraints))
 	{
@@ -988,9 +989,9 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	Assert(!chunk->fd.dropped);
 
 	/* Fill in table relids. Note that we cannot do this in
-	 * chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses that
-	 * function and, in that case, the chunk object is needed to create the data
-	 * table and related objects. */
+	 * chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
+	 * that function and, in that case, the chunk object is needed to create
+	 * the data table and related objects. */
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
 	chunk->hypertable_relid = ts_inheritance_parent_relid(chunk->table_id);
@@ -2310,22 +2311,24 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 														   &tuplock,
 														   CurrentMemoryContext);
 				/* If the slice is not found in the scan above, the table is
-				 * broken so we do not delete the slice. We proceed with
+				 * broken so we do not delete the slice. We proceed
 				 * anyway since users need to be able to drop broken tables or
 				 * remove broken chunks. */
 				if (!slice)
+				{
+					const Hypertable *const ht = ts_hypertable_get_by_id(form.hypertable_id);
 					ereport(WARNING,
-							(errmsg("dimension slice %d was missing, proceeding anyway",
-									cc->fd.dimension_slice_id),
-							 errdetail("Chunk \"%s.%s\" is dependent on dimension slice %d, but it "
-									   "was missing. Proceeding to delete chunk anyway.",
-									   quote_identifier(NameStr(form.schema_name)),
-									   quote_identifier(NameStr(form.table_name)),
-									   cc->fd.dimension_slice_id)));
-				if (slice &&
-					ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
-																   NULL,
-																   CurrentMemoryContext) == 0)
+							(errmsg("unexpected state for chunk %s.%s, dropping anyway",
+									quote_identifier(NameStr(form.schema_name)),
+									quote_identifier(NameStr(form.table_name))),
+							 errdetail("The integrity of hypertable %s.%s might be compromised "
+									   "since one of its chunks lacked a dimension slice.",
+									   quote_identifier(NameStr(ht->fd.schema_name)),
+									   quote_identifier(NameStr(ht->fd.table_name)))));
+				}
+				else if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
+																		NULL,
+																		CurrentMemoryContext) == 0)
 					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
 			}
 		}
@@ -2616,9 +2619,9 @@ ts_chunk_drop_fks(Chunk *const chunk)
 }
 
 /*
- * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable as a
- * template. Currently it is used only during chunk decompression, since FK constraints are dropped
- * during compression.
+ * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable as
+ * a template. Currently it is used only during chunk decompression, since FK constraints are
+ * dropped during compression.
  */
 void
 ts_chunk_create_fks(Chunk *const chunk)
@@ -2810,10 +2813,9 @@ chunk_cmp(const void *ch1, const void *ch2)
 }
 
 /*
- * This is a helper set returning function (SRF) that takes a set returning function context and as
- * argument and returns oids extracted from funcctx->user_fctx (which is Chunk* array).
- * Note that the caller needs to be registered as a
- * set returning function for this to work.
+ * This is a helper set returning function (SRF) that takes a set returning function context and
+ * as argument and returns oids extracted from funcctx->user_fctx (which is Chunk* array). Note
+ * that the caller needs to be registered as a set returning function for this to work.
  */
 static Datum
 chunks_return_srf(FunctionCallInfo fcinfo)
@@ -2955,11 +2957,12 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 						cagg.user_view_schema.data,
 						cagg.user_view_name.data)));
 
-	/* Lock all chunks in Exclusive mode, blocking everything but selects on the table. We have to
-	 * block all modifications so that we cant get new invalidation entries. This makes sure that
-	 * all future modifying txns on this data region will have a now() that higher than ours and
-	 * thus will not invalidate. Otherwise, we could have an old txn with a now() in the past that
-	 * all of a sudden decides to to insert data right after we process_invalidations. */
+	/* Lock all chunks in Exclusive mode, blocking everything but selects on the table. We have
+	 * to block all modifications so that we can't get new invalidation entries. This makes sure
+	 * that all future modifying txns on this data region will have a now() that higher than
+	 * ours and thus will not invalidate. Otherwise, we could have an old txn with a now() in
+	 * the past that all of a sudden decides to to insert data right after we
+	 * process_invalidations. */
 	for (i = 0; i < num_chunks; i++)
 	{
 		LockRelationOid(chunks[i].table_id, ExclusiveLock);
@@ -2978,12 +2981,13 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 		bool finished_all_invalidation = false;
 
 		/* This will loop until all invalidations are done, each iteration of the loop will do
-		 * max_interval_per_job's worth of data. We don't want to ignore max_interval_per_job here
-		 * to avoid large sorts. */
+		 * max_interval_per_job's worth of data. We don't want to ignore max_interval_per_job
+		 * here to avoid large sorts. */
 		while (!finished_all_invalidation)
 		{
 			elog(NOTICE,
-				 "making sure all invalidations for %s.%s have been processed prior to dropping "
+				 "making sure all invalidations for %s.%s have been processed prior to "
+				 "dropping "
 				 "chunks",
 				 NameStr(ca->data.user_view_schema),
 				 NameStr(ca->data.user_view_name));
@@ -3011,6 +3015,7 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 	const char *schema_name, *table_name;
 	int32 hypertable_id = ts_hypertable_relid_to_id(table_relid);
 	bool has_continuous_aggs;
+	const MemoryContext oldcontext = CurrentMemoryContext;
 	ScanTupLock tuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
@@ -3052,15 +3057,35 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 			break;
 	}
 
-	chunks = ts_chunk_get_chunks_in_time_range(table_relid,
-											   older_than_datum,
-											   newer_than_datum,
-											   older_than_type,
-											   newer_than_type,
-											   "drop_chunks",
-											   CurrentMemoryContext,
-											   &num_chunks,
-											   &tuplock);
+	PG_TRY();
+	{
+		chunks = ts_chunk_get_chunks_in_time_range(table_relid,
+												   older_than_datum,
+												   newer_than_datum,
+												   older_than_type,
+												   newer_than_type,
+												   "drop_chunks",
+												   CurrentMemoryContext,
+												   &num_chunks,
+												   &tuplock);
+	}
+	PG_CATCH();
+	{
+		ErrorData *edata;
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		if (edata->sqlerrcode == ERRCODE_LOCK_NOT_AVAILABLE)
+		{
+			FlushErrorState();
+			edata->detail = edata->message;
+			edata->message =
+				psprintf("some chunks could not be read since they are being concurrently updated");
+		}
+		ReThrowError(edata);
+	}
+	PG_END_TRY();
+
+	DEBUG_WAITPOINT("drop_chunks_chunks_found");
 
 	if (has_continuous_aggs)
 		ts_chunk_drop_process_materialization(table_relid,
@@ -3113,10 +3138,9 @@ ts_chunk_do_drop_chunks(Oid table_relid, Datum older_than_datum, Datum newer_tha
 }
 
 /*
- * This is a helper set returning function (SRF) that takes a set returning function context and as
- * argument and returns cstrings extracted from funcctx->user_fctx (which is a List).
- * Note that the caller needs to be registered as a
- * set returning function for this to work.
+ * This is a helper set returning function (SRF) that takes a set returning function context and
+ * as argument and returns cstrings extracted from funcctx->user_fctx (which is a List). Note
+ * that the caller needs to be registered as a set returning function for this to work.
  */
 static Datum
 list_return_srf(FunctionCallInfo fcinfo)
@@ -3314,9 +3338,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 }
 
 /**
- * This function is used to explicitly specify chunks that are being scanned. It's being processed
- * in the planning phase and removed from the query tree. This means that the actual function
- * implementation will only be executed if something went wrong during explicit chunk exclusion.
+ * This function is used to explicitly specify chunks that are being scanned. It's being
+ * processed in the planning phase and removed from the query tree. This means that the actual
+ * function implementation will only be executed if something went wrong during explicit chunk
+ * exclusion.
  */
 Datum
 ts_chunks_in(PG_FUNCTION_ARGS)

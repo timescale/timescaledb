@@ -797,6 +797,12 @@ extern int oid_cmp(const void *p1, const void *p2);
 #endif
 #endif
 
+#if defined(__GNUC__)
+#define TS_ATTRIBUTE_NONNULL(X) __attribute__((nonnull X))
+#else
+#define TS_ATTRIBUTE_NONNULL(X)
+#endif
+
 /* Compatibility functions for table access method API introduced in PG12 */
 #if PG12_LT
 #include "compat/tupconvert.h"
