@@ -230,7 +230,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 														 GetCurrentCommandId(false),
 														 ctx->tuplock->lockmode,
 														 ctx->tuplock->waitpolicy,
-														 false,
+														 ctx->tuplock->follow_updates,
 														 &buffer,
 														 &hufd);
 

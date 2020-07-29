@@ -1,0 +1,22 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1a s2a s3a s3b
+debug_waitpoint_enable
+
+               
+step s1a: SELECT COUNT(*) FROM drop_chunks(TIMESTAMPTZ '2020-03-01', 'dropchunks_race_t1'); <waiting ...>
+step s2a: SELECT COUNT(*) FROM drop_chunks(TIMESTAMPTZ '2020-03-01', 'dropchunks_race_t1'); <waiting ...>
+step s3a: SELECT debug_waitpoint_release('drop_chunks_chunks_found');
+debug_waitpoint_release
+
+               
+step s1a: <... completed>
+count          
+
+1              
+step s2a: <... completed>
+error in steps s3a s1a s2a: ERROR:  some chunks could not be read since they are being concurrently updated
+step s3b: SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
+count          
+
+0              
