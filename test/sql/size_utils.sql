@@ -5,8 +5,6 @@
 \ir include/insert_two_partitions.sql
 
 SELECT * FROM hypertable_detailed_size('"public"."two_Partitions"');
-SELECT * FROM chunk_relation_size('"public"."two_Partitions"');
-SELECT * FROM chunk_relation_size_pretty('"public"."two_Partitions"');
 SELECT * FROM indexes_relation_size('"public"."two_Partitions"');
 SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_name;
 
@@ -15,8 +13,7 @@ SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
 
 INSERT INTO timestamp_partitioned VALUES('2004-10-19 10:23:54', '10');
 INSERT INTO timestamp_partitioned VALUES('2004-12-19 10:23:54', '30');
-SELECT * FROM chunk_relation_size('timestamp_partitioned');
-SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned');
+SELECT * FROM chunks_detailed_size('timestamp_partitioned') order by chunk_name;
 
 
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
@@ -24,8 +21,7 @@ SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
 
 INSERT INTO timestamp_partitioned_2 VALUES('2004-10-19 10:23:54', '10');
 INSERT INTO timestamp_partitioned_2 VALUES('2004-12-19 10:23:54', '30');
-SELECT * FROM chunk_relation_size('timestamp_partitioned_2');
-SELECT * FROM chunk_relation_size_pretty('timestamp_partitioned_2');
+SELECT * FROM chunks_detailed_size('timestamp_partitioned_2') order by chunk_name;
 
 CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
 -- Set storage type to EXTERNAL to prevent PostgreSQL from compressing my
@@ -36,8 +32,7 @@ SELECT * FROM create_hypertable('toast_test', 'time');
 INSERT INTO toast_test VALUES('2004-10-19 10:23:54', $$
 this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k.
 $$);
-SELECT * FROM chunk_relation_size('toast_test');
-SELECT * FROM chunk_relation_size_pretty('toast_test');
+SELECT * FROM chunks_detailed_size('toast_test');
 
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
@@ -59,7 +54,6 @@ SELECT * FROM hypertable_approximate_row_count('approx_count');
 SELECT * FROM hypertable_approximate_row_count();
 SELECT * FROM hypertable_approximate_row_count(NULL);
 
-SELECT * FROM chunk_relation_size(NULL);
-SELECT * FROM chunk_relation_size_pretty(NULL);
+SELECT * FROM chunks_detailed_size(NULL);
 SELECT * FROM hypertable_detailed_size(NULL);
 SELECT * FROM indexes_relation_size(NULL);

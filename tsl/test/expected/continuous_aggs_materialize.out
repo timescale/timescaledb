@@ -1519,12 +1519,14 @@ CREATE VIEW continuous_agg_int_max
         FROM continuous_agg_int
         GROUP BY 1;
 INSERT INTO continuous_agg_int values (-10, 100), (1,100), (10, 100);
-select chunk_table, ranges from chunk_relation_size('continuous_agg_int');
-               chunk_table                |   ranges    
-------------------------------------------+-------------
- _timescaledb_internal._hyper_24_45_chunk | {"[-10,0)"}
- _timescaledb_internal._hyper_24_46_chunk | {"[0,10)"}
- _timescaledb_internal._hyper_24_47_chunk | {"[10,20)"}
+select chunk_name, range_start_integer, range_end_integer 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'continuous_agg_int' ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_24_45_chunk |                 -10 |                 0
+ _hyper_24_46_chunk |                   0 |                10
+ _hyper_24_47_chunk |                  10 |                20
 (3 rows)
 
 REFRESH MATERIALIZED VIEW continuous_agg_int_max;
@@ -1574,11 +1576,13 @@ where view_name::text like 'continuous_agg_ts_max_view';
 
 INSERT INTO continuous_agg_ts_max_t
     values ('1970-01-01 1:00'::timestamptz, 10);
-select chunk_table, ranges from chunk_relation_size('continuous_agg_ts_max_t');
-               chunk_table                |                ranges                 
-------------------------------------------+---------------------------------------
- _timescaledb_internal._hyper_26_50_chunk | {"[-63072000000000,-31536000000000)"}
- _timescaledb_internal._hyper_26_52_chunk | {"[-31536000000000,0)"}
+select chunk_name, range_start, range_end
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'continuous_agg_ts_max_t' ORDER BY range_start;
+     chunk_name     |      range_start       |       range_end        
+--------------------+------------------------+------------------------
+ _hyper_26_50_chunk | 1968-01-02 05:00:00+05 | 1969-01-01 05:00:00+05
+ _hyper_26_52_chunk | 1969-01-01 05:00:00+05 | 1970-01-01 05:00:00+05
 (2 rows)
 
 REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;

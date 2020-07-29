@@ -716,7 +716,9 @@ CREATE VIEW continuous_agg_int_max
         GROUP BY 1;
 
 INSERT INTO continuous_agg_int values (-10, 100), (1,100), (10, 100);
-select chunk_table, ranges from chunk_relation_size('continuous_agg_int');
+select chunk_name, range_start_integer, range_end_integer 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'continuous_agg_int' ORDER BY range_start_integer;
 REFRESH MATERIALIZED VIEW continuous_agg_int_max;
 REFRESH MATERIALIZED VIEW continuous_agg_int_max;
 REFRESH MATERIALIZED VIEW continuous_agg_int_max;
@@ -746,7 +748,9 @@ where view_name::text like 'continuous_agg_ts_max_view';
 INSERT INTO continuous_agg_ts_max_t
     values ('1970-01-01 1:00'::timestamptz, 10);
 
-select chunk_table, ranges from chunk_relation_size('continuous_agg_ts_max_t');
+select chunk_name, range_start, range_end
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'continuous_agg_ts_max_t' ORDER BY range_start;
 
 REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;
 REFRESH MATERIALIZED VIEW continuous_agg_ts_max_view;

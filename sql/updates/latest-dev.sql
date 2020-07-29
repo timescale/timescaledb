@@ -3,9 +3,12 @@
 DROP VIEW timescaledb_information.hypertable;
 DROP FUNCTION hypertable_relation_size_pretty;
 DROP FUNCTION  hypertable_relation_size;
+DROP FUNCTION chunk_relation_size_pretty;
+DROP FUNCTION  chunk_relation_size;
 DROP FUNCTION indexes_relation_size_pretty;
 DROP FUNCTION  indexes_relation_size;
 DROP FUNCTION _timescaledb_internal.partitioning_column_to_pretty;
+DROP FUNCTION _timescaledb_internal.range_value_to_pretty;
 -- end of do not reorder
 
 -- Add new function definitions, columns and tables for distributed hypertables

@@ -258,7 +258,7 @@ SELECT
     srcch.table_name as chunk_name,
     dim.column_name as primary_dimension,
     dim.column_type as primary_dimension_type,
-    row_number() over(partition by chcons.chunk_id order by chcons.dimension_slice_id) as chunk_dimension_num,
+    row_number() over(partition by chcons.chunk_id order by dim.id) as chunk_dimension_num,
     CASE
         WHEN ( dim.column_type = 'TIMESTAMP'::regtype OR
                dim.column_type = 'TIMESTAMPTZ'::regtype OR
