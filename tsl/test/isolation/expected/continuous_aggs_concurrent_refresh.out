@@ -1,0 +1,194 @@
+Parsed test spec with 5 sessions
+
+starting permutation: R1_refresh R1_commit S1_select R2_commit R3_commit R4_commit
+step R1_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+
+refresh_continuous_aggregate
+
+               
+step R1_commit: 
+    COMMIT;
+
+step S1_select: 
+    SELECT day, avg_temp
+    FROM daily_temp
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('daily_temp');
+
+day            avg_temp       
+
+Thu Apr 30 17:00:00 2020 PDT18.4411764705882
+Fri May 01 17:00:00 2020 PDT18.8541666666667
+cagg_bucket_count
+
+2              
+step R2_commit: 
+    COMMIT;
+
+step R3_commit: 
+    COMMIT;
+
+step R4_commit: 
+    COMMIT;
+
+
+starting permutation: R1_refresh R2_refresh R1_commit R2_commit S1_select R3_commit R4_commit
+step R1_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+
+refresh_continuous_aggregate
+
+               
+step R2_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+ <waiting ...>
+step R1_commit: 
+    COMMIT;
+
+step R2_refresh: <... completed>
+refresh_continuous_aggregate
+
+               
+step R2_commit: 
+    COMMIT;
+
+step S1_select: 
+    SELECT day, avg_temp
+    FROM daily_temp
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('daily_temp');
+
+day            avg_temp       
+
+Thu Apr 30 17:00:00 2020 PDT18.4411764705882
+Fri May 01 17:00:00 2020 PDT18.8541666666667
+cagg_bucket_count
+
+2              
+step R3_commit: 
+    COMMIT;
+
+step R4_commit: 
+    COMMIT;
+
+
+starting permutation: R1_refresh R2_refresh R2_commit R1_commit S1_select R3_commit R4_commit
+step R1_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+
+refresh_continuous_aggregate
+
+               
+step R2_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+ <waiting ...>
+step R2_refresh: <... completed>
+ERROR:  canceling statement due to lock timeout
+step R2_commit: 
+    COMMIT;
+
+step R1_commit: 
+    COMMIT;
+
+step S1_select: 
+    SELECT day, avg_temp
+    FROM daily_temp
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('daily_temp');
+
+day            avg_temp       
+
+Thu Apr 30 17:00:00 2020 PDT18.4411764705882
+Fri May 01 17:00:00 2020 PDT18.8541666666667
+cagg_bucket_count
+
+2              
+step R3_commit: 
+    COMMIT;
+
+step R4_commit: 
+    COMMIT;
+
+
+starting permutation: R1_refresh R3_refresh R3_commit R1_commit S1_select R2_commit R4_commit
+step R1_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+
+refresh_continuous_aggregate
+
+               
+step R3_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-08', '2020-05-10');
+ <waiting ...>
+step R3_refresh: <... completed>
+ERROR:  canceling statement due to lock timeout
+step R3_commit: 
+    COMMIT;
+
+step R1_commit: 
+    COMMIT;
+
+step S1_select: 
+    SELECT day, avg_temp
+    FROM daily_temp
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('daily_temp');
+
+day            avg_temp       
+
+Thu Apr 30 17:00:00 2020 PDT18.4411764705882
+Fri May 01 17:00:00 2020 PDT18.8541666666667
+cagg_bucket_count
+
+2              
+step R2_commit: 
+    COMMIT;
+
+step R4_commit: 
+    COMMIT;
+
+
+starting permutation: R1_refresh R4_refresh R4_commit R1_commit S1_select R2_commit R3_commit
+step R1_refresh: 
+    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+
+refresh_continuous_aggregate
+
+               
+step R4_refresh: 
+    SELECT refresh_continuous_aggregate('weekly_temp', '2020-05-01', '2020-05-10');
+
+refresh_continuous_aggregate
+
+               
+step R4_commit: 
+    COMMIT;
+
+step R1_commit: 
+    COMMIT;
+
+step S1_select: 
+    SELECT day, avg_temp
+    FROM daily_temp
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('daily_temp');
+
+day            avg_temp       
+
+Thu Apr 30 17:00:00 2020 PDT18.4411764705882
+Fri May 01 17:00:00 2020 PDT18.8541666666667
+cagg_bucket_count
+
+2              
+step R2_commit: 
+    COMMIT;
+
+step R3_commit: 
+    COMMIT;
+
