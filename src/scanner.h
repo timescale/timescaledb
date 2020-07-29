@@ -19,6 +19,7 @@ typedef struct ScanTupLock
 {
 	LockTupleMode lockmode;
 	LockWaitPolicy waitpolicy;
+	unsigned int lockflags;
 } ScanTupLock;
 
 /* Tuple information passed on to handlers when scanning for tuples. */

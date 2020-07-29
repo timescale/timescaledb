@@ -78,7 +78,9 @@ debug_waitpoint_release(DebugWait *waitpoint)
  * enabled.
  */
 TS_FUNCTION_INFO_V1(ts_debug_waitpoint_enable);
-Datum ts_debug_waitpoint_enable(PG_FUNCTION_ARGS)
+
+Datum
+ts_debug_waitpoint_enable(PG_FUNCTION_ARGS)
 {
 	text *tag = PG_GETARG_TEXT_PP(0);
 	DebugWait waitpoint;
@@ -95,7 +97,8 @@ Datum ts_debug_waitpoint_enable(PG_FUNCTION_ARGS)
  * Release a waitpoint allowing execution to proceed.
  */
 TS_FUNCTION_INFO_V1(ts_debug_waitpoint_release);
-Datum ts_debug_waitpoint_release(PG_FUNCTION_ARGS)
+Datum
+ts_debug_waitpoint_release(PG_FUNCTION_ARGS)
 {
 	text *tag = PG_GETARG_TEXT_PP(0);
 	DebugWait waitpoint;

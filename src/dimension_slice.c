@@ -110,6 +110,9 @@ lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
 		case TM_Ok:
 			break;
 
+#if PG12_GE
+		case TM_Deleted:
+#endif
 		case TM_Updated:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
@@ -124,6 +127,7 @@ lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
 					 errmsg("dimension slice %d updated by other transaction", slice->fd.id),
 					 errhint("Retry the operation again.")));
 			pg_unreachable();
+			break;
 
 		case TM_Invisible:
 			elog(ERROR, "attempt to lock invisible tuple");
@@ -132,7 +136,7 @@ lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
 
 		case TM_WouldBlock:
 		default:
-			elog(ERROR, "unexpected tuple lock status");
+			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
 			pg_unreachable();
 			break;
 	}
@@ -587,6 +591,11 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+/* Scan for a slice by dimension slice id.
+ *
+ * If you're scanning for a tuple, you have to provide a lock, since, otherwise,
+ * concurrent threads can do bad things with the tuple and you probably want
+ * it to not change nor disappear. */
 DimensionSlice *
 ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, ScanTupLock *tuplock,
 									   MemoryContext mctx)
