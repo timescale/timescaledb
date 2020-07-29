@@ -908,6 +908,7 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_1 LOCATION :TEST_TABLESPACE2_PATH;
 SELECT attach_tablespace('tablespace1', 'disttable');
 SELECT detach_tablespace('tablespace1', 'disttable');
 \set ON_ERROR_STOP 1
+SELECT detach_tablespaces('disttable');
 
 -- Continue to use previously attached tablespace, but block attach/detach
 CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE tablespace1;
@@ -930,6 +931,7 @@ WHERE cl.oid = ch.chunk::regclass;
 SELECT attach_tablespace('tablespace2', 'disttable2');
 SELECT detach_tablespace('tablespace2', 'disttable2');
 \set ON_ERROR_STOP 1
+SELECT detach_tablespaces('disttable2');
 
 SELECT * FROM show_tablespaces('disttable2');
 
@@ -939,6 +941,12 @@ SELECT attach_tablespace('tablespace2', 'disttable2');
 $$);
 SELECT * FROM distributed_exec($$
 SELECT detach_tablespace('tablespace2', 'disttable2');
+$$);
+SELECT * FROM distributed_exec($$
+SELECT attach_tablespace('tablespace2', 'disttable2');
+$$);
+SELECT * FROM distributed_exec($$
+SELECT detach_tablespaces('disttable2');
 $$);
 DROP TABLE disttable2;
 
