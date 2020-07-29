@@ -3114,6 +3114,12 @@ ERROR:  cannot attach tablespace to distributed hypertable
 SELECT detach_tablespace('tablespace1', 'disttable');
 ERROR:  tablespace "tablespace1" is not attached to hypertable "disttable"
 \set ON_ERROR_STOP 1
+SELECT detach_tablespaces('disttable');
+ detach_tablespaces 
+--------------------
+                  0
+(1 row)
+
 -- Continue to use previously attached tablespace, but block attach/detach
 CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE tablespace1;
 SELECT create_distributed_hypertable('disttable2', 'time', chunk_time_interval => 1000000::bigint);
@@ -3154,6 +3160,12 @@ ERROR:  cannot attach tablespace to distributed hypertable
 SELECT detach_tablespace('tablespace2', 'disttable2');
 ERROR:  tablespace "tablespace2" is not attached to hypertable "disttable2"
 \set ON_ERROR_STOP 1
+SELECT detach_tablespaces('disttable2');
+ detach_tablespaces 
+--------------------
+                  0
+(1 row)
+
 SELECT * FROM show_tablespaces('disttable2');
  show_tablespaces 
 ------------------
@@ -3170,6 +3182,22 @@ $$);
 
 SELECT * FROM distributed_exec($$
 SELECT detach_tablespace('tablespace2', 'disttable2');
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+SELECT * FROM distributed_exec($$
+SELECT attach_tablespace('tablespace2', 'disttable2');
+$$);
+ distributed_exec 
+------------------
+ 
+(1 row)
+
+SELECT * FROM distributed_exec($$
+SELECT detach_tablespaces('disttable2');
 $$);
  distributed_exec 
 ------------------
