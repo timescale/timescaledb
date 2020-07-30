@@ -3216,10 +3216,9 @@ ts_chunk_drop_preserve_catalog_row(Chunk *chunk, DropBehavior behavior, int32 lo
 }
 
 static void
-ts_chunk_drop_process_materialization(Oid hypertable_relid,
-									  CascadeToMaterializationOption cascade_to_materializations,
-									  Datum older_than_datum, Oid older_than_type,
-									  Oid newer_than_type, Chunk *chunks, int num_chunks)
+ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum,
+									Oid older_than_type, Oid newer_than_type, Chunk *chunks,
+									int num_chunks)
 {
 	Dimension *time_dimension;
 	int64 older_than_time;
@@ -3233,12 +3232,6 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 	int i;
 
 	FormData_continuous_agg cagg;
-
-	/* nothing to do if also dropping materializations */
-	if (cascade_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
-		return;
-
-	Assert(cascade_to_materializations == CASCADE_TO_MATERIALIZATION_FALSE);
 
 	if (OidIsValid(newer_than_type))
 		ereport(ERROR,
@@ -3289,7 +3282,7 @@ ts_chunk_drop_process_materialization(Oid hypertable_relid,
 						cagg.user_view_name.data)));
 
 	/* Lock all chunks in Exclusive mode, blocking everything but selects on the table. We have to
-	 * block all modifications so that we cant get new invalidation entries. This makes sure that
+	 * block all modifications so that we can't get new invalidation entries. This makes sure that
 	 * all future modifying txns on this data region will have a now() that higher than ours and
 	 * thus will not invalidate. Otherwise, we could have an old txn with a now() in the past that
 	 * all of a sudden decides to to insert data right after we process_invalidations. */
@@ -3357,9 +3350,8 @@ lock_referenced_tables(Oid table_relid)
  */
 List *
 ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than_datum,
-						Oid older_than_type, Oid newer_than_type,
-						CascadeToMaterializationOption cascades_to_materializations,
-						int32 log_level, List **affected_data_nodes)
+						Oid older_than_type, Oid newer_than_type, int32 log_level,
+						List **affected_data_nodes)
 
 {
 	uint64 i = 0;
@@ -3397,18 +3389,10 @@ ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than
 			has_continuous_aggs = true;
 			break;
 		case HypertableIsRawTable:
-			if (cascades_to_materializations == CASCADE_TO_MATERIALIZATION_UNKNOWN)
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("cascade_to_materializations options must be set explicitly"),
-						 errhint("Hypertables with continuous aggs must have the "
-								 "cascade_to_materializations option set to either true or false "
-								 "explicitly.")));
 			has_continuous_aggs = true;
 			break;
 		default:
 			has_continuous_aggs = false;
-			cascades_to_materializations = CASCADE_TO_MATERIALIZATION_TRUE;
 			break;
 	}
 
@@ -3423,13 +3407,12 @@ ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than
 											   &tuplock);
 
 	if (has_continuous_aggs)
-		ts_chunk_drop_process_materialization(ht->main_table_relid,
-											  cascades_to_materializations,
-											  older_than_datum,
-											  older_than_type,
-											  newer_than_type,
-											  chunks,
-											  num_chunks);
+		ts_chunk_drop_process_invalidations(ht->main_table_relid,
+											older_than_datum,
+											older_than_type,
+											newer_than_type,
+											chunks,
+											num_chunks);
 
 	for (; i < num_chunks; i++)
 	{
@@ -3444,7 +3427,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_FALSE)
+		if (has_continuous_aggs)
 			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
 		else
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
@@ -3454,21 +3437,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than
 		foreach (lc, chunks[i].data_nodes)
 		{
 			ChunkDataNode *cdn = lfirst(lc);
-
 			data_nodes = list_append_unique_oid(data_nodes, cdn->foreign_server_oid);
 		}
-	}
-
-	if (has_continuous_aggs && cascades_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE)
-	{
-		ts_cm_functions->continuous_agg_drop_chunks_by_chunk_id(hypertable_id,
-																&chunks,
-																num_chunks,
-																older_than_datum,
-																newer_than_datum,
-																older_than_type,
-																newer_than_type,
-																log_level);
 	}
 
 	if (affected_data_nodes)
@@ -3605,7 +3575,6 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Datum older_than_datum, newer_than_datum;
 	Oid older_than_type, newer_than_type;
 	bool verbose;
-	CascadeToMaterializationOption cascades_to_materializations;
 	int elevel;
 	List *data_node_oids = NIL;
 	Cache *hcache;
@@ -3639,10 +3608,6 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	newer_than_type = PG_ARGISNULL(2) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 2);
 	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
-	cascades_to_materializations =
-		(PG_ARGISNULL(4) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
-						   (PG_GETARG_BOOL(4) ? CASCADE_TO_MATERIALIZATION_TRUE :
-												CASCADE_TO_MATERIALIZATION_FALSE));
 	elevel = verbose ? INFO : DEBUG2;
 
 	/* Find either the hypertable or view, or error out if the relid is
@@ -3668,7 +3633,6 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 										  newer_than_datum,
 										  older_than_type,
 										  newer_than_type,
-										  cascades_to_materializations,
 										  elevel,
 										  &data_node_oids);
 	}

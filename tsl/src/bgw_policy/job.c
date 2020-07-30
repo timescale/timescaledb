@@ -285,7 +285,6 @@ execute_drop_chunks_policy(int32 job_id)
 									  InvalidOid,
 									  older_than_type,
 									  InvalidOid,
-									  args->cascade_to_materializations,
 									  DEBUG2,
 									  NULL);
 	num_dropped = list_length(dc_temp);

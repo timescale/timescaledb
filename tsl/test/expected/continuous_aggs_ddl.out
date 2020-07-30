@@ -231,8 +231,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(:'drop_chunks_mat_table',
     newer_than => -20,
-    verbose => true,
-    cascade_to_materializations=>true);
+    verbose => true);
 ERROR:  cannot drop chunks on a continuous aggregate materialization hypertable
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
@@ -254,78 +253,6 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
            5 |     5
           10 |     5
 (3 rows)
-
--- cannot drop from the raw table without specifying cascade_to_materializations
-\set ON_ERROR_STOP 0
-SELECT drop_chunks('drop_chunks_table', older_than => 10);
-ERROR:  cascade_to_materializations options must be set explicitly
-\set ON_ERROR_STOP 1
-SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
- count 
--------
-     3
-(1 row)
-
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
- count 
--------
-     1
-(1 row)
-
-SELECT * FROM drop_chunks_view ORDER BY 1;
- time_bucket | count 
--------------+-------
-           0 |     5
-           5 |     5
-          10 |     5
-(3 rows)
-
-SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
- count 
--------
-     3
-(1 row)
-
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
- count 
--------
-     1
-(1 row)
-
-SELECT * FROM drop_chunks_view ORDER BY 1;
- time_bucket | count 
--------------+-------
-           0 |     5
-           5 |     5
-          10 |     5
-(3 rows)
-
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(\'drop_chunks_table\', older_than => 13)::REGCLASS::TEXT'
-\set QUERY2 'SELECT drop_chunks(\'drop_chunks_table\', older_than => 13, cascade_to_materializations => true)::TEXT'
-\set ECHO errors
- Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
-----------------+-------------------------+-------------------------
-              0 |                       1 |                       1
-(1 row)
-
-SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
- count 
--------
-     2
-(1 row)
-
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
- count 
--------
-     1
-(1 row)
-
-SELECT * FROM drop_chunks_view ORDER BY 1;
- time_bucket | count 
--------------+-------
-          10 |     5
-(1 row)
 
 -- drop chunks when the chunksize and time_bucket aren't aligned
 DROP TABLE drop_chunks_table CASCADE;
@@ -383,38 +310,6 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
           12 |     3
 (5 rows)
 
--- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT show_chunks(\'drop_chunks_table_u\', older_than => 13)::REGCLASS::TEXT'
-\set QUERY2 'SELECT drop_chunks(\'drop_chunks_table_u\', older_than => 13, cascade_to_materializations => true)::TEXT'
-\set ECHO errors
- Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
-----------------+-------------------------+-------------------------
-              0 |                       1 |                       1
-(1 row)
-
--- everything in the first chunk (values within [0, 6]) should be dropped
--- the time_bucket [6, 8] will lose it's first value, but should still have
--- the other two
-SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
- count 
--------
-     3
-(1 row)
-
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
- count 
--------
-     1
-(1 row)
-
-SELECT * FROM drop_chunks_view ORDER BY 1;
- time_bucket | count 
--------------+-------
-           6 |     2
-           9 |     3
-          12 |     3
-(3 rows)
-
 -- TRUNCATE test
 \set ON_ERROR_STOP 0
 TRUNCATE drop_chunks_table_u;
@@ -460,19 +355,24 @@ CREATE INDEX new_name_idx ON new_name(chunk_id);
 SELECT * FROM new_name;
  time_bucket |      agg_2_2       | chunk_id 
 -------------+--------------------+----------
+           0 | \x0000000000000003 |        5
+           3 | \x0000000000000003 |        5
+           6 | \x0000000000000001 |        5
            6 | \x0000000000000002 |        6
            9 | \x0000000000000003 |        6
           12 | \x0000000000000002 |        6
           12 | \x0000000000000001 |        7
-(4 rows)
+(7 rows)
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
-           6 |     2
+           0 |     3
+           3 |     3
+           6 |     3
            9 |     3
           12 |     3
-(3 rows)
+(5 rows)
 
 \set ON_ERROR_STOP 0
 -- no continuous aggregates on a continuous aggregate materialization table
@@ -540,9 +440,7 @@ SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
  Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
 (5 rows)
 
---
--- cascade_to_materialization = false tests
---
+--test materialization of invalidation before drop
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
 NOTICE:  table "drop_chunks_table" does not exist, skipping
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
@@ -572,14 +470,14 @@ AS SELECT time_bucket('5', time), max(data)
     GROUP BY 1;
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 \set ON_ERROR_STOP 0
-SELECT drop_chunks('drop_chunks_table', older_than => 13, cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => 13);
 ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
 ALTER VIEW drop_chunks_view SET (timescaledb.ignore_invalidation_older_than = 9);
 -- 9 is too small (less than timescaledb.ignore_invalidation_older_than)
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-8), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-8));
 ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
 -- 10 works but we don't have the completion threshold far enough along
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 ERROR:  the continuous aggregate public.drop_chunks_view is too far behind
 \set ON_ERROR_STOP 1
 REFRESH MATERIALIZED VIEW drop_chunks_view;
@@ -588,7 +486,7 @@ LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to inv
 WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
 \set ON_ERROR_STOP 0
 --still too far behind
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 ERROR:  the continuous aggregate public.drop_chunks_view is too far behind
 \set ON_ERROR_STOP 1
 REFRESH MATERIALIZED VIEW drop_chunks_view;
@@ -598,7 +496,7 @@ WARNING:  REFRESH did not materialize the entire range since it was limited by t
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, new range up to 25
 --now, this works
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
 LOG:  materializing continuous aggregate public.drop_chunks_view: nothing to invalidate, no new range
 LOG:  materializing continuous aggregate public.drop_chunks_view: no new range to materialize or invalidations found, exiting early
@@ -609,11 +507,11 @@ LOG:  materializing continuous aggregate public.drop_chunks_view: no new range t
 
 \set ON_ERROR_STOP 0
 --must have older_than set and no newer than
-SELECT drop_chunks('drop_chunks_table', cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table');
 ERROR:  older_than and newer_than timestamps provided to drop_chunks cannot both be NULL
-SELECT drop_chunks('drop_chunks_table', newer_than=>10, cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', newer_than=>10);
 ERROR:  cannot use newer_than parameter to drop_chunks with cascade_to_materializations
-SELECT drop_chunks('drop_chunks_table', older_than => 20, newer_than=>10, cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => 20, newer_than=>10);
 ERROR:  cannot use newer_than parameter to drop_chunks with cascade_to_materializations
 \set ON_ERROR_STOP 1
 --test materialization of invalidation before drop
@@ -654,7 +552,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 (8 rows)
 
 --dropping tables will cause the invalidation to be processed
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
                drop_chunks                
@@ -780,7 +678,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 (8 rows)
 
 --should see multiple rounds of invalidation in the log messages
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
@@ -836,7 +734,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
            0 |   4
 (12 rows)
 
-SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), cascade_to_materializations => false);
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 NOTICE:  making sure all invalidations for public.drop_chunks_view have been processed prior to dropping chunks
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
                drop_chunks                
@@ -923,142 +821,34 @@ WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
  _hyper_10_19_chunk |                  50 |                60
 (2 rows)
 
--- TEST drop_chunks with cascade_to_materialization set to true (github 1644)
--- This checks if chunks from mat. hypertable are actually dropped
--- and deletes data from chunks that cannot be dropped from that mat. hypertable.
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
         schema_name AS drop_chunks_mat_schema,
         table_name AS drop_chunks_mat_table_name
     FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
     WHERE _timescaledb_catalog.continuous_agg.raw_hypertable_id = :drop_chunks_table_nid
         AND _timescaledb_catalog.hypertable.id = _timescaledb_catalog.continuous_agg.mat_hypertable_id \gset
-SELECT drop_chunks('drop_chunks_table', older_than=>integer_now_test2() + 200, cascade_to_materializations => true);
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_10_19_chunk
- _timescaledb_internal._hyper_10_15_chunk
-(2 rows)
-
-SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
- count 
--------
-     0
-(1 row)
-
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
- count 
--------
-     0
-(1 row)
-
-SELECT set_chunk_time_interval('drop_chunks_table', 10);
- set_chunk_time_interval 
--------------------------
- 
-(1 row)
-
-SELECT set_chunk_time_interval(:'drop_chunks_mat_tablen', 20);
- set_chunk_time_interval 
--------------------------
- 
-(1 row)
-
-INSERT INTO drop_chunks_table SELECT generate_series(1,35), 100;
-update drop_chunks_table set data = 250 where time = 25;
-update drop_chunks_table set data = 290 where time = 29;
-REFRESH materialized view drop_chunks_view;
-LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
-LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
-REFRESH materialized view drop_chunks_view;
-LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 35
-LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
---now we have chunks in both mat and raw hypertables
-select * from drop_chunks_view order by 1;
- time_bucket | max 
--------------+-----
-           0 | 100
-           5 | 100
-          10 | 100
-          15 | 100
-          20 | 100
-          25 | 290
-          30 | 100
-          35 | 100
-(8 rows)
-
-SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
-WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_14_chunk |                  10 |                20
- _hyper_10_20_chunk |                  20 |                30
- _hyper_10_17_chunk |                  30 |                40
-(4 rows)
-
-SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
-WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_11_21_chunk |                   0 |                20
- _hyper_11_22_chunk |                  20 |                40
-(2 rows)
-
---1 chunk from the mat. hypertable will be dropped and the other will
---need deletes when the chunks from the raw hypertable are dropped.
-SELECT drop_chunks('drop_chunks_table', older_than=>integer_now_test2() - 4 , cascade_to_materializations => true);
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_10_13_chunk
- _timescaledb_internal._hyper_10_14_chunk
- _timescaledb_internal._hyper_10_20_chunk
-(3 rows)
-
-SELECT * from drop_chunks_view ORDER BY 1;
- time_bucket | max 
--------------+-----
-          30 | 100
-          35 | 100
-(2 rows)
-
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_tablen') AS c;
- count 
--------
-     1
-(1 row)
-
-SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
-WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_11_22_chunk |                  20 |                40
-(1 row)
-
 -- TEST drop chunks from continuous aggregates by specifying view name
 SELECT drop_chunks('drop_chunks_view',
     newer_than => -20,
     verbose => true);
-INFO:  dropping chunk _timescaledb_internal._hyper_11_22_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_11_16_chunk
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_11_22_chunk
+ _timescaledb_internal._hyper_11_16_chunk
 (1 row)
 
 -- Test that we cannot drop chunks when specifying materialized
 -- hypertable
 INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
-LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 55
+LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 59
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks 
 WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
- _hyper_11_24_chunk |                  40 |                60
+ _hyper_11_20_chunk |                   0 |               100
 (1 row)
 
 \set ON_ERROR_STOP 0

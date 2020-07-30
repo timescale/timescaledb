@@ -32,7 +32,6 @@ SELECT 'TABLE DEPARSE TEST DONE';
 \set ECHO all
 -- test drop_chunks function deparsing
 SELECT * FROM tsl_test_deparse_drop_chunks('myschema.table10', '2019-01-01'::timestamptz, verbose => true);
-SELECT * FROM tsl_test_deparse_drop_chunks('myschema.table10', interval '1 day', cascade_to_materializations => true);
 SELECT * FROM tsl_test_deparse_drop_chunks('table1', newer_than => 12345);
 SELECT * FROM tsl_test_deparse_drop_chunks('table1', older_than => interval '2 years', newer_than => '2015-01-01'::timestamp);
 

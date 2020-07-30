@@ -85,15 +85,13 @@ CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp (
     		  REFERENCES _timescaledb_catalog.hypertable(id)
 		  ON DELETE CASCADE,
     older_than _timescaledb_catalog.ts_interval NOT NULL,
-    cascade_to_materializations BOOLEAN,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 
 INSERT INTO _timescaledb_config.bgw_policy_drop_chunks_tmp (
     SELECT job_id,
     	   hypertable_id,
-	   older_than,
-	   cascade_to_materializations
+	   older_than
       FROM _timescaledb_config.bgw_policy_drop_chunks
 );
 
@@ -110,7 +108,6 @@ CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks (
     		  REFERENCES _timescaledb_catalog.hypertable(id)
 		  ON DELETE CASCADE,
     older_than _timescaledb_catalog.ts_interval NOT NULL,
-    cascade_to_materializations BOOLEAN,
     CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
 );
 INSERT INTO _timescaledb_config.bgw_policy_drop_chunks (

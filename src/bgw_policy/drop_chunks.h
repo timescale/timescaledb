@@ -16,7 +16,6 @@ typedef struct BgwPolicyDropChunks
 	int32 job_id;
 	int32 hypertable_id;
 	FormData_ts_interval older_than;
-	CascadeToMaterializationOption cascade_to_materializations;
 } BgwPolicyDropChunks;
 
 extern TSDLLEXPORT BgwPolicyDropChunks *ts_bgw_policy_drop_chunks_find_by_job(int32 job_id);
