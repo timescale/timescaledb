@@ -322,11 +322,11 @@ select compress_chunk(:'CHUNK_NAME');
  _timescaledb_internal._hyper_15_7_chunk
 (1 row)
 
-SELECT  hypertable_name , total_chunks , number_compressed_chunks
-FROM timescaledb_information.compressed_hypertable_stats;
- hypertable_name | total_chunks | number_compressed_chunks 
------------------+--------------+--------------------------
- table_constr    |            2 |                        1
+SELECT  total_chunks , number_compressed_chunks
+FROM hypertable_compression_stats('table_constr');
+ total_chunks | number_compressed_chunks 
+--------------+--------------------------
+            2 |                        1
 (1 row)
 
 --github issue 1661

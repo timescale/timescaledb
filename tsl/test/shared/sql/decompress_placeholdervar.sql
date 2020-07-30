@@ -29,10 +29,8 @@ INSERT INTO decompress_phv_ping
 
 ALTER TABLE decompress_phv_ping SET (timescaledb.compress, timescaledb.compress_orderby = 'device_id, insert_ts DESC');
 
-SELECT count(compress_chunk(chunk_name)) AS compressed
-FROM timescaledb_information.compressed_chunk_stats temprow
-WHERE hypertable_name = 'decompress_phv_ping'::regclass
-    AND compression_status = 'Uncompressed';
+SELECT count(*) AS compressed
+FROM ( select compress_chunk(i) FROM show_chunks('decompress_phv_ping') i ) q;
 
 SELECT from_ts, insert_ts, network_id, pkt_loss, rtt_avg
 FROM generate_series('2019-03-21 01:00:00'::timestamp, '2019-03-23 13:00:00'::timestamp, '12h'::interval) ts_bucket (from_ts)

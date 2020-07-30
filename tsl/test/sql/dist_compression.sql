@@ -38,11 +38,8 @@ WHERE table_name = 'compressed';
 $$);
 
 -- There should be no compressed chunks
-SELECT test.remote_exec(NULL, $$
-SELECT * FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'compressed'::regclass
-ORDER BY hypertable_name, chunk_name;
-$$);
+SELECT * from chunk_compression_stats( 'compressed')
+ORDER BY chunk_name, node_name;
 
 -- Test that compression is rolled back on aborted transaction
 BEGIN;
@@ -52,20 +49,14 @@ ORDER BY chunk
 LIMIT 1;
 
 -- Data nodes should now report compressed chunks
-SELECT test.remote_exec(NULL, $$
-SELECT * FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'compressed'::regclass
-ORDER BY hypertable_name, chunk_name;
-$$);
+SELECT * from chunk_compression_stats( 'compressed')
+ORDER BY chunk_name, node_name;
 -- Abort the transaction
 ROLLBACK;
 
 -- No compressed chunks since we rolled back
-SELECT test.remote_exec(NULL, $$
-SELECT * FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'compressed'::regclass
-ORDER BY hypertable_name, chunk_name;
-$$);
+SELECT * from chunk_compression_stats( 'compressed')
+ORDER BY chunk_name, node_name;
 
 -- Compress for real this time
 SELECT compress_chunk(chunk)
@@ -75,11 +66,9 @@ LIMIT 1;
 
 
 -- Check that one chunk, and its replica, is compressed
-SELECT test.remote_exec(NULL, $$
-SELECT * FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'compressed'::regclass
-ORDER BY hypertable_name, chunk_name;
-$$);
+SELECT * from chunk_compression_stats( 'compressed')
+ORDER BY chunk_name, node_name;
+select * from hypertable_compression_stats('compressed'); 
 
 -- Compress twice to generate NOTICE that the chunk is already compressed
 SELECT compress_chunk(chunk, if_not_compressed => true)
@@ -94,11 +83,8 @@ ORDER BY chunk
 LIMIT 1;
 
 -- Should now be decompressed
-SELECT test.remote_exec(NULL, $$
-SELECT * FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'compressed'::regclass
-ORDER BY hypertable_name, chunk_name;
-$$);
+SELECT * from chunk_compression_stats( 'compressed')
+ORDER BY chunk_name, node_name;
 
 -- Decompress twice to generate NOTICE that the chunk is already decompressed
 SELECT decompress_chunk(chunk, if_compressed => true)

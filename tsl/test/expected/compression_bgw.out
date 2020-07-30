@@ -70,10 +70,12 @@ select test_compress_chunks_policy(:compressjob_id);
  
 (1 row)
 
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats where compression_status like 'Compressed' order by chunk_name;
- hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
------------------+----------------------------------------+--------------------------+------------------------
- conditions      | _timescaledb_internal._hyper_1_1_chunk | 32 kB                    | 32 kB
+select chunk_name, pg_size_pretty(before_compression_total_bytes) before_total,
+pg_size_pretty( after_compression_total_bytes)  after_total
+from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
+    chunk_name    | before_total | after_total 
+------------------+--------------+-------------
+ _hyper_1_1_chunk | 32 kB        | 32 kB
 (1 row)
 
 -- TEST 4 --
@@ -159,14 +161,12 @@ select test_compress_chunks_policy(:compressjob_id);
  
 (1 row)
 
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats
-where hypertable_name::text like 'test_table_int'
-and compression_status like 'Compressed'
-order by chunk_name;
- hypertable_name |               chunk_name               | uncompressed_total_bytes | compressed_total_bytes 
------------------+----------------------------------------+--------------------------+------------------------
- test_table_int  | _timescaledb_internal._hyper_3_5_chunk | 24 kB                    | 16 kB
- test_table_int  | _timescaledb_internal._hyper_3_6_chunk | 24 kB                    | 16 kB
+select chunk_name, before_compression_total_bytes, after_compression_total_bytes
+from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
+    chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
+------------------+--------------------------------+-------------------------------
+ _hyper_3_5_chunk |                          24576 |                         16384
+ _hyper_3_6_chunk |                          24576 |                         16384
 (2 rows)
 
 --TEST 8

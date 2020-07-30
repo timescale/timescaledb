@@ -37,7 +37,7 @@ select tgname , tgtype, tgenabled , relname
 from pg_trigger t, pg_class rel
 where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
 \x
-select * from timescaledb_information.compressed_chunk_stats
+select * from chunk_compression_stats('foo') 
 order by chunk_name limit 2;
 \x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
@@ -166,11 +166,10 @@ WHERE map.chunk_id = srcch.id and srcht.id = srcch.hypertable_id
        and srcht.table_name like 'conditions'
 order by chunk_id;
 
-select * from timescaledb_information.compressed_chunk_stats
-where hypertable_name::text like 'conditions'
-order by hypertable_name, chunk_name;
-select * from timescaledb_information.compressed_hypertable_stats
-order by hypertable_name;
+select * from chunk_compression_stats('conditions')
+order by chunk_name;
+select * from hypertable_compression_stats('foo'); 
+select * from hypertable_compression_stats('conditions'); 
 vacuum full foo;
 vacuum full conditions;
 -- After vacuum, table_bytes is 0, but any associated index/toast storage is not
@@ -440,13 +439,12 @@ SELECT create_hypertable('ht5','time');
 INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
 INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
 
--- compressed_chunk_stats should not show dropped chunks
+-- compressed chunk stats should not show dropped chunks
 ALTER TABLE ht5 SET (timescaledb.compress);
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
 SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
-SELECT chunk_name
-FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'ht5'::regclass;
+select chunk_name from chunk_compression_stats('ht5')
+order by chunk_name;
 
 -- Test enabling compression for a table with compound foreign key 
 -- (Issue https://github.com/timescale/timescaledb/issues/2000)

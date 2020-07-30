@@ -48,7 +48,9 @@ select now()::timestamp, 'TOK', 'sony', 55, 75;
 -- TEST3 --
 --only the old chunks will get compressed when policy is executed--
 select test_compress_chunks_policy(:compressjob_id);
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats where compression_status like 'Compressed' order by chunk_name;
+select chunk_name, pg_size_pretty(before_compression_total_bytes) before_total,
+pg_size_pretty( after_compression_total_bytes)  after_total
+from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
 
 -- TEST 4 --
 --cannot set another policy
@@ -88,10 +90,8 @@ select * from _timescaledb_config.bgw_job where id=:compressjob_id;
 \gset
 select test_compress_chunks_policy(:compressjob_id);
 select test_compress_chunks_policy(:compressjob_id);
-select hypertable_name, chunk_name, uncompressed_total_bytes, compressed_total_bytes from timescaledb_information.compressed_chunk_stats
-where hypertable_name::text like 'test_table_int'
-and compression_status like 'Compressed'
-order by chunk_name;
+select chunk_name, before_compression_total_bytes, after_compression_total_bytes
+from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
 
 --TEST 8
 --hypertable owner lacks permission to start background worker

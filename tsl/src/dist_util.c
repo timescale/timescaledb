@@ -234,6 +234,26 @@ dist_util_remote_chunk_info(PG_FUNCTION_ARGS)
 	return dist_util_remote_srf_query(fcinfo, node_name, query_str->data);
 }
 
+Datum
+dist_util_remote_compressed_chunk_info(PG_FUNCTION_ARGS)
+{
+	char *node_name;
+	StringInfo query_str;
+	Name schema_name, table_name;
+	/* Strict function */
+	if (PG_NARGS() != 3 || PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+	schema_name = PG_GETARG_NAME(1);
+	table_name = PG_GETARG_NAME(2);
+	query_str = makeStringInfo();
+	appendStringInfo(query_str,
+					 "SELECT * from _timescaledb_internal.compressed_chunk_local_stats( %s, %s );",
+					 quote_literal_cstr(NameStr(*schema_name)),
+					 quote_literal_cstr(NameStr(*table_name)));
+	node_name = NameStr(*PG_GETARG_NAME(0));
+	return dist_util_remote_srf_query(fcinfo, node_name, query_str->data);
+}
+
 void
 validate_data_node_settings(void)
 {

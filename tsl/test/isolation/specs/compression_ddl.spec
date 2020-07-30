@@ -28,7 +28,7 @@ session "S"
 step "St" {BEGIN;}
 step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT count(*) from _timescaledb_internal._hyper_1_1_chunk; }
-step "SH" { SELECT total_chunks, number_compressed_chunks from timescaledb_information.compressed_hypertable_stats where hypertable_name::text like 'ts_device_table'; }
+step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
 step "Sc" {COMMIT;}
 
 session "LC"
