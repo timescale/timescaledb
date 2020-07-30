@@ -10,6 +10,8 @@ DROP FUNCTION  indexes_relation_size;
 DROP FUNCTION _timescaledb_internal.partitioning_column_to_pretty;
 DROP FUNCTION _timescaledb_internal.range_value_to_pretty;
 -- end of do not reorder
+DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
+DROP VIEW If EXISTS timescaledb_information.compressed_hypertable_stats;
 
 -- Add new function definitions, columns and tables for distributed hypertables
 DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);

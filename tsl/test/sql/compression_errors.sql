@@ -198,8 +198,8 @@ ORDER BY ch1.id limit 1 \gset
 -- we have 1 compressed and 1 uncompressed chunk after this.
 select compress_chunk(:'CHUNK_NAME');
 
-SELECT  hypertable_name , total_chunks , number_compressed_chunks
-FROM timescaledb_information.compressed_hypertable_stats;
+SELECT  total_chunks , number_compressed_chunks
+FROM hypertable_compression_stats('table_constr');
 
 --github issue 1661
 --disable compression after enabling it on a table that has fk constraints

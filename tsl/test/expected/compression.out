@@ -88,32 +88,34 @@ where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgnam
 (1 row)
 
 \x
-select * from timescaledb_information.compressed_chunk_stats
+select * from chunk_compression_stats('foo') 
 order by chunk_name limit 2;
--[ RECORD 1 ]------------+---------------------------------------
-hypertable_name          | foo
-chunk_name               | _timescaledb_internal._hyper_1_1_chunk
-compression_status       | Uncompressed
-uncompressed_heap_bytes  | 
-uncompressed_index_bytes | 
-uncompressed_toast_bytes | 
-uncompressed_total_bytes | 
-compressed_heap_bytes    | 
-compressed_index_bytes   | 
-compressed_toast_bytes   | 
-compressed_total_bytes   | 
--[ RECORD 2 ]------------+---------------------------------------
-hypertable_name          | foo
-chunk_name               | _timescaledb_internal._hyper_1_2_chunk
-compression_status       | Compressed
-uncompressed_heap_bytes  | 8192 bytes
-uncompressed_index_bytes | 32 kB
-uncompressed_toast_bytes | 0 bytes
-uncompressed_total_bytes | 40 kB
-compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 32 kB
-compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 48 kB
+-[ RECORD 1 ]------------------+----------------------
+chunk_schema                   | _timescaledb_internal
+chunk_name                     | _hyper_1_1_chunk
+compression_status             | Uncompressed
+before_compression_table_bytes | 
+before_compression_index_bytes | 
+before_compression_toast_bytes | 
+before_compression_total_bytes | 
+after_compression_table_bytes  | 
+after_compression_index_bytes  | 
+after_compression_toast_bytes  | 
+after_compression_total_bytes  | 
+node_name                      | 
+-[ RECORD 2 ]------------------+----------------------
+chunk_schema                   | _timescaledb_internal
+chunk_name                     | _hyper_1_2_chunk
+compression_status             | Compressed
+before_compression_table_bytes | 8192
+before_compression_index_bytes | 32768
+before_compression_toast_bytes | 0
+before_compression_total_bytes | 40960
+after_compression_table_bytes  | 8192
+after_compression_index_bytes  | 32768
+after_compression_toast_bytes  | 8192
+after_compression_total_bytes  | 49152
+node_name                      | 
 
 \x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
@@ -374,60 +376,62 @@ chunk_id                 | 13
 numrows_pre_compression  | 20
 numrows_post_compression | 2
 
-select * from timescaledb_information.compressed_chunk_stats
-where hypertable_name::text like 'conditions'
-order by hypertable_name, chunk_name;
--[ RECORD 1 ]------------+----------------------------------------
-hypertable_name          | conditions
-chunk_name               | _timescaledb_internal._hyper_5_12_chunk
-compression_status       | Compressed
-uncompressed_heap_bytes  | 8192 bytes
-uncompressed_index_bytes | 16 kB
-uncompressed_toast_bytes | 8192 bytes
-uncompressed_total_bytes | 32 kB
-compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 16 kB
-compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 32 kB
--[ RECORD 2 ]------------+----------------------------------------
-hypertable_name          | conditions
-chunk_name               | _timescaledb_internal._hyper_5_13_chunk
-compression_status       | Compressed
-uncompressed_heap_bytes  | 8192 bytes
-uncompressed_index_bytes | 16 kB
-uncompressed_toast_bytes | 8192 bytes
-uncompressed_total_bytes | 32 kB
-compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 16 kB
-compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 32 kB
+select * from chunk_compression_stats('conditions')
+order by chunk_name;
+-[ RECORD 1 ]------------------+----------------------
+chunk_schema                   | _timescaledb_internal
+chunk_name                     | _hyper_5_12_chunk
+compression_status             | Compressed
+before_compression_table_bytes | 8192
+before_compression_index_bytes | 16384
+before_compression_toast_bytes | 8192
+before_compression_total_bytes | 32768
+after_compression_table_bytes  | 8192
+after_compression_index_bytes  | 16384
+after_compression_toast_bytes  | 8192
+after_compression_total_bytes  | 32768
+node_name                      | 
+-[ RECORD 2 ]------------------+----------------------
+chunk_schema                   | _timescaledb_internal
+chunk_name                     | _hyper_5_13_chunk
+compression_status             | Compressed
+before_compression_table_bytes | 8192
+before_compression_index_bytes | 16384
+before_compression_toast_bytes | 8192
+before_compression_total_bytes | 32768
+after_compression_table_bytes  | 8192
+after_compression_index_bytes  | 16384
+after_compression_toast_bytes  | 8192
+after_compression_total_bytes  | 32768
+node_name                      | 
 
-select * from timescaledb_information.compressed_hypertable_stats
-order by hypertable_name;
--[ RECORD 1 ]------------+-----------
-hypertable_name          | foo
-total_chunks             | 4
-number_compressed_chunks | 1
-uncompressed_heap_bytes  | 8192 bytes
-uncompressed_index_bytes | 32 kB
-uncompressed_toast_bytes | 0 bytes
-uncompressed_total_bytes | 40 kB
-compressed_heap_bytes    | 8192 bytes
-compressed_index_bytes   | 32 kB
-compressed_toast_bytes   | 8192 bytes
-compressed_total_bytes   | 48 kB
--[ RECORD 2 ]------------+-----------
-hypertable_name          | conditions
-total_chunks             | 2
-number_compressed_chunks | 2
-uncompressed_heap_bytes  | 16 kB
-uncompressed_index_bytes | 32 kB
-uncompressed_toast_bytes | 16 kB
-uncompressed_total_bytes | 64 kB
-compressed_heap_bytes    | 16 kB
-compressed_index_bytes   | 32 kB
-compressed_toast_bytes   | 16 kB
-compressed_total_bytes   | 64 kB
+select * from hypertable_compression_stats('foo'); 
+-[ RECORD 1 ]------------------+------
+total_chunks                   | 4
+number_compressed_chunks       | 1
+before_compression_table_bytes | 8192
+before_compression_index_bytes | 32768
+before_compression_toast_bytes | 0
+before_compression_total_bytes | 40960
+after_compression_table_bytes  | 8192
+after_compression_index_bytes  | 32768
+after_compression_toast_bytes  | 8192
+after_compression_total_bytes  | 49152
+node_name                      | 
+
+select * from hypertable_compression_stats('conditions'); 
+-[ RECORD 1 ]------------------+------
+total_chunks                   | 2
+number_compressed_chunks       | 2
+before_compression_table_bytes | 16384
+before_compression_index_bytes | 32768
+before_compression_toast_bytes | 16384
+before_compression_total_bytes | 65536
+after_compression_table_bytes  | 16384
+after_compression_index_bytes  | 32768
+after_compression_toast_bytes  | 16384
+after_compression_total_bytes  | 65536
+node_name                      | 
 
 vacuum full foo;
 vacuum full conditions;
@@ -1110,7 +1114,7 @@ SELECT create_hypertable('ht5','time');
 
 INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
 INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
--- compressed_chunk_stats should not show dropped chunks
+-- compressed chunk stats should not show dropped chunks
 ALTER TABLE ht5 SET (timescaledb.compress);
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
               compress_chunk              
@@ -1125,12 +1129,11 @@ SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
  _timescaledb_internal._hyper_20_46_chunk
 (1 row)
 
-SELECT chunk_name
-FROM timescaledb_information.compressed_chunk_stats
-WHERE hypertable_name = 'ht5'::regclass;
-                chunk_name                
-------------------------------------------
- _timescaledb_internal._hyper_20_45_chunk
+select chunk_name from chunk_compression_stats('ht5')
+order by chunk_name;
+     chunk_name     
+--------------------
+ _hyper_20_45_chunk
 (1 row)
 
 -- Test enabling compression for a table with compound foreign key 

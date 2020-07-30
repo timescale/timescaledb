@@ -29,6 +29,7 @@ WHERE oid IN (
  attach_data_node
  attach_tablespace
  block_new_chunks
+ chunk_compression_stats
  chunks_detailed_size
  compress_chunk
  create_distributed_hypertable
@@ -44,6 +45,7 @@ WHERE oid IN (
  get_telemetry_report
  histogram
  hypertable_approximate_row_count
+ hypertable_compression_stats
  hypertable_detailed_size
  hypertable_size
  indexes_relation_size
@@ -69,5 +71,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(50 rows)
+(52 rows)
 

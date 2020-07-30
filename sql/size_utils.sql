@@ -336,6 +336,7 @@ BEGIN
         END CASE;
 END;
 $BODY$;
+---------- end of detailed size functions ------
 
 -- Get sizes of indexes on a hypertable
 --
@@ -462,3 +463,222 @@ BEGIN
         ORDER BY h.schema_name, h.table_name;
 END
 $BODY$;
+
+-------- stats related to compression ------
+CREATE OR REPLACE VIEW _timescaledb_internal.compressed_chunk_stats AS
+SELECT
+    srcht.schema_name,
+    srcht.table_name,
+    srcch.schema_name AS chunk_schema,
+    srcch.table_name AS chunk_name,
+    CASE WHEN srcch.compressed_chunk_id IS NULL THEN
+        'Uncompressed'::text
+    ELSE
+        'Compressed'::text
+    END AS compression_status,
+    map.uncompressed_heap_size,
+    map.uncompressed_index_size,
+    map.uncompressed_toast_size,
+    map.uncompressed_heap_size + map.uncompressed_toast_size + map.uncompressed_index_size AS uncompressed_total_size,
+    map.compressed_heap_size,
+    map.compressed_index_size,
+    map.compressed_toast_size,
+    map.compressed_heap_size + map.compressed_toast_size + map.compressed_index_size AS compressed_total_size
+FROM
+    _timescaledb_catalog.hypertable AS srcht
+    JOIN _timescaledb_catalog.chunk AS srcch ON srcht.id = srcch.hypertable_id
+        AND srcht.compressed_hypertable_id IS NOT NULL
+        AND srcch.dropped = FALSE
+    LEFT JOIN _timescaledb_catalog.compression_chunk_size map ON srcch.id = map.chunk_id;
+
+GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_compressed_chunk_stats (node_name name, schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint
+    )
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_local_stats (schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint)
+    LANGUAGE PLPGSQL
+    STABLE STRICT
+    AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ch.chunk_schema,
+        ch.chunk_name,
+        ch.compression_status,
+        ch.uncompressed_heap_size,
+        ch.uncompressed_index_size,
+        ch.uncompressed_toast_size,
+        ch.uncompressed_total_size,
+        ch.compressed_heap_size,
+        ch.compressed_index_size,
+        ch.compressed_toast_size,
+        ch.compressed_total_size
+    FROM
+        _timescaledb_internal.compressed_chunk_stats ch
+    WHERE
+        ch.schema_name = schema_name_in
+        AND ch.table_name = table_name_in;
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_remote_stats (schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE PLPGSQL
+    STABLE STRICT
+    AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ch.*,
+        srv.node_name
+    FROM (
+        SELECT
+            s.node_name,
+            _timescaledb_internal.ping_data_node (s.node_name) AS node_up
+        FROM
+            _timescaledb_catalog.hypertable AS ht,
+            _timescaledb_catalog.hypertable_data_node AS s
+        WHERE
+            ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id) AS srv
+    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_compressed_chunk_stats (
+    CASE WHEN srv.node_up THEN
+        srv.node_name
+    ELSE
+        NULL
+    END, schema_name_in, table_name_in) ch ON TRUE;
+END;
+$BODY$;
+
+-- Get per chunk compression statistics for a hypertable that has
+-- compression enabled
+CREATE OR REPLACE FUNCTION chunk_compression_stats (main_table REGCLASS)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE PLPGSQL
+    STABLE STRICT
+    AS $BODY$
+DECLARE
+    table_name name;
+    schema_name name;
+    is_distributed bool;
+BEGIN
+    SELECT
+        relname,
+        nspname,
+        replication_factor > 0 INTO STRICT table_name,
+        schema_name,
+        is_distributed
+    FROM
+        pg_class c
+        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+        INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname
+                AND ht.table_name = c.relname)
+    WHERE
+        c.OID = main_table;
+    CASE WHEN is_distributed THEN
+        RETURN QUERY
+        SELECT
+            *
+        FROM
+            _timescaledb_internal.compressed_chunk_remote_stats (schema_name, table_name);
+        ELSE
+            RETURN QUERY
+            SELECT
+                *,
+                NULL::name
+            FROM
+                _timescaledb_internal.compressed_chunk_local_stats (schema_name, table_name);
+    END CASE;
+END;
+$BODY$;
+
+-- Get compression statistics for a hypertable that has
+-- compression enabled
+CREATE OR REPLACE FUNCTION hypertable_compression_stats (main_table REGCLASS)
+    RETURNS TABLE (
+        total_chunks bigint,
+        number_compressed_chunks bigint,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE PLPGSQL
+    STABLE STRICT
+    AS $BODY$
+BEGIN
+    RETURN QUERY
+    SELECT
+        count(*) AS total_chunks,
+        count(*) FILTER (WHERE ch.compression_status = 'Compressed') AS number_compressed_chunks,
+        sum(ch.before_compression_table_bytes)::bigint AS before_compression_table_bytes,
+        sum(ch.before_compression_index_bytes)::bigint AS before_compression_index_bytes,
+        sum(ch.before_compression_toast_bytes)::bigint AS before_compression_toast_bytes,
+        sum(ch.before_compression_total_bytes)::bigint AS before_compression_total_bytes,
+        sum(ch.after_compression_table_bytes)::bigint AS after_compression_table_bytes,
+        sum(ch.after_compression_index_bytes)::bigint AS after_compression_index_bytes,
+        sum(ch.after_compression_toast_bytes)::bigint AS after_compression_toast_bytes,
+        sum(ch.after_compression_total_bytes)::bigint AS after_compression_total_bytes,
+        ch.node_name
+    FROM
+        chunk_compression_stats (main_table) ch
+    GROUP BY
+        ch.node_name;
+END;
+$BODY$;
+
