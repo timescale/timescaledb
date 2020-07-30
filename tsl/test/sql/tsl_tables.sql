@@ -74,14 +74,12 @@ select add_retention_policy('test_table', INTERVAL '3 month', true);
 select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => true);
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true, cascade_to_materializations => true);
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 \set ON_ERROR_STOP 0
 select add_retention_policy('test_table', INTERVAL '1 year');
 select add_retention_policy('test_table', INTERVAL '3 days');
-select add_retention_policy('test_table', INTERVAL '3 days', cascade_to_materializations => true);
 \set ON_ERROR_STOP 1
 
 select * from _timescaledb_config.bgw_policy_drop_chunks;
@@ -119,7 +117,6 @@ select add_retention_policy('test_table_int', 1);
 select * from _timescaledb_config.bgw_policy_drop_chunks;
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table_int', 2, true);
-select add_retention_policy('test_table_int', 1, true, true);
 
 select remove_retention_policy('test_table_int');
 select * from _timescaledb_config.bgw_policy_drop_chunks;

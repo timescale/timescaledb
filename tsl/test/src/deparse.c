@@ -33,7 +33,7 @@ ts_test_deparse_drop_chunks(PG_FUNCTION_ARGS)
 {
 	FmgrInfo flinfo;
 	FunctionCallInfo fcinfo2 = palloc(SizeForFunctionCallInfo(fcinfo->nargs));
-	Oid argtypes[] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID, BOOLOID };
+	Oid argtypes[] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID };
 	Oid funcid = ts_get_function_oid("drop_chunks",
 									 ts_extension_schema_name(),
 									 sizeof(argtypes) / sizeof(*argtypes),

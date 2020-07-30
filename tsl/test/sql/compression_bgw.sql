@@ -140,8 +140,7 @@ ALTER VIEW conditions_summary SET (
 );
 
 SELECT COUNT(*) AS dropped_chunks_count
-  FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00',
-                   cascade_to_materializations => FALSE);
+  FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00');
 
 -- We need to have some chunks that are marked as dropped, otherwise
 -- we will not have a problem below.

@@ -11,8 +11,7 @@ CREATE OR REPLACE FUNCTION tsl_test_deparse_drop_chunks(
     table_name REGCLASS,
     older_than "any" = NULL,
     newer_than "any" = NULL,
-    verbose BOOLEAN = FALSE,
-    cascade_to_materializations BOOLEAN = NULL) RETURNS TEXT
+    verbose BOOLEAN = FALSE) RETURNS TEXT
 AS :TSL_MODULE_PATHNAME, 'ts_test_deparse_drop_chunks' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION tsl_test_deparse_scalar_func(

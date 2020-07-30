@@ -32,8 +32,7 @@ ON CONFLICT (id) DO NOTHING;
 CREATE OR REPLACE FUNCTION add_retention_policy(
        hypertable REGCLASS,
        retention_window "any",
-       if_not_exists BOOL = false,
-       cascade_to_materializations BOOL = false
+       if_not_exists BOOL = false
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_add_retention_policy'
 LANGUAGE C VOLATILE STRICT;

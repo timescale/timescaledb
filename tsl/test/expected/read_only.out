@@ -38,8 +38,6 @@ ERROR:  cannot execute set_adaptive_chunking() in a read-only transaction
 --
 SELECT * FROM drop_chunks('test_table', older_than => 10);
 ERROR:  cannot execute drop_chunks() in a read-only transaction
-SELECT * FROM drop_chunks('test_table', older_than => 10, cascade_to_materializations => true);
-ERROR:  cannot execute drop_chunks() in a read-only transaction
 -- add_dimension()
 --
 SELECT * FROM add_dimension('test_table', 'device', chunk_time_interval => 100);

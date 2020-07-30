@@ -48,8 +48,8 @@ SELECT * FROM _timescaledb_config.bgw_job;
 (0 rows)
 
 SELECT * FROM timescaledb_information.drop_chunks_policies;
- hypertable | older_than | job_id | schedule_interval | max_runtime | max_retries | retry_period | cascade_to_materializations 
-------------+------------+--------+-------------------+-------------+-------------+--------------+-----------------------------
+ hypertable | older_than | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+------------+------------+--------+-------------------+-------------+-------------+--------------
 (0 rows)
 
 SELECT * FROM timescaledb_information.reorder_policies;
@@ -420,9 +420,9 @@ SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 
 (1 row)
 
 select * from _timescaledb_config.bgw_policy_drop_chunks where job_id=:drop_chunks_job_id;
- job_id | hypertable_id |   older_than    | cascade_to_materializations 
---------+---------------+-----------------+-----------------------------
-   1001 |             2 | (t,"@ 4 mons",) | f
+ job_id | hypertable_id |   older_than    
+--------+---------------+-----------------
+   1001 |             2 | (t,"@ 4 mons",)
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
@@ -580,9 +580,9 @@ SELECT show_chunks('test_drop_chunks_table');
 
 --test that views work
 SELECT * FROM timescaledb_information.drop_chunks_policies;
-       hypertable       |   older_than    | job_id | schedule_interval | max_runtime | max_retries | retry_period | cascade_to_materializations 
-------------------------+-----------------+--------+-------------------+-------------+-------------+--------------+-----------------------------
- test_drop_chunks_table | (t,"@ 4 mons",) |   1001 | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | f
+       hypertable       |   older_than    | job_id | schedule_interval | max_runtime | max_retries | retry_period 
+------------------------+-----------------+--------+-------------------+-------------+-------------+--------------
+ test_drop_chunks_table | (t,"@ 4 mons",) |   1001 | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins
 (1 row)
 
 SELECT * FROM timescaledb_information.policy_stats;

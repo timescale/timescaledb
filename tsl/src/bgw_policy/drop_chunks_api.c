@@ -127,10 +127,6 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 	Oid ht_oid = PG_GETARG_OID(0);
 	Datum older_than_datum = PG_GETARG_DATUM(1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
-	CascadeToMaterializationOption cascade_to_materializations =
-		(PG_ARGISNULL(3) ? CASCADE_TO_MATERIALIZATION_UNKNOWN :
-						   (PG_GETARG_BOOL(3) ? CASCADE_TO_MATERIALIZATION_TRUE :
-												CASCADE_TO_MATERIALIZATION_FALSE));
 	Oid older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	BgwPolicyDropChunks policy;
 	Hypertable *hypertable;
@@ -163,8 +159,7 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 							get_rel_name(ht_oid))));
 		}
 
-		if (ts_interval_equal(&existing->older_than, older_than) &&
-			existing->cascade_to_materializations == cascade_to_materializations)
+		if (ts_interval_equal(&existing->older_than, older_than))
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
@@ -210,7 +205,6 @@ drop_chunks_add_policy(PG_FUNCTION_ARGS)
 		.job_id = job_id,
 		.hypertable_id = ts_hypertable_relid_to_id(mapped_oid),
 		.older_than = *older_than,
-		.cascade_to_materializations = cascade_to_materializations,
 	};
 
 	/* Now, insert a new row in the drop_chunks args table */

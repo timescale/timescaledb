@@ -832,14 +832,10 @@ typedef enum Anum_bgw_policy_drop_chunks
 	Anum_bgw_policy_drop_chunks_job_id = 1,
 	Anum_bgw_policy_drop_chunks_hypertable_id,
 	Anum_bgw_policy_drop_chunks_older_than,
-	Anum_bgw_policy_drop_chunks_cascade_to_materializations,
 	_Anum_bgw_policy_drop_chunks_max,
 } Anum_bgw_policy_drop_chunks;
 
 #define Natts_bgw_policy_drop_chunks (_Anum_bgw_policy_drop_chunks_max - 1)
-
-/* Do NOT define FormData here because cascade_to_materializations as bool is semantically wrong
- * this is a tri-state variable. NULL matters here. */
 
 enum
 {

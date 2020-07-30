@@ -227,8 +227,7 @@ ALTER VIEW conditions_summary SET (
       timescaledb.ignore_invalidation_older_than = '15 days'
 );
 SELECT COUNT(*) AS dropped_chunks_count
-  FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00',
-                   cascade_to_materializations => FALSE);
+  FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00');
 NOTICE:  making sure all invalidations for public.conditions_summary have been processed prior to dropping chunks
  dropped_chunks_count 
 ----------------------

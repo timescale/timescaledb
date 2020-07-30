@@ -49,7 +49,6 @@ ts_continuous_agg_drop_chunks_by_chunk_id(int32 raw_hypertable_id, Chunk **chunk
 								newer_than_datum,
 								older_than_type,
 								newer_than_type,
-								CASCADE_TO_MATERIALIZATION_FALSE,
 								log_level,
 								NULL);
 

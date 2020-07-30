@@ -50,15 +50,6 @@ bgw_policy_drop_chunks_tuple_found(TupleInfo *ti, void *const data)
 	(*policy)->older_than = *ts_interval_from_tuple(
 		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)]);
 
-	if (nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)])
-		(*policy)->cascade_to_materializations = CASCADE_TO_MATERIALIZATION_UNKNOWN;
-	else
-		(*policy)->cascade_to_materializations =
-			(DatumGetBool(values[AttrNumberGetAttrOffset(
-				 Anum_bgw_policy_drop_chunks_cascade_to_materializations)]) ?
-				 CASCADE_TO_MATERIALIZATION_TRUE :
-				 CASCADE_TO_MATERIALIZATION_FALSE);
-
 	if (should_free)
 		heap_freetuple(tuple);
 
@@ -159,19 +150,6 @@ ts_bgw_policy_drop_chunks_insert_with_relation(Relation rel, BgwPolicyDropChunks
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_older_than)] =
 		HeapTupleGetDatum(ht_older_than);
-
-	if (policy->cascade_to_materializations == CASCADE_TO_MATERIALIZATION_UNKNOWN)
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
-			true;
-	}
-	else
-	{
-		values[AttrNumberGetAttrOffset(Anum_bgw_policy_drop_chunks_cascade_to_materializations)] =
-			BoolGetDatum((policy->cascade_to_materializations == CASCADE_TO_MATERIALIZATION_TRUE ?
-							  true :
-							  false));
-	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, tupdesc, values, nulls);

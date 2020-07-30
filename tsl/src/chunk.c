@@ -190,8 +190,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
  * Returns the number of dropped chunks.
  */
 int
-chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type,
-						 bool cascade_to_materializations)
+chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 {
 	EState *estate;
 	ExprContext *econtext;
@@ -218,7 +217,6 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type,
 				  get_typbyval(older_than_type)),
 		makeNullConst(INT8OID, -1, InvalidOid),
 		castNode(Const, makeBoolConst(false, true)),
-		castNode(Const, makeBoolConst(cascade_to_materializations, false))
 	};
 
 	char *const schema_name = ts_extension_schema_name();

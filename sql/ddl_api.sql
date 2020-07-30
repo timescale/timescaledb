@@ -95,8 +95,7 @@ CREATE OR REPLACE FUNCTION drop_chunks(
     hypertable_or_cagg  REGCLASS,
     older_than "any" = NULL,
     newer_than "any" = NULL,
-    verbose BOOLEAN = FALSE,
-    cascade_to_materializations BOOLEAN = NULL
+    verbose BOOLEAN = FALSE
 ) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C VOLATILE PARALLEL UNSAFE;
 

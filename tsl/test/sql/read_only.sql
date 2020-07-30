@@ -40,7 +40,6 @@ SELECT * FROM set_adaptive_chunking('test_table', '2MB');
 -- drop_chunks()
 --
 SELECT * FROM drop_chunks('test_table', older_than => 10);
-SELECT * FROM drop_chunks('test_table', older_than => 10, cascade_to_materializations => true);
 
 -- add_dimension()
 --

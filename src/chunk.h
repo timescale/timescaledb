@@ -101,13 +101,6 @@ typedef struct ChunkScanEntry
 	ChunkStub *stub;
 } ChunkScanEntry;
 
-typedef enum CascadeToMaterializationOption
-{
-	CASCADE_TO_MATERIALIZATION_UNKNOWN = -1,
-	CASCADE_TO_MATERIALIZATION_FALSE = 0,
-	CASCADE_TO_MATERIALIZATION_TRUE = 1
-} CascadeToMaterializationOption;
-
 extern Chunk *ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema,
 										 const char *prefix);
 
@@ -153,11 +146,10 @@ extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compre
 extern TSDLLEXPORT void ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(Chunk *chunk, DropBehavior behavior,
 														   int32 log_level);
-extern TSDLLEXPORT List *
-ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than_datum,
-						Oid older_than_type, Oid newer_than_type,
-						CascadeToMaterializationOption cascades_to_materializations,
-						int32 log_level, List **affected_data_nodes);
+extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum,
+												 Datum newer_than_datum, Oid older_than_type,
+												 Oid newer_than_type, int32 log_level,
+												 List **affected_data_nodes);
 extern TSDLLEXPORT Chunk *
 ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
 								  Oid older_than_type, Oid newer_than_type, char *caller_name,

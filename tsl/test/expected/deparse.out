@@ -11,27 +11,21 @@
 
 -- test drop_chunks function deparsing
 SELECT * FROM tsl_test_deparse_drop_chunks('myschema.table10', '2019-01-01'::timestamptz, verbose => true);
-                                                                                              tsl_test_deparse_drop_chunks                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'myschema.table10',older_than => 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone,newer_than => NULL,verbose => 't',cascade_to_materializations => NULL)
-(1 row)
-
-SELECT * FROM tsl_test_deparse_drop_chunks('myschema.table10', interval '1 day', cascade_to_materializations => true);
-                                                                           tsl_test_deparse_drop_chunks                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'myschema.table10',older_than => '@ 1 day'::interval,newer_than => NULL,verbose => 'f',cascade_to_materializations => 't')
+                                                                            tsl_test_deparse_drop_chunks                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'myschema.table10',older_than => 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone,newer_than => NULL,verbose => 't')
 (1 row)
 
 SELECT * FROM tsl_test_deparse_drop_chunks('table1', newer_than => 12345);
-                                                                         tsl_test_deparse_drop_chunks                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'public.table1',older_than => NULL,newer_than => '12345'::integer,verbose => 'f',cascade_to_materializations => NULL)
+                                                       tsl_test_deparse_drop_chunks                                                       
+------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'public.table1',older_than => NULL,newer_than => '12345'::integer,verbose => 'f')
 (1 row)
 
 SELECT * FROM tsl_test_deparse_drop_chunks('table1', older_than => interval '2 years', newer_than => '2015-01-01'::timestamp);
-                                                                                                     tsl_test_deparse_drop_chunks                                                                                                     
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'public.table1',older_than => '@ 2 years'::interval,newer_than => 'Thu Jan 01 00:00:00 2015'::timestamp without time zone,verbose => 'f',cascade_to_materializations => NULL)
+                                                                                   tsl_test_deparse_drop_chunks                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT * FROM public.drop_chunks(hypertable_or_cagg => 'public.table1',older_than => '@ 2 years'::interval,newer_than => 'Thu Jan 01 00:00:00 2015'::timestamp without time zone,verbose => 'f')
 (1 row)
 
 -- test generalized deparsing function
