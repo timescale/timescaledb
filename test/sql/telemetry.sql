@@ -187,3 +187,16 @@ CREATE TABLE device_readings (
 SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
 
 SELECT json_object_field(get_telemetry_report()::json,'num_hypertables');
+
+set datestyle to iso;
+-- check that installed_time formatting in telemetry report does not depend on local date settings
+SELECT json_object_field_text(get_telemetry_report()::json,'installed_time') as installed_time
+\gset
+set datestyle to sql;
+SELECT json_object_field_text(get_telemetry_report()::json,'installed_time') as installed_time2
+\gset
+
+SELECT :'installed_time' = :'installed_time2' AS equal, length(:'installed_time'), length(:'installed_time2');
+
+RESET datestyle;
+

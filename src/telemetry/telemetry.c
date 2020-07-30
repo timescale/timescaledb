@@ -295,6 +295,15 @@ get_pgversion_string()
 	return buf->data;
 }
 
+#define ISO8601_FORMAT "YYYY-MM-DD\"T\"HH24:MI:SSOF"
+
+static char *
+format_iso8601(Datum value)
+{
+	return TextDatumGetCString(
+		DirectFunctionCall2(timestamptz_to_char, value, CStringGetTextDatum(ISO8601_FORMAT)));
+}
+
 static StringInfo
 build_version_body(void)
 {
@@ -319,9 +328,7 @@ build_version_body(void)
 						 DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_exported_uuid())));
 	ts_jsonb_add_str(parse_state,
 					 REQ_INSTALL_TIME,
-					 DatumGetCString(
-						 DirectFunctionCall1(timestamptz_out,
-											 ts_telemetry_metadata_get_install_timestamp())));
+					 format_iso8601(ts_telemetry_metadata_get_install_timestamp()));
 
 	ts_jsonb_add_str(parse_state, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
