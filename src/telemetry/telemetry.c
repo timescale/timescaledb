@@ -305,61 +305,61 @@ build_version_body(void)
 	Jsonb *jb;
 	StringInfo jtext;
 	VersionOSInfo osinfo;
-	JsonbParseState *parseState = NULL;
+	JsonbParseState *parse_state = NULL;
 	TotalSizes sizes = ts_compression_chunk_size_totals();
 
-	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
-	ts_jsonb_add_str(parseState,
+	ts_jsonb_add_str(parse_state,
 					 REQ_DB_UUID,
 					 DatumGetCString(
 						 DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_uuid())));
-	ts_jsonb_add_str(parseState,
+	ts_jsonb_add_str(parse_state,
 					 REQ_EXPORTED_DB_UUID,
 					 DatumGetCString(
 						 DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_exported_uuid())));
-	ts_jsonb_add_str(parseState,
+	ts_jsonb_add_str(parse_state,
 					 REQ_INSTALL_TIME,
 					 DatumGetCString(
 						 DirectFunctionCall1(timestamptz_out,
 											 ts_telemetry_metadata_get_install_timestamp())));
 
-	ts_jsonb_add_str(parseState, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
+	ts_jsonb_add_str(parse_state, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
 
 	if (ts_version_get_os_info(&osinfo))
 	{
-		ts_jsonb_add_str(parseState, REQ_OS, osinfo.sysname);
-		ts_jsonb_add_str(parseState, REQ_OS_VERSION, osinfo.version);
-		ts_jsonb_add_str(parseState, REQ_OS_RELEASE, osinfo.release);
+		ts_jsonb_add_str(parse_state, REQ_OS, osinfo.sysname);
+		ts_jsonb_add_str(parse_state, REQ_OS_VERSION, osinfo.version);
+		ts_jsonb_add_str(parse_state, REQ_OS_RELEASE, osinfo.release);
 		if (osinfo.has_pretty_version)
-			ts_jsonb_add_str(parseState, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
+			ts_jsonb_add_str(parse_state, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
 	}
 	else
-		ts_jsonb_add_str(parseState, REQ_OS, "Unknown");
+		ts_jsonb_add_str(parse_state, REQ_OS, "Unknown");
 
-	ts_jsonb_add_str(parseState, REQ_PS_VERSION, get_pgversion_string());
-	ts_jsonb_add_str(parseState, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
-	ts_jsonb_add_str(parseState, REQ_BUILD_OS, BUILD_OS_NAME);
-	ts_jsonb_add_str(parseState, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
-	ts_jsonb_add_str(parseState, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
-	ts_jsonb_add_str(parseState, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
-	ts_jsonb_add_str(parseState, REQ_DATA_VOLUME, get_database_size());
-	ts_jsonb_add_str(parseState, REQ_NUM_HYPERTABLES, get_num_hypertables());
-	ts_jsonb_add_str(parseState, REQ_NUM_COMPRESSED_HYPERTABLES, get_num_compressed_hypertables());
-	ts_jsonb_add_str(parseState, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
-	ts_jsonb_add_str(parseState, REQ_NUM_REORDER_POLICIES, get_num_reorder_policies());
-	ts_jsonb_add_str(parseState, REQ_NUM_DROP_CHUNKS_POLICIES, get_num_drop_chunks_policies());
+	ts_jsonb_add_str(parse_state, REQ_PS_VERSION, get_pgversion_string());
+	ts_jsonb_add_str(parse_state, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
+	ts_jsonb_add_str(parse_state, REQ_BUILD_OS, BUILD_OS_NAME);
+	ts_jsonb_add_str(parse_state, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
+	ts_jsonb_add_str(parse_state, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
+	ts_jsonb_add_str(parse_state, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
+	ts_jsonb_add_str(parse_state, REQ_DATA_VOLUME, get_database_size());
+	ts_jsonb_add_str(parse_state, REQ_NUM_HYPERTABLES, get_num_hypertables());
+	ts_jsonb_add_str(parse_state, REQ_NUM_COMPRESSED_HYPERTABLES, get_num_compressed_hypertables());
+	ts_jsonb_add_str(parse_state, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
+	ts_jsonb_add_str(parse_state, REQ_NUM_REORDER_POLICIES, get_num_reorder_policies());
+	ts_jsonb_add_str(parse_state, REQ_NUM_DROP_CHUNKS_POLICIES, get_num_drop_chunks_policies());
 
-	ts_jsonb_add_str(parseState, REQ_COMPRESSED_HEAP_SIZE, get_size(sizes.compressed_heap_size));
-	ts_jsonb_add_str(parseState, REQ_COMPRESSED_INDEX_SIZE, get_size(sizes.compressed_index_size));
-	ts_jsonb_add_str(parseState, REQ_COMPRESSED_TOAST_SIZE, get_size(sizes.compressed_toast_size));
-	ts_jsonb_add_str(parseState,
+	ts_jsonb_add_str(parse_state, REQ_COMPRESSED_HEAP_SIZE, get_size(sizes.compressed_heap_size));
+	ts_jsonb_add_str(parse_state, REQ_COMPRESSED_INDEX_SIZE, get_size(sizes.compressed_index_size));
+	ts_jsonb_add_str(parse_state, REQ_COMPRESSED_TOAST_SIZE, get_size(sizes.compressed_toast_size));
+	ts_jsonb_add_str(parse_state,
 					 REQ_UNCOMPRESSED_HEAP_SIZE,
 					 get_size(sizes.uncompressed_heap_size));
-	ts_jsonb_add_str(parseState,
+	ts_jsonb_add_str(parse_state,
 					 REQ_UNCOMPRESSED_INDEX_SIZE,
 					 get_size(sizes.uncompressed_index_size));
-	ts_jsonb_add_str(parseState,
+	ts_jsonb_add_str(parse_state,
 					 REQ_UNCOMPRESSED_TOAST_SIZE,
 					 get_size(sizes.uncompressed_toast_size));
 
@@ -367,8 +367,8 @@ build_version_body(void)
 	ext_key.type = jbvString;
 	ext_key.val.string.val = REQ_RELATED_EXTENSIONS;
 	ext_key.val.string.len = strlen(REQ_RELATED_EXTENSIONS);
-	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
-	add_related_extensions(parseState);
+	pushJsonbValue(&parse_state, WJB_KEY, &ext_key);
+	add_related_extensions(parse_state);
 
 	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
 	{
@@ -376,23 +376,23 @@ build_version_body(void)
 		license_info_key.type = jbvString;
 		license_info_key.val.string.val = REQ_LICENSE_INFO;
 		license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
-		pushJsonbValue(&parseState, WJB_KEY, &license_info_key);
-		pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
-		ts_jsonb_add_str(parseState, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
-		pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+		pushJsonbValue(&parse_state, WJB_KEY, &license_info_key);
+		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
+		pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	}
 	else
 	{
 		/* add license and distributed database fields */
-		ts_cm_functions->add_tsl_telemetry_info(&parseState);
+		ts_cm_functions->add_tsl_telemetry_info(&parse_state);
 	}
 
 	/* add tuned info, which is optional */
 	if (ts_last_tune_time != NULL)
-		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_TIME, ts_last_tune_time);
+		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, ts_last_tune_time);
 
 	if (ts_last_tune_version != NULL)
-		ts_jsonb_add_str(parseState, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
+		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
 
 	/* add cloud to telemetry when set */
 	if (ts_telemetry_cloud != NULL)
@@ -400,24 +400,24 @@ build_version_body(void)
 		ext_key.type = jbvString;
 		ext_key.val.string.val = REQ_INSTANCE_METADATA;
 		ext_key.val.string.len = strlen(REQ_INSTANCE_METADATA);
-		pushJsonbValue(&parseState, WJB_KEY, &ext_key);
+		pushJsonbValue(&parse_state, WJB_KEY, &ext_key);
 
-		pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
-		ts_jsonb_add_str(parseState, REQ_TS_TELEMETRY_CLOUD, ts_telemetry_cloud);
-		pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+		ts_jsonb_add_str(parse_state, REQ_TS_TELEMETRY_CLOUD, ts_telemetry_cloud);
+		pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	}
 
 	/* Add additional content from metadata */
 	ext_key.type = jbvString;
 	ext_key.val.string.val = REQ_METADATA;
 	ext_key.val.string.len = strlen(REQ_METADATA);
-	pushJsonbValue(&parseState, WJB_KEY, &ext_key);
-	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
-	ts_telemetry_metadata_add_values(parseState);
-	pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+	pushJsonbValue(&parse_state, WJB_KEY, &ext_key);
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_telemetry_metadata_add_values(parse_state);
+	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* end of telemetry object */
-	result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+	result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	jb = JsonbValueToJsonb(result);
 	jtext = makeStringInfo();
 	JsonbToCString(jtext, &jb->root, VARSIZE(jb));

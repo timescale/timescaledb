@@ -9,6 +9,6 @@
 #include <postgres.h>
 #include <utils/jsonb.h>
 
-void tsl_telemetry_add_info(JsonbParseState **parseState);
+void tsl_telemetry_add_info(JsonbParseState **parse_state);
 
 #endif /* TIMESCALEDB_TSL_TELEMETRY_H */

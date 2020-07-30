@@ -205,12 +205,12 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 		schedule_interval.month = 0;
 	}
 
-	JsonbParseState *parseState = NULL;
+	JsonbParseState *parse_state = NULL;
 
-	pushJsonbValue(&parseState, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parseState, CONFIG_KEY_HYPERTABLE_ID, ht->fd.id);
-	ts_jsonb_add_str(parseState, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
-	JsonbValue *result = pushJsonbValue(&parseState, WJB_END_OBJECT, NULL);
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, ht->fd.id);
+	ts_jsonb_add_str(parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
+	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
