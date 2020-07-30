@@ -65,7 +65,7 @@ serialize_test_parameters(int32 ttl)
 {
 	JsonbValue *result;
 	JsonbValue ttl_value;
-	JsonbParseState *parseState = NULL;
+	JsonbParseState *parse_state = NULL;
 	Jsonb *jb;
 	StringInfo jtext = makeStringInfo();
 	JsonbValue user_oid;
@@ -77,12 +77,12 @@ serialize_test_parameters(int32 ttl)
 	ttl_value.type = jbvNumeric;
 	ttl_value.val.numeric = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(ttl)));
 
-	result = pushJsonbValue(&parseState, WJB_BEGIN_ARRAY, NULL);
+	result = pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
 
-	result = pushJsonbValue(&parseState, WJB_ELEM, &ttl_value);
-	result = pushJsonbValue(&parseState, WJB_ELEM, &user_oid);
+	result = pushJsonbValue(&parse_state, WJB_ELEM, &ttl_value);
+	result = pushJsonbValue(&parse_state, WJB_ELEM, &user_oid);
 
-	result = pushJsonbValue(&parseState, WJB_END_ARRAY, NULL);
+	result = pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL);
 
 	jb = JsonbValueToJsonb(result);
 	(void) JsonbToCString(jtext, &jb->root, VARSIZE(jb));

@@ -161,7 +161,7 @@ license_end_time_default_fn(void)
 }
 
 static void
-add_tsl_telemetry_info_default(JsonbParseState **parseState)
+add_tsl_telemetry_info_default(JsonbParseState **parse_state)
 {
 	error_no_default_fn_community();
 }
