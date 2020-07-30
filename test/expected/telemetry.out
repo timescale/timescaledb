@@ -492,3 +492,17 @@ SELECT json_object_field(get_telemetry_report()::json,'num_hypertables');
  "1"
 (1 row)
 
+set datestyle to iso;
+-- check that installed_time formatting in telemetry report does not depend on local date settings
+SELECT json_object_field_text(get_telemetry_report()::json,'installed_time') as installed_time
+\gset
+set datestyle to sql;
+SELECT json_object_field_text(get_telemetry_report()::json,'installed_time') as installed_time2
+\gset
+SELECT :'installed_time' = :'installed_time2' AS equal, length(:'installed_time'), length(:'installed_time2');
+ equal | length | length 
+-------+--------+--------
+ t     |     22 |     22
+(1 row)
+
+RESET datestyle;
