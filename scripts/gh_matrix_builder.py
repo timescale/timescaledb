@@ -7,8 +7,8 @@
 
 # Since we want to run additional test configurations when triggered
 # by a push to prerelease_test or by cron but github actions don't
-# allow a dynamic matrix via yaml configuration we generate the matrix
-# with a python script. While we could always have the full matrix
+# allow a dynamic matrix via yaml configuration, we generate the matrix
+# with this python script. While we could always have the full matrix
 # and have if checks on every step that would make the actual checks
 # harder to browse because the workflow will have lots of entries and
 # only by navigating into the individual jobs would it be visible
@@ -25,6 +25,9 @@ PG11_LATEST = "11.8"
 PG12_EARLIEST = "12.0"
 PG12_LATEST = "12.3"
 
+PG_DEBUG = "--enable-debug --enable-cassert"
+PG_MAC_PATH = "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include"
+
 m = {"include": [],}
 
 # helper functions to generate matrix entries
@@ -37,7 +40,7 @@ def build_debug_config(overrides):
   base_config = dict({
     "name": "Debug",
     "build_type": "Debug",
-    "pg_build_args": "--enable-debug --enable-cassert",
+    "pg_build_args": PG_DEBUG,
     "tsdb_build_args": "-DCODECOVERAGE=ON",
     "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
@@ -76,24 +79,27 @@ def build_apache_config(overrides):
   base_config.update(overrides)
   return base_config
 
+def macos_config(overrides):
+  base_config = dict({
+    "pg": PG12_LATEST,
+    "os": "macos-10.15",
+    "cc": "clang",
+    "cxx": "clang++",
+    "clang": "clang",
+    "pg_build_args": PG_MAC_PATH,
+    "tsdb_build_args": "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
+    "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
+    "coverage": False,
+    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection'",
+  })
+  base_config.update(overrides)
+  return base_config
+
 # always test debug build on latest pg11 and latest pg12
 m["include"].append(build_debug_config({"pg":PG11_LATEST}))
 m["include"].append(build_debug_config({"pg":PG12_LATEST}))
 
-macos_config = {
-  "pg": PG12_LATEST,
-  "os": "macos-10.15",
-  "cc": "clang",
-  "cxx": "clang++",
-  "clang": "clang",
-  "pg_build_args": "--enable-debug --enable-cassert --with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
-  "tsdb_build_args": "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
-  "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
-  "coverage": False,
-  "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection'",
-}
-
-m["include"].append(build_debug_config(macos_config))
+m["include"].append(build_release_config(macos_config({"pg_build_args":PG_MAC_PATH})))
 
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
@@ -114,6 +120,9 @@ if event_type != "pull_request":
 
   # add debug test for first supported PG12 version
   m["include"].append(build_debug_config({"pg":PG12_EARLIEST}))
+
+  # add debug test for MacOS
+  m["include"].append(build_debug_config(macos_config({"pg_build_args":PG_DEBUG+" "+PG_MAC_PATH})))
 
   # add release test for latest pg11 and latest pg12
   m["include"].append(build_release_config({"pg":PG11_LATEST}))
