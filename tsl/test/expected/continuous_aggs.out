@@ -50,9 +50,9 @@ from foo
 group by time_bucket(1, a), a;
 NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
 SELECT * FROM _timescaledb_config.bgw_job;
-  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
-------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
- 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
+  id  |          application_name          |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
+------+------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
+ 1000 | Continuous Aggregate Policy [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
 (1 row)
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",

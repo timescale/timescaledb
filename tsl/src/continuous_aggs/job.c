@@ -75,7 +75,7 @@ ts_continuous_agg_job_add(int32 mat_table_id, int32 raw_table_id, int64 bucket_w
 	int32 job_id;
 
 	namestrcpy(&job_type, "continuous_aggregate");
-	namestrcpy(&application_name, "Continuous Aggregate Background Job");
+	namestrcpy(&application_name, "Continuous Aggregate Policy");
 
 	Interval *refresh_interval =
 		continuous_agg_job_get_default_schedule_interval(raw_table_id, bucket_width);

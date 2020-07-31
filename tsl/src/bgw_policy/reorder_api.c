@@ -185,7 +185,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	}
 
 	/* Next, insert a new job into jobs table */
-	namestrcpy(&application_name, "Reorder Background Job");
+	namestrcpy(&application_name, "Reorder Policy");
 	namestrcpy(&reorder_name, "reorder");
 	namestrcpy(&proc_name, POLICY_REORDER_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);

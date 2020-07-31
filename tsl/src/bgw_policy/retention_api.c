@@ -285,7 +285,7 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	/* Next, insert a new job into jobs table */
-	namestrcpy(&application_name, "Retention Background Job");
+	namestrcpy(&application_name, "Retention Policy");
 	namestrcpy(&drop_chunks_name, "drop_chunks");
 	NameData proc_name, proc_schema, owner;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
