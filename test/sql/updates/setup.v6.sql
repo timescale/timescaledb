@@ -5,4 +5,5 @@
 \ir setup.v2.sql
 \ir setup.continuous_aggs.v2.sql
 \ir setup.compression.sql
+\ir setup.policies.sql
 

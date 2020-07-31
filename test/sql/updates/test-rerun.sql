@@ -16,3 +16,5 @@ SELECT chunk_id, dimension_slice_id, hypertable_constraint_name, constraint_name
 SELECT hypertable_index_name, hypertable_id, chunk_id
 FROM _timescaledb_catalog.chunk_index
 ORDER BY  hypertable_index_name, hypertable_id, chunk_id;
+
+SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;

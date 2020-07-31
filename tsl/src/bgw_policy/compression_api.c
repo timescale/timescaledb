@@ -207,7 +207,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	}
 
 	/* insert a new job into jobs table */
-	namestrcpy(&application_name, "Compress Chunks Background Job");
+	namestrcpy(&application_name, "Compression Policy");
 	namestrcpy(&compress_chunks_name, "compress_chunks");
 	namestrcpy(&proc_name, POLICY_COMPRESSION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
