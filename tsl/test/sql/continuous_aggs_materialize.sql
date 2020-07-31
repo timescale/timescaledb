@@ -434,8 +434,8 @@ SELECT hypertable_id, watermark
     WHERE hypertable_id=:raw_table_id;
 
 --cleanup of continuous agg views --
-DROP view test_t_mat_view CASCADE;
-DROP view extreme_view CASCADE;
+DROP view test_t_mat_view;
+DROP view extreme_view;
 
 -- negative lag test
 CREATE TABLE continuous_agg_negative(time BIGINT, data BIGINT);
@@ -472,7 +472,7 @@ INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
 REFRESH MATERIALIZED VIEW negative_view_5;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
-DROP VIEW negative_view_5 CASCADE;
+DROP VIEW negative_view_5;
 TRUNCATE continuous_agg_negative;
 
 CREATE VIEW negative_view_5

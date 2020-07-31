@@ -111,7 +111,7 @@ ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.ref
 ERROR:  must be owner of view mat_refresh_test
 ALTER VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
 ERROR:  must be owner of view mat_refresh_test
-DROP VIEW mat_refresh_test CASCADE; 
+DROP VIEW mat_refresh_test; 
 ERROR:  must be owner of view mat_refresh_test
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 ERROR:  permission denied for table conditions
@@ -152,7 +152,7 @@ NOTICE:  adding index _materialized_hypertable_7_get_constant_time_partition_col
 --this should fail
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
 ERROR:  permission denied for function get_constant
-DROP VIEW mat_perm_view_test CASCADE;
+DROP VIEW mat_perm_view_test;
 --can create a mat view on something with select and trigger grants
 create or replace view mat_perm_view_test
 WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')

@@ -2968,7 +2968,7 @@ LIMIT 1;
  Fri Dec 31 16:00:00 1999 PST
 (1 row)
 
-DROP VIEW cagg_test CASCADE;
+DROP VIEW cagg_test;
 RESET client_min_messages;
 --github issue 1558. nested loop with index scan needed
 --disables parallel scan
@@ -6714,7 +6714,7 @@ LIMIT 1;
  Fri Dec 31 16:00:00 1999 PST
 (1 row)
 
-DROP VIEW cagg_test CASCADE;
+DROP VIEW cagg_test;
 RESET client_min_messages;
 --github issue 1558. nested loop with index scan needed
 --disables parallel scan

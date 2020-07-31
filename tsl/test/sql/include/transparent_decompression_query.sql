@@ -827,7 +827,7 @@ FROM cagg_test
 ORDER BY time
 LIMIT 1;
 
-DROP VIEW cagg_test CASCADE;
+DROP VIEW cagg_test;
 
 RESET client_min_messages;
 

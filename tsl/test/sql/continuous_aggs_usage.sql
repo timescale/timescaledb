@@ -118,7 +118,7 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 -- a timezone setting can alter from user-to-user and thus
 -- cannot be materialized.
 
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 CREATE VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -136,7 +136,7 @@ GROUP BY bucket, device_id;
 -- You have two options:
 -- Option 1: be explicit in your timezone:
 
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 CREATE VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -149,12 +149,12 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id;
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
 
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 CREATE VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -236,5 +236,49 @@ SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
 -- jit aggregate should have 6 rows
 SELECT * FROM device_readings_jit ORDER BY time_bucket;
 
+-- START OF BASIC USAGE TESTS --
 
+-- Check that continuous aggregate and materialized table is dropped
+-- together.
 
+CREATE TABLE whatever(time TIMESTAMPTZ NOT NULL, metric INTEGER);
+SELECT * FROM create_hypertable('whatever', 'time');
+CREATE VIEW whatever_summary WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
+  FROM whatever GROUP BY bucket;
+
+SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
+          FROM _timescaledb_catalog.hypertable
+	 WHERE id = raw_hypertable_id) AS raw_table
+     , (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
+          FROM _timescaledb_catalog.hypertable
+	 WHERE id = mat_hypertable_id) AS mat_table
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'whatever_summary' \gset
+SELECT relname FROM pg_class WHERE oid = :mat_table;
+
+----------------------------------------------------------------
+-- Should generate an error since the cagg is dependent on the table.
+DROP TABLE whatever;
+
+----------------------------------------------------------------
+-- Checking that a cagg cannot be dropped if there is a dependent
+-- object on it.
+CREATE VIEW whatever_summary_dependency AS SELECT * FROM whatever_summary;
+
+-- Should generate an error
+DROP VIEW whatever_summary;
+
+-- Dropping the dependent view so that we can do a proper drop below.
+DROP VIEW whatever_summary_dependency;
+
+----------------------------------------------------------------
+-- Dropping the cagg should also remove the materialized table
+DROP VIEW whatever_summary;
+SELECT relname FROM pg_class WHERE oid = :mat_table;
+
+----------------------------------------------------------------
+-- Cleanup
+DROP TABLE whatever;
+
+-- END OF BASIC USAGE TESTS --

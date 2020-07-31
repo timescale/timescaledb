@@ -66,7 +66,7 @@ SELECT pg_get_viewdef('metrics_summary',true);
 -- view should have results now after refresh
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 
-DROP VIEW metrics_summary CASCADE;
+DROP VIEW metrics_summary;
 
 -- check default view for new continuous aggregate with materialized_only to true
 CREATE VIEW metrics_summary
@@ -93,7 +93,7 @@ SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_ag
 SELECT pg_get_viewdef('metrics_summary',true);
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 
-DROP VIEW metrics_summary CASCADE;
+DROP VIEW metrics_summary;
 
 --
 -- test queries on union view
@@ -245,7 +245,7 @@ GROUP BY time_bucket(1, a)
 HAVING sum(c) > 50
 ORDER BY 1;
 
-DROP VIEW mat_m1 cascade;
+DROP VIEW mat_m1;
 
 --- TEST union view with multiple WHERE and HAVING clauses
 CREATE VIEW mat_m1

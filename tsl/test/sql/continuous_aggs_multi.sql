@@ -83,7 +83,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidatio
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 
 --now drop cagg_1, should still have materialization_invalidation_log
-drop view cagg_1 cascade;
+DROP VIEW cagg_1;
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 --cagg_2 still exists
 select view_name from timescaledb_information.continuous_aggregates;
@@ -145,8 +145,8 @@ refresh materialized view cagg_1;
 select * from cagg_1 where timed = 18 ;
 --copied over for cagg_2 to process later?
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
-DROP VIEW cagg_1 cascade;
-DROP VIEW cagg_2 cascade;
+DROP VIEW cagg_1;
+DROP VIEW cagg_2;
 
 --TEST6 test the ignore_invalidation_older_than setting
 CREATE TABLE continuous_agg_test_ignore_invalidation_older_than(timeval integer, col1 integer, col2 integer);

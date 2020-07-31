@@ -5,7 +5,7 @@
 --expects QUERY to be set
 \o /dev/null
 
-drop view if exists mat_test cascade;
+DROP VIEW IF EXISTS mat_test;
 
 create view mat_test
 WITH ( timescaledb.continuous)

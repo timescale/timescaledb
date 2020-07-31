@@ -471,7 +471,7 @@ ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '1h');
 ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '2147483648');
 ALTER TABLE conditions ALTER timec type bigint;
 \set ON_ERROR_STOP
-drop view mat_with_test CASCADE;
+DROP VIEW mat_with_test;
 
 ALTER TABLE conditions ALTER timec type bigint;
 create or replace view mat_with_test( timec, minl, sumt , sumh)

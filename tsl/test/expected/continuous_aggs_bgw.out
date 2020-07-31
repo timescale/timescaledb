@@ -342,7 +342,7 @@ SELECT ts_bgw_params_reset_time();
  
 (1 row)
 
-DROP VIEW test_continuous_agg_view CASCADE;
+DROP VIEW test_continuous_agg_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 CREATE VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
@@ -486,7 +486,7 @@ job_status             | Scheduled
 last_run_duration      | 
 
 \x off
-DROP VIEW test_continuous_agg_view CASCADE;
+DROP VIEW test_continuous_agg_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 --create a view with a function that it has no permission to execute
 CREATE VIEW test_continuous_agg_view

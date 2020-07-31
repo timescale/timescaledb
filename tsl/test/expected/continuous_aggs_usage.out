@@ -203,7 +203,7 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 -- For example you cannot cast to the local time. This is because
 -- a timezone setting can alter from user-to-user and thus
 -- cannot be materialized.
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_6_chunk
 CREATE VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -221,7 +221,7 @@ ERROR:  only immutable functions are supported for continuous aggregate query
 --note the error.
 -- You have two options:
 -- Option 1: be explicit in your timezone:
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 ERROR:  view "device_summary" does not exist
 CREATE VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -236,10 +236,10 @@ FROM
   device_readings
 GROUP BY bucket, device_id;
 NOTICE:  adding index _materialized_hypertable_3_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(device_id, bucket)
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
-DROP VIEW device_summary CASCADE;
+DROP VIEW device_summary;
 ERROR:  view "device_summary" does not exist
 CREATE VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -391,3 +391,55 @@ SELECT * FROM device_readings_jit ORDER BY time_bucket;
           60 | 600
 (6 rows)
 
+-- START OF BASIC USAGE TESTS --
+-- Check that continuous aggregate and materialized table is dropped
+-- together.
+CREATE TABLE whatever(time TIMESTAMPTZ NOT NULL, metric INTEGER);
+SELECT * FROM create_hypertable('whatever', 'time');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             8 | public      | whatever   | t
+(1 row)
+
+CREATE VIEW whatever_summary WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
+  FROM whatever GROUP BY bucket;
+SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
+          FROM _timescaledb_catalog.hypertable
+	 WHERE id = raw_hypertable_id) AS raw_table
+     , (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
+          FROM _timescaledb_catalog.hypertable
+	 WHERE id = mat_hypertable_id) AS mat_table
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'whatever_summary' \gset
+SELECT relname FROM pg_class WHERE oid = :mat_table;
+          relname           
+----------------------------
+ _materialized_hypertable_9
+(1 row)
+
+----------------------------------------------------------------
+-- Should generate an error since the cagg is dependent on the table.
+DROP TABLE whatever;
+ERROR:  cannot drop table whatever because other objects depend on it
+----------------------------------------------------------------
+-- Checking that a cagg cannot be dropped if there is a dependent
+-- object on it.
+CREATE VIEW whatever_summary_dependency AS SELECT * FROM whatever_summary;
+-- Should generate an error
+DROP VIEW whatever_summary;
+ERROR:  cannot drop view whatever_summary because other objects depend on it
+-- Dropping the dependent view so that we can do a proper drop below.
+DROP VIEW whatever_summary_dependency;
+----------------------------------------------------------------
+-- Dropping the cagg should also remove the materialized table
+DROP VIEW whatever_summary;
+SELECT relname FROM pg_class WHERE oid = :mat_table;
+ relname 
+---------
+(0 rows)
+
+----------------------------------------------------------------
+-- Cleanup
+DROP TABLE whatever;
+-- END OF BASIC USAGE TESTS --
