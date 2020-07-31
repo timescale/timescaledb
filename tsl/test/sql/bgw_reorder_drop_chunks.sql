@@ -308,4 +308,4 @@ SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last
 SELECT show_chunks('test_drop_chunks_table');
 
 --drop the view to allow drop chunks to work
-DROP VIEW tdc_view CASCADE;
+DROP VIEW tdc_view;

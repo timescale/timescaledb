@@ -658,5 +658,5 @@ SELECT show_chunks('test_drop_chunks_table');
 (4 rows)
 
 --drop the view to allow drop chunks to work
-DROP VIEW tdc_view CASCADE;
+DROP VIEW tdc_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_13_chunk

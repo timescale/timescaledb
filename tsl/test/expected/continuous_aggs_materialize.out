@@ -955,9 +955,9 @@ SELECT hypertable_id, watermark
 (1 row)
 
 --cleanup of continuous agg views --
-DROP view test_t_mat_view CASCADE;
+DROP view test_t_mat_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_16_chunk
-DROP view extreme_view CASCADE;
+DROP view extreme_view;
 NOTICE:  drop cascades to 4 other objects
 -- negative lag test
 CREATE TABLE continuous_agg_negative(time BIGINT, data BIGINT);
@@ -1032,7 +1032,7 @@ SELECT * FROM negative_view_5 ORDER BY 1;
           10 |     5
 (3 rows)
 
-DROP VIEW negative_view_5 CASCADE;
+DROP VIEW negative_view_5;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_27_chunk
 TRUNCATE continuous_agg_negative;
 CREATE VIEW negative_view_5

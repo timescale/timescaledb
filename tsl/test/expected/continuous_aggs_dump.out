@@ -82,7 +82,7 @@ SELECT
   replace(:'QUERY_TEMPLATE', 'TABLE', 'conditions_before') AS "QUERY_BEFORE",
   replace(:'QUERY_TEMPLATE', 'TABLE', 'conditions_after') AS "QUERY_AFTER"
 \gset
-DROP VIEW if exists mat_test cascade;
+DROP VIEW IF EXISTS mat_test;
 NOTICE:  view "mat_test" does not exist, skipping
 --materialize this VIEW before dump this tests
 --that the partial state survives the dump intact
@@ -176,10 +176,6 @@ DROP table :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 ERROR:  cannot drop table _timescaledb_internal._materialized_hypertable_3 because other objects depend on it
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
-DROP VIEW mat_before;
-ERROR:  dropping a continuous aggregate requires using CASCADE
-DROP VIEW mat_after;
-ERROR:  dropping a continuous aggregate requires using CASCADE
 \set ON_ERROR_STOP 1
 --materialize mat_after
 SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
@@ -219,7 +215,7 @@ SELECT count(*) FROM conditions_after;
  Number of rows different between view and original (expect 0) | mat_after |     0
 (1 row)
 
-DROP VIEW mat_after cascade;
+DROP VIEW mat_after;
 NOTICE:  drop cascades to 2 other objects
-DROP VIEW mat_before cascade;
+DROP VIEW mat_before;
 NOTICE:  drop cascades to 2 other objects

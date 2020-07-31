@@ -91,7 +91,7 @@ order by tgname;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- TEST2 ---
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 SELECT * FROM _timescaledb_config.bgw_job;
  id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
@@ -241,7 +241,7 @@ order by time_bucket('1week', timec);
 -- use previous data from conditions
 --drop only the view.
 -- apply where clause on result of mat_m1 --
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -295,7 +295,7 @@ order by time_bucket('1week', timec);
 
 -- TEST5 --
 ---------test with having clause ----------------------
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -370,7 +370,6 @@ insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 35, 45, 50, 40;
 insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, 71, 28;
---drop view mat_m1 cascade;
 --naming with AS clauses
 create or replace view mat_naming
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -405,7 +404,7 @@ order by attnum, attname;
       8 | chunk_id
 (8 rows)
 
-DROP VIEW mat_naming CASCADE;
+DROP VIEW mat_naming;
 --naming with default names
 create or replace view mat_naming
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -440,7 +439,7 @@ order by attnum, attname;
       8 | chunk_id
 (8 rows)
 
-DROP VIEW mat_naming CASCADE;
+DROP VIEW mat_naming;
 --naming with view col names
 create or replace view mat_naming (bucket, loc, sum_t_h, stdd)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -475,7 +474,7 @@ order by attnum, attname;
       8 | chunk_id
 (8 rows)
 
-DROP VIEW mat_naming CASCADE;
+DROP VIEW mat_naming;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
@@ -561,7 +560,7 @@ insert into :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select * from :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --lets drop the view and check
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
 drop table conditions;
 CREATE TABLE conditions (
@@ -636,8 +635,6 @@ DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
 DROP VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME";
 ERROR:  cannot drop the partial/direct view because it is required by a continuous aggregate
-DROP VIEW mat_test;
-ERROR:  dropping a continuous aggregate requires using CASCADE
 \set ON_ERROR_STOP 1
 --catalog entry still there;
 SELECT count(*)
@@ -673,7 +670,7 @@ select count(*) from pg_class where relname = 'mat_test';
      1
 (1 row)
 
-DROP VIEW mat_test CASCADE;
+DROP VIEW mat_test;
 NOTICE:  drop cascades to 2 other objects
 --catalog entry should be gone
 SELECT count(*)
@@ -904,7 +901,7 @@ order by indexname;
  _materialized_hypertable_20_timec_idx         | CREATE INDEX _materialized_hypertable_20_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (timec DESC)
 (4 rows)
 
-drop view mat_with_test cascade;
+DROP VIEW mat_with_test;
 --no additional indexes
 create or replace view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h', timescaledb.create_group_indexes=false)
@@ -1166,7 +1163,7 @@ WARNING:  type integer text
          100 | 
 (3 rows)
 
-DROP view mat_ffunc_test cascade;
+DROP view mat_ffunc_test;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_67_chunk
 create or replace view mat_ffunc_test
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
@@ -1188,7 +1185,7 @@ WARNING:  type integer bigint
 (3 rows)
 
 --refresh mat view test when time_bucket is not projected --
-drop view mat_ffunc_test cascade;
+DROP VIEW mat_ffunc_test;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_68_chunk
 create or replace view mat_refresh_test
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')

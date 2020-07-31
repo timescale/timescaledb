@@ -1079,9 +1079,8 @@ process_grant_and_revoke_role(ProcessUtilityArgs *args)
 	return DDL_DONE;
 }
 
-/* Force the use of CASCADE to drop continuous aggregates */
 static void
-block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, DropStmt *stmt)
+process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 {
 	ListCell *lc;
 
@@ -1108,13 +1107,19 @@ block_dropping_continuous_aggregates_without_cascade(ProcessUtilityArgs *args, D
 		name = get_rel_name(relid);
 
 		cagg = ts_continuous_agg_find_by_view_name(schema, name);
-		if (cagg == NULL)
-			continue;
-
-		if (ts_continuous_agg_view_type(&cagg->data, schema, name) == ContinuousAggUserView)
-			ereport(ERROR,
-					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
-					 errmsg("dropping a continuous aggregate requires using CASCADE")));
+		if (cagg)
+		{
+			/* Add the materialization table to the arguments so that the
+			 * continuous aggregate and associated materialization table is
+			 * dropped together.
+			 *
+			 * If the table is missing, something is wrong, but we proceed
+			 * with dropping the view anyway since the user cannot get rid of
+			 * the broken view if we generate an error. */
+			Hypertable *ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+			if (ht)
+				process_add_hypertable(args, ht);
+		}
 	}
 }
 
@@ -1133,7 +1138,7 @@ process_drop_start(ProcessUtilityArgs *args)
 			process_drop_hypertable_index(args, stmt);
 			break;
 		case OBJECT_VIEW:
-			block_dropping_continuous_aggregates_without_cascade(args, stmt);
+			process_drop_continuous_aggregates(args, stmt);
 			break;
 		case OBJECT_FOREIGN_SERVER:
 			process_drop_foreign_server_start(stmt);

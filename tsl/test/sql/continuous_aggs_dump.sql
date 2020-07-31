@@ -81,7 +81,7 @@ SELECT
 \gset
 
 
-DROP VIEW if exists mat_test cascade;
+DROP VIEW IF EXISTS mat_test;
 
 --materialize this VIEW before dump this tests
 --that the partial state survives the dump intact
@@ -138,8 +138,6 @@ SELECT _timescaledb_internal.stop_background_workers();
 \set ON_ERROR_STOP 0
 DROP table :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
-DROP VIEW mat_before;
-DROP VIEW mat_after;
 \set ON_ERROR_STOP 1
 
 --materialize mat_after
@@ -161,5 +159,5 @@ SELECT count(*) FROM conditions_after;
 \ir include/cont_agg_test_equal.sql
 \set ECHO all
 
-DROP VIEW mat_after cascade;
-DROP VIEW mat_before cascade;
+DROP VIEW mat_after;
+DROP VIEW mat_before;

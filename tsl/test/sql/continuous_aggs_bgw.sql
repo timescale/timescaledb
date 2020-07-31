@@ -219,7 +219,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 -- fast restart test
 SELECT ts_bgw_params_reset_time();
 
-DROP VIEW test_continuous_agg_view CASCADE;
+DROP VIEW test_continuous_agg_view;
 
 CREATE VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
@@ -283,7 +283,7 @@ select view_name, completed_threshold, invalidation_threshold, job_status, last_
 
 \x off
 
-DROP VIEW test_continuous_agg_view CASCADE;
+DROP VIEW test_continuous_agg_view;
 
 --create a view with a function that it has no permission to execute
 CREATE VIEW test_continuous_agg_view

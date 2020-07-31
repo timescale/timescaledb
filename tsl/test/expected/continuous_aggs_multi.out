@@ -215,7 +215,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 (1 row)
 
 --now drop cagg_1, should still have materialization_invalidation_log
-drop view cagg_1 cascade;
+DROP VIEW cagg_1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_5_chunk
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
  count 
@@ -386,9 +386,9 @@ select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                   6 |                18 |                    18 |                      18
 (2 rows)
 
-DROP VIEW cagg_1 cascade;
+DROP VIEW cagg_1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_11_chunk
-DROP VIEW cagg_2 cascade;
+DROP VIEW cagg_2;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_12_chunk
 --TEST6 test the ignore_invalidation_older_than setting
 CREATE TABLE continuous_agg_test_ignore_invalidation_older_than(timeval integer, col1 integer, col2 integer);

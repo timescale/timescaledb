@@ -103,7 +103,7 @@ select from alter_job_schedule(:cagg_job_id, max_runtime => NULL);
 
 ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 ALTER VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
-DROP VIEW mat_refresh_test CASCADE; 
+DROP VIEW mat_refresh_test; 
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 SELECT * FROM mat_refresh_test;
 SELECT * FROM :materialization_hypertable;
@@ -136,7 +136,7 @@ group by time_bucket(100, timec), location;
 
 --this should fail
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
-DROP VIEW mat_perm_view_test CASCADE;
+DROP VIEW mat_perm_view_test;
 
 --can create a mat view on something with select and trigger grants
 create or replace view mat_perm_view_test

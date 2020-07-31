@@ -177,7 +177,7 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
  Fri Dec 31 16:00:00 1999 PST | 0.5
 (1 row)
 
-DROP VIEW metrics_summary CASCADE;
+DROP VIEW metrics_summary;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 -- check default view for new continuous aggregate with materialized_only to true
 CREATE VIEW metrics_summary
@@ -259,7 +259,7 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 -------------+-----
 (0 rows)
 
-DROP VIEW metrics_summary CASCADE;
+DROP VIEW metrics_summary;
 --
 -- test queries on union view
 --
@@ -548,7 +548,7 @@ ORDER BY 1;
           31 |     2 | 129 |       56 |  50
 (3 rows)
 
-DROP VIEW mat_m1 cascade;
+DROP VIEW mat_m1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_12_chunk
 --- TEST union view with multiple WHERE and HAVING clauses
 CREATE VIEW mat_m1

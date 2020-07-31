@@ -75,7 +75,7 @@ order by tgname;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- TEST2 ---
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 
 SELECT * FROM _timescaledb_config.bgw_job;
 
@@ -201,7 +201,7 @@ order by time_bucket('1week', timec);
 --drop only the view.
 
 -- apply where clause on result of mat_m1 --
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
@@ -247,7 +247,7 @@ order by time_bucket('1week', timec);
 
 -- TEST5 --
 ---------test with having clause ----------------------
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
@@ -312,7 +312,6 @@ select generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 insert into conditions
 select generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, 71, 28;
 
---drop view mat_m1 cascade;
 --naming with AS clauses
 create or replace view mat_naming
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -337,7 +336,7 @@ where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
 
-DROP VIEW mat_naming CASCADE;
+DROP VIEW mat_naming;
 
 --naming with default names
 create or replace view mat_naming
@@ -363,7 +362,7 @@ where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
 
-DROP VIEW mat_naming CASCADE;
+DROP VIEW mat_naming;
 
 --naming with view col names
 create or replace view mat_naming (bucket, loc, sum_t_h, stdd)
@@ -389,7 +388,7 @@ where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
 
-DROP VIEW mat_naming CASCADE;
+DROP VIEW mat_naming;
 
 create or replace view mat_m1( timec, minl, sumth, stddevh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -449,7 +448,7 @@ select * from :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --lets drop the view and check
-drop view mat_m1 cascade;
+DROP VIEW mat_m1;
 
 drop table conditions;
 CREATE TABLE conditions (
@@ -517,7 +516,6 @@ WHERE user_view_name = 'mat_test'
 DROP TABLE :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 DROP VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME";
-DROP VIEW mat_test;
 \set ON_ERROR_STOP 1
 
 --catalog entry still there;
@@ -531,7 +529,7 @@ select count(*) from pg_class where relname = :'MAT_TABLE_NAME';
 select count(*) from pg_class where relname = :'DIR_VIEW_NAME';
 select count(*) from pg_class where relname = 'mat_test';
 
-DROP VIEW mat_test CASCADE;
+DROP VIEW mat_test;
 
 --catalog entry should be gone
 SELECT count(*)
@@ -657,7 +655,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_with_test')
 order by indexname;
 
-drop view mat_with_test cascade;
+DROP VIEW mat_with_test;
 --no additional indexes
 create or replace view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h', timescaledb.create_group_indexes=false)
@@ -844,7 +842,7 @@ REFRESH MATERIALIZED VIEW mat_ffunc_test;
 
 SELECT * FROM mat_ffunc_test;
 
-DROP view mat_ffunc_test cascade;
+DROP view mat_ffunc_test;
 
 create or replace view mat_ffunc_test
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
@@ -858,7 +856,7 @@ REFRESH MATERIALIZED VIEW mat_ffunc_test;
 SELECT * FROM mat_ffunc_test;
 
 --refresh mat view test when time_bucket is not projected --
-drop view mat_ffunc_test cascade;
+DROP VIEW mat_ffunc_test;
 create or replace view mat_refresh_test
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as

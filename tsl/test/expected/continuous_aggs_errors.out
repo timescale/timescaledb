@@ -489,7 +489,7 @@ ERROR:  timescaledb.refresh_lag out of range
 ALTER TABLE conditions ALTER timec type bigint;
 ERROR:  cannot alter type of a column used by a view or rule
 \set ON_ERROR_STOP
-drop view mat_with_test CASCADE;
+DROP VIEW mat_with_test;
 ALTER TABLE conditions ALTER timec type bigint;
 create or replace view mat_with_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647', timescaledb.refresh_interval = '2h')
