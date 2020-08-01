@@ -82,6 +82,8 @@ else
     exit 0
   fi
 
+  current_tests=$(echo "${current_tests}" | tr ' ' '\n' | sort)
+
   TESTS=${current_tests}
 
   echo > ${TEMP_SCHEDULE}
