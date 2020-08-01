@@ -192,8 +192,10 @@ tuplefactory_create(Relation rel, ScanState *ss, List *retrieved_attrs)
 
 	if (NULL != rel)
 		tupdesc = RelationGetDescr(rel);
-	else
+	else if (NULL != ss)
 		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
+	else
+		elog(ERROR, "cannot create tuple without a tuple descriptor");
 
 	tf =
 		tuplefactory_create_common(tupdesc, retrieved_attrs, !ts_guc_enable_connection_binary_data);

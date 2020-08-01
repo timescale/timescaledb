@@ -116,6 +116,7 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 			 * create one now. (There will always be one for time)
 			 */
 			Assert(last != NULL);
+			/* NOLINTNEXTLINE(clang-analyzer-core.NullDereference) */
 			last->storage = subspace_store_internal_node_create(i == (hc->num_slices - 1));
 			last->storage_free = subspace_store_internal_node_free;
 			node = last->storage;
@@ -189,6 +190,7 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 	}
 
 	Assert(last != NULL && last->storage == NULL);
+	/* NOLINTNEXTLINE(clang-analyzer-core.NullDereference) */
 	last->storage = object; /* at the end we store the object */
 	last->storage_free = object_free;
 	MemoryContextSwitchTo(old);
@@ -213,6 +215,7 @@ ts_subspace_store_get(SubspaceStore *store, Point *target)
 		vec = ((SubspaceStoreInternalNode *) match->storage)->vector;
 	}
 	Assert(match != NULL);
+	/* NOLINTNEXTLINE(clang-analyzer-core.NullDereference) */
 	return match->storage;
 }
 

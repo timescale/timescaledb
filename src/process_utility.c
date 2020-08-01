@@ -3638,6 +3638,7 @@ process_utility_xact_abort(XactEvent event, void *arg)
 			 * transactions.
 			 */
 			expect_chunk_modification = false;
+			break;
 		default:
 			break;
 	}
@@ -3652,6 +3653,7 @@ process_utility_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
 		case SUBXACT_EVENT_ABORT_SUB:
 			/* see note in process_utility_xact_abort */
 			expect_chunk_modification = false;
+			break;
 		default:
 			break;
 	}

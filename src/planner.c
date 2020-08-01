@@ -777,7 +777,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
 				break;
 			}
-			/* Fall through */
+			/* fall through */
 		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;

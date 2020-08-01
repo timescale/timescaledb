@@ -139,12 +139,13 @@ chunk_update_foreign_server_if_needed(int32 chunk_id, Oid existing_server_id)
 	foreach (lc, chunk->data_nodes)
 	{
 		new_server = lfirst(lc);
-		if (new_server->foreign_server_oid != existing_server_id)
-			break;
-	}
-	Assert(new_server != NULL);
 
-	chunk_set_foreign_server(chunk, GetForeignServer(new_server->foreign_server_oid));
+		if (new_server->foreign_server_oid != existing_server_id)
+		{
+			chunk_set_foreign_server(chunk, GetForeignServer(new_server->foreign_server_oid));
+			break;
+		}
+	}
 }
 
 Datum

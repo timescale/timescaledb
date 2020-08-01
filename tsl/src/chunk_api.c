@@ -443,8 +443,8 @@ chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 	{
 		PGresult *pgres = async_response_result_get_pg_result(res);
 		ChunkDataNode *cdn = async_response_result_get_user_data(res);
-		Datum values[Natts_create_chunk];
-		bool nulls[Natts_create_chunk];
+		Datum values[Natts_create_chunk] = { 0 };
+		bool nulls[Natts_create_chunk] = { false };
 		const char *schema_name, *table_name;
 		bool created;
 
