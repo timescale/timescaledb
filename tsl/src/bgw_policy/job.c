@@ -51,7 +51,7 @@
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
 
 static void
-enable_fast_restart(BgwJob *job, const char *job_name)
+enable_fast_restart(const BgwJob *job, const char *job_name)
 {
 	BgwJobStat *job_stat = ts_bgw_job_stat_find(job->fd.id);
 
@@ -90,7 +90,7 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 }
 
 static int64
-get_compression_window_end_value(Dimension *dim, const Jsonb *config)
+get_compression_window_end_value(const Dimension *dim, const Jsonb *config)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 
@@ -156,7 +156,7 @@ get_chunk_to_compress(Hypertable *ht, const Jsonb *config)
 }
 
 bool
-policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool fast_continue)
+policy_reorder_execute(int32 job_id, const Jsonb *config, reorder_func reorder, bool fast_continue)
 {
 	int chunk_id;
 	bool started = false;
@@ -301,7 +301,7 @@ execute_drop_chunks_policy(int32 job_id)
 }
 
 static bool
-execute_materialize_continuous_aggregate(BgwJob *job)
+execute_materialize_continuous_aggregate(const BgwJob *job)
 {
 	bool started = false;
 	int32 materialization_id;
@@ -341,7 +341,7 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 }
 
 bool
-policy_compression_execute(int32 job_id, Jsonb *config)
+policy_compression_execute(int32 job_id, const Jsonb *config)
 {
 	bool started = false;
 	Oid table_relid;
@@ -399,7 +399,7 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 }
 
 static bool
-bgw_policy_job_check_enterprise_license(BgwJob *job)
+bgw_policy_job_check_enterprise_license(const BgwJob *job)
 {
 	bool required = true;
 
@@ -458,10 +458,10 @@ job_execute_procedure(FuncExpr *funcexpr)
 }
 
 static bool
-job_execute(BgwJob *job)
+job_execute(const BgwJob *job)
 {
 	Const *arg1, *arg2;
-	bool started;
+	bool started = false;
 	char prokind;
 	Oid proc;
 	Oid proc_args[] = { INT4OID, JSONBOID };
@@ -475,8 +475,8 @@ job_execute(BgwJob *job)
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
-	name = list_make2(makeString(NameStr(job->fd.proc_schema)),
-					  makeString(NameStr(job->fd.proc_name)));
+	name = list_make2(makeString(pstrdup(NameStr(job->fd.proc_schema))),
+					  makeString(pstrdup(NameStr(job->fd.proc_name))));
 	proc = LookupFuncName(name, 2, proc_args, false);
 
 	prokind = get_func_prokind(proc);
@@ -515,7 +515,7 @@ job_execute(BgwJob *job)
 }
 
 bool
-tsl_bgw_policy_job_execute(BgwJob *job)
+tsl_bgw_policy_job_execute(const BgwJob *job)
 {
 	bgw_policy_job_check_enterprise_license(job);
 
@@ -525,12 +525,10 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return execute_materialize_continuous_aggregate(job);
-
 		case JOB_TYPE_COMPRESS_CHUNKS:
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_CUSTOM:
 			return job_execute(job);
-
 		default:
 			elog(ERROR,
 				 "scheduler tried to run an invalid job type: \"%s\"",

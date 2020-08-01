@@ -45,7 +45,7 @@ typedef struct CrossModuleFunctions
 	void (*print_tsl_license_expiration_info_hook)(void);
 	void (*module_shutdown_hook)(void);
 	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
-	bool (*bgw_policy_job_execute)(BgwJob *job);
+	bool (*bgw_policy_job_execute)(const BgwJob *job);
 	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
 
 	PGFunction add_retention_policy;

@@ -19,7 +19,7 @@
 #define MIN_WAIT_AFTER_CRASH_MS (5 * 60 * 1000)
 
 static bool
-bgw_job_stat_next_start_was_set(FormData_bgw_job_stat *fd)
+bgw_job_stat_next_start_was_set(const FormData_bgw_job_stat *fd)
 {
 	return fd->next_start != DT_NOBEGIN;
 }
@@ -157,11 +157,11 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 typedef struct
 {
 	JobResult result;
-	BgwJob *job;
+	const BgwJob *job;
 } JobResultCtx;
 
 static TimestampTz
-calculate_next_start_on_success(TimestampTz finish_time, BgwJob *job)
+calculate_next_start_on_success(TimestampTz finish_time, const BgwJob *job)
 {
 	TimestampTz ts;
 	TimestampTz last_finish = finish_time;
@@ -195,7 +195,8 @@ calculate_jitter_percent()
  * put off the next start time for the job indefinitely
  */
 static TimestampTz
-calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures, BgwJob *job)
+calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failures,
+								const BgwJob *job)
 {
 	float8 jitter = calculate_jitter_percent();
 	/* consecutive failures includes this failure */
@@ -265,7 +266,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
  *  there will be enough time before another crash.
  */
 static TimestampTz
-calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
+calculate_next_start_on_crash(int consecutive_crashes, const BgwJob *job)
 {
 	TimestampTz now = ts_timer_get_current_timestamp();
 	TimestampTz failure_calc = calculate_next_start_on_failure(now, consecutive_crashes, job);
@@ -432,7 +433,7 @@ ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 }
 
 void
-ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
+ts_bgw_job_stat_mark_end(const BgwJob *job, JobResult result)
 {
 	JobResultCtx res = {
 		.job = job,
@@ -448,13 +449,13 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 }
 
 bool
-ts_bgw_job_stat_end_was_marked(BgwJobStat *jobstat)
+ts_bgw_job_stat_end_was_marked(const BgwJobStat *jobstat)
 {
 	return !TIMESTAMP_IS_NOBEGIN(jobstat->fd.last_finish);
 }
 
 TSDLLEXPORT void
-ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
+ts_bgw_job_stat_set_next_start(const BgwJob *job, TimestampTz next_start)
 {
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (next_start == DT_NOBEGIN)
@@ -470,7 +471,7 @@ ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
 
 /* update next_start if job stat exists */
 TSDLLEXPORT bool
-ts_bgw_job_stat_update_next_start(BgwJob *job, TimestampTz next_start, bool allow_unset)
+ts_bgw_job_stat_update_next_start(const BgwJob *job, TimestampTz next_start, bool allow_unset)
 {
 	bool found = false;
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
@@ -513,7 +514,7 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 }
 
 bool
-ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
+ts_bgw_job_stat_should_execute(const BgwJobStat *jobstat, const BgwJob *job)
 {
 	/*
 	 * Stub to allow the system to disable jobs based on the number of crashes
@@ -523,7 +524,7 @@ ts_bgw_job_stat_should_execute(BgwJobStat *jobstat, BgwJob *job)
 }
 
 TimestampTz
-ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job)
+ts_bgw_job_stat_next_start(const BgwJobStat *jobstat, const BgwJob *job)
 {
 	if (jobstat == NULL)
 		/* Never previously run - run right away */

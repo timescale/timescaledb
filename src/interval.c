@@ -124,11 +124,12 @@ ts_interval_from_sql_input(Oid relid, Datum interval, Oid interval_type, const c
  * related materialization hypertables
  */
 TSDLLEXPORT FormData_ts_interval *
-ts_interval_from_sql_input_internal(Dimension *open_dim, Datum interval, Oid interval_type,
+ts_interval_from_sql_input_internal(const Dimension *open_dim, Datum interval, Oid interval_type,
 									const char *parameter_name, const char *caller_name)
 {
 	FormData_ts_interval *invl = palloc0(sizeof(FormData_ts_interval));
 	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
+
 	switch (interval_type)
 	{
 		case INTERVALOID:
@@ -315,7 +316,7 @@ noarg_integer_now_func_filter(Form_pg_proc form, void *arg)
  * to access the integer_now_func
  */
 Oid
-ts_get_integer_now_func(Dimension *open_dim)
+ts_get_integer_now_func(const Dimension *open_dim)
 {
 	Oid rettype;
 	Oid now_func;
@@ -337,7 +338,7 @@ ts_get_integer_now_func(Dimension *open_dim)
 }
 
 int64
-ts_get_now_internal(Dimension *open_dim)
+ts_get_now_internal(const Dimension *open_dim)
 {
 	Oid dim_post_part_type = ts_dimension_get_partition_type(open_dim);
 
@@ -387,7 +388,7 @@ ts_get_now_internal(Dimension *open_dim)
  * datum (which incapsulates data of time column type)
  */
 Datum
-ts_interval_subtract_from_now(FormData_ts_interval *invl, Dimension *open_dim)
+ts_interval_subtract_from_now(FormData_ts_interval *invl, const Dimension *open_dim)
 {
 	Oid type_oid;
 	AssertArg(invl != NULL);

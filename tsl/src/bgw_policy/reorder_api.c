@@ -82,7 +82,7 @@ policy_reorder_get_index_name(const Jsonb *config)
 }
 
 static void
-check_valid_index(Hypertable *ht, Name index_name)
+check_valid_index(const Hypertable *ht, const Name index_name)
 {
 	Oid index_oid;
 	HeapTuple idxtuple;
@@ -234,9 +234,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 {
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
-
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
-
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 														   INTERNAL_SCHEMA_NAME,
 														   ht_id);
@@ -248,7 +246,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 					 errmsg("cannot remove reorder policy, no such policy exists")));
 		else
 		{
-			char *hypertable_name = get_rel_name(hypertable_oid);
+			const char *hypertable_name = get_rel_name(hypertable_oid);
 
 			if (hypertable_name != NULL)
 				ereport(NOTICE,

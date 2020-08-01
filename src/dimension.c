@@ -807,7 +807,7 @@ ts_dimension_set_type(Dimension *dim, Oid newtype)
 }
 
 TSDLLEXPORT Oid
-ts_dimension_get_partition_type(Dimension *dim)
+ts_dimension_get_partition_type(const Dimension *dim)
 {
 	Assert(dim != NULL);
 	return dim->partitioning != NULL ? dim->partitioning->partfunc.rettype : dim->fd.column_type;

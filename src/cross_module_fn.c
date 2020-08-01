@@ -168,7 +168,7 @@ add_tsl_telemetry_info_default(JsonbParseState **parse_state)
 }
 
 static bool
-bgw_policy_job_execute_default_fn(BgwJob *job)
+bgw_policy_job_execute_default_fn(const BgwJob *job)
 {
 	error_no_default_fn_enterprise();
 	pg_unreachable();

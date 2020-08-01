@@ -19,13 +19,14 @@ TSDLLEXPORT FormData_ts_interval *ts_interval_from_sql_input(Oid relid, Datum in
 TSDLLEXPORT HeapTuple ts_interval_form_heaptuple(FormData_ts_interval *invl);
 TSDLLEXPORT bool ts_interval_equal(FormData_ts_interval *invl1, FormData_ts_interval *invl2);
 TSDLLEXPORT void ts_interval_now_func_validate(Oid now_func_oid, Oid open_dim_type);
-TSDLLEXPORT Datum ts_interval_subtract_from_now(FormData_ts_interval *invl, Dimension *open_dim);
-TSDLLEXPORT int64 ts_get_now_internal(Dimension *open_dim);
+TSDLLEXPORT Datum ts_interval_subtract_from_now(FormData_ts_interval *invl,
+												const Dimension *open_dim);
+TSDLLEXPORT int64 ts_get_now_internal(const Dimension *open_dim);
 TSDLLEXPORT FormData_ts_interval *
-ts_interval_from_sql_input_internal(Dimension *open_dim, Datum interval, Oid interval_type,
+ts_interval_from_sql_input_internal(const Dimension *open_dim, Datum interval, Oid interval_type,
 									const char *parameter_name, const char *caller_name);
 TSDLLEXPORT Datum ts_interval_from_now_func_get_datum(int64 interval, Oid time_dim_type,
 													  Oid now_func);
-TSDLLEXPORT Oid ts_get_integer_now_func(Dimension *open_dim);
+TSDLLEXPORT Oid ts_get_integer_now_func(const Dimension *open_dim);
 
 #endif /* TIMESCALEDB_INTERVAL */
