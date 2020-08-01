@@ -10,12 +10,7 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
 LANGUAGE C VOLATILE STRICT;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than 
---------+---------------+------------
-(0 rows)
-
-select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder', 'drop_chunks') ORDER BY id;
  id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
@@ -122,7 +117,7 @@ ERROR:  function add_retention_policy(interval) does not exist at character 8
 select add_retention_policy('test_table', INTERVAL 'haha');
 ERROR:  invalid input syntax for type interval: "haha" at character 52
 select add_retention_policy('test_table', 'haha');
-ERROR:  invalid type for parameter retention_window in add_retention_policy
+ERROR:  invalid parameter value for retention_window
 select add_retention_policy('test_table', 42);
 ERROR:  invalid parameter value for retention_window
 select add_retention_policy('fake_table', INTERVAL '3 month');
@@ -136,55 +131,49 @@ select add_retention_policy('test_table', INTERVAL '3 month', true);
 
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table', INTERVAL '3 month', true);
-NOTICE:  drop chunks policy already exists on hypertable "test_table", skipping
+NOTICE:  retention policy already exists on hypertable "test_table", skipping
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
 select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => true);
-WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id |   older_than    
---------+---------------+-----------------
-   1002 |             1 | (t,"@ 3 mons",)
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
+ 1002 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             1 | {"hypertable_id": 1, "retention_window": "@ 3 mons"}
 (1 row)
 
 \set ON_ERROR_STOP 0
 select add_retention_policy('test_table', INTERVAL '1 year');
-ERROR:  drop chunks policy already exists for hypertable "test_table"
+ERROR:  retention policy already exists for hypertable "test_table"
 select add_retention_policy('test_table', INTERVAL '3 days');
-ERROR:  drop chunks policy already exists for hypertable "test_table"
+ERROR:  retention policy already exists for hypertable "test_table"
 \set ON_ERROR_STOP 1
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id |   older_than    
---------+---------------+-----------------
-   1002 |             1 | (t,"@ 3 mons",)
-(1 row)
-
-select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
- job_id | hypertable_id |   older_than    
---------+---------------+-----------------
-   1002 |             1 | (t,"@ 3 mons",)
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
+ 1002 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             1 | {"hypertable_id": 1, "retention_window": "@ 3 mons"}
 (1 row)
 
 select remove_retention_policy('test_table');
@@ -220,14 +209,9 @@ select * from _timescaledb_catalog.dimension;
   2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 | my_new_schema           | dummy_now2
 (2 rows)
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than 
---------+---------------+------------
-(0 rows)
-
-select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
- job_id | hypertable_id | older_than 
---------+---------------+------------
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
 select remove_reorder_policy('test_table');
@@ -247,10 +231,10 @@ select add_retention_policy('test_table', INTERVAL '3 month');
                  1003
 (1 row)
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id |   older_than    
---------+---------------+-----------------
-   1003 |             1 | (t,"@ 3 mons",)
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
+ 1003 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             1 | {"hypertable_id": 1, "retention_window": "@ 3 mons"}
 (1 row)
 
 select remove_retention_policy('test_table');
@@ -259,9 +243,9 @@ select remove_retention_policy('test_table');
  
 (1 row)
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than 
---------+---------------+------------
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
 select add_retention_policy('test_table_int', 1);
@@ -270,15 +254,15 @@ select add_retention_policy('test_table_int', 1);
                  1004
 (1 row)
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than 
---------+---------------+------------
-   1004 |             2 | (f,,1)
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                   config                    
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+---------------------------------------------
+ 1004 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             2 | {"hypertable_id": 2, "retention_window": 1}
 (1 row)
 
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table_int', 2, true);
-WARNING:  could not add drop chunks policy due to existing policy on hypertable with different arguments
+WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
  add_retention_policy 
 ----------------------
                    -1
@@ -290,14 +274,14 @@ select remove_retention_policy('test_table_int');
  
 (1 row)
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than 
---------+---------------+------------
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+ id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
+----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
 -- Make sure remove works when there's nothing to remove
 select remove_retention_policy('test_table', true);
-NOTICE:  drop chunks policy does not exist on hypertable "test_table", skipping
+NOTICE:  retention policy does not exist on hypertable "test_table", skipping
  remove_retention_policy 
 -------------------------
  
@@ -353,12 +337,6 @@ select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
      1
 (1 row)
 
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
- count 
--------
-     1
-(1 row)
-
 select delete_job(:job_id);
  delete_job 
 ------------
@@ -371,14 +349,7 @@ select count(*) from _timescaledb_config.bgw_job where id=:job_id;
      0
 (1 row)
 
--- Job args should be gone
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
- count 
--------
-     0
-(1 row)
-
--- Job args should still be there
+-- Job config should still be there
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
@@ -412,18 +383,12 @@ select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
      1
 (1 row)
 
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
- count 
--------
-     1
-(1 row)
-
 SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
-  id  |      application_name      |                job_type                | schedule_interval |   max_runtime   | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                      config                       
-------+----------------------------+----------------------------------------+-------------------+-----------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+---------------------------------------------------
-    1 | Telemetry Reporter         | telemetry_and_version_check_if_enabled | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     |                |                       | super_user        | t         |               | 
- 1007 | Drop Chunks Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 5 mins     |                |                       | default_perm_user | t         |             1 | 
- 1008 | Reorder Background Job     | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             1 | {"index_name": "third_index", "hypertable_id": 1}
+  id  |     application_name     |                job_type                | schedule_interval |   max_runtime   | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
+------+--------------------------+----------------------------------------+-------------------+-----------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
+    1 | Telemetry Reporter       | telemetry_and_version_check_if_enabled | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     |                  |                       | super_user        | t         |               | 
+ 1007 | Retention Background Job | drop_chunks                            | @ 1 day           | @ 5 mins        |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             1 | {"hypertable_id": 1, "retention_window": "@ 2 mons"}
+ 1008 | Reorder Background Job   | reorder                                | @ 84 hours        | @ 0             |          -1 | @ 5 mins     | policy_reorder   | _timescaledb_internal | default_perm_user | t         |             1 | {"index_name": "third_index", "hypertable_id": 1}
 (3 rows)
 
 DROP TABLE test_table;
@@ -434,12 +399,6 @@ select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 (1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
- count 
--------
-     0
-(1 row)
-
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
  count 
 -------
      0
@@ -486,42 +445,24 @@ select add_retention_policy('test_table2', INTERVAL '1 days');
 (1 row)
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
-  id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+----------------------------+-------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1009 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             4 | 
- 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             5 | 
-(2 rows)
-
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id |   older_than    
---------+---------------+-----------------
-   1009 |             4 | (t,"@ 2 days",)
-   1010 |             5 | (t,"@ 1 day",)
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
+ 1009 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             4 | {"hypertable_id": 4, "retention_window": "@ 2 days"}
+ 1010 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             5 | {"hypertable_id": 5, "retention_window": "@ 1 day"}
 (2 rows)
 
 DROP TABLE test_table;
 DROP TABLE test_table_int;
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
-  id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema |       owner       | scheduled | hypertable_id | config 
-------+----------------------------+-------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------------------+-----------+---------------+--------
- 1010 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     |           |             | default_perm_user | t         |             5 | 
-(1 row)
-
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id |   older_than   
---------+---------------+----------------
-   1010 |             5 | (t,"@ 1 day",)
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                       config                        
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------
+ 1010 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             5 | {"hypertable_id": 5, "retention_window": "@ 1 day"}
 (1 row)
 
 DROP TABLE test_table2;
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
  id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
-(0 rows)
-
-select * from _timescaledb_config.bgw_policy_drop_chunks;
- job_id | hypertable_id | older_than 
---------+---------------+------------
 (0 rows)
 
 -- Now test chunk_stat insertion
@@ -642,10 +583,10 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
-  id  |      application_name      |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |   proc_name    |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
-------+----------------------------+-------------+-------------------+-------------+-------------+--------------+----------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
- 1012 | Reorder Background Job     | reorder     | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder | _timescaledb_internal | default_perm_user | t         |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7}
- 1013 | Drop Chunks Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     |                |                       | default_perm_user | t         |             7 | 
+  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                          config                           
+------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+-----------------------------------------------------------
+ 1012 | Reorder Background Job   | reorder     | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | policy_reorder   | _timescaledb_internal | default_perm_user | t         |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7}
+ 1013 | Retention Background Job | drop_chunks | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             7 | {"hypertable_id": 7, "retention_window": "@ 2 days"}
 (2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row

@@ -228,17 +228,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
 
---Now we define the argument tables for available BGW policies.
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_policy_drop_chunks (
-    job_id          		    INTEGER                 PRIMARY KEY REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE,
-    hypertable_id   		    INTEGER     UNIQUE      NOT NULL REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    older_than	    _timescaledb_catalog.ts_interval    NOT NULL,
-    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
-);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
-
------ End BGW policy table definitions
-
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
 -- to determine whether to run a specific job on a specific chunk.
 CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (

@@ -55,7 +55,6 @@
 #include "trigger.h"
 #include "compat.h"
 #include "utils.h"
-#include "interval.h"
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "bgw_policy/chunk_stats.h"
@@ -1698,6 +1697,41 @@ chunks_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim, StrategyNumb
 }
 
 /*
+ * Convert the difference of interval and current timestamp to internal representation
+ * This function interprets the interval as distance in time dimension to the past.
+ * Depending on the type of hypertable time column, the function applies the
+ * necessary granularity to now() - interval and returns the resulting
+ * datum (which incapsulates data of time column type)
+ */
+static Datum
+subtract_interval_from_now(Oid partitioning_type, const Interval *interval)
+{
+	Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
+
+	switch (partitioning_type)
+	{
+		case TIMESTAMPOID:
+			res = DirectFunctionCall1(timestamptz_timestamp, res);
+			return DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(interval));
+
+		case TIMESTAMPTZOID:
+			return DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(interval));
+
+		case DATEOID:
+			res = DirectFunctionCall1(timestamptz_timestamp, res);
+			res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(interval));
+			return DirectFunctionCall1(timestamp_date, res);
+
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unknown time type %s", format_type_be(partitioning_type))));
+	}
+
+	return res;
+}
+
+/*
  * Convert endpoint specifiers such as older than and newer than to an absolute
  * time. The rules for conversion are as follows:
  *
@@ -1706,24 +1740,19 @@ chunks_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim, StrategyNumb
  * return the internal time representation. Otherwise, ERROR.
  */
 static int64
-get_internal_time_from_endpoint_specifiers(Oid hypertable_relid, Dimension *time_dim,
-										   Datum endpoint_datum, Oid endpoint_type,
-										   const char *parameter_name, const char *caller_name)
+get_internal_time_from_endpoint_specifiers(Dimension *time_dim, Datum endpoint_datum,
+										   Oid endpoint_type, const char *caller_name)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
-	FormData_ts_interval *ts_interval;
 
 	ts_dimension_open_typecheck(endpoint_type, partitioning_type, caller_name);
 	Assert(OidIsValid(endpoint_type));
 
 	if (endpoint_type == INTERVALOID)
 	{
-		ts_interval = ts_interval_from_sql_input(hypertable_relid,
-												 endpoint_datum,
-												 endpoint_type,
-												 parameter_name,
-												 caller_name);
-		return ts_time_value_to_internal(ts_interval_subtract_from_now(ts_interval, time_dim),
+		return ts_time_value_to_internal(subtract_interval_from_now(partitioning_type,
+																	DatumGetIntervalP(
+																		endpoint_datum)),
 										 partitioning_type);
 	}
 	else
@@ -1752,22 +1781,18 @@ chunks_typecheck_and_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim
 
 	if (older_than_type != InvalidOid)
 	{
-		older_than = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
-																time_dim,
+		older_than = get_internal_time_from_endpoint_specifiers(time_dim,
 																older_than_datum,
 																older_than_type,
-																"older_than",
 																caller_name);
 		end_strategy = BTLessStrategyNumber;
 	}
 
 	if (newer_than_type != InvalidOid)
 	{
-		newer_than = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
-																time_dim,
+		newer_than = get_internal_time_from_endpoint_specifiers(time_dim,
 																newer_than_datum,
 																newer_than_type,
-																"newer_than",
 																caller_name);
 		start_strategy = BTGreaterEqualStrategyNumber;
 	}
@@ -3247,11 +3272,9 @@ ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid, CACHE_FLAG_NONE, &hcache);
 	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	older_than_time = get_internal_time_from_endpoint_specifiers(ht->main_table_relid,
-																 time_dimension,
+	older_than_time = get_internal_time_from_endpoint_specifiers(time_dimension,
 																 older_than_datum,
 																 older_than_type,
-																 "older_than",
 																 "drop_chunks");
 	ignore_invalidation_older_than =
 		ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id, &cagg);

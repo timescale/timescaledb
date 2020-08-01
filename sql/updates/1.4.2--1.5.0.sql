@@ -20,8 +20,11 @@ CREATE TYPE _timescaledb_catalog.ts_interval AS (
     integer_interval        BIGINT
     );
 
+-- Because references to a C function in a versioned update file means that functions needs to be in the
+-- object file that is running the update we replace this function with a dummy SQL function to keep
+-- the change to the rest of the script minimal
 CREATE OR REPLACE FUNCTION _timescaledb_internal.valid_ts_interval(invl _timescaledb_catalog.ts_interval)
-RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_valid_ts_interval' LANGUAGE C VOLATILE STRICT;
+RETURNS BOOLEAN AS $$SELECT true;$$ LANGUAGE SQL VOLATILE STRICT;
 
 DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
 DROP VIEW IF EXISTS timescaledb_information.policy_stats;

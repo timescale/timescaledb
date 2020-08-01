@@ -66,7 +66,8 @@ ts_test_auto_reorder(PG_FUNCTION_ARGS)
 Datum
 ts_test_auto_drop_chunks(PG_FUNCTION_ARGS)
 {
-	execute_drop_chunks_policy(PG_GETARG_INT32(0));
+	BgwJob *job = ts_bgw_job_find(PG_GETARG_INT32(0), CurrentMemoryContext, true);
+	policy_retention_execute(job->fd.id, job->fd.config);
 
 	PG_RETURN_NULL();
 }

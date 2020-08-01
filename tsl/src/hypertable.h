@@ -8,7 +8,6 @@
 
 #include <hypertable.h>
 #include "dimension.h"
-#include "interval.h"
 #include "config.h"
 #include "catalog.h"
 
@@ -16,7 +15,6 @@
  * dimensions, and the value for number of slices is an int16. */
 #define MAX_NUM_HYPERTABLE_DATA_NODES PG_INT16_MAX
 
-extern Datum hypertable_valid_ts_interval(PG_FUNCTION_ARGS);
 extern void hypertable_make_distributed(Hypertable *ht, List *data_node_names);
 extern List *hypertable_assign_data_nodes(int32 hypertable_id, List *nodes);
 extern List *hypertable_get_and_validate_data_nodes(ArrayType *nodearr);

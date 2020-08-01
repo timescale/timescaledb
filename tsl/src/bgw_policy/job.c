@@ -24,9 +24,9 @@
 #include "bgw/job.h"
 #include "bgw/job_stat.h"
 #include "bgw_policy/chunk_stats.h"
-#include "bgw_policy/drop_chunks.h"
-#include "bgw_policy/reorder_api.h"
 #include "bgw_policy/compression_api.h"
+#include "bgw_policy/reorder_api.h"
+#include "bgw_policy/retention_api.h"
 #include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/job.h"
@@ -44,8 +44,6 @@
 #include "license.h"
 #include "reorder.h"
 #include "utils.h"
-#include "drop_chunks_api.h"
-#include "interval.h"
 
 #define ALTER_JOB_SCHEDULE_NUM_COLS 6
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
@@ -89,30 +87,67 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 															 -1);
 }
 
-static int64
-get_compression_window_end_value(Dimension *dim, const Jsonb *config)
+static Datum
+subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
+{
+	Datum now;
+	int64 res;
+
+	AssertArg(IS_INTEGER_TYPE(time_dim_type));
+
+	now = OidFunctionCall0(now_func);
+
+	switch (time_dim_type)
+	{
+		case INT2OID:
+			res = DatumGetInt16(now) - interval;
+			if (res < PG_INT16_MIN || res > PG_INT16_MAX)
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+			return Int16GetDatum(res);
+		case INT4OID:
+			res = DatumGetInt32(now) - interval;
+			if (res < PG_INT32_MIN || res > PG_INT32_MAX)
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+			return Int32GetDatum(res);
+		case INT8OID:
+		{
+			bool overflow = pg_sub_s64_overflow(DatumGetInt64(now), interval, &res);
+			if (overflow)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+			}
+			return Int64GetDatum(res);
+		}
+		default:
+			pg_unreachable();
+	}
+}
+
+/*
+ * returns now() - window as partitioning type datum
+ */
+static Datum
+get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_getter)(const Jsonb *),
+					Interval *(*interval_getter)(const Jsonb *) )
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-		int64 lag = policy_compression_get_older_than_int(config);
+		int64 lag = int_getter(config);
 		Oid now_func = ts_get_integer_now_func(dim);
 
-		if (InvalidOid == now_func)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("integer_now function must be set")));
+		Assert(now_func);
 
-		return ts_time_value_to_internal(ts_interval_from_now_func_get_datum(lag,
-																			 partitioning_type,
-																			 now_func),
-										 partitioning_type);
+		return subtract_integer_from_now(lag, partitioning_type, now_func);
 	}
 	else
 	{
 		Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
-		Interval *lag = policy_compression_get_older_than_interval(config);
+		Interval *lag = interval_getter(config);
 
 		switch (partitioning_type)
 		{
@@ -120,39 +155,44 @@ get_compression_window_end_value(Dimension *dim, const Jsonb *config)
 				res = DirectFunctionCall1(timestamptz_timestamp, res);
 				res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
 
-				return ts_time_value_to_internal(res, partitioning_type);
+				return res;
 			case TIMESTAMPTZOID:
 				res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(lag));
 
-				return ts_time_value_to_internal(res, partitioning_type);
+				return res;
 			case DATEOID:
 				res = DirectFunctionCall1(timestamptz_timestamp, res);
 				res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
 				res = DirectFunctionCall1(timestamp_date, res);
 
-				return ts_time_value_to_internal(res, partitioning_type);
+				return res;
 			default:
+				/* this should never happen as otherwise hypertable has unsupported time type */
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("unknown time type OID %d", partitioning_type)));
+						 errmsg("unsupported time type %s", format_type_be(partitioning_type))));
 				pg_unreachable();
 		}
 	}
 }
 
 static int32
-get_chunk_to_compress(Hypertable *ht, const Jsonb *config)
+get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 {
-	Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 	StrategyNumber end_strategy = BTLessStrategyNumber;
 
-	int64 end_value = get_compression_window_end_value(open_dim, config);
+	Datum boundary = get_window_boundary(dim,
+										 config,
+										 policy_compression_get_older_than_int,
+										 policy_compression_get_older_than_interval);
 
-	return ts_dimension_slice_get_chunkid_to_compress(open_dim->fd.id,
+	return ts_dimension_slice_get_chunkid_to_compress(dim->fd.id,
 													  InvalidStrategy, /*start_strategy*/
 													  -1,			   /*start_value*/
 													  end_strategy,
-													  end_value);
+													  ts_time_value_to_internal(boundary,
+																				partitioning_type));
 }
 
 bool
@@ -245,16 +285,15 @@ get_open_dimension_for_hypertable(Hypertable *ht)
 }
 
 bool
-execute_drop_chunks_policy(int32 job_id)
+policy_retention_execute(int32 job_id, Jsonb *config)
 {
 	bool started = false;
-	BgwPolicyDropChunks *args;
 	Oid table_relid;
 	Hypertable *hypertable;
 	Cache *hcache;
 	Dimension *open_dim;
-	Datum older_than;
-	Datum older_than_type;
+	Datum boundary;
+	Datum boundary_type;
 	int num_dropped;
 	List *dc_temp;
 
@@ -265,25 +304,19 @@ execute_drop_chunks_policy(int32 job_id)
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
-	/* Get the arguments from the drop_chunks_policy table */
-	args = ts_bgw_policy_drop_chunks_find_by_job(job_id);
-
-	if (args == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("could not run drop_chunks policy #%d because no args in policy table",
-						job_id)));
-
-	table_relid = ts_hypertable_id_to_relid(args->hypertable_id);
+	table_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config));
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 	open_dim = get_open_dimension_for_hypertable(hypertable);
-	older_than = ts_interval_subtract_from_now(&args->older_than, open_dim);
-	older_than_type = ts_dimension_get_partition_type(open_dim);
+	boundary = get_window_boundary(open_dim,
+								   config,
+								   policy_retention_get_retention_window_int,
+								   policy_retention_get_retention_window_interval);
+	boundary_type = ts_dimension_get_partition_type(open_dim);
 
 	dc_temp = ts_chunk_do_drop_chunks(hypertable,
-									  older_than,
+									  boundary,
 									  InvalidOid,
-									  older_than_type,
+									  boundary_type,
 									  InvalidOid,
 									  DEBUG2,
 									  NULL);
@@ -349,6 +382,7 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 	Cache *hcache;
 	int32 chunkid;
 	Chunk *chunk = NULL;
+	Dimension *dim;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -359,8 +393,9 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 
 	table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	chunkid = get_chunk_to_compress(ht, config);
+	chunkid = get_chunk_to_compress(dim, config);
 	if (chunkid == INVALID_CHUNK_ID)
 	{
 		elog(NOTICE,
@@ -379,7 +414,7 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 			 NameStr(chunk->fd.table_name));
 	}
 
-	chunkid = get_chunk_to_compress(ht, config);
+	chunkid = get_chunk_to_compress(dim, config);
 	if (chunkid != INVALID_CHUNK_ID)
 	{
 		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
@@ -521,12 +556,11 @@ tsl_bgw_policy_job_execute(BgwJob *job)
 
 	switch (job->bgw_type)
 	{
-		case JOB_TYPE_DROP_CHUNKS:
-			return execute_drop_chunks_policy(job->fd.id);
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 			return execute_materialize_continuous_aggregate(job);
 
 		case JOB_TYPE_COMPRESS_CHUNKS:
+		case JOB_TYPE_DROP_CHUNKS:
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_CUSTOM:
 			return job_execute(job);

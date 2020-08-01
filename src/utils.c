@@ -19,6 +19,7 @@
 #include <catalog/pg_operator.h>
 #include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
+#include <parser/parse_func.h>
 #include <parser/parse_coerce.h>
 #include <parser/scansup.h>
 #include <utils/catcache.h>
@@ -32,6 +33,7 @@
 #include "compat.h"
 #include "chunk.h"
 #include "utils.h"
+#include "guc.h"
 
 TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_unix_microseconds);
 
@@ -721,4 +723,72 @@ ts_get_reloptions(Oid relid)
 	ReleaseSysCache(tuple);
 
 	return options;
+}
+
+int64
+ts_get_now_internal(const Dimension *open_dim)
+{
+	Oid dim_post_part_type = ts_dimension_get_partition_type(open_dim);
+
+	if (IS_INTEGER_TYPE(dim_post_part_type))
+	{
+		Datum now_datum;
+		Oid now_func = ts_get_integer_now_func(open_dim);
+		now_datum = OidFunctionCall0(now_func);
+		return ts_time_value_to_internal(now_datum, dim_post_part_type);
+	}
+#ifdef TS_DEBUG
+	Datum now_datum;
+	if (ts_current_timestamp_mock == NULL || strlen(ts_current_timestamp_mock) == 0)
+		now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
+	else
+		now_datum = DirectFunctionCall3(timestamptz_in,
+										CStringGetDatum(ts_current_timestamp_mock),
+										0,
+										Int32GetDatum(-1));
+#else
+	Datum now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
+#endif
+	Assert(IS_TIMESTAMP_TYPE(dim_post_part_type));
+
+	/*
+	 * If the type of the partitioning column is TIMESTAMP or DATE
+	 * we need to adjust the return value for the local timezone.
+	 */
+	if (dim_post_part_type == TIMESTAMPOID || dim_post_part_type == DATEOID)
+		now_datum = DirectFunctionCall1(timestamptz_timestamp, now_datum);
+
+	return ts_time_value_to_internal(now_datum, TIMESTAMPTZOID);
+}
+
+/*
+ * Get the integer_now function for a dimension
+ */
+Oid
+ts_get_integer_now_func(const Dimension *open_dim)
+{
+	Oid rettype;
+	Oid now_func;
+	Oid argtypes[] = { 0 };
+
+	rettype = ts_dimension_get_partition_type(open_dim);
+
+	Assert(IS_INTEGER_TYPE(rettype));
+
+	if (strlen(NameStr(open_dim->fd.integer_now_func)) == 0 &&
+		strlen(NameStr(open_dim->fd.integer_now_func_schema)) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("integer_now function not set"))));
+
+	List *name = list_make2(makeString((char *) NameStr(open_dim->fd.integer_now_func_schema)),
+							makeString((char *) NameStr(open_dim->fd.integer_now_func)));
+	now_func = LookupFuncName(name, 0, argtypes, false);
+
+	if (get_func_rettype(now_func) != rettype)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FUNCTION),
+				 (errmsg("invalid integer_now function"),
+				  errhint("return type of function does not match dimension type"))));
+
+	return now_func;
 }

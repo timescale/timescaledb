@@ -21,7 +21,6 @@
 
 #include <scanner.h>
 #include <compat.h>
-#include <interval.h>
 #include <scan_iterator.h>
 
 #include "chunk.h"
