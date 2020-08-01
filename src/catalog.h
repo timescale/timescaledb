@@ -46,7 +46,6 @@ typedef enum CatalogTable
 	BGW_JOB,
 	BGW_JOB_STAT,
 	METADATA,
-	BGW_POLICY_DROP_CHUNKS,
 	BGW_POLICY_CHUNK_STATS,
 	CONTINUOUS_AGG,
 	CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
@@ -803,62 +802,6 @@ enum
 	METADATA_PKEY_IDX = 0,
 	_MAX_METADATA_INDEX,
 };
-
-/******************************************
- *
- * bgw_policy_drop_chunks table definitions
- *
- ******************************************/
-#define BGW_POLICY_DROP_CHUNKS_TABLE_NAME "bgw_policy_drop_chunks"
-
-typedef enum Anum_ts_interval
-{
-	Anum_is_time_interval = 1,
-	Anum_time_interval,
-	Anum_integer_interval,
-	_Anum_ts_interval_max
-} Anum_ts_interval;
-
-#define Natts_ts_interval (_Anum_ts_interval_max - 1)
-typedef struct FormData_ts_interval
-{
-	bool is_time_interval;
-	Interval time_interval;
-	int64 integer_interval;
-} FormData_ts_interval;
-
-typedef enum Anum_bgw_policy_drop_chunks
-{
-	Anum_bgw_policy_drop_chunks_job_id = 1,
-	Anum_bgw_policy_drop_chunks_hypertable_id,
-	Anum_bgw_policy_drop_chunks_older_than,
-	_Anum_bgw_policy_drop_chunks_max,
-} Anum_bgw_policy_drop_chunks;
-
-#define Natts_bgw_policy_drop_chunks (_Anum_bgw_policy_drop_chunks_max - 1)
-
-enum
-{
-	BGW_POLICY_DROP_CHUNKS_HYPERTABLE_ID_KEY = 0,
-	BGW_POLICY_DROP_CHUNKS_PKEY,
-	_MAX_BGW_POLICY_DROP_CHUNKS_INDEX,
-};
-typedef enum Anum_bgw_policy_drop_chunks_hypertable_id_key
-{
-	Anum_bgw_policy_drop_chunks_hypertable_id_key_hypertable_id = 1,
-	_Anum_bgw_policy_drop_chunks_hypertable_id_key_max,
-} Anum_bgw_policy_drop_chunks_hypertable_id_key;
-
-#define Natts_bgw_policy_drop_chunks_hypertable_id_key                                             \
-	(_Anum_bgw_policy_drop_chunks_hypertable_id_key_max - 1)
-
-typedef enum Anum_bgw_policy_drop_chunks_pkey
-{
-	Anum_bgw_policy_drop_chunks_pkey_job_id = 1,
-	_Anum_bgw_policy_drop_chunks_pkey_max,
-} Anum_bgw_policy_drop_chunks_pkey;
-
-#define Natts_bgw_policy_drop_chunks_pkey (_Anum_bgw_policy_drop_chunks_pkey_max - 1)
 
 /****** BGW_POLICY_CHUNK_STATS TABLE definitions */
 #define BGW_POLICY_CHUNK_STATS_TABLE_NAME "bgw_policy_chunk_stats"

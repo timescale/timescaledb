@@ -24,7 +24,6 @@
 #include "net/http.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
-#include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/policy.h"
 #include "compression_chunk_size.h"
 
@@ -231,7 +230,7 @@ get_num_drop_chunks_policies()
 {
 	StringInfo buf = makeStringInfo();
 
-	appendStringInfo(buf, "%d", ts_bgw_policy_drop_chunks_count());
+	appendStringInfo(buf, "%d", ts_bgw_policy_retention_count());
 	return buf->data;
 }
 

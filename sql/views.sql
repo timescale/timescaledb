@@ -46,11 +46,10 @@ CREATE OR REPLACE VIEW timescaledb_information.license AS
          _timescaledb_internal.license_expiration_time() AS expiration_time;
 
 CREATE OR REPLACE VIEW timescaledb_information.drop_chunks_policies as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.older_than, p.job_id, j.schedule_interval,
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, jsonb_object_field_text(j.config,'retention_window') AS retention_window, j.id AS job_id, j.schedule_interval,
     j.max_runtime, j.max_retries, j.retry_period
-  FROM _timescaledb_config.bgw_policy_drop_chunks p
-    INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
-    INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id;
+  FROM _timescaledb_config.bgw_job j
+    INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.reorder_policies AS
 SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass AS hypertable,
@@ -68,8 +67,7 @@ WHERE job_type = 'reorder';
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
   SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
     js.total_runs, js.total_failures
-  FROM (SELECT id AS job_id, hypertable_id FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder','compress_chunks')
-        UNION SELECT job_id, hypertable_id FROM _timescaledb_config.bgw_policy_drop_chunks
+  FROM (SELECT id AS job_id, hypertable_id FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder','compress_chunks','drop_chunks')
         UNION SELECT job_id, raw_hypertable_id FROM _timescaledb_catalog.continuous_agg) p
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id

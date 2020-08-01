@@ -20,7 +20,6 @@
 #include <access/xact.h>
 
 #include <scanner.h>
-#include <interval.h>
 #include <continuous_agg.h>
 
 #include "compat.h"

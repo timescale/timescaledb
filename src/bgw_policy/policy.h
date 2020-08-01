@@ -15,5 +15,6 @@ extern ScanTupleResult ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, 
 
 extern void ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id);
 extern int32 ts_bgw_policy_reorder_count(void);
+extern int32 ts_bgw_policy_retention_count(void);
 
 #endif /* TIMESCALEDB_BGW_POLICY_POLICY_H */

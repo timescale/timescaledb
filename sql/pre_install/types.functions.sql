@@ -12,8 +12,6 @@
 -- function for constraint validation.
 -- This function needs to be defined before executing pre_install/tables.sql because it is used as
 -- validation constraint for columns of type ts_interval.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.valid_ts_interval(invl _timescaledb_catalog.ts_interval)
-RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_valid_ts_interval' LANGUAGE C VOLATILE STRICT;
 
 --the textual input/output is simply base64 encoding of the binary representation
 CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_data_in(CSTRING)

@@ -34,13 +34,16 @@ CREATE OR REPLACE FUNCTION add_retention_policy(
        retention_window "any",
        if_not_exists BOOL = false
 )
-RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_add_retention_policy'
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
 LANGUAGE C VOLATILE STRICT;
 
--- Remove the retention policy from a hypertable
 CREATE OR REPLACE FUNCTION remove_retention_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_remove_retention_policy'
+AS '@MODULE_PATHNAME@', 'ts_policy_retention_remove'
 LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_retention(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_retention_proc'
+LANGUAGE C;
 
 /* reorder policy */
 CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER

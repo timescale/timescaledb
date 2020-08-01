@@ -15,8 +15,7 @@ LANGUAGE C VOLATILE STRICT;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
-select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder', 'drop_chunks') ORDER BY id;
 
 CREATE TABLE test_table(time timestamptz, junk int);
 CREATE TABLE test_table_int(time bigint, junk int);
@@ -75,15 +74,14 @@ select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => tr
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 
 \set ON_ERROR_STOP 0
 select add_retention_policy('test_table', INTERVAL '1 year');
 select add_retention_policy('test_table', INTERVAL '3 days');
 \set ON_ERROR_STOP 1
 
-select * from _timescaledb_config.bgw_policy_drop_chunks;
-select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 
 select remove_retention_policy('test_table');
 
@@ -101,25 +99,23 @@ select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_catalog.dimension;
 
-
-select * from _timescaledb_config.bgw_policy_drop_chunks;
-select r.job_id,r.hypertable_id,r.older_than from _timescaledb_config.bgw_policy_drop_chunks as r, _timescaledb_catalog.hypertable as h where r.hypertable_id=h.id and h.table_name='test_table';
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 select remove_reorder_policy('test_table');
 
 select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
 
 select add_retention_policy('test_table', INTERVAL '3 month');
-select * from _timescaledb_config.bgw_policy_drop_chunks;
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 select remove_retention_policy('test_table');
-select * from _timescaledb_config.bgw_policy_drop_chunks;
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 
 select add_retention_policy('test_table_int', 1);
-select * from _timescaledb_config.bgw_policy_drop_chunks;
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table_int', 2, true);
 
 select remove_retention_policy('test_table_int');
-select * from _timescaledb_config.bgw_policy_drop_chunks;
+SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
 
 -- Make sure remove works when there's nothing to remove
 select remove_retention_policy('test_table', true);
@@ -147,14 +143,11 @@ select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
 
 select delete_job(:job_id);
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
--- Job args should be gone
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
--- Job args should still be there
+-- Job config should still be there
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
 
 select delete_job(:reorder_job_id);
@@ -166,14 +159,12 @@ select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
 SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
 
 DROP TABLE test_table;
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
-select count(*) from _timescaledb_config.bgw_policy_drop_chunks where job_id=:job_id;
 
 -- Check that we can't add policies on non-hypertables
 CREATE TABLE non_hypertable(junk int, more_junk int);
@@ -197,18 +188,15 @@ select add_retention_policy('test_table', INTERVAL '2 days');
 select add_retention_policy('test_table2', INTERVAL '1 days');
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
-select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 DROP TABLE test_table;
 DROP TABLE test_table_int;
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
-select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 DROP TABLE test_table2;
 
 select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
-select * from _timescaledb_config.bgw_policy_drop_chunks;
 
 -- Now test chunk_stat insertion
 select ts_test_chunk_stats_insert(123, 123, 45);

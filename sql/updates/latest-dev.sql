@@ -18,6 +18,11 @@ DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,a
 DROP FUNCTION IF EXISTS add_drop_chunks_policy;
 DROP FUNCTION IF EXISTS remove_drop_chunks_policy;
 DROP FUNCTION IF EXISTS drop_chunks;
+DROP FUNCTION IF EXISTS add_compress_chunks_policy;
+DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
+
+DROP VIEW IF EXISTS timescaledb_information.policy_stats;
+DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
@@ -70,55 +75,7 @@ CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx
 ON _timescaledb_catalog.remote_txn(data_node_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
-
 GRANT SELECT ON _timescaledb_catalog.remote_txn TO PUBLIC;
-
--- Update drop_chunks policy table
-
---since we are recreating the bgw_policy_drop_chunks table, it has to be explicitly
--- removed from the extension as it was configured to be dumped by pg_extension_config_dump.
--- So remove it from the extension first and then recreate a new table.
-
-CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp (
-    job_id INTEGER PRIMARY KEY
-    	   REFERENCES _timescaledb_config.bgw_job(id)
-	   ON DELETE CASCADE,
-    hypertable_id INTEGER UNIQUE NOT NULL
-    		  REFERENCES _timescaledb_catalog.hypertable(id)
-		  ON DELETE CASCADE,
-    older_than _timescaledb_catalog.ts_interval NOT NULL,
-    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
-);
-
-INSERT INTO _timescaledb_config.bgw_policy_drop_chunks_tmp (
-    SELECT job_id,
-    	   hypertable_id,
-	   older_than
-      FROM _timescaledb_config.bgw_policy_drop_chunks
-);
-
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_drop_chunks;
-DROP VIEW IF EXISTS timescaledb_information.policy_stats;
-DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
-DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
-
-CREATE TABLE _timescaledb_config.bgw_policy_drop_chunks (
-    job_id INTEGER PRIMARY KEY
-    	   REFERENCES _timescaledb_config.bgw_job(id)
-	   ON DELETE CASCADE,
-    hypertable_id INTEGER UNIQUE NOT NULL
-    		  REFERENCES _timescaledb_catalog.hypertable(id)
-		  ON DELETE CASCADE,
-    older_than _timescaledb_catalog.ts_interval NOT NULL,
-    CONSTRAINT valid_older_than CHECK(_timescaledb_internal.valid_ts_interval(older_than))
-);
-INSERT INTO _timescaledb_config.bgw_policy_drop_chunks (
-       SELECT * FROM _timescaledb_config.bgw_policy_drop_chunks_tmp
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_policy_drop_chunks', '');
-DROP TABLE _timescaledb_config.bgw_policy_drop_chunks_tmp;
-GRANT SELECT ON _timescaledb_config.bgw_policy_drop_chunks TO PUBLIC;
 
 DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
 DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
@@ -181,6 +138,23 @@ FROM _timescaledb_config.bgw_policy_compress_chunks c
 WHERE job_type = 'compress_chunks'
   AND job.id = c.job_id;
 
+-- migrate retention jobs
+UPDATE
+  _timescaledb_config.bgw_job job
+SET proc_name = 'policy_retention',
+  proc_schema = '_timescaledb_internal',
+  config = jsonb_build_object('hypertable_id', c.hypertable_id, 'retention_window', CASE WHEN (older_than).is_time_interval THEN (older_than).time_interval::text ELSE (older_than).integer_interval::text END),
+  hypertable_id = c.hypertable_id,
+  OWNER = (
+    SELECT relowner::regrole::text
+    FROM _timescaledb_catalog.hypertable ht,
+      pg_class cl
+    WHERE ht.id = c.hypertable_id
+      AND cl.oid = format('%I.%I', schema_name, table_name)::regclass)
+FROM _timescaledb_config.bgw_policy_drop_chunks c
+WHERE job_type = 'drop_chunks'
+  AND job.id = c.job_id;
+
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
 ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
@@ -189,9 +163,11 @@ CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_compress_chunks;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_drop_chunks;
 DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_reorder CASCADE;
 DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_compress_chunks CASCADE;
+DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
 
-DROP FUNCTION IF EXISTS add_compress_chunks_policy;
-DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
+DROP FUNCTION IF EXISTS _timescaledb_internal.valid_ts_interval;
+DROP TYPE IF EXISTS _timescaledb_catalog.ts_interval;
 

@@ -56,7 +56,6 @@
 #include "utils.h"
 #include "bgw_policy/policy.h"
 #include "continuous_agg.h"
-#include "interval.h"
 #include "license_guc.h"
 #include "cross_module_fn.h"
 #include "scan_iterator.h"
@@ -2297,6 +2296,51 @@ ts_is_partitioning_column(Hypertable *ht, Index column_attno)
 	return false;
 }
 
+static void
+integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
+{
+	HeapTuple tuple;
+	Form_pg_proc now_func;
+
+	/* this function should only be called for hypertables with an open integer time dimension */
+	Assert(IS_INTEGER_TYPE(open_dim_type));
+
+	if (!OidIsValid(now_func_oid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("invalid integer_now function"))));
+
+	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(now_func_oid));
+	if (!HeapTupleIsValid(tuple))
+	{
+		ReleaseSysCache(tuple);
+		ereport(ERROR,
+				(errcode(ERRCODE_NO_DATA_FOUND),
+				 errmsg("cache lookup failed for function %u", now_func_oid)));
+	}
+
+	now_func = (Form_pg_proc) GETSTRUCT(tuple);
+
+	if ((now_func->provolatile != PROVOLATILE_IMMUTABLE &&
+		 now_func->provolatile != PROVOLATILE_STABLE) ||
+		now_func->pronargs != 0)
+	{
+		ReleaseSysCache(tuple);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("integer_now_func must take no arguments and it must be STABLE")));
+	}
+
+	if (now_func->prorettype != open_dim_type)
+	{
+		ReleaseSysCache(tuple);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("return type of integer_now_func must be the same as "
+						"the type of the time partitioning column of the hypertable")));
+	}
+	ReleaseSysCache(tuple);
+}
+
 TS_FUNCTION_INFO_V1(ts_hypertable_set_integer_now_func);
 
 Datum
@@ -2332,7 +2376,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 				 errmsg("integer_now_func can only be set for hypertables "
 						"that have integer time dimensions")));
 
-	ts_interval_now_func_validate(now_func_oid, open_dim_type);
+	integer_now_func_validate(now_func_oid, open_dim_type);
 
 	aclresult = pg_proc_aclcheck(now_func_oid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)

@@ -218,8 +218,6 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 
 SELECT alter_job_schedule(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
 
-select * from _timescaledb_config.bgw_policy_drop_chunks where job_id=:drop_chunks_job_id;
-
 SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
 
 -- no stats

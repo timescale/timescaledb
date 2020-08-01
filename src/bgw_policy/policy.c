@@ -7,7 +7,6 @@
 #include <postgres.h>
 
 #include "bgw/job.h"
-#include "bgw_policy/drop_chunks.h"
 #include "policy.h"
 
 void
@@ -15,17 +14,6 @@ ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id)
 {
 	List *jobs;
 	ListCell *lc;
-	/*
-	 * Because this is used in a cascaded delete from hypertable deletion, we
-	 * also need to delete the job. This means we don't actually call the
-	 * delete on the individual policy, but call the bgw_job delete function.
-	 */
-	void *policy;
-
-	policy = ts_bgw_policy_drop_chunks_find_by_hypertable(hypertable_id);
-
-	if (policy)
-		ts_bgw_job_delete_by_id(((BgwPolicyDropChunks *) policy)->job_id);
 
 	jobs = ts_bgw_job_find_by_hypertable_id(hypertable_id);
 	foreach (lc, jobs)
@@ -52,6 +40,14 @@ int32
 ts_bgw_policy_reorder_count()
 {
 	List *jobs = ts_bgw_job_find_by_proc("policy_reorder", INTERNAL_SCHEMA_NAME);
+
+	return list_length(jobs);
+}
+
+int32
+ts_bgw_policy_retention_count()
+{
+	List *jobs = ts_bgw_job_find_by_proc("policy_retention", INTERNAL_SCHEMA_NAME);
 
 	return list_length(jobs);
 }

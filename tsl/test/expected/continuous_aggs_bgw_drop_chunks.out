@@ -70,7 +70,7 @@ REFRESH MATERIALIZED VIEW drop_chunks_view1;
 -- directly does not work
 \set ON_ERROR_STOP 0
 SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', retention_window=> -50) as drop_chunks_job_id1 \gset
-ERROR:  cannot add drop chunks policy to materialized hypertable "_materialized_hypertable_2" 
+ERROR:  cannot add retention policy to materialized hypertable "_materialized_hypertable_2" 
 \set ON_ERROR_STOP 1
 --TEST2  specify drop chunks policy on cont. aggregate
 -- integer_now func on raw hypertable is used by the drop

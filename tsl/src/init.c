@@ -7,7 +7,7 @@
 #include <fmgr.h>
 
 #include "bgw_policy/compression_api.h"
-#include "bgw_policy/drop_chunks_api.h"
+#include "bgw_policy/retention_api.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
 #include "chunk_api.h"
@@ -92,14 +92,18 @@ CrossModuleFunctions tsl_cm_functions = {
 	.add_tsl_telemetry_info = tsl_telemetry_add_info,
 	.bgw_policy_job_execute = tsl_bgw_policy_job_execute,
 	.continuous_agg_materialize = continuous_agg_materialize,
-	.add_retention_policy = drop_chunks_add_policy,
-	.remove_retention_policy = drop_chunks_remove_policy,
+
+	/* bgw policies */
+	.policy_retention_add = policy_retention_add,
+	.policy_retention_proc = policy_retention_proc,
+	.policy_retention_remove = policy_retention_remove,
 	.policy_compression_add = policy_compression_add,
 	.policy_compression_proc = policy_compression_proc,
 	.policy_compression_remove = policy_compression_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_remove = policy_reorder_remove,
+
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,

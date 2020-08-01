@@ -31,7 +31,6 @@
 #include "utils.h"
 #include "telemetry/telemetry.h"
 #include "bgw_policy/chunk_stats.h"
-#include "bgw_policy/drop_chunks.h"
 #include "bgw_policy/policy.h"
 #include "scan_iterator.h"
 
@@ -109,15 +108,6 @@ ts_bgw_job_owner(BgwJob *job)
 	{
 		case JOB_TYPE_VERSION_CHECK:
 			return ts_catalog_database_info_get()->owner_uid;
-		case JOB_TYPE_DROP_CHUNKS:
-		{
-			BgwPolicyDropChunks *policy = ts_bgw_policy_drop_chunks_find_by_job(job->fd.id);
-
-			if (policy == NULL)
-				elog(ERROR, "drop_chunks policy for job with id \"%d\" not found", job->fd.id);
-
-			return ts_rel_get_owner(ts_hypertable_id_to_relid(policy->hypertable_id));
-		}
 		case JOB_TYPE_CONTINUOUS_AGGREGATE:
 		{
 			ContinuousAgg *ca = ts_continuous_agg_find_by_job_id(job->fd.id);
@@ -129,6 +119,7 @@ ts_bgw_job_owner(BgwJob *job)
 		}
 
 		case JOB_TYPE_COMPRESS_CHUNKS:
+		case JOB_TYPE_DROP_CHUNKS:
 		case JOB_TYPE_REORDER:
 		case JOB_TYPE_CUSTOM:
 			return get_role_oid(NameStr(job->fd.owner), false);
@@ -242,29 +233,59 @@ bgw_job_filter_scheduled(TupleInfo *ti, void *data)
 	return DatumGetBool(scheduled);
 }
 
+/* This function is meant to be used by the scheduler only
+ * it does not include the config field which saves us from
+ * detoasting and makes memory management in the scheduler
+ * simpler as otherwise the config field would have to be
+ * freed separately when freeing jobs which would prevent
+ * the use of list_free_deep.
+ * The scheduler does not need the config field only the
+ * individual jobs do.
+ * The scheduler requires jobs to be sorted by id
+ * which is guaranteed by the index scan on the primary key
+ */
 List *
 ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 {
-	/* the scheduler which uses this function requires jobs to be sorted by id
-	 * which is guaranteed by the index scan on the primary key */
-	Catalog *catalog = ts_catalog_get();
-	AccumData list_data = {
-		.list = NIL,
-		.alloc_size = alloc_size,
-	};
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, BGW_JOB),
-		.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX),
-		.data = &list_data,
-		.tuple_found = bgw_job_accum_tuple_found,
-		.filter = bgw_job_filter_scheduled,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-		.result_mctx = mctx,
-	};
+	MemoryContext old_ctx;
+	List *jobs = NIL;
+	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, AccessShareLock, mctx);
 
-	ts_scanner_scan(&scanctx);
-	return list_data.list;
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX);
+	iterator.ctx.filter = bgw_job_filter_scheduled;
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool should_free, isnull;
+		Datum value;
+
+		BgwJob *job = MemoryContextAllocZero(mctx, alloc_size);
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+		memcpy(job, GETSTRUCT(tuple), sizeof(FormData_bgw_job));
+
+		if (should_free)
+			heap_freetuple(tuple);
+
+		/* handle NULL columns */
+		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
+		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
+
+		/* skip config since the scheduler doesnt need it this saves us
+		 * from detoasting and simplifies freeing job lists in the
+		 * scheduler as otherwise the config field would have to be
+		 * freed separately when freeing a job
+		 */
+		job->fd.config = NULL;
+
+		job->bgw_type = get_job_type_from_name(&job->fd.job_type);
+
+		old_ctx = MemoryContextSwitchTo(mctx);
+		jobs = lappend(jobs, job);
+		MemoryContextSwitchTo(old_ctx);
+	}
+
+	return jobs;
 }
 
 static void
@@ -560,9 +581,6 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Also delete the bgw_stat entry */
 	ts_bgw_job_stat_delete(job_id);
-
-	/* Delete any policy args associated with this job */
-	ts_bgw_policy_drop_chunks_delete_row_only_by_job_id(job_id);
 
 	/* Delete any stats in bgw_policy_chunk_stats related to this job */
 	ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(job_id);

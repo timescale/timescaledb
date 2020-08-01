@@ -38,15 +38,6 @@
 #include "hypertable_data_node.h"
 #include "extension.h"
 
-Datum
-hypertable_valid_ts_interval(PG_FUNCTION_ARGS)
-{
-	/* this function does all the necessary validation and if successfull,
-	returns the interval which is not necessary here */
-	ts_interval_from_tuple(PG_GETARG_DATUM(0));
-	PG_RETURN_BOOL(true);
-}
-
 static List *
 data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
 				 int32 node_hypertable_id, bool block_chunks)
