@@ -87,7 +87,7 @@ def macos_config(overrides):
     "cxx": "clang++",
     "clang": "clang",
     "pg_build_args": PG_MAC_PATH,
-    "tsdb_build_args": "-DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
+    "tsdb_build_args": "-DASSERTIONS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
     "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection'",
