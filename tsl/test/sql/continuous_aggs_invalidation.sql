@@ -135,7 +135,7 @@ SELECT hypertable_id AS hyper_id,
 -- First refresh a window where we don't have any invalidations. This
 -- allows us to see only the copying of the invalidations to the per
 -- cagg log without additional processing.
-SELECT refresh_continuous_aggregate('cond_10', 20, 60);
+CALL refresh_continuous_aggregate('cond_10', 20, 60);
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
@@ -184,7 +184,7 @@ SELECT materialization_id AS cagg_id,
        ORDER BY 1,2,3;
 
 -- Refresh to process invalidations for daily temperature:
-SELECT refresh_continuous_aggregate('cond_10', 20, 60);
+CALL refresh_continuous_aggregate('cond_10', 20, 60);
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log.
@@ -202,7 +202,7 @@ SELECT materialization_id AS cagg_id,
        ORDER BY 1,2,3;
 
 -- Refresh also cond_20:
-SELECT refresh_continuous_aggregate('cond_20', 20, 60);
+CALL refresh_continuous_aggregate('cond_20', 20, 60);
 
 -- The cond_20 cagg should also have its entries cut:
 SELECT materialization_id AS cagg_id,
