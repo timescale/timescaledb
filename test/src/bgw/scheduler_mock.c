@@ -150,6 +150,8 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	pgstat_report_appname("DB Scheduler Test");
 
+	ts_bgw_scheduler_setup_mctx();
+
 	ts_bgw_scheduler_process(ttl, ts_timer_mock_register_bgw_handle);
 
 	PG_RETURN_VOID();
@@ -162,6 +164,8 @@ start_test_scheduler(char *params)
 	 * TODO this is where we would increment the number of bgw used, if we
 	 * decide to do so
 	 */
+	ts_bgw_scheduler_setup_mctx();
+
 	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main",
 							   "ts_bgw_db_scheduler_test_main",
 							   params);
