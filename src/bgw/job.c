@@ -33,6 +33,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/policy.h"
 #include "scan_iterator.h"
+#include "bgw/scheduler.h"
 
 #include <cross_module_fn.h>
 
@@ -76,30 +77,6 @@ typedef enum JobLockLifetime
 	SESSION_LOCK = 0,
 	TXN_LOCK,
 } JobLockLifetime;
-
-BackgroundWorkerHandle *
-ts_bgw_start_worker(const char *function, const char *name, const char *extra)
-{
-	BackgroundWorker worker = {
-		.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION,
-		.bgw_start_time = BgWorkerStart_RecoveryFinished,
-		.bgw_restart_time = BGW_NEVER_RESTART,
-		.bgw_notify_pid = MyProcPid,
-		.bgw_main_arg = ObjectIdGetDatum(MyDatabaseId),
-	};
-	BackgroundWorkerHandle *handle = NULL;
-
-	StrNCpy(worker.bgw_name, name, BGW_MAXLEN);
-	StrNCpy(worker.bgw_library_name, ts_extension_get_so_name(), BGW_MAXLEN);
-	StrNCpy(worker.bgw_function_name, function, BGW_MAXLEN);
-
-	Assert(strlen(extra) < BGW_EXTRALEN);
-	StrNCpy(worker.bgw_extra, extra, BGW_EXTRALEN);
-
-	if (!RegisterDynamicBackgroundWorker(&worker, &handle))
-		return NULL;
-	return handle;
-}
 
 Oid
 ts_bgw_job_owner(BgwJob *job)
