@@ -60,12 +60,7 @@ ORDER BY day DESC, device;
 (0 rows)
 
 -- Refresh the most recent few days:
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-05');
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-05');
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
              day              | device |     avg_temp     
@@ -85,12 +80,7 @@ ORDER BY day DESC, device;
 (12 rows)
 
 -- Refresh the rest
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-03');
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-03');
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
@@ -147,68 +137,48 @@ ORDER BY 1 DESC,2;
 (20 rows)
 
 -- Test unusual, but valid input
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
-SELECT refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
+CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 -- Unbounded window forward in time
 \set ON_ERROR_STOP 0
 -- Currently doesn't work due to timestamp overflow bug in a query optimization
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
 ERROR:  timestamp out of range
-SELECT refresh_continuous_aggregate('daily_temp', NULL, NULL);
+CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
 ERROR:  timestamp out of range
 \set ON_ERROR_STOP 1
 -- Unbounded window back in time
-SELECT refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
 -- Test bad input
 \set ON_ERROR_STOP 0
 -- Bad continuous aggregate name
-SELECT refresh_continuous_aggregate(NULL, '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate(NULL, '2020-05-03', '2020-05-05');
 ERROR:  invalid continuous aggregate
-SELECT refresh_continuous_aggregate('xyz', '2020-05-03', '2020-05-05');
-ERROR:  relation "xyz" does not exist at character 37
+CALL refresh_continuous_aggregate('xyz', '2020-05-03', '2020-05-05');
+ERROR:  relation "xyz" does not exist at character 35
 -- Valid object, but not a continuous aggregate
-SELECT refresh_continuous_aggregate('conditions', '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate('conditions', '2020-05-03', '2020-05-05');
 ERROR:  relation "conditions" is not a continuous aggregate
 -- Object ID with no object
-SELECT refresh_continuous_aggregate(1, '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate(1, '2020-05-03', '2020-05-05');
 ERROR:  continuous aggregate does not exist
 -- Lacking arguments
-SELECT refresh_continuous_aggregate('daily_temp');
-ERROR:  function refresh_continuous_aggregate(unknown) does not exist at character 8
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03');
-ERROR:  function refresh_continuous_aggregate(unknown, unknown) does not exist at character 8
+CALL refresh_continuous_aggregate('daily_temp');
+ERROR:  procedure refresh_continuous_aggregate(unknown) does not exist at character 6
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03');
+ERROR:  procedure refresh_continuous_aggregate(unknown, unknown) does not exist at character 6
 -- Bad time ranges
-SELECT refresh_continuous_aggregate('daily_temp', 'xyz', '2020-05-05');
+CALL refresh_continuous_aggregate('daily_temp', 'xyz', '2020-05-05');
 ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
 ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
 ERROR:  invalid refresh window
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
 ERROR:  invalid refresh window
 -- Bad time input
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 ERROR:  unknown time type OID 25
 \set ON_ERROR_STOP 1
 -- Test different time types
@@ -227,12 +197,7 @@ SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions_date
 GROUP BY 1,2;
 NOTICE:  adding index _materialized_hypertable_4_device_day_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device, day)
-SELECT refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 -- Test smallint-based continuous aggregate
 CREATE TABLE conditions_smallint (time smallint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_smallint', 'time', chunk_time_interval => 20);
@@ -264,12 +229,7 @@ SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2;
 NOTICE:  adding index _materialized_hypertable_6_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_6 USING BTREE(device, bucket)
-SELECT refresh_continuous_aggregate('cond_20_smallint', 5, 50);
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('cond_20_smallint', 5, 50);
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
  bucket | device |     avg_temp     
@@ -319,12 +279,7 @@ SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
 GROUP BY 1,2;
 NOTICE:  adding index _materialized_hypertable_8_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(device, bucket)
-SELECT refresh_continuous_aggregate('cond_20_int', 5, 50);
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
 SELECT * FROM cond_20_int
 ORDER BY 1,2;
  bucket | device |     avg_temp     
@@ -374,12 +329,7 @@ SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
 GROUP BY 1,2;
 NOTICE:  adding index _materialized_hypertable_10_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(device, bucket)
-SELECT refresh_continuous_aggregate('cond_20_bigint', 5, 50);
- refresh_continuous_aggregate 
-------------------------------
- 
-(1 row)
-
+CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
 SELECT * FROM cond_20_bigint
 ORDER BY 1,2;
  bucket | device |     avg_temp     

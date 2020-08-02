@@ -34,13 +34,13 @@ SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
 -- Refresh the most recent few days:
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-05');
 
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
 -- Refresh the rest
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-03');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-03');
 
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
@@ -52,39 +52,39 @@ GROUP BY 1,2
 ORDER BY 1 DESC,2;
 
 -- Test unusual, but valid input
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
-SELECT refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
+CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 
 -- Unbounded window forward in time
 \set ON_ERROR_STOP 0
 -- Currently doesn't work due to timestamp overflow bug in a query optimization
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
-SELECT refresh_continuous_aggregate('daily_temp', NULL, NULL);
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
+CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
 \set ON_ERROR_STOP 1
 
 -- Unbounded window back in time
-SELECT refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
+CALL refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
 
 -- Test bad input
 \set ON_ERROR_STOP 0
 -- Bad continuous aggregate name
-SELECT refresh_continuous_aggregate(NULL, '2020-05-03', '2020-05-05');
-SELECT refresh_continuous_aggregate('xyz', '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate(NULL, '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate('xyz', '2020-05-03', '2020-05-05');
 -- Valid object, but not a continuous aggregate
-SELECT refresh_continuous_aggregate('conditions', '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate('conditions', '2020-05-03', '2020-05-05');
 -- Object ID with no object
-SELECT refresh_continuous_aggregate(1, '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate(1, '2020-05-03', '2020-05-05');
 -- Lacking arguments
-SELECT refresh_continuous_aggregate('daily_temp');
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03');
+CALL refresh_continuous_aggregate('daily_temp');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03');
 -- Bad time ranges
-SELECT refresh_continuous_aggregate('daily_temp', 'xyz', '2020-05-05');
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
+CALL refresh_continuous_aggregate('daily_temp', 'xyz', '2020-05-05');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
 -- Bad time input
-SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 
 \set ON_ERROR_STOP 1
 
@@ -100,7 +100,7 @@ SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions_date
 GROUP BY 1,2;
 
-SELECT refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
+CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 
 -- Test smallint-based continuous aggregate
 CREATE TABLE conditions_smallint (time smallint NOT NULL, device int, temp float);
@@ -127,7 +127,7 @@ SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2;
 
-SELECT refresh_continuous_aggregate('cond_20_smallint', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_smallint', 5, 50);
 
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
@@ -157,7 +157,7 @@ SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
 GROUP BY 1,2;
 
-SELECT refresh_continuous_aggregate('cond_20_int', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
 
 SELECT * FROM cond_20_int
 ORDER BY 1,2;
@@ -187,7 +187,7 @@ SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
 GROUP BY 1,2;
 
-SELECT refresh_continuous_aggregate('cond_20_bigint', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
 
 SELECT * FROM cond_20_bigint
 ORDER BY 1,2;
