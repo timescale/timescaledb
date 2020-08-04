@@ -9,6 +9,7 @@ set(TEST_FILES
   gapfill.sql
   partialize_finalize.sql
   plan_gapfill.sql
+  dist_views.sql
 )
 
 set(TEST_FILES_DEBUG
@@ -124,7 +125,6 @@ set(SOLO_TESTS
   dist_hypertable_am
   dist_hypertable_with_oids
   dist_partial_agg
-  dist_views.sql
   issues
   read_only
   remote_connection_cache

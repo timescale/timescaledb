@@ -164,12 +164,17 @@ SELECT * FROM "testSchema0".hypertable_detailed_size('test_ts');
 (1 row)
 
 -- testing hypertable_detailed_size END
-SELECT * FROM "testSchema0".indexes_relation_size('test_ts') ORDER BY index_name;
-           index_name           | total_bytes 
---------------------------------+-------------
- public.test_ts_device_time_idx |       32768
- public.test_ts_time_idx        |       32768
-(2 rows)
+SELECT * FROM "testSchema0".hypertable_index_size('test_ts_time_idx');
+ hypertable_index_size 
+-----------------------
+                 32768
+(1 row)
+
+SELECT * FROM "testSchema0".hypertable_index_size('test_ts_device_time_idx');
+ hypertable_index_size 
+-----------------------
+                 32768
+(1 row)
 
 CREATE SCHEMA "testSchema";
 \set ON_ERROR_STOP 0

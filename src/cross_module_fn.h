@@ -150,6 +150,7 @@ typedef struct CrossModuleFunctions
 	PGFunction dist_remote_hypertable_info;
 	PGFunction dist_remote_chunk_info;
 	PGFunction dist_remote_compressed_chunk_info;
+	PGFunction dist_remote_hypertable_index_info;
 	void (*validate_as_data_node)(void);
 	void (*func_call_on_data_nodes)(FunctionCallInfo fcinfo, List *data_node_oids);
 	PGFunction distributed_exec;
