@@ -89,13 +89,19 @@ get_max_window(Oid timetype)
 			maxrange.start = MIN_TIMESTAMP;
 			maxrange.end = (END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS) - 1;
 			break;
-		case INT8OID:
-		case INT4OID:
-		case INT2OID:
 			/* There is no "date"/"time" range for integers so they can take
 			 * any value. */
+		case INT8OID:
 			maxrange.start = PG_INT64_MIN;
 			maxrange.end = PG_INT64_MAX;
+			break;
+		case INT4OID:
+			maxrange.start = PG_INT32_MIN;
+			maxrange.end = PG_INT32_MAX;
+			break;
+		case INT2OID:
+			maxrange.start = PG_INT16_MIN;
+			maxrange.end = PG_INT16_MAX;
 			break;
 		default:
 			elog(ERROR, "unrecognized time type %d", timetype);
