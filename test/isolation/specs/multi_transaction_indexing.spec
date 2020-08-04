@@ -42,7 +42,7 @@ session "RENAME COLUMN"
 step "RI"	{ ALTER TABLE test_index RENAME COLUMN location TO height; }
 
 session "COUNT INDEXES"
-step "P"    {  SELECT pg_size_pretty(total_bytes) as total_size FROM indexes_relation_size('ts_index_test'); }
+step "P"    {  SELECT * FROM hypertable_index_size('test_index'); }
 
 # we need to COMMIT every transaction started in setup regardless of whether we use them
 # inserts work between chunks

@@ -74,7 +74,7 @@ RETURNS TABLE (
     index_bytes bigint,
     toast_bytes bigint,
     total_bytes bigint)
-LANGUAGE PLPGSQL STABLE STRICT AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 BEGIN
    RETURN QUERY 
@@ -118,7 +118,7 @@ RETURNS TABLE (
     toast_bytes bigint,
     total_bytes bigint,
     node_name   NAME)
-LANGUAGE PLPGSQL STABLE STRICT AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 BEGIN
     RETURN QUERY
@@ -169,8 +169,8 @@ RETURNS TABLE (table_bytes BIGINT,
                toast_bytes BIGINT,
                total_bytes BIGINT,
                node_name   NAME
-               ) LANGUAGE PLPGSQL STABLE STRICT
-               AS
+               ) 
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 DECLARE
         table_name       NAME;
@@ -197,7 +197,7 @@ CREATE OR REPLACE FUNCTION hypertable_size(
     main_table              REGCLASS
 )
 RETURNS BIGINT 
-LANGUAGE PLPGSQL STABLE STRICT AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 DECLARE
   num_bytes BIGINT;
@@ -219,7 +219,7 @@ RETURNS TABLE (
     index_bytes bigint,
     toast_bytes bigint,
     total_bytes bigint)
-LANGUAGE PLPGSQL STABLE STRICT AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 BEGIN
    RETURN QUERY
@@ -253,7 +253,7 @@ RETURNS TABLE (
     toast_bytes bigint,
     total_bytes bigint,
     node_name NAME)
-LANGUAGE PLPGSQL STABLE STRICT AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 BEGIN
     RETURN QUERY
@@ -310,8 +310,7 @@ RETURNS TABLE (
                toast_bytes BIGINT,
                total_bytes BIGINT,
                node_name   NAME)
-               LANGUAGE PLPGSQL STABLE STRICT
-               AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 DECLARE
         table_name       NAME;
@@ -337,53 +336,6 @@ BEGIN
 END;
 $BODY$;
 ---------- end of detailed size functions ------
-
--- Get sizes of indexes on a hypertable
---
--- main_table - hypertable to get index sizes of
---
--- Returns:
--- index_name           - index on hyper table
--- total_bytes          - size of index on disk
-
-CREATE OR REPLACE FUNCTION indexes_relation_size(
-    main_table              REGCLASS
-)
-RETURNS TABLE (index_name TEXT,
-               total_bytes BIGINT)
-               LANGUAGE PLPGSQL STABLE STRICT
-               AS
-$BODY$
-<<main>>
-DECLARE
-        table_name       NAME;
-        schema_name      NAME;
-BEGIN
-        SELECT relname, nspname
-        INTO STRICT table_name, schema_name
-        FROM pg_class c
-        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-        WHERE c.OID = main_table;
-
-        RETURN QUERY
-        SELECT format('%I.%I', h.schema_name, ci.hypertable_index_name),
-               sum(pg_relation_size(c.oid))::bigint
-        FROM
-        pg_class c,
-        pg_namespace n,
-        _timescaledb_catalog.hypertable h,
-        _timescaledb_catalog.chunk ch,
-        _timescaledb_catalog.chunk_index ci
-        WHERE ch.schema_name = n.nspname
-            AND c.relnamespace = n.oid
-            AND c.relname = ci.index_name
-            AND ch.id = ci.chunk_id
-            AND h.id = ci.hypertable_id
-            AND h.schema_name = main.schema_name
-            AND h.table_name = main.table_name
-        GROUP BY h.schema_name, ci.hypertable_index_name;
-END;
-$BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
     time_value      BIGINT,
@@ -682,3 +634,122 @@ BEGIN
 END;
 $BODY$;
 
+-------------Get index size for hypertables -------
+--schema_name      - schema_name for hypertable index
+-- index_name      - index on hyper table
+---note that the query matches against the hypertable's schema name as
+-- the input is on the hypertable index nd not the chunk index.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_local_size(
+    schema_name_in             NAME,
+    index_name_in              NAME
+)
+RETURNS TABLE ( hypertable_id INTEGER,
+                total_bytes BIGINT ) 
+LANGUAGE PLPGSQL VOLATILE STRICT AS
+$BODY$
+BEGIN
+        RETURN QUERY
+        SELECT ci.hypertable_id, sum(pg_relation_size(c.oid))::bigint
+        FROM                                      
+        pg_class c,
+        pg_namespace n,
+        _timescaledb_catalog.hypertable h,
+        _timescaledb_catalog.chunk ch,
+        _timescaledb_catalog.chunk_index ci
+        WHERE ch.schema_name = n.nspname
+            AND c.relnamespace = n.oid
+            AND c.relname = ci.index_name
+            AND ch.id = ci.chunk_id
+            AND h.id = ci.hypertable_id
+            AND h.schema_name = schema_name_in 
+            AND ci.hypertable_index_name = index_name_in
+        GROUP BY ci.hypertable_id; 
+END;
+$BODY$;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_index_size (node_name name, schema_name_in name, index_name_in name)
+RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_hypertable_index_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_remote_size(
+    schema_name_in             NAME,
+    table_name_in              NAME,
+    index_name_in              NAME
+)
+RETURNS BIGINT
+LANGUAGE PLPGSQL VOLATILE STRICT AS
+$BODY$
+DECLARE
+    total_bytes BIGINT;
+BEGIN
+    SELECT
+        sum(entry.total_bytes)::bigint AS total_bytes
+    INTO total_bytes
+    FROM (
+        SELECT
+            s.node_name,
+            _timescaledb_internal.ping_data_node (s.node_name) AS node_up
+        FROM
+            _timescaledb_catalog.hypertable AS ht,
+            _timescaledb_catalog.hypertable_data_node AS s
+        WHERE
+            ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id
+         ) AS srv
+    JOIN LATERAL _timescaledb_internal.data_node_index_size(
+    CASE WHEN srv.node_up THEN
+        srv.node_name
+    ELSE
+        NULL
+    END, schema_name_in, index_name_in) entry ON TRUE ;
+    RETURN total_bytes;
+END;
+$BODY$;
+
+-- Get sizes of indexes on a hypertable
+--
+-- index_name           - index on hyper table
+--
+-- Returns:
+-- total_bytes          - size of index on disk
+
+CREATE OR REPLACE FUNCTION  hypertable_index_size(
+    index_name              REGCLASS
+)
+RETURNS BIGINT
+LANGUAGE PLPGSQL VOLATILE STRICT AS
+$BODY$
+DECLARE
+        ht_index_name       NAME;
+        ht_schema_name      NAME;
+        ht_name      NAME;
+        is_distributed   BOOL;
+        ht_id INTEGER;
+        index_bytes BIGINT;
+BEGIN
+
+   SELECT c.relname, cl.relname, nsp.nspname       
+   INTO STRICT ht_index_name, ht_name, ht_schema_name  
+   FROM pg_class c, pg_index cind, pg_class cl, pg_namespace nsp
+   WHERE c.oid = cind.indexrelid AND cind.indrelid = cl.oid
+         AND cl.relnamespace = nsp.oid AND c.oid = index_name;
+        
+   SELECT replication_factor > 0
+   INTO STRICT is_distributed
+   FROM _timescaledb_catalog.hypertable ht
+   WHERE ht.schema_name = ht_schema_name AND ht.table_name = ht_name;
+
+   CASE WHEN is_distributed THEN
+         SELECT _timescaledb_internal.indexes_remote_size(ht_schema_name, ht_name, ht_index_name) 
+         INTO index_bytes ;
+   ELSE
+         SELECT il.total_bytes
+         INTO index_bytes
+         FROM _timescaledb_internal.indexes_local_size(ht_schema_name, ht_index_name) il;
+   END CASE;
+   RETURN index_bytes;
+END;
+$BODY$;
+
+-------------End index size for hypertables -------

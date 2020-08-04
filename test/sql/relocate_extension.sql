@@ -76,7 +76,8 @@ SELECT * FROM test_dt ORDER BY time;
 SELECT * FROM "testSchema0".hypertable_detailed_size('test_ts');
 -- testing hypertable_detailed_size END
 
-SELECT * FROM "testSchema0".indexes_relation_size('test_ts') ORDER BY index_name;
+SELECT * FROM "testSchema0".hypertable_index_size('test_ts_time_idx');
+SELECT * FROM "testSchema0".hypertable_index_size('test_ts_device_time_idx');
 
 CREATE SCHEMA "testSchema";
 

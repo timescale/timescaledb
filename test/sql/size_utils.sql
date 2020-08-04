@@ -5,7 +5,13 @@
 \ir include/insert_two_partitions.sql
 
 SELECT * FROM hypertable_detailed_size('"public"."two_Partitions"');
-SELECT * FROM indexes_relation_size('"public"."two_Partitions"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_device_id_timeCustom_idx"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_device_id_idx"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_idx"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_0_idx"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_1_idx"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_2_idx"');
+SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_bool_idx"');
 SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_name;
 
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
@@ -56,4 +62,9 @@ SELECT * FROM hypertable_approximate_row_count(NULL);
 
 SELECT * FROM chunks_detailed_size(NULL);
 SELECT * FROM hypertable_detailed_size(NULL);
-SELECT * FROM indexes_relation_size(NULL);
+SELECT * FROM hypertable_index_size(NULL);
+
+-- tests with tables that are not hypertables
+CREATE TABLE regtab( a integer, b integer);
+CREATE INDEX regtab_idx ON regtab( a);
+SELECT * FROM hypertable_index_size('regtab_idx');
