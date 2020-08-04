@@ -102,24 +102,92 @@ GROUP BY 1,2;
 
 SELECT refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 
-CREATE TABLE conditions_int (time int NOT NULL, device int, temp float);
-SELECT create_hypertable('conditions_int', 'time', chunk_time_interval => 10);
+-- Test smallint-based continuous aggregate
+CREATE TABLE conditions_smallint (time smallint NOT NULL, device int, temp float);
+SELECT create_hypertable('conditions_smallint', 'time', chunk_time_interval => 20);
 
-CREATE OR REPLACE FUNCTION integer_now_conditions()
+INSERT INTO conditions_smallint
+SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::smallint, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+FROM generate_series(1, 100, 1) t;
+
+CREATE OR REPLACE FUNCTION smallint_now()
+RETURNS smallint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)::smallint
+    FROM conditions_smallint
+$$;
+
+SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
+
+CREATE VIEW cond_20_smallint
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
+FROM conditions_smallint c
+GROUP BY 1,2;
+
+SELECT refresh_continuous_aggregate('cond_20_smallint', 5, 50);
+
+SELECT * FROM cond_20_smallint
+ORDER BY 1,2;
+
+-- Test int-based continuous aggregate
+CREATE TABLE conditions_int (time int NOT NULL, device int, temp float);
+SELECT create_hypertable('conditions_int', 'time', chunk_time_interval => 20);
+
+INSERT INTO conditions_int
+SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+FROM generate_series(1, 100, 1) t;
+
+CREATE OR REPLACE FUNCTION int_now()
 RETURNS int LANGUAGE SQL STABLE AS
 $$
     SELECT coalesce(max(time), 0)
     FROM conditions_int
 $$;
 
-SELECT set_integer_now_func('conditions_int', 'integer_now_conditions');
+SELECT set_integer_now_func('conditions_int', 'int_now');
 
-CREATE VIEW daily_temp_int
+CREATE VIEW cond_20_int
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
-SELECT time_bucket(4, time) AS day, device, avg(temp) AS avg_temp
+SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
 GROUP BY 1,2;
 
-SELECT refresh_continuous_aggregate('daily_temp_int', 5, 10);
+SELECT refresh_continuous_aggregate('cond_20_int', 5, 50);
+
+SELECT * FROM cond_20_int
+ORDER BY 1,2;
+
+-- Test bigint-based continuous aggregate
+CREATE TABLE conditions_bigint (time bigint NOT NULL, device int, temp float);
+SELECT create_hypertable('conditions_bigint', 'time', chunk_time_interval => 20);
+
+INSERT INTO conditions_bigint
+SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::bigint, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+FROM generate_series(1, 100, 1) t;
+
+CREATE OR REPLACE FUNCTION bigint_now()
+RETURNS bigint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)::bigint
+    FROM conditions_bigint
+$$;
+
+SELECT set_integer_now_func('conditions_bigint', 'bigint_now');
+
+CREATE VIEW cond_20_bigint
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
+FROM conditions_bigint
+GROUP BY 1,2;
+
+SELECT refresh_continuous_aggregate('cond_20_bigint', 5, 50);
+
+SELECT * FROM cond_20_bigint
+ORDER BY 1,2;
