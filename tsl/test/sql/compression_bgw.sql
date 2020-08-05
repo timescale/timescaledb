@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.enterprise_enabled();
 
 CREATE OR REPLACE FUNCTION test_compress_chunks_policy(job_id INTEGER)
 RETURNS VOID
