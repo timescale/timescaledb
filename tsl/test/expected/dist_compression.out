@@ -324,7 +324,7 @@ ORDER BY chunk_name, node_name;
  _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | data_node_3
 (6 rows)
 
-SELECT * FROM hypertable_detailed_size('compressed'::regclass) 
+SELECT * FROM hypertable_detailed_size('compressed'::regclass);
  table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
 -------------+-------------+-------------+-------------+-------------
        16384 |       65536 |           0 |       81920 | data_node_1
@@ -332,3 +332,12 @@ SELECT * FROM hypertable_detailed_size('compressed'::regclass)
        16384 |       65536 |           0 |       81920 | data_node_2
 (3 rows)
 
+------------------------------------------------------
+-- Test compression policy on a distributed hypertable
+------------------------------------------------------
+INSERT INTO compressed VALUES 
+(now()::TIMESTAMPTZ, 1, 0.1), (now()::TIMESTAMPTZ, 2, 0.2);
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('compressed', '60d'::interval);
+ERROR:  can add compression policy only on hypertables with compression enabled
+\set ON_ERROR_STOP 1

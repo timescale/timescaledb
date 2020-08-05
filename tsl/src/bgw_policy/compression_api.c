@@ -149,7 +149,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		ts_cache_release(hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("can add compress_chunks policy only on hypertables with compression "
+				 errmsg("can add compression policy only on hypertables with compression "
 						"enabled")));
 	}
 
@@ -191,7 +191,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		{
 			ts_cache_release(hcache);
 			elog(WARNING,
-				 "could not add compress_chunks policy due to existing policy on hypertable with "
+				 "could not add compression policy due to existing policy on hypertable with "
 				 "different arguments");
 			PG_RETURN_INT32(-1);
 		}
