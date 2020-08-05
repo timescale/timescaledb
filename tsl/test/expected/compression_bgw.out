@@ -2,12 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.enterprise_enabled();
- enterprise_enabled 
---------------------
- t
-(1 row)
-
 CREATE OR REPLACE FUNCTION test_compress_chunks_policy(job_id INTEGER)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_auto_compress_chunks'
