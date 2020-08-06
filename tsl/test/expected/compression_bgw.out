@@ -26,7 +26,7 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 --cannot set policy without enabling compression --
 \set ON_ERROR_STOP 0
 select add_compression_policy('conditions', '60d'::interval);
-ERROR:  can add compress_chunks policy only on hypertables with compression enabled
+ERROR:  compression not enabled on hypertable "conditions"
 \set ON_ERROR_STOP 1
 -- TEST2 --
 --add a policy to compress chunks --
@@ -76,16 +76,16 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
 --cannot set another policy
 \set ON_ERROR_STOP 0
 select add_compression_policy('conditions', '60d'::interval, if_not_exists=>true);
-NOTICE:  compress chunks policy already exists on hypertable "conditions", skipping
+NOTICE:  compression policy already exists on hypertable "conditions", skipping
  add_compression_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_compression_policy('conditions', '60d'::interval);
-ERROR:  compress chunks policy already exists for hypertable "conditions"
+ERROR:  compression policy already exists for hypertable "conditions"
 select add_compression_policy('conditions', '30d'::interval, if_not_exists=>true);
-WARNING:  could not add compress_chunks policy due to existing policy on hypertable with different arguments
+WARNING:  compression policy already exists for hypertable "conditions" with different arguments
  add_compression_policy 
 ------------------------
                      -1
@@ -116,7 +116,7 @@ ERROR:  job 1000 not found
 DROP TABLE IF EXISTS conditions CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_2_4_chunk
 --TEST 7
---compress chunks policy for integer based partition hypertable
+--compression policy for integer based partition hypertable
 CREATE TABLE test_table_int(time bigint, val int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
 NOTICE:  adding not-null constraint to column "time"

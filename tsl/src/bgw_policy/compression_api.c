@@ -149,8 +149,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		ts_cache_release(hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("can add compress_chunks policy only on hypertables with compression "
-						"enabled")));
+				 errmsg("compression not enabled on hypertable \"%s\"", get_rel_name(ht_oid)),
+				 errhint("Enable compression before adding a compression policy.")));
 	}
 
 	ts_bgw_job_validate_job_owner(owner_id, JOB_TYPE_COMPRESS_CHUNKS);
@@ -170,8 +170,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("compress chunks policy already exists for hypertable \"%s\"",
-							get_rel_name(ht_oid))));
+					 errmsg("compression policy already exists for hypertable \"%s\"",
+							get_rel_name(ht_oid)),
+					 errhint("Set option \"if_not_exists\" to true to avoid error.")));
 		}
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
@@ -183,16 +184,18 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
 			ereport(NOTICE,
-					(errmsg("compress chunks policy already exists on hypertable \"%s\", skipping",
+					(errmsg("compression policy already exists on hypertable \"%s\", skipping",
 							get_rel_name(ht_oid))));
 			PG_RETURN_INT32(-1);
 		}
 		else
 		{
 			ts_cache_release(hcache);
-			elog(WARNING,
-				 "could not add compress_chunks policy due to existing policy on hypertable with "
-				 "different arguments");
+			ereport(WARNING,
+					(errmsg("compression policy already exists for hypertable \"%s\" with "
+							"different arguments",
+							get_rel_name(ht_oid)),
+					 errhint("Remove the existing policy before adding a new one.")));
 			PG_RETURN_INT32(-1);
 		}
 	}

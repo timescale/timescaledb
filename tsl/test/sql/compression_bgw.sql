@@ -74,7 +74,7 @@ select test_compress_chunks_policy(:compressjob_id);
 DROP TABLE IF EXISTS conditions CASCADE;
 
 --TEST 7
---compress chunks policy for integer based partition hypertable
+--compression policy for integer based partition hypertable
 CREATE TABLE test_table_int(time bigint, val int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
 
