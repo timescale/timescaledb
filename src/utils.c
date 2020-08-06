@@ -45,6 +45,12 @@ ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
 
+	if (TIMESTAMP_IS_NOBEGIN(timestamp))
+		PG_RETURN_INT64(PG_INT64_MIN);
+
+	if (TIMESTAMP_IS_NOEND(timestamp))
+		PG_RETURN_INT64(PG_INT64_MAX);
+
 	if (timestamp < MIN_TIMESTAMP)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
@@ -68,10 +74,16 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 {
 	int64 microseconds = PG_GETARG_INT64(0);
 
+	if (microseconds == PG_INT64_MIN)
+		PG_RETURN_TIMESTAMPTZ(DT_NOBEGIN);
+
+	if (microseconds == PG_INT64_MAX)
+		PG_RETURN_TIMESTAMPTZ(DT_NOEND);
+
 	/*
 	 * Test that the UNIX us timestamp is within bounds. Note that an int64 at
 	 * UNIX epoch and microsecond precision cannot represent the upper limit
-	 * of the supported date range (Julian end date), so INT64_MAX is the
+	 * of the supported date range (Julian end date), so INT64_MAX-1 is the
 	 * natural upper bound for this function.
 	 */
 	if (microseconds < TS_INTERNAL_TIMESTAMP_MIN)
@@ -85,8 +97,15 @@ Datum
 ts_pg_unix_microseconds_to_date(PG_FUNCTION_ARGS)
 {
 	int64 microseconds = PG_GETARG_INT64(0);
-	Datum res =
-		DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(microseconds));
+	Datum res;
+
+	if (microseconds == PG_INT64_MIN)
+		PG_RETURN_DATEADT(DATEVAL_NOBEGIN);
+
+	if (microseconds == PG_INT64_MAX)
+		PG_RETURN_DATEADT(DATEVAL_NOEND);
+
+	res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(microseconds));
 	res = DirectFunctionCall1(timestamp_date, res);
 	PG_RETURN_DATUM(res);
 }
