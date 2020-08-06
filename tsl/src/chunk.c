@@ -19,6 +19,7 @@
 #include <utils/palloc.h>
 #include <utils/memutils.h>
 #include <executor/executor.h>
+#include <parser/parse_func.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <fmgr.h>
@@ -178,7 +179,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
 
 /* Should match definition in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
-#define DROP_CHUNKS_NARGS 5
+#define DROP_CHUNKS_NARGS 4
 
 /*
  * Invoke drop_chunks via fmgr so that the call can be deparsed and sent to
@@ -194,12 +195,12 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 {
 	EState *estate;
 	ExprContext *econtext;
-	FuncCandidateList funclist;
 	FuncExpr *fexpr;
 	List *args = NIL;
 	int i, num_results = 0;
 	SetExprState *state;
 	Oid restype;
+	Oid func_oid;
 	Const *argarr[DROP_CHUNKS_NARGS] = {
 		makeConst(REGCLASSOID,
 				  -1,
@@ -215,26 +216,26 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 				  older_than,
 				  false,
 				  get_typbyval(older_than_type)),
-		makeNullConst(INT8OID, -1, InvalidOid),
+		makeNullConst(older_than_type, -1, InvalidOid),
 		castNode(Const, makeBoolConst(false, true)),
 	};
-
+	Oid type_id[DROP_CHUNKS_NARGS] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID };
 	char *const schema_name = ts_extension_schema_name();
-	char *const function_name = DROP_CHUNKS_FUNCNAME;
-	List *fqn = list_make2(makeString(schema_name), makeString(function_name));
-	funclist = FuncnameGetCandidates(fqn, DROP_CHUNKS_NARGS, NIL, false, false, false);
+	List *const fqn = list_make2(makeString(schema_name), makeString(DROP_CHUNKS_FUNCNAME));
 
-	if (funclist->next != NULL)
-		elog(ERROR, "could not find drop_chunks function");
+	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
+					 "argarr and type_id should have matching lengths");
+
+	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
+	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
 
 	/* Prepare the function expr with argument list */
-	get_func_result_type(funclist->oid, &restype, NULL);
+	get_func_result_type(func_oid, &restype, NULL);
 
-	for (i = 0; i < DROP_CHUNKS_NARGS; i++)
+	for (i = 0; i < lengthof(argarr); i++)
 		args = lappend(args, argarr[i]);
 
-	fexpr =
-		makeFuncExpr(funclist->oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 	fexpr->funcretset = true;
 
 	/* Execute the SRF */

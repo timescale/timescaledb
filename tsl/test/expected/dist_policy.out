@@ -1,0 +1,314 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Need to be super user to create extension and add data nodes
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\unset ECHO
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+CREATE OR REPLACE FUNCTION test_retention(job_id INTEGER)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_auto_drop_chunks'
+LANGUAGE C VOLATILE STRICT;
+-- Add data nodes
+\x on
+SELECT * FROM add_data_node('dist_policy_data_node_1', host => 'localhost',
+                            database => 'dist_policy_data_node_1');
+-[ RECORD 1 ]-----+------------------------
+node_name         | dist_policy_data_node_1
+host              | localhost
+port              | 55432
+database          | dist_policy_data_node_1
+node_created      | t
+database_created  | t
+extension_created | t
+
+SELECT * FROM add_data_node('dist_policy_data_node_2', host => 'localhost',
+                            database => 'dist_policy_data_node_2');
+-[ RECORD 1 ]-----+------------------------
+node_name         | dist_policy_data_node_2
+host              | localhost
+port              | 55432
+database          | dist_policy_data_node_2
+node_created      | t
+database_created  | t
+extension_created | t
+
+SELECT * FROM add_data_node('dist_policy_data_node_3', host => 'localhost',
+                            database => 'dist_policy_data_node_3');
+-[ RECORD 1 ]-----+------------------------
+node_name         | dist_policy_data_node_3
+host              | localhost
+port              | 55432
+database          | dist_policy_data_node_3
+node_created      | t
+database_created  | t
+extension_created | t
+
+\x off
+GRANT USAGE ON FOREIGN SERVER dist_policy_data_node_1, dist_policy_data_node_2, dist_policy_data_node_3 TO PUBLIC;
+-- Create a fake clock that we can use below and make sure that it is
+-- defined on the data nodes as well.
+CREATE TABLE time_table (time BIGINT);
+INSERT INTO time_table VALUES (1);
+CREATE OR REPLACE FUNCTION dummy_now()
+RETURNS BIGINT
+LANGUAGE SQL
+STABLE AS 'SELECT time FROM time_table';
+GRANT ALL ON TABLE time_table TO PUBLIC;
+SELECT * FROM test.remote_exec(NULL, $$
+       CREATE TABLE time_table (time BIGINT);
+       INSERT INTO time_table VALUES (1);
+       CREATE OR REPLACE FUNCTION dummy_now()
+       RETURNS BIGINT
+       LANGUAGE SQL
+       STABLE AS 'SELECT time FROM time_table';
+       GRANT ALL ON TABLE time_table TO PUBLIC;
+$$);
+NOTICE:  [dist_policy_data_node_1]: 
+       CREATE TABLE time_table (time BIGINT)
+NOTICE:  [dist_policy_data_node_1]: 
+       INSERT INTO time_table VALUES (1)
+NOTICE:  [dist_policy_data_node_1]: 
+       CREATE OR REPLACE FUNCTION dummy_now()
+       RETURNS BIGINT
+       LANGUAGE SQL
+       STABLE AS 'SELECT time FROM time_table'
+NOTICE:  [dist_policy_data_node_1]: 
+       GRANT ALL ON TABLE time_table TO PUBLIC
+NOTICE:  [dist_policy_data_node_2]: 
+       CREATE TABLE time_table (time BIGINT)
+NOTICE:  [dist_policy_data_node_2]: 
+       INSERT INTO time_table VALUES (1)
+NOTICE:  [dist_policy_data_node_2]: 
+       CREATE OR REPLACE FUNCTION dummy_now()
+       RETURNS BIGINT
+       LANGUAGE SQL
+       STABLE AS 'SELECT time FROM time_table'
+NOTICE:  [dist_policy_data_node_2]: 
+       GRANT ALL ON TABLE time_table TO PUBLIC
+NOTICE:  [dist_policy_data_node_3]: 
+       CREATE TABLE time_table (time BIGINT)
+NOTICE:  [dist_policy_data_node_3]: 
+       INSERT INTO time_table VALUES (1)
+NOTICE:  [dist_policy_data_node_3]: 
+       CREATE OR REPLACE FUNCTION dummy_now()
+       RETURNS BIGINT
+       LANGUAGE SQL
+       STABLE AS 'SELECT time FROM time_table'
+NOTICE:  [dist_policy_data_node_3]: 
+       GRANT ALL ON TABLE time_table TO PUBLIC
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SET ROLE :ROLE_1;
+CREATE TABLE conditions(
+    time BIGINT NOT NULL, 
+    device INT, 
+    value FLOAT
+);
+SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device', 3,
+       chunk_time_interval => 5);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | conditions | t
+(1 row)
+
+SELECT set_integer_now_func('conditions', 'dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+INSERT INTO conditions
+SELECT time, device, random()*80
+FROM generate_series(1, 40) AS time,
+     generate_series(1,3) AS device
+ORDER BY time, device;
+SELECT add_retention_policy('conditions', 5, true) as retention_job_id \gset
+-- Now simulate drop_chunks running automatically by calling it
+-- explicitly. Show chunks before and after.
+SELECT show_chunks('conditions');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+ _timescaledb_internal._dist_hyper_1_2_chunk
+ _timescaledb_internal._dist_hyper_1_3_chunk
+ _timescaledb_internal._dist_hyper_1_4_chunk
+ _timescaledb_internal._dist_hyper_1_5_chunk
+ _timescaledb_internal._dist_hyper_1_6_chunk
+ _timescaledb_internal._dist_hyper_1_7_chunk
+ _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_9_chunk
+ _timescaledb_internal._dist_hyper_1_10_chunk
+ _timescaledb_internal._dist_hyper_1_11_chunk
+ _timescaledb_internal._dist_hyper_1_12_chunk
+ _timescaledb_internal._dist_hyper_1_13_chunk
+ _timescaledb_internal._dist_hyper_1_14_chunk
+ _timescaledb_internal._dist_hyper_1_15_chunk
+ _timescaledb_internal._dist_hyper_1_16_chunk
+ _timescaledb_internal._dist_hyper_1_17_chunk
+ _timescaledb_internal._dist_hyper_1_18_chunk
+ _timescaledb_internal._dist_hyper_1_19_chunk
+ _timescaledb_internal._dist_hyper_1_20_chunk
+ _timescaledb_internal._dist_hyper_1_21_chunk
+ _timescaledb_internal._dist_hyper_1_22_chunk
+ _timescaledb_internal._dist_hyper_1_23_chunk
+ _timescaledb_internal._dist_hyper_1_24_chunk
+ _timescaledb_internal._dist_hyper_1_25_chunk
+ _timescaledb_internal._dist_hyper_1_26_chunk
+ _timescaledb_internal._dist_hyper_1_27_chunk
+(27 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('conditions'); $$);
+NOTICE:  [dist_policy_data_node_1]:  SELECT show_chunks('conditions')
+NOTICE:  [dist_policy_data_node_1]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_1_1_chunk 
+_timescaledb_internal._dist_hyper_1_4_chunk 
+_timescaledb_internal._dist_hyper_1_7_chunk 
+_timescaledb_internal._dist_hyper_1_10_chunk
+_timescaledb_internal._dist_hyper_1_13_chunk
+_timescaledb_internal._dist_hyper_1_16_chunk
+_timescaledb_internal._dist_hyper_1_19_chunk
+_timescaledb_internal._dist_hyper_1_22_chunk
+_timescaledb_internal._dist_hyper_1_25_chunk
+(9 rows)
+
+
+NOTICE:  [dist_policy_data_node_2]:  SELECT show_chunks('conditions')
+NOTICE:  [dist_policy_data_node_2]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_1_2_chunk 
+_timescaledb_internal._dist_hyper_1_5_chunk 
+_timescaledb_internal._dist_hyper_1_8_chunk 
+_timescaledb_internal._dist_hyper_1_11_chunk
+_timescaledb_internal._dist_hyper_1_14_chunk
+_timescaledb_internal._dist_hyper_1_17_chunk
+_timescaledb_internal._dist_hyper_1_20_chunk
+_timescaledb_internal._dist_hyper_1_23_chunk
+_timescaledb_internal._dist_hyper_1_26_chunk
+(9 rows)
+
+
+NOTICE:  [dist_policy_data_node_3]:  SELECT show_chunks('conditions')
+NOTICE:  [dist_policy_data_node_3]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_1_3_chunk 
+_timescaledb_internal._dist_hyper_1_6_chunk 
+_timescaledb_internal._dist_hyper_1_9_chunk 
+_timescaledb_internal._dist_hyper_1_12_chunk
+_timescaledb_internal._dist_hyper_1_15_chunk
+_timescaledb_internal._dist_hyper_1_18_chunk
+_timescaledb_internal._dist_hyper_1_21_chunk
+_timescaledb_internal._dist_hyper_1_24_chunk
+_timescaledb_internal._dist_hyper_1_27_chunk
+(9 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+UPDATE time_table SET time = 20;
+SELECT * FROM test.remote_exec(NULL, $$ UPDATE time_table SET time = 20; $$);
+NOTICE:  [dist_policy_data_node_1]:  UPDATE time_table SET time = 20
+NOTICE:  [dist_policy_data_node_2]:  UPDATE time_table SET time = 20
+NOTICE:  [dist_policy_data_node_3]:  UPDATE time_table SET time = 20
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT test_retention(:retention_job_id);
+ test_retention 
+----------------
+ 
+(1 row)
+
+SELECT show_chunks('conditions');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_1_10_chunk
+ _timescaledb_internal._dist_hyper_1_11_chunk
+ _timescaledb_internal._dist_hyper_1_12_chunk
+ _timescaledb_internal._dist_hyper_1_13_chunk
+ _timescaledb_internal._dist_hyper_1_14_chunk
+ _timescaledb_internal._dist_hyper_1_15_chunk
+ _timescaledb_internal._dist_hyper_1_16_chunk
+ _timescaledb_internal._dist_hyper_1_17_chunk
+ _timescaledb_internal._dist_hyper_1_18_chunk
+ _timescaledb_internal._dist_hyper_1_19_chunk
+ _timescaledb_internal._dist_hyper_1_20_chunk
+ _timescaledb_internal._dist_hyper_1_21_chunk
+ _timescaledb_internal._dist_hyper_1_22_chunk
+ _timescaledb_internal._dist_hyper_1_23_chunk
+ _timescaledb_internal._dist_hyper_1_24_chunk
+ _timescaledb_internal._dist_hyper_1_25_chunk
+ _timescaledb_internal._dist_hyper_1_26_chunk
+ _timescaledb_internal._dist_hyper_1_27_chunk
+(18 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('conditions'); $$);
+NOTICE:  [dist_policy_data_node_1]:  SELECT show_chunks('conditions')
+NOTICE:  [dist_policy_data_node_1]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_1_10_chunk
+_timescaledb_internal._dist_hyper_1_13_chunk
+_timescaledb_internal._dist_hyper_1_16_chunk
+_timescaledb_internal._dist_hyper_1_19_chunk
+_timescaledb_internal._dist_hyper_1_22_chunk
+_timescaledb_internal._dist_hyper_1_25_chunk
+(6 rows)
+
+
+NOTICE:  [dist_policy_data_node_2]:  SELECT show_chunks('conditions')
+NOTICE:  [dist_policy_data_node_2]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_1_11_chunk
+_timescaledb_internal._dist_hyper_1_14_chunk
+_timescaledb_internal._dist_hyper_1_17_chunk
+_timescaledb_internal._dist_hyper_1_20_chunk
+_timescaledb_internal._dist_hyper_1_23_chunk
+_timescaledb_internal._dist_hyper_1_26_chunk
+(6 rows)
+
+
+NOTICE:  [dist_policy_data_node_3]:  SELECT show_chunks('conditions')
+NOTICE:  [dist_policy_data_node_3]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_1_12_chunk
+_timescaledb_internal._dist_hyper_1_15_chunk
+_timescaledb_internal._dist_hyper_1_18_chunk
+_timescaledb_internal._dist_hyper_1_21_chunk
+_timescaledb_internal._dist_hyper_1_24_chunk
+_timescaledb_internal._dist_hyper_1_27_chunk
+(6 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT remove_retention_policy('conditions');
+ remove_retention_policy 
+-------------------------
+ 
+(1 row)
+
+-- Check that we can insert into the table without the retention
+-- policy and not get an error. This will be a problem if the policy
+-- did not propagate drop_chunks to data nodes.
+INSERT INTO conditions
+SELECT time, device, random()*80
+FROM generate_series(1,10) AS time,
+     generate_series(1,3) AS device;

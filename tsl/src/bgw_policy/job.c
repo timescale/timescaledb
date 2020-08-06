@@ -284,14 +284,13 @@ bool
 policy_retention_execute(int32 job_id, Jsonb *config)
 {
 	bool started = false;
-	Oid table_relid;
+	Oid object_relid;
 	Hypertable *hypertable;
 	Cache *hcache;
 	Dimension *open_dim;
 	Datum boundary;
 	Datum boundary_type;
-	int num_dropped;
-	List *dc_temp;
+	ContinuousAgg *cagg;
 
 	if (!ActiveSnapshotSet())
 	{
@@ -299,8 +298,8 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
-	table_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config));
-	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config));
+	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
 	open_dim = get_open_dimension_for_hypertable(hypertable);
 	boundary = get_window_boundary(open_dim,
 								   config,
@@ -308,17 +307,20 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 								   policy_retention_get_retention_window_interval);
 	boundary_type = ts_dimension_get_partition_type(open_dim);
 
-	dc_temp = ts_chunk_do_drop_chunks(hypertable,
-									  boundary,
-									  InvalidOid,
-									  boundary_type,
-									  InvalidOid,
-									  DEBUG2,
-									  NULL);
-	num_dropped = list_length(dc_temp);
-	ts_cache_release(hcache);
+	/* We need to do a reverse lookup here since the given hypertable
+	   might be a materialized hypertable, and thus need to call drop_chunks
+		on the continuous aggregate instead. */
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id);
+	if (cagg)
+	{
+		const char *const view_name = NameStr(cagg->data.user_view_name);
+		const char *const schema_name = NameStr(cagg->data.user_view_schema);
+		object_relid = get_relname_relid(view_name, get_namespace_oid(schema_name, false));
+	}
 
-	elog(LOG, "job %d completed dropping %d chunks", job_id, num_dropped);
+	chunk_invoke_drop_chunks(object_relid, boundary, boundary_type);
+
+	ts_cache_release(hcache);
 
 	if (started)
 		PopActiveSnapshot();

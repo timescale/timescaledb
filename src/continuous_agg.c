@@ -400,6 +400,36 @@ ts_continuous_aggs_get_minimum_invalidation_time(int64 modification_time,
 	}
 }
 
+/* Find a continuous aggregate by the materialized hypertable id */
+ContinuousAgg *
+ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
+{
+	ContinuousAgg *ca = NULL;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+
+	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		Form_continuous_agg form = (Form_continuous_agg) GETSTRUCT(tuple);
+
+		/* Note that this scan can only match at most once, so we assert on
+		 * `ca` here. */
+		Assert(ca == NULL);
+		ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
+		continuous_agg_init(ca, form);
+
+		Assert(ca && ca->data.mat_hypertable_id == mat_hypertable_id);
+
+		if (should_free)
+			heap_freetuple(tuple);
+	}
+	ts_scan_iterator_close(&iterator);
+	return ca;
+}
+
 ContinuousAgg *
 ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 {

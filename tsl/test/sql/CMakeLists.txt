@@ -45,6 +45,7 @@ set(TEST_FILES_DEBUG
   dist_ddl.sql
   dist_grant.sql
   dist_partial_agg.sql
+  dist_policy.sql
   dist_util.sql
   issues.sql
   remote_connection_cache.sql
