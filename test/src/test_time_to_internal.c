@@ -111,7 +111,10 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPOID),
 													TIMESTAMPOID));
 
-	TestEnsureError(ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPOID));
+	TestAssertInt64Eq(PG_INT64_MIN, ts_time_value_to_internal(DT_NOBEGIN, TIMESTAMPOID));
+	TestAssertInt64Eq(PG_INT64_MAX, ts_time_value_to_internal(DT_NOEND, TIMESTAMPOID));
+
+	TestAssertInt64Eq(DT_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPOID));
 	TestEnsureError(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN - 1, TIMESTAMPOID));
 
 	TestAssertInt64Eq(TS_INTERNAL_TIMESTAMP_MIN,
@@ -119,10 +122,10 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 																		  TIMESTAMPOID),
 												TIMESTAMPOID));
 
-	TestAssertInt64Eq(PG_INT64_MAX - TS_EPOCH_DIFF_MICROSECONDS,
-					  DatumGetInt64(ts_internal_to_time_value(PG_INT64_MAX, TIMESTAMPOID)));
-	TestEnsureError(ts_time_value_to_internal(ts_internal_to_time_value(PG_INT64_MAX, TIMESTAMPOID),
-											  TIMESTAMPOID));
+	TestAssertInt64Eq(DT_NOEND,
+					  (ts_time_value_to_internal(ts_internal_to_time_value(PG_INT64_MAX,
+																		   TIMESTAMPOID),
+												 TIMESTAMPOID)));
 
 	/* TIMESTAMPTZ */
 	for (i64 = -100; i64 < 100; i64++)
@@ -140,7 +143,10 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPTZOID),
 													TIMESTAMPTZOID));
 
-	TestEnsureError(ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPTZOID));
+	TestAssertInt64Eq(PG_INT64_MIN, ts_time_value_to_internal(DT_NOBEGIN, TIMESTAMPTZOID));
+	TestAssertInt64Eq(PG_INT64_MAX, ts_time_value_to_internal(DT_NOEND, TIMESTAMPTZOID));
+
+	TestAssertInt64Eq(DT_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPTZOID));
 	TestEnsureError(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN - 1, TIMESTAMPTZOID));
 
 	TestAssertInt64Eq(TS_INTERNAL_TIMESTAMP_MIN,
@@ -148,21 +154,19 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 																		  TIMESTAMPTZOID),
 												TIMESTAMPTZOID));
 
-	TestAssertInt64Eq(PG_INT64_MAX - TS_EPOCH_DIFF_MICROSECONDS,
-					  DatumGetInt64(ts_internal_to_time_value(PG_INT64_MAX, TIMESTAMPTZOID)));
-	TestEnsureError(
-		ts_time_value_to_internal(ts_internal_to_time_value(PG_INT64_MAX, TIMESTAMPTZOID),
-								  TIMESTAMPTZOID));
+	TestAssertInt64Eq(DT_NOEND,
+					  ts_time_value_to_internal(ts_internal_to_time_value(PG_INT64_MAX,
+																		  TIMESTAMPTZOID),
+												TIMESTAMPTZOID));
 
 	/* DATE */
+
 	for (i64 = -100 * USECS_PER_DAY; i64 < 100 * USECS_PER_DAY; i64 += USECS_PER_DAY)
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, DATEOID),
 													DATEOID));
-
-	TestEnsureError(ts_internal_to_time_value(PG_INT64_MIN, DATEOID));
-	TestAssertInt64Eq(106741034, DatumGetDateADT(ts_internal_to_time_value(PG_INT64_MAX, DATEOID)));
-
+	TestAssertInt64Eq(DATEVAL_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, DATEOID));
+	TestAssertInt64Eq(DATEVAL_NOEND, ts_internal_to_time_value(PG_INT64_MAX, DATEOID));
 	TestEnsureError(ts_time_value_to_internal((DATEVAL_NOBEGIN + 1), DATEOID));
 	TestEnsureError(ts_time_value_to_internal((DATEVAL_NOEND - 1), DATEOID));
 

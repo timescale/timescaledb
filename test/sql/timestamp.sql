@@ -100,12 +100,20 @@ SELECT _timescaledb_internal.to_timestamp(1486480176236538);
 -- Should be the inverse of the statement above.
 SELECT _timescaledb_internal.to_unix_microseconds('2017-02-07 15:09:36.236538+00');
 
--- In UNIX microseconds, BIGINT MAX is smaller than internal date upper bound
--- and should therefore be OK. Further, converting to the internal postgres
--- epoch cannot overflow a 64-bit INTEGER since the postgres epoch is at a
--- later date compared to the UNIX epoch, and is therefore represented by a
--- smaller number
+-- For timestamps, BIGINT MAX represents +Infinity and BIGINT MIN
+-- -Infinity. We keep this notion for UNIX epoch time:
+SELECT _timescaledb_internal.to_unix_microseconds('+infinity');
 SELECT _timescaledb_internal.to_timestamp(9223372036854775807);
+SELECT _timescaledb_internal.to_unix_microseconds('-infinity');
+SELECT _timescaledb_internal.to_timestamp(-9223372036854775808);
+
+-- In UNIX microseconds, the largest bigint value below infinity
+-- (BIGINT MAX) is smaller than internal date upper bound and should
+-- therefore be OK. Further, converting to the internal postgres epoch
+-- cannot overflow a 64-bit INTEGER since the postgres epoch is at a
+-- later date compared to the UNIX epoch, and is therefore represented
+-- by a smaller number
+SELECT _timescaledb_internal.to_timestamp(9223372036854775806);
 
 -- Julian day zero is -210866803200000000 microseconds from UNIX epoch
 SELECT _timescaledb_internal.to_timestamp(-210866803200000000);
