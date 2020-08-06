@@ -59,6 +59,9 @@ typedef struct ContinuousAggMatOptions
 									   cover this point */
 } ContinuousAggMatOptions;
 
+extern TSDLLEXPORT ContinuousAgg *
+ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
+
 extern TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
