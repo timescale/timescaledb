@@ -253,7 +253,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     partial_view_schema NAME NOT NULL,
     partial_view_name NAME NOT NULL,
     bucket_width  BIGINT NOT NULL,
-    job_id INTEGER UNIQUE NOT NULL REFERENCES _timescaledb_config.bgw_job(id) ON DELETE RESTRICT,
     refresh_lag BIGINT NOT NULL,
     direct_view_schema NAME NOT NULL,
     direct_view_name NAME NOT NULL,

@@ -229,7 +229,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, cha
 						  char *partial_schema, char *partial_view, int64 bucket_width,
 						  int64 refresh_lag, int64 max_interval_per_job,
 						  int64 ignore_invalidation_older_than, bool materialized_only,
-						  int32 job_id, char *direct_schema, char *direct_view)
+						  char *direct_schema, char *direct_view)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -260,7 +260,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, cha
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)] =
 		NameGetDatum(&partial_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = Int64GetDatum(bucket_width);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_job_id)] = job_id;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = Int64GetDatum(refresh_lag);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)] =
 		NameGetDatum(&direct_schnm);
@@ -1645,11 +1644,8 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	Oid nspid;
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 materialize_hypertable_id;
-	int32 job_id;
 	char trigarg[NAMEDATALEN];
 	int ret;
-	Interval *refresh_interval =
-		DatumGetIntervalP(with_clause_options[ContinuousViewOptionRefreshInterval].parsed);
 	int64 refresh_lag = get_refresh_lag(origquery_ht->htpartcoltype,
 										origquery_ht->bucket_width,
 										with_clause_options);
@@ -1724,8 +1720,9 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	create_view_for_query(orig_userview_query, dum_rel);
 
 	/* register the BGW job to process continuous aggs*/
-	job_id =
-		ts_continuous_agg_job_add(origquery_ht->htid, origquery_ht->bucket_width, refresh_interval);
+	ts_continuous_agg_job_add(materialize_hypertable_id,
+							  origquery_ht->htid,
+							  origquery_ht->bucket_width);
 
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
@@ -1740,7 +1737,6 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 							  max_interval_per_job,
 							  ignore_invalidation_older_than,
 							  materialized_only,
-							  job_id,
 							  dum_rel->schemaname,
 							  dum_rel->relname);
 

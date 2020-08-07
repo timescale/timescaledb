@@ -12,7 +12,7 @@ setup
     INSERT INTO ts_continuous_test SELECT i, i FROM
         (SELECT generate_series(0, 29) AS i) AS i;
     CREATE VIEW continuous_view
-        WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_interval='72 hours')
+        WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
         AS SELECT time_bucket('5', time), COUNT(location)
             FROM ts_continuous_test
             GROUP BY 1;

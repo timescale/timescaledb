@@ -63,8 +63,8 @@ SELECT * FROM timescaledb_information.policy_stats;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | job_id | refresh_lag | direct_view_schema | direct_view_name | max_interval_per_job | ignore_invalidation_older_than | materialized_only 
--------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------+-------------+--------------------+------------------+----------------------+--------------------------------+-------------------
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | refresh_lag | direct_view_schema | direct_view_name | max_interval_per_job | ignore_invalidation_older_than | materialized_only 
+-------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+-------------+--------------------+------------------+----------------------+--------------------------------+-------------------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -98,18 +98,19 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_
 
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 -- min distance from end should be 1
-SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag, ignore_invalidation_older_than FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | user_view_schema |      user_view_name      | bucket_width | job_id | refresh_lag | ignore_invalidation_older_than 
--------------------+------------------+--------------------------+--------------+--------+-------------+--------------------------------
-                 2 | public           | test_continuous_agg_view |            2 |   1000 |           4 |            9223372036854775807
+SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, refresh_lag, ignore_invalidation_older_than FROM _timescaledb_catalog.continuous_agg;
+ mat_hypertable_id | user_view_schema |      user_view_name      | bucket_width | refresh_lag | ignore_invalidation_older_than 
+-------------------+------------------+--------------------------+--------------+-------------+--------------------------------
+                 2 | public           | test_continuous_agg_view |            2 |           4 |            9223372036854775807
 (1 row)
 
-SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
 -- job was created
-SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
- 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
+SELECT * FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id;
+  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
+------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
+ 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
 (1 row)
 
 -- create 10 time buckets
@@ -145,9 +146,9 @@ SELECT * FROM sorted_bgw_log;
 (2 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
- 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
+  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
+------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
+ 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
 (1 row)
 
 -- job ran once, successfully
@@ -253,7 +254,12 @@ SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint 
 (1 row)
 
 --alter the refresh interval and check if next_scheduled_run is altered
-ALTER VIEW test_continuous_agg_view SET(timescaledb.refresh_interval= '1m');
+SELECT alter_job_schedule(:job_id, schedule_interval => '1m', retry_period => '1m');
+                         alter_job_schedule                         
+--------------------------------------------------------------------
+ (1000,"@ 1 min","@ 0",-1,"@ 1 min","Sat Jan 01 04:01:00 2000 PST")
+(1 row)
+
 SELECT job_id, next_start- last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id;;
@@ -352,7 +358,8 @@ CREATE VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
-SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -432,9 +439,9 @@ SELECT * FROM sorted_bgw_log;
 (6 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
- 1001 | Continuous Aggregate Background Job [1001] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
+  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
+------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
+ 1001 | Continuous Aggregate Background Job [1001] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             3 | {"mat_hypertable_id": 3}
 (1 row)
 
 -- job ran again, fast restart
@@ -457,14 +464,13 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x on
 --check the information views --
-select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job, materialization_hypertable
+select view_name, view_owner, refresh_lag, max_interval_per_job, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 -[ RECORD 1 ]--------------+-------------------------------------------------
 view_name                  | test_continuous_agg_view
 view_owner                 | default_perm_user
 refresh_lag                | -2
-refresh_interval           | @ 12 hours
 max_interval_per_job       | 2
 materialization_hypertable | _timescaledb_internal._materialized_hypertable_3
 
@@ -498,7 +504,7 @@ CREATE VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 NOTICE:  adding index _materialized_hypertable_4_get_constant_no_perms_time_bucke_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(get_constant_no_perms, time_bucket)
-SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -546,7 +552,7 @@ CREATE VIEW test_continuous_agg_view_user_2
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
         GROUP BY 1;
-SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------

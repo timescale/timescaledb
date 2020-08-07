@@ -88,11 +88,12 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 
 -- min distance from end should be 1
-SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, job_id, refresh_lag, ignore_invalidation_older_than FROM _timescaledb_catalog.continuous_agg;
-SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width, refresh_lag, ignore_invalidation_older_than FROM _timescaledb_catalog.continuous_agg;
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
 
 -- job was created
-SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
+SELECT * FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id;
 
 -- create 10 time buckets
 INSERT INTO test_continuous_agg_table
@@ -182,7 +183,7 @@ SELECT wait_for_job_to_run(:job_id, 2);
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+1, true);
 
 --alter the refresh interval and check if next_scheduled_run is altered
-ALTER VIEW test_continuous_agg_view SET(timescaledb.refresh_interval= '1m');
+SELECT alter_job_schedule(:job_id, schedule_interval => '1m', retry_period => '1m');
 SELECT job_id, next_start- last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id;;
@@ -230,7 +231,8 @@ CREATE VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 
-SELECT job_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
@@ -272,7 +274,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x on
 --check the information views --
-select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job, materialization_hypertable
+select view_name, view_owner, refresh_lag, max_interval_per_job, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 
@@ -295,7 +297,7 @@ CREATE VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 
-SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
@@ -329,7 +331,7 @@ CREATE VIEW test_continuous_agg_view_user_2
         FROM test_continuous_agg_table_w_grant
         GROUP BY 1;
 
-SELECT job_id FROM _timescaledb_catalog.continuous_agg ORDER BY job_id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 

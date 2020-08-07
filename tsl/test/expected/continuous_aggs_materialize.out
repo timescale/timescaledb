@@ -620,12 +620,11 @@ CREATE VIEW test_t_mat_view
         GROUP BY 1;
 SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
        partial_view_schema, partial_view_name,
-       _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag),
-       job_id
+       _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag)
     FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  | partial_view_name |      to_timestamp      | to_interval | job_id 
--------------------+-------------------+------------------+-----------------+-----------------------+-------------------+------------------------+-------------+--------
-                 6 |                 5 | public           | test_t_mat_view | _timescaledb_internal | _partial_view_6   | 1970-01-01 02:00:00+00 | @ 4 hours   |   1000
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name  |  partial_view_schema  | partial_view_name |      to_timestamp      | to_interval 
+-------------------+-------------------+------------------+-----------------+-----------------------+-------------------+------------------------+-------------
+                 6 |                 5 | public           | test_t_mat_view | _timescaledb_internal | _partial_view_6   | 1970-01-01 02:00:00+00 | @ 4 hours
 (1 row)
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
@@ -1398,10 +1397,10 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
        view_name        |  completed_threshold   | invalidation_threshold | job_id | job_status | last_run_duration 
 ------------------------+------------------------+------------------------+--------+------------+-------------------
- max_mat_view           | 16                     | 16                     |   1004 |            | 
- max_mat_view_t         | 2019-09-09 12:00:00+00 | 2019-09-09 12:00:00+00 |   1005 |            | 
- max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1006 |            | 
- max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1007 |            | 
+ max_mat_view           | 16                     | 16                     |        |            | 
+ max_mat_view_t         | 2019-09-09 12:00:00+00 | 2019-09-09 12:00:00+00 |        |            | 
+ max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |        |            | 
+ max_mat_view_date      | 2019-09-16             | 2019-09-16             |        |            | 
 (4 rows)
 
 SELECT view_name, refresh_lag, max_interval_per_job
@@ -1419,10 +1418,10 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
        view_name        |  completed_threshold   | invalidation_threshold | job_id | job_status | last_run_duration 
 ------------------------+------------------------+------------------------+--------+------------+-------------------
- max_mat_view           | 16                     | 16                     |   1004 |            | 
- max_mat_view_t         | 2019-09-09 07:00:00-05 | 2019-09-09 07:00:00-05 |   1005 |            | 
- max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |   1006 |            | 
- max_mat_view_date      | 2019-09-16             | 2019-09-16             |   1007 |            | 
+ max_mat_view           | 16                     | 16                     |        |            | 
+ max_mat_view_t         | 2019-09-09 07:00:00-05 | 2019-09-09 07:00:00-05 |        |            | 
+ max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |        |            | 
+ max_mat_view_date      | 2019-09-16             | 2019-09-16             |        |            | 
 (4 rows)
 
 SELECT view_name, refresh_lag, max_interval_per_job

@@ -278,8 +278,7 @@ CREATE VIEW test_t_mat_view
 
 SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
        partial_view_schema, partial_view_name,
-       _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag),
-       job_id
+       _timescaledb_internal.to_timestamp(bucket_width), _timescaledb_internal.to_interval(refresh_lag)
     FROM _timescaledb_catalog.continuous_agg;
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SET ROLE :ROLE_SUPERUSER;

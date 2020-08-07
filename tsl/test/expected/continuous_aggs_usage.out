@@ -90,7 +90,7 @@ SELECT * FROM timescaledb_information.continuous_aggregate_stats;
 view_name              | device_summary
 completed_threshold    | Sun Dec 30 22:00:00 2018 PST
 invalidation_threshold | Sun Dec 30 22:00:00 2018 PST
-job_id                 | 1000
+job_id                 | 
 last_run_started_at    | 
 last_successful_finish | 
 last_run_status        | 
@@ -108,17 +108,22 @@ total_crashes          |
 --
 -- The refresh interval determines how often the background worker
 -- for automatic materialization will run. The default is (2 x bucket_width)
-SELECT refresh_interval FROM timescaledb_information.continuous_aggregates;
- refresh_interval 
-------------------
+SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+ schedule_interval 
+-------------------
  @ 2 hours
 (1 row)
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
-ALTER VIEW device_summary SET (timescaledb.refresh_interval = '1 hour');
-SELECT refresh_interval FROM timescaledb_information.continuous_aggregates;
- refresh_interval 
-------------------
+SELECT alter_job_schedule(1000, schedule_interval := '1h');
+                alter_job_schedule                
+--------------------------------------------------
+ (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",-infinity)
+(1 row)
+
+SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+ schedule_interval 
+-------------------
  @ 1 hour
 (1 row)
 

@@ -37,12 +37,12 @@ AS
     FROM continuous_agg_test
     GROUP BY 1, 2;
 NOTICE:  adding index _materialized_hypertable_3_grp_timed_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(grp, timed)
-select view_name, view_owner, refresh_lag, refresh_interval, max_interval_per_job , materialization_hypertable 
+select view_name, view_owner, refresh_lag, max_interval_per_job , materialization_hypertable 
 from timescaledb_information.continuous_aggregates;
- view_name |    view_owner     | refresh_lag | refresh_interval | max_interval_per_job |            materialization_hypertable            
------------+-------------------+-------------+------------------+----------------------+--------------------------------------------------
- cagg_1    | default_perm_user | -2          | @ 12 hours       | 40                   | _timescaledb_internal._materialized_hypertable_2
- cagg_2    | default_perm_user | -2          | @ 12 hours       | 40                   | _timescaledb_internal._materialized_hypertable_3
+ view_name |    view_owner     | refresh_lag | max_interval_per_job |            materialization_hypertable            
+-----------+-------------------+-------------+----------------------+--------------------------------------------------
+ cagg_1    | default_perm_user | -2          | 40                   | _timescaledb_internal._materialized_hypertable_2
+ cagg_2    | default_perm_user | -2          | 40                   | _timescaledb_internal._materialized_hypertable_3
 (2 rows)
 
 --TEST1: cagg_1 is materialized, not cagg_2.

@@ -50,9 +50,9 @@ from foo
 group by time_bucket(1, a), a;
 NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
 SELECT * FROM _timescaledb_config.bgw_job;
-  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
- 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   |           |             |       | t         |               | 
+  id  |              application_name              |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
+------+--------------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
+ 1000 | Continuous Aggregate Background Job [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
 (1 row)
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
@@ -854,7 +854,7 @@ select table_name from create_hypertable( 'conditions', 'timec');
 (1 row)
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -862,6 +862,12 @@ group by time_bucket('1day', timec), location, humidity, temperature;
 NOTICE:  adding index _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_5_5, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_6_6, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_7_7, timec)
+SELECT alter_job_schedule(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
+                alter_job_schedule                 
+---------------------------------------------------
+ (1012,"@ 1 hour","@ 0",-1,"@ 48 hours",-infinity)
+(1 row)
+
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
  schedule_interval 
 -------------------
@@ -874,7 +880,13 @@ SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.
  @ 5 hours
 (1 row)
 
-ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
+ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h');
+SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+                 alter_job_schedule                 
+----------------------------------------------------
+ (1012,"@ 2 hours","@ 0",-1,"@ 48 hours",-infinity)
+(1 row)
+
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
  to_interval 
 -------------
@@ -904,7 +916,7 @@ order by indexname;
 DROP VIEW mat_with_test;
 --no additional indexes
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h', timescaledb.create_group_indexes=false)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.create_group_indexes=false)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -945,11 +957,17 @@ SELECT set_integer_now_func('conditions', 'integer_now_conditions');
 (1 row)
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '500', timescaledb.refresh_interval = '2h')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '500')
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
+SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+                 alter_job_schedule                 
+----------------------------------------------------
+ (1014,"@ 2 hours","@ 0",-1,"@ 12 hours",-infinity)
+(1 row)
+
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
  schedule_interval 
 -------------------
@@ -1005,7 +1023,7 @@ SELECT set_integer_now_func('space_table', 'integer_now_space_table');
 (1 row)
 
 CREATE VIEW space_view
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-2', timescaledb.refresh_interval = '72h')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-2')
 AS SELECT time_bucket('4', time), COUNT(data)
    FROM space_table
    GROUP BY 1;

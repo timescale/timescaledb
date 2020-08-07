@@ -3,12 +3,12 @@ Parsed test spec with 11 sessions
 starting permutation: Setup2 LockCompleted LockMat1 Refresh1 Refresh2 UnlockCompleted UnlockMat1
 step Setup2: 
     CREATE VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1;
     CREATE VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1;
@@ -34,12 +34,12 @@ step Refresh1: <... completed>
 starting permutation: Setup2 Refresh1 Refresh2 LockCompleted LockMat1 I1 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
 step Setup2: 
     CREATE VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1;
     CREATE VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1;
@@ -80,12 +80,12 @@ bkt            maxl
 starting permutation: Setup2 AlterLag1 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockCompleted LockMat1 I2 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
 step Setup2: 
     CREATE VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1;
     CREATE VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1;
@@ -134,12 +134,12 @@ bkt            maxl
 starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel U1 U2 LInvRow Refresh1 Refresh2 UnlockInvRow Refresh1_sel Refresh2_sel
 step Setup2: 
     CREATE VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1;
     CREATE VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1;

@@ -25,6 +25,7 @@
 #include "bgw/job_stat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/compression_api.h"
+#include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "compression/compress_utils.h"
@@ -49,12 +50,12 @@
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
 
 static void
-enable_fast_restart(BgwJob *job, const char *job_name)
+enable_fast_restart(int32 job_id, const char *job_name)
 {
-	BgwJobStat *job_stat = ts_bgw_job_stat_find(job->fd.id);
+	BgwJobStat *job_stat = ts_bgw_job_stat_find(job_id);
 
-	ts_bgw_job_stat_set_next_start(job, job_stat->fd.last_start);
-	elog(LOG, "the %s job is scheduled to run again immediately", job_name);
+	ts_bgw_job_stat_set_next_start(job_id, job_stat->fd.last_start);
+	elog(DEBUG1, "the %s job is scheduled to run again immediately", job_name);
 }
 
 /*
@@ -246,12 +247,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder, bool f
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
 
 	if (fast_continue && get_chunk_id_to_reorder(job_id, ht) != -1)
-	{
-		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
-
-		if (job != NULL)
-			enable_fast_restart(job, "reorder");
-	}
+		enable_fast_restart(job_id, "reorder");
 
 commit:
 	if (started)
@@ -297,10 +293,9 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	int num_dropped;
 	List *dc_temp;
 
-	if (!IsTransactionOrTransactionBlock())
+	if (!ActiveSnapshotSet())
 	{
 		started = true;
-		StartTransactionCommand();
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
@@ -326,32 +321,20 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	elog(LOG, "job %d completed dropping %d chunks", job_id, num_dropped);
 
 	if (started)
-	{
 		PopActiveSnapshot();
-		CommitTransactionCommand();
-	}
+
 	return true;
 }
 
-static bool
-execute_materialize_continuous_aggregate(BgwJob *job)
+bool
+policy_continuous_aggregate_execute(int32 job_id, Jsonb *config)
 {
-	bool started = false;
+	bool committed = false;
 	int32 materialization_id;
 	bool finshed_all_materialization;
 	ContinuousAggMatOptions mat_options;
 
-	if (!IsTransactionOrTransactionBlock())
-	{
-		started = true;
-		StartTransactionCommand();
-	}
-
-	materialization_id = ts_continuous_agg_job_find_materializtion_by_job_id(job->fd.id);
-	if (materialization_id < 0)
-		elog(ERROR, "cannot find continuous aggregate for job %d", job->fd.id);
-
-	CommitTransactionCommand();
+	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 
 	/* always materialize verbosely for now */
 	mat_options = (ContinuousAggMatOptions){
@@ -360,15 +343,27 @@ execute_materialize_continuous_aggregate(BgwJob *job)
 		.process_only_invalidation = false,
 		.invalidate_prior_to_time = PG_INT64_MAX,
 	};
+
+	/* materialization code has it's own transaction handling so we commit
+	 * current transaction */
+	if (IsTransactionOrTransactionBlock())
+	{
+		committed = true;
+		CommitTransactionCommand();
+	}
+
 	finshed_all_materialization = continuous_agg_materialize(materialization_id, &mat_options);
 
-	StartTransactionCommand();
-
 	if (!finshed_all_materialization)
-		enable_fast_restart(job, "materialize continuous aggregate");
-
-	if (started)
+	{
+		StartTransactionCommand();
+		enable_fast_restart(job_id, "materialize continuous aggregate");
 		CommitTransactionCommand();
+	}
+
+	/* start new transaction if we committed before */
+	if (committed)
+		StartTransactionCommand();
 
 	return true;
 }
@@ -384,10 +379,9 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 	Chunk *chunk = NULL;
 	Dimension *dim;
 
-	if (!IsTransactionOrTransactionBlock())
+	if (!ActiveSnapshotSet())
 	{
 		started = true;
-		StartTransactionCommand();
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
@@ -416,50 +410,14 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 
 	chunkid = get_chunk_to_compress(dim, config);
 	if (chunkid != INVALID_CHUNK_ID)
-	{
-		BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
-
-		if (job != NULL)
-			enable_fast_restart(job, "compression");
-	}
+		enable_fast_restart(job_id, "compression");
 
 	ts_cache_release(hcache);
 	if (started)
-	{
 		PopActiveSnapshot();
-		CommitTransactionCommand();
-	}
-	elog(LOG, "job %d completed compressing chunk", job_id);
+
+	elog(DEBUG1, "job %d completed compressing chunk", job_id);
 	return true;
-}
-
-static bool
-bgw_policy_job_check_enterprise_license(BgwJob *job)
-{
-	bool required = true;
-
-	switch (job->bgw_type)
-	{
-		case JOB_TYPE_REORDER:
-		case JOB_TYPE_DROP_CHUNKS:
-		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-		case JOB_TYPE_COMPRESS_CHUNKS:
-		case JOB_TYPE_CUSTOM:
-			required = false;
-			break;
-		default:
-			elog(ERROR,
-				 "scheduler could not determine the license type for job type: \"%s\"",
-				 NameStr(job->fd.job_type));
-	}
-
-	if (required)
-	{
-		license_enforce_enterprise_enabled();
-		license_print_expiration_warning_if_needed();
-	}
-
-	return required;
 }
 
 static void
@@ -492,8 +450,8 @@ job_execute_procedure(FuncExpr *funcexpr)
 	ExecuteCallStmt(call, params, false, dest);
 }
 
-static bool
-job_execute(BgwJob *job)
+bool
+tsl_bgw_policy_job_execute(BgwJob *job)
 {
 	Const *arg1, *arg2;
 	bool started;
@@ -502,12 +460,12 @@ job_execute(BgwJob *job)
 	Oid proc_args[] = { INT4OID, JSONBOID };
 	List *name;
 	FuncExpr *funcexpr;
+	MemoryContext parent_ctx = CurrentMemoryContext;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
 		started = true;
 		StartTransactionCommand();
-		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
 	name = list_make2(makeString(NameStr(job->fd.proc_schema)),
@@ -516,6 +474,13 @@ job_execute(BgwJob *job)
 
 	prokind = get_func_prokind(proc);
 
+	/*
+	 * We need to switch back to parent MemoryContext as StartTransactionCommand
+	 * switched to CurTransactionContext and this context will be destroyed
+	 * on CommitTransactionCommand which may be too short-lived if a policy
+	 * has its own transaction handling.
+	 */
+	MemoryContextSwitchTo(parent_ctx);
 	arg1 = makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(job->fd.id), false, true);
 	arg2 = makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(job->fd.config), false, false);
 
@@ -541,36 +506,9 @@ job_execute(BgwJob *job)
 	}
 
 	if (started)
-	{
-		PopActiveSnapshot();
 		CommitTransactionCommand();
-	}
 
 	return true;
-}
-
-bool
-tsl_bgw_policy_job_execute(BgwJob *job)
-{
-	bgw_policy_job_check_enterprise_license(job);
-
-	switch (job->bgw_type)
-	{
-		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-			return execute_materialize_continuous_aggregate(job);
-
-		case JOB_TYPE_COMPRESS_CHUNKS:
-		case JOB_TYPE_DROP_CHUNKS:
-		case JOB_TYPE_REORDER:
-		case JOB_TYPE_CUSTOM:
-			return job_execute(job);
-
-		default:
-			elog(ERROR,
-				 "scheduler tried to run an invalid job type: \"%s\"",
-				 NameStr(job->fd.job_type));
-	}
-	pg_unreachable();
 }
 
 Datum
@@ -605,7 +543,6 @@ bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS)
 					 errmsg("cannot alter policy schedule, policy #%d not found", job_id)));
 	}
 
-	bgw_policy_job_check_enterprise_license(job);
 	ts_bgw_job_permission_check(job);
 
 	if (!PG_ARGISNULL(1))

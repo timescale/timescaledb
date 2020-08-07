@@ -121,7 +121,6 @@ FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestam
 
 CREATE VIEW conditions_summary
 WITH (timescaledb.continuous,
-      timescaledb.refresh_interval='1 minute',
       timescaledb.max_interval_per_job = '60 days') AS
 SELECT device,
        time_bucket(INTERVAL '1 hour', "time") AS day,

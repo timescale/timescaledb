@@ -67,8 +67,8 @@ WHERE job_type = 'reorder';
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
   SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
     js.total_runs, js.total_failures
-  FROM (SELECT id AS job_id, hypertable_id FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder','compress_chunks','drop_chunks')
-        UNION SELECT job_id, raw_hypertable_id FROM _timescaledb_catalog.continuous_agg) p
+  FROM (SELECT id AS job_id, hypertable_id FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder','compress_chunks','drop_chunks','continuous_aggregate')
+        ) p
     INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
     INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id
     INNER JOIN _timescaledb_internal.bgw_job_stat js on p.job_id = js.job_id
@@ -114,15 +114,13 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
     cagg.materialized_only,
     format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
     directview.viewdefinition as view_definition
-  FROM  _timescaledb_catalog.continuous_agg cagg,
+  FROM  _timescaledb_catalog.continuous_agg cagg
+        LEFT JOIN _timescaledb_config.bgw_job bgwjob ON bgwjob.hypertable_id = cagg.mat_hypertable_id,
         _timescaledb_catalog.hypertable ht, LATERAL
         ( select C.oid, pg_get_userbyid( C.relowner) as viewowner
           FROM pg_class C LEFT JOIN pg_namespace N on (N.oid = C.relnamespace)
           where C.relkind = 'v' and C.relname = cagg.user_view_name
           and N.nspname = cagg.user_view_schema ) viewinfo, LATERAL
-        ( select schedule_interval
-          FROM  _timescaledb_config.bgw_job
-          where id = cagg.job_id ) bgwjob, LATERAL
         ( select pg_get_viewdef(C.oid) as viewdefinition
           FROM pg_class C LEFT JOIN pg_namespace N on (N.oid = C.relnamespace)
           where C.relkind = 'v' and C.relname = cagg.direct_view_name
@@ -149,7 +147,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
         THEN _timescaledb_internal.to_date(it.watermark)::TEXT
       ELSE it.watermark::TEXT
     END AS invalidation_threshold,
-    cagg.job_id as job_id,
+    bgw_job_stat.job_id,
     bgw_job_stat.last_start as last_run_started_at,
     bgw_job_stat.last_successful_finish as last_successful_finish,
     CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL
@@ -170,8 +168,10 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
     bgw_job_stat.total_crashes
   FROM
     _timescaledb_catalog.continuous_agg as cagg
+    LEFT JOIN _timescaledb_config.bgw_job as bgw_job
+    ON  ( cagg.mat_hypertable_id = bgw_job.hypertable_id )
     LEFT JOIN _timescaledb_internal.bgw_job_stat as bgw_job_stat
-    ON  ( cagg.job_id = bgw_job_stat.job_id )
+    ON  ( bgw_job.id = bgw_job_stat.job_id )
     LEFT JOIN _timescaledb_catalog.continuous_aggs_invalidation_threshold as it
     ON ( cagg.raw_hypertable_id = it.hypertable_id)
     LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold as ct

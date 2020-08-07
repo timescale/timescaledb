@@ -7,6 +7,7 @@
 #include <fmgr.h>
 
 #include "bgw_policy/compression_api.h"
+#include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/retention_api.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
@@ -94,15 +95,16 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_materialize = continuous_agg_materialize,
 
 	/* bgw policies */
-	.policy_retention_add = policy_retention_add,
-	.policy_retention_proc = policy_retention_proc,
-	.policy_retention_remove = policy_retention_remove,
 	.policy_compression_add = policy_compression_add,
 	.policy_compression_proc = policy_compression_proc,
 	.policy_compression_remove = policy_compression_remove,
+	.policy_continuous_aggregate_proc = policy_continuous_aggregate_proc,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_remove = policy_reorder_remove,
+	.policy_retention_add = policy_retention_add,
+	.policy_retention_proc = policy_retention_proc,
+	.policy_retention_remove = policy_retention_remove,
 
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,

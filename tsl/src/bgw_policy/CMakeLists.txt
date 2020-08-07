@@ -2,6 +2,7 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/reorder_api.c
   ${CMAKE_CURRENT_SOURCE_DIR}/retention_api.c
   ${CMAKE_CURRENT_SOURCE_DIR}/compression_api.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/continuous_aggregate_api.c
   ${CMAKE_CURRENT_SOURCE_DIR}/job.c
 )
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

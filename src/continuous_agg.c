@@ -36,10 +36,6 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(false),
 		},
-		[ContinuousViewOptionRefreshInterval] = {
-			.arg_name = "refresh_interval",
-			.type_id = INTERVALOID,
-		},
 		[ContinuousViewOptionRefreshLag] = {
 			 .arg_name = "refresh_lag",
 			 .type_id = TEXTOID,
@@ -488,34 +484,6 @@ ts_continuous_agg_find_by_relid(Oid relid)
 	return ts_continuous_agg_find_userview_name(schemaname, relname);
 }
 
-ContinuousAgg *
-ts_continuous_agg_find_by_job_id(int32 job_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ContinuousAgg *ca = NULL;
-	int count = 0;
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
-
-		if (data->job_id == job_id)
-		{
-			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
-			continuous_agg_init(ca, data);
-			count++;
-		}
-
-		if (should_free)
-			heap_freetuple(tuple);
-	}
-	Assert(count <= 1);
-	return ca;
-}
-
 /*
  * Drops continuous aggs and all related objects.
  *
@@ -546,7 +514,14 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 
 	/* delete the job before taking locks as it kills long-running jobs which we would otherwise
 	 * wait on */
-	ts_bgw_job_delete_by_id(agg->data.job_id);
+	List *jobs = ts_bgw_job_find_by_hypertable_id(agg->data.mat_hypertable_id);
+	ListCell *lc;
+
+	foreach (lc, jobs)
+	{
+		BgwJob *job = lfirst(lc);
+		ts_bgw_job_delete_by_id(job->fd.id);
+	}
 
 	user_view = (ObjectAddress){
 		.classId = RelationRelationId,
