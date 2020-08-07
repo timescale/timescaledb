@@ -345,14 +345,7 @@ select table_name from create_hypertable( 'conditions', 'timec');
 
 \set ON_ERROR_STOP 0
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 joules', timescaledb.refresh_interval = '1h')
-as
-select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket('1day', timec);
-
-create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5h', timescaledb.refresh_interval = '1 joule')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 joules')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -360,14 +353,14 @@ group by time_bucket('1day', timec);
 \set ON_ERROR_STOP 1
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec);
 
 create or replace view mat_with_test_no_inval( timec, minl, sumt , sumh)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h',
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours',
                timescaledb.ignore_invalidation_older_than='0')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
@@ -412,14 +405,14 @@ SELECT set_integer_now_func('conditions', 'integer_now_test_s');
 
 \set ON_ERROR_STOP 0
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '1 hour', timescaledb.refresh_interval = '1h')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '1 hour')
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '32768', timescaledb.refresh_interval = '1h')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '32768')
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -428,7 +421,7 @@ group by time_bucket(100, timec);
 ALTER TABLE conditions ALTER timec type int;
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483648', timescaledb.refresh_interval = '1h')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483648')
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -460,7 +453,7 @@ group by time_bucket(100, timec);
 \set ON_ERROR_STOP 1
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647', timescaledb.refresh_interval = '2h')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647')
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -475,7 +468,7 @@ DROP VIEW mat_with_test;
 
 ALTER TABLE conditions ALTER timec type bigint;
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647', timescaledb.refresh_interval = '2h')
+WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647')
 as
 select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -491,7 +484,7 @@ CREATE TABLE text_time(time TEXT);
 
 \set ON_ERROR_STOP 0
 CREATE VIEW text_view
-    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('5', text_part_func(time)), COUNT(time)
         FROM text_time
         GROUP BY 1;

@@ -635,16 +635,18 @@ CREATE TABLE conditions (
 select table_name from create_hypertable( 'conditions', 'timec');
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours')
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature;
 
+SELECT alter_job_schedule(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 
-ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
+ALTER VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h');
+SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 
@@ -658,7 +660,7 @@ order by indexname;
 DROP VIEW mat_with_test;
 --no additional indexes
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.refresh_interval = '1h', timescaledb.create_group_indexes=false)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.create_group_indexes=false)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -689,11 +691,12 @@ CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STA
 SELECT set_integer_now_func('conditions', 'integer_now_conditions');
 
 create or replace view mat_with_test( timec, minl, sumt , sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '500', timescaledb.refresh_interval = '2h')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '500')
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
+SELECT alter_job_schedule(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
@@ -726,7 +729,7 @@ CREATE OR REPLACE FUNCTION integer_now_space_table() returns BIGINT LANGUAGE SQL
 SELECT set_integer_now_func('space_table', 'integer_now_space_table');
 
 CREATE VIEW space_view
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-2', timescaledb.refresh_interval = '72h')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-2')
 AS SELECT time_bucket('4', time), COUNT(data)
    FROM space_table
    GROUP BY 1;

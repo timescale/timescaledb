@@ -37,12 +37,12 @@ teardown {
 
 session "cj"
 step "cjj5" {
-    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-    ('test_job_1', 'bgw_test_job_5_lock', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period, owner) VALUES
+    ('test_job_1', 'bgw_test_job_5_lock', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s', 'default_perm_user');
 }
 step "cjj6" {
-    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-    ('test_job_1', 'bgw_test_job_6_lock_notxn', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period, owner) VALUES
+    ('test_job_1', 'bgw_test_job_6_lock_notxn', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s', 'default_perm_user');
 }
 
 session "s1"

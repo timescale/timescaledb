@@ -168,6 +168,23 @@ FROM _timescaledb_config.bgw_policy_drop_chunks c
 WHERE job_type = 'drop_chunks'
   AND job.id = c.job_id;
 
+-- migrate cagg jobs
+UPDATE
+  _timescaledb_config.bgw_job job
+SET proc_name = 'policy_continuous_aggregate',
+  proc_schema = '_timescaledb_internal',
+  config = jsonb_build_object('mat_hypertable_id', c.mat_hypertable_id),
+  hypertable_id = c.mat_hypertable_id,
+  OWNER = (
+    SELECT relowner::regrole::text
+    FROM _timescaledb_catalog.hypertable ht,
+      pg_class cl
+    WHERE ht.id = c.mat_hypertable_id
+      AND cl.oid = format('%I.%I', schema_name, table_name)::regclass)
+FROM _timescaledb_catalog.continuous_agg c
+WHERE job_type = 'continuous_aggregate'
+  AND job.id = c.job_id;
+
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
 ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
@@ -183,4 +200,47 @@ DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.valid_ts_interval;
 DROP TYPE IF EXISTS _timescaledb_catalog.ts_interval;
+
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregate_stats;
+ALTER TABLE IF EXISTS _timescaledb_catalog.continuous_agg DROP COLUMN IF EXISTS job_id;
+
+-- rebuild continuous aggregate table
+CREATE TABLE _timescaledb_catalog.continuous_agg_tmp AS SELECT * FROM _timescaledb_catalog.continuous_agg;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_completed_threshold DROP CONSTRAINT continuous_aggs_completed_threshold_materialization_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log DROP CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
+DROP TABLE _timescaledb_catalog.continuous_agg;
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
+    mat_hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    raw_hypertable_id INTEGER NOT NULL REFERENCES  _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    user_view_schema NAME NOT NULL,
+    user_view_name NAME NOT NULL,
+    partial_view_schema NAME NOT NULL,
+    partial_view_name NAME NOT NULL,
+    bucket_width  BIGINT NOT NULL,
+    refresh_lag BIGINT NOT NULL,
+    direct_view_schema NAME NOT NULL,
+    direct_view_name NAME NOT NULL,
+    max_interval_per_job BIGINT NOT NULL,
+    ignore_invalidation_older_than BIGINT NOT NULL DEFAULT BIGINT '9223372036854775807',
+    materialized_only BOOL NOT NULL DEFAULT false,
+    UNIQUE(user_view_schema, user_view_name),
+    UNIQUE(partial_view_schema, partial_view_name)
+);
+
+CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx
+    ON _timescaledb_catalog.continuous_agg(raw_hypertable_id);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
+GRANT SELECT ON _timescaledb_catalog.continuous_agg TO PUBLIC;
+
+INSERT INTO _timescaledb_catalog.continuous_agg SELECT mat_hypertable_id,raw_hypertable_id,user_view_schema,user_view_name,partial_view_schema,partial_view_name,bucket_width,refresh_lag,direct_view_schema,direct_view_name,max_interval_per_job,ignore_invalidation_older_than,materialized_only FROM _timescaledb_catalog.continuous_agg_tmp;
+DROP TABLE _timescaledb_catalog.continuous_agg_tmp;
+
+ALTER TABLE _timescaledb_catalog.continuous_aggs_completed_threshold ADD CONSTRAINT continuous_aggs_completed_threshold_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
+ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
 

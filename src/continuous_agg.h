@@ -21,7 +21,6 @@ typedef enum ContinuousAggViewOption
 {
 	ContinuousEnabled = 0,
 	ContinuousViewOptionRefreshLag,
-	ContinuousViewOptionRefreshInterval,
 	ContinuousViewOptionMaxIntervalPerRun,
 	ContinuousViewOptionCreateGroupIndex,
 	ContinuousViewOptionIgnoreInvalidationOlderThan,
@@ -76,7 +75,6 @@ extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char
 																	  const char *name);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_relid(Oid relid);
 
-extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_job_id(int32 job_id);
 extern void ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema,
 												 const char *name);
 

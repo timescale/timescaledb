@@ -23,12 +23,12 @@ session "SetupContinue"
 step "Setup2"
 {
     CREATE VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1;
     CREATE VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10',  timescaledb.refresh_interval='72 hours', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1;

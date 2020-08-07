@@ -72,6 +72,11 @@ CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_compression(job_id INTE
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_proc'
 LANGUAGE C;
 
+/* continuous aggregates policy */
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_continuous_aggregate(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_continuous_aggregate_proc'
+LANGUAGE C;
+
 -- Returns the updated job schedule values
 CREATE OR REPLACE FUNCTION alter_job_schedule(
     job_id INTEGER,

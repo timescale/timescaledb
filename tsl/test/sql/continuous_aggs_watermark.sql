@@ -21,7 +21,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 CREATE TABLE continuous_agg_test_mat(time int);
 select create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
 INSERT INTO _timescaledb_config.bgw_job VALUES (2, '','continuous_aggregate',interval '1s', interval '1s',0, interval '1s');
-INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,2,0,'','',0, bigint '10000000');
+INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,0,'','',0, bigint '10000000');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- create the trigger
@@ -110,7 +110,7 @@ CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE a
 SELECT set_integer_now_func('ca_inval_test', 'integer_now_test2');
 
 CREATE VIEW cit_view
-    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('5', time), COUNT(time)
         FROM ca_inval_test
         GROUP BY 1;
@@ -166,7 +166,7 @@ SELECT set_integer_now_func('ts_continuous_test', 'integer_now_test3');
 INSERT INTO ts_continuous_test SELECT i, i FROM
     (SELECT generate_series(0, 29) AS i) AS i;
 CREATE VIEW continuous_view
-    WITH ( timescaledb.continuous, timescaledb.refresh_interval='72 hours')
+    WITH ( timescaledb.continuous)
     AS SELECT time_bucket('5', time), COUNT(location)
         FROM ts_continuous_test
         GROUP BY 1;

@@ -861,7 +861,6 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_partial_view_schema,
 	Anum_continuous_agg_partial_view_name,
 	Anum_continuous_agg_bucket_width,
-	Anum_continuous_agg_job_id,
 	Anum_continuous_agg_refresh_lag,
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
@@ -882,7 +881,6 @@ typedef struct FormData_continuous_agg
 	NameData partial_view_schema;
 	NameData partial_view_name;
 	int64 bucket_width;
-	int32 job_id;
 	int64 refresh_lag;
 	NameData direct_view_schema;
 	NameData direct_view_name;
@@ -894,20 +892,12 @@ typedef FormData_continuous_agg *Form_continuous_agg;
 
 enum
 {
-	CONTINUOUS_AGG_JOB_ID_KEY = 0,
-	CONTINUOUS_AGG_PARTIAL_VIEW_SCHEMA_PARTIAL_VIEW_NAME_KEY,
+	CONTINUOUS_AGG_PARTIAL_VIEW_SCHEMA_PARTIAL_VIEW_NAME_KEY = 0,
 	CONTINUOUS_AGG_PKEY,
 	CONTINUOUS_AGG_USER_VIEW_SCHEMA_USER_VIEW_NAME_KEY,
 	CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX,
 	_MAX_CONTINUOUS_AGG_INDEX,
 };
-typedef enum Anum_continuous_agg_job_id_key
-{
-	Anum_continuous_agg_job_id_key_job_id = 1,
-	_Anum_continuous_agg_job_id_key_max,
-} Anum_continuous_agg_job_id_key;
-
-#define Natts_continuous_agg_job_id_key (_Anum_continuous_agg_job_id_key_max - 1)
 
 typedef enum Anum_continuous_agg_partial_view_schema_partial_view_name_key
 {

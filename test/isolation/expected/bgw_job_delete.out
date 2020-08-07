@@ -2,8 +2,8 @@ Parsed test spec with 4 sessions
 
 starting permutation: cjj5 s2a s1a s3a s1b s1c
 step cjj5: 
-    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-    ('test_job_1', 'bgw_test_job_5_lock', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period, owner) VALUES
+    ('test_job_1', 'bgw_test_job_5_lock', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s', 'default_perm_user');
 
 step s2a: SELECT pg_advisory_lock(1);
 pg_advisory_lock
@@ -38,8 +38,8 @@ pg_advisory_unlock_all
 
 starting permutation: cjj5 s2a s3a s1a s1b s1c
 step cjj5: 
-    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-    ('test_job_1', 'bgw_test_job_5_lock', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period, owner) VALUES
+    ('test_job_1', 'bgw_test_job_5_lock', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s', 'default_perm_user');
 
 step s2a: SELECT pg_advisory_lock(1);
 pg_advisory_lock
@@ -70,8 +70,8 @@ pg_advisory_unlock_all
 
 starting permutation: cjj6 s2a s1a s3a s2u s1b s1c
 step cjj6: 
-    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-    ('test_job_1', 'bgw_test_job_6_lock_notxn', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+    INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period, owner) VALUES
+    ('test_job_1', 'bgw_test_job_6_lock_notxn', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s', 'default_perm_user');
 
 step s2a: SELECT pg_advisory_lock(1);
 pg_advisory_lock

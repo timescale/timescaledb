@@ -69,7 +69,6 @@ static const char *job_type_names[_MAX_JOB_TYPE] = {
 };
 
 static unknown_job_type_hook_type unknown_job_type_hook = NULL;
-static unknown_job_type_owner_hook_type unknown_job_type_owner_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 
 typedef enum JobLockLifetime
@@ -77,40 +76,6 @@ typedef enum JobLockLifetime
 	SESSION_LOCK = 0,
 	TXN_LOCK,
 } JobLockLifetime;
-
-Oid
-ts_bgw_job_owner(BgwJob *job)
-{
-	switch (job->bgw_type)
-	{
-		case JOB_TYPE_VERSION_CHECK:
-			return ts_catalog_database_info_get()->owner_uid;
-		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-		{
-			ContinuousAgg *ca = ts_continuous_agg_find_by_job_id(job->fd.id);
-
-			if (ca == NULL)
-				elog(ERROR, "continuous aggregate for job with id \"%d\" not found", job->fd.id);
-
-			return ts_rel_get_owner(ts_continuous_agg_get_user_view_oid(ca));
-		}
-
-		case JOB_TYPE_COMPRESS_CHUNKS:
-		case JOB_TYPE_DROP_CHUNKS:
-		case JOB_TYPE_REORDER:
-		case JOB_TYPE_CUSTOM:
-			return get_role_oid(NameStr(job->fd.owner), false);
-
-		case JOB_TYPE_UNKNOWN:
-			if (unknown_job_type_owner_hook != NULL)
-				return unknown_job_type_owner_hook(job);
-			break;
-		case _MAX_JOB_TYPE:
-			break;
-	}
-	elog(ERROR, "unknown job type \"%s\" in finding owner", NameStr(job->fd.job_type));
-	pg_unreachable();
-}
 
 BackgroundWorkerHandle *
 ts_bgw_job_start(BgwJob *job, Oid user_uid)
@@ -619,7 +584,7 @@ ts_bgw_job_delete_by_id(int32 job_id)
 void
 ts_bgw_job_permission_check(BgwJob *job)
 {
-	Oid owner_oid = ts_bgw_job_owner(job);
+	Oid owner_oid = get_role_oid(NameStr(job->fd.owner), false);
 
 	if (!has_privs_of_role(GetUserId(), owner_oid))
 		ereport(ERROR,
@@ -885,12 +850,6 @@ ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook)
 }
 
 void
-ts_bgw_job_set_unknown_job_type_owner_hook(unknown_job_type_owner_hook_type hook)
-{
-	unknown_job_type_owner_hook = hook;
-}
-
-void
 ts_bgw_job_set_job_entrypoint_function_name(char *func_name)
 {
 	job_entrypoint_function_name = func_name;
@@ -919,7 +878,7 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 													TimestampTzGetDatum(job_stat->fd.last_start),
 													IntervalPGetDatum(next_interval)));
 
-		ts_bgw_job_stat_set_next_start(job, next_start);
+		ts_bgw_job_stat_set_next_start(job->fd.id, next_start);
 	}
 	CommitTransactionCommand();
 
@@ -1011,7 +970,7 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 			/* allow DT_NOBEGIN for next_start here through allow_unset=true in the case that
 			 * last_finish is DT_NOBEGIN,
 			 * This means the value is counted as unset which is what we want */
-			ts_bgw_job_stat_update_next_start(updated_job, next_start, true);
+			ts_bgw_job_stat_update_next_start(updated_job->fd.id, next_start, true);
 		}
 		fd->schedule_interval = updated_job->fd.schedule_interval;
 	}

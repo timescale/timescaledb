@@ -148,8 +148,7 @@ SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
 CREATE VIEW drop_chunks_view
   WITH (
     timescaledb.continuous,
-    timescaledb.materialized_only=true,
-    timescaledb.refresh_interval='72 hours'
+    timescaledb.materialized_only=true
   )
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
@@ -197,8 +196,7 @@ SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
 CREATE VIEW drop_chunks_view
   WITH (
     timescaledb.continuous,
-    timescaledb.materialized_only=true,
-    timescaledb.refresh_interval='72 hours'
+    timescaledb.materialized_only=true
   )
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
@@ -262,8 +260,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 CREATE VIEW new_name_view
   WITH (
     timescaledb.continuous,
-    timescaledb.materialized_only=true,
-    timescaledb.refresh_interval='72 hours'
+    timescaledb.materialized_only=true
   )
 AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
     FROM new_name
@@ -273,8 +270,7 @@ AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
 CREATE VIEW drop_chunks_view_view
   WITH (
     timescaledb.continuous,
-    timescaledb.materialized_only=true,
-    timescaledb.refresh_interval='72 hours'
+    timescaledb.materialized_only=true
   )
 AS SELECT time_bucket('6', time_bucket), SUM(count)
     FROM drop_chunks_view
@@ -323,7 +319,6 @@ CREATE VIEW drop_chunks_view
   WITH (
     timescaledb.continuous,
     timescaledb.materialized_only=true,
-    timescaledb.refresh_interval='72 hours',
     timescaledb.refresh_lag = '-5',
     timescaledb.max_interval_per_job=10
   )

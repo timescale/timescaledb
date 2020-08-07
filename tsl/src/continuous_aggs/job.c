@@ -5,13 +5,18 @@
  */
 #include "catalog.h"
 #include <postgres.h>
+#include <miscadmin.h>
 #include <utils/builtins.h>
 
 #include <hypertable_cache.h>
 #include <scan_iterator.h>
+#include <jsonb_utils.h>
 
 #include "bgw/job.h"
 #include "continuous_aggs/job.h"
+
+#define POLICY_CAGG_PROC_NAME "policy_continuous_aggregate"
+#define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
 
 /* DEFAULT_SCHEDULE_INTERVAL 12 hours */
 #define DEFAULT_SCHEDULE_INTERVAL                                                                  \
@@ -62,7 +67,7 @@ continuous_agg_job_get_default_schedule_interval(int32 raw_table_id, int64 bucke
 }
 
 int32
-ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refresh_interval)
+ts_continuous_agg_job_add(int32 mat_table_id, int32 raw_table_id, int64 bucket_width)
 {
 	NameData application_name;
 	NameData job_type;
@@ -72,13 +77,19 @@ ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refr
 	namestrcpy(&job_type, "continuous_aggregate");
 	namestrcpy(&application_name, "Continuous Aggregate Background Job");
 
-	if (refresh_interval == NULL)
-		refresh_interval =
-			continuous_agg_job_get_default_schedule_interval(raw_table_id, bucket_width);
+	Interval *refresh_interval =
+		continuous_agg_job_get_default_schedule_interval(raw_table_id, bucket_width);
 
-	namestrcpy(&proc_name, "");
-	namestrcpy(&proc_schema, "");
-	namestrcpy(&owner, "");
+	namestrcpy(&proc_name, POLICY_CAGG_PROC_NAME);
+	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&owner, GetUserNameFromId(GetUserId(), false));
+
+	JsonbParseState *parse_state = NULL;
+
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	ts_jsonb_add_int32(parse_state, CONFIG_KEY_MAT_HYPERTABLE_ID, mat_table_id);
+	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&job_type,
@@ -90,38 +101,8 @@ ts_continuous_agg_job_add(int32 raw_table_id, int64 bucket_width, Interval *refr
 										&proc_schema,
 										&owner,
 										true,
-										0,
-										NULL);
+										mat_table_id,
+										config);
 
 	return job_id;
-}
-
-int32
-ts_continuous_agg_job_find_materializtion_by_job_id(int32 job_id)
-{
-	int32 materialization_id = -1;
-	ScanIterator continuous_aggregate_iter =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-
-	continuous_aggregate_iter.ctx.index =
-		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_JOB_ID_KEY);
-
-	ts_scan_iterator_scan_key_init(&continuous_aggregate_iter,
-								   Anum_continuous_agg_job_id_key_job_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(job_id));
-	ts_scanner_foreach(&continuous_aggregate_iter)
-	{
-		bool isnull;
-		Datum id;
-		Assert(materialization_id == -1);
-		id = slot_getattr(ts_scan_iterator_slot(&continuous_aggregate_iter),
-						  Anum_continuous_agg_mat_hypertable_id,
-						  &isnull);
-		Assert(!isnull);
-		materialization_id = DatumGetInt32(id);
-	}
-
-	return materialization_id;
 }

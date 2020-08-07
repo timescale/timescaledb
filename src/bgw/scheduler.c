@@ -305,7 +305,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			else
 				sjob->timeout_at = DT_NOEND;
 
-			owner_uid = ts_bgw_job_owner(&sjob->job);
+			owner_uid = get_role_oid(NameStr(sjob->job.fd.owner), false);
 			CommitTransactionCommand();
 			MemoryContextSwitchTo(scratch_mctx);
 
@@ -351,7 +351,7 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 	{
 		/* restore the original next_start to maintain priority (it is unset during mark_start) */
 		if (sjob->next_start != DT_NOBEGIN)
-			ts_bgw_job_stat_set_next_start(&sjob->job, sjob->next_start);
+			ts_bgw_job_stat_set_next_start(sjob->job.fd.id, sjob->next_start);
 		mark_job_as_ended(sjob, JOB_FAILURE_TO_START);
 	}
 	scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);

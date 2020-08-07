@@ -24,7 +24,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME, job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, proc_name NAME DEFAULT '', proc_schema NAME DEFAULT '', owner NAME DEFAULT '', scheduled BOOL DEFAULT true, hypertable_id INTEGER DEFAULT 0, config JSONB DEFAULT '{}')
+CREATE OR REPLACE FUNCTION insert_job(application_name NAME, job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, proc_name NAME DEFAULT '', proc_schema NAME DEFAULT '', owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, hypertable_id INTEGER DEFAULT 0, config JSONB DEFAULT '{}')
 RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_test_bgw_job_insert_relation'
 LANGUAGE C VOLATILE STRICT;

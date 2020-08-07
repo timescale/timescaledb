@@ -348,15 +348,6 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		ts_cache_release(hcache);
 	}
 
-	if (!with_clause_options[ContinuousViewOptionRefreshInterval].is_default)
-	{
-		BgwJob *job = ts_bgw_job_find(agg->data.job_id, CurrentMemoryContext, true);
-		job->fd.schedule_interval =
-			*DatumGetIntervalP(with_clause_options[ContinuousViewOptionRefreshInterval].parsed);
-		job->fd.retry_period =
-			*DatumGetIntervalP(with_clause_options[ContinuousViewOptionRefreshInterval].parsed);
-		ts_bgw_job_update_by_id(agg->data.job_id, job);
-	}
 	if (!with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default)
 	{
 		elog(ERROR, "cannot alter create_group_indexes option for continuous aggregates");

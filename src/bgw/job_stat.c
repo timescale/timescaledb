@@ -454,30 +454,30 @@ ts_bgw_job_stat_end_was_marked(BgwJobStat *jobstat)
 }
 
 TSDLLEXPORT void
-ts_bgw_job_stat_set_next_start(BgwJob *job, TimestampTz next_start)
+ts_bgw_job_stat_set_next_start(int32 job_id, TimestampTz next_start)
 {
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
-	if (!bgw_job_stat_scan_job_id(job->fd.id,
+	if (!bgw_job_stat_scan_job_id(job_id,
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
 								  RowExclusiveLock))
-		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
+		elog(ERROR, "unable to find job statistics for job %d", job_id);
 }
 
 /* update next_start if job stat exists */
 TSDLLEXPORT bool
-ts_bgw_job_stat_update_next_start(BgwJob *job, TimestampTz next_start, bool allow_unset)
+ts_bgw_job_stat_update_next_start(int32 job_id, TimestampTz next_start, bool allow_unset)
 {
 	bool found = false;
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (!allow_unset && next_start == DT_NOBEGIN)
 		elog(ERROR, "cannot set next start to -infinity");
 
-	found = bgw_job_stat_scan_job_id(job->fd.id,
+	found = bgw_job_stat_scan_job_id(job_id,
 									 bgw_job_stat_tuple_set_next_start,
 									 NULL,
 									 &next_start,

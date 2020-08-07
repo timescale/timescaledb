@@ -21,6 +21,7 @@ typedef void (*reorder_func)(Oid tableOid, Oid indexOid, bool verbose, Oid wait_
 extern bool policy_reorder_execute(int32 job_id, Jsonb *config, reorder_func reorder,
 								   bool fast_continue);
 extern bool policy_retention_execute(int32 job_id, Jsonb *config);
+extern bool policy_continuous_aggregate_execute(int32 job_id, Jsonb *config);
 extern bool policy_compression_execute(int32 job_id, Jsonb *config);
 extern bool tsl_bgw_policy_job_execute(BgwJob *job);
 extern Datum bgw_policy_alter_job_schedule(PG_FUNCTION_ARGS);
