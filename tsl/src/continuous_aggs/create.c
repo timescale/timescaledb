@@ -784,6 +784,11 @@ cagg_validate_query(Query *query)
 		Dimension *part_dimension = NULL;
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
 
+		if (hypertable_is_distributed(ht))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("continuous aggregates are not supported on distributed hypertables")));
+
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
 		{
