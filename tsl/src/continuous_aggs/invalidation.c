@@ -414,10 +414,11 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 {
 	int32 hyper_id = state->cagg.data.raw_hypertable_id;
 	List *cagg_ids = get_cagg_ids(hyper_id);
-	int32 last_cagg_hyper_id = llast_int(cagg_ids);
+	int32 last_cagg_hyper_id;
 	ListCell *lc;
 
 	Assert(list_length(cagg_ids) > 0);
+	last_cagg_hyper_id = llast_int(cagg_ids);
 
 	/* We use a per-tuple memory context in the scan loop since we could be
 	 * processing a lot of invalidations (basically an unbounded
@@ -449,6 +450,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 
 			oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 			ti = ts_scan_iterator_tuple_info(&iterator);
+
 			invalidation_entry_set_from_hyper_invalidation(&logentry, ti, cagg_hyper_id);
 
 			if (!IS_VALID_INVALIDATION(&mergedentry))
@@ -575,10 +577,8 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 
 	invalidation_entry_reset(&mergedentry);
 	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, RowExclusiveLock);
+	iterator.ctx.snapshot = state->snapshot;
 
-	/* Must use an up-to-date snapshot to see inserts done after processing
-	 * the hypertable invalidation log */
-	iterator.ctx.snapshot = RegisterSnapshot(GetLatestSnapshot());
 	MemoryContextReset(state->per_tuple_mctx);
 
 	/* Process all invalidations for the continuous aggregate */
@@ -618,7 +618,6 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 		cut_cagg_invalidation(state, refresh_window, &mergedentry);
 
 	ts_scan_iterator_close(&iterator);
-	UnregisterSnapshot(iterator.ctx.snapshot);
 }
 
 static void

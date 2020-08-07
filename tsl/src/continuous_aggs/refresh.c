@@ -194,21 +194,6 @@ continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg
 	refresh->refresh_window = *refresh_window;
 	refresh->partial_view.schema = &refresh->cagg.data.partial_view_schema;
 	refresh->partial_view.name = &refresh->cagg.data.partial_view_name;
-
-	/* Lock the continuous aggregate's materialized hypertable to protect
-	 * against concurrent refreshes. Only reads will be allowed. This is a
-	 * heavy lock that serializes all refreshes. We might want to consider
-	 * relaxing this in the future, e.g., we'd like to at least allow
-	 * concurrent refreshes that don't have overlapping refresh windows.
-	 *
-	 * Concurrent refreshes on the same continuous aggregate could be achieved
-	 * if we protect the aggregate with a UNIQUE constraint on the GROUP BY
-	 * columns. This would allow concurrent refreshes, but overlapping ones
-	 * might fail with, e.g., unique violation errors. Those could be
-	 * captured, however, and ignored when we know it means someone else just
-	 * did the same work.
-	 */
-	LockRelationOid(refresh->cagg_ht->main_table_relid, ExclusiveLock);
 }
 
 /*
@@ -394,10 +379,14 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	 * invalidation log. Doing the threshold and copying as part of the first
 	 * transaction ensures that the threshold and new invalidations will be
 	 * visible as soon as possible to concurrent refreshes and that we keep
-	 * locks for only a short period.
+	 * locks for only a short period. Note that the first transaction
+	 * serializes around the threshold table lock, which protects both the
+	 * threshold and the invalidation processing against concurrent refreshes.
 	 *
 	 * The second transaction processes the cagg invalidation log and then
-	 * performs the actual refresh (materialization of data).
+	 * performs the actual refresh (materialization of data). This transaction
+	 * serializes around a lock on the materialized hypertable for the
+	 * continuous aggregate that gets refreshed.
 	 */
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 					AccessExclusiveLock);
@@ -410,6 +399,17 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	CommitTransactionCommand();
 	StartTransactionCommand();
 	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
+	cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+
+	/* Lock the continuous aggregate's materialized hypertable to protect
+	 * against concurrent refreshes. Only concurrent reads will be
+	 * allowed. This is a heavy lock that serializes all refreshes on the same
+	 * continuous aggregate. We might want to consider relaxing this in the
+	 * future, e.g., we'd like to at least allow concurrent refreshes on the
+	 * same continuous aggregate when they don't have overlapping refresh
+	 * windows.
+	 */
+	LockRelationOid(cagg_ht->main_table_relid, ExclusiveLock);
 
 	refresh_window = compute_bucketed_refresh_window(&refresh_window, cagg->data.bucket_width);
 
