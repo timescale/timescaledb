@@ -36,7 +36,9 @@ jobs:
     steps:
     - name: Install Dependencies
       if: runner.os == 'Linux'
-      run: sudo apt install flex bison lcov systemd-coredump gdb ${{ matrix.extra_packages }}
+      run: |
+        sudo apt-get update
+        sudo apt-get install flex bison lcov systemd-coredump gdb ${{ matrix.extra_packages }}
 
     # on macOS the path used is depending on the runner version leading to cache failure
     # when the runner version changes so we extract runner version from path and add it
