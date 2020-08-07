@@ -113,7 +113,7 @@ CALL refresh_continuous_aggregate('cond_20', 60, 100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 
--- There should be no invalidations initially:
+-- There should be no hypertable invalidations initially:
 SELECT hypertable_id AS hyper_id,
        lowest_modified_value AS start,
        greatest_modified_value AS end
@@ -230,6 +230,16 @@ SELECT materialization_id AS cagg_id,
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
 
 -- The cond_20 cagg should also have its entries cut:
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       ORDER BY 1,2,3;
+
+-- Refresh cond_10 to completely remove an invalidation:
+CALL refresh_continuous_aggregate('cond_10', 1, 20);
+
+-- The 1-19 invalidation should be deleted:
 SELECT materialization_id AS cagg_id,
        lowest_modified_value AS start,
        greatest_modified_value AS end

@@ -178,7 +178,7 @@ ORDER BY 1,2;
              2 |        30
 (2 rows)
 
--- There should be no invalidations initially:
+-- There should be no hypertable invalidations initially:
 SELECT hypertable_id AS hyper_id,
        lowest_modified_value AS start,
        greatest_modified_value AS end
@@ -268,13 +268,11 @@ SELECT materialization_id AS cagg_id,
        ORDER BY 1,2,3;
  cagg_id | start | end 
 ---------+-------+-----
-       3 |    10 |  10
        3 |    10 |  19
        3 |    60 |  70
-       4 |    10 |  10
        4 |    10 |  19
        4 |    60 |  70
-(6 rows)
+(4 rows)
 
 -- Now add more invalidations to test a refresh that overlaps with them.
 -- Entries that should be deleted:
@@ -319,13 +317,11 @@ SELECT materialization_id AS cagg_id,
        ORDER BY 1,2,3;
  cagg_id | start | end 
 ---------+-------+-----
-       3 |    10 |  10
        3 |    10 |  19
        3 |    60 |  70
-       4 |    10 |  10
        4 |    10 |  19
        4 |    60 |  70
-(6 rows)
+(4 rows)
 
 -- Refresh to process invalidations for daily temperature:
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
@@ -350,28 +346,11 @@ SELECT materialization_id AS cagg_id,
  cagg_id | start | end 
 ---------+-------+-----
        3 |     1 |  19
-       3 |     2 |  19
-       3 |     3 |  19
-       3 |    10 |  10
-       3 |    10 |  19
-       3 |    19 |  19
-       3 |    60 |  60
-       3 |    60 |  70
-       3 |    60 |  80
-       3 |    60 |  90
        3 |    60 | 100
-       4 |     1 |  25
-       4 |     2 |  60
-       4 |     3 |  80
-       4 |    10 |  10
+       4 |     1 | 100
        4 |    10 |  19
-       4 |    19 |  59
-       4 |    20 |  30
-       4 |    20 | 100
-       4 |    30 |  59
        4 |    60 |  70
-       4 |    60 |  90
-(22 rows)
+(5 rows)
 
 -- Refresh also cond_20:
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
@@ -384,26 +363,23 @@ SELECT materialization_id AS cagg_id,
  cagg_id | start | end 
 ---------+-------+-----
        3 |     1 |  19
-       3 |     2 |  19
-       3 |     3 |  19
-       3 |    10 |  10
-       3 |    10 |  19
-       3 |    19 |  19
-       3 |    60 |  60
-       3 |    60 |  70
-       3 |    60 |  80
-       3 |    60 |  90
        3 |    60 | 100
        4 |     1 |  19
-       4 |     2 |  19
-       4 |     3 |  19
-       4 |    10 |  10
-       4 |    10 |  19
-       4 |    19 |  19
-       4 |    60 |  60
-       4 |    60 |  70
-       4 |    60 |  80
-       4 |    60 |  90
        4 |    60 | 100
-(22 rows)
+(4 rows)
+
+-- Refresh cond_10 to completely remove an invalidation:
+CALL refresh_continuous_aggregate('cond_10', 1, 20);
+-- The 1-19 invalidation should be deleted:
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       ORDER BY 1,2,3;
+ cagg_id | start | end 
+---------+-------+-----
+       3 |    60 | 100
+       4 |     1 |  19
+       4 |    60 | 100
+(3 rows)
 

@@ -250,19 +250,160 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state, int64 
 	return result;
 }
 
+#define IS_VALID_INVALIDATION(entry) ((entry)->hyper_id > 0)
+
+static void
+invalidation_entry_reset(Invalidation *entry)
+{
+	MemSet(entry, 0, sizeof(Invalidation));
+}
+
+/*
+ * Macro to set an Invalidation from a tuple. The tuple can either have the
+ * format of the hypertable invalidation log or the continuous aggregate
+ * invalidation log (as determined by the type parameter).
+ */
+#define INVALIDATION_ENTRY_SET(entry, ti, hypertable_id, type)                                     \
+	do                                                                                             \
+	{                                                                                              \
+		bool should_free;                                                                          \
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);                    \
+		type form;                                                                                 \
+		form = (type) GETSTRUCT(tuple);                                                            \
+		(entry)->hyper_id = form->hypertable_id;                                                   \
+		(entry)->modification_time = form->modification_time;                                      \
+		(entry)->lowest_modified_value = form->lowest_modified_value;                              \
+		(entry)->greatest_modified_value = form->greatest_modified_value;                          \
+		(entry)->is_modified = false;                                                              \
+		ItemPointerCopy(&tuple->t_self, &(entry)->tid);                                            \
+                                                                                                   \
+		if (should_free)                                                                           \
+			heap_freetuple(tuple);                                                                 \
+	} while (0);
+
+void
+invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
+											   int32 hyper_id)
+{
+	INVALIDATION_ENTRY_SET(entry,
+						   ti,
+						   hypertable_id,
+						   Form_continuous_aggs_hypertable_invalidation_log);
+	/* Since hypertable invalidations are moved to the continuous aggregate
+	 * invalidation log, a different hypertable ID must be set (the ID of the
+	 * materialized hypertable). */
+	entry->hyper_id = hyper_id;
+}
+
+static void
+invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti)
+{
+	INVALIDATION_ENTRY_SET(entry,
+						   ti,
+						   materialization_id,
+						   Form_continuous_aggs_materialization_invalidation_log);
+}
+
+/*
+ * Try to merge two invalidations into one.
+ *
+ * Returns true if the invalidations were merged, otherwise false.
+ *
+ * Given that we scan ordered on lowest_modified_value, the previous and
+ * current invalidation can overlap in two ways (generalized):
+ *
+ * |------|
+ *    |++++++++|
+ *
+ * |-------------|
+ *    |++++++++|
+ *
+ * The closest non-overlapping case is:
+ *
+ * |--|
+ *    |++++++++|
+ *
+ */
+static bool
+invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
+{
+	/* Quick exit if no overlap */
+	if (entry->greatest_modified_value < newentry->lowest_modified_value)
+	{
+		Assert(entry->lowest_modified_value <= newentry->lowest_modified_value);
+		return false;
+	}
+
+	/* Check if the new entry expands beyond the old one (first case above) */
+	if (entry->greatest_modified_value < newentry->greatest_modified_value)
+	{
+		entry->greatest_modified_value = newentry->greatest_modified_value;
+		entry->is_modified = true;
+	}
+
+	return true;
+}
+
+static bool
+cut_hyper_invalidation(const CaggInvalidationState *state, const InternalTimeRange *refresh_window,
+					   const Invalidation *entry)
+{
+	InvalidationResult result;
+
+	result = cut_invalidation_along_refresh_window(state,
+												   entry->modification_time,
+												   entry->lowest_modified_value,
+												   entry->greatest_modified_value,
+												   refresh_window,
+												   NULL);
+
+	/* Return true if the the invalidation didn't match the refresh window,
+	 * which means we need to copy this entry over to the cagg invalidation
+	 * log. For the CUT and DELETE case, the work is already done. */
+	return (result == INVAL_NOMATCH);
+}
+
+static void
+cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state,
+									 const InternalTimeRange *refresh_window,
+									 const Invalidation *entry, int32 cagg_hyper_id)
+{
+	CatalogSecurityContext sec_ctx;
+	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
+	HeapTuple newtup;
+
+	/* If we're processing an invalidation for the continuous aggregate that
+	 * is getting refreshed, then we can cut or delete the invalidation
+	 * immediately, instead of doing it later in the cagg invalidation
+	 * log. Otherwise, we just insert the entry. */
+	if (cagg_hyper_id == state->cagg.data.mat_hypertable_id &&
+		!cut_hyper_invalidation(state, refresh_window, entry))
+		return;
+
+	newtup = create_invalidation_tup(tupdesc,
+									 cagg_hyper_id,
+									 entry->modification_time,
+									 entry->lowest_modified_value,
+									 entry->greatest_modified_value);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_only(state->cagg_log_rel, newtup);
+	ts_catalog_restore_user(&sec_ctx);
+}
+
 /*
  * Process invalidations in the hypertable invalidation log.
  *
- * Copy and delete all entries from the hypertable invalidation log.  For the
+ * Copy and delete all entries from the hypertable invalidation log. For the
  * continuous aggregate that is getting refreshed, we also match the
  * invalidation against the refresh window and perform additional processing
- * (cutting or deleting); work that we'd otherwise have to do later in the
- * cagg invalidation log.
+ * (cutting or deleting and merging); work that we'd otherwise have to do
+ * later in the cagg invalidation log.
  *
  * Note that each entry gets one copy per continuous aggregate in the cagg
- * invalidation log (unless it matched the refresh window). These copied
- * entries are later used to track invalidations across refreshes on a
- * per-cagg basis.
+ * invalidation log (unless it was merged or matched the refresh
+ * window). These copied entries are later used to track invalidations across
+ * refreshes on a per-cagg basis.
  *
  * After this function has run, there are no entries left in the hypertable
  * invalidation log.
@@ -274,7 +415,6 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 	int32 hyper_id = state->cagg.data.raw_hypertable_id;
 	List *cagg_ids = get_cagg_ids(hyper_id);
 	int32 last_cagg_hyper_id = llast_int(cagg_ids);
-	ScanIterator iterator;
 	ListCell *lc;
 
 	Assert(list_length(cagg_ids) > 0);
@@ -283,8 +423,6 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 	 * processing a lot of invalidations (basically an unbounded
 	 * amount). Initialize it here by resetting it. */
 	MemoryContextReset(state->per_tuple_mctx);
-	hypertable_invalidation_scan_init(&iterator, hyper_id, RowExclusiveLock);
-	iterator.ctx.snapshot = state->snapshot;
 
 	/*
 	 * Looping over all continuous aggregates in the outer loop ensures all
@@ -295,94 +433,63 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 	foreach (lc, cagg_ids)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc);
+		Invalidation mergedentry;
+		ScanIterator iterator;
+
+		invalidation_entry_reset(&mergedentry);
+		hypertable_invalidation_scan_init(&iterator, hyper_id, RowExclusiveLock);
+		iterator.ctx.snapshot = state->snapshot;
 
 		/* Scan all invalidations */
 		ts_scanner_foreach(&iterator)
 		{
 			TupleInfo *ti;
-			Form_continuous_aggs_hypertable_invalidation_log form;
-			CatalogSecurityContext sec_ctx;
 			MemoryContext oldmctx;
-			bool should_free;
-			HeapTuple tuple;
-			bool should_insert = false;
+			Invalidation logentry;
 
 			oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 			ti = ts_scan_iterator_tuple_info(&iterator);
-			tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-			form = (Form_continuous_aggs_hypertable_invalidation_log) GETSTRUCT(tuple);
+			invalidation_entry_set_from_hyper_invalidation(&logentry, ti, cagg_hyper_id);
 
-			/* If we're processing an invalidation for the continuous
-			 * aggregate that is getting refreshed, then we can cut or delete
-			 * the invalidation immediately, instead of doing it later in the
-			 * cagg invalidation log. */
-			if (cagg_hyper_id == state->cagg.data.mat_hypertable_id)
+			if (!IS_VALID_INVALIDATION(&mergedentry))
 			{
-				InvalidationResult result;
-
-				result = cut_invalidation_along_refresh_window(state,
-															   form->modification_time,
-															   form->lowest_modified_value,
-															   form->greatest_modified_value,
-															   refresh_window,
-															   NULL);
-
-				switch (result)
-				{
-					case INVAL_CUT:
-					case INVAL_DELETE:
-						/* Work already done, so nothing more to do. */
-						break;
-					case INVAL_NOMATCH:
-						/* The tuple didn't match the refresh window, so we need
-						 * to copy this entry over to the cagg invalidation log. */
-						should_insert = true;
-						break;
-				}
+				mergedentry = logentry;
+				mergedentry.hyper_id = cagg_hyper_id;
 			}
-			else
+			else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
 			{
-				/* We aren't refreshing this continuous aggregate, so the only
-				 * work to do is to insert a new entry in the cagg
-				 * invalidation log. */
-				should_insert = true;
-			}
-
-			if (should_insert)
-			{
-				TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
-				HeapTuple newtup;
-
-				newtup = create_invalidation_tup(tupdesc,
-												 cagg_hyper_id,
-												 form->modification_time,
-												 form->lowest_modified_value,
-												 form->greatest_modified_value);
-
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-				ts_catalog_insert_only(state->cagg_log_rel, newtup);
-				ts_catalog_restore_user(&sec_ctx);
+				cut_and_insert_new_cagg_invalidation(state,
+													 refresh_window,
+													 &mergedentry,
+													 cagg_hyper_id);
+				mergedentry = logentry;
 			}
 
 			if (cagg_hyper_id == last_cagg_hyper_id)
 			{
+				CatalogSecurityContext sec_ctx;
+
 				/* The invalidation has been processed for all caggs, so the
 				 * only thing left is to delete it from the source hypertable
 				 * invalidation log. */
 				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-				ts_catalog_delete_only(ti->scanrel, tuple);
+				ts_catalog_delete_tid_only(ti->scanrel, &logentry.tid);
 				ts_catalog_restore_user(&sec_ctx);
 			}
-
-			if (should_free)
-				heap_freetuple(tuple);
 
 			MemoryContextSwitchTo(oldmctx);
 			MemoryContextReset(state->per_tuple_mctx);
 		}
-	}
 
-	ts_scan_iterator_close(&iterator);
+		/* Handle the last merged invalidation */
+		if (IS_VALID_INVALIDATION(&mergedentry))
+			cut_and_insert_new_cagg_invalidation(state,
+												 refresh_window,
+												 &mergedentry,
+												 cagg_hyper_id);
+
+		ts_scan_iterator_close(&iterator);
+	}
 }
 
 static void
@@ -402,6 +509,47 @@ cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hy
 		F_INT4EQ,
 		Int32GetDatum(cagg_hyper_id));
 }
+
+static void
+cut_cagg_invalidation(const CaggInvalidationState *state, const InternalTimeRange *refresh_window,
+					  Invalidation *entry)
+{
+	InvalidationResult result;
+
+	result = cut_invalidation_along_refresh_window(state,
+												   entry->modification_time,
+												   entry->lowest_modified_value,
+												   entry->greatest_modified_value,
+												   refresh_window,
+												   &entry->tid);
+
+	switch (result)
+	{
+		case INVAL_NOMATCH:
+			/* If no cutting was done (i.e., the invalidation was outside the
+			 * refresh window), but the invalidation was previously merged
+			 * (expanded) with another invalidation, then we still need to
+			 * update it. */
+			if (entry->is_modified)
+			{
+				HeapTuple tuple = create_invalidation_tup(RelationGetDescr(state->cagg_log_rel),
+														  entry->hyper_id,
+														  entry->modification_time,
+														  entry->lowest_modified_value,
+														  entry->greatest_modified_value);
+				ts_catalog_update_tid_only(state->cagg_log_rel, &entry->tid, tuple);
+				heap_freetuple(tuple);
+			}
+			break;
+		case INVAL_CUT:
+			/* Nothing to do */
+			break;
+		case INVAL_DELETE:
+			ts_catalog_delete_tid_only(state->cagg_log_rel, &entry->tid);
+			break;
+	}
+}
+
 /*
  * Clear all cagg invalidations that match a refresh window.
  *
@@ -423,70 +571,93 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 {
 	ScanIterator iterator;
 	int32 cagg_hyper_id = state->cagg.data.mat_hypertable_id;
+	Invalidation mergedentry;
 
-	/* The scanner defaults to SnapshotSelf, which would show the
-	 * modifications we do (new and updated tuples) within the scan loop
-	 * below. Therefore, we use our own snapshot here. */
+	invalidation_entry_reset(&mergedentry);
 	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, RowExclusiveLock);
-	iterator.ctx.snapshot = state->snapshot;
+
+	/* Must use an up-to-date snapshot to see inserts done after processing
+	 * the hypertable invalidation log */
+	iterator.ctx.snapshot = RegisterSnapshot(GetLatestSnapshot());
 	MemoryContextReset(state->per_tuple_mctx);
 
 	/* Process all invalidations for the continuous aggregate */
 	ts_scanner_foreach(&iterator)
 	{
-		Form_continuous_aggs_materialization_invalidation_log form;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		MemoryContext oldmctx;
-		InvalidationResult result;
-		bool should_free;
-		HeapTuple tuple;
+		Invalidation logentry;
 
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
-		tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-		form = (Form_continuous_aggs_materialization_invalidation_log) GETSTRUCT(tuple);
-		result = cut_invalidation_along_refresh_window(state,
-													   form->modification_time,
-													   form->lowest_modified_value,
-													   form->greatest_modified_value,
-													   refresh_window,
-													   &tuple->t_self);
+		invalidation_entry_set_from_cagg_invalidation(&logentry, ti);
 
-		switch (result)
+		if (!IS_VALID_INVALIDATION(&mergedentry))
+			mergedentry = logentry;
+		else if (invalidation_entry_try_merge(&mergedentry, &logentry))
 		{
-			case INVAL_NOMATCH:
-			case INVAL_CUT:
-				/* Nothing to do */
-				break;
-			case INVAL_DELETE:
-				ts_catalog_delete_tid_only(state->cagg_log_rel, &tuple->t_self);
-				break;
+			/*
+			 * The previous and current invalidation were merged into
+			 * one entry (i.e., they overlapped or were adjecent).
+			 */
+			ts_catalog_delete_tid_only(state->cagg_log_rel, &logentry.tid);
+		}
+		else
+		{
+			/* The previous and current invalidation could not be merged. We
+			 * need to cut the prev invalidation against the refresh window */
+			cut_cagg_invalidation(state, refresh_window, &mergedentry);
+			mergedentry = logentry;
 		}
 
 		MemoryContextSwitchTo(oldmctx);
 		MemoryContextReset(state->per_tuple_mctx);
 	}
 
+	/* Handle the last merged invalidation */
+	if (IS_VALID_INVALIDATION(&mergedentry))
+		cut_cagg_invalidation(state, refresh_window, &mergedentry);
+
 	ts_scan_iterator_close(&iterator);
+	UnregisterSnapshot(iterator.ctx.snapshot);
+}
+
+static void
+invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg,
+						const InternalTimeRange *refresh_window)
+{
+	state->cagg = *cagg;
+	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
+	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
+												  "Continuous aggregate invalidations",
+												  ALLOCSET_DEFAULT_SIZES);
+	state->snapshot = RegisterSnapshot(GetTransactionSnapshot());
+}
+
+static void
+invalidation_state_cleanup(const CaggInvalidationState *state)
+{
+	table_close(state->cagg_log_rel, NoLock);
+	UnregisterSnapshot(state->snapshot);
+	MemoryContextDelete(state->per_tuple_mctx);
 }
 
 void
-continuous_agg_invalidation_process(const ContinuousAgg *cagg,
+invalidation_process_hypertable_log(const ContinuousAgg *cagg,
 									const InternalTimeRange *refresh_window)
 {
-	CaggInvalidationState state = {
-		.cagg = *cagg,
-		.cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock),
-		.per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
-												"Continuous aggregate invalidations",
-												ALLOCSET_DEFAULT_SIZES),
-		.snapshot = RegisterSnapshot(GetTransactionSnapshot()),
-	};
+	CaggInvalidationState state;
 
-	/* Clear the cagg invalidation log first, so that we don't need to
-	 * unnecessarily scan any hew entries that we might insert when we move
-	 * invalidations from the hypertable invalidation log. */
-	clear_cagg_invalidations_for_refresh(&state, refresh_window);
+	invalidation_state_init(&state, cagg, refresh_window);
 	move_invalidations_from_hyper_to_cagg_log(&state, refresh_window);
-	table_close(state.cagg_log_rel, NoLock);
-	UnregisterSnapshot(state.snapshot);
-	MemoryContextDelete(state.per_tuple_mctx);
+	invalidation_state_cleanup(&state);
+}
+
+void
+invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window)
+{
+	CaggInvalidationState state;
+
+	invalidation_state_init(&state, cagg, refresh_window);
+	clear_cagg_invalidations_for_refresh(&state, refresh_window);
+	invalidation_state_cleanup(&state);
 }
