@@ -57,5 +57,5 @@ REFRESH MATERIALIZED VIEW records_monthly;
 REFRESH MATERIALIZED VIEW records_monthly;
 
 \set VERBOSITY default
-SELECT drop_chunks('2000-03-16'::timestamptz, 'records');
+SELECT drop_chunks('records', '2000-03-16'::timestamptz);
 
