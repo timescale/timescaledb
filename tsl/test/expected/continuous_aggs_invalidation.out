@@ -139,6 +139,17 @@ ORDER BY 1,2;
 ---------------+-----------
 (0 rows)
 
+-- There should be only "infinite" invalidations in the cagg
+-- invalidation log:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
+                  3 |               100 |  -9223372036854775808 |     9223372036854775807
+                  4 |               100 |  -9223372036854775808 |     9223372036854775807
+                  5 |               100 |  -9223372036854775808 |     9223372036854775807
+(3 rows)
+
 -- Now refresh up to 50, and the threshold should be updated accordingly:
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -148,6 +159,17 @@ ORDER BY 1,2;
              1 |        50
 (1 row)
 
+-- Invalidations should be cleared for the refresh window:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
+                  3 |               100 |  -9223372036854775808 |                      -1
+                  3 |               100 |                    50 |     9223372036854775807
+                  4 |               100 |  -9223372036854775808 |     9223372036854775807
+                  5 |               100 |  -9223372036854775808 |     9223372036854775807
+(4 rows)
+
 -- Refreshing below the threshold does not move it:
 CALL refresh_continuous_aggregate('cond_10', 20, 49);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -156,6 +178,18 @@ ORDER BY 1,2;
 ---------------+-----------
              1 |        50
 (1 row)
+
+-- Nothing changes with invalidations either since the region was
+-- already refreshed and no new invalidations have been generated:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
+                  3 |               100 |  -9223372036854775808 |                      -1
+                  3 |               100 |                    50 |     9223372036854775807
+                  4 |               100 |  -9223372036854775808 |     9223372036854775807
+                  5 |               100 |  -9223372036854775808 |     9223372036854775807
+(4 rows)
 
 -- Refreshing measure_10 moves the threshold only for the other hypertable:
 CALL refresh_continuous_aggregate('measure_10', 1, 30);
@@ -167,6 +201,17 @@ ORDER BY 1,2;
              2 |        30
 (2 rows)
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
+                  3 |               100 |  -9223372036854775808 |                      -1
+                  3 |               100 |                    50 |     9223372036854775807
+                  4 |               100 |  -9223372036854775808 |     9223372036854775807
+                  5 |               100 |  -9223372036854775808 |                      -1
+                  5 |               100 |                    30 |     9223372036854775807
+(5 rows)
+
 -- Refresh on the second continuous aggregate, cond_20, on the first
 -- hypertable moves the same threshold as when refreshing cond_10:
 CALL refresh_continuous_aggregate('cond_20', 60, 100);
@@ -177,6 +222,18 @@ ORDER BY 1,2;
              1 |       100
              2 |        30
 (2 rows)
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+ materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
+--------------------+-------------------+-----------------------+-------------------------
+                  3 |               100 |  -9223372036854775808 |                      -1
+                  3 |               100 |                    50 |     9223372036854775807
+                  4 |               100 |  -9223372036854775808 |                      59
+                  4 |               100 |                   100 |     9223372036854775807
+                  5 |               100 |  -9223372036854775808 |                      -1
+                  5 |               100 |                    30 |     9223372036854775807
+(6 rows)
 
 -- There should be no hypertable invalidations initially:
 SELECT hypertable_id AS hyper_id,
@@ -193,9 +250,15 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
- cagg_id | start | end 
----------+-------+-----
-(0 rows)
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                   50 | 9223372036854775807
+       4 | -9223372036854775808 |                  59
+       4 |                  100 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+(6 rows)
 
 -- Create invalidations across different ranges. Some of these should
 -- be deleted and others cut in different ways when a refresh is
@@ -266,13 +329,18 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
- cagg_id | start | end 
----------+-------+-----
-       3 |    10 |  19
-       3 |    60 |  70
-       4 |    10 |  19
-       4 |    60 |  70
-(4 rows)
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                   10 |                  19
+       3 |                   60 | 9223372036854775807
+       4 | -9223372036854775808 |                  59
+       4 |                   10 |                  19
+       4 |                   60 |                  70
+       4 |                  100 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+(9 rows)
 
 -- Now add more invalidations to test a refresh that overlaps with them.
 -- Entries that should be deleted:
@@ -315,13 +383,18 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
- cagg_id | start | end 
----------+-------+-----
-       3 |    10 |  19
-       3 |    60 |  70
-       4 |    10 |  19
-       4 |    60 |  70
-(4 rows)
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                   10 |                  19
+       3 |                   60 | 9223372036854775807
+       4 | -9223372036854775808 |                  59
+       4 |                   10 |                  19
+       4 |                   60 |                  70
+       4 |                  100 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+(9 rows)
 
 -- Refresh to process invalidations for daily temperature:
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
@@ -343,14 +416,19 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
- cagg_id | start | end 
----------+-------+-----
-       3 |     1 |  19
-       3 |    60 | 100
-       4 |     1 | 100
-       4 |    10 |  19
-       4 |    60 |  70
-(5 rows)
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                    1 |                  19
+       3 |                   60 | 9223372036854775807
+       4 | -9223372036854775808 |                  59
+       4 |                    1 |                 100
+       4 |                   10 |                  19
+       4 |                   60 |                  70
+       4 |                  100 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+(10 rows)
 
 -- Refresh also cond_20:
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
@@ -360,13 +438,16 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
- cagg_id | start | end 
----------+-------+-----
-       3 |     1 |  19
-       3 |    60 | 100
-       4 |     1 |  19
-       4 |    60 | 100
-(4 rows)
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                    1 |                  19
+       3 |                   60 | 9223372036854775807
+       4 | -9223372036854775808 |                  19
+       4 |                   60 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+(7 rows)
 
 -- Refresh cond_10 to completely remove an invalidation:
 CALL refresh_continuous_aggregate('cond_10', 1, 20);
@@ -376,10 +457,13 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
- cagg_id | start | end 
----------+-------+-----
-       3 |    60 | 100
-       4 |     1 |  19
-       4 |    60 | 100
-(3 rows)
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                   60 | 9223372036854775807
+       4 | -9223372036854775808 |                  19
+       4 |                   60 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+(6 rows)
 
