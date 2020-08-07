@@ -387,20 +387,30 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 				 errmsg("invalid refresh window"),
 				 errhint("The start of the window must be before the end.")));
 
+	/* Perform the refresh across two transactions.
+	 *
+	 * The first transaction moves the invalidation threshold (if needed) and
+	 * copies over invalidations from the hypertable log to the cagg
+	 * invalidation log. Doing the threshold and copying as part of the first
+	 * transaction ensures that the threshold and new invalidations will be
+	 * visible as soon as possible to concurrent refreshes and that we keep
+	 * locks for only a short period.
+	 *
+	 * The second transaction processes the cagg invalidation log and then
+	 * performs the actual refresh (materialization of data).
+	 */
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 					AccessExclusiveLock);
+	continuous_agg_invalidation_threshold_set(cagg->data.raw_hypertable_id, refresh_window.end);
+	invalidation_process_hypertable_log(cagg, &refresh_window);
 
-	if (continuous_agg_invalidation_threshold_set(cagg->data.raw_hypertable_id, refresh_window.end))
-	{
-		/* Start a new transaction if the threshold was set. Note that this
-		 * invalidates previous memory allocations (and locks). */
-		PopActiveSnapshot();
-		CommitTransactionCommand();
-		StartTransactionCommand();
-		cagg = ts_continuous_agg_find_by_relid(cagg_relid);
-	}
-
-	continuous_agg_invalidation_process(cagg, &refresh_window);
+	/* Start a new transaction. Note that this invalidates previous memory
+	 * allocations (and locks). */
+	PopActiveSnapshot();
+	CommitTransactionCommand();
+	StartTransactionCommand();
+	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
+	invalidation_process_cagg_log(cagg, &refresh_window);
 	continuous_agg_refresh_with_window(cagg, &refresh_window);
 
 	PG_RETURN_VOID();

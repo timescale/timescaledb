@@ -35,6 +35,7 @@
 
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/invalidation_threshold.h"
+#include "continuous_aggs/invalidation.h"
 
 static bool ranges_overlap(InternalTimeRange invalidation_range,
 						   InternalTimeRange new_materialization_range);
@@ -639,27 +640,8 @@ scan_take_invalidation_tuple(TupleInfo *ti, void *data)
 	InvalidationScanState *scan_state = (InvalidationScanState *) data;
 	MemoryContext old_ctx = MemoryContextSwitchTo(scan_state->mctx);
 	Invalidation *invalidation = palloc(sizeof(*invalidation));
-	Datum datum;
-	bool isnull;
 
-	datum = slot_getattr(ti->slot,
-						 Anum_continuous_aggs_hypertable_invalidation_log_modification_time,
-						 &isnull);
-	Assert(!isnull);
-	invalidation->modification_time = DatumGetInt64(datum);
-
-	datum = slot_getattr(ti->slot,
-						 Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value,
-						 &isnull);
-	Assert(!isnull);
-	invalidation->lowest_modified_value = DatumGetInt64(datum);
-
-	datum = slot_getattr(ti->slot,
-						 Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value,
-						 &isnull);
-	Assert(!isnull);
-	invalidation->greatest_modified_value = DatumGetInt64(datum);
-
+	invalidation_entry_set_from_hyper_invalidation(invalidation, ti, -1);
 	Assert(invalidation->lowest_modified_value <= invalidation->greatest_modified_value);
 	*scan_state->invalidations = lappend(*scan_state->invalidations, invalidation);
 
