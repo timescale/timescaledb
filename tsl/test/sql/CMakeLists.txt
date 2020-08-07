@@ -24,6 +24,7 @@ set(TEST_FILES_DEBUG
   compression.sql
   compress_table.sql
   continuous_aggs_bgw_drop_chunks.sql
+  continuous_aggs_drop_chunks.sql
   continuous_aggs_bgw.sql
   continuous_aggs_ddl.sql
   continuous_aggs_dump.sql
