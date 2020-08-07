@@ -9,6 +9,8 @@
 #include <postgres.h>
 #include <fmgr.h>
 
+#include "materialize.h"
+
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_REFRESH_H */

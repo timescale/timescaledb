@@ -92,26 +92,44 @@ ORDER BY day DESC, device;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 
+-- There should be only "infinite" invalidations in the cagg
+-- invalidation log:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+
 -- Now refresh up to 50, and the threshold should be updated accordingly:
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
+
+-- Invalidations should be cleared for the refresh window:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
 
 -- Refreshing below the threshold does not move it:
 CALL refresh_continuous_aggregate('cond_10', 20, 49);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 
+-- Nothing changes with invalidations either since the region was
+-- already refreshed and no new invalidations have been generated:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
+
 -- Refreshing measure_10 moves the threshold only for the other hypertable:
 CALL refresh_continuous_aggregate('measure_10', 1, 30);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
 
 -- Refresh on the second continuous aggregate, cond_20, on the first
 -- hypertable moves the same threshold as when refreshing cond_10:
 CALL refresh_continuous_aggregate('cond_20', 60, 100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+ORDER BY 1,2,3;
 
 -- There should be no hypertable invalidations initially:
 SELECT hypertable_id AS hyper_id,

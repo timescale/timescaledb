@@ -130,6 +130,24 @@ create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 modt
 	return heap_form_tuple(tupdesc, values, isnull);
 }
 
+/*
+ * Add an entry to the continuous aggregate invalidation log.
+ */
+void
+invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 modtime, int64 start, int64 end)
+{
+	Relation rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
+	CatalogSecurityContext sec_ctx;
+	HeapTuple tuple;
+
+	tuple = create_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, modtime, start, end);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_only(rel, tuple);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(tuple);
+	table_close(rel, NoLock);
+}
+
 typedef enum InvalidationResult
 {
 	INVAL_NOMATCH,

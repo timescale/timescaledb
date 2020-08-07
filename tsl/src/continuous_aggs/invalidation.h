@@ -27,11 +27,14 @@ typedef struct Invalidation
 	ItemPointerData tid;
 } Invalidation;
 
+extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 modtime, int64 start,
+											int64 end);
 extern void invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 														   int32 hyper_id);
 extern void invalidation_process_hypertable_log(const ContinuousAgg *cagg,
 												const InternalTimeRange *refresh_window);
 extern void invalidation_process_cagg_log(const ContinuousAgg *cagg,
 										  const InternalTimeRange *refresh_window);
+extern void invalidation_cagg_log_init(int32 cagg_hyper_id, int64 current_time);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_INVALIDATION_H */

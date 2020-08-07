@@ -73,6 +73,77 @@ static InternalTimeRange materialization_invalidation_log_get_range(int32 materi
 static void materialization_invalidation_log_delete_or_cut(int32 cagg_id,
 														   InternalTimeRange invalidation_range,
 														   int64 completed_threshold);
+
+/*
+ * Get the largest window allowed given the time type of a continuous
+ * aggregate and other restrictions.
+ *
+ * The largest window allowed sets an upper bound on the range a refresh
+ * window can have given a specific time type. Note that this bound might be
+ * lower than supported by the time type itself. This is because we internally
+ * use UNIX epoch time for all non-integer types and must be able to convert
+ * back-and-forth between them.
+ *
+ * Note that each time type has its own range of possible time values. For
+ * instance, Date has a much bigger range than timestamp.
+ *
+ * This is further complicated by the fact that we internally convert
+ * timestamp and date types to UNIX time. The conversion ensures that all
+ * hypertables use the same epoch and ranges internally, although this adds
+ * further restrictions as we must be able to convert back-and-forth between
+ * types and time epochs.
+ */
+InternalTimeRange
+continuous_agg_materialize_window_max(Oid timetype)
+{
+	InternalTimeRange maxrange = {
+		.type = timetype,
+	};
+
+	/* PG checks for valid timestamps and dates in the range MIN <= time <
+	 * END. So, for those types we subtract 1 from the MAX to get into the
+	 * valid range. The MAX values account for ability to convert to UNIX time
+	 * without overflow. */
+	switch (timetype)
+	{
+		case DATEOID:
+			/* Since our internal conversion turns a date into a timestamp,
+			 * dates are governed by the same limits as timestamps. This is
+			 * probably a limitation we want to do away with, even though it
+			 * has little effect in practice. */
+			maxrange.start = TS_DATE_MIN;
+			maxrange.end = TS_DATE_END - 1;
+			break;
+		case TIMESTAMPTZOID:
+		case TIMESTAMPOID:
+			maxrange.start = TS_TIMESTAMP_MIN;
+			maxrange.end = TS_TIMESTAMP_END - 1;
+			break;
+			/* There is no "date"/"time" range for integers so they can take
+			 * any value. */
+		case INT8OID:
+			maxrange.start = PG_INT64_MIN;
+			maxrange.end = PG_INT64_MAX;
+			break;
+		case INT4OID:
+			maxrange.start = PG_INT32_MIN;
+			maxrange.end = PG_INT32_MAX;
+			break;
+		case INT2OID:
+			maxrange.start = PG_INT16_MIN;
+			maxrange.end = PG_INT16_MAX;
+			break;
+		default:
+			elog(ERROR, "unrecognized time type %d", timetype);
+			break;
+	}
+
+	maxrange.start = ts_time_value_to_internal(Int64GetDatum(maxrange.start), timetype);
+	maxrange.end = ts_time_value_to_internal(Int64GetDatum(maxrange.end), timetype);
+
+	return maxrange;
+}
+
 /* must be called without a transaction started if !options->within_single_transaction */
 bool
 continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *options)
@@ -714,18 +785,26 @@ materialization_invalidation_log_get_range(int32 materialization_id, Oid type, i
 			&greatest_isnull);
 		InternalTimeRange entry_range = {
 			.type = type,
-			.start =
-				ts_time_bucket_by_type(bucket_width, DatumGetInt64(lowest_modified_value), type),
-			/* add a bucket width to cover the endpoint */
-			.end =
-				int64_saturating_add(ts_time_bucket_by_type(bucket_width,
-															DatumGetInt64(greatest_modified_value),
-															type),
-									 bucket_width),
 		};
+		InternalTimeRange maxwindow = continuous_agg_materialize_window_max(type);
 
 		Assert(!lowest_isnull);
 		Assert(!greatest_isnull);
+
+		/* Need to handle infinite invalidations since bucketing cannot handle
+		 * those values */
+		if (lowest_modified_value == PG_INT64_MIN)
+			entry_range.start = maxwindow.start;
+		else
+			entry_range.start =
+				ts_time_bucket_by_type(bucket_width, DatumGetInt64(lowest_modified_value), type);
+
+		/* add a bucket width to cover the endpoint */
+		entry_range.end =
+			int64_saturating_add(ts_time_bucket_by_type(bucket_width,
+														DatumGetInt64(greatest_modified_value),
+														type),
+								 bucket_width);
 
 		/* don't process anything starting after the completed threshold; safe to break because
 		 * order is lowest_modified_value ASC */
