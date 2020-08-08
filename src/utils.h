@@ -19,6 +19,9 @@
 #include <nodes/relation.h>
 #endif
 
+#define MAX(x, y) ((x) > (y) ? x : y)
+#define MIN(x, y) ((x) < (y) ? x : y)
+
 /* Use a special pseudo-random field 4 value to avoid conflicting with user-advisory-locks */
 #define TS_SET_LOCKTAG_ADVISORY(tag, id1, id2, id3)                                                \
 	SET_LOCKTAG_ADVISORY((tag), (id1), (id2), (id3), 29749)

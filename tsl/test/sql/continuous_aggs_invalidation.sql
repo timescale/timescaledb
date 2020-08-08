@@ -9,14 +9,14 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 
-CREATE TABLE conditions (time int NOT NULL, device int, temp float);
+CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
 
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
 
 CREATE OR REPLACE FUNCTION cond_now()
-RETURNS int LANGUAGE SQL STABLE AS
+RETURNS bigint LANGUAGE SQL STABLE AS
 $$
     SELECT coalesce(max(time), 0)
     FROM conditions
@@ -51,7 +51,7 @@ CREATE MATERIALIZED VIEW cond_10
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
-SELECT time_bucket(10, time) AS day, device, avg(temp) AS avg_temp
+SELECT time_bucket(BIGINT '10', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2;
 
@@ -59,7 +59,7 @@ CREATE MATERIALIZED VIEW cond_20
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
-SELECT time_bucket(20, time) AS day, device, avg(temp) AS avg_temp
+SELECT time_bucket(BIGINT '20', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2;
 
@@ -258,6 +258,45 @@ SELECT materialization_id AS cagg_id,
 CALL refresh_continuous_aggregate('cond_10', 1, 20);
 
 -- The 1-19 invalidation should be deleted:
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       ORDER BY 1,2,3;
+
+-- Clear everything between 0 and 100 to make way for new
+-- invalidations
+CALL refresh_continuous_aggregate('cond_10', 0, 100);
+
+-- Test refreshing with non-overlapping invalidations
+INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
+INSERT INTO conditions VALUES (30, 1, 23.4), (46, 1, 23.4);
+
+CALL refresh_continuous_aggregate('cond_10', 1, 40);
+
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       ORDER BY 1,2,3;
+
+
+-- Refresh whithout cutting (in area where there are no
+-- invalidations). Merging of overlapping entries should still happen:
+INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
+
+CALL refresh_continuous_aggregate('cond_10', 90, 100);
+
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       ORDER BY 1,2,3;
+
+
+-- Test max refresh window
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+
 SELECT materialization_id AS cagg_id,
        lowest_modified_value AS start,
        greatest_modified_value AS end
