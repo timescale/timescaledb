@@ -7,6 +7,7 @@
 #include <utils/lsyscache.h>
 #include <utils/fmgrprotos.h>
 #include <utils/snapmgr.h>
+#include <utils/guc.h>
 #include <access/xact.h>
 #include <storage/lmgr.h>
 #include <miscadmin.h>
@@ -134,7 +135,8 @@ continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg
  * refresh state.
  */
 static void
-continuous_agg_refresh_execute(const CaggRefreshState *refresh)
+continuous_agg_refresh_execute(const CaggRefreshState *refresh,
+							   const InternalTimeRange *bucketed_refresh_window)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
@@ -150,21 +152,71 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh)
 	};
 	Dimension *time_dim = hyperspace_get_open_dimension(refresh->cagg_ht->space, 0);
 
+	Assert(time_dim != NULL);
+
 	continuous_agg_update_materialization(refresh->partial_view,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
-										  refresh->refresh_window,
+										  *bucketed_refresh_window,
 										  unused_invalidation_range,
 										  refresh->cagg.data.bucket_width);
 }
 
 static void
-continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange *refresh_window)
+continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+								   InvalidationStore *invalidations)
 {
 	CaggRefreshState refresh;
+	TupleTableSlot *slot;
 
 	continuous_agg_refresh_init(&refresh, cagg, refresh_window);
-	continuous_agg_refresh_execute(&refresh);
+	slot = MakeSingleTupleTableSlotCompat(invalidations->tupdesc, &TTSOpsMinimalTuple);
+
+	while (tuplestore_gettupleslot(invalidations->tupstore,
+								   true /* forward */,
+								   false /* copy */,
+								   slot))
+	{
+		bool isnull;
+		Datum start = slot_getattr(
+			slot,
+			Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
+			&isnull);
+		Datum end = slot_getattr(
+			slot,
+			Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+			&isnull);
+		InternalTimeRange invalidation = {
+			.type = refresh_window->type,
+			.start = DatumGetInt64(start),
+			.end = DatumGetInt64(end),
+		};
+		InternalTimeRange bucketed_refresh_window =
+			compute_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
+
+		if (client_min_messages <= DEBUG1)
+		{
+			Datum start_ts = ts_internal_to_time_value(DatumGetInt64(bucketed_refresh_window.start),
+													   refresh_window->type);
+			Datum end_ts = ts_internal_to_time_value(DatumGetInt64(bucketed_refresh_window.end),
+													 refresh_window->type);
+			Oid outfuncid = InvalidOid;
+			bool isvarlena;
+
+			getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
+			Assert(!isvarlena);
+
+			elog(DEBUG1,
+				 "refreshing continuous aggregate \"%s\" in window [ %s, %s ]",
+				 NameStr(cagg->data.user_view_name),
+				 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+				 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
+		}
+
+		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
@@ -185,6 +237,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		.start = PG_INT64_MIN,
 		.end = PG_INT64_MAX,
 	};
+	InvalidationStore *invalidations;
 
 	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
 
@@ -284,8 +337,17 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	 * windows.
 	 */
 	LockRelationOid(cagg_ht->main_table_relid, ExclusiveLock);
-	invalidation_process_cagg_log(cagg, &refresh_window);
-	continuous_agg_refresh_with_window(cagg, &refresh_window);
+	invalidations = invalidation_process_cagg_log(cagg, &refresh_window);
+
+	if (invalidations != NULL)
+	{
+		continuous_agg_refresh_with_window(cagg, &refresh_window, invalidations);
+		invalidation_store_free(invalidations);
+	}
+	else
+		elog(NOTICE,
+			 "continuous aggregate \"%s\" is already up-to-date",
+			 NameStr(cagg->data.user_view_name));
 
 	PG_RETURN_VOID();
 }

@@ -2520,8 +2520,6 @@ ts_hypertable_clone_constraints_to_compressed(Hypertable *user_ht, List *constra
 	ts_catalog_restore_user(&sec_ctx);
 }
 
-#define MIN(x, y) (x < y ? x : y)
-
 #if defined(USE_ASSERT_CHECKING)
 static void
 assert_chunk_data_nodes_is_a_set(List *chunk_data_nodes)

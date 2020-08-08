@@ -282,6 +282,7 @@ step L3_unlock_cagg_table:
     ROLLBACK;
 
 step R1_refresh: <... completed>
+R2: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 step R2_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
