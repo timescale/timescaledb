@@ -55,5 +55,7 @@ void continuous_agg_update_materialization(SchemaAndName partial_view,
 										   InternalTimeRange new_materialization_range,
 										   InternalTimeRange invalidation_range,
 										   int64 bucket_width);
+bool continuous_agg_invalidation_threshold_set(int32 raw_hypertable_id,
+											   int64 invalidation_threshold);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_MATERIALIZE_H */

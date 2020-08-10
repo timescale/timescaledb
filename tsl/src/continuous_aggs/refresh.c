@@ -6,6 +6,8 @@
 #include <postgres.h>
 #include <utils/lsyscache.h>
 #include <utils/fmgrprotos.h>
+#include <utils/snapmgr.h>
+#include <access/xact.h>
 #include <storage/lmgr.h>
 #include <miscadmin.h>
 #include <fmgr.h>
@@ -312,6 +314,8 @@ get_time_value_from_arg(Datum arg, Oid argtype, Oid cagg_timetype)
 	return ts_time_value_to_internal(arg, argtype);
 }
 
+#define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
+
 /*
  * Refresh a continuous aggregate across the given window.
  */
@@ -319,6 +323,7 @@ Datum
 continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Catalog *catalog = ts_catalog_get();
 	ContinuousAgg *cagg;
 	Hypertable *cagg_ht;
 	Dimension *time_dim;
@@ -328,7 +333,16 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		.end = PG_INT64_MAX,
 	};
 
-	PreventCommandIfReadOnly("refresh_continuous_aggregate()");
+	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
+
+	/* Prevent running refresh if we're in a transaction block since a refresh
+	 * can run two transactions and might take a long time to release locks if
+	 * there's a lot to materialize. Strictly, it is optional to prohibit
+	 * transaction blocks since there will be only one transaction if the
+	 * invalidation threshold needs no update. However, materialization might
+	 * still take a long time and it is probably best for conistency to always
+	 * prevent transaction blocks.  */
+	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
 
 	if (!OidIsValid(cagg_relid))
 		ereport(ERROR,
@@ -371,6 +385,19 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid refresh window"),
 				 errhint("The start of the window must be before the end.")));
+
+	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+					AccessExclusiveLock);
+
+	if (continuous_agg_invalidation_threshold_set(cagg->data.raw_hypertable_id, refresh_window.end))
+	{
+		/* Start a new transaction if the threshold was set. Note that this
+		 * invalidates previous memory allocations (and locks). */
+		PopActiveSnapshot();
+		CommitTransactionCommand();
+		StartTransactionCommand();
+		cagg = ts_continuous_agg_find_by_relid(cagg_relid);
+	}
 
 	continuous_agg_invalidation_process(cagg, &refresh_window);
 	continuous_agg_refresh_with_window(cagg, &refresh_window);
