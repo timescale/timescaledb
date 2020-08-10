@@ -151,12 +151,12 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                      msg                      
---------+-----------+------------------+-----------------------------------------------
-      0 |         0 | DB Scheduler     | [TESTING] Wait until 50000, started at 0
-      0 |     50000 | DB Scheduler     | [TESTING] Registered new background worker
-      1 |     50000 | DB Scheduler     | [TESTING] Wait until 100000, started at 50000
-      0 |     50000 | unscheduled      | Execute job 1
+ msg_no | mock_time |  application_name  |                      msg                      
+--------+-----------+--------------------+-----------------------------------------------
+      0 |         0 | DB Scheduler       | [TESTING] Wait until 50000, started at 0
+      0 |     50000 | DB Scheduler       | [TESTING] Registered new background worker
+      1 |     50000 | DB Scheduler       | [TESTING] Wait until 100000, started at 50000
+      0 |     50000 | unscheduled [1000] | Execute job 1
 (4 rows)
 
 SELECT delete_job(1000);
@@ -1404,19 +1404,19 @@ SELECT * FROM sorted_bgw_log;
       0 |         0 | DB Scheduler     | [TESTING] Wait until 500000, started at 0
       1 |     50000 | DB Scheduler     | [TESTING] Registered new background worker
       2 |     50000 | DB Scheduler     | [TESTING] Wait until 500000, started at 50000
-      0 |     50000 | another          | Execute job 1
+      0 |     50000 | another [1026]   | Execute job 1
       3 |    150000 | DB Scheduler     | [TESTING] Registered new background worker
       4 |    150000 | DB Scheduler     | [TESTING] Wait until 500000, started at 150000
-      0 |    150000 | another          | Execute job 1
+      0 |    150000 | another [1026]   | Execute job 1
       5 |    200000 | DB Scheduler     | [TESTING] Wait until 500000, started at 200000
       6 |    300000 | DB Scheduler     | [TESTING] Wait until 500000, started at 300000
       7 |    400000 | DB Scheduler     | [TESTING] Wait until 500000, started at 400000
       8 |    450000 | DB Scheduler     | [TESTING] Registered new background worker
       9 |    450000 | DB Scheduler     | [TESTING] Wait until 500000, started at 450000
-      0 |    450000 | new_job          | Execute job 1
+      0 |    450000 | new_job [1027]   | Execute job 1
      10 |    480000 | DB Scheduler     | [TESTING] Registered new background worker
      11 |    480000 | DB Scheduler     | [TESTING] Wait until 500000, started at 480000
-      0 |    480000 | new_job          | Execute job 1
+      0 |    480000 | new_job [1027]   | Execute job 1
 (16 rows)
 
 select * from _timescaledb_internal.bgw_job_stat;

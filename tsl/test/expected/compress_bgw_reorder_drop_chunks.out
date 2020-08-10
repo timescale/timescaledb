@@ -87,9 +87,9 @@ SELECT alter_job_schedule(:retention_job_id, schedule_interval => INTERVAL '1 se
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
-  id  |     application_name     |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
-------+--------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
- 1000 | Retention Background Job | drop_chunks | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             1 | {"hypertable_id": 1, "retention_window": "@ 4 mons"}
+  id  |        application_name         |  job_type   | schedule_interval | max_runtime | max_retries | retry_period |    proc_name     |      proc_schema      |       owner       | scheduled | hypertable_id |                        config                        
+------+---------------------------------+-------------+-------------------+-------------+-------------+--------------+------------------+-----------------------+-------------------+-----------+---------------+------------------------------------------------------
+ 1000 | Retention Background Job [1000] | drop_chunks | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | policy_retention | _timescaledb_internal | default_perm_user | t         |             1 | {"hypertable_id": 1, "retention_window": "@ 4 mons"}
 (1 row)
 
 --turn on compression and compress all chunks
