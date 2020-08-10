@@ -7,35 +7,44 @@
 #
 # We define a function 'cagg_bucket_count' to get the number of
 # buckets in a continuous aggregate.  We use it to verify that there
-# aren't any duplicate buckets inserted after concurrent
-# refreshes. Duplicate buckets are possible since there is no unique
-# constraint on the GROUP BY keys in the materialized hypertable.
+# aren't any duplicate buckets/rows inserted into the materialization
+# hypertable after concurrent refreshes. Duplicate buckets are
+# possible since there is no unique constraint on the GROUP BY keys in
+# the materialized hypertable.
 #
 setup
 {
     SELECT _timescaledb_internal.stop_background_workers();
-    CREATE TABLE conditions(time timestamptz, temp float);
-    SELECT create_hypertable('conditions', 'time');
+    CREATE TABLE conditions(time int, temp float);
+    SELECT create_hypertable('conditions', 'time', chunk_time_interval => 20);
     INSERT INTO conditions
-    SELECT t, abs(timestamp_hash(t::timestamp))%40
-    FROM generate_series('2020-05-01', '2020-05-10', '10 minutes'::interval) t;
-    CREATE VIEW daily_temp
+    SELECT t, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+    FROM generate_series(1, 100, 1) t;
+    CREATE OR REPLACE FUNCTION cond_now()
+    RETURNS int LANGUAGE SQL STABLE AS
+    $$
+      SELECT coalesce(max(time), 0)
+      FROM conditions
+    $$;
+    SELECT set_integer_now_func('conditions', 'cond_now');
+    CREATE VIEW cond_10
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
     AS
-      SELECT time_bucket('1 day', time) AS day, avg(temp) AS avg_temp
+      SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
       GROUP BY 1;
-    CREATE VIEW weekly_temp
+    CREATE VIEW cond_20
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
     AS
-      SELECT time_bucket('1 week', time) AS day, avg(temp) AS avg_temp
+      SELECT time_bucket(20, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
       GROUP BY 1;
 
-    CREATE OR REPLACE FUNCTION cagg_bucket_count(cagg regclass) RETURNS int
-    AS $$
+    CREATE OR REPLACE FUNCTION cagg_bucket_count(cagg regclass)
+    RETURNS int AS
+    $$
     DECLARE
       cagg_schema name;
       cagg_name name;
@@ -65,111 +74,202 @@ setup
       RETURN result;
     END
     $$ LANGUAGE plpgsql;
+    CREATE OR REPLACE FUNCTION lock_cagg(cagg name) RETURNS void AS $$
+    DECLARE
+      mattable text;
+    BEGIN
+      SELECT format('%I.%I', user_view_schema, user_view_name)
+      FROM _timescaledb_catalog.continuous_agg
+      INTO mattable;
+      EXECUTE format('LOCK table %s IN EXCLUSIVE MODE', mattable);
+    END; $$ LANGUAGE plpgsql;
 }
 
 teardown {
     DROP TABLE conditions CASCADE;
 }
 
-# Session to refresh the daily_temp continuous aggregate
+# Session to refresh the cond_10 continuous aggregate
 session "R1"
 setup
 {
-    BEGIN;
-    SET LOCAL lock_timeout = '500ms';
-    SET LOCAL deadlock_timeout = '500ms';
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
 }
 step "R1_refresh"
 {
-    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
+    CALL refresh_continuous_aggregate('cond_10', 35, 62);
 }
-step "R1_commit"
-{
-    COMMIT;
-}
+
 
 # Refresh that overlaps with R1
 session "R2"
 setup
 {
-    BEGIN;
-    SET LOCAL lock_timeout = '500ms';
-    SET LOCAL deadlock_timeout = '500ms';
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
 }
 step "R2_refresh"
 {
-    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-02');
-}
-step "R2_commit"
-{
-    COMMIT;
+    CALL refresh_continuous_aggregate('cond_10', 35, 62);
 }
 
-# Refresh on same aggregate (daily_temp) that doesn't overlap with R1 and R2
+
+# Refresh on same aggregate (cond_10) that doesn't overlap with R1 and R2
 session "R3"
 setup
 {
-    BEGIN;
-    SET LOCAL lock_timeout = '500ms';
-    SET LOCAL deadlock_timeout = '500ms';
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
 }
 step "R3_refresh"
 {
-    SELECT refresh_continuous_aggregate('daily_temp', '2020-05-08', '2020-05-10');
-}
-step "R3_commit"
-{
-    COMMIT;
+    CALL refresh_continuous_aggregate('cond_10', 71, 97);
 }
 
-# Overlapping refresh on another continuous aggregate (weekly_temp)
+# Overlapping refresh on another continuous aggregate (cond_20)
 session "R4"
 setup
 {
-    BEGIN;
-    SET LOCAL lock_timeout = '500ms';
-    SET LOCAL deadlock_timeout = '500ms';
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
 }
 step "R4_refresh"
 {
-    SELECT refresh_continuous_aggregate('weekly_temp', '2020-05-01', '2020-05-10');
-}
-step "R4_commit"
-{
-    COMMIT;
+    CALL refresh_continuous_aggregate('cond_20', 39, 84);
 }
 
-# Session to query
+# Define a number of lock sessions to simulate concurrent refreshes
+# by selectively grabbing the locks we use to handle concurrency.
+
+# The "L1" session exclusively locks the invalidation threshold
+# table. This simulates an ongoing update of the invalidation
+# threshold, which has not yet finished.
+session "L1"
+setup
+{
+    BEGIN;
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+}
+step "L1_lock_threshold_table"
+{
+    LOCK _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    IN ACCESS EXCLUSIVE MODE;
+}
+step "L1_unlock_threshold_table"
+{
+    ROLLBACK;
+}
+
+# The "L2" session takes an access share lock on the invalidation
+# threshold table. This simulates a reader, which has not yet finished
+# (e.g., and insert into the hypertable, or a refresh that has not yet
+# grabbed the exclusive lock).
+session "L2"
+setup
+{
+    BEGIN;
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+}
+step "L2_read_lock_threshold_table"
+{
+    LOCK _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    IN ACCESS SHARE MODE;
+}
+step "L2_read_unlock_threshold_table"
+{
+    ROLLBACK;
+}
+
+# The "L3" session locks the cagg table. This simulates an ongoing
+# refresh that has not yet completed and released the lock on the cagg
+# materialization table.
+#
+session "L3"
+setup
+{
+    BEGIN;
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+}
+step "L3_lock_cagg_table"
+{
+    SELECT lock_cagg('cond_10');
+}
+step "L3_unlock_cagg_table"
+{
+    ROLLBACK;
+}
+
+
+# Session to view the contents of a cagg after materialization. It
+# also prints the bucket count (number of rows in the materialization
+# hypertable) and the invalidation threshold. The bucket count should
+# match the number of rows in the query if there are no duplicate
+# buckets/rows.
 session "S1"
 setup
 {
-    SET LOCAL lock_timeout = '500ms';
-    SET LOCAL deadlock_timeout = '100ms';
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
 }
 step "S1_select"
 {
-    SELECT day, avg_temp
-    FROM daily_temp
+    SELECT bucket, avg_temp
+    FROM cond_10
     ORDER BY 1;
 
-    SELECT * FROM cagg_bucket_count('daily_temp');
+    SELECT * FROM cagg_bucket_count('cond_10');
+    SELECT h.table_name AS hypertable, it.watermark AS threshold
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
+    _timescaledb_catalog.hypertable h
+    WHERE it.hypertable_id = h.id;
 }
 
-# Run single transaction refresh to get some reference output.
-# The result of a query on the aggregate should always look like this example.
-permutation "R1_refresh" "R1_commit" "S1_select" "R2_commit" "R3_commit" "R4_commit"
+####################################################################
+#
+# Tests for concurrent updates to the invalidation threshold (first
+# transaction of a refresh).
+#
+####################################################################
 
-# Interleave two refreshes that are overlapping. Since we serialize
-# refreshes, R2 should block until R1 commits.
-permutation "R1_refresh" "R2_refresh" "R1_commit" "R2_commit" "S1_select" "R3_commit" "R4_commit"
+# Run single transaction refresh to get some reference output.  The
+# result of a query on the aggregate should always look like this
+# example (when refreshed with the same window).
+permutation "R1_refresh" "S1_select" "R3_refresh" "S1_select"  "L2_read_unlock_threshold_table" "L3_unlock_cagg_table" "L1_unlock_threshold_table"
 
-# R2 starts after R1 but commits before. This should not work (lock timeout).
-permutation "R1_refresh" "R2_refresh" "R2_commit" "R1_commit" "S1_select" "R3_commit" "R4_commit"
+# A threshold reader (insert) should block a refresh if the threshold
+# does not exist yet (insert of new threshold)
+permutation "L2_read_lock_threshold_table" "R3_refresh" "L2_read_unlock_threshold_table" "S1_select" "L3_unlock_cagg_table" "L1_unlock_threshold_table"
 
-# R1 and R3 don't have overlapping refresh windows, but we serialize
-# anyway, so not yet supported.
-permutation "R1_refresh" "R3_refresh" "R3_commit" "R1_commit" "S1_select" "R2_commit" "R4_commit"
+# A threshold reader (insert) should block a refresh if the threshold
+# needs an update
+permutation "R1_refresh" "L2_read_lock_threshold_table" "R3_refresh" "L2_read_unlock_threshold_table" "S1_select" "L3_unlock_cagg_table" "L1_unlock_threshold_table"
 
-# Concurrent refreshing across two different aggregates on the same
-# hypertable should be OK:
-permutation "R1_refresh" "R4_refresh" "R4_commit" "R1_commit" "S1_select" "R2_commit" "R3_commit"
+# A threshold reader (insert) blocks a refresh even if the threshold
+# doesn't need an update (could be improved)
+permutation "R3_refresh" "L2_read_lock_threshold_table" "R1_refresh" "L2_read_unlock_threshold_table"  "S1_select" "L3_unlock_cagg_table" "L1_unlock_threshold_table"
+
+##################################################################
+#
+# Tests for concurrent refreshes of continuous aggregates (second
+# transaction of a refresh).
+#
+##################################################################
+
+# Interleave two refreshes that are overlapping (one simulated). Since
+# we serialize refreshes, R1 should block until the lock is released
+permutation "L3_lock_cagg_table" "R1_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
+
+# R1 and R2 queued to refresh, both should serialize
+permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
+
+# R1 and R3 don't have overlapping refresh windows, but should serialize
+# anyway. This could potentially be optimized in the future.
+permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
+
+# Concurrent refreshing across two different aggregates on same
+# hypertable does not block
+permutation "L3_lock_cagg_table" "R3_refresh" "R4_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"

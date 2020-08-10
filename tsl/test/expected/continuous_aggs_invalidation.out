@@ -130,10 +130,54 @@ ORDER BY day DESC, device;
 -----+--------+----------
 (0 rows)
 
--- Must refresh with "legacy" functionality to move the invalidation
--- threshold, or no invalidations will be generated.
-REFRESH MATERIALIZED VIEW cond_10;
-REFRESH MATERIALIZED VIEW measure_10;
+-- Must refresh to move the invalidation threshold, or no
+-- invalidations will be generated. Initially, there is no threshold
+-- set:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+ hypertable_id | watermark 
+---------------+-----------
+(0 rows)
+
+-- Now refresh up to 50, and the threshold should be updated accordingly:
+CALL refresh_continuous_aggregate('cond_10', 1, 50);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |        50
+(1 row)
+
+-- Refreshing below the threshold does not move it:
+CALL refresh_continuous_aggregate('cond_10', 20, 49);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |        50
+(1 row)
+
+-- Refreshing measure_10 moves the threshold only for the other hypertable:
+CALL refresh_continuous_aggregate('measure_10', 1, 30);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |        50
+             2 |        30
+(2 rows)
+
+-- Refresh on the second continuous aggregate, cond_20, on the first
+-- hypertable moves the same threshold as when refreshing cond_10:
+CALL refresh_continuous_aggregate('cond_20', 60, 100);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |       100
+             2 |        30
+(2 rows)
+
 -- There should be no invalidations initially:
 SELECT hypertable_id AS hyper_id,
        lowest_modified_value AS start,
@@ -189,13 +233,21 @@ SELECT hypertable_id AS hyper_id,
         1 |    10 |  19
         1 |    60 |  70
         2 |    20 |  20
-        2 |    30 |  80
-(5 rows)
+(4 rows)
 
 -- First refresh a window where we don't have any invalidations. This
 -- allows us to see only the copying of the invalidations to the per
 -- cagg log without additional processing.
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
+-- Invalidation threshold remains at 100:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+ hypertable_id | watermark 
+---------------+-----------
+             1 |       100
+             2 |        30
+(2 rows)
+
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
 -- the refreshed aggregate belongs to:
@@ -207,8 +259,7 @@ SELECT hypertable_id AS hyper_id,
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
-        2 |    30 |  80
-(2 rows)
+(1 row)
 
 SELECT materialization_id AS cagg_id,
        lowest_modified_value AS start,
@@ -258,8 +309,7 @@ SELECT hypertable_id AS hyper_id,
         1 |    30 |  59
         1 |    60 |  90
         2 |    20 |  20
-        2 |    30 |  80
-(10 rows)
+(9 rows)
 
 -- But nothing has yet changed in the cagg invalidation log:
 SELECT materialization_id AS cagg_id,
@@ -289,8 +339,7 @@ SELECT hypertable_id AS hyper_id,
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
-        2 |    30 |  80
-(2 rows)
+(1 row)
 
 -- Only the cond_10 cagg should have its entries cut:
 SELECT materialization_id AS cagg_id,

@@ -62,7 +62,6 @@ static void lock_invalidation_threshold_hypertable_row(int32 raw_hypertable_id);
 static void drain_invalidation_log(int32 raw_hypertable_id, List **invalidations_out);
 static void insert_materialization_invalidation_logs(List *caggs, List *invalidations,
 													 Relation rel);
-static void invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold);
 static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 												bool *is_infinite_out);
 static InternalTimeRange materialization_invalidation_log_get_range(int32 materialization_id,
@@ -259,8 +258,8 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 	{
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						AccessExclusiveLock);
-		invalidation_threshold_set(cagg_data.raw_hypertable_id,
-								   materialization_invalidation_threshold);
+		continuous_agg_invalidation_threshold_set(cagg_data.raw_hypertable_id,
+												  materialization_invalidation_threshold);
 	}
 
 	table_close(materialization_invalidation_log_table_relation, NoLock);
@@ -1136,23 +1135,30 @@ continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
 	return;
 }
 
+typedef struct InvalidationThresholdData
+{
+	int64 threshold;
+	bool was_updated;
+} InvalidationThresholdData;
+
 static ScanTupleResult
 scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 {
-	int64 new_threshold = *(int64 *) data;
+	InvalidationThresholdData *invthresh = data;
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	Form_continuous_aggs_invalidation_threshold form =
 		(Form_continuous_aggs_invalidation_threshold) GETSTRUCT(tuple);
 
-	if (new_threshold > form->watermark)
+	if (invthresh->threshold > form->watermark)
 	{
 		HeapTuple new_tuple = heap_copytuple(tuple);
 		form = (Form_continuous_aggs_invalidation_threshold) GETSTRUCT(new_tuple);
 
-		form->watermark = new_threshold;
+		form->watermark = invthresh->threshold;
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);
+		invthresh->was_updated = true;
 	}
 	else
 	{
@@ -1161,7 +1167,7 @@ scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 			 " " INT64_FORMAT,
 			 form->hypertable_id,
 			 form->watermark,
-			 new_threshold);
+			 invthresh->threshold);
 	}
 
 	if (should_free)
@@ -1174,10 +1180,14 @@ scan_update_invalidation_threshold(TupleInfo *ti, void *data)
  *refresh_lag etc. We update the raw hypertable's invalidation threshold
  * only if this new value is greater than the existsing one.
  */
-static void
-invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold)
+bool
+continuous_agg_invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold)
 {
-	bool updated_threshold;
+	bool threshold_found;
+	InvalidationThresholdData data = {
+		.threshold = invalidation_threshold,
+		.was_updated = false,
+	};
 	ScanKeyData scankey[1];
 
 	ScanKeyInit(&scankey[0],
@@ -1195,7 +1205,7 @@ invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold
 	 * cause us to lose the updates. The AccessExclusiveLock ensures no one else can possibly be
 	 * reading the threshold.
 	 */
-	updated_threshold =
+	threshold_found =
 		ts_catalog_scan_one(CONTINUOUS_AGGS_INVALIDATION_THRESHOLD /*=table*/,
 							CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY /*=indexid*/,
 							scankey /*=scankey*/,
@@ -1203,9 +1213,9 @@ invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold
 							scan_update_invalidation_threshold /*=tuple_found*/,
 							AccessExclusiveLock /*=lockmode*/,
 							CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME /*=table_name*/,
-							&invalidation_threshold /*=data*/);
+							&data /*=data*/);
 
-	if (!updated_threshold)
+	if (!threshold_found)
 	{
 		Catalog *catalog = ts_catalog_get();
 		/* NOTE: this function deliberately takes a stronger lock than RowExclusive, see the comment
@@ -1225,7 +1235,10 @@ invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold
 
 		ts_catalog_insert_values(rel, desc, values, nulls);
 		table_close(rel, NoLock);
+		data.was_updated = true;
 	}
+
+	return data.was_updated;
 }
 
 static ScanTupleResult

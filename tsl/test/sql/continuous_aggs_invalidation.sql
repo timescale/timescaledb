@@ -86,10 +86,32 @@ ORDER BY day DESC, device;
 SELECT * FROM measure_10
 ORDER BY day DESC, device;
 
--- Must refresh with "legacy" functionality to move the invalidation
--- threshold, or no invalidations will be generated.
-REFRESH MATERIALIZED VIEW cond_10;
-REFRESH MATERIALIZED VIEW measure_10;
+-- Must refresh to move the invalidation threshold, or no
+-- invalidations will be generated. Initially, there is no threshold
+-- set:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+
+-- Now refresh up to 50, and the threshold should be updated accordingly:
+CALL refresh_continuous_aggregate('cond_10', 1, 50);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+
+-- Refreshing below the threshold does not move it:
+CALL refresh_continuous_aggregate('cond_10', 20, 49);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+
+-- Refreshing measure_10 moves the threshold only for the other hypertable:
+CALL refresh_continuous_aggregate('measure_10', 1, 30);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
+
+-- Refresh on the second continuous aggregate, cond_20, on the first
+-- hypertable moves the same threshold as when refreshing cond_10:
+CALL refresh_continuous_aggregate('cond_20', 60, 100);
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
 
 -- There should be no invalidations initially:
 SELECT hypertable_id AS hyper_id,
@@ -136,6 +158,9 @@ SELECT hypertable_id AS hyper_id,
 -- allows us to see only the copying of the invalidations to the per
 -- cagg log without additional processing.
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
+-- Invalidation threshold remains at 100:
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+ORDER BY 1,2;
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
