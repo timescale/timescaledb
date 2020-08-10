@@ -1,0 +1,261 @@
+/*
+ * This file and its contents are licensed under the Timescale License.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-TIMESCALE for a copy of the license.
+ */
+#include <postgres.h>
+#include <access/htup_details.h>
+#include <access/htup.h>
+#include <access/xact.h>
+#include <nodes/memnodes.h>
+#include <storage/lockdefs.h>
+#include <storage/lmgr.h>
+#include <utils/memutils.h>
+#include <utils/snapmgr.h>
+
+#include <catalog.h>
+#include <scanner.h>
+#include <scan_iterator.h>
+#include <compat.h>
+
+#include "continuous_agg.h"
+#include "continuous_aggs/materialize.h"
+#include "invalidation_threshold.h"
+
+/*
+ * Invalidation threshold.
+ *
+ * The invalidation threshold acts as a dampener on a hypertable to make sure
+ * that invalidations written during inserts won't cause too much write
+ * amplification in "hot" regions---typically the "head" of the table. The
+ * presumption is that most inserts happen at recent time intervals, and those
+ * intervals will be invalid until writes move out of them. Therefore, it
+ * isnt't worth writing invalidations in that region since it is presumed
+ * out-of-date anyway. Further, although it is possible to refresh a
+ * continuous aggregate in those "hot" regions, it will lead to partially
+ * filled buckets. Thus, refreshing those intervals is discouraged since the
+ * aggregate will be immediately out-of-date until the buckets are filled. The
+ * invalidation threshold is, in other words, used as a marker that lags
+ * behind the head of the hypertable, where invalidations are written before
+ * the threshold but not after it.
+ *
+ * The invalidation threshold is moved forward (and only forward) by refreshes
+ * on continuous aggregates when it covers a window that streches beyond the
+ * current threshold. The invalidation threshold needs to be moved in its own
+ * transaction, with exclusive access, before the refresh starts to
+ * materialize data. This is to avoid losing any invalidations that occur
+ * between the start of the transaction that moves the threshold and its end
+ * (when the new threshold becomes visible).
+ *
+ * ______________________________________________
+ * |_______________________________________|_____| recent data
+ *                                        ^
+ *      invalidations written here        |  no invalidations
+ *                                        |
+ *                               invalidation threshold
+ *
+ */
+
+typedef struct InvalidationThresholdData
+{
+	int64 threshold;
+	bool was_updated;
+} InvalidationThresholdData;
+
+static ScanTupleResult
+scan_update_invalidation_threshold(TupleInfo *ti, void *data)
+{
+	InvalidationThresholdData *invthresh = data;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	Form_continuous_aggs_invalidation_threshold form =
+		(Form_continuous_aggs_invalidation_threshold) GETSTRUCT(tuple);
+
+	if (invthresh->threshold > form->watermark)
+	{
+		HeapTuple new_tuple = heap_copytuple(tuple);
+		form = (Form_continuous_aggs_invalidation_threshold) GETSTRUCT(new_tuple);
+
+		form->watermark = invthresh->threshold;
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+		invthresh->was_updated = true;
+	}
+	else
+	{
+		elog(DEBUG1,
+			 "hypertable %d existing  watermark >= new invalidation threshold " INT64_FORMAT
+			 " " INT64_FORMAT,
+			 form->hypertable_id,
+			 form->watermark,
+			 invthresh->threshold);
+	}
+
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return SCAN_DONE;
+}
+
+/* every cont. agg calculates its invalidation_threshold point based on its
+ *refresh_lag etc. We update the raw hypertable's invalidation threshold
+ * only if this new value is greater than the existsing one.
+ */
+bool
+continuous_agg_invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold)
+{
+	bool threshold_found;
+	InvalidationThresholdData data = {
+		.threshold = invalidation_threshold,
+		.was_updated = false,
+	};
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(raw_hypertable_id));
+
+	/* NOTE: this function deliberately takes an AccessExclusiveLock when updating the invalidation
+	 * threshold, instead of the weaker RowExclusiveLock lock normally held for such operations: in
+	 * order to ensure we do not lose invalidations from concurrent mutations, we must ensure that
+	 * all transactions which read the invalidation threshold have either completed, or not yet read
+	 * the value; if we used a RowExclusiveLock we could race such a transaction and update the
+	 * threshold between the time it is read but before the other transaction commits. This would
+	 * cause us to lose the updates. The AccessExclusiveLock ensures no one else can possibly be
+	 * reading the threshold.
+	 */
+	threshold_found =
+		ts_catalog_scan_one(CONTINUOUS_AGGS_INVALIDATION_THRESHOLD /*=table*/,
+							CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY /*=indexid*/,
+							scankey /*=scankey*/,
+							1 /*=num_keys*/,
+							scan_update_invalidation_threshold /*=tuple_found*/,
+							AccessExclusiveLock /*=lockmode*/,
+							CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME /*=table_name*/,
+							&data /*=data*/);
+
+	if (!threshold_found)
+	{
+		Catalog *catalog = ts_catalog_get();
+		/* NOTE: this function deliberately takes a stronger lock than RowExclusive, see the comment
+		 * above for the rationale
+		 */
+		Relation rel =
+			table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+					   AccessExclusiveLock);
+		TupleDesc desc = RelationGetDescr(rel);
+		Datum values[Natts_continuous_aggs_invalidation_threshold];
+		bool nulls[Natts_continuous_aggs_invalidation_threshold] = { false };
+
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_hypertable_id)] =
+			Int32GetDatum(raw_hypertable_id);
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_watermark)] =
+			Int64GetDatum(invalidation_threshold);
+
+		ts_catalog_insert_values(rel, desc, values, nulls);
+		table_close(rel, NoLock);
+		data.was_updated = true;
+	}
+
+	return data.was_updated;
+}
+
+static ScanTupleResult
+invalidation_threshold_tuple_found(TupleInfo *ti, void *data)
+{
+	int64 *threshold = data;
+	bool isnull;
+	Datum datum =
+		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_watermark, &isnull);
+
+	Assert(!isnull);
+	*threshold = DatumGetInt64(datum);
+
+	return SCAN_CONTINUE;
+}
+
+int64
+continuous_agg_invalidation_threshold_get(int32 hypertable_id)
+{
+	int64 threshold = 0;
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	if (!ts_catalog_scan_one(CONTINUOUS_AGGS_INVALIDATION_THRESHOLD /*=table*/,
+							 CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY /*=indexid*/,
+							 scankey /*=scankey*/,
+							 1 /*=num_keys*/,
+							 invalidation_threshold_tuple_found /*=tuple_found*/,
+							 AccessShareLock /*=lockmode*/,
+							 CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_TABLE_NAME /*=table_name*/,
+							 &threshold /*=data*/))
+		elog(ERROR, "could not find invalidation threshold for hypertable %d", hypertable_id);
+
+	return threshold;
+}
+
+static ScanTupleResult
+invalidation_threshold_htid_found(TupleInfo *tinfo, void *data)
+{
+	if (tinfo->lockresult != TM_Ok)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not acquire lock for invalidation threshold row %d",
+						tinfo->lockresult),
+				 errhint("Retry the operation again.")));
+	}
+	return SCAN_DONE;
+}
+
+/* lock row corresponding to hypertable id in
+ * continuous_aggs_invalidation_threshold table in AccessExclusive mode,
+ * block till lock is acquired.
+ */
+void
+continuous_agg_invalidation_threshold_lock(int32 raw_hypertable_id)
+{
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	Catalog *catalog = ts_catalog_get();
+	ScanKeyData scankey[1];
+	int retcnt = 0;
+	ScannerCtx scanctx;
+
+	ScanKeyInit(&scankey[0],
+				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(raw_hypertable_id));
+
+	/* lock table in AccessShare mode and the row with AccessExclusive */
+	scanctx = (ScannerCtx){ .table = catalog_get_table_id(catalog,
+														  CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+							.index = catalog_get_index(catalog,
+													   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+													   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
+							.nkeys = 1,
+							.scankey = scankey,
+							.limit = 1,
+							.tuple_found = invalidation_threshold_htid_found,
+							.lockmode = AccessShareLock,
+							.scandirection = ForwardScanDirection,
+							.result_mctx = CurrentMemoryContext,
+							.tuplock = &scantuplock };
+	retcnt = ts_scanner_scan(&scanctx);
+	if (retcnt > 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("found multiple invalidation rows for hypertable %d", raw_hypertable_id)));
+	}
+}
