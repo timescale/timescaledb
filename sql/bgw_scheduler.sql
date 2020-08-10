@@ -17,17 +17,17 @@ RETURNS BOOL
 AS '@LOADER_PATHNAME@', 'ts_bgw_db_workers_start'
 LANGUAGE C VOLATILE;
 
-INSERT INTO _timescaledb_config.bgw_job (id, application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-(1, 'Telemetry Reporter', 'telemetry_and_version_check_if_enabled', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h')
+INSERT INTO _timescaledb_config.bgw_job (id, application_name, job_type, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled) VALUES
+(1, 'Telemetry Reporter [1]', 'telemetry_and_version_check_if_enabled', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h', '_timescaledb_internal', 'policy_telemetry_proc', CURRENT_ROLE, true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Add a retention policy to a hypertable or continuous aggregate.
--- The retention_window (typically an INTERVAL) determines the 
+-- The retention_window (typically an INTERVAL) determines the
 -- window beyond which data is dropped at the time
--- of execution of the policy (e.g., '1 week'). Note that the retention 
--- window will always align with chunk boundaries, thus the window 
+-- of execution of the policy (e.g., '1 week'). Note that the retention
+-- window will always align with chunk boundaries, thus the window
 -- might be larger than the given one, but never smaller. In other
--- words, some data beyond the retention window 
+-- words, some data beyond the retention window
 -- might be kept, but data within the window will never be deleted.
 CREATE OR REPLACE FUNCTION add_retention_policy(
        hypertable REGCLASS,

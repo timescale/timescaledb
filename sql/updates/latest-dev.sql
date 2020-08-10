@@ -104,6 +104,19 @@ ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN config JSONB;
 ALTER TABLE _timescaledb_config.bgw_job DROP CONSTRAINT valid_job_type;
 ALTER TABLE _timescaledb_config.bgw_job ADD CONSTRAINT valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks', 'custom'));
 
+-- add job id to application name
+UPDATE
+  _timescaledb_config.bgw_job job
+SET application_name = format('%s [%s]', application_name, id);
+
+-- migrate telemetry jobs
+UPDATE
+  _timescaledb_config.bgw_job job
+SET proc_name = 'policy_telemetry_proc',
+  proc_schema = '_timescaledb_internal',
+  OWNER = CURRENT_ROLE
+WHERE job_type = 'telemetry_and_version_check_if_enabled';
+
 -- migrate reorder jobs
 UPDATE
   _timescaledb_config.bgw_job job

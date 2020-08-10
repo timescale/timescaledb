@@ -938,11 +938,12 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	Datum values[Natts_bgw_job];
 	CatalogSecurityContext sec_ctx;
 	bool nulls[Natts_bgw_job] = { false };
+	int32 job_id;
+	char app_name[NAMEDATALEN];
 
 	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = NameGetDatum(application_name);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_job_type)] = NameGetDatum(job_type);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] =
 		IntervalPGetDatum(schedule_interval);
@@ -965,8 +966,13 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = JsonbPGetDatum(config);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] =
-		ts_catalog_table_next_seq_id(catalog, BGW_JOB);
+
+	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
+	snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = Int32GetDatum(job_id);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = CStringGetDatum(app_name);
+
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 
