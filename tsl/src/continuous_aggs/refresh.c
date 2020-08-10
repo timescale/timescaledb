@@ -23,6 +23,7 @@
 #include "refresh.h"
 #include "materialize.h"
 #include "invalidation.h"
+#include "invalidation_threshold.h"
 
 typedef struct CaggRefreshState
 {
