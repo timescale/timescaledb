@@ -235,6 +235,12 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TABLE, get_rel_name(main_table_relid));
 	}
 
+	if (hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("move_chunk() and reorder_chunk() cannot be used "
+						"with distributed hypertables")));
+
 	if (!chunk_get_reorder_index(ht, chunk, index_id, &cim))
 	{
 		ts_cache_release(hcache);

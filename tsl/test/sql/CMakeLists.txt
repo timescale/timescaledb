@@ -58,6 +58,7 @@ set(TEST_FILES_DEBUG
   transparent_decompression_queries.sql
   tsl_tables.sql
   read_only.sql
+  dist_api_calls.sql
 )
 
 set(TEST_TEMPLATES
@@ -116,7 +117,7 @@ set(SOLO_TESTS
   data_fetcher
   data_node
   debug_notice
-  dist_api_calls.sql
+  dist_api_calls
   dist_commands
   dist_compression
   dist_ddl
