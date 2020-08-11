@@ -65,3 +65,18 @@ INSERT INTO disttable VALUES
        ('2017-01-02 08:01', 2, 0.23);
 SELECT * FROM disttable ORDER BY time;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+
+-- Ensure that move_chunk() and reorder_chunk() functions cannot be used
+-- with distributed hypertable
+SET ROLE TO DEFAULT;
+SET client_min_messages TO error;
+DROP TABLESPACE IF EXISTS tablespace1;
+RESET client_min_messages;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_CLUSTER_SUPERUSER LOCATION :TEST_TABLESPACE1_PATH;
+
+\set ON_ERROR_STOP 0
+SELECT move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_4_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'disttable_time_idx', verbose=>TRUE);
+SELECT reorder_chunk('_timescaledb_internal._dist_hyper_1_4_chunk', verbose => TRUE);
+\set ON_ERROR_STOP 1
+
+DROP TABLESPACE tablespace1;
