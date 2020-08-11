@@ -80,7 +80,13 @@ docker_logs() {
 }
 
 docker_pgcmd() {
-    docker_exec $1 "psql -h localhost -U postgres -d single -c \"$2\""
+    set +e
+    docker_exec $1 "psql -h localhost -U postgres -d single -v VERBOSITY=verbose -c \"$2\""
+    if [ $? -ne 0 ]; then
+      docker_logs $1
+      exit 1
+    fi
+    set -e
 }
 
 docker_pgscript() {
@@ -96,7 +102,13 @@ docker_pgdiff() {
     diff_file=update_test.diff.${UPDATE_FROM_TAG}
     >&2 echo -e "\033[1m$1 vs $2\033[0m: $2"
     docker_pgtest $1 $3
+    if [ $? -ne 0 ]; then
+      docker_logs $1
+    fi
     docker_pgtest $2 $3
+    if [ $? -ne 0 ]; then
+      docker_logs $2
+    fi
     echo "RUNNING:  diff ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out "
     diff -u ${TEST_TMPDIR}/$1.out ${TEST_TMPDIR}/$2.out | tee ${diff_file}
     if [ ! -s ${diff_file} ]; then
