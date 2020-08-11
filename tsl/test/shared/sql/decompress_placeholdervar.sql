@@ -19,7 +19,7 @@ CREATE TABLE decompress_phv_ping (
     insert_ts timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-SELECT create_hypertable ('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
+SELECT table_name FROM create_hypertable('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
 
 INSERT INTO decompress_phv_device
     VALUES (41040, 'MB10010013', 240), (65101, 'BR100103ca', 240), (65103, 'BR100103cb', 240), (65105, 'BR100103cc', 240), (65107, 'BR100103cd', 240), (41041, 'MB11000000', 241), (65201, 'BR11000014', 241), (65203, 'BR11000015', 241), (65205, 'BR11000016', 241), (65207, 'BR11000017', 241);
