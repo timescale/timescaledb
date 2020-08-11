@@ -15,10 +15,10 @@ CREATE TABLE decompress_phv_ping (
     rtt_avg float,
     insert_ts timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
-SELECT create_hypertable ('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
-        create_hypertable         
-----------------------------------
- (7,public,decompress_phv_ping,t)
+SELECT table_name FROM create_hypertable('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
+     table_name      
+---------------------
+ decompress_phv_ping
 (1 row)
 
 INSERT INTO decompress_phv_device
