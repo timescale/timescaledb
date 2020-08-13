@@ -67,6 +67,13 @@ SELECT * FROM disttable ORDER BY time;
 SELECT * FROM show_chunks('disttable');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
 
+-- Simple test of time_bucket_gapfill
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+
 -- Ensure that move_chunk() and reorder_chunk() functions cannot be used
 -- with distributed hypertable
 SET ROLE TO DEFAULT;

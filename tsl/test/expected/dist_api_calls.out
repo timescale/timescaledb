@@ -216,6 +216,32 @@ _timescaledb_internal._dist_hyper_1_8_chunk
  
 (1 row)
 
+-- Simple test of time_bucket_gapfill
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+     time_bucket_gapfill      | first |   avg   
+------------------------------+-------+---------
+ Sun Jan 01 04:00:00 2017 PST |   1.2 |     1.2
+ Sun Jan 01 07:00:00 2017 PST |   7.3 |     5.8
+ Sun Jan 01 10:00:00 2017 PST |       |        
+ Sun Jan 01 13:00:00 2017 PST |       |        
+ Sun Jan 01 16:00:00 2017 PST |       |        
+ Sun Jan 01 19:00:00 2017 PST |       |        
+ Sun Jan 01 22:00:00 2017 PST |       |        
+ Mon Jan 02 01:00:00 2017 PST |       |        
+ Mon Jan 02 04:00:00 2017 PST |       |        
+ Mon Jan 02 07:00:00 2017 PST |  0.23 |    0.23
+ Mon Jan 02 10:00:00 2017 PST |       |        
+ Mon Jan 02 13:00:00 2017 PST |       |        
+ Mon Jan 02 16:00:00 2017 PST |       |        
+ Sun Jul 01 05:00:00 2018 PDT |   3.1 |     3.1
+ Sun Jul 01 08:00:00 2018 PDT |    64 | 5183.56
+ Mon Jul 02 08:00:00 2018 PDT |     0 |       0
+(16 rows)
+
 -- Ensure that move_chunk() and reorder_chunk() functions cannot be used
 -- with distributed hypertable
 SET ROLE TO DEFAULT;
