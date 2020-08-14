@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
     env:
-      PG_VERSION: 12.3
+      PG_VERSION: 12.4
 
     steps:
     - name: Checkout TimescaleDB
