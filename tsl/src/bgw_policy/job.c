@@ -26,11 +26,13 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/policy_utils.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
-#include "continuous_aggs/job.h"
+#include "continuous_aggs/refresh.h"
+
 #include "tsl/src/chunk.h"
 
 #include "config.h"
@@ -90,45 +92,6 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 															 -1);
 }
 
-static Datum
-subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
-{
-	Datum now;
-	int64 res;
-
-	AssertArg(IS_INTEGER_TYPE(time_dim_type));
-
-	now = OidFunctionCall0(now_func);
-
-	switch (time_dim_type)
-	{
-		case INT2OID:
-			res = DatumGetInt16(now) - interval;
-			if (res < PG_INT16_MIN || res > PG_INT16_MAX)
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
-			return Int16GetDatum(res);
-		case INT4OID:
-			res = DatumGetInt32(now) - interval;
-			if (res < PG_INT32_MIN || res > PG_INT32_MAX)
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
-			return Int32GetDatum(res);
-		case INT8OID:
-		{
-			bool overflow = pg_sub_s64_overflow(DatumGetInt64(now), interval, &res);
-			if (overflow)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
-			}
-			return Int64GetDatum(res);
-		}
-		default:
-			pg_unreachable();
-	}
-}
-
 /*
  * returns now() - window as partitioning type datum
  */
@@ -149,33 +112,8 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 	}
 	else
 	{
-		Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
 		Interval *lag = interval_getter(config);
-
-		switch (partitioning_type)
-		{
-			case TIMESTAMPOID:
-				res = DirectFunctionCall1(timestamptz_timestamp, res);
-				res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
-
-				return res;
-			case TIMESTAMPTZOID:
-				res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(lag));
-
-				return res;
-			case DATEOID:
-				res = DirectFunctionCall1(timestamptz_timestamp, res);
-				res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
-				res = DirectFunctionCall1(timestamp_date, res);
-
-				return res;
-			default:
-				/* this should never happen as otherwise hypertable has unsupported time type */
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("unsupported time type %s", format_type_be(partitioning_type))));
-				pg_unreachable();
-		}
+		return subtract_interval_from_now(lag, partitioning_type);
 	}
 }
 
@@ -320,46 +258,36 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 }
 
 bool
-policy_continuous_aggregate_execute(int32 job_id, Jsonb *config)
+policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 {
-	bool committed = false;
+	bool start_isnull, end_isnull;
 	int32 materialization_id;
-	bool finshed_all_materialization;
-	ContinuousAggMatOptions mat_options;
+	Hypertable *mat_ht;
+	Dimension *open_dim;
+	Oid dim_type;
+	int64 refresh_start, refresh_end;
+	ContinuousAgg *cagg;
+	InternalTimeRange refresh_window;
 
+	if (!ActiveSnapshotSet())
+	{
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
-
-	/* always materialize verbosely for now */
-	mat_options = (ContinuousAggMatOptions){
-		.verbose = true,
-		.within_single_transaction = false,
-		.process_only_invalidation = false,
-		.invalidate_prior_to_time = PG_INT64_MAX,
-	};
-
-	/* materialization code has it's own transaction handling so we commit
-	 * current transaction */
-	if (IsTransactionOrTransactionBlock())
-	{
-		committed = true;
-		if (ActiveSnapshotSet())
-			PopActiveSnapshot();
-		CommitTransactionCommand();
-	}
-
-	finshed_all_materialization = continuous_agg_materialize(materialization_id, &mat_options);
-
-	if (!finshed_all_materialization)
-	{
-		StartTransactionCommand();
-		enable_fast_restart(job_id, "materialize continuous aggregate");
-		CommitTransactionCommand();
-	}
-
-	/* start new transaction if we committed before */
-	if (committed)
-		StartTransactionCommand();
-
+	mat_ht = ts_hypertable_get_by_id(materialization_id);
+	open_dim = get_open_dimension_for_hypertable(mat_ht);
+	dim_type = ts_dimension_get_partition_type(open_dim);
+	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
+	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
+	refresh_window = (InternalTimeRange){ .type = dim_type,
+										  .start = (start_isnull ? PG_INT64_MIN : refresh_start),
+										  .end = (end_isnull ? PG_INT64_MAX : refresh_end) };
+	continuous_agg_refresh_internal(cagg, &refresh_window);
+	elog(LOG,
+		 "refresh continuous aggregate range %s , %s",
+		 ts_internal_to_time_string(refresh_start, dim_type),
+		 ts_internal_to_time_string(refresh_end, dim_type));
 	return true;
 }
 

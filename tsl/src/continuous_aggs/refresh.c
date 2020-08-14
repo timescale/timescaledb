@@ -231,7 +231,6 @@ continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange 
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
-
 /*
  * Refresh a continuous aggregate across the given window.
  */
@@ -239,7 +238,6 @@ Datum
 continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Catalog *catalog = ts_catalog_get();
 	ContinuousAgg *cagg;
 	Hypertable *cagg_ht;
 	Dimension *time_dim;
@@ -248,19 +246,6 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		.start = PG_INT64_MIN,
 		.end = PG_INT64_MAX,
 	};
-	InvalidationStore *invalidations;
-
-	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
-
-	/* Prevent running refresh if we're in a transaction block since a refresh
-	 * can run two transactions and might take a long time to release locks if
-	 * there's a lot to materialize. Strictly, it is optional to prohibit
-	 * transaction blocks since there will be only one transaction if the
-	 * invalidation threshold needs no update. However, materialization might
-	 * still take a long time and it is probably best for conistency to always
-	 * prevent transaction blocks.  */
-	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
-
 	if (!OidIsValid(cagg_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid continuous aggregate")));
@@ -280,7 +265,6 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
 	}
-
 	cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	Assert(cagg_ht != NULL);
 	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
@@ -296,14 +280,37 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
 													get_fn_expr_argtype(fcinfo->flinfo, 2),
 													refresh_window.type);
+	continuous_agg_refresh_internal(cagg, &refresh_window);
+	PG_RETURN_VOID();
+}
 
-	if (refresh_window.start >= refresh_window.end)
+void
+continuous_agg_refresh_internal(ContinuousAgg *cagg, InternalTimeRange *refresh_window_arg)
+{
+	Catalog *catalog = ts_catalog_get();
+	Hypertable *cagg_ht;
+	int32 mat_id = cagg->data.mat_hypertable_id;
+	InternalTimeRange refresh_window;
+	InvalidationStore *invalidations = NULL;
+
+	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
+
+	/* Prevent running refresh if we're in a transaction block since a refresh
+	 * can run two transactions and might take a long time to release locks if
+	 * there's a lot to materialize. Strictly, it is optional to prohibit
+	 * transaction blocks since there will be only one transaction if the
+	 * invalidation threshold needs no update. However, materialization might
+	 * still take a long time and it is probably best for consistency to always
+	 * prevent transaction blocks.  */
+	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
+
+	if (refresh_window_arg->start >= refresh_window_arg->end)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid refresh window"),
 				 errhint("The start of the window must be before the end.")));
 
-	refresh_window = compute_bucketed_refresh_window(&refresh_window, cagg->data.bucket_width);
+	refresh_window = compute_bucketed_refresh_window(refresh_window_arg, cagg->data.bucket_width);
 
 	elog(DEBUG1,
 		 "computed refresh window at [ " INT64_FORMAT ", " INT64_FORMAT "]",
@@ -336,7 +343,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	PopActiveSnapshot();
 	CommitTransactionCommand();
 	StartTransactionCommand();
-	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 	cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 
 	/* Lock the continuous aggregate's materialized hypertable to protect
@@ -359,6 +366,4 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		elog(NOTICE,
 			 "continuous aggregate \"%s\" is already up-to-date",
 			 NameStr(cagg->data.user_view_name));
-
-	PG_RETURN_VOID();
 }

@@ -45,6 +45,7 @@ select a, count(b)
 from foo
 group by time_bucket(1, a), a;
 
+SELECT add_refresh_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval); 
 SELECT * FROM _timescaledb_config.bgw_job;
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
@@ -641,6 +642,7 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature;
 
+SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval); 
 SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
@@ -696,6 +698,8 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
+
+SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval); 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;

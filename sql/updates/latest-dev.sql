@@ -183,23 +183,52 @@ WHERE job_type = 'drop_chunks'
   AND job.id = c.job_id;
 
 -- migrate cagg jobs
+--- timescale functions cannot be invoked in latest-dev.sql
+--- this is a mapping for get_time_type
+CREATE FUNCTION ts_tmp_get_time_type(htid integer)
+RETURNS OID LANGUAGE SQL AS
+$BODY$
+  SELECT dim.column_type
+  FROM _timescaledb_catalog.dimension dim
+  WHERE dim.hypertable_id = htid and dim.num_slices is null
+        and dim.interval_length is not null;
+$BODY$;
+--- this is a mapping for _timescaledb_internal.to_interval
+CREATE FUNCTION ts_tmp_get_interval( intval bigint)
+RETURNS INTERVAL LANGUAGE SQL AS
+$BODY$
+   SELECT format('%sd %ss', intval/86400000000, (intval%86400000000)/1E6)::interval; 
+$BODY$;
+ 
 UPDATE
   _timescaledb_config.bgw_job job
 SET
-  application_name = format('%s [%s]', 'Continuous Aggregate Policy', id),
+  application_name = format('%s [%s]', 'Refresh Continuous Aggregate Policy', id),
   proc_schema = '_timescaledb_internal',
-  proc_name = 'policy_continuous_aggregate',
-  config = jsonb_build_object('mat_hypertable_id', c.mat_hypertable_id),
-  hypertable_id = c.mat_hypertable_id,
+  proc_name = 'policy_refresh_continuous_aggregate',
+  job_type = 'custom',
+  config = jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id,
+                              'start_interval', NULL,
+                              'end_interval',
+             CASE  ts_tmp_get_time_type(cagg.raw_hypertable_id)
+                   WHEN 'TIMESTAMP'::regtype THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT
+                   WHEN 'TIMESTAMPTZ'::regtype THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT
+                   WHEN 'DATE'::regtype THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT
+                   ELSE cagg.refresh_lag::TEXT END ),
+  hypertable_id = cagg.mat_hypertable_id,
   owner = (
     SELECT relowner::regrole::text
     FROM _timescaledb_catalog.hypertable ht,
       pg_class cl
-    WHERE ht.id = c.mat_hypertable_id
+    WHERE ht.id = cagg.mat_hypertable_id
       AND cl.oid = format('%I.%I', schema_name, table_name)::regclass)
-FROM _timescaledb_catalog.continuous_agg c
+FROM _timescaledb_catalog.continuous_agg cagg
 WHERE job_type = 'continuous_aggregate'
-  AND job.id = c.job_id;
+  AND job.id = cagg.job_id ;
+
+--drop tmp functions created for cont agg job migration
+DROP FUNCTION ts_tmp_get_time_type;
+DROP FUNCTION ts_tmp_get_interval;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_compress_chunks;

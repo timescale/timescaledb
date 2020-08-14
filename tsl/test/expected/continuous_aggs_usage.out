@@ -31,6 +31,12 @@ FROM
   device_readings
 GROUP BY bucket, device_id; --We have to group by the bucket column, but can also add other group-by columns
 NOTICE:  adding index _materialized_hypertable_2_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device_id, bucket)
+SELECT add_refresh_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1000
+(1 row)
+
 --Next, insert some data into the raw hypertable
 INSERT INTO device_readings
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
@@ -103,7 +109,6 @@ total_failures         |
 total_crashes          | 
 
 \x
---
 -- Refresh interval
 --
 -- The refresh interval determines how often the background worker
@@ -116,9 +121,9 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
 SELECT alter_job(1000, schedule_interval := '1h');
-                                    alter_job                                    
----------------------------------------------------------------------------------
- (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""mat_hypertable_id"": 2}",-infinity)
+                                                                 alter_job                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_interval"": ""@ 2 hours"", ""start_interval"": null, ""mat_hypertable_id"": 2}",-infinity)
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;

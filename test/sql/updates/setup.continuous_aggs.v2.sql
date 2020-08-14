@@ -77,7 +77,7 @@ BEGIN
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
   ELSE
-    CREATE MATERIALIZED VIEW mat_before
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
     AS
       SELECT time_bucket('1week', timec) as bucket,
@@ -120,10 +120,12 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+    PERFORM add_refresh_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h'); 
   END IF;
 END $$;
 
 REFRESH MATERIALIZED VIEW mat_before;
+
 
 -- we create separate schema for realtime agg since we dump all view definitions in public schema
 -- but realtime agg view definition is not stable across versions
@@ -180,7 +182,7 @@ BEGIN
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
   ELSE
-    CREATE MATERIALIZED VIEW cagg.realtime_mat
+    CREATE MATERIALIZED VIEW IF NOT EXISTS cagg.realtime_mat
     WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
     AS
       SELECT time_bucket('1week', timec) as bucket,
@@ -223,6 +225,7 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+    PERFORM add_refresh_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h'); 
   END IF;
 END $$;
 

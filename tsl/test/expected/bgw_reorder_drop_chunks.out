@@ -581,6 +581,12 @@ CREATE MATERIALIZED VIEW tdc_view
   AS SELECT time_bucket('1 hour', time), count(drop_order)
      FROM test_drop_chunks_table
      GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('tdc_view', NULL, '2 h'::interval, '12 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1002
+(1 row)
+
 SELECT show_chunks('test_drop_chunks_table');
                show_chunks               
 -----------------------------------------
@@ -628,4 +634,4 @@ SELECT show_chunks('test_drop_chunks_table');
 
 --drop the view to allow drop chunks to work
 DROP MATERIALIZED VIEW tdc_view;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_13_chunk
+NOTICE:  drop cascades to 3 other objects

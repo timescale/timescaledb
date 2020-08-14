@@ -6,6 +6,7 @@ set(TEST_FILES
   continuous_aggs_errors.sql
   continuous_aggs_invalidation.sql
   continuous_aggs_permissions.sql
+  continuous_aggs_policy.sql
   continuous_aggs_refresh.sql
   continuous_aggs_watermark.sql
   dist_views.sql

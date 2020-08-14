@@ -280,8 +280,8 @@ ERROR:  cannot execute CREATE MATERIALIZED VIEW in a read-only transaction
 -- policy API
 CALL _timescaledb_internal.policy_compression(1,'{}');
 ERROR:  cannot execute policy_compression() in a read-only transaction
-CALL _timescaledb_internal.policy_continuous_aggregate(1,'{}');
-ERROR:  cannot execute policy_continuous_aggregate() in a read-only transaction
+CALL _timescaledb_internal.policy_refresh_continuous_aggregate(1,'{}');
+ERROR:  cannot execute policy_refresh_continuous_aggregate() in a read-only transaction
 CALL _timescaledb_internal.policy_reorder(1,'{}');
 ERROR:  cannot execute policy_reorder() in a read-only transaction
 CALL _timescaledb_internal.policy_retention(1,'{}');

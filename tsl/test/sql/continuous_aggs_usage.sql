@@ -30,6 +30,7 @@ FROM
   device_readings
 GROUP BY bucket, device_id; --We have to group by the bucket column, but can also add other group-by columns
 
+SELECT add_refresh_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
 --Next, insert some data into the raw hypertable
 INSERT INTO device_readings
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
@@ -57,18 +58,16 @@ SELECT * FROM timescaledb_information.continuous_aggregates;
 SELECT * FROM timescaledb_information.continuous_aggregate_stats;
 \x
 
---
 -- Refresh interval
 --
-
 -- The refresh interval determines how often the background worker
 -- for automatic materialization will run. The default is (2 x bucket_width)
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
 SELECT alter_job(1000, schedule_interval := '1h');
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
+SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 --
 -- Refresh lag

@@ -17,12 +17,13 @@ WHERE oid IN (
         AND classid = 'pg_catalog.pg_proc'::regclass)
     AND pronamespace = 'public'::regnamespace
   ORDER BY proname;
-             proname              
-----------------------------------
+                  proname                   
+--------------------------------------------
  add_compression_policy
  add_data_node
  add_dimension
  add_job
+ add_refresh_continuous_aggregate_policy
  add_reorder_policy
  add_retention_policy
  allow_new_chunks
@@ -57,6 +58,7 @@ WHERE oid IN (
  move_chunk
  refresh_continuous_aggregate
  remove_compression_policy
+ remove_refresh_continuous_aggregate_policy
  remove_reorder_policy
  remove_retention_policy
  reorder_chunk
@@ -74,5 +76,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(55 rows)
+(57 rows)
 

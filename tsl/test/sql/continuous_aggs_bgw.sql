@@ -80,6 +80,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
 
 -- even before running, stats shows something
 SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration
@@ -166,7 +167,6 @@ $BODY$;
 --make sure there is 1 job to start with
 SELECT wait_for_job_to_run(:job_id, 1);
 
-
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
 
 --start the scheduler on 0 time
@@ -217,7 +217,7 @@ TRUNCATE public.bgw_log;
 -- data before 8
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
--- fast restart test
+-- invalidations test by running job multiple times 
 SELECT ts_bgw_params_reset_time();
 
 DROP MATERIALIZED VIEW test_continuous_agg_view;
@@ -231,6 +231,8 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
 
@@ -239,37 +241,29 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start, last_finish , last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
--- data at 0
+-- should have refreshed everything we have so far
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
+
+-- invalidate some data
+UPDATE test_continuous_agg_table
+SET data = 11 WHERE time = 6;
+
+--advance time by 12h so that job runs one more time 
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint * 1000000, true);
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 
 SELECT * FROM sorted_bgw_log;
 
--- job ran again, fast restart
 SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
--- data at 2
-SELECT * FROM test_continuous_agg_view ORDER BY 1;
-
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
-
-SELECT * FROM sorted_bgw_log;
-
-SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-
--- job ran again, fast restart
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
-    FROM _timescaledb_internal.bgw_job_stat
-    where job_id=:job_id;
-
--- data at 4
+-- should have updated data for time=6 
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x on
@@ -296,6 +290,8 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
         FROM test_continuous_agg_table
         GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
@@ -306,6 +302,15 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
+DROP MATERIALIZED VIEW test_continuous_agg_view;
+
+--advance clock to quit scheduler
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '25 hour')::bigint * 1000000, true);
+select ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+--clear log for next run of the scheduler
+TRUNCATE public.bgw_log;
+SELECT ts_bgw_params_reset_time();
 
 --
 -- Test creating continuous aggregate with a user that is the non-owner of the raw table
@@ -316,8 +321,7 @@ CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE a
 SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_test1');
 GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;
 INSERT INTO test_continuous_agg_table_w_grant
-    SELECT i, i FROM
-        (SELECT generate_series(0, 10) as i) AS j;
+    SELECT 1 , 1;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 
@@ -330,27 +334,32 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
         GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT id, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id ;
+SELECT job_id, next_start, last_finish, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
 --view is populated
-SELECT * FROM test_continuous_agg_view_user_2;
-
+SELECT * FROM test_continuous_agg_view_user_2 ORDER BY 1;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --revoke permissions from the continuous agg view owner to select from raw table
 --no further updates to cont agg should happen
 REVOKE SELECT ON test_continuous_agg_table_w_grant FROM public;
+--add new data to table
+INSERT INTO test_continuous_agg_table_w_grant VALUES(5,1);
 
-INSERT INTO test_continuous_agg_table_w_grant VALUES(1,1);
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--advance time by 12h so that job tries to run one more time 
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint * 1000000, true);
+
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 
 --should show a failing execution because no longer has permissions (due to lack of permission on partial view owner's part)
@@ -360,3 +369,6 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
 
 --view was NOT updated; but the old stuff is still there
 SELECT * FROM test_continuous_agg_view_user_2;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT * from sorted_bgw_log;

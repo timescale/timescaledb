@@ -35,6 +35,12 @@ select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location;
 NOTICE:  adding index _materialized_hypertable_2_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, time_partition_col)
+SELECT add_refresh_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1000
+(1 row)
+
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 REFRESH MATERIALIZED VIEW  mat_refresh_test;

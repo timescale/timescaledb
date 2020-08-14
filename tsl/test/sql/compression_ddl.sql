@@ -335,7 +335,7 @@ CREATE MATERIALIZED VIEW test1_cont_view WITH (timescaledb.continuous, timescale
 AS SELECT time_bucket('1 hour', "Time"), SUM(i)
    FROM test1
    GROUP BY 1;
-
+SELECT add_refresh_continuous_aggregate_policy('test1_cont_view', NULL, '1 hour'::interval, '1 day'::interval);
 REFRESH MATERIALIZED VIEW test1_cont_view;
 
 SELECT count(*) FROM test1_cont_view;

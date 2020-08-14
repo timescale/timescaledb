@@ -31,7 +31,6 @@ DECLARE
   ts_version TEXT;
 BEGIN
   SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
   IF ts_version < '2.0.0' THEN
     CREATE VIEW mat_before
     WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
@@ -77,7 +76,7 @@ BEGIN
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
   ELSE
-    CREATE MATERIALIZED VIEW mat_before
+    CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
     WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
     AS
       SELECT time_bucket('1week', timec) as bucket,
@@ -120,6 +119,7 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+    PERFORM add_refresh_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
 
   END IF;
 END $$;

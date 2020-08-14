@@ -20,7 +20,6 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLE continuous_agg_test_mat(time int);
 select create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
-INSERT INTO _timescaledb_config.bgw_job VALUES (2,'continuous_aggregate',interval '1s', interval '1s',0, interval '1s','','');
 INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, '','','','',0,0,'','',0, bigint '10000000');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 

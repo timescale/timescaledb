@@ -1752,12 +1752,6 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	PRINT_MATINTERNAL_NAME(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);
-
-	/* register the BGW job to process continuous aggs*/
-	ts_continuous_agg_job_add(materialize_hypertable_id,
-							  origquery_ht->htid,
-							  origquery_ht->bucket_width);
-
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
 	create_cagg_catalog_entry(materialize_hypertable_id,
