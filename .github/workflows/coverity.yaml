@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [11.8, 12.3]
+        pg: [11.9, 12.4]
         os: [ubuntu-18.04]
     env:
       PG_SRC_DIR: pgbuild

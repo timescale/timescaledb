@@ -21,9 +21,9 @@ import sys
 event_type = sys.argv[1]
 
 PG11_EARLIEST = "11.0"
-PG11_LATEST = "11.8"
+PG11_LATEST = "11.9"
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.3"
+PG12_LATEST = "12.4"
 
 PG_DEBUG = "--enable-debug --enable-cassert"
 PG_MAC_PATH = "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include"
