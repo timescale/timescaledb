@@ -88,6 +88,12 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1000
+(1 row)
+
 -- even before running, stats shows something
 SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration
     FROM timescaledb_information.continuous_aggregate_stats;
@@ -108,9 +114,9 @@ SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
 -- job was created
 SELECT * FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id;
-  id  |          application_name          | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |          proc_name          |       owner       | scheduled | hypertable_id |          config          
-------+------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-----------------------------+-------------------+-----------+---------------+--------------------------
- 1000 | Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_continuous_aggregate | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                               config                                
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+---------------------------------------------------------------------
+ 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_interval": 4, "start_interval": null, "mat_hypertable_id": 2}
 (1 row)
 
 -- create 10 time buckets
@@ -139,17 +145,17 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |          application_name          |                                                     msg                                                      
---------+-----------+------------------------------------+--------------------------------------------------------------------------------------------------------------
-      0 |         0 | Continuous Aggregate Policy [1000] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 6
-      0 |         0 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler                       | [TESTING] Wait until 25000, started at 0
+ msg_no | mock_time |              application_name              |                    msg                     
+--------+-----------+--------------------------------------------+--------------------------------------------
+      0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Refresh Continuous Aggregate Policy [1000] | refresh continuous aggregate range 0 , 6
 (3 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |          application_name          | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |          proc_name          |       owner       | scheduled | hypertable_id |          config          
-------+------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-----------------------------+-------------------+-----------+---------------+--------------------------
- 1000 | Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_continuous_aggregate | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
+  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |              proc_name              |       owner       | scheduled | hypertable_id |                               config                                
+------+--------------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-------------------------------------+-------------------+-----------+---------------+---------------------------------------------------------------------
+ 1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_refresh_continuous_aggregate | default_perm_user | t         |             2 | {"end_interval": 4, "start_interval": null, "mat_hypertable_id": 2}
 (1 row)
 
 -- job ran once, successfully
@@ -256,9 +262,9 @@ SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint 
 
 --alter the refresh interval and check if next_scheduled_run is altered
 SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
-                                             alter_job                                             
----------------------------------------------------------------------------------------------------
- (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""mat_hypertable_id"": 2}","Sat Jan 01 04:01:00 2000 PST")
+                                                                    alter_job                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_interval"": 4, ""start_interval"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:01:00 2000 PST")
 (1 row)
 
 SELECT job_id, next_start- last_finish as until_next, total_runs
@@ -296,9 +302,9 @@ SELECT (next_start - '30s'::interval) AS "NEW_NEXT_START"
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id \gset
 SELECT alter_job(:job_id, next_start => :'NEW_NEXT_START');
-                                             alter_job                                             
----------------------------------------------------------------------------------------------------
- (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""mat_hypertable_id"": 2}","Sat Jan 01 04:02:30 2000 PST")
+                                                                    alter_job                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_interval"": 4, ""start_interval"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:02:30 2000 PST")
 (1 row)
 
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute 30 seconds')::bigint * 1000000), true);
@@ -342,7 +348,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
            4 |     9
 (3 rows)
 
--- fast restart test
+-- invalidations test by running job multiple times 
 SELECT ts_bgw_params_reset_time();
  ts_bgw_params_reset_time 
 --------------------------
@@ -359,6 +365,12 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1001
+(1 row)
+
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
@@ -368,112 +380,80 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |          application_name          |                                                                 msg                                                                  
---------+-----------+------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------
-      0 |         0 | Continuous Aggregate Policy [1001] | new materialization range for public.test_continuous_agg_table (time column time) larger than allowed in one run, truncating 12 to 2
-      1 |         0 | Continuous Aggregate Policy [1001] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 2
-      0 |         0 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler                       | [TESTING] Wait until 25000, started at 0
-(4 rows)
+ msg_no | mock_time |              application_name              |                    msg                     
+--------+-----------+--------------------------------------------+--------------------------------------------
+      0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      0 |         0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range 0 , 12
+(3 rows)
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start, last_finish , last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | t                |          1 |               1 |              0 |             0
+ job_id |          next_start          |         last_finish          |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------------------+------------------------------+----------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Sat Jan 01 04:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST | @ 12 hours ago | t                |          1 |               1 |              0 |             0
 (1 row)
 
--- data at 0
-SELECT * FROM test_continuous_agg_view ORDER BY 1;
- time_bucket | value 
--------------+-------
-           0 |     1
-(1 row)
-
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
- ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
-------------------------------------------------------------
- 
-(1 row)
-
-SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |          application_name          |                                                                 msg                                                                  
---------+-----------+------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------
-      0 |         0 | Continuous Aggregate Policy [1001] | new materialization range for public.test_continuous_agg_table (time column time) larger than allowed in one run, truncating 12 to 2
-      1 |         0 | Continuous Aggregate Policy [1001] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 2
-      0 |         0 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler                       | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | Continuous Aggregate Policy [1001] | new materialization range for public.test_continuous_agg_table (time column time) larger than allowed in one run, truncating 12 to 4
-      1 |     25000 | Continuous Aggregate Policy [1001] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 4
-      0 |     25000 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |     25000 | DB Scheduler                       | [TESTING] Wait until 50000, started at 25000
-(8 rows)
-
--- job ran again, fast restart
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
-    FROM _timescaledb_internal.bgw_job_stat
-    where job_id=:job_id;
- job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:00.025 1999 PST | Fri Dec 31 16:00:00.025 1999 PST | t                |          2 |               2 |              0 |             0
-(1 row)
-
--- data at 2
-SELECT * FROM test_continuous_agg_view ORDER BY 1;
- time_bucket | value 
--------------+-------
-           0 |     1
-           2 |     5
-(2 rows)
-
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
- ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
-------------------------------------------------------------
- 
-(1 row)
-
-SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |          application_name          |                                                                 msg                                                                  
---------+-----------+------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------
-      0 |         0 | Continuous Aggregate Policy [1001] | new materialization range for public.test_continuous_agg_table (time column time) larger than allowed in one run, truncating 12 to 2
-      1 |         0 | Continuous Aggregate Policy [1001] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 2
-      0 |         0 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |         0 | DB Scheduler                       | [TESTING] Wait until 25000, started at 0
-      0 |     25000 | Continuous Aggregate Policy [1001] | new materialization range for public.test_continuous_agg_table (time column time) larger than allowed in one run, truncating 12 to 4
-      1 |     25000 | Continuous Aggregate Policy [1001] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 4
-      0 |     25000 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |     25000 | DB Scheduler                       | [TESTING] Wait until 50000, started at 25000
-      0 |     50000 | Continuous Aggregate Policy [1001] | new materialization range for public.test_continuous_agg_table (time column time) larger than allowed in one run, truncating 12 to 6
-      1 |     50000 | Continuous Aggregate Policy [1001] | materializing continuous aggregate public.test_continuous_agg_view: nothing to invalidate, new range up to 6
-      0 |     50000 | DB Scheduler                       | [TESTING] Registered new background worker
-      1 |     50000 | DB Scheduler                       | [TESTING] Wait until 75000, started at 50000
-(12 rows)
-
-SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
-  id  |          application_name          | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |          proc_name          |       owner       | scheduled | hypertable_id |          config          
-------+------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-----------------------------+-------------------+-----------+---------------+--------------------------
- 1001 | Continuous Aggregate Policy [1001] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_continuous_aggregate | default_perm_user | t         |             3 | {"mat_hypertable_id": 3}
-(1 row)
-
--- job ran again, fast restart
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
-    FROM _timescaledb_internal.bgw_job_stat
-    where job_id=:job_id;
- job_id |           next_start            |           until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+---------------------------------+---------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          3 |               3 |              0 |             0
-(1 row)
-
--- data at 4
+-- should have refreshed everything we have so far
 SELECT * FROM test_continuous_agg_view ORDER BY 1;
  time_bucket | value 
 -------------+-------
            0 |     1
            2 |     5
            4 |     9
-(3 rows)
+           6 |    13
+           8 |    17
+          10 |    10
+(6 rows)
+
+-- invalidate some data
+UPDATE test_continuous_agg_table
+SET data = 11 WHERE time = 6;
+--advance time by 12h so that job runs one more time 
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |  mock_time  |              application_name              |                           msg                            
+--------+-------------+--------------------------------------------+----------------------------------------------------------
+      0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      0 |           0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range 0 , 12
+      0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
+      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range 0 , 12
+(6 rows)
+
+SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+    FROM _timescaledb_internal.bgw_job_stat
+    where job_id=:job_id;
+ job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
+   1001 | Sat Jan 01 16:00:00 2000 PST | Sat Jan 01 04:00:00 2000 PST | t                |          2 |               2 |              0 |             0
+(1 row)
+
+-- should have updated data for time=6 
+SELECT * FROM test_continuous_agg_view ORDER BY 1;
+ time_bucket | value 
+-------------+-------
+           0 |     1
+           2 |     5
+           4 |     9
+           6 |    18
+           8 |    17
+          10 |    10
+(6 rows)
 
 \x on
 --check the information views --
@@ -499,8 +479,8 @@ view_definition |  SELECT time_bucket(2, test_continuous_agg_table."time") AS ti
 select view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
 -[ RECORD 1 ]----------+-------------------------
 view_name              | test_continuous_agg_view
-completed_threshold    | 6
-invalidation_threshold | 6
+completed_threshold    | 
+invalidation_threshold | 12
 job_status             | Scheduled
 last_run_duration      | 
 
@@ -517,6 +497,12 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1;
 NOTICE:  adding index _materialized_hypertable_4_get_constant_no_perms_time_bucke_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(get_constant_no_perms, time_bucket)
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1002
+(1 row)
+
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -530,7 +516,35 @@ SELECT job_id, next_start, last_finish as until_next, last_run_success, total_ru
     where job_id=:job_id;
  job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
-   1002 | Sat Jan 01 03:48:45.075 2000 PST | Fri Dec 31 16:00:00.075 1999 PST | f                |          1 |               0 |              1 |             0
+   1002 | Sat Jan 01 15:48:45.025 2000 PST | Sat Jan 01 04:00:00.025 2000 PST | f                |          1 |               0 |              1 |             0
+(1 row)
+
+DROP MATERIALIZED VIEW test_continuous_agg_view;
+--advance clock to quit scheduler
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '25 hour')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+select ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+ ts_bgw_db_scheduler_test_wait_for_scheduler_finish 
+----------------------------------------------------
+ 
+(1 row)
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+(1 row)
+
+--clear log for next run of the scheduler
+TRUNCATE public.bgw_log;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
 (1 row)
 
 --
@@ -553,8 +567,7 @@ SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_te
 
 GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;
 INSERT INTO test_continuous_agg_table_w_grant
-    SELECT i, i FROM
-        (SELECT generate_series(0, 10) as i) AS j;
+    SELECT 1 , 1;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 -- make sure view can be created
 CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
@@ -565,6 +578,12 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
         GROUP BY 1;
+SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
+ add_refresh_continuous_aggregate_policy 
+-----------------------------------------
+                                    1003
+(1 row)
+
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
@@ -572,16 +591,22 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  
 (1 row)
 
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT id, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id ;
+  id  |        owner        
+------+---------------------
+ 1003 | default_perm_user_2
+(1 row)
+
+SELECT job_id, next_start, last_finish, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |           next_start           |           until_next           | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+--------------------------------+--------------------------------+------------------+------------+-----------------+----------------+---------------
-   1003 | Fri Dec 31 16:00:00.1 1999 PST | Fri Dec 31 16:00:00.1 1999 PST | t                |          1 |               1 |              0 |             0
+ job_id |          next_start          |         last_finish          |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------------------+------------------------------+----------------+------------------+------------+-----------------+----------------+---------------
+   1003 | Sat Jan 01 04:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST | @ 12 hours ago | t                |          1 |               1 |              0 |             0
 (1 row)
 
 --view is populated
-SELECT * FROM test_continuous_agg_view_user_2;
+SELECT * FROM test_continuous_agg_view_user_2 ORDER BY 1;
  time_bucket | value 
 -------------+-------
            0 |     1
@@ -591,8 +616,16 @@ SELECT * FROM test_continuous_agg_view_user_2;
 --revoke permissions from the continuous agg view owner to select from raw table
 --no further updates to cont agg should happen
 REVOKE SELECT ON test_continuous_agg_table_w_grant FROM public;
-INSERT INTO test_continuous_agg_table_w_grant VALUES(1,1);
+--add new data to table
+INSERT INTO test_continuous_agg_table_w_grant VALUES(5,1);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+--advance time by 12h so that job tries to run one more time 
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -603,9 +636,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
-   1003 | Sat Jan 01 03:48:45.125 2000 PST | Fri Dec 31 16:00:00.125 1999 PST | f                |          2 |               1 |              1 |             0
+ job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
+   1003 | Sat Jan 01 15:48:45 2000 PST | Sat Jan 01 04:00:00 2000 PST | f                |          2 |               1 |              1 |             0
 (1 row)
 
 --view was NOT updated; but the old stuff is still there
@@ -614,4 +647,17 @@ SELECT * FROM test_continuous_agg_view_user_2;
 -------------+-------
            0 |     1
 (1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT * from sorted_bgw_log;
+ msg_no |  mock_time  |              application_name              |                              msg                              
+--------+-------------+--------------------------------------------+---------------------------------------------------------------
+      0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
+      0 |           0 | Refresh Continuous Aggregate Policy [1003] | refresh continuous aggregate range 0 , 3
+      0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
+      0 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | job 1003 threw an error
+      1 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | permission denied for table test_continuous_agg_table_w_grant
+(7 rows)
 

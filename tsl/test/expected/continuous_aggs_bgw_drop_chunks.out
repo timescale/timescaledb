@@ -99,7 +99,7 @@ SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10) as drop
 SELECT alter_job(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
                                                 alter_job                                                 
 ----------------------------------------------------------------------------------------------------------
- (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""hypertable_id"": 2, ""retention_window"": 10}",-infinity)
+ (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""hypertable_id"": 2, ""retention_window"": 10}",-infinity)
 (1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(2000000);

@@ -84,8 +84,18 @@ AS '@MODULE_PATHNAME@', 'ts_policy_compression_proc'
 LANGUAGE C;
 
 /* continuous aggregates policy */
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_continuous_aggregate(job_id INTEGER, config JSONB)
-AS '@MODULE_PATHNAME@', 'ts_policy_continuous_aggregate_proc'
+CREATE OR REPLACE FUNCTION add_refresh_continuous_aggregate_policy(continuous_aggregate REGCLASS, start_interval "any",  end_interval "any" , schedule_interval INTERVAL, if_not_exists BOOL = false)
+RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
+LANGUAGE C VOLATILE ;
+
+CREATE OR REPLACE FUNCTION remove_refresh_continuous_aggregate_policy(continuous_aggregate REGCLASS, if_not_exists BOOL = false)
+RETURNS VOID 
+AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_remove'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_refresh_continuous_aggregate(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_proc'
 LANGUAGE C;
 
 -- Returns the updated job schedule values

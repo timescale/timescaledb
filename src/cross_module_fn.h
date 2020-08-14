@@ -50,7 +50,9 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_compression_add;
 	PGFunction policy_compression_proc;
 	PGFunction policy_compression_remove;
-	PGFunction policy_continuous_aggregate_proc;
+	PGFunction policy_refresh_cagg_add;
+	PGFunction policy_refresh_cagg_proc;
+	PGFunction policy_refresh_cagg_remove;
 	PGFunction policy_reorder_add;
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_remove;

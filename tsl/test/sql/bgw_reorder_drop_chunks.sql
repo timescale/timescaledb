@@ -294,7 +294,7 @@ CREATE MATERIALIZED VIEW tdc_view
   AS SELECT time_bucket('1 hour', time), count(drop_order)
      FROM test_drop_chunks_table
      GROUP BY 1;
-
+SELECT add_refresh_continuous_aggregate_policy('tdc_view', NULL, '2 h'::interval, '12 h'::interval);
 SELECT show_chunks('test_drop_chunks_table');
 
 SELECT alter_job(:drop_chunks_job_id, max_retries => 0);

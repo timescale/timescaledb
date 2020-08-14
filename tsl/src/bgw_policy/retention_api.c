@@ -22,6 +22,7 @@
 #include "hypertable.h"
 #include "dimension.h"
 #include "license.h"
+#include "policy_utils.h"
 #include "utils.h"
 #include "jsonb_utils.h"
 #include "bgw_policy/job.h"
@@ -132,37 +133,6 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 	return ht;
 }
 
-static bool
-retention_window_equal(Oid partitioning_type, const Jsonb *config, Oid lag_type, Datum lag_datum)
-{
-	if (IS_INTEGER_TYPE(partitioning_type))
-	{
-		int64 config_value = policy_retention_get_retention_window_int(config);
-
-		switch (lag_type)
-		{
-			case INT2OID:
-				return config_value == DatumGetInt16(lag_datum);
-			case INT4OID:
-				return config_value == DatumGetInt32(lag_datum);
-			case INT8OID:
-				return config_value == DatumGetInt64(lag_datum);
-			default:
-				return false;
-		}
-	}
-	else
-	{
-		if (lag_type != INTERVALOID)
-			return false;
-
-		Interval *config_value = policy_retention_get_retention_window_interval(config);
-
-		return DatumGetBool(
-			DirectFunctionCall2(interval_eq, IntervalPGetDatum(config_value), lag_datum));
-	}
-}
-
 Datum
 policy_retention_add(PG_FUNCTION_ARGS)
 {
@@ -215,10 +185,11 @@ policy_retention_add(PG_FUNCTION_ARGS)
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
 
-		if (retention_window_equal(partitioning_type,
-								   existing->fd.config,
-								   window_type,
-								   window_datum))
+		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
+														CONFIG_KEY_RETENTION_WINDOW,
+														partitioning_type,
+														window_type,
+														window_datum))
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);

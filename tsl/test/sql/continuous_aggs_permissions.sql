@@ -32,6 +32,8 @@ select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location;
 
+SELECT add_refresh_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
+
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 

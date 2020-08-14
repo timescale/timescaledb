@@ -30,4 +30,3 @@ $$;
 
 -- can only be dropped after views have been rebuilt
 DROP FUNCTION IF EXISTS _timescaledb_internal.cagg_watermark(oid);
-

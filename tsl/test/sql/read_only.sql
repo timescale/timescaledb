@@ -242,9 +242,8 @@ FROM
 GROUP BY bucket, device_id;
 
 -- policy API
-
 CALL _timescaledb_internal.policy_compression(1,'{}');
-CALL _timescaledb_internal.policy_continuous_aggregate(1,'{}');
+CALL _timescaledb_internal.policy_refresh_continuous_aggregate(1,'{}');
 CALL _timescaledb_internal.policy_reorder(1,'{}');
 CALL _timescaledb_internal.policy_retention(1,'{}');
 

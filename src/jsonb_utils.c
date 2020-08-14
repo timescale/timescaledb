@@ -19,6 +19,15 @@
 static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value);
 
 void
+ts_jsonb_add_null(JsonbParseState *state, const char *key)
+{
+	JsonbValue json_value;
+
+	json_value.type = jbvNull;
+	ts_jsonb_add_value(state, key, &json_value);
+}
+
+void
 ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean)
 {
 	JsonbValue json_value;

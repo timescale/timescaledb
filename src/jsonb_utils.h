@@ -12,6 +12,7 @@
 
 #include "export.h"
 
+extern TSDLLEXPORT void ts_jsonb_add_null(JsonbParseState *state, const char *key);
 extern TSDLLEXPORT void ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean);
 extern TSDLLEXPORT void ts_jsonb_add_str(JsonbParseState *state, const char *key,
 										 const char *value);

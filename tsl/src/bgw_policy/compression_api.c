@@ -15,6 +15,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "license.h"
+#include "policy_utils.h"
 #include "utils.h"
 #include "jsonb_utils.h"
 #include "bgw_policy/job.h"
@@ -79,37 +80,6 @@ policy_compression_get_older_than_interval(const Jsonb *config)
 				 errmsg("could not find older_than in config for job")));
 
 	return interval;
-}
-
-static bool
-compression_lag_equal(Oid partitioning_type, Jsonb *config, Oid lag_type, Datum lag_datum)
-{
-	if (IS_INTEGER_TYPE(partitioning_type))
-	{
-		int64 config_value = policy_compression_get_older_than_int(config);
-
-		switch (lag_type)
-		{
-			case INT2OID:
-				return config_value == DatumGetInt16(lag_datum);
-			case INT4OID:
-				return config_value == DatumGetInt32(lag_datum);
-			case INT8OID:
-				return config_value == DatumGetInt64(lag_datum);
-			default:
-				return false;
-		}
-	}
-	else
-	{
-		if (lag_type != INTERVALOID)
-			return false;
-
-		Interval *config_value = policy_compression_get_older_than_interval(config);
-
-		return DatumGetBool(
-			DirectFunctionCall2(interval_eq, IntervalPGetDatum(config_value), lag_datum));
-	}
 }
 
 Datum
@@ -180,10 +150,11 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		}
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
-		if (compression_lag_equal(partitioning_type,
-								  existing->fd.config,
-								  older_than_type,
-								  older_than_datum))
+		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
+														CONFIG_KEY_OLDER_THAN,
+														partitioning_type,
+														older_than_type,
+														older_than_datum))
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
