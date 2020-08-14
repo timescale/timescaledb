@@ -26,7 +26,7 @@ cagg_bucket_count
 4              
 hypertable     threshold      
 
-conditions     62             
+conditions     70             
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 71, 97);
 
@@ -55,7 +55,7 @@ cagg_bucket_count
 7              
 hypertable     threshold      
 
-conditions     97             
+conditions     100            
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
@@ -99,7 +99,7 @@ cagg_bucket_count
 3              
 hypertable     threshold      
 
-conditions     97             
+conditions     100            
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
@@ -147,7 +147,7 @@ cagg_bucket_count
 7              
 hypertable     threshold      
 
-conditions     97             
+conditions     100            
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
@@ -195,7 +195,7 @@ cagg_bucket_count
 7              
 hypertable     threshold      
 
-conditions     97             
+conditions     100            
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
@@ -239,7 +239,7 @@ cagg_bucket_count
 4              
 hypertable     threshold      
 
-conditions     62             
+conditions     70             
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
@@ -287,7 +287,7 @@ cagg_bucket_count
 4              
 hypertable     threshold      
 
-conditions     62             
+conditions     70             
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
@@ -338,7 +338,7 @@ cagg_bucket_count
 7              
 hypertable     threshold      
 
-conditions     97             
+conditions     100            
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
@@ -384,7 +384,7 @@ cagg_bucket_count
 3              
 hypertable     threshold      
 
-conditions     97             
+conditions     100            
 step L1_unlock_threshold_table: 
     ROLLBACK;
 

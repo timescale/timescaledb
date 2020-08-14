@@ -372,6 +372,13 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 				 errmsg("invalid refresh window"),
 				 errhint("The start of the window must be before the end.")));
 
+	refresh_window = compute_bucketed_refresh_window(&refresh_window, cagg->data.bucket_width);
+
+	elog(DEBUG1,
+		 "computed refresh window at [ " INT64_FORMAT ", " INT64_FORMAT "]",
+		 refresh_window.start,
+		 refresh_window.end);
+
 	/* Perform the refresh across two transactions.
 	 *
 	 * The first transaction moves the invalidation threshold (if needed) and
@@ -410,14 +417,6 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	 * windows.
 	 */
 	LockRelationOid(cagg_ht->main_table_relid, ExclusiveLock);
-
-	refresh_window = compute_bucketed_refresh_window(&refresh_window, cagg->data.bucket_width);
-
-	elog(DEBUG1,
-		 "computed refresh window at [ " INT64_FORMAT ", " INT64_FORMAT "]",
-		 refresh_window.start,
-		 refresh_window.end);
-
 	invalidation_process_cagg_log(cagg, &refresh_window);
 	continuous_agg_refresh_with_window(cagg, &refresh_window);
 
