@@ -71,7 +71,7 @@ RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_time_to_internal' LANGUAGE C VOLATILE
 
 -- return the materialization watermark for a continuous aggregate materialization hypertable
 -- returns NULL when no materialization has happened yet
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_watermark(hypertable_id oid)
+CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_watermark(hypertable_id INTEGER)
 RETURNS INT8 LANGUAGE SQL AS
 $BODY$
 
