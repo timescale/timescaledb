@@ -9,6 +9,7 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #2090 Fix index creation with IF NOT EXISTS for existing indexes
 * #2092 Fix delete on tables involving hypertables with compression
+* #2222 Fix `negative bitmapset member not allowed` in decompression
 
 **Thanks**
 * @PichetGoulu for reporting an issue with index creation and IF NOT EXISTS
