@@ -9,17 +9,15 @@
  * for more detail.
  */
 #include <postgres.h>
-
 #include <access/xact.h>
 #include <common/base64.h>
 #include <utils/builtins.h>
-#include <utils/elog.h>
-#include <utils/json.h>
-#include <utils/jsonb.h>
-#include <utils/jsonapi.h>
-#include <utils/memutils.h>
 #include <utils/datetime.h>
+#include <utils/elog.h>
+#include <utils/jsonb.h>
+#include <utils/memutils.h>
 
+#include <export.h>
 #include <license_guc.h>
 #include <jsonb_utils.h>
 
@@ -72,7 +70,7 @@ static bool printed_license_expiration_warning = false;
 
 TS_FUNCTION_INFO_V1(tsl_license_update_check);
 
-PGDLLEXPORT Datum
+Datum
 tsl_license_update_check(PG_FUNCTION_ARGS)
 {
 	bool license_deserialized;

@@ -21,7 +21,6 @@ gapfill_marker(PG_FUNCTION_ARGS)
 }
 
 #define GAPFILL_TIMEBUCKET_WRAPPER(datatype)                                                       \
-	TS_FUNCTION_INFO_V1(ts_gapfill_##datatype##_bucket);                                           \
 	Datum gapfill_##datatype##_time_bucket(PG_FUNCTION_ARGS)                    \
 	{                                                                                              \
 		/*                                                                                         \

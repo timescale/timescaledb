@@ -11,7 +11,6 @@
  * the PostgreSQL License.
  */
 #include <postgres.h>
-#include <access/htup_details.h>
 #include <access/xact.h>
 #include <catalog/pg_foreign_server.h>
 #include <commands/defrem.h>
@@ -21,27 +20,20 @@
 #include <mb/pg_wchar.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
-#include <pgstat.h>
 #include <port.h>
 #include <postmaster/postmaster.h>
-#include <storage/latch.h>
 #include <utils/builtins.h>
-#include <utils/hsearch.h>
+#include <utils/fmgrprotos.h>
 #include <utils/inval.h>
-#include <utils/memutils.h>
-#include <utils/syscache.h>
-#include <utils/uuid.h>
 #include <utils/guc.h>
 
-#include <export.h>
-#include <telemetry/telemetry_metadata.h>
+#include <dist_util.h>
+#include <errors.h>
 #include <extension_constants.h>
-#include "compat.h"
+#include <guc.h>
+#include <telemetry/telemetry_metadata.h>
 #include "connection.h"
-#include "guc.h"
 #include "utils.h"
-#include "dist_util.h"
-#include "errors.h"
 
 /*
  * Connection library for TimescaleDB.

@@ -21,16 +21,17 @@
 
 #include <guc.h>
 
-#include "option.h"
-#include "relinfo.h"
-#include "scan_plan.h"
-#include "scan_exec.h"
-#include "modify_plan.h"
-#include "modify_exec.h"
 #include "data_node_scan_plan.h"
 #include "debug_guc.h"
 #include "debug.h"
+#include "fdw.h"
 #include "fdw_utils.h"
+#include "modify_exec.h"
+#include "modify_plan.h"
+#include "option.h"
+#include "relinfo.h"
+#include "scan_exec.h"
+#include "scan_plan.h"
 
 /*
  * Parse options from foreign table and apply them to fpinfo.
@@ -393,15 +394,11 @@ static FdwRoutine timescaledb_fdw_routine = {
 	.AnalyzeForeignTable = NULL,
 };
 
-TS_FUNCTION_INFO_V1(timescaledb_fdw_handler);
-
 Datum
 timescaledb_fdw_handler(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_POINTER(&timescaledb_fdw_routine);
 }
-
-PG_FUNCTION_INFO_V1(timescaledb_fdw_validator);
 
 Datum
 timescaledb_fdw_validator(PG_FUNCTION_ARGS)

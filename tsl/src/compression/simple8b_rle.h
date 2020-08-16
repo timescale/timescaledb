@@ -12,7 +12,6 @@
 #include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
 
-#include <export.h>
 #include <adts/bit_array.h>
 
 #include <adts/uint64_vec.h>

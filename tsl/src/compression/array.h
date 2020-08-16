@@ -17,7 +17,6 @@
 
 #include <fmgr.h>
 
-#include <export.h>
 #include "compression/compression.h"
 
 typedef struct ArrayCompressor ArrayCompressor;
