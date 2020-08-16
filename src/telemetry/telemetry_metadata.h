@@ -9,6 +9,8 @@
 #include <postgres.h>
 #include <utils/jsonb.h>
 
+#include <export.h>
+
 extern void ts_telemetry_metadata_add_values(JsonbParseState *state);
 extern TSDLLEXPORT Datum ts_telemetry_metadata_get_uuid(void);
 extern Datum ts_telemetry_metadata_get_exported_uuid(void);

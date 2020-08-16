@@ -22,7 +22,6 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 
-#include <export.h>
 #include "compression/compression.h"
 
 typedef struct DeltaDeltaCompressor DeltaDeltaCompressor;

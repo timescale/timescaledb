@@ -19,8 +19,6 @@
 
 #include <fmgr.h>
 
-#include <export.h>
-
 typedef struct DictionaryCompressor DictionaryCompressor;
 typedef struct DictionaryCompressed DictionaryCompressed;
 typedef struct DictionaryDecompressionIterator DictionaryDecompressionIterator;
