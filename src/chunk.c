@@ -2492,7 +2492,21 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 					ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
 														   &tuplock,
 														   CurrentMemoryContext);
-				if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
+				/* If the slice is not found in the scan above, the table is
+				 * broken so we do not delete the slice. We proceed with
+				 * anyway since users need to be able to drop broken tables or
+				 * remove broken chunks. */
+				if (!slice)
+					ereport(WARNING,
+							(errmsg("dimension slice %d was missing, proceeding anyway",
+									cc->fd.dimension_slice_id),
+							 errdetail("Chunk \"%s.%s\" is dependent on dimension slice %d, but it "
+									   "was missing. Proceeding to delete chunk anyway.",
+									   quote_identifier(NameStr(form.schema_name)),
+									   quote_identifier(NameStr(form.table_name)),
+									   cc->fd.dimension_slice_id)));
+				if (slice &&
+					ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
 																   NULL,
 																   CurrentMemoryContext) == 0)
 					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);

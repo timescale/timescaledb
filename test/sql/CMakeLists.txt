@@ -1,6 +1,7 @@
 set(TEST_FILES
   alter.sql
   alternate_users.sql
+  broken_tables.sql
   chunks.sql
   chunk_utils.sql
   cluster.sql
