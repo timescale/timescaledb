@@ -47,6 +47,7 @@ INSERT INTO disttable VALUES
        ('2018-07-01 06:01', 13, 3.1),
        ('2018-07-01 09:11', 90, 10303.12),
        ('2018-07-01 08:01', 29, 64);
+
 SELECT * FROM disttable ORDER BY time;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
 
@@ -73,6 +74,13 @@ SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:0
        avg(value)
 FROM disttable
 GROUP BY 1;
+SET enable_partitionwise_aggregate = 'on';
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+--       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+SET enable_partitionwise_aggregate = 'off';
 
 -- Ensure that move_chunk() and reorder_chunk() functions cannot be used
 -- with distributed hypertable
