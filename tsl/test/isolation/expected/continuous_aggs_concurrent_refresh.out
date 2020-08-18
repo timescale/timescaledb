@@ -17,13 +17,16 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 cagg_bucket_count
 
-4              
+7              
 hypertable     threshold      
 
 conditions     70             
@@ -43,8 +46,11 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 70             24.6           
@@ -52,7 +58,7 @@ bucket         avg_temp
 90             21.3           
 cagg_bucket_count
 
-7              
+10             
 hypertable     threshold      
 
 conditions     100            
@@ -91,12 +97,15 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 70             24.6           
 80             23.6           
 90             21.3           
 cagg_bucket_count
 
-3              
+6              
 hypertable     threshold      
 
 conditions     100            
@@ -135,8 +144,11 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 70             24.6           
@@ -144,7 +156,7 @@ bucket         avg_temp
 90             21.3           
 cagg_bucket_count
 
-7              
+10             
 hypertable     threshold      
 
 conditions     100            
@@ -183,8 +195,11 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 70             24.6           
@@ -192,7 +207,7 @@ bucket         avg_temp
 90             21.3           
 cagg_bucket_count
 
-7              
+10             
 hypertable     threshold      
 
 conditions     100            
@@ -230,13 +245,16 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 cagg_bucket_count
 
-4              
+7              
 hypertable     threshold      
 
 conditions     70             
@@ -278,13 +296,16 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 cagg_bucket_count
 
-4              
+7              
 hypertable     threshold      
 
 conditions     70             
@@ -326,8 +347,11 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 30             18.3           
-40             15.1           
+40             16.0909090909091
 50             26.9           
 60             18.9           
 70             24.6           
@@ -335,7 +359,7 @@ bucket         avg_temp
 90             21.3           
 cagg_bucket_count
 
-7              
+10             
 hypertable     threshold      
 
 conditions     100            
@@ -376,12 +400,15 @@ step S1_select:
 
 bucket         avg_temp       
 
+0              15.8888888888889
+10             14.2           
+20             13.4           
 70             24.6           
 80             23.6           
 90             21.3           
 cagg_bucket_count
 
-3              
+6              
 hypertable     threshold      
 
 conditions     100            

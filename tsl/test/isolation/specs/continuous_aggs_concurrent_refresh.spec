@@ -85,6 +85,36 @@ setup
     END; $$ LANGUAGE plpgsql;
 }
 
+# Move the invalidation threshold so that we can generate some
+# invalidations. This must be done in its own setup block since
+# refreshing can't be done in a transaction block.
+setup
+{
+    CALL refresh_continuous_aggregate('cond_10', 0, 30);
+
+}
+
+# Generate some invalidations. Must be done in separate transcations
+# or otherwise there will be only one invalidation.
+setup
+{
+    BEGIN;
+    INSERT INTO conditions
+    SELECT t, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+    FROM generate_series(1, 10, 1) t;
+    COMMIT;
+    BEGIN;
+    INSERT INTO conditions
+    SELECT t, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+    FROM generate_series(10, 20, 1) t;
+    COMMIT;
+    BEGIN;
+    INSERT INTO conditions
+    SELECT t, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
+    FROM generate_series(15, 40, 1) t;
+    COMMIT;
+}
+
 teardown {
     DROP TABLE conditions CASCADE;
 }
@@ -202,7 +232,6 @@ step "L3_unlock_cagg_table"
 {
     ROLLBACK;
 }
-
 
 # Session to view the contents of a cagg after materialization. It
 # also prints the bucket count (number of rows in the materialization
