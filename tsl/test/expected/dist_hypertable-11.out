@@ -1695,7 +1695,7 @@ SET ROLE :ROLE_1;
 CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __region text, reading float);
 SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region',
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
-create_default_indexes => FALSE, if_not_exists => TRUE, migrate_data => TRUE, replication_factor => 2,
+create_default_indexes => FALSE, if_not_exists => TRUE, replication_factor => 2,
 data_nodes => '{ "data_node_3" }');
 WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
@@ -4544,3 +4544,24 @@ SELECT  * FROM _timescaledb_catalog.hypertable_id_seq;
          24 |      23 | t
 (1 row)
 
+-- Test that creating a distributed hypertable from a table with data
+-- fails, and that migrate_data blocked.
+CREATE TABLE dist_hypertable_1 (
+  time TIMESTAMPTZ NOT NULL,
+  device INTEGER,
+  temp FLOAT
+);
+INSERT INTO dist_hypertable_1 VALUES
+       ('2017-01-01 06:01', 1),
+       ('2017-01-01 09:11', 3),
+       ('2017-01-01 08:01', 1),
+       ('2017-01-02 08:01', 2),
+       ('2018-07-02 08:01', 87);
+\set ON_ERROR_STOP 0
+SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device', 3,
+       migrate_data => FALSE);
+ERROR:  table "dist_hypertable_1" is not empty
+SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device', 3,
+       migrate_data => TRUE);
+ERROR:  cannot migrate data for distributed hypertable
+\set ON_ERROR_STOP 1

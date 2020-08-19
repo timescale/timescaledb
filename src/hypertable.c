@@ -1835,6 +1835,11 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid main_table: cannot be NULL")));
 
+	if (migrate_data && is_dist_call)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot migrate data for distributed hypertable")));
+
 	if (NULL == time_dim_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
