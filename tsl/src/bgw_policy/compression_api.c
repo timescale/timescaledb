@@ -118,6 +118,8 @@ policy_compression_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
+	PreventCommandIfReadOnly("policy_compression()");
+
 	policy_compression_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
 	PG_RETURN_VOID();
@@ -135,6 +137,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	Oid older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
+
+	PreventCommandIfReadOnly("add_compression_policy()");
 
 	Hypertable *hypertable;
 	Cache *hcache;
@@ -268,7 +272,8 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 
-	/* Remove the job, then remove the policy */
+	PreventCommandIfReadOnly("remove_compression_policy()");
+
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,

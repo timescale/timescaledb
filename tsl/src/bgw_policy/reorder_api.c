@@ -111,6 +111,8 @@ policy_reorder_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
+	PreventCommandIfReadOnly("policy_reorder()");
+
 	policy_reorder_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
 	PG_RETURN_VOID();
@@ -124,6 +126,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	Dimension *dim;
+
+	PreventCommandIfReadOnly("add_reorder_policy()");
 
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Oid ht_oid = PG_GETARG_OID(0);
@@ -234,6 +238,8 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 {
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
+
+	PreventCommandIfReadOnly("remove_reorder_policy()");
 
 	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
 

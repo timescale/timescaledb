@@ -241,4 +241,23 @@ FROM
   test_contagg
 GROUP BY bucket, device_id;
 
-\set ON_ERROR_STOP 1
+-- policy API
+
+CALL _timescaledb_internal.policy_compression(1,'{}');
+CALL _timescaledb_internal.policy_continuous_aggregate(1,'{}');
+CALL _timescaledb_internal.policy_reorder(1,'{}');
+CALL _timescaledb_internal.policy_retention(1,'{}');
+
+SELECT add_compression_policy('test_table', '1w');
+SELECT remove_compression_policy('test_table');
+
+SELECT add_reorder_policy('test_table', 'test_table_time_idx');
+SELECT remove_reorder_policy('test_table');
+
+SELECT add_retention_policy('test_table', '1w');
+SELECT remove_retention_policy('test_table');
+
+SELECT add_job('now','12h');
+SELECT alter_job(1,scheduled:=false);
+SELECT delete_job(1);
+

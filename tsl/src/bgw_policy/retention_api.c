@@ -36,6 +36,8 @@ policy_retention_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
+	PreventCommandIfReadOnly("policy_retention()");
+
 	policy_retention_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
 	PG_RETURN_VOID();
@@ -173,18 +175,20 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	Hypertable *hypertable;
 	Cache *hcache;
+
 	Oid owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 	Oid partitioning_type;
 	Dimension *dim;
 	/* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 	Interval default_schedule_interval = { .day = 1 };
-	/* Default max runtime for a drop_chunks job should not be very long. Right now set to 5 minutes
-	 */
+	/* Default max runtime should not be very long. Right now set to 5 minutes */
 	Interval default_max_runtime = { .time = 5 * USECS_PER_MINUTE };
-	/* Default retry period for drop_chunks_jobs is currently 5 minutes */
+	/* Default retry period is currently 5 minutes */
 	Interval default_retry_period = { .time = 5 * USECS_PER_MINUTE };
 	/* Right now, there is an infinite number of retries for drop_chunks jobs */
 	int default_max_retries = -1;
+
+	PreventCommandIfReadOnly("add_retention_policy()");
 
 	/* Verify that the hypertable owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner_id, JOB_TYPE_DROP_CHUNKS);
@@ -316,6 +320,8 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 	Oid table_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 	Cache *hcache;
+
+	PreventCommandIfReadOnly("remove_retention_policy()");
 
 	Hypertable *hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, true, &hcache);
 	if (!hypertable)

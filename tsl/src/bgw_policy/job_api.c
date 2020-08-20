@@ -53,6 +53,8 @@ job_add(PG_FUNCTION_ARGS)
 	Jsonb *config = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
 	bool scheduled = PG_ARGISNULL(4) ? true : PG_GETARG_BOOL(4);
 
+	PreventCommandIfReadOnly("add_job()");
+
 	func_name = get_func_name(proc);
 	if (func_name == NULL)
 		ereport(ERROR,
@@ -104,6 +106,9 @@ Datum
 job_delete(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
+
+	PreventCommandIfReadOnly("delete_job()");
+
 	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
 	Oid owner = get_role_oid(NameStr(job->fd.owner), false);
 
@@ -125,6 +130,7 @@ Datum
 job_run(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
+
 	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
 
 	job_execute(job);
@@ -166,6 +172,8 @@ job_alter(PG_FUNCTION_ARGS)
 
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
+
+	PreventCommandIfReadOnly("alter_job()");
 
 	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
 
