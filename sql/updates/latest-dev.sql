@@ -11,7 +11,7 @@ DROP FUNCTION _timescaledb_internal.partitioning_column_to_pretty;
 DROP FUNCTION _timescaledb_internal.range_value_to_pretty;
 -- end of do not reorder
 DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
-DROP VIEW If EXISTS timescaledb_information.compressed_hypertable_stats;
+DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
 
 -- Add new function definitions, columns and tables for distributed hypertables
 DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
@@ -25,6 +25,7 @@ DROP FUNCTION IF EXISTS alter_job_schedule;
 
 DROP VIEW IF EXISTS timescaledb_information.policy_stats;
 DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;
+DROP VIEW IF EXISTS timescaledb_information.reorder_policies;
 
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
@@ -96,8 +97,8 @@ ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_schema_na
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_id_schema_name_key;
 
 -- add fields for custom jobs/generic configuration to bgw_job table
-ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_name NAME NOT NULL DEFAULT '';
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_schema NAME NOT NULL DEFAULT '';
+ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN proc_name NAME NOT NULL DEFAULT '';
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN owner NAME NOT NULL DEFAULT CURRENT_ROLE;
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN scheduled BOOL NOT NULL DEFAULT true;
 ALTER TABLE _timescaledb_config.bgw_job ADD COLUMN hypertable_id INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
@@ -112,7 +113,7 @@ UPDATE
 SET
   application_name = format('%s [%s]', application_name, id),
   proc_schema = '_timescaledb_internal',
-  proc_name = 'policy_telemetry_proc',
+  proc_name = 'policy_telemetry',
   owner = CURRENT_ROLE
 WHERE job_type = 'telemetry_and_version_check_if_enabled';
 
@@ -200,17 +201,11 @@ FROM _timescaledb_catalog.continuous_agg c
 WHERE job_type = 'continuous_aggregate'
   AND job.id = c.job_id;
 
---rewrite catalog table to not break catalog scans on tables with missingval optimization
-CLUSTER  _timescaledb_config.bgw_job USING bgw_job_pkey;
-ALTER TABLE _timescaledb_config.bgw_job SET WITHOUT CLUSTER;
-
-CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_name,proc_schema,hypertable_id);
-
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_compress_chunks;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_drop_chunks;
 DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_reorder CASCADE;
-DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_compress_chunks CASCADE;
+DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_compress_chunks;
 DROP TABLE IF EXISTS _timescaledb_config.bgw_policy_drop_chunks;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.valid_ts_interval;
@@ -219,6 +214,44 @@ DROP TYPE IF EXISTS _timescaledb_catalog.ts_interval;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregate_stats;
 ALTER TABLE IF EXISTS _timescaledb_catalog.continuous_agg DROP COLUMN IF EXISTS job_id;
+
+-- rebuild bgw_job table
+CREATE TABLE _timescaledb_config.bgw_job_tmp AS SELECT * FROM _timescaledb_config.bgw_job;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_job;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_config.bgw_job_id_seq;
+ALTER TABLE _timescaledb_internal.bgw_job_stat DROP CONSTRAINT IF EXISTS bgw_job_stat_job_id_fkey;
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT IF EXISTS bgw_policy_chunk_stats_job_id_fkey;
+DROP TABLE _timescaledb_config.bgw_job;
+
+CREATE SEQUENCE IF NOT EXISTS _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
+
+CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
+    id                  INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
+    application_name    NAME        NOT NULL,
+    schedule_interval   INTERVAL    NOT NULL,
+    max_runtime         INTERVAL    NOT NULL,
+    max_retries         INTEGER     NOT NULL,
+    retry_period        INTERVAL    NOT NULL,
+    proc_schema         NAME        NOT NULL,
+    proc_name           NAME        NOT NULL,
+    owner               NAME        NOT NULL DEFAULT CURRENT_ROLE,
+    scheduled           BOOL        NOT NULL DEFAULT true,
+    hypertable_id       INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    config              JSONB
+);
+
+ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
+CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
+
+INSERT INTO _timescaledb_config.bgw_job SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config FROM _timescaledb_config.bgw_job_tmp ORDER BY id;
+DROP TABLE _timescaledb_config.bgw_job_tmp;
+ALTER TABLE _timescaledb_internal.bgw_job_stat ADD CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY(job_id) REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats ADD CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY(job_id) REFERENCES _timescaledb_config.bgw_job(id) ON DELETE CASCADE;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
+GRANT SELECT ON _timescaledb_config.bgw_job TO PUBLIC;
+GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
 
 -- rebuild continuous aggregate table
 CREATE TABLE _timescaledb_catalog.continuous_agg_tmp AS SELECT * FROM _timescaledb_catalog.continuous_agg;

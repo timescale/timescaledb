@@ -152,7 +152,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	check_valid_index(ht, index_name);
 
 	/* Verify that the hypertable owner can create a background worker */
-	ts_bgw_job_validate_job_owner(owner_id, JOB_TYPE_REORDER);
+	ts_bgw_job_validate_job_owner(owner_id);
 
 	/* Make sure that an existing reorder policy doesn't exist on this hypertable */
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
@@ -223,8 +223,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
 										DEFAULT_RETRY_PERIOD,
-										&proc_name,
 										&proc_schema,
+										&proc_name,
 										&owner,
 										true,
 										hypertable_id,

@@ -15,29 +15,22 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_wait_for_scheduler_finish() RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-
-CREATE OR REPLACE FUNCTION ts_bgw_params_destroy() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_params_destroy() RETURNS VOID AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_test_job_sleep(job_id INT, config JSONB) RETURNS VOID AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION insert_job(application_name NAME, job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, proc_name NAME DEFAULT '', proc_schema NAME DEFAULT '', owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true, hypertable_id INTEGER DEFAULT 0, config JSONB DEFAULT '{}')
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_test_bgw_job_insert_relation'
-LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
+$$
+  INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,retry_period,proc_name,proc_schema,owner,scheduled) VALUES($1,$3,$4,3,$5,$2,'public',$6,$7) RETURNING id;
+$$;
 
 CREATE OR REPLACE FUNCTION test_toggle_scheduled(job_id INTEGER) RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS
 $$
   UPDATE _timescaledb_config.bgw_job SET scheduled = NOT scheduled WHERE id = $1;
 $$;
-
-CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER)
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
-LANGUAGE C VOLATILE STRICT;
 
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
@@ -46,9 +39,6 @@ LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-
---allow us to inject test jobs
-ALTER TABLE _timescaledb_config.bgw_job DROP CONSTRAINT valid_job_type;
 
 CREATE FUNCTION get_application_pid(app_name TEXT) RETURNS INTEGER LANGUAGE SQL AS
 $BODY$
@@ -70,6 +60,28 @@ BEGIN
         ELSE
             RETURN r;
         END IF;
+    END LOOP;
+    RETURN NULL;
+END
+$BODY$;
+
+CREATE FUNCTION wait_for_logentry(job_id INTEGER) RETURNS TEXT LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  app_name TEXT;
+  message TEXT;
+BEGIN
+    SELECT application_name INTO app_name FROM _timescaledb_config.bgw_job WHERE id = job_id;
+
+    --wait up to a second checking each 100ms
+    FOR i in 1..10
+    LOOP
+        SELECT msg INTO message FROM bgw_log WHERE application_name = app_name ORDER BY msg_no DESC LIMIT 1;
+        IF FOUND THEN
+          RETURN message;
+        END IF;
+        PERFORM pg_sleep(0.1);
+        PERFORM pg_stat_clear_snapshot();
     END LOOP;
     RETURN NULL;
 END
@@ -114,7 +126,7 @@ SELECT * FROM sorted_bgw_log;
 
 TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time();
-SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s',scheduled:= false);
+SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s',scheduled:= false);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
@@ -127,14 +139,29 @@ SELECT * FROM sorted_bgw_log;
 SELECT delete_job(1000);
 
 --
+-- test deleting job also terminates running jobs
+--
+
+SELECT add_job('ts_bgw_test_job_sleep','1h') AS job_id \gset
+SELECT ts_bgw_db_scheduler_test_run();
+
+SELECT wait_for_logentry(:job_id);
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'Custom Job%';
+
+-- have to suppress notices here as delete_job will print pid of the running background worker processes
+SET client_min_messages TO WARNING;
+SELECT delete_job(:job_id);
+RESET client_min_messages;
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'Custom Job%';
+
+--
 -- Test running a normal job
 --
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq RESTART;
 SELECT ts_bgw_params_reset_time();
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+SELECT insert_job('test_job_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from _timescaledb_config.bgw_job;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -172,8 +199,7 @@ TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '100ms');
+SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', INTERVAL '100ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --Run the first time and error
@@ -216,8 +242,7 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
 --set timeout lower than job length
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '20ms', 3, INTERVAL '50ms');
+SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '20ms', INTERVAL '50ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:IMMEDIATELY_SET_UNTIL);
@@ -235,8 +260,7 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
 --set timeout to 0
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '0', 3, INTERVAL '10ms');
+SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '0', INTERVAL '10ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(550);
@@ -255,8 +279,7 @@ TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time();
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 DELETE FROM _timescaledb_config.bgw_job;
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '500ms');
+SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '500ms');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --escalated priv needed for access to pg_stat_activity
@@ -283,10 +306,6 @@ TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time();
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 DELETE FROM _timescaledb_config.bgw_job;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
---escalated priv needed for access to pg_stat_activity
-\c :TEST_DBNAME :ROLE_SUPERUSER
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_STANDARD_WAITLATCH);
 SELECT ts_bgw_db_scheduler_test_run(-1);
@@ -315,12 +334,7 @@ TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
---escalated priv needed for access to pg_stat_activity
-\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT insert_job('test_job_3_long', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms');
 
 SELECT ts_bgw_db_scheduler_test_run(500);
 SELECT wait_application_pid('test_job_3_long') IS NOT NULL ;
@@ -396,15 +410,15 @@ SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
 --Our normal limit is 8 jobs (1 already taken up by the launcher, we don't register the test scheduler)
 --so start 8 workers. Make the schedule_INTERVAL long and the retry period short so that the
 --retries happen within the scheduler run time but everything only runs once.
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_3_long_1', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_2', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_3', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_4', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms'),
-('test_job_3_long_8', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', 3, INTERVAL '10ms');
+SELECT
+insert_job('test_job_3_long_1', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_2', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_3', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_4', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_5', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_6', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_7', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms'),
+insert_job('test_job_3_long_8', 'bgw_test_job_3_long', INTERVAL '5000ms', INTERVAL '100s', INTERVAL '10ms');
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -443,8 +457,7 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
 DELETE FROM _timescaledb_config.bgw_job;
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+SELECT insert_job('test_job_4', 'bgw_test_job_4', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from _timescaledb_config.bgw_job;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -479,7 +492,6 @@ SELECT _timescaledb_internal.stop_background_workers();
 CREATE OR REPLACE FUNCTION ts_test_job_refresh() RETURNS TABLE(
 id INTEGER,
 application_name NAME,
-job_type NAME,
 schedule_interval INTERVAL,
 max_runtime INTERVAL,
 max_retries INT,
@@ -498,7 +510,7 @@ DECLARE
     num_jobs_in_list INTEGER;
 BEGIN
     SELECT COUNT(*) from _timescaledb_config.bgw_job INTO num_jobs;
-	select COUNT(*) from ts_test_job_refresh() JOIN _timescaledb_config.bgw_job USING (id,application_name,job_type,schedule_interval,max_runtime,max_retries,retry_period) INTO num_jobs_in_list;
+	select COUNT(*) from ts_test_job_refresh() JOIN _timescaledb_config.bgw_job USING (id,application_name,schedule_interval,max_runtime,max_retries,retry_period) INTO num_jobs_in_list;
 	IF (num_jobs = num_jobs_in_list) THEN
 		RETURN true;
 	END IF;
@@ -531,36 +543,33 @@ DELETE FROM _timescaledb_config.bgw_job;
 -- Make sure jobs list is empty
 select count(*) from ts_test_job_refresh();
 
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s'),
-('test_2', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s'),
-('test_3', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+SELECT
+insert_job('test_1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s'),
+insert_job('test_2', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s'),
+insert_job('test_3', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from verify_refresh_correct();
 
 DELETE from _timescaledb_config.bgw_job where application_name='test_2';
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_4', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 3, INTERVAL '1s');
+SELECT insert_job('test_4', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from verify_refresh_correct();
 
 DELETE FROM _timescaledb_config.bgw_job;
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('test_10', 'test_10', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s');
+SELECT insert_job('test_10', 'test_10', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from verify_refresh_correct();
 -- Should be idempotent
 select * from verify_refresh_correct();
 
 DELETE FROM _timescaledb_config.bgw_job;
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s'),
-('another1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s'),
-('another2', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s'),
-('another3', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s'),
-('another4', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s');
+SELECT
+insert_job('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s'),
+insert_job('another1', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s'),
+insert_job('another2', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s'),
+insert_job('another3', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s'),
+insert_job('another4', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from verify_refresh_correct();
 
 DELETE FROM _timescaledb_config.bgw_job where application_name='another' OR application_name='another3';
-INSERT INTO _timescaledb_config.bgw_job (application_name, job_type, schedule_INTERVAL, max_runtime, max_retries, retry_period) VALUES
-('blah', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s');
+SELECT insert_job('blah', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s');
 select * from verify_refresh_correct();
 
 -- Now test a real scheduler-mock running in a loop and updating the list of jobs
@@ -573,7 +582,9 @@ SELECT ts_bgw_db_scheduler_test_run(500);
 -- Wait for scheduler to start up
 SELECT wait_for_timer_to_run(0);
 
-SELECT insert_job('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', 5, INTERVAL '1s');
+SELECT insert_job('another', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
+-- call alter_job to trigger cache invalidation
+SELECT alter_job(:job_id,scheduled:=true);
 
 SELECT ts_bgw_params_reset_time(50000, true);
 SELECT wait_for_timer_to_run(50000);
@@ -599,7 +610,9 @@ SELECT ts_bgw_params_reset_time(400000, true);
 SELECT wait_for_timer_to_run(400000);
 
 -- Now add a new job and make sure it gets run before the scheduler dies
-SELECT insert_job('new_job', 'bgw_test_job_1', INTERVAL '10ms', INTERVAL '100s', 5, INTERVAL '1s');
+SELECT insert_job('new_job', 'bgw_test_job_1', INTERVAL '10ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
+-- call alter_job to trigger cache invalidation
+SELECT alter_job(:job_id,scheduled:=true);
 
 SELECT ts_bgw_params_reset_time(450000, true);
 -- New job should be run once, for a total of 3 runs of this job in the log
@@ -610,8 +623,9 @@ SELECT ts_bgw_params_reset_time(480000, true);
 SELECT wait_for_job_1_to_run(4);
 
 SELECT ts_bgw_params_reset_time(500000, true);
-SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 SELECT * FROM sorted_bgw_log;
-select * from _timescaledb_internal.bgw_job_stat;
+SELECT * FROM _timescaledb_internal.bgw_job_stat;
 
-SELECT * FROM insert_job(NULL,NULL,NULL,NULL,NULL,NULL);
+-- clean up jobs
+SELECT _timescaledb_internal.stop_background_workers();
+

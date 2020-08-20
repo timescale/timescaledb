@@ -31,14 +31,13 @@
 #include "timer_mock.h"
 #include "params.h"
 #include "test_utils.h"
+#include "cross_module_fn.h"
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_main);
 TS_FUNCTION_INFO_V1(ts_bgw_job_execute_test);
-TS_FUNCTION_INFO_V1(ts_test_bgw_job_insert_relation);
-TS_FUNCTION_INFO_V1(ts_test_bgw_job_delete_by_id);
 
 typedef enum TestJobType
 {
@@ -46,8 +45,6 @@ typedef enum TestJobType
 	TEST_JOB_TYPE_JOB_2_ERROR,
 	TEST_JOB_TYPE_JOB_3_LONG,
 	TEST_JOB_TYPE_JOB_4,
-	TEST_JOB_TYPE_JOB_5_LOCK,
-	TEST_JOB_TYPE_JOB_6_LOCK_NOTXN,
 	_MAX_TEST_JOB_TYPE
 } TestJobType;
 
@@ -56,8 +53,6 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_2_ERROR] = "bgw_test_job_2_error",
 	[TEST_JOB_TYPE_JOB_3_LONG] = "bgw_test_job_3_long",
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
-	[TEST_JOB_TYPE_JOB_5_LOCK] = "bgw_test_job_5_lock",
-	[TEST_JOB_TYPE_JOB_6_LOCK_NOTXN] = "bgw_test_job_6_lock_notxn"
 };
 
 static char *
@@ -259,6 +254,43 @@ static void log_terminate_signal(SIGNAL_ARGS)
 		prev_signal_func(postgres_signal_arg);
 }
 
+TS_FUNCTION_INFO_V1(ts_bgw_test_job_sleep);
+
+/*
+ * This function is used for testing removing jobs with
+ * a currently running background job.
+ */
+Datum
+ts_bgw_test_job_sleep(PG_FUNCTION_ARGS)
+{
+	BackgroundWorkerBlockSignals();
+
+	/*
+	 * Only set prev_signal_func once to prevent it from being set to
+	 * log_terminate_signal.
+	 */
+	if (prev_signal_func == NULL)
+		prev_signal_func = pqsignal(SIGTERM, log_terminate_signal);
+	/* Setup any signal handlers here */
+	BackgroundWorkerUnblockSignals();
+
+	elog(WARNING, "Before sleep");
+	PopActiveSnapshot();
+	/*
+	 * we commit here so the effect of the elog which is written
+	 * to a table with a emit_log_hook is seen by other transactions
+	 * to verify the background job started
+	 */
+	CommitTransactionCommand();
+
+	StartTransactionCommand();
+	DirectFunctionCall1(pg_sleep, Float8GetDatum(10));
+
+	elog(WARNING, "After sleep");
+
+	PG_RETURN_VOID();
+}
+
 static bool
 test_job_3_long()
 {
@@ -285,43 +317,7 @@ test_job_3_long()
 static bool
 test_job_4(void)
 {
-	StartTransactionCommand();
 	elog(WARNING, "Execute job 4");
-	CommitTransactionCommand();
-	return true;
-}
-
-static bool
-test_job_5_lock()
-{
-	BackgroundWorkerBlockSignals();
-	/* Use the default sig handlers */
-	BackgroundWorkerUnblockSignals();
-
-	elog(WARNING, "Before lock job 5");
-
-	/* have to have a txn, otherwise can't kill the process */
-	StartTransactionCommand();
-	DirectFunctionCall1(pg_advisory_lock_int8, Int64GetDatum(1));
-	CommitTransactionCommand();
-
-	elog(WARNING, "After lock job 5");
-	return true;
-}
-
-static bool
-test_job_6_lock_notxn()
-{
-	BackgroundWorkerBlockSignals();
-	/* Use the default sig handlers */
-	BackgroundWorkerUnblockSignals();
-
-	elog(WARNING, "Before lock job 6");
-
-	/* no txn */
-	DirectFunctionCall1(pg_advisory_lock_int8, Int64GetDatum(1));
-
-	elog(WARNING, "After lock job 5");
 	return true;
 }
 
@@ -348,7 +344,7 @@ test_job_dispatcher(BgwJob *job)
 	ts_params_get();
 	CommitTransactionCommand();
 
-	switch (get_test_job_type_from_name(&job->fd.job_type))
+	switch (get_test_job_type_from_name(&job->fd.proc_name))
 	{
 		case TEST_JOB_TYPE_JOB_1:
 			return test_job_1();
@@ -359,26 +355,11 @@ test_job_dispatcher(BgwJob *job)
 		case TEST_JOB_TYPE_JOB_4:
 		{
 			/* Set next_start to 200ms */
-			Interval *new_interval = DatumGetIntervalP(DirectFunctionCall7(make_interval,
-																		   Int32GetDatum(0),
-																		   Int32GetDatum(0),
-																		   Int32GetDatum(0),
-																		   Int32GetDatum(0),
-																		   Int32GetDatum(0),
-																		   Int32GetDatum(0),
-																		   Float8GetDatum(0.2)));
-
-			return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, new_interval);
+			Interval new_interval = { .time = .2 * USECS_PER_SEC };
+			return ts_bgw_job_run_and_set_next_start(job, test_job_4, 3, &new_interval);
 		}
-		case TEST_JOB_TYPE_JOB_5_LOCK:
-			return test_job_5_lock();
-		case TEST_JOB_TYPE_JOB_6_LOCK_NOTXN:
-			return test_job_6_lock_notxn();
-		case _MAX_TEST_JOB_TYPE:
-			elog(ERROR,
-				 "unrecognized test job type: %s %d",
-				 NameStr(job->fd.job_type),
-				 get_test_job_type_from_name(&job->fd.job_type));
+		default:
+			return ts_cm_functions->job_execute(job);
 	}
 	return false;
 }
@@ -387,33 +368,7 @@ Datum
 ts_bgw_job_execute_test(PG_FUNCTION_ARGS)
 {
 	ts_timer_set(&ts_mock_timer);
-	ts_bgw_job_set_unknown_job_type_hook(test_job_dispatcher);
+	ts_bgw_job_set_scheduler_test_hook(test_job_dispatcher);
 
 	return ts_bgw_job_entrypoint(fcinfo);
-}
-
-Datum
-ts_test_bgw_job_insert_relation(PG_FUNCTION_ARGS)
-{
-	ts_bgw_job_insert_relation(PG_GETARG_NAME(0),
-							   PG_GETARG_NAME(1),
-							   PG_GETARG_INTERVAL_P(2),
-							   PG_GETARG_INTERVAL_P(3),
-							   PG_GETARG_INT32(4),
-							   PG_GETARG_INTERVAL_P(5),
-							   PG_GETARG_NAME(6),
-							   PG_GETARG_NAME(7),
-							   PG_GETARG_NAME(8),
-							   PG_GETARG_BOOL(9),
-							   PG_GETARG_INT32(10),
-							   PG_GETARG_JSONB_P(11));
-
-	PG_RETURN_NULL();
-}
-
-Datum
-ts_test_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
-{
-	ts_bgw_job_delete_by_id(PG_GETARG_INT32(0));
-	PG_RETURN_NULL();
 }

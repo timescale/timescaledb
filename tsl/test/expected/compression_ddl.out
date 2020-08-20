@@ -458,7 +458,7 @@ select add_compression_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
                    1000
 (1 row)
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE job_type = 'compress_chunks';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
  count 
 -------
      1
@@ -479,7 +479,7 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
 (1 row)
 
 --verify that the policy is gone
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE job_type = 'compress_chunks';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
  count 
 -------
      0

@@ -45,7 +45,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-11 parallel-11 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-11 parallel-11 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
       after_script:
         - docker rm -f docker_arm_emulator
 
@@ -69,7 +69,7 @@ jobs:
         - docker exec -u postgres -it docker_arm_emulator find /build -name postmaster.log -exec cat {} +
       script:
       # allow 50 mins to run
-        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler bgw_job_delete continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-12 parallel-12 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
+        - travis_wait 50 docker exec -u postgres docker_arm_emulator /bin/bash -c "cd /build && make installcheck IGNORES='multi_transaction_indexing bgw_db_scheduler continuous_aggs_insert continuous_aggs_bgw plan_ordered_append-12 parallel-12 compression_ddl continuous_aggs_insert continuous_aggs_multi'"
       after_script:
         - docker rm -f docker_arm_emulator
 

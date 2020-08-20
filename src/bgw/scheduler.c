@@ -517,15 +517,14 @@ ts_populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
 
 	values[0] = Int32GetDatum(sjob->job.fd.id);
 	values[1] = NameGetDatum(&sjob->job.fd.application_name);
-	values[2] = NameGetDatum(&sjob->job.fd.job_type);
-	values[3] = IntervalPGetDatum(&sjob->job.fd.schedule_interval);
-	values[4] = IntervalPGetDatum(&sjob->job.fd.max_runtime);
-	values[5] = Int32GetDatum(sjob->job.fd.max_retries);
-	values[6] = IntervalPGetDatum(&sjob->job.fd.retry_period);
-	values[7] = TimestampTzGetDatum(sjob->next_start);
-	values[8] = TimestampTzGetDatum(sjob->timeout_at);
-	values[9] = BoolGetDatum(sjob->reserved_worker);
-	values[10] = BoolGetDatum(sjob->may_need_mark_end);
+	values[2] = IntervalPGetDatum(&sjob->job.fd.schedule_interval);
+	values[3] = IntervalPGetDatum(&sjob->job.fd.max_runtime);
+	values[4] = Int32GetDatum(sjob->job.fd.max_retries);
+	values[5] = IntervalPGetDatum(&sjob->job.fd.retry_period);
+	values[6] = TimestampTzGetDatum(sjob->next_start);
+	values[7] = TimestampTzGetDatum(sjob->timeout_at);
+	values[8] = BoolGetDatum(sjob->reserved_worker);
+	values[9] = BoolGetDatum(sjob->may_need_mark_end);
 }
 #endif
 

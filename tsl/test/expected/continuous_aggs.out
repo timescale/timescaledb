@@ -12,8 +12,8 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
 (0 rows)
 
 --TEST1 ---
@@ -50,9 +50,9 @@ from foo
 group by time_bucket(1, a), a;
 NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
 SELECT * FROM _timescaledb_config.bgw_job;
-  id  |          application_name          |       job_type       | schedule_interval | max_runtime | max_retries | retry_period |          proc_name          |      proc_schema      |       owner       | scheduled | hypertable_id |          config          
-------+------------------------------------+----------------------+-------------------+-------------+-------------+--------------+-----------------------------+-----------------------+-------------------+-----------+---------------+--------------------------
- 1000 | Continuous Aggregate Policy [1000] | continuous_aggregate | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | policy_continuous_aggregate | _timescaledb_internal | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
+  id  |          application_name          | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |          proc_name          |       owner       | scheduled | hypertable_id |          config          
+------+------------------------------------+-------------------+-------------+-------------+--------------+-----------------------+-----------------------------+-------------------+-----------+---------------+--------------------------
+ 1000 | Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_internal | policy_continuous_aggregate | default_perm_user | t         |             2 | {"mat_hypertable_id": 2}
 (1 row)
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
@@ -94,8 +94,8 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
 (0 rows)
 
 CREATE TABLE conditions (
@@ -814,8 +814,8 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job;
- id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
 (0 rows)
 
 --mat table, user_view, and partial view all gone

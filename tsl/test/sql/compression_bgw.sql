@@ -35,7 +35,7 @@ select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
-select * from _timescaledb_config.bgw_job where job_type like 'compress%';
+select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
 insert into conditions
 select now()::timestamp, 'TOK', 'sony', 55, 75;
 

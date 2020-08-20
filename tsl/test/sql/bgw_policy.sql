@@ -26,7 +26,7 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 -- by starting with oldest chunks
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 
-select * from _timescaledb_config.bgw_job where job_type IN ('reorder');
+select * from _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
 -- Make a manual calls to reorder: make sure the correct chunk is called

@@ -191,7 +191,7 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	PreventCommandIfReadOnly("add_retention_policy()");
 
 	/* Verify that the hypertable owner can create a background worker */
-	ts_bgw_job_validate_job_owner(owner_id, JOB_TYPE_DROP_CHUNKS);
+	ts_bgw_job_validate_job_owner(owner_id);
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
 	hcache = ts_hypertable_cache_pin();
@@ -302,8 +302,8 @@ policy_retention_add(PG_FUNCTION_ARGS)
 										&default_max_runtime,
 										default_max_retries,
 										&default_retry_period,
-										&proc_name,
 										&proc_schema,
+										&proc_name,
 										&owner,
 										true,
 										hypertable->fd.id,

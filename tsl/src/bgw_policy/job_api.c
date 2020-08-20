@@ -68,7 +68,7 @@ job_add(PG_FUNCTION_ARGS)
 				 errhint("Job owner must have EXECUTE privilege on the function.")));
 
 	/* Verify that the owner can create a background worker */
-	ts_bgw_job_validate_job_owner(owner, JOB_TYPE_CUSTOM);
+	ts_bgw_job_validate_job_owner(owner);
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Custom Job");
@@ -83,8 +83,8 @@ job_add(PG_FUNCTION_ARGS)
 										&max_runtime,
 										DEFAULT_MAX_RETRIES,
 										&retry_period,
-										&proc_name,
 										&proc_schema,
+										&proc_name,
 										&owner_name,
 										scheduled,
 										0,

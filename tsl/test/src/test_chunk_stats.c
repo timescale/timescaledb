@@ -14,7 +14,6 @@
 #include "bgw_policy/chunk_stats.h"
 
 TS_FUNCTION_INFO_V1(ts_test_chunk_stats_insert);
-TS_FUNCTION_INFO_V1(ts_test_bgw_job_delete_by_id);
 
 Datum
 ts_test_chunk_stats_insert(PG_FUNCTION_ARGS)
@@ -33,12 +32,5 @@ ts_test_chunk_stats_insert(PG_FUNCTION_ARGS)
 
 	ts_bgw_policy_chunk_stats_insert(&stat);
 
-	PG_RETURN_NULL();
-}
-
-Datum
-ts_test_bgw_job_delete_by_id(PG_FUNCTION_ARGS)
-{
-	ts_bgw_job_delete_by_id(PG_GETARG_INT32(0));
 	PG_RETURN_NULL();
 }
