@@ -33,7 +33,7 @@ GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE foo(time TIMESTAMPTZ, data INTEGER);
 SELECT create_hypertable('foo', 'time');
 
-CREATE VIEW rename_test
+CREATE MATERIALIZED VIEW rename_test
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
@@ -42,7 +42,7 @@ AS SELECT time_bucket('1week', time), COUNT(data)
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
-ALTER VIEW rename_test SET SCHEMA rename_schema;
+ALTER MATERIALIZED VIEW rename_test SET SCHEMA rename_schema;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -100,7 +100,7 @@ ALTER SCHEMA new_name_schema RENAME TO foo_name_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
-ALTER VIEW foo_name_schema.rename_test SET SCHEMA public;
+ALTER MATERIALIZED VIEW foo_name_schema.rename_test SET SCHEMA public;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -115,7 +115,7 @@ SET client_min_messages TO LOG;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
-ALTER VIEW rename_test RENAME TO rename_c_aggregate;
+ALTER MATERIALIZED VIEW rename_test RENAME TO rename_c_aggregate;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -145,7 +145,7 @@ SELECT hypertable_id AS drop_chunks_table_id
 CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
 
-CREATE VIEW drop_chunks_view
+CREATE MATERIALIZED VIEW drop_chunks_view
   WITH (
     timescaledb.continuous,
     timescaledb.materialized_only=true
@@ -193,7 +193,7 @@ SELECT hypertable_id AS drop_chunks_table_u_id
 CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
 SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
 
-CREATE VIEW drop_chunks_view
+CREATE MATERIALIZED VIEW drop_chunks_view
   WITH (
     timescaledb.continuous,
     timescaledb.materialized_only=true
@@ -257,7 +257,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 \set ON_ERROR_STOP 0
 
 -- no continuous aggregates on a continuous aggregate materialization table
-CREATE VIEW new_name_view
+CREATE MATERIALIZED VIEW new_name_view
   WITH (
     timescaledb.continuous,
     timescaledb.materialized_only=true
@@ -267,7 +267,7 @@ AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
     GROUP BY 1;
 
 -- cannot create a continuous aggregate on a continuous aggregate view
-CREATE VIEW drop_chunks_view_view
+CREATE MATERIALIZED VIEW drop_chunks_view_view
   WITH (
     timescaledb.continuous,
     timescaledb.materialized_only=true
@@ -285,7 +285,7 @@ SELECT create_hypertable('metrics','time');
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 
 -- check expressions in view definition
-CREATE VIEW cagg_expr
+CREATE MATERIALIZED VIEW cagg_expr
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -315,7 +315,7 @@ SELECT hypertable_id AS drop_chunks_table_nid
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
 
-CREATE VIEW drop_chunks_view
+CREATE MATERIALIZED VIEW drop_chunks_view
   WITH (
     timescaledb.continuous,
     timescaledb.materialized_only=true,
@@ -331,7 +331,7 @@ INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 \set ON_ERROR_STOP 0
 SELECT drop_chunks('drop_chunks_table', older_than => 13);
 
-ALTER VIEW drop_chunks_view SET (timescaledb.ignore_invalidation_older_than = 9);
+ALTER MATERIALIZED VIEW drop_chunks_view SET (timescaledb.ignore_invalidation_older_than = 9);
 
 -- 9 is too small (less than timescaledb.ignore_invalidation_older_than)
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-8));
@@ -397,7 +397,7 @@ REFRESH MATERIALIZED VIEW drop_chunks_view;
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
 --show that the invalidation processed during drop aren't limited by max_interval_per_job
-ALTER VIEW drop_chunks_view SET (timescaledb.max_interval_per_job = 5);
+ALTER MATERIALIZED VIEW drop_chunks_view SET (timescaledb.max_interval_per_job = 5);
 INSERT INTO drop_chunks_table SELECT i, 300+i FROM generate_series(31, 39) AS i;
 --move the time up to 49
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(40, 49) AS i;
@@ -408,7 +408,7 @@ SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
 --test splitting one range for invalidation in drop_chunks and then later
-ALTER VIEW drop_chunks_view SET (timescaledb.max_interval_per_job = 100);
+ALTER MATERIALIZED VIEW drop_chunks_view SET (timescaledb.max_interval_per_job = 100);
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(50,55) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 --one command and thus one range that spans 46 (which will be processed by drop_chunks) and (51 which won't, but will be later)

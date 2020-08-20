@@ -265,7 +265,7 @@ SET default_transaction_read_only TO on;
 -- CREATE VIEW
 --
 \set ON_ERROR_STOP 0
-CREATE VIEW test_contagg_view
+CREATE MATERIALIZED VIEW test_contagg_view
 WITH (timescaledb.continuous)
 AS
 SELECT
@@ -276,7 +276,7 @@ SELECT
 FROM
   test_contagg
 GROUP BY bucket, device_id;
-ERROR:  cannot execute CREATE VIEW in a read-only transaction
+ERROR:  cannot execute CREATE MATERIALIZED VIEW in a read-only transaction
 -- policy API
 CALL _timescaledb_internal.policy_compression(1,'{}');
 ERROR:  cannot execute policy_compression() in a read-only transaction

@@ -13,7 +13,7 @@
 
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
 
-DDLResult tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
+DDLResult tsl_process_continuous_agg_viewstmt(Node *stmt, const char *query_string, void *pstmt,
 											  WithClauseResult *with_clause_options);
 
 void cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,

@@ -319,7 +319,7 @@ SELECT create_hypertable('metrics','time');
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 
 -- check expressions in view definition
-CREATE VIEW cagg_expr WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW cagg_expr WITH (timescaledb.continuous)
 AS
 SELECT
   time_bucket('1d', time) AS time,

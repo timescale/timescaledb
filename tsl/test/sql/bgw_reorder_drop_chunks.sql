@@ -283,7 +283,7 @@ SELECT * FROM timescaledb_information.policy_stats;
 -- continuous aggregate blocks drop_chunks
 INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '12 months', 0);
 
-CREATE VIEW tdc_view
+CREATE MATERIALIZED VIEW tdc_view
   WITH (timescaledb.continuous)
   AS SELECT time_bucket('1 hour', time), count(drop_order)
      FROM test_drop_chunks_table
@@ -306,4 +306,4 @@ SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last
 SELECT show_chunks('test_drop_chunks_table');
 
 --drop the view to allow drop chunks to work
-DROP VIEW tdc_view;
+DROP MATERIALIZED VIEW tdc_view;

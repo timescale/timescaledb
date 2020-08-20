@@ -331,7 +331,7 @@ DROP VIEW dependent_1;
 
 --create a cont agg view on the ht as well then the drop should nuke everything
 SET timescaledb.current_timestamp_mock = '2018-03-28 1:00';
-CREATE VIEW test1_cont_view WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+CREATE MATERIALIZED VIEW test1_cont_view WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1 hour', "Time"), SUM(i)
    FROM test1
    GROUP BY 1;

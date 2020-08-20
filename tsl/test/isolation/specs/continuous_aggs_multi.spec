@@ -22,12 +22,12 @@ teardown {
 session "SetupContinue"
 step "Setup2"
 {
-    CREATE VIEW continuous_view_1( bkt, cnt)
+    CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1;
-    CREATE VIEW continuous_view_2(bkt, maxl)
+    CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
         WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
@@ -70,7 +70,7 @@ step "UnlockMat1" { ROLLBACK; }
 
 #alter the refresh_lag for continuous_view_1
 session "CVddl"
-step "AlterLag1" { alter view continuous_view_1 set (timescaledb.refresh_lag = 10); }
+step "AlterLag1" { alter materialized view continuous_view_1 set (timescaledb.refresh_lag = 10); }
 
 #update the hypertable
 session "Upd"

@@ -515,6 +515,21 @@ ts_continuous_agg_find_by_relid(Oid relid)
 }
 
 /*
+ * Find a continuous aggregate by range var.
+ */
+ContinuousAgg *
+ts_continuous_agg_find_by_rv(const RangeVar *rv)
+{
+	Oid relid;
+	if (rv == NULL)
+		return NULL;
+	relid = RangeVarGetRelid(rv, NoLock, true);
+	if (!OidIsValid(relid))
+		return NULL;
+	return ts_continuous_agg_find_by_relid(relid);
+}
+
+/*
  * Drops continuous aggs and all related objects.
  *
  * These objects are: the user view itself, the catalog entry in
@@ -834,10 +849,13 @@ ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema)
 }
 
 extern void
-ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, char *new_name)
+ts_continuous_agg_rename_view(const char *old_schema, const char *name, const char *new_schema,
+							  const char *new_name, ObjectType *object_type)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+
+	Assert(object_type);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -847,11 +865,24 @@ ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema, ch
 		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 		HeapTuple new_tuple = NULL;
 		ContinuousAggViewType vtyp = ts_continuous_agg_view_type(data, old_schema, name);
+
 		switch (vtyp)
 		{
 			case ContinuousAggUserView:
 			{
-				FormData_continuous_agg *new_data = ensure_new_tuple(tuple, &new_tuple);
+				FormData_continuous_agg *new_data;
+
+				if (*object_type == OBJECT_VIEW)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot alter continuous aggregate using ALTER VIEW"),
+							 errhint(
+								 "Use ALTER MATERIALIZED VIEW to alter a continuous aggregate.")));
+
+				Assert(*object_type == OBJECT_MATVIEW);
+				*object_type = OBJECT_VIEW;
+
+				new_data = ensure_new_tuple(tuple, &new_tuple);
 				namestrcpy(&new_data->user_view_schema, new_schema);
 				namestrcpy(&new_data->user_view_name, new_name);
 				break;

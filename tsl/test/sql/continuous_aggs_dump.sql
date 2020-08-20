@@ -81,18 +81,18 @@ SELECT
 \gset
 
 
-DROP VIEW IF EXISTS mat_test;
+DROP MATERIALIZED VIEW IF EXISTS mat_test;
 
 --materialize this VIEW before dump this tests
 --that the partial state survives the dump intact
-CREATE VIEW mat_before
+CREATE MATERIALIZED VIEW mat_before
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_BEFORE;
 
 --materialize this VIEW after dump this tests
 --that the partialize VIEW and refresh mechanics
 --survives the dump intact
-CREATE VIEW mat_after
+CREATE MATERIALIZED VIEW mat_after
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_AFTER;
 
@@ -159,5 +159,5 @@ SELECT count(*) FROM conditions_after;
 \ir include/cont_agg_test_equal.sql
 \set ECHO all
 
-DROP VIEW mat_after;
-DROP VIEW mat_before;
+DROP MATERIALIZED VIEW mat_after;
+DROP MATERIALIZED VIEW mat_before;

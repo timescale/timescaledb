@@ -229,7 +229,7 @@ SET default_transaction_read_only TO on;
 --
 \set ON_ERROR_STOP 0
 
-CREATE VIEW test_contagg_view
+CREATE MATERIALIZED VIEW test_contagg_view
 WITH (timescaledb.continuous)
 AS
 SELECT

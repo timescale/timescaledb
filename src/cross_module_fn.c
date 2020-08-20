@@ -245,7 +245,7 @@ error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
 }
 
 static DDLResult
-process_cagg_viewstmt_default(ViewStmt *stmt, const char *query_string, void *pstmt,
+process_cagg_viewstmt_default(Node *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
 {
 	return error_no_default_fn_bool_void_community();

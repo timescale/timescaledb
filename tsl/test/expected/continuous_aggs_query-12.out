@@ -41,7 +41,7 @@ create table location_tab( locid integer, locname text );
 insert into location_tab values( 1, 'SFO');
 insert into location_tab values( 2, 'NYC');
 insert into location_tab values( 3, 'por');
-create or replace view mat_m1( location, timec, minl, sumt , sumh)
+create materialized view mat_m1( location, timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
 as
 select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
@@ -60,7 +60,7 @@ FROM ( select max(timec)as timeval from conditions ) as q;
 REFRESH MATERIALIZED VIEW mat_m1;
 LOG:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
 --test first/last
-create or replace view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
+create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
 WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
 as
 select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)

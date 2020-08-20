@@ -1751,41 +1751,47 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 	return;
 }
 
-/* entry point for creating continuous aggregate view
- * step 1 : validate query
- * step 2: create underlying tables and views
- */
 DDLResult
-tsl_process_continuous_agg_viewstmt(ViewStmt *stmt, const char *query_string, void *pstmt,
+tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *pstmt,
 									WithClauseResult *with_clause_options)
 {
-	Query *query = NULL;
+	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
 	CAggTimebucketInfo timebucket_exprinfo;
 	Oid nspid;
-	PlannedStmt *pstmt_info = (PlannedStmt *) pstmt;
-	RawStmt *rawstmt = NULL;
-	/* we have a continuous aggregate query. convert to Query structure
-	 */
-	rawstmt = makeNode(RawStmt);
-	rawstmt->stmt = (Node *) copyObject(stmt->query);
-	rawstmt->stmt_location = pstmt_info->stmt_location;
-	rawstmt->stmt_len = pstmt_info->stmt_len;
-	query = parse_analyze(rawstmt, query_string, NULL, 0, NULL);
+	ViewStmt viewstmt = {
+		.type = T_ViewStmt,
+		.view = stmt->into->rel,
+		.query = stmt->into->viewQuery,
+		.options = stmt->into->options,
+		.aliases = stmt->into->colNames,
+	};
 
-	nspid = RangeVarGetCreationNamespace(stmt->view);
-	if (get_relname_relid(stmt->view->relname, nspid))
+	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
+
+	if (get_relname_relid(stmt->into->rel->relname, nspid))
 	{
-		ereport(ERROR,
-				(errcode(ERRCODE_DUPLICATE_TABLE),
-				 errmsg("continuous aggregate query \"%s\" already exists", stmt->view->relname),
-				 errhint("drop and recreate if needed.  This will drop the underlying "
-						 "materialization")));
-		return DDL_DONE;
+		if (stmt->if_not_exists)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_DUPLICATE_TABLE),
+					 errmsg("continuous aggregate \"%s\" already exists, skipping",
+							stmt->into->rel->relname)));
+			return DDL_DONE;
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DUPLICATE_TABLE),
+					 errmsg("continuous aggregate \"%s\" already exists", stmt->into->rel->relname),
+					 errhint(
+						 "Drop or rename the existing continuous aggregate first or use another "
+						 "name.")));
+		}
 	}
 
-	timebucket_exprinfo = cagg_validate_query(query);
+	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery);
+	cagg_create(&viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
-	cagg_create(stmt, query, &timebucket_exprinfo, with_clause_options);
 	return DDL_DONE;
 }
 

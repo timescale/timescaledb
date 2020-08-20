@@ -27,14 +27,14 @@ setup
       FROM conditions
     $$;
     SELECT set_integer_now_func('conditions', 'cond_now');
-    CREATE VIEW cond_10
+    CREATE MATERIALIZED VIEW cond_10
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
     AS
       SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
       GROUP BY 1;
-    CREATE VIEW cond_20
+    CREATE MATERIALIZED VIEW cond_20
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
     AS

@@ -17,7 +17,7 @@ CREATE TABLE jit_test_contagg (
 );
 SELECT table_name FROM create_hypertable('jit_test_contagg', 'observation_time');
 
-CREATE VIEW jit_device_summary
+CREATE MATERIALIZED VIEW jit_device_summary
 WITH (timescaledb.continuous)
 AS
 SELECT
@@ -34,6 +34,6 @@ SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01
 INSERT INTO jit_test_contagg
 SELECT ts, 'device_2', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
 
-ALTER VIEW jit_device_summary SET (timescaledb.max_interval_per_job = '60 day');
+ALTER MATERIALIZED VIEW jit_device_summary SET (timescaledb.max_interval_per_job = '60 day');
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW jit_device_summary;

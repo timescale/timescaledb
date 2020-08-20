@@ -2038,8 +2038,10 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
 					 errdetail("It is not possible to turn partitioned tables into hypertables.")));
+		case RELKIND_MATVIEW:
 		case RELKIND_RELATION:
 			break;
+
 		default:
 			ereport(ERROR, (errcode(ERRCODE_WRONG_OBJECT_TYPE), errmsg("invalid relation type")));
 	}

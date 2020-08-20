@@ -77,6 +77,7 @@ int64 ts_continuous_agg_get_completed_threshold(int32 materialization_id);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_relid(Oid relid);
+extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_rv(const RangeVar *rv);
 
 extern void ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema,
 												 const char *name);
@@ -87,8 +88,9 @@ extern TSDLLEXPORT ContinuousAggViewType ts_continuous_agg_view_type(FormData_co
 																	 const char *schema,
 																	 const char *name);
 extern void ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema);
-extern void ts_continuous_agg_rename_view(char *old_schema, char *name, char *new_schema,
-										  char *new_name);
+extern void ts_continuous_agg_rename_view(const char *old_schema, const char *name,
+										  const char *new_schema, const char *new_name,
+										  ObjectType *object_type);
 
 extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
 

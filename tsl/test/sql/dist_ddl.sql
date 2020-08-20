@@ -513,7 +513,7 @@ INSERT INTO disttable VALUES
        ('2018-07-01 08:01', 29, 64);
 
 \set ON_ERROR_STOP 0
-CREATE VIEW disttable_cagg WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW disttable_cagg WITH (timescaledb.continuous)
 AS SELECT time_bucket('2 days', time), device, max(value)
     FROM disttable
     GROUP BY 1, 2;

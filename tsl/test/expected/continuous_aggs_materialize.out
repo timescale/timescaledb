@@ -613,7 +613,7 @@ SELECT * FROM continuous_agg_test_t;
  2019-02-02 05:00:00+00 |    1
 (4 rows)
 
-CREATE VIEW test_t_mat_view
+CREATE MATERIALIZED VIEW test_t_mat_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
@@ -830,7 +830,7 @@ SELECT set_integer_now_func('continuous_agg_extreme', 'integer_now_continuous_ag
 
 -- We should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
-CREATE VIEW extreme_view
+CREATE MATERIALIZED VIEW extreme_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('1', time), SUM(data) as value
         FROM continuous_agg_extreme
@@ -954,9 +954,9 @@ SELECT hypertable_id, watermark
 (1 row)
 
 --cleanup of continuous agg views --
-DROP view test_t_mat_view;
+DROP MATERIALIZED view test_t_mat_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_16_chunk
-DROP view extreme_view;
+DROP MATERIALIZED view extreme_view;
 NOTICE:  drop cascades to 4 other objects
 -- negative lag test
 CREATE TABLE continuous_agg_negative(time BIGINT, data BIGINT);
@@ -974,7 +974,7 @@ SELECT set_integer_now_func('continuous_agg_negative', 'integer_now_continuous_a
  
 (1 row)
 
-CREATE VIEW negative_view_5
+CREATE MATERIALIZED VIEW negative_view_5
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('5', time), COUNT(data) as value
         FROM continuous_agg_negative
@@ -1031,10 +1031,10 @@ SELECT * FROM negative_view_5 ORDER BY 1;
           10 |     5
 (3 rows)
 
-DROP VIEW negative_view_5;
+DROP MATERIALIZED VIEW negative_view_5;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_27_chunk
 TRUNCATE continuous_agg_negative;
-CREATE VIEW negative_view_5
+CREATE MATERIALIZED VIEW negative_view_5
             WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
 AS SELECT time_bucket('5', time), COUNT(data) as value
    FROM continuous_agg_negative
@@ -1081,7 +1081,7 @@ SELECT set_integer_now_func('continuous_agg_max_mat', 'integer_now_continuous_ag
 (1 row)
 
 -- only allow two time_buckets per run
-CREATE VIEW max_mat_view
+CREATE MATERIALIZED VIEW max_mat_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4', timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), COUNT(data) as value
         FROM continuous_agg_max_mat
@@ -1271,7 +1271,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 -- only allow two time_buckets per run
-CREATE VIEW max_mat_view_t
+CREATE MATERIALIZED VIEW max_mat_view_t
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4 hours', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_max_mat_t
@@ -1343,7 +1343,7 @@ NOTICE:  adding not-null constraint to column "time"
  (16,public,continuous_agg_max_mat_timestamp,t)
 (1 row)
 
-CREATE VIEW max_mat_view_timestamp
+CREATE MATERIALIZED VIEW max_mat_view_timestamp
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time)
         FROM continuous_agg_max_mat_timestamp
@@ -1373,7 +1373,7 @@ NOTICE:  adding not-null constraint to column "time"
  (18,public,continuous_agg_max_mat_date,t)
 (1 row)
 
-CREATE VIEW max_mat_view_date
+CREATE MATERIALIZED VIEW max_mat_view_date
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-7 days')
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_max_mat_date
@@ -1449,7 +1449,7 @@ INSERT INTO timezone_test VALUES
     (:NOW_TEST - '30m'::interval),
     (:NOW_TEST),
     (:NOW_TEST + '30m'::interval);
-CREATE VIEW timezone_test_summary
+CREATE MATERIALIZED VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
@@ -1478,7 +1478,7 @@ INSERT INTO timezone_test VALUES
     (:NOW_TEST - '30m'::interval),
     (:NOW_TEST),
     (:NOW_TEST + '30m'::interval);
-CREATE VIEW timezone_test_summary
+CREATE MATERIALIZED VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
@@ -1512,7 +1512,7 @@ SELECT set_integer_now_func('continuous_agg_int', 'integer_now_continuous_agg_ma
  
 (1 row)
 
-CREATE VIEW continuous_agg_int_max 
+CREATE MATERIALIZED VIEW continuous_agg_int_max 
     WITH (timescaledb.continuous, timescaledb.refresh_lag='0')
     AS SELECT time_bucket('10', time), COUNT(data) as value
         FROM continuous_agg_int
@@ -1557,7 +1557,7 @@ NOTICE:  adding not-null constraint to column "timecol"
  (26,public,continuous_agg_ts_max_t,t)
 (1 row)
 
-CREATE VIEW continuous_agg_ts_max_view
+CREATE MATERIALIZED VIEW continuous_agg_ts_max_view
     WITH (timescaledb.continuous, timescaledb.max_interval_per_job='365 days', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', timecol), COUNT(data) as value
         FROM continuous_agg_ts_max_t

@@ -809,7 +809,7 @@ DEALLOCATE param_prep;
 -- test continuous aggs
 SET client_min_messages TO error;
 
-CREATE VIEW cagg_test WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+CREATE MATERIALIZED VIEW cagg_test WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket ('1d', time) AS time,
     device_id,
     avg(v1)
@@ -827,7 +827,7 @@ FROM cagg_test
 ORDER BY time
 LIMIT 1;
 
-DROP VIEW cagg_test;
+DROP MATERIALIZED VIEW cagg_test;
 
 RESET client_min_messages;
 

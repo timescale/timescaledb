@@ -47,7 +47,7 @@ LIMIT 10;
 
 -- Create two continuous aggregates on the same hypertable to test
 -- that invalidations are handled correctly across both of them.
-CREATE VIEW cond_10
+CREATE MATERIALIZED VIEW cond_10
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -55,7 +55,7 @@ SELECT time_bucket(10, time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2;
 
-CREATE VIEW cond_20
+CREATE MATERIALIZED VIEW cond_20
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -63,7 +63,7 @@ SELECT time_bucket(20, time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2;
 
-CREATE VIEW measure_10
+CREATE MATERIALIZED VIEW measure_10
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
