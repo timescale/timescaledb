@@ -192,21 +192,19 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq',
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
     id                  INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
     application_name    NAME        NOT NULL,
-    job_type            NAME        NOT NULL,
     schedule_interval   INTERVAL    NOT NULL,
     max_runtime         INTERVAL    NOT NULL,
     max_retries         INTEGER     NOT NULL,
     retry_period        INTERVAL    NOT NULL,
-    proc_name           NAME        NOT NULL DEFAULT '',
-    proc_schema         NAME        NOT NULL DEFAULT '',
+    proc_schema         NAME        NOT NULL,
+    proc_name           NAME        NOT NULL,
     owner               NAME        NOT NULL DEFAULT CURRENT_ROLE,
     scheduled           BOOL        NOT NULL DEFAULT true,
     hypertable_id       INTEGER REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
-    config              JSONB,
-    CONSTRAINT  valid_job_type CHECK (job_type IN ('telemetry_and_version_check_if_enabled', 'reorder', 'drop_chunks', 'continuous_aggregate', 'compress_chunks', 'custom'))
+    config              JSONB
 );
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
-CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_name,proc_schema,hypertable_id);
+CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
 

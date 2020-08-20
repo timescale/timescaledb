@@ -13,27 +13,13 @@
 #include "export.h"
 #include "catalog.h"
 
-typedef enum JobType
-{
-	JOB_TYPE_VERSION_CHECK = 0,
-	JOB_TYPE_REORDER,
-	JOB_TYPE_DROP_CHUNKS,
-	JOB_TYPE_CONTINUOUS_AGGREGATE,
-	JOB_TYPE_COMPRESS_CHUNKS,
-	JOB_TYPE_CUSTOM,
-	/* end of real jobs */
-	JOB_TYPE_UNKNOWN,
-	_MAX_JOB_TYPE
-} JobType;
-
 typedef struct BgwJob
 {
 	FormData_bgw_job fd;
-	JobType bgw_type;
 } BgwJob;
 
 typedef bool job_main_func(void);
-typedef bool (*unknown_job_type_hook_type)(BgwJob *job);
+typedef bool (*scheduler_test_hook_type)(BgwJob *job);
 
 extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job, Oid user_oid);
 
@@ -56,19 +42,19 @@ extern TSDLLEXPORT bool ts_bgw_job_delete_by_id(int32 job_id);
 extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name job_type,
 													Interval *schedule_interval,
 													Interval *max_runtime, int32 max_retries,
-													Interval *retry_period, Name proc_name,
-													Name proc_schema, Name owner, bool scheduled,
+													Interval *retry_period, Name proc_schema,
+													Name proc_name, Name owner, bool scheduled,
 													int32 hypertable_id, Jsonb *config);
 extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_job);
 
 extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
 
-extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner, JobType type);
+extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
 
 extern bool ts_bgw_job_execute(BgwJob *job);
 
 extern TSDLLEXPORT Datum ts_bgw_job_entrypoint(PG_FUNCTION_ARGS);
-extern void ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook);
+extern void ts_bgw_job_set_scheduler_test_hook(scheduler_test_hook_type hook);
 extern void ts_bgw_job_set_job_entrypoint_function_name(char *func_name);
 extern bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial_runs,
 											  Interval *next_interval);

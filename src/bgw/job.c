@@ -58,17 +58,7 @@ GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
 	GetLockConflicts(locktag, lockmode, countp)
 #endif
 
-static const char *job_type_names[_MAX_JOB_TYPE] = {
-	[JOB_TYPE_VERSION_CHECK] = "telemetry_and_version_check_if_enabled",
-	[JOB_TYPE_REORDER] = "reorder",
-	[JOB_TYPE_DROP_CHUNKS] = "drop_chunks",
-	[JOB_TYPE_CONTINUOUS_AGGREGATE] = "continuous_aggregate",
-	[JOB_TYPE_COMPRESS_CHUNKS] = "compress_chunks",
-	[JOB_TYPE_CUSTOM] = "custom",
-	[JOB_TYPE_UNKNOWN] = "unknown",
-};
-
-static unknown_job_type_hook_type unknown_job_type_hook = NULL;
+static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 
 typedef enum JobLockLifetime
@@ -94,17 +84,6 @@ ts_bgw_job_start(BgwJob *job, Oid user_uid)
 	pfree(si->data);
 	pfree(si);
 	return bgw_handle;
-}
-
-static JobType
-get_job_type_from_name(Name job_type_name)
-{
-	int i;
-
-	for (i = 0; i < _MAX_JOB_TYPE; i++)
-		if (namestrcmp(job_type_name, job_type_names[i]) == 0)
-			return i;
-	return JOB_TYPE_UNKNOWN;
 }
 
 static BgwJob *
@@ -140,8 +119,6 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 	old_ctx = MemoryContextSwitchTo(ti->mctx);
 	job->fd.config = isnull ? NULL : DatumGetJsonbP(value);
 	MemoryContextSwitchTo(old_ctx);
-
-	job->bgw_type = get_job_type_from_name(&job->fd.job_type);
 
 	return job;
 }
@@ -220,8 +197,6 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		 */
 		job->fd.config = NULL;
 
-		job->bgw_type = get_job_type_from_name(&job->fd.job_type);
-
 		old_ctx = MemoryContextSwitchTo(mctx);
 		jobs = lappend(jobs, job);
 		MemoryContextSwitchTo(old_ctx);
@@ -281,8 +256,8 @@ ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name, const char *pro
 		.scandirection = ForwardScanDirection,
 	};
 
-	init_scan_by_proc_name(&scankey[0], proc_name);
-	init_scan_by_proc_schema(&scankey[1], proc_schema);
+	init_scan_by_proc_schema(&scankey[0], proc_schema);
+	init_scan_by_proc_name(&scankey[1], proc_name);
 	init_scan_by_hypertable_id(&scankey[2], hypertable_id);
 
 	ts_scanner_scan(&scanctx);
@@ -309,8 +284,8 @@ ts_bgw_job_find_by_proc(const char *proc_name, const char *proc_schema)
 		.scandirection = ForwardScanDirection,
 	};
 
-	init_scan_by_proc_name(&scankey[0], proc_name);
-	init_scan_by_proc_schema(&scankey[1], proc_schema);
+	init_scan_by_proc_schema(&scankey[0], proc_schema);
+	init_scan_by_proc_name(&scankey[1], proc_name);
 
 	ts_scanner_scan(&scanctx);
 	return list_data.list;
@@ -593,7 +568,7 @@ ts_bgw_job_permission_check(BgwJob *job)
 }
 
 void
-ts_bgw_job_validate_job_owner(Oid owner, JobType type)
+ts_bgw_job_validate_job_owner(Oid owner)
 {
 	HeapTuple role_tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(owner));
 	Form_pg_authid rform = (Form_pg_authid) GETSTRUCT(role_tup);
@@ -603,63 +578,43 @@ ts_bgw_job_validate_job_owner(Oid owner, JobType type)
 		ReleaseSysCache(role_tup);
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
-				 errmsg("permission denied to start %s background process as role \"%s\"",
-						job_type_names[type],
+				 errmsg("permission denied to start background process as role \"%s\"",
 						rform->rolname.data),
 				 errhint("Hypertable owner must have LOGIN permission to run background tasks.")));
 	}
 	ReleaseSysCache(role_tup);
 }
 
+static bool
+is_telemetry_job(BgwJob *job)
+{
+	return namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0 &&
+		   namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0;
+}
+
 bool
 ts_bgw_job_execute(BgwJob *job)
 {
-	switch (job->bgw_type)
+	if (is_telemetry_job(job))
 	{
-		case JOB_TYPE_VERSION_CHECK:
-		{
-			bool next_start_set;
-			if (!ts_telemetry_on())
-				/* If telemetry is off, the job trivially succeeds. */
-				return true;
-			/*
-			 * In the first 12 hours, we want telemetry to ping every
-			 * hour. After that initial period, we default to the
-			 * schedule_interval listed in the job table.
-			 */
-			Interval *one_hour = DatumGetIntervalP(DirectFunctionCall7(make_interval,
-																	   Int32GetDatum(0),
-																	   Int32GetDatum(0),
-																	   Int32GetDatum(0),
-																	   Int32GetDatum(0),
-																	   Int32GetDatum(1),
-																	   Int32GetDatum(0),
-																	   Float8GetDatum(0)));
-
-			next_start_set = ts_bgw_job_run_and_set_next_start(job,
-															   ts_telemetry_main_wrapper,
-															   TELEMETRY_INITIAL_NUM_RUNS,
-															   one_hour);
-			pfree(one_hour);
-			return next_start_set;
-		}
-		case JOB_TYPE_REORDER:
-		case JOB_TYPE_DROP_CHUNKS:
-		case JOB_TYPE_CONTINUOUS_AGGREGATE:
-		case JOB_TYPE_COMPRESS_CHUNKS:
-		case JOB_TYPE_CUSTOM:
-			return ts_cm_functions->job_execute(job);
-		case JOB_TYPE_UNKNOWN:
-			if (unknown_job_type_hook != NULL)
-				return unknown_job_type_hook(job);
-			elog(ERROR, "unknown job type \"%s\"", NameStr(job->fd.job_type));
-			break;
-		case _MAX_JOB_TYPE:
-			elog(ERROR, "unknown job type \"%s\"", NameStr(job->fd.job_type));
-			break;
+		/*
+		 * In the first 12 hours, we want telemetry to ping every
+		 * hour. After that initial period, we default to the
+		 * schedule_interval listed in the job table.
+		 */
+		Interval one_hour = { .time = 1 * USECS_PER_HOUR };
+		return ts_bgw_job_run_and_set_next_start(job,
+												 ts_telemetry_main_wrapper,
+												 TELEMETRY_INITIAL_NUM_RUNS,
+												 &one_hour);
 	}
-	Assert(false);
-	return false;
+
+#ifdef TS_DEBUG
+	if (scheduler_test_hook != NULL)
+		return scheduler_test_hook(job);
+#endif
+
+	return ts_cm_functions->job_execute(job);
 }
 
 bool
@@ -844,9 +799,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 }
 
 void
-ts_bgw_job_set_unknown_job_type_hook(unknown_job_type_hook_type hook)
+ts_bgw_job_set_scheduler_test_hook(scheduler_test_hook_type hook)
 {
-	unknown_job_type_hook = hook;
+	scheduler_test_hook = hook;
 }
 
 void
@@ -888,7 +843,7 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 int
 ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
-						   Name proc_name, Name proc_schema, Name owner, bool scheduled,
+						   Name proc_schema, Name proc_name, Name owner, bool scheduled,
 						   int32 hypertable_id, Jsonb *config)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -903,15 +858,14 @@ ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *sched
 	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_job_type)] = NameGetDatum(job_type);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] =
 		IntervalPGetDatum(schedule_interval);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = IntervalPGetDatum(max_runtime);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = Int32GetDatum(max_retries);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = IntervalPGetDatum(retry_period);
 
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)] = NameGetDatum(proc_name);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)] = NameGetDatum(proc_schema);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)] = NameGetDatum(proc_name);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = NameGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
 	if (hypertable_id == 0)

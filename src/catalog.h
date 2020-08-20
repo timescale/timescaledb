@@ -641,13 +641,12 @@ enum Anum_bgw_job
 {
 	Anum_bgw_job_id = 1,
 	Anum_bgw_job_application_name,
-	Anum_bgw_job_job_type,
 	Anum_bgw_job_schedule_interval,
 	Anum_bgw_job_max_runtime,
 	Anum_bgw_job_max_retries,
 	Anum_bgw_job_retry_period,
-	Anum_bgw_job_proc_name,
 	Anum_bgw_job_proc_schema,
+	Anum_bgw_job_proc_name,
 	Anum_bgw_job_owner,
 	Anum_bgw_job_scheduled,
 	Anum_bgw_job_hypertable_id,
@@ -661,13 +660,12 @@ typedef struct FormData_bgw_job
 {
 	int32 id;
 	NameData application_name;
-	NameData job_type;
 	Interval schedule_interval;
 	Interval max_runtime;
 	int32 max_retries;
 	Interval retry_period;
-	NameData proc_name;
 	NameData proc_schema;
+	NameData proc_name;
 	NameData owner;
 	bool scheduled;
 	int32 hypertable_id;
@@ -693,8 +691,8 @@ enum Anum_bgw_job_pkey_idx
 
 enum Anum_bgw_job_proc_hypertable_id_idx
 {
-	Anum_bgw_job_proc_hypertable_id_idx_proc_name = 1,
-	Anum_bgw_job_proc_hypertable_id_idx_proc_schema,
+	Anum_bgw_job_proc_hypertable_id_idx_proc_schema = 1,
+	Anum_bgw_job_proc_hypertable_id_idx_proc_name,
 	Anum_bgw_job_proc_hypertable_id_idx_hypertable_id,
 	_Anum_bgw_job_proc_hypertable_id_idx_max,
 };

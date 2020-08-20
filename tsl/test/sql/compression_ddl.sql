@@ -302,7 +302,7 @@ WHERE hypertable.table_name like 'test1' ORDER BY hypertable.id LIMIT 1 \gset
 SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 --add policy to make sure it's dropped later
 select add_compression_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE job_type = 'compress_chunks';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
 
 DROP TABLE :UNCOMPRESSED_HYPER_NAME;
 
@@ -311,7 +311,7 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
 SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
 
 --verify that the policy is gone
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE job_type = 'compress_chunks';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
 
 ROLLBACK;
 

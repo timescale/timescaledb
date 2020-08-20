@@ -104,8 +104,8 @@ SELECT delete_job(1004);
 
 -- check jobs got removed
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000;
- id | application_name | job_type | schedule_interval | max_runtime | max_retries | retry_period | proc_name | proc_schema | owner | scheduled | hypertable_id | config 
-----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
+ id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER

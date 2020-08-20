@@ -8,14 +8,9 @@ SET timescaledb.license_key='CommunityLicense';
 CREATE OR REPLACE FUNCTION ts_test_chunk_stats_insert(job_id INTEGER, chunk_id INTEGER, num_times_run INTEGER, last_time_run TIMESTAMPTZ = NULL) RETURNS VOID
 AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER)
-RETURNS VOID
-AS :TSL_MODULE_PATHNAME, 'ts_test_bgw_job_delete_by_id'
-LANGUAGE C VOLATILE STRICT;
-
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder', 'drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 CREATE TABLE test_table(time timestamptz, junk int);
 CREATE TABLE test_table_int(time bigint, junk int);
@@ -50,11 +45,11 @@ CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time', chunk_time_interval=>INTERVAL '1 day');
 select add_reorder_policy('test_table2', 'test_table2_time_idx');
 
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 DROP TABLE test_table2;
 -- Make sure that test_table2 reorder policy gets dropped
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
 \set ON_ERROR_STOP 0
@@ -74,14 +69,14 @@ select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => tr
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
 
 \set ON_ERROR_STOP 0
 select add_retention_policy('test_table', INTERVAL '1 year');
 select add_retention_policy('test_table', INTERVAL '3 days');
 \set ON_ERROR_STOP 1
 
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
 
 select remove_retention_policy('test_table');
 
@@ -99,23 +94,23 @@ select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_catalog.dimension;
 
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
 select remove_reorder_policy('test_table');
 
-select * from _timescaledb_config.bgw_job WHERE job_type IN ('reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 select add_retention_policy('test_table', INTERVAL '3 month');
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 select remove_retention_policy('test_table');
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 select add_retention_policy('test_table_int', 1);
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table_int', 2, true);
 
 select remove_retention_policy('test_table_int');
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Make sure remove works when there's nothing to remove
 select remove_retention_policy('test_table', true);
@@ -136,7 +131,7 @@ select remove_reorder_policy(2);
 \set ON_ERROR_STOP 1
 
 -- Now make sure policy args have correct job deletion dependency
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks', 'reorder');
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
 select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
@@ -187,16 +182,16 @@ CREATE INDEX junk_index on test_table2 (junk);
 select add_retention_policy('test_table', INTERVAL '2 days');
 select add_retention_policy('test_table2', INTERVAL '1 days');
 
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 DROP TABLE test_table;
 DROP TABLE test_table_int;
 
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 DROP TABLE test_table2;
 
-select * from _timescaledb_config.bgw_job where job_type IN ('drop_chunks');
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Now test chunk_stat insertion
 select ts_test_chunk_stats_insert(123, 123, 45);
@@ -224,7 +219,7 @@ select add_reorder_policy('test_table', 'second_index') as job_id \gset
 -- Simulate reorder job running and setting this stat row
 select ts_test_chunk_stats_insert(:job_id, :chunk_id, 1);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select * from _timescaledb_config.bgw_job where job_type='reorder';
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Deleting a chunk that has nothing to do with the job should do nothing
 select c.table_name as other_chunk_name,c.schema_name as other_chunk_schema from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.id != :chunk_id \gset
@@ -233,12 +228,12 @@ select concat(:'other_chunk_schema','.',:'other_chunk_name') as other_chunk \gse
 DROP TABLE :other_chunk;
 
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select * from _timescaledb_config.bgw_job where job_type='reorder';
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Dropping the hypertable should drop the chunk, which should drop the reorder policy
 DROP TABLE test_table;
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-select * from _timescaledb_config.bgw_job where job_type='reorder';
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Now check dropping a job will drop the chunk_stat row
 CREATE TABLE test_table(time timestamptz, junk int);
@@ -249,17 +244,17 @@ select add_retention_policy('test_table', INTERVAL '2 days', true);
 
 select ts_test_chunk_stats_insert(:job_id, 123, 1);
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
 select remove_retention_policy('test_table');
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 select remove_reorder_policy('test_table');
 -- Row should be gone
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
-SELECT * FROM _timescaledb_config.bgw_job WHERE job_type IN ('drop_chunks', 'reorder') ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Now test if alter_job works
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset

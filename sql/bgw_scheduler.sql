@@ -17,8 +17,8 @@ RETURNS BOOL
 AS '@LOADER_PATHNAME@', 'ts_bgw_db_workers_start'
 LANGUAGE C VOLATILE;
 
-INSERT INTO _timescaledb_config.bgw_job (id, application_name, job_type, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled) VALUES
-(1, 'Telemetry Reporter [1]', 'telemetry_and_version_check_if_enabled', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h', '_timescaledb_internal', 'policy_telemetry_proc', CURRENT_ROLE, true)
+INSERT INTO _timescaledb_config.bgw_job (id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled) VALUES
+(1, 'Telemetry Reporter [1]', INTERVAL '24h', INTERVAL '100s', -1, INTERVAL '1h', '_timescaledb_internal', 'policy_telemetry', CURRENT_ROLE, true)
 ON CONFLICT (id) DO NOTHING;
 
 CREATE OR REPLACE FUNCTION add_job(

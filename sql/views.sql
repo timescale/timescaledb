@@ -4,9 +4,9 @@
 
 CREATE SCHEMA IF NOT EXISTS timescaledb_information;
 
--- Convenience view to list all hypertables 
+-- Convenience view to list all hypertables
 CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
-  SELECT 
+  SELECT
     ht.schema_name AS table_schema,
     ht.table_name as table_name,
     t.tableowner AS owner,
@@ -23,16 +23,16 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
     srchtbs.tablespace_list as tablespaces
   FROM _timescaledb_catalog.hypertable ht
         INNER JOIN pg_tables t
-        ON ht.table_name=t.tablename 
+        ON ht.table_name=t.tablename
            AND ht.schema_name=t.schemaname
         LEFT OUTER JOIN (
-            SELECT hypertable_id, 
-            array_agg(tablespace_name ORDER BY id) as tablespace_list 
+            SELECT hypertable_id,
+            array_agg(tablespace_name ORDER BY id) as tablespace_list
             FROM _timescaledb_catalog.tablespace
             GROUP BY hypertable_id ) srchtbs
        ON ht.id = srchtbs.hypertable_id
-       LEFT OUTER JOIN ( 
-            SELECT hypertable_id, 
+       LEFT OUTER JOIN (
+            SELECT hypertable_id,
             array_agg(node_name ORDER BY node_name) as node_list
                       FROM _timescaledb_catalog.hypertable_data_node
                       GROUP BY hypertable_id) dn
@@ -45,33 +45,12 @@ CREATE OR REPLACE VIEW timescaledb_information.license AS
          _timescaledb_internal.license_expiration_time() <= now() AS expired,
          _timescaledb_internal.license_expiration_time() AS expiration_time;
 
-CREATE OR REPLACE VIEW timescaledb_information.drop_chunks_policies as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, jsonb_object_field_text(j.config,'retention_window') AS retention_window, j.id AS job_id, j.schedule_interval,
-    j.max_runtime, j.max_retries, j.retry_period
-  FROM _timescaledb_config.bgw_job j
-    INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id;
-
-CREATE OR REPLACE VIEW timescaledb_information.reorder_policies AS
-SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass AS hypertable,
-  jsonb_object_field_text (j.config, 'index_name') AS hypertable_index_name,
-  j.id AS job_id,
-  j.schedule_interval,
-  j.max_runtime,
-  j.max_retries,
-  j.retry_period
-FROM _timescaledb_config.bgw_job j
-  INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
-WHERE job_type = 'reorder';
-
-
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, p.job_id, j.job_type, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, j.id AS job_id, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
     js.total_runs, js.total_failures
-  FROM (SELECT id AS job_id, hypertable_id FROM _timescaledb_config.bgw_job WHERE job_type IN ('reorder','compress_chunks','drop_chunks','continuous_aggregate')
-        ) p
-    INNER JOIN _timescaledb_catalog.hypertable ht ON p.hypertable_id = ht.id
-    INNER JOIN _timescaledb_config.bgw_job j ON p.job_id = j.id
-    INNER JOIN _timescaledb_internal.bgw_job_stat js on p.job_id = js.job_id
+  FROM _timescaledb_config.bgw_job j
+    INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
+    INNER JOIN _timescaledb_internal.bgw_job_stat js on j.id = js.job_id
   ORDER BY ht.schema_name, ht.table_name;
 
 -- views for continuous aggregate queries ---
