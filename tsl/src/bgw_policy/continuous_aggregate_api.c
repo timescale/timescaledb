@@ -5,13 +5,13 @@
  */
 
 #include <postgres.h>
+#include <miscadmin.h>
 
 #include <jsonb_utils.h>
 
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/job.h"
 
-#define POLICY_REORDER_PROC_NAME "policy_reorder"
 #define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
 
 int32
@@ -34,6 +34,8 @@ policy_continuous_aggregate_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
+
+	PreventCommandIfReadOnly("policy_continuous_aggregate()");
 
 	policy_continuous_aggregate_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 

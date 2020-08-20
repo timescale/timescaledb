@@ -277,4 +277,30 @@ FROM
   test_contagg
 GROUP BY bucket, device_id;
 ERROR:  cannot execute CREATE VIEW in a read-only transaction
-\set ON_ERROR_STOP 1
+-- policy API
+CALL _timescaledb_internal.policy_compression(1,'{}');
+ERROR:  cannot execute policy_compression() in a read-only transaction
+CALL _timescaledb_internal.policy_continuous_aggregate(1,'{}');
+ERROR:  cannot execute policy_continuous_aggregate() in a read-only transaction
+CALL _timescaledb_internal.policy_reorder(1,'{}');
+ERROR:  cannot execute policy_reorder() in a read-only transaction
+CALL _timescaledb_internal.policy_retention(1,'{}');
+ERROR:  cannot execute policy_retention() in a read-only transaction
+SELECT add_compression_policy('test_table', '1w');
+ERROR:  cannot execute add_compression_policy() in a read-only transaction
+SELECT remove_compression_policy('test_table');
+ERROR:  cannot execute remove_compression_policy() in a read-only transaction
+SELECT add_reorder_policy('test_table', 'test_table_time_idx');
+ERROR:  cannot execute add_reorder_policy() in a read-only transaction
+SELECT remove_reorder_policy('test_table');
+ERROR:  cannot execute remove_reorder_policy() in a read-only transaction
+SELECT add_retention_policy('test_table', '1w');
+ERROR:  cannot execute add_retention_policy() in a read-only transaction
+SELECT remove_retention_policy('test_table');
+ERROR:  cannot execute remove_retention_policy() in a read-only transaction
+SELECT add_job('now','12h');
+ERROR:  cannot execute add_job() in a read-only transaction
+SELECT alter_job(1,scheduled:=false);
+ERROR:  cannot execute alter_job() in a read-only transaction
+SELECT delete_job(1);
+ERROR:  cannot execute delete_job() in a read-only transaction
