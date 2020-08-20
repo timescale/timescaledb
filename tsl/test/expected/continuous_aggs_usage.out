@@ -19,7 +19,7 @@ SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
 (1 row)
 
 --Next, create your continuous aggregate view
-CREATE VIEW device_summary
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) --This flag is what makes the view continuous
 AS
 SELECT
@@ -44,7 +44,7 @@ SELECT * FROM device_summary;
 
 --Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
 --We alter max_interval_per_job too since we are not using background workers
-ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
+ALTER MATERIALIZED VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW device_summary;
 LOG:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to Sun Dec 30 22:00:00 2018 PST
@@ -156,7 +156,7 @@ SELECT max(bucket) FROM device_summary;
 --Negative values create materialization where the bucket ends after the max of the raw data.
 --So to have you data always up-to-date make the refresh_lag (-bucket_width). Note this
 --will slow down your inserts because of invalidation.
-ALTER VIEW device_summary SET (timescaledb.refresh_lag = '-1 hour');
+ALTER MATERIALIZED VIEW device_summary SET (timescaledb.refresh_lag = '-1 hour');
 REFRESH MATERIALIZED VIEW device_summary;
 LOG:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to Mon Dec 31 01:00:00 2018 PST
 SELECT max(observation_time) FROM device_readings;
@@ -208,9 +208,9 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 -- For example you cannot cast to the local time. This is because
 -- a timezone setting can alter from user-to-user and thus
 -- cannot be materialized.
-DROP VIEW device_summary;
+DROP MATERIALIZED VIEW device_summary;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_6_chunk
-CREATE VIEW device_summary
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -226,9 +226,9 @@ ERROR:  only immutable functions are supported for continuous aggregate query
 --note the error.
 -- You have two options:
 -- Option 1: be explicit in your timezone:
-DROP VIEW device_summary;
-ERROR:  view "device_summary" does not exist
-CREATE VIEW device_summary
+DROP MATERIALIZED VIEW device_summary;
+ERROR:  materialized view "device_summary" does not exist
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -241,12 +241,12 @@ FROM
   device_readings
 GROUP BY bucket, device_id;
 NOTICE:  adding index _materialized_hypertable_3_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(device_id, bucket)
-DROP VIEW device_summary;
+DROP MATERIALIZED VIEW device_summary;
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
-DROP VIEW device_summary;
-ERROR:  view "device_summary" does not exist
-CREATE VIEW device_summary
+DROP MATERIALIZED VIEW device_summary;
+ERROR:  materialized view "device_summary" does not exist
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -292,11 +292,11 @@ SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
  
 (1 row)
 
-CREATE VIEW device_readings_mat_only
+CREATE MATERIALIZED VIEW device_readings_mat_only
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
   SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
-CREATE VIEW device_readings_jit
+CREATE MATERIALIZED VIEW device_readings_jit
   WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
   SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
@@ -406,7 +406,7 @@ SELECT * FROM create_hypertable('whatever', 'time');
              8 | public      | whatever   | t
 (1 row)
 
-CREATE VIEW whatever_summary WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW whatever_summary WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
   FROM whatever GROUP BY bucket;
 SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
@@ -432,13 +432,13 @@ ERROR:  cannot drop table whatever because other objects depend on it
 -- object on it.
 CREATE VIEW whatever_summary_dependency AS SELECT * FROM whatever_summary;
 -- Should generate an error
-DROP VIEW whatever_summary;
+DROP MATERIALIZED VIEW whatever_summary;
 ERROR:  cannot drop view whatever_summary because other objects depend on it
 -- Dropping the dependent view so that we can do a proper drop below.
 DROP VIEW whatever_summary_dependency;
 ----------------------------------------------------------------
 -- Dropping the cagg should also remove the materialized table
-DROP VIEW whatever_summary;
+DROP MATERIALIZED VIEW whatever_summary;
 SELECT relname FROM pg_class WHERE oid = :mat_table;
  relname 
 ---------

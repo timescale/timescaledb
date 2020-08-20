@@ -26,49 +26,102 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 INSERT INTO conditions_before
 SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL, NULL, 8, true;
 
-CREATE VIEW mat_before
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
-AS
-  SELECT time_bucket('1week', timec) as bucket,
-    location,
-    min(allnull) as min_allnull,
-    max(temperature) as max_temp,
-    sum(temperature)+sum(humidity) as agg_sum_expr,
-    avg(humidity),
-    stddev(humidity),
-    bit_and(bit_int),
-    bit_or(bit_int),
-    bool_and(good_life),
-    every(temperature > 0),
-    bool_or(good_life),
-    count(*) as count_rows,
-    count(temperature) as count_temp,
-    count(allnull) as count_zero,
-    corr(temperature, humidity),
-    covar_pop(temperature, humidity),
-    covar_samp(temperature, humidity),
-    regr_avgx(temperature, humidity),
-    regr_avgy(temperature, humidity),
-    regr_count(temperature, humidity),
-    regr_intercept(temperature, humidity),
-    regr_r2(temperature, humidity),
-    regr_slope(temperature, humidity),
-    regr_sxx(temperature, humidity),
-    regr_sxy(temperature, humidity),
-    regr_syy(temperature, humidity),
-    stddev(temperature) as stddev_temp,
-    stddev_pop(temperature),
-    stddev_samp(temperature),
-    variance(temperature),
-    var_pop(temperature),
-    var_samp(temperature),
-    last(temperature, timec) as last_temp,
-    last(highlow, timec) as last_hl,
-    first(highlow, timec) as first_hl,
-    histogram(temperature, 0, 100, 5)
-  FROM conditions_before
-  GROUP BY bucket, location
-  HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+DO LANGUAGE PLPGSQL $$
+DECLARE
+  ts_version TEXT;
+BEGIN
+  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version < '2.0.0' THEN
+    CREATE VIEW mat_before
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    AS
+      SELECT time_bucket('1week', timec) as bucket,
+	location,
+	min(allnull) as min_allnull,
+	max(temperature) as max_temp,
+	sum(temperature)+sum(humidity) as agg_sum_expr,
+	avg(humidity),
+	stddev(humidity),
+	bit_and(bit_int),
+	bit_or(bit_int),
+	bool_and(good_life),
+	every(temperature > 0),
+	bool_or(good_life),
+	count(*) as count_rows,
+	count(temperature) as count_temp,
+	count(allnull) as count_zero,
+	corr(temperature, humidity),
+	covar_pop(temperature, humidity),
+	covar_samp(temperature, humidity),
+	regr_avgx(temperature, humidity),
+	regr_avgy(temperature, humidity),
+	regr_count(temperature, humidity),
+	regr_intercept(temperature, humidity),
+	regr_r2(temperature, humidity),
+	regr_slope(temperature, humidity),
+	regr_sxx(temperature, humidity),
+	regr_sxy(temperature, humidity),
+	regr_syy(temperature, humidity),
+	stddev(temperature) as stddev_temp,
+	stddev_pop(temperature),
+	stddev_samp(temperature),
+	variance(temperature),
+	var_pop(temperature),
+	var_samp(temperature),
+	last(temperature, timec) as last_temp,
+	last(highlow, timec) as last_hl,
+	first(highlow, timec) as first_hl,
+	histogram(temperature, 0, 100, 5)
+      FROM conditions_before
+      GROUP BY bucket, location
+      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+  ELSE
+    CREATE MATERIALIZED VIEW mat_before
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    AS
+      SELECT time_bucket('1week', timec) as bucket,
+	location,
+	min(allnull) as min_allnull,
+	max(temperature) as max_temp,
+	sum(temperature)+sum(humidity) as agg_sum_expr,
+	avg(humidity),
+	stddev(humidity),
+	bit_and(bit_int),
+	bit_or(bit_int),
+	bool_and(good_life),
+	every(temperature > 0),
+	bool_or(good_life),
+	count(*) as count_rows,
+	count(temperature) as count_temp,
+	count(allnull) as count_zero,
+	corr(temperature, humidity),
+	covar_pop(temperature, humidity),
+	covar_samp(temperature, humidity),
+	regr_avgx(temperature, humidity),
+	regr_avgy(temperature, humidity),
+	regr_count(temperature, humidity),
+	regr_intercept(temperature, humidity),
+	regr_r2(temperature, humidity),
+	regr_slope(temperature, humidity),
+	regr_sxx(temperature, humidity),
+	regr_sxy(temperature, humidity),
+	regr_syy(temperature, humidity),
+	stddev(temperature) as stddev_temp,
+	stddev_pop(temperature),
+	stddev_samp(temperature),
+	variance(temperature),
+	var_pop(temperature),
+	var_samp(temperature),
+	last(temperature, timec) as last_temp,
+	last(highlow, timec) as last_hl,
+	first(highlow, timec) as first_hl,
+	histogram(temperature, 0, 100, 5)
+      FROM conditions_before
+      GROUP BY bucket, location
+      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+  END IF;
+END $$;
 
 REFRESH MATERIALIZED VIEW mat_before;
 
@@ -76,49 +129,101 @@ REFRESH MATERIALIZED VIEW mat_before;
 -- but realtime agg view definition is not stable across versions
 CREATE SCHEMA cagg;
 
-CREATE VIEW cagg.realtime_mat
-WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
-AS
-  SELECT time_bucket('1week', timec) as bucket,
-    location,
-    min(allnull) as min_allnull,
-    max(temperature) as max_temp,
-    sum(temperature)+sum(humidity) as agg_sum_expr,
-    avg(humidity),
-    stddev(humidity),
-    bit_and(bit_int),
-    bit_or(bit_int),
-    bool_and(good_life),
-    every(temperature > 0),
-    bool_or(good_life),
-    count(*) as count_rows,
-    count(temperature) as count_temp,
-    count(allnull) as count_zero,
-    corr(temperature, humidity),
-    covar_pop(temperature, humidity),
-    covar_samp(temperature, humidity),
-    regr_avgx(temperature, humidity),
-    regr_avgy(temperature, humidity),
-    regr_count(temperature, humidity),
-    regr_intercept(temperature, humidity),
-    regr_r2(temperature, humidity),
-    regr_slope(temperature, humidity),
-    regr_sxx(temperature, humidity),
-    regr_sxy(temperature, humidity),
-    regr_syy(temperature, humidity),
-    stddev(temperature) as stddev_temp,
-    stddev_pop(temperature),
-    stddev_samp(temperature),
-    variance(temperature),
-    var_pop(temperature),
-    var_samp(temperature),
-    last(temperature, timec) as last_temp,
-    last(highlow, timec) as last_hl,
-    first(highlow, timec) as first_hl,
-    histogram(temperature, 0, 100, 5)
-  FROM conditions_before
-  GROUP BY bucket, location
-  HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+DO LANGUAGE PLPGSQL $$
+DECLARE
+  ts_version TEXT;
+BEGIN
+  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version < '2.0.0' THEN
+    CREATE VIEW cagg.realtime_mat
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    AS
+      SELECT time_bucket('1week', timec) as bucket,
+	location,
+	min(allnull) as min_allnull,
+	max(temperature) as max_temp,
+	sum(temperature)+sum(humidity) as agg_sum_expr,
+	avg(humidity),
+	stddev(humidity),
+	bit_and(bit_int),
+	bit_or(bit_int),
+	bool_and(good_life),
+	every(temperature > 0),
+	bool_or(good_life),
+	count(*) as count_rows,
+	count(temperature) as count_temp,
+	count(allnull) as count_zero,
+	corr(temperature, humidity),
+	covar_pop(temperature, humidity),
+	covar_samp(temperature, humidity),
+	regr_avgx(temperature, humidity),
+	regr_avgy(temperature, humidity),
+	regr_count(temperature, humidity),
+	regr_intercept(temperature, humidity),
+	regr_r2(temperature, humidity),
+	regr_slope(temperature, humidity),
+	regr_sxx(temperature, humidity),
+	regr_sxy(temperature, humidity),
+	regr_syy(temperature, humidity),
+	stddev(temperature) as stddev_temp,
+	stddev_pop(temperature),
+	stddev_samp(temperature),
+	variance(temperature),
+	var_pop(temperature),
+	var_samp(temperature),
+	last(temperature, timec) as last_temp,
+	last(highlow, timec) as last_hl,
+	first(highlow, timec) as first_hl,
+	histogram(temperature, 0, 100, 5)
+      FROM conditions_before
+      GROUP BY bucket, location
+      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+  ELSE
+    CREATE MATERIALIZED VIEW cagg.realtime_mat
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    AS
+      SELECT time_bucket('1week', timec) as bucket,
+	location,
+	min(allnull) as min_allnull,
+	max(temperature) as max_temp,
+	sum(temperature)+sum(humidity) as agg_sum_expr,
+	avg(humidity),
+	stddev(humidity),
+	bit_and(bit_int),
+	bit_or(bit_int),
+	bool_and(good_life),
+	every(temperature > 0),
+	bool_or(good_life),
+	count(*) as count_rows,
+	count(temperature) as count_temp,
+	count(allnull) as count_zero,
+	corr(temperature, humidity),
+	covar_pop(temperature, humidity),
+	covar_samp(temperature, humidity),
+	regr_avgx(temperature, humidity),
+	regr_avgy(temperature, humidity),
+	regr_count(temperature, humidity),
+	regr_intercept(temperature, humidity),
+	regr_r2(temperature, humidity),
+	regr_slope(temperature, humidity),
+	regr_sxx(temperature, humidity),
+	regr_sxy(temperature, humidity),
+	regr_syy(temperature, humidity),
+	stddev(temperature) as stddev_temp,
+	stddev_pop(temperature),
+	stddev_samp(temperature),
+	variance(temperature),
+	var_pop(temperature),
+	var_samp(temperature),
+	last(temperature, timec) as last_temp,
+	last(highlow, timec) as last_hl,
+	first(highlow, timec) as first_hl,
+	histogram(temperature, 0, 100, 5)
+      FROM conditions_before
+      GROUP BY bucket, location
+      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+  END IF;
+END $$;
 
 REFRESH MATERIALIZED VIEW cagg.realtime_mat;
-

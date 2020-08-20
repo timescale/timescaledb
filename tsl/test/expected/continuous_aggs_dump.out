@@ -82,18 +82,18 @@ SELECT
   replace(:'QUERY_TEMPLATE', 'TABLE', 'conditions_before') AS "QUERY_BEFORE",
   replace(:'QUERY_TEMPLATE', 'TABLE', 'conditions_after') AS "QUERY_AFTER"
 \gset
-DROP VIEW IF EXISTS mat_test;
-NOTICE:  view "mat_test" does not exist, skipping
+DROP MATERIALIZED VIEW IF EXISTS mat_test;
+NOTICE:  materialized view "mat_test" does not exist, skipping
 --materialize this VIEW before dump this tests
 --that the partial state survives the dump intact
-CREATE VIEW mat_before
+CREATE MATERIALIZED VIEW mat_before
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_BEFORE;
 NOTICE:  adding index _materialized_hypertable_3_location_bucket_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, bucket)
 --materialize this VIEW after dump this tests
 --that the partialize VIEW and refresh mechanics
 --survives the dump intact
-CREATE VIEW mat_after
+CREATE MATERIALIZED VIEW mat_after
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
 AS :QUERY_AFTER;
 NOTICE:  adding index _materialized_hypertable_4_location_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(location, bucket)
@@ -215,7 +215,7 @@ SELECT count(*) FROM conditions_after;
  Number of rows different between view and original (expect 0) | mat_after |     0
 (1 row)
 
-DROP VIEW mat_after;
+DROP MATERIALIZED VIEW mat_after;
 NOTICE:  drop cascades to 2 other objects
-DROP VIEW mat_before;
+DROP MATERIALIZED VIEW mat_before;
 NOTICE:  drop cascades to 2 other objects

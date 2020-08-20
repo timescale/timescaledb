@@ -270,7 +270,7 @@ SET client_min_messages TO LOG;
 
 SELECT * FROM continuous_agg_test_t;
 
-CREATE VIEW test_t_mat_view
+CREATE MATERIALIZED VIEW test_t_mat_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
@@ -368,7 +368,7 @@ SELECT set_integer_now_func('continuous_agg_extreme', 'integer_now_continuous_ag
 
 -- We should be able to use time_bucket(5, ...) (note lack of '), but that is currently not
 --      recognized as a constant
-CREATE VIEW extreme_view
+CREATE MATERIALIZED VIEW extreme_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('1', time), SUM(data) as value
         FROM continuous_agg_extreme
@@ -433,8 +433,8 @@ SELECT hypertable_id, watermark
     WHERE hypertable_id=:raw_table_id;
 
 --cleanup of continuous agg views --
-DROP view test_t_mat_view;
-DROP view extreme_view;
+DROP MATERIALIZED view test_t_mat_view;
+DROP MATERIALIZED view extreme_view;
 
 -- negative lag test
 CREATE TABLE continuous_agg_negative(time BIGINT, data BIGINT);
@@ -443,7 +443,7 @@ SELECT create_hypertable('continuous_agg_negative', 'time', chunk_time_interval=
 CREATE OR REPLACE FUNCTION integer_now_continuous_agg_negative() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), BIGINT '-9223372036854775808') FROM continuous_agg_negative $$;
 SELECT set_integer_now_func('continuous_agg_negative', 'integer_now_continuous_agg_negative');
 
-CREATE VIEW negative_view_5
+CREATE MATERIALIZED VIEW negative_view_5
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('5', time), COUNT(data) as value
         FROM continuous_agg_negative
@@ -471,10 +471,10 @@ INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
 REFRESH MATERIALIZED VIEW negative_view_5;
 SELECT * FROM negative_view_5 ORDER BY 1;
 
-DROP VIEW negative_view_5;
+DROP MATERIALIZED VIEW negative_view_5;
 TRUNCATE continuous_agg_negative;
 
-CREATE VIEW negative_view_5
+CREATE MATERIALIZED VIEW negative_view_5
             WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
 AS SELECT time_bucket('5', time), COUNT(data) as value
    FROM continuous_agg_negative
@@ -505,7 +505,7 @@ CREATE OR REPLACE FUNCTION integer_now_continuous_agg_max_mat() returns BIGINT L
 SELECT set_integer_now_func('continuous_agg_max_mat', 'integer_now_continuous_agg_max_mat');
 
 -- only allow two time_buckets per run
-CREATE VIEW max_mat_view
+CREATE MATERIALIZED VIEW max_mat_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4', timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), COUNT(data) as value
         FROM continuous_agg_max_mat
@@ -576,7 +576,7 @@ CREATE TABLE continuous_agg_max_mat_t(time TIMESTAMPTZ, data TIMESTAMPTZ);
 SELECT create_hypertable('continuous_agg_max_mat_t', 'time');
 
 -- only allow two time_buckets per run
-CREATE VIEW max_mat_view_t
+CREATE MATERIALIZED VIEW max_mat_view_t
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4 hours', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_max_mat_t
@@ -605,7 +605,7 @@ SELECT * FROM max_mat_view_t ORDER BY 1;
 CREATE TABLE continuous_agg_max_mat_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_max_mat_timestamp', 'time');
 
-CREATE VIEW max_mat_view_timestamp
+CREATE MATERIALIZED VIEW max_mat_view_timestamp
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time)
         FROM continuous_agg_max_mat_timestamp
@@ -622,7 +622,7 @@ SELECT * FROM max_mat_view_timestamp ORDER BY 1;
 CREATE TABLE continuous_agg_max_mat_date(time DATE);
 SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
 
-CREATE VIEW max_mat_view_date
+CREATE MATERIALIZED VIEW max_mat_view_date
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-7 days')
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_max_mat_date
@@ -664,7 +664,7 @@ INSERT INTO timezone_test VALUES
     (:NOW_TEST),
     (:NOW_TEST + '30m'::interval);
 
-CREATE VIEW timezone_test_summary
+CREATE MATERIALIZED VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
@@ -686,7 +686,7 @@ INSERT INTO timezone_test VALUES
     (:NOW_TEST),
     (:NOW_TEST + '30m'::interval);
 
-CREATE VIEW timezone_test_summary
+CREATE MATERIALIZED VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
@@ -708,7 +708,7 @@ SELECT create_hypertable('continuous_agg_int', 'time', chunk_time_interval=> 10)
 CREATE OR REPLACE FUNCTION integer_now_continuous_agg_max() returns BIGINT LANGUAGE SQL STABLE as $$ SELECT BIGINT '9223372036854775807' $$;
 SELECT set_integer_now_func('continuous_agg_int', 'integer_now_continuous_agg_max');
 
-CREATE VIEW continuous_agg_int_max 
+CREATE MATERIALIZED VIEW continuous_agg_int_max 
     WITH (timescaledb.continuous, timescaledb.refresh_lag='0')
     AS SELECT time_bucket('10', time), COUNT(data) as value
         FROM continuous_agg_int
@@ -730,7 +730,7 @@ where view_name::text like 'continuous_agg_int_max';
 -- TEST that watermark is limited by max value from data and not by now() 
 CREATE TABLE continuous_agg_ts_max_t(timecol TIMESTAMPTZ, data integer);
 SELECT create_hypertable('continuous_agg_ts_max_t', 'timecol', chunk_time_interval=>'365 days'::interval);
-CREATE VIEW continuous_agg_ts_max_view
+CREATE MATERIALIZED VIEW continuous_agg_ts_max_view
     WITH (timescaledb.continuous, timescaledb.max_interval_per_job='365 days', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', timecol), COUNT(data) as value
         FROM continuous_agg_ts_max_t

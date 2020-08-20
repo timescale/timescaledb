@@ -21,7 +21,7 @@ SELECT * FROM conditions
 ORDER BY time DESC, device
 LIMIT 10;
 
-CREATE VIEW daily_temp
+CREATE MATERIALIZED VIEW daily_temp
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -92,7 +92,7 @@ CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_date', 'time');
 
-CREATE VIEW daily_temp_date
+CREATE MATERIALIZED VIEW daily_temp_date
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -119,7 +119,7 @@ $$;
 
 SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
 
-CREATE VIEW cond_20_smallint
+CREATE MATERIALIZED VIEW cond_20_smallint
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -149,7 +149,7 @@ $$;
 
 SELECT set_integer_now_func('conditions_int', 'int_now');
 
-CREATE VIEW cond_20_int
+CREATE MATERIALIZED VIEW cond_20_int
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -179,7 +179,7 @@ $$;
 
 SELECT set_integer_now_func('conditions_bigint', 'bigint_now');
 
-CREATE VIEW cond_20_bigint
+CREATE MATERIALIZED VIEW cond_20_bigint
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS

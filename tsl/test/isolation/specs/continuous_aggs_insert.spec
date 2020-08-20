@@ -11,7 +11,7 @@ setup
     SELECT set_integer_now_func('ts_continuous_test', 'integer_now_test');
     INSERT INTO ts_continuous_test SELECT i, i FROM
         (SELECT generate_series(0, 29) AS i) AS i;
-    CREATE VIEW continuous_view
+    CREATE MATERIALIZED VIEW continuous_view
         WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
         AS SELECT time_bucket('5', time), COUNT(location)
             FROM ts_continuous_test

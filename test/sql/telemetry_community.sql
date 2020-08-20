@@ -19,7 +19,7 @@ CREATE TABLE device_readings (
       observation_time  TIMESTAMPTZ       NOT NULL
 );
 SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
-CREATE VIEW device_summary
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous) AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,

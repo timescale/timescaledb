@@ -392,27 +392,28 @@ process_altertableschema(ProcessUtilityArgs *args)
 	ts_cache_release(hcache);
 }
 
+/* We use this for both materialized views and views. */
 static void
 process_alterviewschema(ProcessUtilityArgs *args)
 {
-	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
+	AlterObjectSchemaStmt *stmt = (AlterObjectSchemaStmt *) args->parsetree;
 	Oid relid;
 	char *schema;
 	char *name;
 
-	Assert(alterstmt->objectType == OBJECT_VIEW);
+	Assert(stmt->objectType == OBJECT_MATVIEW || stmt->objectType == OBJECT_VIEW);
 
-	if (NULL == alterstmt->relation)
+	if (NULL == stmt->relation)
 		return;
 
-	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
+	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	if (!OidIsValid(relid))
 		return;
 
 	schema = get_namespace_name(get_rel_namespace(relid));
 	name = get_rel_name(relid);
 
-	ts_continuous_agg_rename_view(schema, name, alterstmt->newschema, name);
+	ts_continuous_agg_rename_view(schema, name, stmt->newschema, name, &stmt->objectType);
 }
 
 /* Change the schema of a hypertable or a chunk */
@@ -426,13 +427,13 @@ process_alterobjectschema(ProcessUtilityArgs *args)
 		case OBJECT_TABLE:
 			process_altertableschema(args);
 			break;
+		case OBJECT_MATVIEW:
 		case OBJECT_VIEW:
 			process_alterviewschema(args);
 			break;
 		default:
 			break;
-	};
-
+	}
 	return DDL_CONTINUE;
 }
 
@@ -1085,33 +1086,38 @@ process_grant_and_revoke_role(ProcessUtilityArgs *args)
 }
 
 static void
+process_drop_view_start(ProcessUtilityArgs *args, DropStmt *stmt)
+{
+	ListCell *cell;
+	foreach (cell, stmt->objects)
+	{
+		List *const object = lfirst(cell);
+		RangeVar *const rv = makeRangeVarFromNameList(object);
+		ContinuousAgg *const cagg = ts_continuous_agg_find_by_rv(rv);
+
+		if (cagg)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot drop continuous aggregate using DROP VIEW"),
+					 errhint("Use DROP MATERIALIZED VIEW to drop a continuous aggregate.")));
+	}
+}
+
+static void
 process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 {
 	ListCell *lc;
+	int caggs_count = 0;
 
 	if (stmt->behavior == DROP_CASCADE)
 		return;
 
 	foreach (lc, stmt->objects)
 	{
-		List *object = lfirst(lc);
-		RangeVar *relation = makeRangeVarFromNameList(object);
-		Oid relid;
-		char *schema;
-		char *name;
-		ContinuousAgg *cagg;
+		List *const object = lfirst(lc);
+		RangeVar *const rv = makeRangeVarFromNameList(object);
+		ContinuousAgg *const cagg = ts_continuous_agg_find_by_rv(rv);
 
-		if (NULL == relation)
-			continue;
-
-		relid = RangeVarGetRelid(relation, NoLock, true);
-		if (!OidIsValid(relid))
-			continue;
-
-		schema = get_namespace_name(get_rel_namespace(relid));
-		name = get_rel_name(relid);
-
-		cagg = ts_continuous_agg_find_by_view_name(schema, name);
 		if (cagg)
 		{
 			/* Add the materialization table to the arguments so that the
@@ -1124,8 +1130,21 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 			Hypertable *ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 			if (ht)
 				process_add_hypertable(args, ht);
+			/* If there is at least one cagg, the drop should be treated as a
+			 * DROP VIEW. */
+			stmt->removeType = OBJECT_VIEW;
+			++caggs_count;
 		}
 	}
+
+	/* We check that there were only continuous aggregates or that there were
+	   no continuous aggregates. Otherwise, we have a mixture of tables and
+	   views and are looking for views only.*/
+	if (caggs_count > 0 && caggs_count < list_length(stmt->objects))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("mixing continuous aggregates and other objects not allowed"),
+				 errhint("Drop continuous aggregates and other objects in separate statements.")));
 }
 
 static DDLResult
@@ -1142,8 +1161,11 @@ process_drop_start(ProcessUtilityArgs *args)
 		case OBJECT_INDEX:
 			process_drop_hypertable_index(args, stmt);
 			break;
-		case OBJECT_VIEW:
+		case OBJECT_MATVIEW:
 			process_drop_continuous_aggregates(args, stmt);
+			break;
+		case OBJECT_VIEW:
+			process_drop_view_start(args, stmt);
 			break;
 		case OBJECT_FOREIGN_SERVER:
 			process_drop_foreign_server_start(stmt);
@@ -1347,7 +1369,7 @@ process_rename_view(Oid relid, RenameStmt *stmt)
 {
 	char *schema = get_namespace_name(get_rel_namespace(relid));
 	char *name = get_rel_name(relid);
-	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname);
+	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname, &stmt->renameType);
 }
 
 /* Visit all internal catalog tables with a schema column to check for applicable rename */
@@ -1492,6 +1514,7 @@ process_rename(ProcessUtilityArgs *args)
 		case OBJECT_TABCONSTRAINT:
 			process_rename_constraint(args, hcache, relid, stmt);
 			break;
+		case OBJECT_MATVIEW:
 		case OBJECT_VIEW:
 			process_rename_view(relid, stmt);
 			break;
@@ -2699,15 +2722,14 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 }
 
 static DDLResult
-process_altertable_start_view(ProcessUtilityArgs *args)
+process_altertable_start_matview(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
-	Oid view_relid = AlterTableLookupRelation(stmt, NoLock);
+	const Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	NameData view_name;
 	NameData view_schema;
 	ContinuousAgg *cagg;
 	ListCell *lc;
-	ContinuousAggViewType vtyp;
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
@@ -2720,12 +2742,6 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 		return DDL_CONTINUE;
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
-
-	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
-	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot alter the internal view of a continuous aggregate")));
 
 	foreach (lc, stmt->cmds)
 	{
@@ -2752,6 +2768,39 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 }
 
 static DDLResult
+process_altertable_start_view(ProcessUtilityArgs *args)
+{
+	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
+	Oid relid = AlterTableLookupRelation(stmt, NoLock);
+	ContinuousAgg *cagg;
+	ContinuousAggViewType vtyp;
+	NameData view_name;
+	NameData view_schema;
+
+	/* Check if this is a materialized view and give error if it is. */
+	cagg = ts_continuous_agg_find_by_relid(relid);
+	if (cagg)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot alter continuous aggregate using ALTER VIEW"),
+				 errhint("Use ALTER MATERIALIZED VIEW to alter a continuous aggregate.")));
+
+	/* Check if this is an internal view of a continuous aggregate and give
+	 * error if attempts are made to alter them. */
+	namestrcpy(&view_name, get_rel_name(relid));
+	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(relid)));
+	cagg = ts_continuous_agg_find_by_view_name(NameStr(view_schema), NameStr(view_name));
+	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
+
+	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot alter the internal view of a continuous aggregate")));
+
+	return DDL_DONE;
+}
+
+static DDLResult
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
@@ -2759,6 +2808,8 @@ process_altertable_start(ProcessUtilityArgs *args)
 	{
 		case OBJECT_TABLE:
 			return process_altertable_start_table(args);
+		case OBJECT_MATVIEW:
+			return process_altertable_start_matview(args);
 		case OBJECT_VIEW:
 			return process_altertable_start_view(args);
 		default:
@@ -3131,33 +3182,57 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 static DDLResult
 process_viewstmt(ProcessUtilityArgs *args)
 {
-	WithClauseResult *parse_results = NULL;
-	bool is_cagg = false;
-	Node *parsetree = args->parsetree;
-	ViewStmt *stmt = (ViewStmt *) parsetree;
-	List *pg_options = NIL, *cagg_options = NIL;
-	Assert(IsA(parsetree, ViewStmt));
-	/* is this a continuous agg */
+	ViewStmt *stmt = castNode(ViewStmt, args->parsetree);
+	List *pg_options = NIL;
+	List *cagg_options = NIL;
+
+	/* Check if user is passing continuous aggregate parameters and print a
+	 * useful error message if that is the case. */
 	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
 	if (cagg_options)
+		ereport(ERROR,
+				(errmsg("cannot create continuous aggregate with CREATE VIEW"),
+				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate")));
+	return DDL_CONTINUE;
+}
+
+static DDLResult
+process_create_table_as(ProcessUtilityArgs *args)
+{
+	CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, args->parsetree);
+	WithClauseResult *parse_results = NULL;
+	bool is_cagg = false;
+	List *pg_options = NIL, *cagg_options = NIL;
+
+	if (stmt->relkind == OBJECT_MATVIEW)
 	{
-		parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
-		is_cagg = DatumGetBool(parse_results[ContinuousEnabled].parsed);
+		/* Check for creation of continuous aggregate */
+		ts_with_clause_filter(stmt->into->options, &cagg_options, &pg_options);
+
+		if (cagg_options)
+		{
+			parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
+			is_cagg = DatumGetBool(parse_results[ContinuousEnabled].parsed);
+		}
+
+		if (!is_cagg)
+			return DDL_CONTINUE;
+
+		if (pg_options != NIL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("unsupported combination of storage parameters"),
+					 errdetail("A continuous aggregate does not support standard storage "
+							   "parameters."),
+					 errhint("Use only parameters with the \"timescaledb.\" prefix when "
+							 "creating a continuous aggregate.")));
+		return ts_cm_functions->process_cagg_viewstmt(args->parsetree,
+													  args->query_string,
+													  args->pstmt,
+													  parse_results);
 	}
 
-	if (!is_cagg)
-		return DDL_CONTINUE;
-
-	if (pg_options != NIL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb parameters allowed in WITH clause for continuous "
-						"aggregate")));
-
-	return ts_cm_functions->process_cagg_viewstmt(stmt,
-												  args->query_string,
-												  args->pstmt,
-												  parse_results);
+	return DDL_CONTINUE;
 }
 
 static DDLResult
@@ -3309,6 +3384,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_RefreshMatViewStmt:
 			handler = process_refresh_mat_view_start;
+			break;
+		case T_CreateTableAsStmt:
+			handler = process_create_table_as;
 			break;
 		default:
 			handler = NULL;

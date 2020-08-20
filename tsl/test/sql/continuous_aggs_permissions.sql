@@ -25,7 +25,7 @@ CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE a
 SELECT set_integer_now_func('conditions', 'integer_now_test1');
 
 
-create or replace view mat_refresh_test
+CREATE MATERIALIZED VIEW mat_refresh_test
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
@@ -101,16 +101,16 @@ select from alter_job(:cagg_job_id, max_runtime => NULL);
 
 --make sure that commands fail
 
-ALTER VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
-ALTER VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
-DROP VIEW mat_refresh_test; 
+ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
+ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
+DROP MATERIALIZED VIEW mat_refresh_test; 
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 SELECT * FROM mat_refresh_test;
 SELECT * FROM :materialization_hypertable;
 SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
 
 --cannot create a mat view without select and trigger grants
-create or replace view mat_perm_view_test
+CREATE MATERIALIZED VIEW mat_perm_view_test
 WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
@@ -118,7 +118,7 @@ from conditions_for_perm_check
 group by time_bucket(100, timec), location;
 
 --cannot create mat view in a schema without create privileges
-create or replace view custom_schema.mat_perm_view_test
+CREATE MATERIALIZED VIEW custom_schema.mat_perm_view_test
 WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
@@ -127,7 +127,7 @@ group by time_bucket(100, timec), location;
 
 --cannot use a function without EXECUTE privileges
 --you can create a VIEW but cannot refresh it
-create or replace view mat_perm_view_test
+CREATE MATERIALIZED VIEW mat_perm_view_test
 WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity), get_constant()
@@ -136,10 +136,10 @@ group by time_bucket(100, timec), location;
 
 --this should fail
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
-DROP VIEW mat_perm_view_test;
+DROP MATERIALIZED VIEW mat_perm_view_test;
 
 --can create a mat view on something with select and trigger grants
-create or replace view mat_perm_view_test
+CREATE MATERIALIZED VIEW mat_perm_view_test
 WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)

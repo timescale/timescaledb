@@ -18,7 +18,7 @@ CREATE TABLE device_readings (
 SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
 
 --Next, create your continuous aggregate view
-CREATE VIEW device_summary
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) --This flag is what makes the view continuous
 AS
 SELECT
@@ -41,7 +41,7 @@ SELECT * FROM device_summary;
 
 --Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
 --We alter max_interval_per_job too since we are not using background workers
-ALTER VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
+ALTER MATERIALIZED VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 REFRESH MATERIALIZED VIEW device_summary;
 
@@ -87,7 +87,7 @@ SELECT max(bucket) FROM device_summary;
 --Negative values create materialization where the bucket ends after the max of the raw data.
 --So to have you data always up-to-date make the refresh_lag (-bucket_width). Note this
 --will slow down your inserts because of invalidation.
-ALTER VIEW device_summary SET (timescaledb.refresh_lag = '-1 hour');
+ALTER MATERIALIZED VIEW device_summary SET (timescaledb.refresh_lag = '-1 hour');
 REFRESH MATERIALIZED VIEW device_summary;
 SELECT max(observation_time) FROM device_readings;
 SELECT max(bucket) FROM device_summary;
@@ -118,8 +118,8 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 -- a timezone setting can alter from user-to-user and thus
 -- cannot be materialized.
 
-DROP VIEW device_summary;
-CREATE VIEW device_summary
+DROP MATERIALIZED VIEW device_summary;
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -136,8 +136,8 @@ GROUP BY bucket, device_id;
 -- You have two options:
 -- Option 1: be explicit in your timezone:
 
-DROP VIEW device_summary;
-CREATE VIEW device_summary
+DROP MATERIALIZED VIEW device_summary;
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -149,13 +149,13 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id;
-DROP VIEW device_summary;
+DROP MATERIALIZED VIEW device_summary;
 
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
 
-DROP VIEW device_summary;
-CREATE VIEW device_summary
+DROP MATERIALIZED VIEW device_summary;
+CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
 SELECT
@@ -186,12 +186,12 @@ SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
 
 SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
 
-CREATE VIEW device_readings_mat_only
+CREATE MATERIALIZED VIEW device_readings_mat_only
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
   SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
 
-CREATE VIEW device_readings_jit
+CREATE MATERIALIZED VIEW device_readings_jit
   WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
   SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
@@ -243,7 +243,7 @@ SELECT * FROM device_readings_jit ORDER BY time_bucket;
 
 CREATE TABLE whatever(time TIMESTAMPTZ NOT NULL, metric INTEGER);
 SELECT * FROM create_hypertable('whatever', 'time');
-CREATE VIEW whatever_summary WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW whatever_summary WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
   FROM whatever GROUP BY bucket;
 
@@ -267,14 +267,14 @@ DROP TABLE whatever;
 CREATE VIEW whatever_summary_dependency AS SELECT * FROM whatever_summary;
 
 -- Should generate an error
-DROP VIEW whatever_summary;
+DROP MATERIALIZED VIEW whatever_summary;
 
 -- Dropping the dependent view so that we can do a proper drop below.
 DROP VIEW whatever_summary_dependency;
 
 ----------------------------------------------------------------
 -- Dropping the cagg should also remove the materialized table
-DROP VIEW whatever_summary;
+DROP MATERIALIZED VIEW whatever_summary;
 SELECT relname FROM pg_class WHERE oid = :mat_table;
 
 ----------------------------------------------------------------

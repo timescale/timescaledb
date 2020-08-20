@@ -49,7 +49,7 @@ CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABL
 
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
 
-CREATE VIEW drop_chunks_view1 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.max_interval_per_job=100)
+CREATE MATERIALIZED VIEW drop_chunks_view1 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.max_interval_per_job=100)
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
     GROUP BY 1;

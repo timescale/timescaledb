@@ -44,7 +44,7 @@ LIMIT 10;
  Mon May 04 22:30:00 2020 PDT |      0 |    8
 (10 rows)
 
-CREATE VIEW daily_temp
+CREATE MATERIALIZED VIEW daily_temp
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -190,7 +190,7 @@ SELECT create_hypertable('conditions_date', 'time');
  (3,public,conditions_date,t)
 (1 row)
 
-CREATE VIEW daily_temp_date
+CREATE MATERIALIZED VIEW daily_temp_date
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -222,7 +222,7 @@ SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
  
 (1 row)
 
-CREATE VIEW cond_20_smallint
+CREATE MATERIALIZED VIEW cond_20_smallint
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -272,7 +272,7 @@ SELECT set_integer_now_func('conditions_int', 'int_now');
  
 (1 row)
 
-CREATE VIEW cond_20_int
+CREATE MATERIALIZED VIEW cond_20_int
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
@@ -322,7 +322,7 @@ SELECT set_integer_now_func('conditions_bigint', 'bigint_now');
  
 (1 row)
 
-CREATE VIEW cond_20_bigint
+CREATE MATERIALIZED VIEW cond_20_bigint
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS

@@ -75,7 +75,7 @@ CREATE TABLE test_continuous_agg_table(time int, data int);
 SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
 CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
 SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
-CREATE VIEW test_continuous_agg_view
+CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
@@ -220,9 +220,9 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 -- fast restart test
 SELECT ts_bgw_params_reset_time();
 
-DROP VIEW test_continuous_agg_view;
+DROP MATERIALIZED VIEW test_continuous_agg_view;
 
-CREATE VIEW test_continuous_agg_view
+CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
         timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',
@@ -285,10 +285,10 @@ select view_name, completed_threshold, invalidation_threshold, job_status, last_
 
 \x off
 
-DROP VIEW test_continuous_agg_view;
+DROP MATERIALIZED VIEW test_continuous_agg_view;
 
 --create a view with a function that it has no permission to execute
-CREATE VIEW test_continuous_agg_view
+CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
         timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',
@@ -322,7 +322,7 @@ INSERT INTO test_continuous_agg_table_w_grant
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 
 -- make sure view can be created
-CREATE VIEW test_continuous_agg_view_user_2
+CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
     WITH ( timescaledb.continuous,
         timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',

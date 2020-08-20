@@ -83,7 +83,7 @@ SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
  
 (1 row)
 
-CREATE VIEW test_continuous_agg_view
+CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
@@ -348,9 +348,9 @@ SELECT ts_bgw_params_reset_time();
  
 (1 row)
 
-DROP VIEW test_continuous_agg_view;
+DROP MATERIALIZED VIEW test_continuous_agg_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
-CREATE VIEW test_continuous_agg_view
+CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
         timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',
@@ -492,10 +492,10 @@ job_status             | Scheduled
 last_run_duration      | 
 
 \x off
-DROP VIEW test_continuous_agg_view;
+DROP MATERIALIZED VIEW test_continuous_agg_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 --create a view with a function that it has no permission to execute
-CREATE VIEW test_continuous_agg_view
+CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
         timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',
@@ -544,7 +544,7 @@ INSERT INTO test_continuous_agg_table_w_grant
         (SELECT generate_series(0, 10) as i) AS j;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 -- make sure view can be created
-CREATE VIEW test_continuous_agg_view_user_2
+CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
     WITH ( timescaledb.continuous,
         timescaledb.materialized_only=true,
         timescaledb.max_interval_per_job='2',

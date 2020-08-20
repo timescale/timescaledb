@@ -23,7 +23,7 @@ CREATE TABLE records (
 SELECT * FROM create_hypertable('records', 'time',
        chunk_time_interval => INTERVAL '1h');
 
-CREATE VIEW records_monthly 
+CREATE MATERIALIZED VIEW records_monthly 
     WITH (timescaledb.continuous)
     AS 
         SELECT time_bucket('1d', time) as bucket, 
@@ -41,7 +41,7 @@ SET timescaledb.current_timestamp_mock = '2000-04-01';
 
 SELECT * FROM records_monthly;
 
-ALTER VIEW records_monthly SET (
+ALTER MATERIALIZED VIEW records_monthly SET (
    timescaledb.ignore_invalidation_older_than = '15 days'
 );
 

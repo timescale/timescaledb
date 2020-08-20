@@ -5,9 +5,9 @@
 --expects QUERY to be set
 \o /dev/null
 
-DROP VIEW IF EXISTS mat_test;
+DROP MATERIALIZED VIEW IF EXISTS mat_test;
 
-create view mat_test
+CREATE MATERIALIZED VIEW mat_test
 WITH ( timescaledb.continuous)
 as :QUERY
 ;

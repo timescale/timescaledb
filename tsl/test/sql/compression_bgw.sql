@@ -114,7 +114,7 @@ INSERT INTO conditions
 SELECT time, (random()*30)::int, random()*80 - 40
 FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
 
-CREATE VIEW conditions_summary
+CREATE MATERIALIZED VIEW conditions_summary
 WITH (timescaledb.continuous,
       timescaledb.max_interval_per_job = '60 days') AS
 SELECT device,
@@ -128,7 +128,7 @@ GROUP BY device, time_bucket(INTERVAL '1 hour', "time");
 REFRESH MATERIALIZED VIEW conditions_summary;
 
 ALTER TABLE conditions SET (timescaledb.compress);
-ALTER VIEW conditions_summary SET (
+ALTER MATERIALIZED VIEW conditions_summary SET (
       timescaledb.ignore_invalidation_older_than = '15 days'
 );
 
