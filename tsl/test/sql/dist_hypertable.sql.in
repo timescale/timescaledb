@@ -1470,3 +1470,24 @@ SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device
 SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device', 3,
        migrate_data => TRUE);
 \set ON_ERROR_STOP 1
+
+-- Test creating index with transaction per chunk on a distributed hypertable
+--
+DROP TABLE disttable;
+
+CREATE TABLE disttable(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, 1.2),
+       ('2017-01-01 09:11', 3, 4.3),
+       ('2017-01-01 08:01', 1, 7.3),
+       ('2017-01-02 08:01', 2, 0.23),
+       ('2018-07-02 08:01', 87, 0.0),
+       ('2018-07-01 06:01', 13, 3.1),
+       ('2018-07-01 09:11', 90, 10303.12),
+       ('2018-07-01 08:01', 29, 64);
+CREATE INDEX disttable_time_device_idx ON disttable (time, device) WITH (timescaledb.transaction_per_chunk);
