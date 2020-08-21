@@ -230,7 +230,12 @@ job_alter(PG_FUNCTION_ARGS)
 	values[3] = Int32GetDatum(job->fd.max_retries);
 	values[4] = IntervalPGetDatum(&job->fd.retry_period);
 	values[5] = BoolGetDatum(job->fd.scheduled);
-	values[6] = JsonbPGetDatum(job->fd.config);
+
+	if (job->fd.config == NULL)
+		nulls[6] = true;
+	else
+		values[6] = JsonbPGetDatum(job->fd.config);
+
 	values[7] = TimestampTzGetDatum(next_start);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
