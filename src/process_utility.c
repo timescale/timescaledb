@@ -1991,6 +1991,12 @@ process_index_start(ProcessUtilityArgs *args)
 				 errmsg(
 					 "cannot use timescaledb.transaction_per_chunk with UNIQUE or PRIMARY KEY")));
 
+	if (info.extended_options.multitransaction && hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg(
+					 "cannot use timescaledb.transaction_per_chunk with distributed hypetable")));
+
 	ts_indexing_verify_index(ht->space, stmt);
 
 	if (info.extended_options.multitransaction)
