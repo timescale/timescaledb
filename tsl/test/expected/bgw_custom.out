@@ -108,3 +108,11 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000;
 ----+------------------+----------+-------------------+-------------+-------------+--------------+-----------+-------------+-------+-----------+---------------+--------
 (0 rows)
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test altering job with NULL config
+SELECT job_id FROM alter_job(1,scheduled:=false);
+ job_id 
+--------
+      1
+(1 row)
+

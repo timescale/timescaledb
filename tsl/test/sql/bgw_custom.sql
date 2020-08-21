@@ -56,3 +56,7 @@ SELECT delete_job(1004);
 -- check jobs got removed
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000;
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- test altering job with NULL config
+SELECT job_id FROM alter_job(1,scheduled:=false);
+
