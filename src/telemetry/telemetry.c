@@ -10,6 +10,7 @@
 #include <commands/extension.h>
 #include <catalog/pg_collation.h>
 #include <utils/builtins.h>
+#include <utils/fmgrprotos.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
