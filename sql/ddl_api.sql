@@ -92,26 +92,19 @@ CREATE OR REPLACE FUNCTION  set_number_partitions(
 -- Drop chunks older than the given timestamp for the specific
 -- hypertable or continuous aggregate.
 CREATE OR REPLACE FUNCTION drop_chunks(
-    hypertable_or_cagg  REGCLASS,
-    older_than "any" = NULL,
-    newer_than "any" = NULL,
-    verbose BOOLEAN = FALSE
+    hypertable_or_cagg     REGCLASS,
+    older_than             "any" = NULL,
+    newer_than             "any" = NULL,
+    verbose                BOOLEAN = FALSE
 ) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C VOLATILE PARALLEL UNSAFE;
 
 -- show chunks older than or newer than a specific time.
--- `hypertable` argument can be a valid hypertable or NULL.
--- In the latter case the function will try to list all
--- the chunks from all of the hypertables in the database.
--- older_than or newer_than or both can be NULL.
--- if `hypertable` argument is null but a time constraint is specified
--- through older_than or newer_than, the call will succeed
--- if and only if all the hypertables in the database
--- have the same type as the given time constraint argument
+-- `hypertable` must be a valid hypertable or continuous aggregate.
 CREATE OR REPLACE FUNCTION show_chunks(
-    hypertable  REGCLASS = NULL,
-    older_than "any" = NULL,
-    newer_than "any" = NULL
+    hypertable_or_cagg     REGCLASS,
+    older_than             "any" = NULL,
+    newer_than             "any" = NULL
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
 

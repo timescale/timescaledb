@@ -54,7 +54,6 @@ ORDER BY 1 DESC,2;
 -- Test unusual, but valid input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
-CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 
 -- Unbounded window forward in time
 \set ON_ERROR_STOP 0
@@ -85,6 +84,7 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
+CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 
 \set ON_ERROR_STOP 1
 
@@ -127,7 +127,7 @@ SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2;
 
-CALL refresh_continuous_aggregate('cond_20_smallint', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint);
 
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;

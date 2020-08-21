@@ -52,6 +52,7 @@
 #include "hypercube.h"
 #include "scanner.h"
 #include "process_utility.h"
+#include "time_utils.h"
 #include "trigger.h"
 #include "compat.h"
 #include "utils.h"
@@ -114,6 +115,10 @@ static int chunk_cmp(const void *ch1, const void *ch2);
 static Chunk *chunk_find(Hypertable *ht, Point *p, bool resurrect);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
 											  const char *table_name);
+static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid);
+static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
+									   const char *caller_name, MemoryContext mctx,
+									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
 
 #define IS_VALID_CHUNK(chunk)                                                                      \
 	((chunk) && !(chunk)->fd.dropped && (chunk)->fd.id > 0 && (chunk)->fd.hypertable_id > 0 &&     \
@@ -542,8 +547,8 @@ chunk_collision_resolve(Hypertable *ht, Hypercube *cube, Point *p)
 	chunk_scan_ctx_destroy(&scanctx);
 }
 
-int
-ts_chunk_add_constraints(Chunk *chunk)
+static int
+chunk_add_constraints(Chunk *chunk)
 {
 	int num_added;
 
@@ -959,7 +964,7 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
 	/* Add metadata for dimensional and inheritable constraints */
-	ts_chunk_add_constraints(chunk);
+	chunk_add_constraints(chunk);
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 
 	/* If this is a remote chunk we assign data nodes */
@@ -1662,12 +1667,12 @@ ts_chunk_find(Hypertable *ht, Point *p)
  * ChunkScanCxt. It is the caller's responsibility to destroy this context after
  * usage.
  */
-static ChunkScanCtx *
+static void
 chunks_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim, StrategyNumber start_strategy,
 							   int64 start_value, StrategyNumber end_strategy, int64 end_value,
-							   int limit, uint64 *num_found, ScanTupLock *tuplock)
+							   int limit, uint64 *num_found, ScanTupLock *tuplock,
+							   ChunkScanCtx *ctx)
 {
-	ChunkScanCtx *ctx = palloc(sizeof(ChunkScanCtx));
 	DimensionVec *slices;
 
 	Assert(ht != NULL);
@@ -1693,130 +1698,6 @@ chunks_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim, StrategyNumb
 	dimension_slice_and_chunk_constraint_join(ctx, slices);
 
 	*num_found += hash_get_num_entries(ctx->htab);
-	return ctx;
-}
-
-/*
- * Convert the difference of interval and current timestamp to internal representation
- * This function interprets the interval as distance in time dimension to the past.
- * Depending on the type of hypertable time column, the function applies the
- * necessary granularity to now() - interval and returns the resulting
- * datum (which incapsulates data of time column type)
- */
-static Datum
-subtract_interval_from_now(Oid partitioning_type, const Interval *interval)
-{
-	Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
-
-	switch (partitioning_type)
-	{
-		case TIMESTAMPOID:
-			res = DirectFunctionCall1(timestamptz_timestamp, res);
-			return DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(interval));
-
-		case TIMESTAMPTZOID:
-			return DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(interval));
-
-		case DATEOID:
-			res = DirectFunctionCall1(timestamptz_timestamp, res);
-			res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(interval));
-			return DirectFunctionCall1(timestamp_date, res);
-
-		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unknown time type %s", format_type_be(partitioning_type))));
-	}
-
-	return res;
-}
-
-/*
- * Convert endpoint specifiers such as older than and newer than to an absolute
- * time. The rules for conversion are as follows:
- *
- * For PG INTERVAL input return now()-interval (this is the correct
- * interpretation for both older and newer than). For TIMESTAMP(TZ)/DATE/INTEGERS
- * return the internal time representation. Otherwise, ERROR.
- */
-static int64
-get_internal_time_from_endpoint_specifiers(Dimension *time_dim, Datum endpoint_datum,
-										   Oid endpoint_type, const char *caller_name)
-{
-	Oid partitioning_type = ts_dimension_get_partition_type(time_dim);
-
-	ts_dimension_open_typecheck(endpoint_type, partitioning_type, caller_name);
-	Assert(OidIsValid(endpoint_type));
-
-	if (endpoint_type == INTERVALOID)
-	{
-		return ts_time_value_to_internal(subtract_interval_from_now(partitioning_type,
-																	DatumGetIntervalP(
-																		endpoint_datum)),
-										 partitioning_type);
-	}
-	else
-	{
-		return ts_time_value_to_internal(endpoint_datum, endpoint_type);
-	}
-}
-
-static ChunkScanCtx *
-chunks_typecheck_and_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim,
-											 Datum older_than_datum, Oid older_than_type,
-											 Datum newer_than_datum, Oid newer_than_type, int limit,
-											 MemoryContext multi_call_memory_ctx, char *caller_name,
-											 uint64 *num_found, ScanTupLock *tuplock)
-{
-	ChunkScanCtx *chunk_ctx = NULL;
-	int64 older_than = -1;
-	int64 newer_than = -1;
-	StrategyNumber start_strategy = InvalidStrategy;
-	StrategyNumber end_strategy = InvalidStrategy;
-	MemoryContext oldcontext;
-
-	if (time_dim == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no time dimension found")));
-
-	if (older_than_type != InvalidOid)
-	{
-		older_than = get_internal_time_from_endpoint_specifiers(time_dim,
-																older_than_datum,
-																older_than_type,
-																caller_name);
-		end_strategy = BTLessStrategyNumber;
-	}
-
-	if (newer_than_type != InvalidOid)
-	{
-		newer_than = get_internal_time_from_endpoint_specifiers(time_dim,
-																newer_than_datum,
-																newer_than_type,
-																caller_name);
-		start_strategy = BTGreaterEqualStrategyNumber;
-	}
-
-	if (older_than_type != InvalidOid && newer_than_type != InvalidOid && older_than < newer_than)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("When both older_than and newer_than are specified, "
-						"older_than must refer to a time that is more recent than newer_than so "
-						"that a valid overlapping range is specified")));
-
-	oldcontext = MemoryContextSwitchTo(multi_call_memory_ctx);
-	chunk_ctx = chunks_find_all_in_range_limit(ht,
-											   time_dim,
-											   start_strategy,
-											   newer_than,
-											   end_strategy,
-											   older_than,
-											   limit,
-											   num_found,
-											   tuplock);
-	MemoryContextSwitchTo(oldcontext);
-
-	return chunk_ctx;
 }
 
 static ChunkResult
@@ -1962,127 +1843,84 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 	if (SRF_IS_FIRSTCALL())
 	{
 		FuncCallContext *funcctx;
+		Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+		Hypertable *ht;
+		Dimension *time_dim;
+		Cache *hcache;
+		int64 older_than = PG_INT64_MAX;
+		int64 newer_than = PG_INT64_MIN;
+		Oid time_type;
 
-		Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-		Datum older_than_datum = PG_GETARG_DATUM(1);
-		Datum newer_than_datum = PG_GETARG_DATUM(2);
+		hcache = ts_hypertable_cache_pin();
+		ht = find_hypertable_from_table_or_cagg(hcache, relid);
+		Assert(ht != NULL);
+		time_dim = hyperspace_get_open_dimension(ht->space, 0);
+		Assert(time_dim != NULL);
+		time_type = ts_dimension_get_partition_type(time_dim);
 
-		/*
-		 * get_fn_expr_argtype defaults to UNKNOWNOID if argument is NULL but
-		 * making it InvalidOid makes the logic simpler later
-		 */
-		Oid older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
-		Oid newer_than_type = PG_ARGISNULL(2) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 2);
+		if (!PG_ARGISNULL(1))
+			older_than = ts_time_value_from_arg(PG_GETARG_DATUM(1),
+												get_fn_expr_argtype(fcinfo->flinfo, 1),
+												time_type);
+
+		if (!PG_ARGISNULL(2))
+			newer_than = ts_time_value_from_arg(PG_GETARG_DATUM(2),
+												get_fn_expr_argtype(fcinfo->flinfo, 2),
+												time_type);
 
 		funcctx = SRF_FIRSTCALL_INIT();
-
-		funcctx->user_fctx = ts_chunk_get_chunks_in_time_range(table_relid,
-															   older_than_datum,
-															   newer_than_datum,
-															   older_than_type,
-															   newer_than_type,
-															   "show_chunks",
-															   funcctx->multi_call_memory_ctx,
-															   &funcctx->max_calls,
-															   NULL);
+		funcctx->user_fctx = get_chunks_in_time_range(ht,
+													  older_than,
+													  newer_than,
+													  "show_chunks",
+													  funcctx->multi_call_memory_ctx,
+													  &funcctx->max_calls,
+													  NULL);
+		ts_cache_release(hcache);
 	}
 
 	return chunks_return_srf(fcinfo);
 }
 
-Chunk *
-ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
-								  Oid older_than_type, Oid newer_than_type, char *caller_name,
-								  MemoryContext mctx, uint64 *num_chunks_returned,
-								  ScanTupLock *tuplock)
+static Chunk *
+get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
+						 const char *caller_name, MemoryContext mctx, uint64 *num_chunks_returned,
+						 ScanTupLock *tuplock)
 {
-	ListCell *lc;
 	MemoryContext oldcontext;
-	ChunkScanCtx **chunk_scan_ctxs;
+	ChunkScanCtx chunk_scan_ctx;
 	Chunk *chunks;
 	ChunkScanCtxAddChunkData data;
-	Cache *hypertable_cache;
-	Hypertable *ht;
 	Dimension *time_dim;
-	Oid time_dim_type = InvalidOid;
-
-	/*
-	 * contains the list of hypertables which need to be considered. this is a
-	 * list containing a single hypertable if we are passed a valid table
-	 * OID. Otherwise, it will have the list of all hypertables in the system
-	 */
-	List *hypertables = NIL;
-	int ht_index = 0;
+	StrategyNumber start_strategy;
+	StrategyNumber end_strategy;
 	uint64 num_chunks = 0;
-	int i;
 
-	if (older_than_type != InvalidOid && newer_than_type != InvalidOid &&
-		older_than_type != newer_than_type)
+	if (older_than <= newer_than)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("older_than_type and newer_than_type should have the same type")));
+				 errmsg("invalid time range"),
+				 errhint("The start of the time range must be before the end.")));
 
-	/*
-	 * Cache outside the if block to make sure cached hypertable entry
-	 * returned will still be valid in foreach block below
-	 */
-	hypertable_cache = ts_hypertable_cache_pin();
-	if (!OidIsValid(table_relid))
-	{
-		hypertables = ts_hypertable_get_all();
-	}
-	else
-	{
-		ht = ts_hypertable_cache_get_entry(hypertable_cache, table_relid, CACHE_FLAG_NONE);
-		hypertables = list_make1(ht);
-	}
+	if (ht->fd.compressed)
+		elog(ERROR, "invalid operation on compressed hypertable");
+
+	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
+	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	oldcontext = MemoryContextSwitchTo(mctx);
-	chunk_scan_ctxs = palloc(sizeof(ChunkScanCtx *) * list_length(hypertables));
+	chunks_find_all_in_range_limit(ht,
+								   time_dim,
+								   start_strategy,
+								   newer_than,
+								   end_strategy,
+								   older_than,
+								   -1,
+								   &num_chunks,
+								   tuplock,
+								   &chunk_scan_ctx);
 	MemoryContextSwitchTo(oldcontext);
-	foreach (lc, hypertables)
-	{
-		ht = lfirst(lc);
-
-		if (ht->fd.compressed)
-			elog(ERROR, "cannot call ts_chunk_get_chunks_in_time_range on a compressed hypertable");
-
-		time_dim = hyperspace_get_open_dimension(ht->space, 0);
-
-		if (time_dim_type == InvalidOid)
-			time_dim_type = ts_dimension_get_partition_type(time_dim);
-
-		/*
-		 * Even though internally all time columns are represented as bigints,
-		 * it is locally unclear what set of chunks should be returned if
-		 * there are multiple tables on the system some of which care about
-		 * timestamp when others do not. That is why, whenever there is any
-		 * time dimension constraint given as an argument (older_than or
-		 * newer_than) we make sure all hypertables have the time dimension
-		 * type of the given type or through an error. This check is done
-		 * across hypertables that is why it is not in the helper function
-		 * below.
-		 */
-		if (time_dim_type != ts_dimension_get_partition_type(time_dim) &&
-			(older_than_type != InvalidOid || newer_than_type != InvalidOid))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot call \"%s\" on all hypertables "
-							"when all hypertables do not have the same time dimension type",
-							caller_name)));
-
-		chunk_scan_ctxs[ht_index++] = chunks_typecheck_and_find_all_in_range_limit(ht,
-																				   time_dim,
-																				   older_than_datum,
-																				   older_than_type,
-																				   newer_than_datum,
-																				   newer_than_type,
-																				   -1,
-																				   mctx,
-																				   caller_name,
-																				   &num_chunks,
-																				   tuplock);
-	}
 
 	chunks = MemoryContextAllocZero(mctx, sizeof(Chunk) * num_chunks);
 	data = (ChunkScanCtxAddChunkData){
@@ -2091,22 +1929,17 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 		.num_chunks = 0,
 	};
 
-	for (i = 0; i < list_length(hypertables); i++)
-	{
-		/* Get all the chunks from the context */
-		chunk_scan_ctxs[i]->data = &data;
-		chunk_scan_ctx_foreach_chunk_stub(chunk_scan_ctxs[i], chunk_scan_context_add_chunk, -1);
-		/*
-		 * only affects ctx.htab Got all the chunk already so can now safely
-		 * destroy the context
-		 */
-		chunk_scan_ctx_destroy(chunk_scan_ctxs[i]);
-	}
+	/* Get all the chunks from the context */
+	chunk_scan_ctx.data = &data;
+	chunk_scan_ctx_foreach_chunk_stub(&chunk_scan_ctx, chunk_scan_context_add_chunk, -1);
+	/*
+	 * only affects ctx.htab Got all the chunk already so can now safely
+	 * destroy the context
+	 */
+	chunk_scan_ctx_destroy(&chunk_scan_ctx);
 
 	*num_chunks_returned = data.num_chunks;
 	qsort(chunks, *num_chunks_returned, sizeof(Chunk), chunk_cmp);
-
-	ts_cache_release(hypertable_cache);
 
 #ifdef USE_ASSERT_CHECKING
 	do
@@ -2122,7 +1955,7 @@ ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum
 }
 
 List *
-ts_chunk_data_nodes_copy(Chunk *chunk)
+ts_chunk_data_nodes_copy(const Chunk *chunk)
 {
 	List *lcopy = NIL;
 	ListCell *lc;
@@ -2141,7 +1974,7 @@ ts_chunk_data_nodes_copy(Chunk *chunk)
 }
 
 Chunk *
-ts_chunk_copy(Chunk *chunk)
+ts_chunk_copy(const Chunk *chunk)
 {
 	Chunk *copy;
 
@@ -2184,7 +2017,7 @@ chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_
 }
 
 /*
- * Get a window of chunks that "precede" the given dimensional point.
+ * Get a window of chunks that "precedes" the given dimensional point.
  *
  * For instance, if the dimension is "time", then given a point in time the
  * function returns the recent chunks that come before the chunk that includes
@@ -3207,7 +3040,7 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 }
 
 static void
-ts_chunk_drop_internal(Chunk *chunk, DropBehavior behavior, int32 log_level,
+ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_level,
 					   bool preserve_catalog_row)
 {
 	ObjectAddress objaddr = {
@@ -3229,24 +3062,22 @@ ts_chunk_drop_internal(Chunk *chunk, DropBehavior behavior, int32 log_level,
 }
 
 void
-ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level)
+ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	ts_chunk_drop_internal(chunk, behavior, log_level, false);
 }
 
 void
-ts_chunk_drop_preserve_catalog_row(Chunk *chunk, DropBehavior behavior, int32 log_level)
+ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 {
 	ts_chunk_drop_internal(chunk, behavior, log_level, true);
 }
 
 static void
-ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum,
-									Oid older_than_type, Oid newer_than_type, Chunk *chunks,
-									int num_chunks)
+ts_chunk_drop_process_invalidations(Oid hypertable_relid, int64 older_than, int64 newer_than,
+									Chunk *chunks, int num_chunks)
 {
 	Dimension *time_dimension;
-	int64 older_than_time;
 	int64 ignore_invalidation_older_than;
 	int64 minimum_invalidation_time;
 	int64 lowest_completion_time;
@@ -3255,27 +3086,11 @@ ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum
 	Cache *hcache;
 	Hypertable *ht;
 	int i;
-
 	FormData_continuous_agg cagg;
-
-	if (OidIsValid(newer_than_type))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot use newer_than parameter to drop_chunks with "
-						"cascade_to_materializations")));
-
-	if (!OidIsValid(older_than_type))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("must use older_than parameter to drop_chunks with "
-						"cascade_to_materializations")));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid, CACHE_FLAG_NONE, &hcache);
 	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	older_than_time = get_internal_time_from_endpoint_specifiers(time_dimension,
-																 older_than_datum,
-																 older_than_type,
-																 "drop_chunks");
+
 	ignore_invalidation_older_than =
 		ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id, &cagg);
 	minimum_invalidation_time =
@@ -3283,7 +3098,7 @@ ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum
 														 ignore_invalidation_older_than);
 
 	/* minimum_invalidation_time is inclusive; older_than_time is exclusive */
-	if (minimum_invalidation_time < older_than_time)
+	if (minimum_invalidation_time < older_than)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("older_than must be greater than the "
@@ -3297,7 +3112,7 @@ ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum
 	 * that would block the system. So, just bail. The completion threshold
 	 * should be much higher than this anyway */
 	lowest_completion_time = ts_continuous_aggs_min_completed_threshold(ht->fd.id, &cagg);
-	if (lowest_completion_time < older_than_time)
+	if (lowest_completion_time < older_than)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("the continuous aggregate %s.%s is too far behind",
@@ -3322,7 +3137,7 @@ ts_chunk_drop_process_invalidations(Oid hypertable_relid, Datum older_than_datum
 			.verbose = true,
 			.within_single_transaction = true,
 			.process_only_invalidation = true,
-			.invalidate_prior_to_time = older_than_time,
+			.invalidate_prior_to_time = older_than,
 		};
 		bool finished_all_invalidation = false;
 
@@ -3368,12 +3183,8 @@ lock_referenced_tables(Oid table_relid)
 		LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
 }
 
-/* Continuous agg materialization hypertables can be dropped
- * only if a user explicitly specifies the table name
- */
 List *
-ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than_datum,
-						Oid older_than_type, Oid newer_than_type, int32 log_level,
+ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int32 log_level,
 						List **affected_data_nodes)
 
 {
@@ -3419,21 +3230,18 @@ ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum, Datum newer_than
 			break;
 	}
 
-	chunks = ts_chunk_get_chunks_in_time_range(ht->main_table_relid,
-											   older_than_datum,
-											   newer_than_datum,
-											   older_than_type,
-											   newer_than_type,
-											   "drop_chunks",
-											   CurrentMemoryContext,
-											   &num_chunks,
-											   &tuplock);
+	chunks = get_chunks_in_time_range(ht,
+									  older_than,
+									  newer_than,
+									  DROP_CHUNKS_FUNCNAME,
+									  CurrentMemoryContext,
+									  &num_chunks,
+									  &tuplock);
 
 	if (has_continuous_aggs)
 		ts_chunk_drop_process_invalidations(ht->main_table_relid,
-											older_than_datum,
-											older_than_type,
-											newer_than_type,
+											older_than,
+											newer_than,
 											chunks,
 											num_chunks);
 
@@ -3523,7 +3331,7 @@ list_return_srf(FunctionCallInfo fcinfo)
  * it is a materialized hypertable.
  */
 static Hypertable *
-find_hypertable_for_drop_by_relid(Cache *hcache, Oid relid)
+find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid)
 {
 	const char *rel_name;
 	Hypertable *ht;
@@ -3532,7 +3340,7 @@ find_hypertable_for_drop_by_relid(Cache *hcache, Oid relid)
 	if (!rel_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
-				 errmsg("OID %u does not refer to a table or view", relid)));
+				 errmsg("invalid hypertable or continuous aggregate")));
 
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	if (ht)
@@ -3543,10 +3351,9 @@ find_hypertable_for_drop_by_relid(Cache *hcache, Oid relid)
 			case HypertableIsMaterialization:
 			case HypertableIsMaterializationAndRaw:
 				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("cannot drop chunks on a continuous aggregate materialization "
-								"hypertable"),
-						 errhint("Call drop_chunks on the continuous aggregate instead."),
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on materialized hypertable"),
+						 errhint("Try the operation on the continuous aggregate instead."),
 						 errdetail("Hypertable \"%s\" is a materialized hypertable.", rel_name)));
 				break;
 
@@ -3569,15 +3376,15 @@ find_hypertable_for_drop_by_relid(Cache *hcache, Oid relid)
 					 errmsg("\"%s.%s\" is not a hypertable or a continuous aggregate view",
 							schema_name,
 							rel_name),
-					 errhint("It is only possible to drop chunks from a hypertable or continuous "
-							 "aggregate view")));
+					 errhint("The operation is only possible on a hypertable or continuous"
+							 " aggregate view")));
 		ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 		if (!ht)
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_INTERNAL_ERROR),
 					 errmsg("no materialized table for continuous aggregate view"),
-					 errdetail("Continuous aggregate \"%s.%s\" had a materialized hypertable "
-							   "with id %d but it was not found in the hypertable catalog.",
+					 errdetail("Continuous aggregate \"%s.%s\" had a materialized hypertable"
+							   " with id %d but it was not found in the hypertable catalog.",
 							   schema_name,
 							   rel_name,
 							   cagg->data.mat_hypertable_id)));
@@ -3595,14 +3402,16 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	List *dc_temp = NIL;
 	List *dc_names = NIL;
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Datum older_than_datum, newer_than_datum;
-	Oid older_than_type, newer_than_type;
+	int64 older_than = PG_INT64_MAX;
+	int64 newer_than = PG_INT64_MIN;
 	bool verbose;
 	int elevel;
 	List *data_node_oids = NIL;
 	Cache *hcache;
+	Dimension *time_dim;
+	Oid time_type;
 
-	PreventCommandIfReadOnly("drop_chunks()");
+	PreventCommandIfReadOnly(DROP_CHUNKS_FUNCNAME "()");
 
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,
@@ -3615,23 +3424,13 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable or continuous aggregate"),
-				 errdetail(
-					 "Expected either a hypertable or a continuous aggregate but got NULL.")));
+				 errhint("Specify a hypertable or continuous aggregate.")));
 
 	if (PG_ARGISNULL(1) && PG_ARGISNULL(2))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("older_than and newer_than timestamps provided to drop_chunks cannot both "
-						"be NULL")));
-
-	older_than_datum = PG_GETARG_DATUM(1);
-	newer_than_datum = PG_GETARG_DATUM(2);
-
-	/* Making types InvalidOid makes the logic simpler later */
-	older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
-	newer_than_type = PG_ARGISNULL(2) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 2);
-	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
-	elevel = verbose ? INFO : DEBUG2;
+				 errmsg("invalid time range for dropping chunks"),
+				 errhint("At least one of older_than and newer_than must be provided.")));
 
 	/* Find either the hypertable or view, or error out if the relid is
 	 * neither.
@@ -3640,8 +3439,24 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	 * that does not refer to a hypertable or a continuous aggregate, or a
 	 * relid that does not refer to anything at all. */
 	hcache = ts_hypertable_cache_pin();
-	ht = find_hypertable_for_drop_by_relid(hcache, relid);
+	ht = find_hypertable_from_table_or_cagg(hcache, relid);
 	Assert(ht != NULL);
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Assert(time_dim != NULL);
+	time_type = ts_dimension_get_partition_type(time_dim);
+
+	if (!PG_ARGISNULL(1))
+		older_than = ts_time_value_from_arg(PG_GETARG_DATUM(1),
+											get_fn_expr_argtype(fcinfo->flinfo, 1),
+											time_type);
+
+	if (!PG_ARGISNULL(2))
+		newer_than = ts_time_value_from_arg(PG_GETARG_DATUM(2),
+											get_fn_expr_argtype(fcinfo->flinfo, 2),
+											time_type);
+
+	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	elevel = verbose ? INFO : DEBUG2;
 
 	/* Initial multi function call setup */
 	funcctx = SRF_FIRSTCALL_INIT();
@@ -3651,13 +3466,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	PG_TRY();
 	{
-		dc_temp = ts_chunk_do_drop_chunks(ht,
-										  older_than_datum,
-										  newer_than_datum,
-										  older_than_type,
-										  newer_than_type,
-										  elevel,
-										  &data_node_oids);
+		dc_temp = ts_chunk_do_drop_chunks(ht, older_than, newer_than, elevel, &data_node_oids);
 	}
 	PG_CATCH();
 	{

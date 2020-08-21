@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 --------------------------------------------------------------------------
--- show_chunks and drop_chunks functions on a compressed table 
+-- show_chunks and drop_chunks functions on a compressed table
 -- (issue https://github.com/timescale/timescaledb/issues/1535)
 -- create a table that will not be compressed
 CREATE TABLE public.uncompressed_table(time date NOT NULL, temp float8, device_id text);
@@ -33,28 +33,7 @@ NOTICE:  adding index _compressed_hypertable_3_acq_id__ts_meta_sequence_num_idx 
 INSERT INTO public.table_to_compress VALUES ('2020-01-01', 1234567, 777888);
 INSERT INTO public.table_to_compress VALUES ('2020-02-01', 567567, 890890);
 INSERT INTO public.table_to_compress VALUES ('2020-02-10', 1234, 5678);
-SELECT show_chunks('public.table_to_compress');
-              show_chunks               
-----------------------------------------
- _timescaledb_internal._hyper_2_7_chunk
- _timescaledb_internal._hyper_2_8_chunk
- _timescaledb_internal._hyper_2_9_chunk
-(3 rows)
-
-SELECT show_chunks(hypertable=>'public.table_to_compress', older_than=>'1 day'::interval);
-              show_chunks               
-----------------------------------------
- _timescaledb_internal._hyper_2_7_chunk
- _timescaledb_internal._hyper_2_8_chunk
- _timescaledb_internal._hyper_2_9_chunk
-(3 rows)
-
-SELECT show_chunks(hypertable=>'public.table_to_compress', newer_than=>'1 day'::interval);
- show_chunks 
--------------
-(0 rows)
-
-SELECT show_chunks(); -- across all hypertables
+SELECT show_chunks('public.uncompressed_table');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -63,13 +42,31 @@ SELECT show_chunks(); -- across all hypertables
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+SELECT show_chunks('public.table_to_compress');
+              show_chunks               
+----------------------------------------
  _timescaledb_internal._hyper_2_7_chunk
  _timescaledb_internal._hyper_2_8_chunk
  _timescaledb_internal._hyper_2_9_chunk
-(9 rows)
+(3 rows)
+
+SELECT show_chunks('public.table_to_compress', older_than=>'1 day'::interval);
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_2_7_chunk
+ _timescaledb_internal._hyper_2_8_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+(3 rows)
+
+SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
+ show_chunks 
+-------------
+(0 rows)
 
 -- compress all chunks of the table:
-SELECT compress_chunk(show_chunks(hypertable=>'public.table_to_compress'));
+SELECT compress_chunk(show_chunks('public.table_to_compress'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_2_7_chunk
@@ -78,28 +75,7 @@ SELECT compress_chunk(show_chunks(hypertable=>'public.table_to_compress'));
 (3 rows)
 
 -- and run the queries again to make sure results are the same
-SELECT show_chunks('public.table_to_compress');
-              show_chunks               
-----------------------------------------
- _timescaledb_internal._hyper_2_7_chunk
- _timescaledb_internal._hyper_2_8_chunk
- _timescaledb_internal._hyper_2_9_chunk
-(3 rows)
-
-SELECT show_chunks(hypertable=>'public.table_to_compress', older_than=>'1 day'::interval);
-              show_chunks               
-----------------------------------------
- _timescaledb_internal._hyper_2_7_chunk
- _timescaledb_internal._hyper_2_8_chunk
- _timescaledb_internal._hyper_2_9_chunk
-(3 rows)
-
-SELECT show_chunks(hypertable=>'public.table_to_compress', newer_than=>'1 day'::interval);
- show_chunks 
--------------
-(0 rows)
-
-SELECT show_chunks(); 
+SELECT show_chunks('public.uncompressed_table');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -108,10 +84,28 @@ SELECT show_chunks();
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+SELECT show_chunks('public.table_to_compress');
+              show_chunks               
+----------------------------------------
  _timescaledb_internal._hyper_2_7_chunk
  _timescaledb_internal._hyper_2_8_chunk
  _timescaledb_internal._hyper_2_9_chunk
-(9 rows)
+(3 rows)
+
+SELECT show_chunks('public.table_to_compress', older_than=>'1 day'::interval);
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_2_7_chunk
+ _timescaledb_internal._hyper_2_8_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+(3 rows)
+
+SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
+ show_chunks 
+-------------
+(0 rows)
 
 -- drop all hypertables' old chunks
 SELECT drop_chunks(table_name::regclass, older_than=>'1 day'::interval)
@@ -131,7 +125,12 @@ ORDER BY table_name DESC;
  _timescaledb_internal._hyper_2_9_chunk
 (9 rows)
 
-SELECT show_chunks(); 
+SELECT show_chunks('public.uncompressed_table');
+ show_chunks 
+-------------
+(0 rows)
+
+SELECT show_chunks('public.table_to_compress');
  show_chunks 
 -------------
 (0 rows)

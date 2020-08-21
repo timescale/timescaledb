@@ -52,19 +52,19 @@ SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '
 
 -- testing drop_chunks START
 -- show_chunks and drop_chunks output should be the same
-\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => \'2017-03-01\'::timestamp, hypertable => \'test_ts\')::REGCLASS::TEXT'
+\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => \'2017-03-01\'::timestamp, hypertable_or_cagg => \'test_ts\')::REGCLASS::TEXT'
 \set QUERY2 'SELECT "testSchema0".drop_chunks(\'test_ts\', \'2017-03-01\'::timestamp)::TEXT'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
 SELECT * FROM test_ts ORDER BY time;
-\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => interval \'1 minutes\', hypertable => \'test_tz\')::REGCLASS::TEXT'
+\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => interval \'1 minutes\', hypertable_or_cagg => \'test_tz\')::REGCLASS::TEXT'
 \set QUERY2 'SELECT "testSchema0".drop_chunks(\'test_tz\', interval \'1 minutes\')::TEXT'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
 \set ECHO all
 SELECT * FROM test_tz ORDER BY time;
-\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => interval \'1 minutes\', hypertable => \'test_dt\')::REGCLASS::TEXT'
+\set QUERY1 'SELECT "testSchema0".show_chunks(older_than => interval \'1 minutes\', hypertable_or_cagg => \'test_dt\')::REGCLASS::TEXT'
 \set QUERY2 'SELECT "testSchema0".drop_chunks(\'test_dt\', interval \'1 minutes\')::TEXT'
 \set ECHO errors
 \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH

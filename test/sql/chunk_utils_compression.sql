@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 --------------------------------------------------------------------------
--- show_chunks and drop_chunks functions on a compressed table 
+-- show_chunks and drop_chunks functions on a compressed table
 -- (issue https://github.com/timescale/timescaledb/issues/1535)
 
 -- create a table that will not be compressed
@@ -26,20 +26,21 @@ ALTER TABLE public.table_to_compress SET (timescaledb.compress, timescaledb.comp
 INSERT INTO public.table_to_compress VALUES ('2020-01-01', 1234567, 777888);
 INSERT INTO public.table_to_compress VALUES ('2020-02-01', 567567, 890890);
 INSERT INTO public.table_to_compress VALUES ('2020-02-10', 1234, 5678);
+SELECT show_chunks('public.uncompressed_table');
 SELECT show_chunks('public.table_to_compress');
-SELECT show_chunks(hypertable=>'public.table_to_compress', older_than=>'1 day'::interval);
-SELECT show_chunks(hypertable=>'public.table_to_compress', newer_than=>'1 day'::interval);
-SELECT show_chunks(); -- across all hypertables
+SELECT show_chunks('public.table_to_compress', older_than=>'1 day'::interval);
+SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
 -- compress all chunks of the table:
-SELECT compress_chunk(show_chunks(hypertable=>'public.table_to_compress'));
+SELECT compress_chunk(show_chunks('public.table_to_compress'));
 -- and run the queries again to make sure results are the same
+SELECT show_chunks('public.uncompressed_table');
 SELECT show_chunks('public.table_to_compress');
-SELECT show_chunks(hypertable=>'public.table_to_compress', older_than=>'1 day'::interval);
-SELECT show_chunks(hypertable=>'public.table_to_compress', newer_than=>'1 day'::interval);
-SELECT show_chunks(); 
+SELECT show_chunks('public.table_to_compress', older_than=>'1 day'::interval);
+SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
 -- drop all hypertables' old chunks
 SELECT drop_chunks(table_name::regclass, older_than=>'1 day'::interval)
   FROM _timescaledb_catalog.hypertable
  WHERE schema_name = current_schema()
 ORDER BY table_name DESC;
-SELECT show_chunks(); 
+SELECT show_chunks('public.uncompressed_table');
+SELECT show_chunks('public.table_to_compress');

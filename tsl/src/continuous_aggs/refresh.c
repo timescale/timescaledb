@@ -18,6 +18,7 @@
 #include <hypertable.h>
 #include <hypertable_cache.h>
 #include <time_bucket.h>
+#include <time_utils.h>
 #include <utils.h>
 
 #include "refresh.h"
@@ -236,70 +237,6 @@ continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange 
 	continuous_agg_refresh_execute(&refresh);
 }
 
-/*
- * Get the time value for a given time argument in "internal" time.
- *
- * Since the window parameters are of type "any", there is no type information
- * given to the function unless the user did an explicit cast. Thus, if the
- * refresh is executed as follows:
- *
- * refresh_continuous_aggregate('daily_temp', '2020-10-01', '2020-10-04');
- *
- * then the argument type will be UNKNOWNOID. And the user would have to add
- * explicit type casts:
- *
- * refresh_continuous_aggregate('daily_temp', '2020-10-01'::date, '2020-10-04'::date);
- *
- * However, we can easily handle the UNKNOWNOID case since we have the time
- * type information in the continuous aggregate and we can try to convert the
- * argument to that type.
- *
- * Thus, there are two cases:
- *
- * 1. An explicit cast was done --> the type is given in argtype.
- * 2. No cast was done --> We try to convert the argument to the caggs time
- *    type.
- *
- * If an unsupported type is given, or the typeless argument has a nonsensical
- * string, then there will be an error raised.
- */
-static int64
-get_time_value_from_arg(Datum arg, Oid argtype, Oid cagg_timetype)
-{
-	if (!OidIsValid(argtype) || argtype == UNKNOWNOID)
-	{
-		/* No explicit cast was done by the user. Try to convert the argument
-		 * to the time type used by the continuous aggregate. */
-		Oid infuncid = InvalidOid;
-		Oid typeioparam;
-
-		argtype = cagg_timetype;
-		getTypeInputInfo(argtype, &infuncid, &typeioparam);
-
-		switch (get_func_nargs(infuncid))
-		{
-			case 1:
-				/* Functions that take one input argument, e.g., the Date function */
-				arg = OidFunctionCall1(infuncid, arg);
-				break;
-			case 3:
-				/* Timestamp functions take three input arguments */
-				arg = OidFunctionCall3(infuncid,
-									   arg,
-									   ObjectIdGetDatum(InvalidOid),
-									   Int32GetDatum(-1));
-				break;
-			default:
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("invalid window parameter"),
-						 errhint("The window parameter requires an explicit cast.")));
-		}
-	}
-
-	return ts_time_value_to_internal(arg, argtype);
-}
-
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 
 /*
@@ -357,14 +294,14 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	refresh_window.type = ts_dimension_get_partition_type(time_dim);
 
 	if (!PG_ARGISNULL(1))
-		refresh_window.start = get_time_value_from_arg(PG_GETARG_DATUM(1),
-													   get_fn_expr_argtype(fcinfo->flinfo, 1),
-													   refresh_window.type);
+		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
+													  get_fn_expr_argtype(fcinfo->flinfo, 1),
+													  refresh_window.type);
 
 	if (!PG_ARGISNULL(2))
-		refresh_window.end = get_time_value_from_arg(PG_GETARG_DATUM(2),
-													 get_fn_expr_argtype(fcinfo->flinfo, 2),
-													 refresh_window.type);
+		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
+													get_fn_expr_argtype(fcinfo->flinfo, 2),
+													refresh_window.type);
 
 	if (refresh_window.start >= refresh_window.end)
 		ereport(ERROR,
