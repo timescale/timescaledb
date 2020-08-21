@@ -177,10 +177,6 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(chunk_set_foreign_server(chunk, server));
 }
 
-/* Should match definition in ddl_api.sql */
-#define DROP_CHUNKS_FUNCNAME "drop_chunks"
-#define DROP_CHUNKS_NARGS 4
-
 /*
  * Invoke drop_chunks via fmgr so that the call can be deparsed and sent to
  * remote data nodes.

@@ -20,6 +20,10 @@
 
 #define INVALID_CHUNK_ID 0
 
+/* Should match definition in ddl_api.sql */
+#define DROP_CHUNKS_FUNCNAME "drop_chunks"
+#define DROP_CHUNKS_NARGS 4
+
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct Hyperspace Hyperspace;
@@ -110,9 +114,7 @@ extern Chunk *ts_chunk_find(Hypertable *ht, Point *p);
 extern Chunk **ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
 extern List *ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode);
-extern TSDLLEXPORT int ts_chunk_add_constraints(Chunk *chunk);
-
-extern TSDLLEXPORT Chunk *ts_chunk_copy(Chunk *chunk);
+extern TSDLLEXPORT Chunk *ts_chunk_copy(const Chunk *chunk);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 																   const char *table_name,
 																   MemoryContext mctx,
@@ -143,18 +145,11 @@ extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, in
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id,
 													  bool isnull);
-extern TSDLLEXPORT void ts_chunk_drop(Chunk *chunk, DropBehavior behavior, int32 log_level);
-extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(Chunk *chunk, DropBehavior behavior,
-														   int32 log_level);
-extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, Datum older_than_datum,
-												 Datum newer_than_datum, Oid older_than_type,
-												 Oid newer_than_type, int32 log_level,
-												 List **affected_data_nodes);
-extern TSDLLEXPORT Chunk *
-ts_chunk_get_chunks_in_time_range(Oid table_relid, Datum older_than_datum, Datum newer_than_datum,
-								  Oid older_than_type, Oid newer_than_type, char *caller_name,
-								  MemoryContext mctx, uint64 *num_chunks_returned,
-								  ScanTupLock *tuplock);
+extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
+extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
+														   DropBehavior behavior, int32 log_level);
+extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
+												 int32 log_level, List **affected_data_nodes);
 extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc,
 															   const char *schema_name,
 															   const char *table_name,
@@ -165,7 +160,7 @@ extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_data_node_name_list(const Chunk *chunk);
-extern List *ts_chunk_data_nodes_copy(Chunk *chunk);
+extern List *ts_chunk_data_nodes_copy(const Chunk *chunk);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

@@ -258,15 +258,6 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 	pg_unreachable();
 }
 
-static void
-continuous_agg_drop_chunks_by_chunk_id_default(int32 raw_hypertable_id, Chunk **chunks,
-											   Size num_chunks, Datum older_than_datum,
-											   Datum newer_than_datum, Oid older_than_type,
-											   Oid newer_than_type, int32 log_level)
-{
-	error_no_default_fn_community();
-}
-
 static Datum
 empty_fn(PG_FUNCTION_ARGS)
 {
@@ -370,7 +361,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
-	.continuous_agg_drop_chunks_by_chunk_id = continuous_agg_drop_chunks_by_chunk_id_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,

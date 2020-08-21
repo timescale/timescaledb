@@ -166,7 +166,7 @@ INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
@@ -180,7 +180,7 @@ SELECT drop_chunks(:'drop_chunks_mat_table',
 \set ON_ERROR_STOP 1
 
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
@@ -214,7 +214,7 @@ INSERT INTO drop_chunks_table_u SELECT i, i FROM generate_series(0, 21) AS i;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 
 SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
+SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
@@ -426,7 +426,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
 SELECT set_chunk_time_interval('drop_chunks_table', 1000);
 SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
 ;
 --recreate the dropped chunk
@@ -435,7 +435,7 @@ INSERT INTO drop_chunks_table VALUES (20, 20);
 SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
 --should show chunk with old name and old ranges
 SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
 
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
@@ -455,7 +455,7 @@ SELECT drop_chunks('drop_chunks_view',
 INSERT INTO drop_chunks_table SELECT generate_series(45, 55), 500;
 REFRESH MATERIALIZED VIEW drop_chunks_view;
 SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default

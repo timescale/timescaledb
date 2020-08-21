@@ -18,6 +18,7 @@ DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,a
 DROP FUNCTION IF EXISTS add_drop_chunks_policy;
 DROP FUNCTION IF EXISTS remove_drop_chunks_policy;
 DROP FUNCTION IF EXISTS drop_chunks;
+DROP FUNCTION IF EXISTS show_chunks;
 DROP FUNCTION IF EXISTS add_compress_chunks_policy;
 DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
 DROP FUNCTION IF EXISTS alter_job_schedule;
@@ -257,4 +258,3 @@ DROP TABLE _timescaledb_catalog.continuous_agg_tmp;
 
 ALTER TABLE _timescaledb_catalog.continuous_aggs_completed_threshold ADD CONSTRAINT continuous_aggs_completed_threshold_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
-

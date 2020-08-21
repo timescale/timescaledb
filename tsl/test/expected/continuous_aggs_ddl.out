@@ -211,7 +211,7 @@ SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
      3
 (1 row)
 
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
  count 
 -------
      1
@@ -231,7 +231,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 SELECT drop_chunks(:'drop_chunks_mat_table',
     newer_than => -20,
     verbose => true);
-ERROR:  cannot drop chunks on a continuous aggregate materialization hypertable
+ERROR:  operation not supported on materialized hypertable
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
@@ -239,7 +239,7 @@ SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
      3
 (1 row)
 
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table') AS c;
+SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
  count 
 -------
      1
@@ -292,7 +292,7 @@ SELECT count(c) FROM show_chunks('drop_chunks_table_u') AS c;
      4
 (1 row)
 
-SELECT count(c) FROM show_chunks(:'drop_chunks_mat_table_u') AS c;
+SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
  count 
 -------
      1
@@ -503,11 +503,11 @@ LOG:  materializing continuous aggregate public.drop_chunks_view: no new range t
 \set ON_ERROR_STOP 0
 --must have older_than set and no newer than
 SELECT drop_chunks('drop_chunks_table');
-ERROR:  older_than and newer_than timestamps provided to drop_chunks cannot both be NULL
+ERROR:  invalid time range for dropping chunks
 SELECT drop_chunks('drop_chunks_table', newer_than=>10);
-ERROR:  cannot use newer_than parameter to drop_chunks with cascade_to_materializations
+ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
 SELECT drop_chunks('drop_chunks_table', older_than => 20, newer_than=>10);
-ERROR:  cannot use newer_than parameter to drop_chunks with cascade_to_materializations
+ERROR:  older_than must be greater than the timescaledb.ignore_invalidation_older_than parameter of public.drop_chunks_view
 \set ON_ERROR_STOP 1
 --test materialization of invalidation before drop
 SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
@@ -789,7 +789,7 @@ SELECT set_chunk_time_interval('drop_chunks_table', 1000);
 (1 row)
 
 SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
@@ -808,7 +808,7 @@ SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY ti
 
 --should show chunk with old name and old ranges
 SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table' ORDER BY range_start_integer;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
@@ -839,7 +839,7 @@ REFRESH MATERIALIZED VIEW drop_chunks_view;
 LOG:  new materialization range not found for public.drop_chunks_table (time column time): not enough new data past completion threshold of 60 as of 59
 LOG:  materializing continuous aggregate public.drop_chunks_view: processing invalidations, no new range
 SELECT chunk_name, range_start_integer, range_end_integer
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integer;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
@@ -849,8 +849,8 @@ WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integ
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT drop_chunks(:'drop_chunks_mat_tablen', older_than => 60);
-ERROR:  cannot drop chunks on a continuous aggregate materialization hypertable
+ERROR:  operation not supported on materialized hypertable
 DETAIL:  Hypertable "_materialized_hypertable_11" is a materialized hypertable.
-HINT:  Call drop_chunks on the continuous aggregate instead.
+HINT:  Try the operation on the continuous aggregate instead.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1

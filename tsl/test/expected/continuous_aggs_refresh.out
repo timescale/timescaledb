@@ -139,7 +139,6 @@ ORDER BY 1 DESC,2;
 -- Test unusual, but valid input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
-CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
 -- Unbounded window forward in time
 \set ON_ERROR_STOP 0
 -- Currently doesn't work due to timestamp overflow bug in a query optimization
@@ -179,7 +178,9 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
 ERROR:  invalid refresh window
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
-ERROR:  unknown time type OID 25
+ERROR:  invalid type of time argument
+CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
+ERROR:  invalid type of time argument
 \set ON_ERROR_STOP 1
 -- Test different time types
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
@@ -229,7 +230,7 @@ SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2;
 NOTICE:  adding index _materialized_hypertable_6_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_6 USING BTREE(device, bucket)
-CALL refresh_continuous_aggregate('cond_20_smallint', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint);
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
  bucket | device |     avg_temp     

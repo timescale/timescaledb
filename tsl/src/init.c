@@ -23,7 +23,6 @@
 #include "compression/gorilla.h"
 #include "compression/segment_meta.h"
 #include "continuous_aggs/create.h"
-#include "continuous_aggs/drop.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
@@ -131,7 +130,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
-	.continuous_agg_drop_chunks_by_chunk_id = ts_continuous_agg_drop_chunks_by_chunk_id,
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_refresh = continuous_agg_refresh,
