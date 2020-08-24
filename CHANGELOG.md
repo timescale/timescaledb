@@ -4,15 +4,36 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 1.7.3 (2020-07-27)
+
+This maintenance release contains bugfixes since the 1.7.2 release. We deem it high
+priority for upgrading.
+
+In particular the fixes contained in this maintenance release address issues in compression,
+drop_chunks and the background worker scheduler.
 
 **Bugfixes**
+* #2059 Improve infering start and stop arguments from gapfill query
+* #2067 Support moving compressed chunks
+* #2068 Apply SET TABLESPACE for compressed chunks
 * #2090 Fix index creation with IF NOT EXISTS for existing indexes
 * #2092 Fix delete on tables involving hypertables with compression
+* #2164 Fix telemetry installed_time format
+* #2184 Fix background worker scheduler memory consumption
 * #2222 Fix `negative bitmapset member not allowed` in decompression
+* #2255 Propagate privileges from hypertables to chunks
+* #2256 Fix segfault in chunk_append with space partitioning
+* #2259 Fix recursion in cache processing
+* #2261 Lock dimension slice tuple when scanning
 
 **Thanks**
+* @akamensky for reporting an issue with drop_chunks and ChunkAppend with space partitioning
+* @dewetburger430 for reporting an issue with setting tablespace for compressed chunks
+* @fvannee for reporting an issue with cache invalidation
+* @nexces for reporting an issue with ChunkAppend on space-partitioned hypertables
 * @PichetGoulu for reporting an issue with index creation and IF NOT EXISTS
+* @prathamesh-sonpatki for contributing a typo fix
+* @sezaru for reporting an issue with background worker scheduler memory consumption
 
 ## 1.7.2 (2020-07-07)
 
@@ -388,7 +409,7 @@ or in this [tutorial](https://docs.timescale.com/latest/tutorials/compression-tu
 * @dhyun-obsec for reporting an issue with pg_restore
 * @rhaymo for reporting an issue with interpolate
 * @optijon for reporting an issue with locf treat_null_as_missing
-* @favnee for reporting an issue with runtime exclusion
+* @fvannee for reporting an issue with runtime exclusion
 * @Lectem for reporting an issue with histograms
 * @rogerdwan for reporting an issue with BGW rescheduling
 * @od0 for reporting an issue with alter_job_schedule
