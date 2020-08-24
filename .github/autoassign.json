@@ -1,0 +1,6 @@
+{
+  "users": [ "erimatnor","gayyappan","k-rus","mkindahl","pmwkaa","svenklemm","wirebaron"],
+  "action": "review",
+  "includes": ".github/*.json",
+  "errorLevel": "error"
+}

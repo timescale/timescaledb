@@ -1,0 +1,25 @@
+name: Assign Reviewers
+on: pull_request
+#    types: [opened, ready_for_review]
+
+jobs:
+
+  assign-reviewers:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Add PR reviewers
+      uses: AveryCameronUofR/add-reviewer-gh-action@1.0.3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        reviewers: "erimatnor,gayyappan,k-rus,mkindahl,pmwkaa,svenklemm,wirebaron"
+
+    - name: Apply Herald rules
+      uses: gagoar/use-herald-action@master
+      with:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        rulesLocation: '.github/*.json'
+        DEBUG: "*"
+
