@@ -25,3 +25,6 @@ typedef.list
 
 /CMakeSettings.json
 /out/*
+/debug/
+/cmake-build-debug/
+/.idea/
