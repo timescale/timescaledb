@@ -238,6 +238,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	}
 	PG_CATCH();
 	{
+		MemoryContextSwitchTo(oldctx);
 		ErrorData *errdata = CopyErrorData();
 		ereport(LOG,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -247,7 +248,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		RollbackAndReleaseCurrentSubTransaction();
 	}
 	PG_END_TRY();
-	MemoryContextSwitchTo(oldctx);
+	Assert(CurrentMemoryContext == oldctx);
 	if (!res_set)
 	{
 		TimestampTz nowt;
