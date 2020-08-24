@@ -479,7 +479,11 @@ job_execute(BgwJob *job)
 	 */
 	MemoryContextSwitchTo(parent_ctx);
 	arg1 = makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(job->fd.id), false, true);
-	arg2 = makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(job->fd.config), false, false);
+	if (job->fd.config == NULL)
+		arg2 = makeNullConst(JSONBOID, -1, InvalidOid);
+	else
+		arg2 =
+			makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(job->fd.config), false, false);
 
 	funcexpr = makeFuncExpr(proc,
 							VOIDOID,
