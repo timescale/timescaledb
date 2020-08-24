@@ -75,17 +75,18 @@
 #include <compat/nodes.h>
 #endif
 
+#include <extension_constants.h>
 #include <func_cache.h>
+#include <plan_expand_hypertable.h>
 #include <remote/utils.h>
+#include <utils.h>
 
-#include "relinfo.h"
 #include "deparse.h"
-#include "shippable.h"
-#include "utils.h"
-#include "scan_plan.h"
-#include "extension_constants.h"
-#include "plan_expand_hypertable.h"
+#include "nodes/gapfill/gapfill.h"
 #include "partialize_finalize.h"
+#include "relinfo.h"
+#include "shippable.h"
+#include "scan_plan.h"
 
 /*
  * Global context for foreign_expr_walker's search of an expression tree.
@@ -505,7 +506,8 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt)
 			 * can't be sent to remote because it might have incompatible
 			 * semantics on remote side.
 			 */
-			if (!is_shippable(fe->funcid, ProcedureRelationId, fpinfo))
+			if (!is_shippable(fe->funcid, ProcedureRelationId, fpinfo) ||
+				is_gapfill_function_call(fe))
 				return false;
 
 			/*

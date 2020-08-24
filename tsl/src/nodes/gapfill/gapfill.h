@@ -9,10 +9,13 @@
 
 #include <postgres.h>
 #include <fmgr.h>
+#include <nodes/primnodes.h>
 
 #define GAPFILL_FUNCTION "time_bucket_gapfill"
 #define GAPFILL_LOCF_FUNCTION "locf"
 #define GAPFILL_INTERPOLATE_FUNCTION "interpolate"
+
+extern bool is_gapfill_function_call(FuncExpr *call);
 
 extern Datum gapfill_marker(PG_FUNCTION_ARGS);
 extern Datum gapfill_int16_time_bucket(PG_FUNCTION_ARGS);

@@ -46,16 +46,6 @@ typedef struct gapfill_walker_context
 } gapfill_walker_context;
 
 /*
- * FuncExpr is time_bucket_gapfill function call
- */
-static inline bool
-is_gapfill_function_call(FuncExpr *call)
-{
-	char *func_name = get_func_name(call->funcid);
-	return strncmp(func_name, GAPFILL_FUNCTION, NAMEDATALEN) == 0;
-}
-
-/*
  * FuncExpr is locf or interpolate function call
  */
 static inline bool

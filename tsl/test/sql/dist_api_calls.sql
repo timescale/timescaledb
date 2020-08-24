@@ -33,8 +33,8 @@ GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 -- Create a distributed hypertable with data
 SET ROLE :ROLE_1;
 CREATE TABLE disttable(
-    time timestamptz NOT NULL, 
-    device int, 
+    time timestamptz NOT NULL,
+    device int,
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
@@ -74,12 +74,54 @@ SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:0
        avg(value)
 FROM disttable
 GROUP BY 1;
-SET enable_partitionwise_aggregate = 'on';
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+-- Explain the same simple queries with time_bucket_gapfill
+EXPLAIN (verbose, costs off)
 SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
---       first(value, time),
+       first(value, time),
        avg(value)
 FROM disttable
 GROUP BY 1;
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+
+-- Test the same queries with enabled partitionwise aggregate
+SET enable_partitionwise_aggregate = 'on';
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+-- Explain the same simple queries with time_bucket_gapfill
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
 SET enable_partitionwise_aggregate = 'off';
 
 -- Ensure that move_chunk() and reorder_chunk() functions cannot be used

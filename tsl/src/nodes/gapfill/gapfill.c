@@ -11,6 +11,16 @@
 #include "time_bucket.h"
 #include "nodes/gapfill/gapfill.h"
 
+/*
+ * FuncExpr is time_bucket_gapfill function call
+ */
+bool
+is_gapfill_function_call(FuncExpr *call)
+{
+	char *func_name = get_func_name(call->funcid);
+	return strncmp(func_name, GAPFILL_FUNCTION, NAMEDATALEN) == 0;
+}
+
 Datum
 gapfill_marker(PG_FUNCTION_ARGS)
 {

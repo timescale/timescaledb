@@ -1159,9 +1159,7 @@ gapfill_state_initialize_columns(GapFillState *state)
 			 * if there is time_bucket_gapfill function call this is our time
 			 * column
 			 */
-			if (IsA(expr, FuncExpr) && strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),
-											   GAPFILL_FUNCTION,
-											   NAMEDATALEN) == 0)
+			if (IsA(expr, FuncExpr) && is_gapfill_function_call(castNode(FuncExpr, expr)))
 			{
 				state->columns[i] =
 					gapfill_column_state_create(TIME_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
