@@ -25,9 +25,6 @@ PG11_LATEST = "11.9"
 PG12_EARLIEST = "12.0"
 PG12_LATEST = "12.4"
 
-PG_DEBUG = "--enable-debug --enable-cassert"
-PG_MAC_PATH = "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include"
-
 m = {"include": [],}
 
 # helper functions to generate matrix entries
@@ -40,7 +37,7 @@ def build_debug_config(overrides):
   base_config = dict({
     "name": "Debug",
     "build_type": "Debug",
-    "pg_build_args": PG_DEBUG,
+    "pg_build_args": "--enable-debug --enable-cassert",
     "tsdb_build_args": "-DCODECOVERAGE=ON",
     "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
@@ -86,7 +83,7 @@ def macos_config(overrides):
     "cc": "clang",
     "cxx": "clang++",
     "clang": "clang",
-    "pg_build_args": PG_MAC_PATH,
+    "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
     "tsdb_build_args": "-DASSERTIONS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
@@ -99,7 +96,7 @@ def macos_config(overrides):
 m["include"].append(build_debug_config({"pg":PG11_LATEST}))
 m["include"].append(build_debug_config({"pg":PG12_LATEST}))
 
-m["include"].append(build_release_config(macos_config({"pg_build_args":PG_MAC_PATH})))
+m["include"].append(build_release_config(macos_config({})))
 
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
@@ -122,7 +119,7 @@ if event_type != "pull_request":
   m["include"].append(build_debug_config({"pg":PG12_EARLIEST}))
 
   # add debug test for MacOS
-  m["include"].append(build_debug_config(macos_config({"pg_build_args":PG_DEBUG+" "+PG_MAC_PATH})))
+  m["include"].append(build_debug_config(macos_config({})))
 
   # add release test for latest pg11 and latest pg12
   m["include"].append(build_release_config({"pg":PG11_LATEST}))

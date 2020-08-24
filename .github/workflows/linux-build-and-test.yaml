@@ -46,7 +46,7 @@ jobs:
     - name: Cache suffix
       if: runner.os == 'macOS'
       run: |
-        echo "::set-env name=CACHE_SUFFIX::-$(pwd | sed -e 's!^[^0-9]\{1,\}/\([0-9.]\{1,\}\)/[^0-9]\{1,\}!\1!')"
+        echo "::set-env name=CACHE_SUFFIX::-${ImageVersion}"
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
@@ -65,7 +65,12 @@ jobs:
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR ${{ matrix.pg_build_args }} --with-llvm LLVM_CONFIG=${{ matrix.llvm_config }} --with-openssl --without-readline --without-zlib
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          ./configure --prefix=$HOME/$PG_INSTALL_DIR ${{ matrix.pg_build_args }} --with-llvm LLVM_CONFIG=${{ matrix.llvm_config }} --with-openssl --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
+        else
+          # the current github macos image has a buggy llvm installation so we build without llvm on mac
+          ./configure --prefix=$HOME/$PG_INSTALL_DIR ${{ matrix.pg_build_args }} --with-openssl --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
+        fi
         make -j $MAKE_JOBS
         make -j $MAKE_JOBS -C src/test/isolation
         make -j $MAKE_JOBS -C contrib/postgres_fdw
