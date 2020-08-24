@@ -295,10 +295,10 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 #if PG12_GE
 				TupleTableSlot *slot = ictx->tinfo.slot;
 
-				PushActiveSnapshot(GetLatestSnapshot());
+				Assert(ctx->snapshot);
 				ictx->tinfo.lockresult = table_tuple_lock(ictx->tablerel,
 														  &(slot->tts_tid),
-														  GetLatestSnapshot(),
+														  ctx->snapshot,
 														  slot,
 														  GetCurrentCommandId(false),
 														  ctx->tuplock->lockmode,
@@ -306,7 +306,6 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 														  0 /* don't follow updates */,
 														  &tmfd);
 
-				PopActiveSnapshot();
 #else
 				HeapTuple tuple = ExecFetchSlotTuple(ictx->tinfo.slot);
 				Buffer buffer;
