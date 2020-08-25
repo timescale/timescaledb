@@ -10,11 +10,17 @@
 #include <commands/extension.h>
 #include <catalog/pg_collation.h>
 #include <utils/builtins.h>
-#include <utils/fmgrprotos.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
 #include "compat.h"
+
+#if !PG96
+#include <utils/fmgrprotos.h>
+#else
+#include <utils/formatting.h>
+#endif
+
 #include "config.h"
 #include "version.h"
 #include "guc.h"
