@@ -20,6 +20,7 @@ set(TEST_FILES
   dump_meta.sql
   extension.sql
   gapfill.sql
+  grant_hypertable.sql
   hash.sql
   histogram_test.sql
   index.sql

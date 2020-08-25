@@ -546,6 +546,7 @@ INSERT INTO document VALUES (11, 33, 1, current_user, 'hoge');
 SET SESSION AUTHORIZATION regress_rls_bob;
 INSERT INTO document VALUES (8, 44, 1, 'regress_rls_bob', 'my third manga'); -- Must fail with unique violation, revealing presence of did we can't see
 ERROR:  duplicate key value violates unique constraint "5_10_document_pkey"
+DETAIL:  Key (did)=(8) already exists.
 SELECT * FROM document WHERE did = 8; -- and confirm we can't see it
  did | cid | dlevel | dauthor | dtitle 
 -----+-----+--------+---------+--------
@@ -4332,7 +4333,7 @@ INSERT INTO r1 SELECT a + 1 FROM r2 RETURNING *; -- OK
 
 UPDATE r1 SET a = r2.a + 2 FROM r2 WHERE r1.a = r2.a RETURNING *; -- OK
 ERROR:  new row for relation "_hyper_23_105_chunk" violates check constraint "constraint_105"
-DETAIL:  Failing row contains (a) = (12).
+DETAIL:  Failing row contains (12).
 DELETE FROM r1 USING r2 WHERE r1.a = r2.a + 2 RETURNING *; -- OK
  a | a 
 ---+---

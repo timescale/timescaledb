@@ -277,6 +277,16 @@ process_add_hypertable(ProcessUtilityArgs *args, Hypertable *ht)
 }
 
 static void
+add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
+{
+	ProcessUtilityArgs *args = vargs;
+	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	RangeVar *rv = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+	stmt->objects = lappend(stmt->objects, rv);
+}
+
+static void
 process_altertableschema(ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
@@ -968,6 +978,14 @@ process_drop_tablespace(ProcessUtilityArgs *args)
 	return false;
 }
 
+#if PG11_LT
+#define IS_TABLESPACE(STMT) ((STMT) == ACL_OBJECT_TABLESPACE)
+#define IS_TABLE(STMT) ((STMT) == ACL_OBJECT_RELATION)
+#else
+#define IS_TABLESPACE(STMT) ((STMT) == OBJECT_TABLESPACE)
+#define IS_TABLE(STMT) ((STMT) == OBJECT_TABLE)
+#endif
+
 /*
  * Handle GRANT / REVOKE.
  *
@@ -978,37 +996,34 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 {
 	GrantStmt *stmt = (GrantStmt *) args->parsetree;
 
-	/*
-	 * Need to apply the REVOKE first to be able to check remaining
-	 * permissions
-	 */
-	prev_ProcessUtility(args);
-
-	/* We only care about revokes and setting privileges on a specific object */
-	if (stmt->is_grant || stmt->targtype != ACL_TARGET_OBJECT)
-		return true;
-
-	switch (stmt->objtype)
+	if (IS_TABLESPACE(stmt->objtype) && !stmt->is_grant && stmt->targtype == ACL_TARGET_OBJECT)
 	{
-/*
- * PG11 consolidated several ACL_OBJECT_FOO or similar to the already extant
- * OBJECT_FOO see:
- * https://github.com/postgres/postgres/commit/2c6f37ed62114bd5a092c20fe721bd11b3bcb91e
- * so we can't simply #define OBJECT_TABLESPACE ACL_OBJECT_TABLESPACE and have
- * things work correctly for previous versions.
- */
-#if PG11_LT
-		case ACL_OBJECT_TABLESPACE:
-#else
-		case OBJECT_TABLESPACE:
-#endif
-			ts_tablespace_validate_revoke(stmt);
-			break;
-		default:
-			break;
+		prev_ProcessUtility(args);
+		ts_tablespace_validate_revoke(stmt);
+		return true;
 	}
 
-	return true;
+	if (IS_TABLE(stmt->objtype) && stmt->targtype == ACL_TARGET_OBJECT)
+	{
+		Cache *hcache = ts_hypertable_cache_pin();
+		ListCell *cell;
+
+		foreach (cell, stmt->objects)
+		{
+			RangeVar *relation = lfirst_node(RangeVar, cell);
+			Hypertable *ht = ts_hypertable_cache_get_entry_rv(hcache, relation);
+
+			if (ht)
+			{
+				process_add_hypertable(args, ht);
+				foreach_chunk(ht, add_chunk_oid, args);
+			}
+		}
+
+		ts_cache_release(hcache);
+	}
+
+	return false;
 }
 
 static bool
