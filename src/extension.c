@@ -139,10 +139,20 @@ extension_set_state(enum ExtensionState newstate)
 }
 
 /* Updates the state based on the current state, returning whether there had been a change. */
-static bool
+static void
 extension_update_state()
 {
-	return extension_set_state(extension_current_state());
+	static bool in_recursion = false;
+	/* Since the state of the extension is determined by the snapshot of the transaction there
+	 * is no point processing recursive calls as the outer call will always set the correct state.
+	 * This also prevents deep recursion during `AcceptInvalidationMessages`.
+	 */
+	if (in_recursion)
+		return;
+
+	in_recursion = true;
+	extension_set_state(extension_current_state());
+	in_recursion = false;
 }
 
 Oid
@@ -199,17 +209,7 @@ ts_extension_schema_name(void)
 bool
 ts_extension_invalidate(Oid relid)
 {
-	static bool in_recursion = false;
 	bool invalidate_all = false;
-
-	/* Since the state of the extension is determined by the snapshot of the transaction there
-	 * is no point processing recursive calls as the outer call will always set the correct state.
-	 * This also prevents deep recursion during `AcceptInvalidationMessages`.
-	 */
-	if (in_recursion)
-		return false;
-
-	in_recursion = true;
 
 	switch (extstate)
 	{
@@ -245,7 +245,6 @@ ts_extension_invalidate(Oid relid)
 			elog(ERROR, "unknown state: %d", extstate);
 			break;
 	}
-	in_recursion = false;
 	return invalidate_all;
 }
 
