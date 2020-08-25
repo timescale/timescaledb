@@ -193,6 +193,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			List *merge_childs = NIL;
 			MergeAppendPath *append;
 
+			if (flat == NULL)
+				break;
+
 			foreach (lc_oid, current_oids)
 			{
 				/* postgres may have pruned away some children already */
@@ -207,6 +210,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				{
 					merge_childs = lappend(merge_childs, child);
 					flat = lnext(flat);
+					if (flat == NULL)
+						break;
 				}
 			}
 
