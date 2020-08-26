@@ -169,10 +169,14 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE time > 950 AND time_bucket(10, time) < '9223372036854775807'::bigint ORDER BY time;
 
 \qecho test timestamp upper boundary
+\qecho there should be no transformation if we are out of the supported (TimescaleDB-specific) range
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1d',time) < '294276-01-01'::timestamp ORDER BY time;
 \qecho transformation would be out of range
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('1000d',time) < '294276-01-01'::timestamp ORDER BY time;
 
 \qecho test timestamptz upper boundary
+\qecho there should be no transformation if we are out of the supported (TimescaleDB-specific) range
+:PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) < '294276-01-01'::timestamptz ORDER BY time;
 \qecho transformation would be out of range
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
 
@@ -302,4 +306,3 @@ SELECT time FROM regular_timestamptz UNION SELECT time FROM metrics_timestamptz 
 
 -- test UNION ALL between regular table and hypertable
 SELECT time FROM regular_timestamptz UNION ALL SELECT time FROM metrics_timestamptz ORDER BY 1;
-

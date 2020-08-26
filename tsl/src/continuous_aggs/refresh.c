@@ -85,13 +85,13 @@ get_max_window(Oid timetype)
 			 * dates are governed by the same limits as timestamps. This is
 			 * probably a limitation we want to do away with, even though it
 			 * has little effect in practice. */
-			maxrange.start = DATETIME_MIN_JULIAN - POSTGRES_EPOCH_JDATE;
-			maxrange.end = TIMESTAMP_END_JULIAN - (2 * POSTGRES_EPOCH_JDATE) + UNIX_EPOCH_JDATE - 1;
+			maxrange.start = TS_DATE_MIN;
+			maxrange.end = TS_DATE_END - 1;
 			break;
 		case TIMESTAMPTZOID:
 		case TIMESTAMPOID:
-			maxrange.start = MIN_TIMESTAMP;
-			maxrange.end = (END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS) - 1;
+			maxrange.start = TS_TIMESTAMP_MIN;
+			maxrange.end = TS_TIMESTAMP_END - 1;
 			break;
 			/* There is no "date"/"time" range for integers so they can take
 			 * any value. */

@@ -414,8 +414,8 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 					return op;
 
 				if (DatumGetDateADT(castNode(Const, value)->constvalue) >=
-					DATEVAL_NOEND - interval->day +
-						ceil((double) interval->time / (double) USECS_PER_DAY))
+					(TS_DATE_END - interval->day +
+					 ceil((double) interval->time / (double) USECS_PER_DAY)))
 					return op;
 
 				datum = DateADTGetDatum(DatumGetDateADT(castNode(Const, value)->constvalue) +
@@ -462,7 +462,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				}
 
 				if (DatumGetTimestampTz(castNode(Const, value)->constvalue) >=
-					DT_NOEND - interval->time)
+					(TS_TIMESTAMP_END - interval->time))
 					return op;
 
 				datum = TimestampTzGetDatum(
@@ -509,7 +509,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				}
 
 				if (DatumGetTimestamp(castNode(Const, value)->constvalue) >=
-					DT_NOEND - interval->time)
+					(TS_TIMESTAMP_END - interval->time))
 					return op;
 
 				datum = TimestampGetDatum(DatumGetTimestamp(castNode(Const, value)->constvalue) +

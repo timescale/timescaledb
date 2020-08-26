@@ -4,7 +4,6 @@
 
 \set PREFIX 'EXPLAIN (costs off) '
 \ir include/plan_expand_hypertable_load.sql
-\ir include/plan_expand_hypertable_errors.sql
 \ir include/plan_expand_hypertable_query.sql
 \ir include/plan_expand_hypertable_chunks_in_query.sql
 

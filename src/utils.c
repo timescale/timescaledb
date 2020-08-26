@@ -51,11 +51,11 @@ ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 	if (TIMESTAMP_IS_NOEND(timestamp))
 		PG_RETURN_INT64(PG_INT64_MAX);
 
-	if (timestamp < MIN_TIMESTAMP)
+	if (timestamp < TS_TIMESTAMP_MIN)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
-	if (timestamp >= (END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS))
+	if (timestamp >= TS_TIMESTAMP_END)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
 
