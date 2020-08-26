@@ -37,7 +37,6 @@ file(COPY ${TEST_OUTPUT_DIR}${CMAKE_FILES_DIRECTORY}/pgpass.conf
 
 set(PG_REGRESS_OPTS_BASE
   --host=${TEST_PGHOST}
-  --load-language=plpgsql
   --dlpath=${PROJECT_BINARY_DIR}/src)
 
 set(PG_REGRESS_OPTS_EXTRA
