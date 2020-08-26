@@ -172,6 +172,17 @@ SELECT * FROM disttable ORDER BY time;
  Mon Jul 02 08:01:00 2018 PDT |     87 |        0
 (8 rows)
 
+SELECT * FROM show_chunks('disttable');
+                 show_chunks                 
+---------------------------------------------
+ _timescaledb_internal._dist_hyper_1_4_chunk
+ _timescaledb_internal._dist_hyper_1_5_chunk
+ _timescaledb_internal._dist_hyper_1_6_chunk
+ _timescaledb_internal._dist_hyper_1_7_chunk
+ _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_9_chunk
+(6 rows)
+
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
 NOTICE:  [data_node_1]:  SELECT show_chunks('disttable')
 NOTICE:  [data_node_1]:
@@ -220,3 +231,166 @@ SELECT reorder_chunk('_timescaledb_internal._dist_hyper_1_4_chunk', verbose => T
 ERROR:  move_chunk() and reorder_chunk() cannot be used with distributed hypertables
 \set ON_ERROR_STOP 1
 DROP TABLESPACE tablespace1;
+-- Ensure hypertable_approximate_row_count() works with distributed hypertable
+--
+SELECT * FROM disttable ORDER BY time;
+             time             | device |  value   
+------------------------------+--------+----------
+ Sun Jan 01 06:01:00 2017 PST |      1 |      1.2
+ Sun Jan 01 08:01:00 2017 PST |      1 |      7.3
+ Sun Jan 01 09:11:00 2017 PST |      3 |      4.3
+ Mon Jan 02 08:01:00 2017 PST |      2 |     0.23
+ Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+ Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+ Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+ Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+(8 rows)
+
+ANALYZE disttable;
+SELECT count(*) FROM disttable;
+ count 
+-------
+     8
+(1 row)
+
+SELECT hypertable_approximate_row_count('disttable');
+ hypertable_approximate_row_count 
+----------------------------------
+ (public,disttable,8)
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT hypertable_approximate_row_count('disttable'); $$);
+NOTICE:  [data_node_1]:  SELECT hypertable_approximate_row_count('disttable')
+NOTICE:  [data_node_1]:
+hypertable_approximate_row_count
+--------------------------------
+(public,disttable,3)            
+(1 row)
+
+
+NOTICE:  [data_node_2]:  SELECT hypertable_approximate_row_count('disttable')
+NOTICE:  [data_node_2]:
+hypertable_approximate_row_count
+--------------------------------
+(public,disttable,2)            
+(1 row)
+
+
+NOTICE:  [data_node_3]:  SELECT hypertable_approximate_row_count('disttable')
+NOTICE:  [data_node_3]:
+hypertable_approximate_row_count
+--------------------------------
+(public,disttable,3)            
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Test with native replication
+--
+CREATE TABLE disttable_repl(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_distributed_hypertable('disttable_repl', 'time', 'device', 3, replication_factor => 2);
+ hypertable_id | schema_name |   table_name   | created 
+---------------+-------------+----------------+---------
+             2 | public      | disttable_repl | t
+(1 row)
+
+INSERT INTO disttable_repl VALUES
+       ('2017-01-01 06:01', 1, 1.2),
+       ('2017-01-01 09:11', 3, 4.3),
+       ('2017-01-01 08:01', 1, 7.3),
+       ('2017-01-02 08:01', 2, 0.23),
+       ('2018-07-02 08:01', 87, 0.0),
+       ('2018-07-01 06:01', 13, 3.1),
+       ('2018-07-01 09:11', 90, 10303.12),
+       ('2018-07-01 08:01', 29, 64);
+SELECT * FROM disttable_repl ORDER BY time;
+             time             | device |  value   
+------------------------------+--------+----------
+ Sun Jan 01 06:01:00 2017 PST |      1 |      1.2
+ Sun Jan 01 08:01:00 2017 PST |      1 |      7.3
+ Sun Jan 01 09:11:00 2017 PST |      3 |      4.3
+ Mon Jan 02 08:01:00 2017 PST |      2 |     0.23
+ Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+ Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+ Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+ Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+(8 rows)
+
+SELECT * FROM show_chunks('disttable_repl');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_2_10_chunk
+ _timescaledb_internal._dist_hyper_2_11_chunk
+ _timescaledb_internal._dist_hyper_2_12_chunk
+ _timescaledb_internal._dist_hyper_2_13_chunk
+ _timescaledb_internal._dist_hyper_2_14_chunk
+ _timescaledb_internal._dist_hyper_2_15_chunk
+(6 rows)
+
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable_repl'); $$);
+NOTICE:  [data_node_1]:  SELECT show_chunks('disttable_repl')
+NOTICE:  [data_node_1]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_2_10_chunk
+_timescaledb_internal._dist_hyper_2_11_chunk
+_timescaledb_internal._dist_hyper_2_13_chunk
+_timescaledb_internal._dist_hyper_2_15_chunk
+(4 rows)
+
+
+NOTICE:  [data_node_2]:  SELECT show_chunks('disttable_repl')
+NOTICE:  [data_node_2]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_2_10_chunk
+_timescaledb_internal._dist_hyper_2_12_chunk
+_timescaledb_internal._dist_hyper_2_13_chunk
+_timescaledb_internal._dist_hyper_2_14_chunk
+(4 rows)
+
+
+NOTICE:  [data_node_3]:  SELECT show_chunks('disttable_repl')
+NOTICE:  [data_node_3]:
+show_chunks                                 
+--------------------------------------------
+_timescaledb_internal._dist_hyper_2_11_chunk
+_timescaledb_internal._dist_hyper_2_12_chunk
+_timescaledb_internal._dist_hyper_2_14_chunk
+_timescaledb_internal._dist_hyper_2_15_chunk
+(4 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT count(*) FROM disttable_repl;
+ count 
+-------
+     8
+(1 row)
+
+SELECT hypertable_approximate_row_count('disttable_repl');
+ hypertable_approximate_row_count 
+----------------------------------
+ (public,disttable_repl,0)
+(1 row)
+
+ANALYZE disttable_repl;
+SELECT hypertable_approximate_row_count('disttable_repl');
+ hypertable_approximate_row_count 
+----------------------------------
+ (public,disttable_repl,8)
+(1 row)
+
+DROP TABLE disttable_repl;

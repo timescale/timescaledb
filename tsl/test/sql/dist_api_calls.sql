@@ -64,6 +64,7 @@ INSERT INTO disttable VALUES
        ('2017-01-01 08:01', 1, 7.3),
        ('2017-01-02 08:01', 2, 0.23);
 SELECT * FROM disttable ORDER BY time;
+SELECT * FROM show_chunks('disttable');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
 
 -- Ensure that move_chunk() and reorder_chunk() functions cannot be used
@@ -80,3 +81,43 @@ SELECT reorder_chunk('_timescaledb_internal._dist_hyper_1_4_chunk', verbose => T
 \set ON_ERROR_STOP 1
 
 DROP TABLESPACE tablespace1;
+
+-- Ensure hypertable_approximate_row_count() works with distributed hypertable
+--
+SELECT * FROM disttable ORDER BY time;
+
+ANALYZE disttable;
+
+SELECT count(*) FROM disttable;
+SELECT hypertable_approximate_row_count('disttable');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT hypertable_approximate_row_count('disttable'); $$);
+
+-- Test with native replication
+--
+CREATE TABLE disttable_repl(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_distributed_hypertable('disttable_repl', 'time', 'device', 3, replication_factor => 2);
+INSERT INTO disttable_repl VALUES
+       ('2017-01-01 06:01', 1, 1.2),
+       ('2017-01-01 09:11', 3, 4.3),
+       ('2017-01-01 08:01', 1, 7.3),
+       ('2017-01-02 08:01', 2, 0.23),
+       ('2018-07-02 08:01', 87, 0.0),
+       ('2018-07-01 06:01', 13, 3.1),
+       ('2018-07-01 09:11', 90, 10303.12),
+       ('2018-07-01 08:01', 29, 64);
+SELECT * FROM disttable_repl ORDER BY time;
+
+SELECT * FROM show_chunks('disttable_repl');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable_repl'); $$);
+
+SELECT count(*) FROM disttable_repl;
+SELECT hypertable_approximate_row_count('disttable_repl');
+
+ANALYZE disttable_repl;
+SELECT hypertable_approximate_row_count('disttable_repl');
+
+DROP TABLE disttable_repl;
