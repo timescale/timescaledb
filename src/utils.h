@@ -23,8 +23,23 @@
 #define TS_SET_LOCKTAG_ADVISORY(tag, id1, id2, id3)                                                \
 	SET_LOCKTAG_ADVISORY((tag), (id1), (id2), (id3), 29749)
 
-#define TS_EPOCH_DIFF_MICROSECONDS ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY)
+#define TS_EPOCH_DIFF (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE)
+#define TS_EPOCH_DIFF_MICROSECONDS (TS_EPOCH_DIFF * USECS_PER_DAY)
 #define TS_INTERNAL_TIMESTAMP_MIN ((int64) USECS_PER_DAY * (DATETIME_MIN_JULIAN - UNIX_EPOCH_JDATE))
+
+/* TimescaleDB-specific ranges for valid timestamps and dates: */
+
+/* For Timestamps, we need to be able to go from UNIX epoch to POSTGRES epoch
+ * and thus add the difference between the two epochs. This will constrain the
+ * max supported timestamp by the same amount. */
+#define TS_TIMESTAMP_MIN MIN_TIMESTAMP
+#define TS_TIMESTAMP_END (END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS)
+
+/* For Dates, we're limited by the timestamp range (since we internally first
+ * convert dates to timestamps). Naturally the TimescaleDB-specific timestamp
+ * limits apply as well. */
+#define TS_DATE_MIN (DATETIME_MIN_JULIAN - POSTGRES_EPOCH_JDATE)
+#define TS_DATE_END (TIMESTAMP_END_JULIAN - POSTGRES_EPOCH_JDATE - TS_EPOCH_DIFF)
 
 /* find the length of a statically sized array */
 #define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))

@@ -278,3 +278,70 @@ ts_test_interval_to_internal_conversion(PG_FUNCTION_ARGS)
 
 	PG_RETURN_VOID();
 }
+
+/*
+ * Functions to show TimescaleDB-specific limits of timestamps and dates:
+ */
+TS_FUNCTION_INFO_V1(ts_timestamptz_pg_min);
+
+Datum
+ts_timestamptz_pg_min(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TIMESTAMPTZ(MIN_TIMESTAMP);
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_pg_end);
+
+Datum
+ts_timestamptz_pg_end(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TIMESTAMPTZ(END_TIMESTAMP);
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_min);
+
+Datum
+ts_timestamptz_min(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TIMESTAMPTZ(TS_TIMESTAMP_MIN);
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_end);
+
+Datum
+ts_timestamptz_end(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TIMESTAMPTZ(TS_TIMESTAMP_END);
+}
+
+TS_FUNCTION_INFO_V1(ts_date_pg_min);
+
+Datum
+ts_date_pg_min(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATEADT(DATETIME_MIN_JULIAN - POSTGRES_EPOCH_JDATE);
+}
+
+TS_FUNCTION_INFO_V1(ts_date_pg_end);
+
+Datum
+ts_date_pg_end(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATEADT(DATE_END_JULIAN - POSTGRES_EPOCH_JDATE);
+}
+
+TS_FUNCTION_INFO_V1(ts_date_min);
+
+Datum
+ts_date_min(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATEADT(TS_DATE_MIN);
+}
+
+TS_FUNCTION_INFO_V1(ts_date_end);
+
+Datum
+ts_date_end(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATEADT(TS_DATE_END);
+}

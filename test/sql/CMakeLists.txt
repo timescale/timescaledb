@@ -87,6 +87,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     symbol_conflict.sql
     telemetry.sql
     test_utils.sql
+    timestamp_limits.sql
     with_clause_parser.sql
   )
   if (USE_OPENSSL)

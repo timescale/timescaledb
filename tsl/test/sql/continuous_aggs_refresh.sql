@@ -56,11 +56,8 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::date, '2020-05-03'::date);
 
 -- Unbounded window forward in time
-\set ON_ERROR_STOP 0
--- Currently doesn't work due to timestamp overflow bug in a query optimization
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', NULL);
 CALL refresh_continuous_aggregate('daily_temp', NULL, NULL);
-\set ON_ERROR_STOP 1
 
 -- Unbounded window back in time
 CALL refresh_continuous_aggregate('daily_temp', NULL, '2020-05-01');
@@ -102,6 +99,9 @@ GROUP BY 1,2;
 
 CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 
+-- Try max refresh window size
+CALL refresh_continuous_aggregate('daily_temp_date', NULL, NULL);
+
 -- Test smallint-based continuous aggregate
 CREATE TABLE conditions_smallint (time smallint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_smallint', 'time', chunk_time_interval => 20);
@@ -131,6 +131,9 @@ CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint)
 
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
+
+-- Try max refresh window size
+CALL refresh_continuous_aggregate('cond_20_smallint', NULL, NULL);
 
 -- Test int-based continuous aggregate
 CREATE TABLE conditions_int (time int NOT NULL, device int, temp float);
@@ -162,6 +165,9 @@ CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
 SELECT * FROM cond_20_int
 ORDER BY 1,2;
 
+-- Try max refresh window size
+CALL refresh_continuous_aggregate('cond_20_int', NULL, NULL);
+
 -- Test bigint-based continuous aggregate
 CREATE TABLE conditions_bigint (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions_bigint', 'time', chunk_time_interval => 20);
@@ -191,3 +197,6 @@ CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
 
 SELECT * FROM cond_20_bigint
 ORDER BY 1,2;
+
+-- Try max refresh window size
+CALL refresh_continuous_aggregate('cond_20_bigint', NULL, NULL);
