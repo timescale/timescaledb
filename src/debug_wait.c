@@ -25,7 +25,10 @@ ts_debug_waitpoint_init(DebugWait *waitpoint, const char *tagname)
 
 	SET_LOCKTAG_ADVISORY(waitpoint->tag, MyDatabaseId, (uint32)(hash >> 32), (uint32) hash, 1);
 	waitpoint->tagname = pstrdup(tagname);
-	ereport(DEBUG1, (errmsg("initializing waitpoint '%s' to use %lu", waitpoint->tagname, hash)));
+	ereport(DEBUG1,
+			(errmsg("initializing waitpoint '%s' to use " UINT64_FORMAT,
+					waitpoint->tagname,
+					hash)));
 }
 
 /*
