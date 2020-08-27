@@ -111,8 +111,10 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPOID),
 													TIMESTAMPOID));
 
-	TestAssertInt64Eq(PG_INT64_MIN, ts_time_value_to_internal(DT_NOBEGIN, TIMESTAMPOID));
-	TestAssertInt64Eq(PG_INT64_MAX, ts_time_value_to_internal(DT_NOEND, TIMESTAMPOID));
+	TestAssertInt64Eq(PG_INT64_MIN,
+					  ts_time_value_to_internal(Int64GetDatum(DT_NOBEGIN), TIMESTAMPOID));
+	TestAssertInt64Eq(PG_INT64_MAX,
+					  ts_time_value_to_internal(Int64GetDatum(DT_NOEND), TIMESTAMPOID));
 
 	TestAssertInt64Eq(DT_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPOID));
 	TestEnsureError(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN - 1, TIMESTAMPOID));
@@ -143,8 +145,10 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPTZOID),
 													TIMESTAMPTZOID));
 
-	TestAssertInt64Eq(PG_INT64_MIN, ts_time_value_to_internal(DT_NOBEGIN, TIMESTAMPTZOID));
-	TestAssertInt64Eq(PG_INT64_MAX, ts_time_value_to_internal(DT_NOEND, TIMESTAMPTZOID));
+	TestAssertInt64Eq(PG_INT64_MIN,
+					  ts_time_value_to_internal(Int64GetDatum(DT_NOBEGIN), TIMESTAMPTZOID));
+	TestAssertInt64Eq(PG_INT64_MAX,
+					  ts_time_value_to_internal(Int64GetDatum(DT_NOEND), TIMESTAMPTZOID));
 
 	TestAssertInt64Eq(DT_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPTZOID));
 	TestEnsureError(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN - 1, TIMESTAMPTZOID));
@@ -167,8 +171,8 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 													DATEOID));
 	TestAssertInt64Eq(DATEVAL_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, DATEOID));
 	TestAssertInt64Eq(DATEVAL_NOEND, ts_internal_to_time_value(PG_INT64_MAX, DATEOID));
-	TestEnsureError(ts_time_value_to_internal((DATEVAL_NOBEGIN + 1), DATEOID));
-	TestEnsureError(ts_time_value_to_internal((DATEVAL_NOEND - 1), DATEOID));
+	TestEnsureError(ts_time_value_to_internal(DateADTGetDatum(DATEVAL_NOBEGIN + 1), DATEOID));
+	TestEnsureError(ts_time_value_to_internal(DateADTGetDatum(DATEVAL_NOEND - 1), DATEOID));
 
 	PG_RETURN_VOID();
 };
