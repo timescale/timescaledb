@@ -37,6 +37,15 @@ if(APACHE_ONLY)
   add_definitions(-DAPACHE_ONLY)
 endif()
 
+# AT_CookedColumnDefault was backported to PG12 but is not yet in a released version.
+# To be able to build against snapshots and REL_12_STABLE branch we check header file
+# for existance. Once PG 12.5 is out this can safely be turned into a version check.
+file(READ ${PG_INCLUDEDIR_SERVER}/nodes/parsenodes.h PG_PARSENODES_H)
+string(REGEX MATCH "AT_CookedColumnDefault" PG_HAS_COOKEDCOLUMNDEFAULT ${PG_CONFIG_H})
+if (PG_HAS_COOKEDCOLUMNDEFAULT)
+  add_definitions(-DPG_HAS_COOKEDCOLUMNDEFAULT)
+endif()
+
 include_directories(${PROJECT_SOURCE_DIR}/src ${PROJECT_BINARY_DIR}/src)
 include_directories(SYSTEM ${PG_INCLUDEDIR_SERVER})
 
