@@ -33,7 +33,7 @@ if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE
 fi
 
-TAGS="1.7.0-pg11 1.7.1-pg11 1.7.2-pg11"
+TAGS="1.7.0-pg11 1.7.1-pg11 1.7.2-pg11 1.7.3-pg11"
 TEST_VERSION="v6"
 
 TAGS=$TAGS TEST_VERSION=$TEST_VERSION bash ${SCRIPT_DIR}/test_updates.sh
