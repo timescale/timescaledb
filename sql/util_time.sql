@@ -69,19 +69,5 @@ $BODY$;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_val ANYELEMENT)
 RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_time_to_internal' LANGUAGE C VOLATILE STRICT;
 
--- return the materialization watermark for a continuous aggregate materialization hypertable
--- returns NULL when no materialization has happened yet
 CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_watermark(hypertable_id INTEGER)
-RETURNS INT8 LANGUAGE SQL AS
-$BODY$
-
-  SELECT
-    watermark
-  FROM
-    _timescaledb_catalog.continuous_agg cagg
-    LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold completed ON completed.materialization_id = cagg.mat_hypertable_id
-  WHERE
-    cagg.mat_hypertable_id = $1;
-
-$BODY$ STABLE STRICT;
-
+RETURNS INT8 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_watermark' LANGUAGE C STABLE STRICT;

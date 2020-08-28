@@ -122,7 +122,7 @@ ERROR:  must be owner of view mat_refresh_test
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 ERROR:  permission denied for table conditions
 SELECT * FROM mat_refresh_test;
-ERROR:  permission denied for view mat_refresh_test
+ERROR:  permission denied for materialized view mat_refresh_test
 SELECT * FROM :materialization_hypertable;
 ERROR:  permission denied for table _materialized_hypertable_2
 SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
