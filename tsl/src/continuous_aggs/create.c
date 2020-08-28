@@ -203,6 +203,7 @@ static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo 
 															 int32 hypertable_id, RangeVar *mat_rel,
 															 CAggTimebucketInfo *origquery_tblinfo,
 															 bool create_addl_index,
+															 char *tablespacename,
 															 ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
 														  Query *userview_query);
@@ -460,7 +461,8 @@ static int32
 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
 												RangeVar *mat_rel,
 												CAggTimebucketInfo *origquery_tblinfo,
-												bool create_addl_index, ObjectAddress *mataddress)
+												bool create_addl_index, char *const tablespacename,
+												ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
@@ -484,7 +486,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	create->constraints = NIL;
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
-	create->tablespacename = NULL;
+	create->tablespacename = tablespacename;
 	create->if_not_exists = false;
 
 	/*  Create the materialization table.  */
@@ -1662,8 +1664,8 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  *        )
  */
 static void
-cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
-			WithClauseResult *with_clause_options)
+cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
+			CAggTimebucketInfo *origquery_ht, WithClauseResult *with_clause_options)
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
@@ -1721,6 +1723,7 @@ cagg_create(ViewStmt *stmt, Query *panquery, CAggTimebucketInfo *origquery_ht,
 													mat_rel,
 													origquery_ht,
 													is_create_mattbl_index,
+													create_stmt->into->tableSpaceName,
 													&mataddress);
 	/* Step 2: create view with select finalize from materialization
 	 * table
@@ -1819,7 +1822,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	}
 
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery);
-	cagg_create(&viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
+	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
 	return DDL_DONE;
 }

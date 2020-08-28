@@ -24,6 +24,8 @@ select table_name from create_hypertable('conditions', 'timec');
 -- schema tests
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 
 CREATE SCHEMA rename_schema;
 GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
@@ -478,3 +480,78 @@ WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integ
 SELECT drop_chunks(:'drop_chunks_mat_tablen', older_than => 60);
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
+
+--------------------------------------------------------------------
+-- Check that we can create a materialized table in a tablespace. We
+-- create one with tablespace and one without and compare them.
+
+CREATE VIEW cagg_info AS
+WITH
+  caggs AS (
+    SELECT format('%s.%s', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%s.%s', ht.schema_name, ht.table_name)::regclass AS mat_relid
+      FROM _timescaledb_catalog.hypertable ht,
+           _timescaledb_catalog.continuous_agg cagg
+     WHERE ht.id = cagg.mat_hypertable_id
+  )
+SELECT user_view,
+       relname AS mat_table,
+       (SELECT spcname FROM pg_tablespace WHERE oid = reltablespace) AS tablespace
+  FROM pg_class JOIN caggs ON pg_class.oid = caggs.mat_relid;
+
+CREATE VIEW chunk_info AS
+SELECT ht.schema_name, ht.table_name, relname AS chunk_name,
+       (SELECT spcname FROM pg_tablespace WHERE oid = reltablespace) AS tablespace
+  FROM pg_class c,
+       _timescaledb_catalog.hypertable ht,
+       _timescaledb_catalog.chunk ch
+ WHERE ch.table_name = c.relname AND ht.id = ch.hypertable_id;
+
+CREATE TABLE whatever(time BIGINT NOT NULL, data INTEGER);
+
+SELECT hypertable_id AS whatever_nid
+  FROM create_hypertable('whatever', 'time', chunk_time_interval => 10)
+\gset
+
+SELECT set_integer_now_func('whatever', 'integer_now_test');
+
+CREATE MATERIALIZED VIEW whatever_view_1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket('2', time), COUNT(data)
+  FROM whatever GROUP BY 1;
+
+CREATE MATERIALIZED VIEW whatever_view_2
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+TABLESPACE tablespace1 AS
+SELECT time_bucket('2', time), COUNT(data)
+  FROM whatever GROUP BY 1;
+
+INSERT INTO whatever SELECT i, i FROM generate_series(0, 29) AS i;
+REFRESH MATERIALIZED VIEW whatever_view_1;
+REFRESH MATERIALIZED VIEW whatever_view_2;
+
+SELECT user_view,
+       mat_table,
+       cagg_info.tablespace AS mat_tablespace,
+       chunk_name,
+       chunk_info.tablespace AS chunk_tablespace
+  FROM cagg_info, chunk_info
+ WHERE mat_table::text = table_name
+   AND user_view::text LIKE 'whatever_view%';
+
+ALTER MATERIALIZED VIEW whatever_view_1 SET TABLESPACE tablespace2;
+
+SELECT user_view,
+       mat_table,
+       cagg_info.tablespace AS mat_tablespace,
+       chunk_name,
+       chunk_info.tablespace AS chunk_tablespace
+  FROM cagg_info, chunk_info
+ WHERE mat_table::text = table_name
+   AND user_view::text LIKE 'whatever_view%';
+
+DROP MATERIALIZED VIEW whatever_view_1;
+DROP MATERIALIZED VIEW whatever_view_2;
+
+DROP TABLESPACE tablespace1;
+DROP TABLESPACE tablespace2;

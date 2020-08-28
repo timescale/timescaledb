@@ -2762,6 +2762,8 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	NameData view_schema;
 	ContinuousAgg *cagg;
 	ListCell *lc;
+	Hypertable *ht;
+	Cache *hcache;
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
@@ -2788,6 +2790,19 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 							 errmsg("expected set options to contain a list")));
 				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				break;
+
+			case AT_SetTableSpace:
+				hcache = ts_hypertable_cache_pin();
+				ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+				Assert(ht); /* Broken continuous aggregate */
+				ts_hypertable_permissions_check_by_id(ht->fd.id);
+				check_alter_table_allowed_on_ht_with_compression(ht, stmt);
+				relation_not_only(stmt->relation);
+				process_altertable_set_tablespace_end(ht, cmd);
+				AlterTableInternal(ht->main_table_relid, list_make1(cmd), false);
+				ts_cache_release(hcache);
+				break;
+
 			default:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
