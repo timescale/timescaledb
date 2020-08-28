@@ -40,6 +40,7 @@ extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const L
 typedef struct ContinuousAgg
 {
 	FormData_continuous_agg data;
+	Oid relid;
 } ContinuousAgg;
 
 typedef enum ContinuousAggHypertableStatus

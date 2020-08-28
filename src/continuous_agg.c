@@ -15,10 +15,15 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
+#include <executor/spi.h>
 #include <fmgr.h>
 #include <storage/lmgr.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
 #include <utils/lsyscache.h>
+#include <utils/timestamp.h>
+#include <miscadmin.h>
 
 #include "compat.h"
 
@@ -26,6 +31,8 @@
 #include "continuous_agg.h"
 #include "hypertable.h"
 #include "scan_iterator.h"
+#include "time_bucket.h"
+#include "time_utils.h"
 #include "catalog.h"
 
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
@@ -257,8 +264,11 @@ materialization_invalidation_log_delete(int32 materialization_id)
 }
 
 static void
-continuous_agg_init(ContinuousAgg *cagg, FormData_continuous_agg *fd)
+continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
+	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
+
+	cagg->relid = get_relname_relid(NameStr(fd->user_view_name), nspid);
 	memcpy(&cagg->data, fd, sizeof(cagg->data));
 }
 
@@ -988,4 +998,102 @@ ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
 		raw_htid = find_raw_hypertable_for_materialization(mat_htid);
 	}
 	return par_dim;
+}
+
+TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
+
+/*
+ * Get the watermark for a real-time aggregation query on a continuous
+ * aggregate.
+ *
+ * The watermark determines where the materialization ends for a continuous
+ * aggregate. It is used by real-time aggregation as the threshold between the
+ * materialized data and real-time data in the UNION query.
+ *
+ * The watermark is defined as the end of the last (highest) bucket in the
+ * materialized hypertable of a continuous aggregate.
+ *
+ * The materialized hypertable ID is given as input argument.
+ */
+Datum
+ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
+{
+	const int32 hyper_id = PG_GETARG_INT32(0);
+	ContinuousAgg *cagg;
+	StringInfo command;
+	Hypertable *ht;
+	Dimension *dim;
+	Datum maxdat;
+	bool max_isnull;
+	int64 watermark;
+	Oid timetype;
+	AclResult aclresult;
+	int res;
+
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid continuous aggregate hypertable")));
+
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hyper_id);
+
+	if (NULL == cagg)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("%d is not a materialized hypertable", hyper_id)));
+
+	/* Preemptive permission check to ensure the function complains about lack
+	 * of permissions on the cagg rather than the materialized hypertable */
+	aclresult = pg_class_aclcheck(cagg->relid, GetUserId(), ACL_SELECT);
+	aclcheck_error(aclresult, OBJECT_MATVIEW, get_rel_name(cagg->relid));
+
+	ht = ts_hypertable_get_by_id(hyper_id);
+	Assert(NULL != ht);
+	dim = hyperspace_get_open_dimension(ht->space, 0);
+	timetype = ts_dimension_get_partition_type(dim);
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* Query for the last bucket in the materialized hypertable */
+	command = makeStringInfo();
+	appendStringInfo(command,
+					 "SELECT max(%s) FROM %s.%s",
+					 quote_identifier(NameStr(dim->fd.column_name)),
+					 quote_identifier(NameStr(ht->fd.schema_name)),
+					 quote_identifier(NameStr(ht->fd.table_name)));
+
+	res = SPI_execute_with_args(command->data,
+								0 /*=nargs*/,
+								NULL,
+								NULL,
+								NULL /*=Nulls*/,
+								true /*=read_only*/,
+								0 /*count*/);
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not find the maximum time value for hypertable"),
+				  errdetail("SPI error when calculating continuous aggregate watermark: %d.",
+							res))));
+
+	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype);
+	maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
+
+	if (!max_isnull)
+	{
+		/* Add one bucket to get to the end of the last bucket */
+		watermark = ts_time_value_to_internal(maxdat, timetype);
+		watermark = ts_time_saturating_add(watermark, cagg->data.bucket_width, timetype);
+	}
+	else
+	{
+		/* Nothing materialized, so return min */
+		watermark = ts_time_get_min(timetype);
+	}
+
+	res = SPI_finish();
+	Assert(res == SPI_OK_FINISH);
+
+	PG_RETURN_INT64(watermark);
 }

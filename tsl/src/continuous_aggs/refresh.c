@@ -112,6 +112,7 @@ compute_bucketed_refresh_window(const InternalTimeRange *refresh_window, int64 b
 			exclusive_end = ts_time_saturating_sub(result.end, 1, result.type);
 
 		bucketed_end = ts_time_bucket_by_type(bucket_width, exclusive_end, result.type);
+
 		/* We get the time value for the start of the bucket, so need to add
 		 * bucket_width to get the end of it */
 		result.end = ts_time_saturating_add(bucketed_end, bucket_width, refresh_window->type);
@@ -228,6 +229,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 			 * aren't, so add one to the end of the invalidated region */
 			.end = ts_time_saturating_add(DatumGetInt64(end), 1, refresh_window->type),
 		};
+
 		InternalTimeRange bucketed_refresh_window =
 			compute_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
 

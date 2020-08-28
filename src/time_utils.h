@@ -18,6 +18,7 @@
  * and thus add the difference between the two epochs. This will constrain the
  * max supported timestamp by the same amount. */
 #define TS_TIMESTAMP_MIN MIN_TIMESTAMP
+#define TS_TIMESTAMP_MAX (TS_TIMESTAMP_END - 1)
 #define TS_TIMESTAMP_END (END_TIMESTAMP - TS_EPOCH_DIFF_MICROSECONDS)
 #define TS_TIMESTAMP_INTERNAL_MIN (TS_TIMESTAMP_MIN + TS_EPOCH_DIFF_MICROSECONDS)
 #define TS_TIMESTAMP_INTERNAL_MAX (TS_TIMESTAMP_INTERNAL_END - 1)
@@ -67,6 +68,7 @@ extern TSDLLEXPORT Datum ts_time_datum_get_min(Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_max(Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_end(Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_nobegin(Oid timetype);
+extern TSDLLEXPORT Datum ts_time_datum_get_nobegin_or_min(Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_noend(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_min(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_max(Oid timetype);

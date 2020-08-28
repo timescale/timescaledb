@@ -267,6 +267,15 @@ ts_time_datum_get_nobegin(Oid timetype)
 }
 
 Datum
+ts_time_datum_get_nobegin_or_min(Oid timetype)
+{
+	if (TS_TIME_IS_INTEGER_TIME(timetype))
+		return ts_time_datum_get_min(timetype);
+
+	return ts_time_datum_get_nobegin(timetype);
+}
+
+Datum
 ts_time_datum_get_noend(Oid timetype)
 {
 	switch (timetype)

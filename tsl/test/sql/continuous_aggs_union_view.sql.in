@@ -156,8 +156,12 @@ AS
 
 INSERT INTO boundary_test SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
 
+SELECT mat_hypertable_id AS boundary_view_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'boundary_view' \gset
+
 -- watermark should be NULL
-SELECT _timescaledb_internal.cagg_watermark(6);
+SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
 
 -- first UNION child should have no rows because no materialization has happened yet and 2nd child should have 4 rows
 :PREFIX SELECT * FROM boundary_view;
@@ -168,7 +172,7 @@ SELECT * FROM boundary_view ORDER BY time_bucket;
 REFRESH MATERIALIZED VIEW boundary_view;
 
 -- watermark should be 30
-SELECT _timescaledb_internal.cagg_watermark(6);
+SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
 
 -- both sides of the UNION should return 2 rows
 :PREFIX SELECT * FROM boundary_view;
@@ -264,8 +268,20 @@ INSERT into ht_intdata values( 41 , 18 , 21);
 
 REFRESH MATERIALIZED VIEW mat_m1;
 
-SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
-WHERE view_name::text like 'mat_m1';
+SELECT mat_hypertable_id AS mat_m1_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'mat_m1' \gset
+
+-- Show the new watermark
+SELECT _timescaledb_internal.cagg_watermark(:mat_m1_id);
+
+-- Data inserted after refresh and after cagg_watermark should be
+-- reflected in the real-time aggregation
+INSERT into ht_intdata VALUES (34, 13, 65), (26, 12, 78), (28, 9, 32);
+
+SELECT view_name, completed_threshold
+FROM timescaledb_information.continuous_aggregate_stats
+WHERE view_name::text LIKE 'mat_m1';
 
 --view and direct query should return same results
 SELECT * from mat_m1 ORDER BY 1;
@@ -274,7 +290,174 @@ FROM ht_intdata
 WHERE b < 16 and c > 20
 GROUP BY time_bucket(5, a)
 HAVING sum(c) > 50 and avg(b)::int > 12
-ORDER by 1; 
+ORDER by 1;
 
 -- plan output
 :PREFIX SELECT * FROM mat_m1 ORDER BY 1;
+
+-- Test caggs with different time types
+CREATE TABLE smallint_table (time smallint, value int);
+CREATE TABLE int_table (time int, value int);
+CREATE TABLE bigint_table (time bigint, value int);
+CREATE TABLE date_table (time date, value int);
+CREATE TABLE timestamp_table (time timestamp, value int);
+CREATE TABLE timestamptz_table (time timestamptz, value int);
+
+SELECT create_hypertable('smallint_table', 'time', chunk_time_interval=>20);
+SELECT create_hypertable('int_table', 'time', chunk_time_interval=>20);
+SELECT create_hypertable('bigint_table', 'time', chunk_time_interval=>20);
+SELECT create_hypertable('date_table', 'time');
+SELECT create_hypertable('timestamp_table', 'time');
+SELECT create_hypertable('timestamptz_table', 'time');
+
+CREATE OR REPLACE FUNCTION smallint_now()
+RETURNS smallint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)::smallint
+    FROM smallint_table
+$$;
+CREATE OR REPLACE FUNCTION int_now()
+RETURNS int LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM int_table
+$$;
+CREATE OR REPLACE FUNCTION bigint_now()
+RETURNS bigint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)::bigint
+    FROM bigint_table
+$$;
+
+SELECT set_integer_now_func('smallint_table', 'smallint_now');
+SELECT set_integer_now_func('int_table', 'int_now');
+SELECT set_integer_now_func('bigint_table', 'bigint_now');
+
+CREATE MATERIALIZED VIEW smallint_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(SMALLINT '10', time) AS bucket, avg(value)
+FROM smallint_table
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW int_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(5, time) AS bucket, avg(value)
+FROM int_table
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW bigint_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket(BIGINT '10', time) AS bucket, avg(value)
+FROM bigint_table
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW date_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('2 days', time) AS bucket, avg(value)
+FROM date_table
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW timestamp_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('2 days', time) AS bucket, avg(value)
+FROM timestamp_table
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW timestamptz_agg
+WITH (timescaledb.continuous)
+AS
+SELECT time_bucket('2 days', time) AS bucket, avg(value)
+FROM timestamptz_table
+GROUP BY 1;
+
+-- Refresh first without data
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+
+-- Watermarks at min for the above caggs:
+SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+ORDER BY 1,2;
+
+INSERT INTO smallint_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
+INSERT INTO int_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
+INSERT INTO bigint_table VALUES (1, 1), (2, 2), (6, 6), (8, 8), (19, 19);
+INSERT INTO date_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
+INSERT INTO timestamp_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
+INSERT INTO timestamptz_table VALUES ('2020-01-01', 1), ('2020-01-02', 2), ('2020-01-06', 6), ('2020-01-08', 8);
+
+-- Refresh to move the watermarks
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+
+
+-- Watermarks should reflect the new materializations
+SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+ORDER BY 1,2;
+
+-- Test overflow of valid ranges by inserting values close to the max
+-- supported time values. Adding one bucket to these values overflow
+-- the valid time ranges so the watermark should end up at the end of
+-- valid range for the type.
+INSERT INTO smallint_table VALUES (32765, 1);
+INSERT INTO int_table VALUES (2147483645, 1);
+INSERT INTO bigint_table VALUES (9223372036854775804, 1);
+INSERT INTO date_table VALUES ('294247-01-01', 1);
+INSERT INTO timestamp_table VALUES ('294247-01-01 00:00:00-00', 1);
+INSERT INTO timestamptz_table VALUES ('294247-01-01 00:00:00-00', 1);
+
+CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+
+-- Watermarks after refresh hould be at the end of the valid range for
+-- the time type
+SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+ORDER BY 1,2;
+
+-- Querying the aggs should work even when fully materialized
+SELECT * FROM smallint_agg
+ORDER BY 1,2;
+
+SELECT * FROM int_agg
+ORDER BY 1,2;
+
+SELECT * FROM bigint_agg
+ORDER BY 1,2;
+
+SELECT * FROM date_agg
+ORDER BY 1,2;
+
+SELECT * FROM timestamp_agg
+ORDER BY 1,2;
+
+SELECT * FROM timestamptz_agg
+ORDER BY 1,2;
+
+\set ON_ERROR_STOP 0
+-------------------------------------
+-- Test invalid inputs for cagg_watermark
+-------------------------------------
+-- Non-existing materialized hypertable
+SELECT _timescaledb_internal.cagg_watermark(100);
+-- NULL hypertable ID. Function is STRICT, so does nothing:
+SELECT _timescaledb_internal.cagg_watermark(NULL);
+\set ON_ERROR_STOP 1

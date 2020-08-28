@@ -1912,29 +1912,8 @@ cagg_boundary_make_lower_bound(Oid type)
 	bool typbyval;
 
 	get_typlenbyval(type, &typlen, &typbyval);
+	value = ts_time_datum_get_nobegin_or_min(type);
 
-	switch (type)
-	{
-		case INT2OID:
-			value = Int16GetDatum(PG_INT16_MIN);
-			break;
-		case DATEOID:
-		case INT4OID:
-			value = Int32GetDatum(PG_INT32_MIN);
-			break;
-		case INT8OID:
-		case TIMESTAMPTZOID:
-		case TIMESTAMPOID:
-			value = Int64GetDatum(PG_INT64_MIN);
-			break;
-		default:
-			/* validation at earlier stages should prevent ever reaching this */
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
-					 errmsg("unsupported datatype \"%s\" for continuous aggregate",
-							format_type_be(type))));
-			pg_unreachable();
-	}
 	return makeConst(type, -1, InvalidOid, typlen, value, false, typbyval);
 }
 
