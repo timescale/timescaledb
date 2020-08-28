@@ -114,6 +114,7 @@ set(SOLO_TESTS
   compress_bgw_reorder_drop_chunks
   compression_ddl
   continuous_aggs_bgw
+  continuous_aggs_ddl
   continuous_aggs_dump
   data_fetcher
   data_node
