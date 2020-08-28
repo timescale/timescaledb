@@ -57,7 +57,7 @@ cleanup() {
 docker_exec() {
     # Echo to stderr
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec -it $1 /bin/bash -c "$2"
+    docker exec $1 /bin/bash -c "$2"
 }
 
 docker rm -f timescaledb-san 2>/dev/null || true
