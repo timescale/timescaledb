@@ -162,7 +162,7 @@ INSERT INTO "nondefault_mem_settings" VALUES
 ('2002-04-20T09:00:00', 34.9),
 ('2003-04-20T09:00:00', 35.9);
 
-SELECT * FROM "nondefault_mem_settings";
+SELECT * FROM "nondefault_mem_settings" ORDER BY 2;
 
 
 --test rollback

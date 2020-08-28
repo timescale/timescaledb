@@ -259,27 +259,27 @@ ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
 	switch (timestamp_type)
 	{
 		case INT2OID:
-			interval_in_interval_type = ts_internal_to_interval_value(interval, timestamp_type);
+			interval_in_interval_type = Int16GetDatum(interval);
 			bucket_function = ts_int16_bucket;
 			break;
 		case INT4OID:
-			interval_in_interval_type = ts_internal_to_interval_value(interval, timestamp_type);
+			interval_in_interval_type = Int32GetDatum(interval);
 			bucket_function = ts_int32_bucket;
 			break;
 		case INT8OID:
-			interval_in_interval_type = ts_internal_to_interval_value(interval, timestamp_type);
+			interval_in_interval_type = Int64GetDatum(interval);
 			bucket_function = ts_int64_bucket;
 			break;
 		case TIMESTAMPOID:
-			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
+			interval_in_interval_type = DirectFunctionCall1(ts_internal_to_interval, interval);
 			bucket_function = ts_timestamp_bucket;
 			break;
 		case TIMESTAMPTZOID:
-			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
+			interval_in_interval_type = DirectFunctionCall1(ts_internal_to_interval, interval);
 			bucket_function = ts_timestamptz_bucket;
 			break;
 		case DATEOID:
-			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
+			interval_in_interval_type = DirectFunctionCall1(ts_internal_to_interval, interval);
 			bucket_function = ts_date_bucket;
 			break;
 		default:

@@ -40,7 +40,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 
 EXPLAIN (costs off)
-SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
+SELECT * FROM alter_test WHERE time > '2017-04-22T10:00:01';
 
 -- rename column and change its type
 ALTER TABLE alter_test RENAME COLUMN time TO time_us;
@@ -63,7 +63,7 @@ SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 
 -- constraint exclusion should still work with updated column
 EXPLAIN (costs off)
-SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
+SELECT * FROM alter_test WHERE time_us > '2017-04-22T10:00:01';
 
 \set ON_ERROR_STOP 0
 -- verify that we cannot change the column type to something incompatible

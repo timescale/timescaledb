@@ -212,9 +212,9 @@ ORDER BY 1,
                            ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=48 loops=1)
                            ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=960 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=480 loops=1)
                            ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=480 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=960 loops=1)
                            ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
 (18 rows)
 
@@ -282,13 +282,13 @@ WHERE extract(minute FROM d.time) = 0;
                Chunks left after exclusion: 5
                ->  Merge Append (actual rows=389 loops=1)
                      Sort Key: d_1.device_id
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=120 loops=1)
-                           Filter: (date_part('minute'::text, "time") = '0'::double precision)
-                           Rows Removed by Filter: 360
-                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=240 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=240 loops=1)
                            Filter: (date_part('minute'::text, "time") = '0'::double precision)
                            Rows Removed by Filter: 720
+                           ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=120 loops=1)
+                           Filter: (date_part('minute'::text, "time") = '0'::double precision)
+                           Rows Removed by Filter: 360
                            ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=12 loops=1)
                            Filter: (date_part('minute'::text, "time") = '0'::double precision)
@@ -348,13 +348,13 @@ WHERE extract(minute FROM d.time) = 0;
  Nested Loop (actual rows=12 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_ordered_idx d (actual rows=389 loops=1)
          Chunks excluded during startup: 0
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=120 loops=1)
-               Filter: (date_part('minute'::text, "time") = '0'::double precision)
-               Rows Removed by Filter: 360
-               ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_pee on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-         ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=240 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=240 loops=1)
                Filter: (date_part('minute'::text, "time") = '0'::double precision)
                Rows Removed by Filter: 720
+               ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id_pee on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=120 loops=1)
+               Filter: (date_part('minute'::text, "time") = '0'::double precision)
+               Rows Removed by Filter: 360
                ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id_pee on compress_hyper_2_7_chunk (actual rows=5 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=12 loops=1)
                Filter: (date_part('minute'::text, "time") = '0'::double precision)
@@ -422,9 +422,9 @@ GROUP BY device_id;
          Rows Removed by Join Filter: 1493
          ->  Merge Append (actual rows=1541 loops=1)
                Sort Key: mt.device_id
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=480 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=960 loops=1)
                      ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=960 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=480 loops=1)
                      ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_2 (actual rows=48 loops=1)
                      ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_8_chunk (actual rows=1 loops=1)
@@ -455,12 +455,12 @@ ORDER BY time;
          ->  Append (actual rows=48 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=0 loops=1)
                      Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time) AND (nd.node = device_id))
-                     Rows Removed by Filter: 96
+                     Rows Removed by Filter: 192
                      ->  Index Scan using compress_hyper_2_6_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_6_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = nd.node)
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=0 loops=1)
                      Filter: (("time" > nd.start_time) AND ("time" < nd.stop_time) AND (nd.node = device_id))
-                     Rows Removed by Filter: 192
+                     Rows Removed by Filter: 96
                      ->  Index Scan using compress_hyper_2_7_chunk__compressed_hypertable_2_device_id__ts on compress_hyper_2_7_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = nd.node)
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_2 (actual rows=0 loops=1)
@@ -511,9 +511,9 @@ ORDER BY time;
                Sort Key: mt.device_id
                Sort Method: quicksort 
                ->  Append (actual rows=1541 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=480 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=960 loops=1)
                            ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=960 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=480 loops=1)
                            ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_2 (actual rows=48 loops=1)
                            ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
@@ -544,9 +544,9 @@ ORDER BY time;
          Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
          Rows Removed by Join Filter: 289
          ->  Append (actual rows=1541 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=480 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt (actual rows=960 loops=1)
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=960 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_1 (actual rows=480 loops=1)
                      ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_2 (actual rows=48 loops=1)
                      ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
@@ -846,10 +846,10 @@ ORDER BY 1,
                            Hypertable: metrics_ordered_idx
                            Chunks left after exclusion: 5
                            ->  Append (actual rows=1541 loops=1)
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=480 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=960 loops=1)
                                        Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=960 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=480 loops=1)
                                        Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=48 loops=1)
@@ -868,10 +868,10 @@ ORDER BY 1,
                            Hypertable: metrics_ordered_idx
                            Chunks left after exclusion: 5
                            ->  Append (actual rows=1541 loops=1)
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=480 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=960 loops=1)
                                        Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=5 loops=1)
-                                 ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_2 (actual rows=960 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_2 (actual rows=480 loops=1)
                                        Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=5 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_3 (actual rows=48 loops=1)

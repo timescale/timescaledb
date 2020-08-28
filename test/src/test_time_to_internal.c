@@ -17,7 +17,6 @@
 #include "test_utils.h"
 
 TS_FUNCTION_INFO_V1(ts_test_time_to_internal_conversion);
-TS_FUNCTION_INFO_V1(ts_test_interval_to_internal_conversion);
 
 Datum
 ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
@@ -287,3 +286,4 @@ ts_test_interval_to_internal_conversion(PG_FUNCTION_ARGS)
 
 	PG_RETURN_VOID();
 }
+

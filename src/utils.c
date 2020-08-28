@@ -36,79 +36,26 @@
 #include "time_utils.h"
 #include "guc.h"
 
-TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_unix_microseconds);
+TS_FUNCTION_INFO_V1(ts_internal_to_date);
+TS_FUNCTION_INFO_V1(ts_internal_to_timestamp);
+TS_FUNCTION_INFO_V1(ts_internal_to_timestamptz);
 
-/*
- * Convert a Postgres TIMESTAMP to BIGINT microseconds relative the UNIX epoch.
- */
 Datum
-ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
+ts_internal_to_timestamp(PG_FUNCTION_ARGS)
 {
-	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-
-	if (TIMESTAMP_IS_NOBEGIN(timestamp))
-		PG_RETURN_INT64(TS_TIME_NOBEGIN);
-
-	if (TIMESTAMP_IS_NOEND(timestamp))
-		PG_RETURN_INT64(TS_TIME_NOEND);
-
-	if (timestamp < TS_TIMESTAMP_MIN)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
-
-	if (timestamp >= TS_TIMESTAMP_END)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
-
-	PG_RETURN_INT64(timestamp + TS_EPOCH_DIFF_MICROSECONDS);
-}
-
-TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_timestamp);
-TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_timestamp_without_timezone);
-TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_date);
-
-/*
- * Convert BIGINT microseconds relative the UNIX epoch to a Postgres TIMESTAMP.
- */
-Datum
-ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
-{
-	int64 microseconds = PG_GETARG_INT64(0);
-
-	if (TS_TIME_IS_NOBEGIN(microseconds, TIMESTAMPTZOID))
-		PG_RETURN_DATUM(ts_time_datum_get_nobegin(TIMESTAMPTZOID));
-
-	if (TS_TIME_IS_NOEND(microseconds, TIMESTAMPTZOID))
-		PG_RETURN_DATUM(ts_time_datum_get_noend(TIMESTAMPTZOID));
-
-	/*
-	 * Test that the UNIX us timestamp is within bounds. Note that an int64 at
-	 * UNIX epoch and microsecond precision cannot represent the upper limit
-	 * of the supported date range (Julian end date), so INT64_MAX-1 is the
-	 * natural upper bound for this function.
-	 */
-	if (microseconds < TS_TIMESTAMP_INTERNAL_MIN)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
-
-	PG_RETURN_TIMESTAMPTZ(microseconds - TS_EPOCH_DIFF_MICROSECONDS);
+	PG_RETURN_TIMESTAMP(PG_GETARG_INT64(0));
 }
 
 Datum
-ts_pg_unix_microseconds_to_date(PG_FUNCTION_ARGS)
+ts_internal_to_timestamptz(PG_FUNCTION_ARGS)
 {
-	int64 microseconds = PG_GETARG_INT64(0);
-	Datum res;
+	PG_RETURN_TIMESTAMPTZ(PG_GETARG_INT64(0));
+}
 
-	if (TS_TIME_IS_NOBEGIN(microseconds, DATEOID))
-		PG_RETURN_DATUM(ts_time_datum_get_nobegin(DATEOID));
-
-	if (TS_TIME_IS_NOEND(microseconds, DATEOID))
-		PG_RETURN_DATUM(ts_time_datum_get_noend(DATEOID));
-
-	res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(microseconds));
-	res = DirectFunctionCall1(timestamp_date, res);
-	PG_RETURN_DATUM(res);
+Datum
+ts_internal_to_date(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_DATEADT(PG_GETARG_INT64(0) / USECS_PER_DAY);
 }
 
 static int64 ts_integer_to_internal(Datum time_val, Oid type_oid);
@@ -154,22 +101,10 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		case INT2OID:
 			return ts_integer_to_internal(time_val, type_oid);
 		case TIMESTAMPOID:
-			/*
-			 * for timestamps, ignore timezones, make believe the timestamp is
-			 * at UTC
-			 */
-			res = DirectFunctionCall1(ts_pg_timestamp_to_unix_microseconds, time_val);
-
-			return DatumGetInt64(res);
 		case TIMESTAMPTZOID:
-			res = DirectFunctionCall1(ts_pg_timestamp_to_unix_microseconds, time_val);
-
-			return DatumGetInt64(res);
+			return DatumGetInt64(time_val);
 		case DATEOID:
-			tz = DirectFunctionCall1(date_timestamp, time_val);
-			res = DirectFunctionCall1(ts_pg_timestamp_to_unix_microseconds, tz);
-
-			return DatumGetInt64(res);
+			return DatumGetInt32(time_val) * USECS_PER_DAY;
 		default:
 			elog(ERROR, "unknown time type OID %d", type_oid);
 			return -1;
@@ -219,80 +154,6 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 	}
 }
 
-int64
-ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-									  TimevalInfinity *is_infinite_out)
-{
-	switch (type_oid)
-	{
-		case TIMESTAMPOID:
-		{
-			Timestamp ts = DatumGetTimestamp(time_val);
-			if (TIMESTAMP_NOT_FINITE(ts))
-			{
-				if (TIMESTAMP_IS_NOBEGIN(ts))
-				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
-					return PG_INT64_MIN;
-				}
-				else
-				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
-					return PG_INT64_MAX;
-				}
-			}
-
-			return ts_time_value_to_internal(time_val, type_oid);
-		}
-		case TIMESTAMPTZOID:
-		{
-			TimestampTz ts = DatumGetTimestampTz(time_val);
-			if (TIMESTAMP_NOT_FINITE(ts))
-			{
-				if (TIMESTAMP_IS_NOBEGIN(ts))
-				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
-					return PG_INT64_MIN;
-				}
-				else
-				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
-					return PG_INT64_MAX;
-				}
-			}
-
-			return ts_time_value_to_internal(time_val, type_oid);
-		}
-		case DATEOID:
-		{
-			DateADT d = DatumGetDateADT(time_val);
-			if (DATE_NOT_FINITE(d))
-			{
-				if (DATE_IS_NOBEGIN(d))
-				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
-					return PG_INT64_MIN;
-				}
-				else
-				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
-					return PG_INT64_MAX;
-				}
-			}
-
-			return ts_time_value_to_internal(time_val, type_oid);
-		}
-	}
-
-	return ts_time_value_to_internal(time_val, type_oid);
-}
-
 TS_FUNCTION_INFO_V1(ts_time_to_internal);
 Datum
 ts_time_to_internal(PG_FUNCTION_ARGS)
@@ -302,8 +163,6 @@ ts_time_to_internal(PG_FUNCTION_ARGS)
 	int64 res = ts_time_value_to_internal(time, time_type);
 	PG_RETURN_INT64(res);
 }
-
-static Datum ts_integer_to_internal_value(int64 value, Oid type);
 
 /*
  * convert int64 to Datum according to type
@@ -322,16 +181,18 @@ ts_internal_to_time_value(int64 value, Oid type)
 	switch (type)
 	{
 		case INT2OID:
+			return Int16GetDatum(value);
 		case INT4OID:
+			return Int32GetDatum(value);
 		case INT8OID:
-			return ts_integer_to_internal_value(value, type);
+			return Int64GetDatum(value);
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
 			 * compatibility */
-			return DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
+			return Int64GetDatum(value);
 		case DATEOID:
-			return DirectFunctionCall1(ts_pg_unix_microseconds_to_date, Int64GetDatum(value));
+			return Int32GetDatum(value);
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
@@ -353,50 +214,16 @@ ts_internal_to_time_string(int64 value, Oid type)
 	return OutputFunctionCall(&typoutputinfo, time_datum);
 }
 
-TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_interval);
+TS_FUNCTION_INFO_V1(ts_internal_to_interval);
 
 Datum
-ts_pg_unix_microseconds_to_interval(PG_FUNCTION_ARGS)
+ts_internal_to_interval(PG_FUNCTION_ARGS)
 {
 	int64 microseconds = PG_GETARG_INT64(0);
 	Interval *interval = palloc0(sizeof(*interval));
 	interval->day = microseconds / USECS_PER_DAY;
 	interval->time = microseconds % USECS_PER_DAY;
 	PG_RETURN_INTERVAL_P(interval);
-}
-
-TSDLLEXPORT Datum
-ts_internal_to_interval_value(int64 value, Oid type)
-{
-	switch (type)
-	{
-		case INT2OID:
-		case INT4OID:
-		case INT8OID:
-			return ts_integer_to_internal_value(value, type);
-		case INTERVALOID:
-			return DirectFunctionCall1(ts_pg_unix_microseconds_to_interval, Int64GetDatum(value));
-		default:
-			elog(ERROR, "unknown time type OID %d in ts_internal_to_interval_value", type);
-			pg_unreachable();
-	}
-}
-
-static Datum
-ts_integer_to_internal_value(int64 value, Oid type)
-{
-	switch (type)
-	{
-		case INT2OID:
-			return Int16GetDatum(value);
-		case INT4OID:
-			return Int32GetDatum(value);
-		case INT8OID:
-			return Int64GetDatum(value);
-		default:
-			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
-			pg_unreachable();
-	}
 }
 
 /* Returns approximate period in microseconds */

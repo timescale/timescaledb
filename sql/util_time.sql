@@ -3,24 +3,17 @@
 -- LICENSE-APACHE for a copy of the license.
 
 -- This file contains utilities for time conversion.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
-    AS '@MODULE_PATHNAME@', 'ts_pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(time_us BIGINT) RETURNS TIMESTAMP
+    AS '@MODULE_PATHNAME@', 'ts_internal_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp(unixtime_us BIGINT) RETURNS TIMESTAMPTZ
-    AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamptz(time_us BIGINT) RETURNS TIMESTAMPTZ
+  AS '@MODULE_PATHNAME@', 'ts_internal_to_timestamptz' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.to_timestamp_without_timezone(unixtime_us BIGINT)
-  RETURNS TIMESTAMP
-  AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_timestamp'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.to_date(unixtime_us BIGINT)
-  RETURNS DATE
-  AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_date'
-  LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.to_date(unixtime_us BIGINT) RETURNS DATE
+  AS '@MODULE_PATHNAME@', 'ts_internal_to_date' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.to_interval(unixtime_us BIGINT) RETURNS INTERVAL
-    AS '@MODULE_PATHNAME@', 'ts_pg_unix_microseconds_to_interval' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    AS '@MODULE_PATHNAME@', 'ts_internal_to_interval' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 -- Time can be represented in a hypertable as an int* (bigint/integer/smallint) or as a timestamp type (
 -- with or without timezones). In metatables and other internal systems all time values are stored as bigint.
@@ -44,13 +37,11 @@ BEGIN
       WHEN 'BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype THEN
         RETURN format('%L', time_value); -- scale determined by user.
       WHEN 'TIMESTAMP'::regtype THEN
-        --the time_value for timestamps w/o tz does not depend on local timezones. So perform at UTC.
-        RETURN format('TIMESTAMP %1$L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))); -- microseconds
+        RETURN format('TIMESTAMP %L', _timescaledb_internal.to_timestamp(time_value));
       WHEN 'TIMESTAMPTZ'::regtype THEN
-        -- assume time_value is in microsec
-        RETURN format('TIMESTAMPTZ %1$L', _timescaledb_internal.to_timestamp(time_value)); -- microseconds
+        RETURN format('TIMESTAMPTZ %L', _timescaledb_internal.to_timestamptz(time_value));
       WHEN 'DATE'::regtype THEN
-        RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
+        RETURN format('DATE %L', _timescaledb_internal.to_date(time_value));
       ELSE
          EXECUTE 'SELECT format(''%L'', $1::' || column_type::text || ')' into ret using time_value;
          RETURN ret;

@@ -16,7 +16,7 @@ INSERT INTO upsert_test VALUES ('2017-01-20T09:00:01', 12.3, 'yellow') ON CONFLI
 DO UPDATE SET temp = 12.3 RETURNING time, temp, color;
 
 -- Test that update generates error on conflicts
-INSERT INTO upsert_test VALUES ('2017-01-21T09:00:01', 22.5, 'yellow') RETURNING *;
+INSERT INTO upsert_test VALUES ('2017-01-19T09:00:01', 22.5, 'yellow') RETURNING *;
 UPDATE upsert_test SET time = '2017-01-20T09:00:01';
 \set ON_ERROR_STOP 1
 

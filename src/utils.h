@@ -31,13 +31,6 @@
 
 extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
-typedef enum TimevalInfinity
-{
-	TimevalFinite = 0,
-	TimevalNegInfinity = -1,
-	TimevalPosInfinity = 1,
-} TimevalInfinity;
-
 typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
 
 /*
@@ -48,15 +41,13 @@ typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
  * Will throw an error for that, or other conversion issues.
  */
 extern TSDLLEXPORT int64 ts_time_value_to_internal(Datum time_val, Oid type);
-extern int64 ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-												   TimevalInfinity *is_infinite_out);
 extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_oid);
 
 /*
  * Convert a column from the internal time representation into the specified type
  */
+extern TSDLLEXPORT Datum ts_internal_to_interval(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_internal_to_time_value(int64 value, Oid type);
-extern TSDLLEXPORT Datum ts_internal_to_interval_value(int64 value, Oid type);
 extern TSDLLEXPORT char *ts_internal_to_time_string(int64 value, Oid type);
 
 /*

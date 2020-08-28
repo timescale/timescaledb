@@ -354,11 +354,12 @@ BEGIN
     CASE column_type
       WHEN 'BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype THEN
         RETURN format('%L', time_value); -- scale determined by user.
-      WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype THEN
-        -- assume time_value is in microsec
-        RETURN format('%1$L', _timescaledb_internal.to_timestamp(time_value)); -- microseconds
+      WHEN 'TIMESTAMP'::regtype THEN
+        RETURN format('%L', _timescaledb_internal.to_timestamp(time_value));
+      WHEN 'TIMESTAMPTZ'::regtype THEN
+        RETURN format('%L', _timescaledb_internal.to_timestamptz(time_value));
       WHEN 'DATE'::regtype THEN
-        RETURN format('%L', timezone('UTC',_timescaledb_internal.to_timestamp(time_value))::date);
+        RETURN format('%L', _timescaledb_internal.to_date(time_value));
       ELSE
         RETURN time_value;
     END CASE;

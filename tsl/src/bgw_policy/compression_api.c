@@ -180,10 +180,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	}
 
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)))
-	{
-		default_schedule_interval = DatumGetIntervalP(
-			ts_internal_to_interval_value(dim->fd.interval_length / 2, INTERVALOID));
-	}
+		default_schedule_interval =
+			DatumGetIntervalP(DirectFunctionCall1(ts_internal_to_interval,
+												  Int64GetDatum(dim->fd.interval_length / 2)));
 
 	/* insert a new job into jobs table */
 	namestrcpy(&application_name, "Compression Policy");

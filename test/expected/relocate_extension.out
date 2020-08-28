@@ -147,7 +147,7 @@ SELECT * FROM test_tz ORDER BY time;
 \set ECHO errors
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
-              0 |                       3 |                       3
+              0 |                       2 |                       2
 (1 row)
 
 SELECT * FROM test_dt ORDER BY time;

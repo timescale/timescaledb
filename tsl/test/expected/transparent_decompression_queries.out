@@ -94,7 +94,7 @@ GROUP BY 2, 3;
          Chunks left after exclusion: 5
          ->  Merge Append (actual rows=745 loops=1)
                Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
-               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=120 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=168 loops=1)
                      Filter: ("time" < now())
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: compress_hyper_4_10_chunk.device_id, compress_hyper_4_10_chunk.measure_id
@@ -115,10 +115,10 @@ GROUP BY 2, 3;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_8_chunk (actual rows=168 loops=1)
                            Filter: ("time" < now())
-               ->  Sort (actual rows=121 loops=1)
+               ->  Sort (actual rows=73 loops=1)
                      Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
+                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=73 loops=1)
                            Filter: ("time" < now())
 (33 rows)
 
@@ -131,8 +131,8 @@ EXPLAIN (analyze,costs off,timing off,summary off) SELECT
 FROM merge_sort
 WHERE time > '2000-01-10'::text::timestamp
 GROUP BY 2, 3;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=528 loops=1)
@@ -140,11 +140,12 @@ GROUP BY 2, 3;
          Chunks left after exclusion: 4
          ->  Merge Append (actual rows=528 loops=1)
                Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
-               ->  Sort (actual rows=71 loops=1)
+               ->  Sort (actual rows=119 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Index Scan using _hyper_3_6_chunk_merge_sort_time_idx on _hyper_3_6_chunk (actual rows=71 loops=1)
-                           Index Cond: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
+                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=119 loops=1)
+                           Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
+                           Rows Removed by Filter: 49
                ->  Sort (actual rows=168 loops=1)
                      Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
                      Sort Method: quicksort 
@@ -155,12 +156,12 @@ GROUP BY 2, 3;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_8_chunk (actual rows=168 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-               ->  Sort (actual rows=121 loops=1)
+               ->  Sort (actual rows=73 loops=1)
                      Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
+                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=73 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-(27 rows)
+(28 rows)
 
 RESET enable_hashagg;
 -- test if volatile function quals are applied to compressed chunks

@@ -109,7 +109,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 												   PointerGetDatum(lfirst(item)),
 												   dimvalues->type,
 												   &restype);
-		int64 value = ts_time_value_to_internal_or_infinite(datum, restype, NULL);
+		int64 value = ts_time_value_to_internal(datum, restype);
 
 		switch (strategy)
 		{

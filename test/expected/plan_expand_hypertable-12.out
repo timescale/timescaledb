@@ -1152,16 +1152,21 @@ there should be no transformation if we are out of the supported (TimescaleDB-sp
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276'::timestamp without time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276'::timestamp without time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276'::timestamp without time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276'::timestamp without time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276'::timestamp without time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276'::timestamp without time zone)
-(12 rows)
+(17 rows)
 
 \qecho transformation would be out of range
 transformation would be out of range
@@ -1192,16 +1197,21 @@ there should be no transformation if we are out of the supported (TimescaleDB-sp
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
    ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Index Cond: ("time" < 'Sun Jan 02 00:00:00 294276 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 1 day'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
-(12 rows)
+(17 rows)
 
 \qecho transformation would be out of range
 transformation would be out of range
