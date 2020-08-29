@@ -118,7 +118,6 @@ set(SOLO_TESTS
   debug_notice
   dist_api_calls
   dist_commands
-  dist_compression
   dist_ddl
   dist_hypertable-11
   dist_hypertable-12
