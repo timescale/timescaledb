@@ -37,7 +37,6 @@ set(TEST_FILES_DEBUG
   data_node.sql
   ddl_hook.sql
   debug_notice.sql
-  deparse_fail.sql
   deparse.sql
   dist_api_calls.sql
   dist_commands.sql

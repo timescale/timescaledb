@@ -41,3 +41,20 @@ SELECT * FROM tsl_test_deparse_scalar_func(schema_name => 'Foo', table_name => '
 SELECT * FROM tsl_test_deparse_named_scalar_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
 
 SELECT * FROM tsl_test_deparse_composite_func(schema_name => 'Foo', table_name => 'bar', option => false, "time" => timestamp '2019-09-10 11:08', message => 'This is a test message.');
+
+-- test errors handling
+\set ON_ERROR_STOP 0
+
+CREATE TEMP TABLE fail_table1(x INT);
+
+SELECT _timescaledb_internal.get_tabledef('fail_table1');
+
+CREATE INDEX my_fail_table1_idx ON fail_table1 USING BTREE(x);
+
+SELECT _timescaledb_internal.get_tabledef('my_fail_table1_idx');
+
+SELECT _timescaledb_internal.get_tabledef('non_existing');
+
+CREATE TABLE row_sec(i INT);
+ALTER TABLE row_sec ENABLE ROW LEVEL SECURITY;
+SELECT _timescaledb_internal.get_tabledef('row_sec');
