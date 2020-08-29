@@ -2,6 +2,7 @@ set(TEST_FILES_SHARED
   constraint_exclusion_prepared.sql
   decompress_placeholdervar.sql
   ordered_append_join.sql
+  license.sql
 )
 
 set(TEST_TEMPLATES_SHARED
