@@ -7,21 +7,16 @@
 ---------------------------------------------------
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+
 \ir include/remote_exec.sql
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
 
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
-SET client_min_messages TO NOTICE;
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
 SET ROLE :ROLE_1;
 
 CREATE TABLE compressed(time timestamptz, device int, temp float);
@@ -103,4 +98,5 @@ ORDER BY hypertable_name, dimension_number;
 
 SELECT * FROM chunks_detailed_size('compressed'::regclass) 
 ORDER BY chunk_name, node_name;
-SELECT * FROM hypertable_detailed_size('compressed'::regclass) 
+SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_name;
+
