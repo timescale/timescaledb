@@ -12,7 +12,6 @@ set(TEST_FILES
   edition.sql
   gapfill.sql
   partialize_finalize.sql
-  plan_gapfill.sql
 )
 
 set(TEST_FILES_DEBUG
