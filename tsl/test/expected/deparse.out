@@ -50,3 +50,17 @@ NOTICE:  Deparsed: SELECT success,message FROM public.tsl_test_deparse_composite
          | 
 (1 row)
 
+-- test errors handling
+\set ON_ERROR_STOP 0
+CREATE TEMP TABLE fail_table1(x INT);
+SELECT _timescaledb_internal.get_tabledef('fail_table1');
+ERROR:  temporary table is not supported
+CREATE INDEX my_fail_table1_idx ON fail_table1 USING BTREE(x);
+SELECT _timescaledb_internal.get_tabledef('my_fail_table1_idx');
+ERROR:  "my_fail_table1_idx" is an index
+SELECT _timescaledb_internal.get_tabledef('non_existing');
+ERROR:  relation "non_existing" does not exist at character 43
+CREATE TABLE row_sec(i INT);
+ALTER TABLE row_sec ENABLE ROW LEVEL SECURITY;
+SELECT _timescaledb_internal.get_tabledef('row_sec');
+ERROR:  row security is not supported
