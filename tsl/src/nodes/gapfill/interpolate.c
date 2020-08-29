@@ -142,7 +142,7 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 			sample->value = datumCopy(value, column->base.typbyval, column->base.typlen);
 	}
 
-	DecrTupleDescRefCount(tupdesc);
+	ReleaseTupleDesc(tupdesc);
 }
 
 /* Calculate the interpolation using numerics, returning the result as a numeric datum */
