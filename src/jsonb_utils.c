@@ -61,7 +61,7 @@ ts_jsonb_add_int64(JsonbParseState *state, const char *key, const int64 int_valu
 {
 	Numeric value;
 
-	value = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int64GetDatum(int_value)));
+	value = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int64GetDatum(int_value)));
 
 	ts_jsonb_add_numeric(state, key, value);
 }
