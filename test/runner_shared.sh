@@ -64,6 +64,7 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
      -v ECHO=all \
+     -v TEST_DBNAME="${TEST_DBNAME}" \
      -v TEST_BASE_NAME=${TEST_BASE_NAME} \
      -v TEST_INPUT_DIR=${TEST_INPUT_DIR} \
      -v TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR} \
