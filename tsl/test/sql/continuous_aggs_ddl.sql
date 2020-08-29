@@ -219,10 +219,26 @@ SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
 -- TRUNCATE test
-\set ON_ERROR_STOP 0
+-- Can truncate regular hypertables that have caggs
 TRUNCATE drop_chunks_table_u;
+\set ON_ERROR_STOP 0
+-- Can't truncate materialized hypertables directly
 TRUNCATE :drop_chunks_mat_table_u;
 \set ON_ERROR_STOP 1
+
+-- Check that we don't interfere with TRUNCATE of normal table and
+-- partitioned table
+CREATE TABLE truncate (value int);
+INSERT INTO truncate VALUES (1), (2);
+TRUNCATE truncate;
+SELECT * FROM truncate;
+CREATE TABLE truncate_partitioned (value int)
+  PARTITION BY RANGE(value);
+CREATE TABLE truncate_p1 PARTITION OF truncate_partitioned
+  FOR VALUES FROM (1) TO (3);
+INSERT INTO truncate_partitioned VALUES (1), (2);
+TRUNCATE truncate_partitioned;
+SELECT * FROM truncate_partitioned;
 
 -- ALTER TABLE tests
 \set ON_ERROR_STOP 0

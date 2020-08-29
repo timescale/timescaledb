@@ -258,6 +258,13 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 	pg_unreachable();
 }
 
+static void
+continuous_agg_invalidate_default(const Hypertable *ht, int64 start, int64 end)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 static Datum
 empty_fn(PG_FUNCTION_ARGS)
 {
@@ -365,6 +372,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_materialize = cagg_materialize_default_fn,
+	.continuous_agg_invalidate = continuous_agg_invalidate_default,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

@@ -29,6 +29,7 @@
 #include "dimension.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "invalidation.h"
 #include "export.h"
 #include "partitioning.h"
 #include "utils.h"
@@ -71,7 +72,6 @@ typedef struct ContinuousAggsCacheInvalEntry
 	int64 greatest_modified_value;
 } ContinuousAggsCacheInvalEntry;
 
-static void append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry);
 static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
 
 #define CA_CACHE_INVAL_INIT_HTAB_SIZE 64
@@ -141,6 +141,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
 	 * hypertable_relid directly from the Chunk*/
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
+	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_relid = ht->main_table_relid;
 	cache_entry->hypertable_open_dimension = *hyperspace_get_open_dimension(ht->space, 0);
 	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
@@ -279,13 +280,20 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
-		append_invalidation_entry(entry);
+		invalidation_hyper_log_add_entry(entry->hypertable_id,
+										 entry->modification_time,
+										 entry->lowest_modified_value,
+										 entry->greatest_modified_value);
 		return;
 	}
 
 	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
+
 	if (entry->lowest_modified_value < liv)
-		append_invalidation_entry(entry);
+		invalidation_hyper_log_add_entry(entry->hypertable_id,
+										 entry->modification_time,
+										 entry->lowest_modified_value,
+										 entry->greatest_modified_value);
 };
 
 static void
@@ -298,6 +306,7 @@ cache_inval_cleanup(void)
 	continuous_aggs_cache_inval_htab = NULL;
 	continuous_aggs_trigger_mctx = NULL;
 };
+
 static void
 cache_inval_htab_write(void)
 {
@@ -321,6 +330,7 @@ cache_inval_htab_write(void)
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
 		cache_inval_entry_write(current_entry);
 };
+
 static void
 continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
@@ -342,6 +352,7 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 			break;
 	}
 }
+
 void
 _continuous_aggs_cache_inval_init(void)
 {
@@ -410,44 +421,4 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 		return PG_INT64_MIN;
 
 	return min_val;
-}
-
-static void
-append_invalidation_entry(ContinuousAggsCacheInvalEntry *entry)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel;
-	TupleDesc desc;
-	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
-	CatalogSecurityContext sec_ctx;
-	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
-	int32 hypertable_id = ts_hypertable_relid_to_id(entry->hypertable_relid);
-
-	Assert(entry->lowest_modified_value <= entry->greatest_modified_value);
-
-	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
-					 RowExclusiveLock);
-	desc = RelationGetDescr(rel);
-
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id)] =
-		ObjectIdGetDatum(hypertable_id);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_hypertable_invalidation_log_modification_time)] =
-		Int64GetDatum(entry->modification_time);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)] =
-		Int64GetDatum(entry->lowest_modified_value);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)] =
-		Int64GetDatum(entry->greatest_modified_value);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-
-	/* Lock will be released by the transaction end. Since this is called on the
-	 * commit hook, this should be soon.
-	 */
-	table_close(rel, NoLock);
 }
