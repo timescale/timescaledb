@@ -78,13 +78,14 @@ FROM _timescaledb_catalog.continuous_agg;
 
 -- The continuous aggregates should be empty
 SELECT * FROM cond_10
-ORDER BY bucket DESC, device;
+ORDER BY 1 DESC, 2;
 
 SELECT * FROM cond_20
-ORDER BY bucket DESC, device;
+ORDER BY 1 DESC, 2;
 
 SELECT * FROM measure_10
-ORDER BY bucket DESC, device;
+ORDER BY 1 DESC, 2;
+
 
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, there is no threshold
@@ -307,24 +308,90 @@ SELECT hypertable_id AS hyper_id,
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
        ORDER BY 1,2,3;
 
--- Clear the table and aggregate
-DELETE FROM conditions;
+-- TRUNCATE the hypertable to invalidate all its continuous aggregates
+TRUNCATE conditions;
+
+-- Now empty
 SELECT * FROM conditions;
 
+-- Should see an infinite invalidation entry for conditions
 SELECT hypertable_id AS hyper_id,
        lowest_modified_value AS start,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
        ORDER BY 1,2,3;
 
-CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-
+-- Aggregates still hold data
 SELECT * FROM cond_10
+ORDER BY 1,2
+LIMIT 5;
+
+SELECT * FROM cond_20
+ORDER BY 1,2
+LIMIT 5;
+
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+
+-- Both should now be empty after refresh
+SELECT * FROM cond_10
+ORDER BY 1,2;
+
+SELECT * FROM cond_20
+ORDER BY 1,2;
+
+-- Insert new data again and refresh
+INSERT INTO conditions VALUES
+       (1, 1, 23.4), (4, 3, 14.3), (5, 1, 13.6),
+       (6, 2, 17.9), (12, 1, 18.3), (19, 3, 28.2),
+       (10, 3, 22.3), (11, 2, 34.9), (15, 2, 45.6),
+       (21, 1, 15.3), (22, 2, 12.3), (29, 3, 16.3);
+
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+
+-- Should now hold data again
+SELECT * FROM cond_10
+ORDER BY 1,2;
+
+SELECT * FROM cond_20
+ORDER BY 1,2;
+
+-- Truncate one of the aggregates, but first test that we block
+-- TRUNCATE ONLY
+\set ON_ERROR_STOP 0
+TRUNCATE ONLY cond_20;
+\set ON_ERROR_STOP 1
+TRUNCATE cond_20;
+
+-- Should now be empty
+SELECT * FROM cond_20
+ORDER BY 1,2;
+
+-- Other aggregate is not affected
+SELECT * FROM cond_10
+ORDER BY 1,2;
+
+-- Refresh again to bring data back
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+
+-- The aggregate should be populated again
+SELECT * FROM cond_20
 ORDER BY 1,2;
 
 -------------------------------------------------------
 -- Test corner cases against a minimal bucket aggregate
 -------------------------------------------------------
+
+-- First, clear the table and aggregate
+TRUNCATE conditions;
+SELECT * FROM conditions;
+
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+
+SELECT * FROM cond_10
+ORDER BY 1,2;
+
 CREATE MATERIALIZED VIEW cond_1
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
@@ -386,7 +453,7 @@ SELECT * FROM cond_1
 ORDER BY 1,2;
 
 -- Clear to reset aggregate
-DELETE FROM conditions;
+TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 
 -- Test invalidation of size 2
@@ -402,7 +469,7 @@ SELECT * FROM cond_1
 ORDER BY 1,2;
 
 -- Repeat the same thing but refresh the whole invalidation at once
-DELETE FROM conditions;
+TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
@@ -411,7 +478,7 @@ SELECT * FROM cond_1
 ORDER BY 1,2;
 
 -- Test invalidation of size 3
-DELETE FROM conditions;
+TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
@@ -439,7 +506,8 @@ SELECT * FROM cond_1
 ORDER BY 1,2;
 
 -- Clear and repeat but instead refresh the whole range in one go. The
--- result should be the same as the three partial refreshes
+-- result should be the same as the three partial refreshes. Use
+-- DELETE instead of TRUNCATE to clear this time.
 DELETE FROM conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);

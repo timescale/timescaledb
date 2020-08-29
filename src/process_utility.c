@@ -737,47 +737,79 @@ process_truncate(ProcessUtilityArgs *args)
 		 * below. We just do it preemptively here. */
 		relid = RangeVarGetRelid(rv, AccessExclusiveLock, true);
 
-		if (OidIsValid(relid))
+		if (!OidIsValid(relid))
+			continue;
+
+		switch (get_rel_relkind(relid))
 		{
-			Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-
-			if (ht != NULL)
+			case RELKIND_VIEW:
 			{
-				ContinuousAggHypertableStatus agg_status =
-					ts_continuous_agg_hypertable_status(ht->fd.id);
+				ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 
-				ts_hypertable_permissions_check_by_id(ht->fd.id);
+				if (NULL != cagg)
+				{
+					Hypertable *ht;
 
-				if ((agg_status & HypertableIsMaterialization) != 0)
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg(
-								 "cannot TRUNCATE a hypertable underlying a continuous aggregate"),
-							 errhint(
-								 "DELETE from the table this continuous aggregate is based on.")));
+					if (!relation_should_recurse(rv))
+						ereport(ERROR,
+								(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+								 errmsg("cannot truncate only a continuous aggregate")));
 
-				if (agg_status == HypertableIsRawTable)
-					ereport(ERROR,
-							(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-							 errmsg("cannot TRUNCATE a hypertable that has a continuous aggregate"),
-							 errhint(
-								 "either DROP the continuous aggregate, or DELETE or drop_chunks "
-								 "from the table this continuous aggregate is based on.")));
+					ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+					Assert(ht != NULL);
+					rv = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
 
-				if (!relation_should_recurse(rv))
-					ereport(ERROR,
-							(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-							 errmsg("cannot truncate only a hypertable"),
-							 errhint("Do not specify the ONLY keyword, or use truncate"
-									 " only on the chunks directly.")));
+					/* Invalidate the entire continuous aggregate since it no
+					 * longer has any data */
+					ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+				}
 
-				hypertables = lappend(hypertables, ht);
-
-				if (!hypertable_is_distributed(ht))
-					relations = lappend(relations, rv);
-			}
-			else
 				relations = lappend(relations, rv);
+				break;
+			}
+			case RELKIND_RELATION:
+			{
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+
+				if (ht == NULL)
+					relations = lappend(relations, rv);
+				else
+				{
+					ContinuousAggHypertableStatus agg_status;
+
+					agg_status = ts_continuous_agg_hypertable_status(ht->fd.id);
+
+					ts_hypertable_permissions_check_by_id(ht->fd.id);
+
+					if ((agg_status & HypertableIsMaterialization) != 0)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("cannot TRUNCATE a hypertable underlying a continuous "
+										"aggregate"),
+								 errhint("TRUNCATE the continuous aggregate instead.")));
+
+					if (agg_status == HypertableIsRawTable)
+						/* The truncation invalidates all associated continuous aggregates */
+						ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+
+					if (!relation_should_recurse(rv))
+						ereport(ERROR,
+								(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+								 errmsg("cannot truncate only a hypertable"),
+								 errhint("Do not specify the ONLY keyword, or use truncate"
+										 " only on the chunks directly.")));
+
+					hypertables = lappend(hypertables, ht);
+
+					if (!hypertable_is_distributed(ht))
+						relations = lappend(relations, rv);
+				}
+				break;
+			}
+			default:
+				relations = lappend(relations, rv);
+				break;
 		}
 	}
 

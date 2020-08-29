@@ -195,12 +195,95 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 modtime, int64 start,
 	CatalogSecurityContext sec_ctx;
 	HeapTuple tuple;
 
+	Assert(start <= end);
 	tuple = create_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, modtime, start, end);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(rel, tuple);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(tuple);
 	table_close(rel, NoLock);
+}
+
+void
+invalidation_hyper_log_add_entry(int32 hyper_id, int64 modtime, int64 start, int64 end)
+{
+	Relation rel = open_invalidation_log(LOG_HYPER, RowExclusiveLock);
+	CatalogSecurityContext sec_ctx;
+	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
+	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
+
+	Assert(start <= end);
+	values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id)] = Int32GetDatum(hyper_id);
+	values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_modification_time)] =
+		Int64GetDatum(modtime);
+	values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)] =
+		Int64GetDatum(start);
+	values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value)] =
+		Int64GetDatum(end);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+	table_close(rel, NoLock);
+}
+
+/*
+ * Invalidate one or more continuous aggregates.
+ *
+ * Add an invalidation in the given range. The invalidation is added either to
+ * the hypertable invalidation log or the continuous aggregate invalidation
+ * log depending on the type of the given hypertable. If the hypertable is a
+ * "raw" hypertable (i.e., one that has one or more continous aggregates), the
+ * entry is added to the hypertable invalidation log and will invalidate all
+ * the associated continuous aggregates. If the hypertable is instead an
+ * materialized hypertable, the entry is added to the cagg invalidation log
+ * and only invalidates the continuous aggregate owning that materialized
+ * hypertable.
+ */
+void
+invalidation_add_entry(const Hypertable *ht, int64 start, int64 end)
+{
+	ContinuousAggHypertableStatus caggstatus;
+	Dimension *dim;
+	int64 timeval;
+
+	Assert(ht != NULL);
+	caggstatus = ts_continuous_agg_hypertable_status(ht->fd.id);
+
+	switch (caggstatus)
+	{
+		case HypertableIsMaterialization:
+		{
+			ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+			Hypertable *raw_ht;
+
+			/* Need to get the now function from the "raw" hypertable */
+			Assert(NULL != cagg);
+			raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+			dim = hyperspace_get_open_dimension(raw_ht->space, 0);
+			timeval = ts_get_now_internal(dim);
+			invalidation_cagg_log_add_entry(ht->fd.id, timeval, start, end);
+			break;
+		}
+		case HypertableIsRawTable:
+			dim = hyperspace_get_open_dimension(ht->space, 0);
+			timeval = ts_get_now_internal(dim);
+			invalidation_hyper_log_add_entry(ht->fd.id, timeval, start, end);
+			break;
+		case HypertableIsMaterializationAndRaw:
+			break;
+		case HypertableIsNotContinuousAgg:
+			ereport(ERROR,
+					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+					 errmsg("cannot add invalidation for hypertable \"%s\"",
+							get_rel_name(ht->main_table_relid)),
+					 errdetail("There is no continuous aggregate associated with the hypertable")));
+			break;
+	}
 }
 
 typedef enum InvalidationResult

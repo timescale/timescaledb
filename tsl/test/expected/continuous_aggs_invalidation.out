@@ -113,19 +113,19 @@ FROM _timescaledb_catalog.continuous_agg;
 
 -- The continuous aggregates should be empty
 SELECT * FROM cond_10
-ORDER BY bucket DESC, device;
+ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
 (0 rows)
 
 SELECT * FROM cond_20
-ORDER BY bucket DESC, device;
+ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
 (0 rows)
 
 SELECT * FROM measure_10
-ORDER BY bucket DESC, device;
+ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
 (0 rows)
@@ -547,23 +547,156 @@ SELECT hypertable_id AS hyper_id,
         2 |    20 |  20
 (1 row)
 
--- Clear the table and aggregate
-DELETE FROM conditions;
+-- TRUNCATE the hypertable to invalidate all its continuous aggregates
+TRUNCATE conditions;
+-- Now empty
 SELECT * FROM conditions;
  time | device | temp 
 ------+--------+------
 (0 rows)
 
+-- Should see an infinite invalidation entry for conditions
 SELECT hypertable_id AS hyper_id,
        lowest_modified_value AS start,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
        ORDER BY 1,2,3;
- hyper_id | start | end 
-----------+-------+-----
-        1 |     1 | 100
-        2 |    20 |  20
+ hyper_id |        start         |         end         
+----------+----------------------+---------------------
+        1 | -9223372036854775808 | 9223372036854775807
+        2 |                   20 |                  20
 (2 rows)
+
+-- Aggregates still hold data
+SELECT * FROM cond_10
+ORDER BY 1,2
+LIMIT 5;
+ bucket | device | avg_temp 
+--------+--------+----------
+      0 |      0 |       18
+      0 |      1 |       25
+      0 |      2 |    20.75
+      0 |      3 |       21
+      0 |      4 |     23.7
+(5 rows)
+
+SELECT * FROM cond_20
+ORDER BY 1,2
+LIMIT 5;
+ bucket | device |     avg_temp     
+--------+--------+------------------
+     20 |      0 | 18.2857142857143
+     20 |      1 | 23.5142857142857
+     20 |      2 |               26
+     20 |      3 |               23
+     20 |      5 |             23.8
+(5 rows)
+
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+-- Both should now be empty after refresh
+SELECT * FROM cond_10
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+(0 rows)
+
+SELECT * FROM cond_20
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+(0 rows)
+
+-- Insert new data again and refresh
+INSERT INTO conditions VALUES
+       (1, 1, 23.4), (4, 3, 14.3), (5, 1, 13.6),
+       (6, 2, 17.9), (12, 1, 18.3), (19, 3, 28.2),
+       (10, 3, 22.3), (11, 2, 34.9), (15, 2, 45.6),
+       (21, 1, 15.3), (22, 2, 12.3), (29, 3, 16.3);
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+-- Should now hold data again
+SELECT * FROM cond_10
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+      0 |      1 |     18.5
+      0 |      2 |     17.9
+      0 |      3 |     14.3
+     10 |      1 |     18.3
+     10 |      2 |    40.25
+     10 |      3 |    25.25
+     20 |      1 |     15.3
+     20 |      2 |     12.3
+     20 |      3 |     16.3
+(9 rows)
+
+SELECT * FROM cond_20
+ORDER BY 1,2;
+ bucket | device |     avg_temp     
+--------+--------+------------------
+      0 |      1 | 18.4333333333333
+      0 |      2 |             32.8
+      0 |      3 |             21.6
+     20 |      1 |             15.3
+     20 |      2 |             12.3
+     20 |      3 |             16.3
+(6 rows)
+
+-- Truncate one of the aggregates, but first test that we block
+-- TRUNCATE ONLY
+\set ON_ERROR_STOP 0
+TRUNCATE ONLY cond_20;
+ERROR:  cannot truncate only a continuous aggregate
+\set ON_ERROR_STOP 1
+TRUNCATE cond_20;
+-- Should now be empty
+SELECT * FROM cond_20
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+(0 rows)
+
+-- Other aggregate is not affected
+SELECT * FROM cond_10
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+      0 |      1 |     18.5
+      0 |      2 |     17.9
+      0 |      3 |     14.3
+     10 |      1 |     18.3
+     10 |      2 |    40.25
+     10 |      3 |    25.25
+     20 |      1 |     15.3
+     20 |      2 |     12.3
+     20 |      3 |     16.3
+(9 rows)
+
+-- Refresh again to bring data back
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+-- The aggregate should be populated again
+SELECT * FROM cond_20
+ORDER BY 1,2;
+ bucket | device |     avg_temp     
+--------+--------+------------------
+      0 |      1 | 18.4333333333333
+      0 |      2 |             32.8
+      0 |      3 |             21.6
+     20 |      1 |             15.3
+     20 |      2 |             12.3
+     20 |      3 |             16.3
+(6 rows)
+
+-------------------------------------------------------
+-- Test corner cases against a minimal bucket aggregate
+-------------------------------------------------------
+-- First, clear the table and aggregate
+TRUNCATE conditions;
+SELECT * FROM conditions;
+ time | device | temp 
+------+--------+------
+(0 rows)
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 SELECT * FROM cond_10
@@ -572,9 +705,6 @@ ORDER BY 1,2;
 --------+--------+----------
 (0 rows)
 
--------------------------------------------------------
--- Test corner cases against a minimal bucket aggregate
--------------------------------------------------------
 CREATE MATERIALIZED VIEW cond_1
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
@@ -666,7 +796,7 @@ ORDER BY 1,2;
 (1 row)
 
 -- Clear to reset aggregate
-DELETE FROM conditions;
+TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 -- Test invalidation of size 2
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
@@ -689,7 +819,7 @@ ORDER BY 1,2;
 (2 rows)
 
 -- Repeat the same thing but refresh the whole invalidation at once
-DELETE FROM conditions;
+TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
 CALL refresh_continuous_aggregate('cond_1', 0, 2);
@@ -702,7 +832,7 @@ ORDER BY 1,2;
 (2 rows)
 
 -- Test invalidation of size 3
-DELETE FROM conditions;
+TRUNCATE conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
 -- Invalidation extends beyond the refresh window on both ends
@@ -749,7 +879,8 @@ ORDER BY 1,2;
 (3 rows)
 
 -- Clear and repeat but instead refresh the whole range in one go. The
--- result should be the same as the three partial refreshes
+-- result should be the same as the three partial refreshes. Use
+-- DELETE instead of TRUNCATE to clear this time.
 DELETE FROM conditions;
 CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
