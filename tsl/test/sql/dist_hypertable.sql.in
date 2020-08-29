@@ -13,32 +13,25 @@
 \o
 \set ECHO all
 
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
+\set DATA_NODE_1 dist_hypertable_1
+\set DATA_NODE_2 dist_hypertable_2
+\set DATA_NODE_3 dist_hypertable_3
 
--- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
-GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 \o /dev/null
-\c data_node_1
+\c :DATA_NODE_1
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c data_node_2
+\c :DATA_NODE_2
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c data_node_3
+\c :DATA_NODE_3
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -53,7 +46,7 @@ SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node
 
 \set ON_ERROR_STOP 0
 -- Test that one cannot directly create TimescaleDB foreign tables
-CREATE FOREIGN TABLE foreign_table (time timestamptz, device int, temp float) SERVER data_node_1;
+CREATE FOREIGN TABLE foreign_table (time timestamptz, device int, temp float) SERVER :DATA_NODE_1;
 \set ON_ERROR_STOP 1
 
 -- Create distributed hypertables. Add a trigger and primary key
@@ -186,11 +179,11 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM disttable;
 $$);
 
@@ -354,13 +347,13 @@ INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
 
 -- Show new row and that conflicting row is not inserted
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM disttable;
 $$);
 
@@ -373,15 +366,13 @@ ON CONFLICT (time) DO UPDATE SET temp = 3.2;
 
 -- Test that an INSERT that would create a chunk does not work on a
 -- data node
-SELECT * FROM test.remote_exec('{ data_node_1 }',
-$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
     INSERT INTO disttable VALUES ('2019-01-02 12:34', 1, 2, 9.3)
 $$);
 \set ON_ERROR_STOP 1
 
 -- However, INSERTs on a data node that does not create a chunk works.
-SELECT * FROM test.remote_exec('{ data_node_1 }',
-$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
     INSERT INTO disttable VALUES ('2017-09-03 06:09', 1, 2, 9.3)
 $$);
 
@@ -414,7 +405,7 @@ RETURNING *;
 SELECT * FROM disttable;
 
 -- Ensure rows are deleted on the data nodes
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM disttable;
 $$);
 
@@ -429,7 +420,7 @@ SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM show_chunks('disttable');
 
 -- Also cleaned up remotely
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM show_chunks('disttable');
 SELECT * FROM disttable;
@@ -452,12 +443,12 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 
 -- Show that chunks are created on remote data nodes and that all
 -- data nodes/chunks have the same data due to replication
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 $$);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM underreplicated;
 $$);
 
@@ -468,7 +459,7 @@ RETURNING time, temp, device;
 SELECT * FROM underreplicated;
 
 -- Show that all replica chunks are updated
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM underreplicated;
 $$);
 
@@ -476,12 +467,12 @@ DELETE FROM underreplicated WHERE device = 2
 RETURNING *;
 
 -- Ensure deletes across all data nodes
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM underreplicated;
 $$);
 
 -- Test hypertable creation fails on distributed error
-SELECT * FROM test.remote_exec('{ data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
 SELECT * FROM underreplicated;
 $$);
@@ -499,19 +490,19 @@ SELECT * FROM timescaledb_information.hypertables
 ORDER BY table_schema, table_name;
 
 -- Test distributed hypertable creation with many parameters
-\c data_node_1
+\c :DATA_NODE_1
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 CREATE SCHEMA "single'schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
 GRANT ALL ON SCHEMA "single'schema" TO :ROLE_1;
-\c data_node_2
+\c :DATA_NODE_2
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-\c data_node_3
+\c :DATA_NODE_3
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
@@ -529,7 +520,7 @@ CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __reg
 SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region',
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, replication_factor => 2,
-data_nodes => '{ "data_node_3" }');
+data_nodes => ARRAY[:'DATA_NODE_3']);
 
 -- Test attach_data_node. First show dimensions and currently attached
 -- servers.  The number of slices in the space dimension should equal
@@ -547,7 +538,7 @@ WHERE h.id = hdn.hypertable_id
 AND h.table_name = 'Param_Table'
 ORDER BY 1, 2;
 
-SELECT * FROM attach_data_node('data_node_1', '"Table\\Schema"."Param_Table"');
+SELECT * FROM attach_data_node(:'DATA_NODE_1', '"Table\\Schema"."Param_Table"');
 
 -- Show updated metadata after attach
 SELECT h.table_name, d.column_name, d.num_slices
@@ -564,7 +555,7 @@ ORDER BY 1, 2;
 
 -- Attach another data node but do not auto-repartition, i.e.,
 -- increase the number of slices.
-SELECT * FROM attach_data_node('data_node_2', '"Table\\Schema"."Param_Table"', repartition => false);
+SELECT * FROM attach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', repartition => false);
 
 -- Number of slices should not be increased
 SELECT h.table_name, d.column_name, d.num_slices
@@ -581,7 +572,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM test.show_triggers('"Table\\Schema"."Param_Table"');
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT * FROM _timescaledb_catalog.dimension;
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc
@@ -589,12 +580,12 @@ FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.
 $$);
 
 -- Verify that repartitioning works as expected on detach_data_node
-SELECT * FROM detach_data_node('data_node_1', '"Table\\Schema"."Param_Table"', repartition => true);
+SELECT * FROM detach_data_node(:'DATA_NODE_1', '"Table\\Schema"."Param_Table"', repartition => true);
 SELECT h.table_name, d.column_name, d.num_slices
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id
 AND h.table_name = 'Param_Table';
-SELECT * FROM detach_data_node('data_node_2', '"Table\\Schema"."Param_Table"', force => true, repartition => false);
+SELECT * FROM detach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', force => true, repartition => false);
 SELECT h.table_name, d.column_name, d.num_slices
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id
@@ -603,7 +594,7 @@ AND h.table_name = 'Param_Table';
 -- Test multi-dimensional hypertable. The add_dimension() command
 -- should be propagated to backends.
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
-SELECT * FROM create_distributed_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => '{ "data_node_1" }');
+SELECT * FROM create_distributed_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => ARRAY[:'DATA_NODE_1']);
 -- Create one chunk to block add_dimension
 INSERT INTO dimented_table VALUES('2017-01-01 06:01', 1, '2017-01-01 08:01', 1);
 
@@ -618,12 +609,12 @@ SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => 
 SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
 
 SELECT * FROM _timescaledb_catalog.dimension;
-SELECT * FROM attach_data_node('data_node_2', 'dimented_table');
+SELECT * FROM attach_data_node(:'DATA_NODE_2', 'dimented_table');
 
 SELECT * FROM _timescaledb_catalog.dimension;
 
 -- Note that this didn't get the add_dimension
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM _timescaledb_catalog.dimension;
 $$);
 
@@ -690,7 +681,7 @@ SET timescaledb.max_insert_batch_size=4;
 CREATE TABLE twodim (time timestamptz DEFAULT '2019-02-10 10:11', "Color" int DEFAULT 11 CHECK ("Color" > 0), temp float DEFAULT 22.1);
 -- Create a replicated table to ensure we handle that case correctly
 -- with batching
-SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, data_nodes => '{ "data_node_1", "data_node_2", "data_node_3" }');
+SELECT * FROM create_hypertable('twodim', 'time', 'Color', 3, replication_factor => 2, data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2',:'DATA_NODE_3']);
 
 SELECT * FROM twodim
 ORDER BY time;
@@ -737,7 +728,7 @@ SET timescaledb.max_insert_batch_size=4;
 --
 -- Execute and filter mentioned data node name in the error message.
 \set ON_ERROR_STOP 0
-SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$);
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$, 'dist_hypertable');
 \set ON_ERROR_STOP 1
 
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.
@@ -767,7 +758,7 @@ ORDER BY time;
 SELECT count(*) FROM twodim;
 
 -- Show distribution across data nodes
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM twodim
 ORDER BY time;
 SELECT count(*) FROM twodim;
@@ -795,7 +786,7 @@ DELETE FROM disttable_with_ct WHERE info = 'a';
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 -- Connect to data nodes to see if data is gone
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 $$);
 
@@ -803,7 +794,7 @@ $$);
 SET SCHEMA 'single''schema';
 CREATE TABLE "disttable'quote"(time timestamptz, "device'quote" int, val float, info text);
 SELECT public.create_distributed_hypertable(
-    'disttable''quote', 'time', 'device''quote', data_nodes => '{ "data_node_1" }'
+    'disttable''quote', 'time', 'device''quote', data_nodes => ARRAY[:'DATA_NODE_1']
 );
 
 SET SCHEMA 'public';
@@ -825,7 +816,7 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 
 -- Show chunks on data nodes
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
@@ -837,7 +828,7 @@ SELECT * FROM disttable_drop_chunks;
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
@@ -868,7 +859,7 @@ CREATE TABLE disttable (time bigint, device int, temp float);
 SELECT create_distributed_hypertable('disttable', 'time', chunk_time_interval => 1000000::bigint);
 
 -- Show the dimension configuration on data nodes
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable';
 $$);
@@ -878,7 +869,7 @@ $$);
 SELECT * FROM add_dimension('disttable', 'device', 1, partitioning_func => '_timescaledb_internal.get_partition_hash');
 CREATE INDEX disttable_device_time_idx ON disttable (device, time);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable';
 $$);
@@ -895,7 +886,7 @@ $$);
 SELECT * FROM set_integer_now_func('disttable', 'dummy_now');
 
 -- Show changes to dimensions
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable';
 $$);
@@ -1100,7 +1091,7 @@ INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
 
 -- Test alter replication factor with data
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
@@ -1108,14 +1099,14 @@ $$);
 SELECT * FROM set_replication_factor('hyper', 3);
 INSERT INTO hyper VALUES ('2017-01-02 07:11', 1, 1.7);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
 
 INSERT INTO hyper VALUES ('2017-02-01 06:01', 1, 5.1);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
@@ -1124,7 +1115,7 @@ SELECT * FROM set_replication_factor('hyper', 2);
 
 INSERT INTO hyper VALUES ('2017-03-01 06:01', 1, 15.1);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
@@ -1133,7 +1124,7 @@ SELECT * FROM set_replication_factor('hyper', replication_factor => 2);
 
 INSERT INTO hyper VALUES ('2017-04-01 06:01', 2, 45.1);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
@@ -1191,27 +1182,27 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN
 ORDER BY relname;
 
 -- Ensure parent tables has proper storage options
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname;
 $$);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname;
 $$);
 
 -- Ensure index has proper storage options set
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname;
 $$);
 
 -- Make sure chunks derive parent reloptions
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
     ORDER BY relname;
@@ -1230,7 +1221,7 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN
 ORDER BY relname;
 
 -- Ensure data node chunks has proper options set
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
@@ -1247,7 +1238,7 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN
 ORDER BY relname;
 
 -- Ensure data node chunks has proper options set
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
@@ -1267,7 +1258,7 @@ SELECT create_distributed_hypertable('disttable_serial', 'time', 'device');
 
 -- Show created columns (AN and DN tables must be exact)
 SELECT * FROM test.show_columns('disttable_serial');
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 	SELECT * FROM test.show_columns('disttable_serial');
 $$);
 
@@ -1276,7 +1267,7 @@ SELECT column_name, column_default
 FROM information_schema.columns
 WHERE table_name  = 'disttable_serial';
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 	SELECT column_name, column_default
 	FROM information_schema.columns
 	WHERE table_name  = 'disttable_serial';
@@ -1293,7 +1284,7 @@ SELECT currval('disttable_serial_id1_seq'::regclass),
        currval('disttable_serial_id2_seq'::regclass),
        currval('disttable_serial_id3_seq'::regclass);
 \set ON_ERROR_STOP 0
-SELECT * FROM test.remote_exec('{ data_node_1 }',$$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	SELECT currval('disttable_serial_id1_seq'::regclass);
 $$);
 \set ON_ERROR_STOP 1
@@ -1302,7 +1293,7 @@ $$);
 -- serial values being set correctly
 SELECT * from disttable_serial ORDER BY id1;
 
-SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }', $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 	SELECT * from disttable_serial ORDER BY id1;
 $$);
 
