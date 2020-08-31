@@ -100,3 +100,61 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
  "0"
 (1 row)
 
+--test compression
+ALTER TABLE device_readings SET(timescaledb.compress);
+insert into device_readings select  generate_series('2018-01-01 00:00'::timestamp, '2018-01-02 00:00'::timestamp, '1 hour');
+select  count(compress_chunk(ch1.schema_name|| '.' || ch1.table_name))
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'device_readings';
+ count 
+-------
+     1
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_hypertables');
+ json_object_field 
+-------------------
+ "1"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_compressed_hypertables');
+ json_object_field 
+-------------------
+ "1"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_heap_size');
+ json_object_field 
+-------------------
+ "8192"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_index_size');
+ json_object_field 
+-------------------
+ "0"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_toast_size');
+ json_object_field 
+-------------------
+ "8192"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_heap_size');
+ json_object_field 
+-------------------
+ "8192"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_index_size');
+ json_object_field 
+-------------------
+ "16384"
+(1 row)
+
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_toast_size');
+ json_object_field 
+-------------------
+ "0"
+(1 row)
+

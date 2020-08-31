@@ -60,7 +60,6 @@ if(NOT APACHE_ONLY)
     chunk_utils_compression.sql
     edition.sql
     telemetry_community.sql
-    telemetry_compression.sql
   )
 endif()
 
