@@ -368,6 +368,20 @@ SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
  sensor_4         | bigint  | t
 (9 rows)
 
+SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
+      Column      |  Type   | NotNull 
+------------------+---------+---------
+ time             | bigint  | t
+ Device_id        | text    | t
+ humidity         | numeric | f
+ sensor_1         | numeric | t
+ sensor_2_renamed | integer | f
+ sensor_3_renamed | numeric | t
+ temp_f           | integer | t
+ sensor_3         | bigint  | t
+ sensor_4         | bigint  | t
+(9 rows)
+
 SELECT * FROM PUBLIC."Hypertable_1";
         time         | Device_id | humidity | sensor_1 | sensor_2_renamed | sensor_3_renamed | temp_f | sensor_3 | sensor_4 
 ---------------------+-----------+----------+----------+------------------+------------------+--------+----------+----------
