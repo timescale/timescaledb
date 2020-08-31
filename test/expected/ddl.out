@@ -268,12 +268,6 @@ SELECT * FROM PUBLIC."Hypertable_1";
  1257894000000000000 | dev1      |     30 |       70 |        1 |        2 |        3 |      100
 (1 row)
 
-EXPLAIN (costs off) SELECT * FROM PUBLIC."Hypertable_1";
-          QUERY PLAN          
-------------------------------
- Seq Scan on _hyper_1_1_chunk
-(1 row)
-
 SELECT * FROM ONLY PUBLIC."Hypertable_1";
  time | Device_id | temp_c | humidity | sensor_1 | sensor_2 | sensor_3 | sensor_4 
 ------+-----------+--------+----------+----------+----------+----------+----------
