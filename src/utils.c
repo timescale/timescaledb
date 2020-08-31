@@ -759,14 +759,14 @@ ts_get_now_internal(const Dimension *open_dim)
 #ifdef TS_DEBUG
 	Datum now_datum;
 	if (ts_current_timestamp_mock == NULL || strlen(ts_current_timestamp_mock) == 0)
-		now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
+		now_datum = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
 	else
 		now_datum = DirectFunctionCall3(timestamptz_in,
 										CStringGetDatum(ts_current_timestamp_mock),
 										0,
 										Int32GetDatum(-1));
 #else
-	Datum now_datum = TimestampTzGetDatum(GetCurrentTimestamp());
+	Datum now_datum = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
 #endif
 	Assert(IS_TIMESTAMP_TYPE(dim_post_part_type));
 
