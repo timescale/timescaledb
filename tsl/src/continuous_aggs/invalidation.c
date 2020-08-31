@@ -253,6 +253,9 @@ set_remainder_after_cut(Invalidation *remainder, int32 hyper_id, int64 modificat
  * The part(s) of the invalidation that are outside the refresh window after
  * the cut will remain in the log. The part of the invalidation that fits
  * within the window is returned as the "remainder".
+ *
+ * Note that the refresh window is exclusive in the end while invalidations
+ * are inclusive.
  */
 static InvalidationResult
 cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
@@ -308,7 +311,8 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 									cagg_hyper_id,
 									invalidation->modification_time,
 									refresh_window->start,
-									MIN(refresh_window->end,
+									/* Refresh window not exclusive at end */
+									MIN(refresh_window->end - 1,
 										invalidation->greatest_modified_value));
 			result = INVAL_CUT;
 		}
@@ -333,7 +337,8 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 									cagg_hyper_id,
 									invalidation->modification_time,
 									MAX(invalidation->lowest_modified_value, refresh_window->start),
-									refresh_window->end);
+									/* Refresh window exclusive at end */
+									refresh_window->end - 1);
 			result = INVAL_CUT;
 		}
 	}

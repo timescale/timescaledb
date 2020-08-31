@@ -100,9 +100,18 @@ compute_bucketed_refresh_window(const InternalTimeRange *refresh_window, int64 b
 		result.end = largest_bucketed_window.end;
 	else
 	{
-		/* The end of the window is non-inclusive so subtract one before bucketing */
-		int64 exclusive_end = int64_saturating_sub(result.end, 1);
-		int64 bucketed_end = ts_time_bucket_by_type(bucket_width, exclusive_end, result.type);
+		int64 exclusive_end = result.end;
+		int64 bucketed_end;
+
+		/* The end of the window is non-inclusive so subtract one before
+		 * bucketing in case we're already at the end of the bucket (we don't
+		 * want to add an extra bucket). But we also don't want to subtract if
+		 * we are at the start of the bucket (we don't want to remove a
+		 * bucket). The last  */
+		if (result.end > result.start)
+			exclusive_end = int64_saturating_sub(result.end, 1);
+
+		bucketed_end = ts_time_bucket_by_type(bucket_width, exclusive_end, result.type);
 		/* We get the time value for the start of the bucket, so need to add
 		 * bucket_width to get the end of it */
 		result.end = bucketed_end + bucket_width;
@@ -189,7 +198,9 @@ continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange 
 		InternalTimeRange invalidation = {
 			.type = refresh_window->type,
 			.start = DatumGetInt64(start),
-			.end = DatumGetInt64(end),
+			/* Invalidations are inclusive at the end, while refresh windows
+			 * aren't, so add one to the end of the invalidated region */
+			.end = int64_saturating_add(DatumGetInt64(end), 1),
 		};
 		InternalTimeRange bucketed_refresh_window =
 			compute_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
