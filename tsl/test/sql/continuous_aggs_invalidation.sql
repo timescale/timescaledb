@@ -51,7 +51,7 @@ CREATE MATERIALIZED VIEW cond_10
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
-SELECT time_bucket(BIGINT '10', time) AS day, device, avg(temp) AS avg_temp
+SELECT time_bucket(BIGINT '10', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2;
 
@@ -59,7 +59,7 @@ CREATE MATERIALIZED VIEW cond_20
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
-SELECT time_bucket(BIGINT '20', time) AS day, device, avg(temp) AS avg_temp
+SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2;
 
@@ -67,7 +67,7 @@ CREATE MATERIALIZED VIEW measure_10
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
 AS
-SELECT time_bucket(10, time) AS day, device, avg(temp) AS avg_temp
+SELECT time_bucket(10, time) AS bucket, device, avg(temp) AS avg_temp
 FROM measurements
 GROUP BY 1,2;
 
@@ -78,13 +78,13 @@ FROM _timescaledb_catalog.continuous_agg;
 
 -- The continuous aggregates should be empty
 SELECT * FROM cond_10
-ORDER BY day DESC, device;
+ORDER BY bucket DESC, device;
 
 SELECT * FROM cond_20
-ORDER BY day DESC, device;
+ORDER BY bucket DESC, device;
 
 SELECT * FROM measure_10
-ORDER BY day DESC, device;
+ORDER BY bucket DESC, device;
 
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, there is no threshold
@@ -280,7 +280,6 @@ SELECT materialization_id AS cagg_id,
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
 
-
 -- Refresh whithout cutting (in area where there are no
 -- invalidations). Merging of overlapping entries should still happen:
 INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
@@ -293,7 +292,6 @@ SELECT materialization_id AS cagg_id,
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
 
-
 -- Test max refresh window
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 
@@ -302,3 +300,150 @@ SELECT materialization_id AS cagg_id,
        greatest_modified_value AS end
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3;
+
+SELECT hypertable_id AS hyper_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+       ORDER BY 1,2,3;
+
+-- Clear the table and aggregate
+DELETE FROM conditions;
+SELECT * FROM conditions;
+
+SELECT hypertable_id AS hyper_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+       ORDER BY 1,2,3;
+
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+
+SELECT * FROM cond_10
+ORDER BY 1,2;
+
+-------------------------------------------------------
+-- Test corner cases against a minimal bucket aggregate
+-------------------------------------------------------
+CREATE MATERIALIZED VIEW cond_1
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(BIGINT '1', time) AS bucket, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2;
+
+SELECT mat_hypertable_id AS cond_1_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'cond_1' \gset
+
+-- Test invalidations with bucket size 1
+INSERT INTO conditions VALUES (0, 1, 1.0);
+
+SELECT hypertable_id AS hyper_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+       ORDER BY 1,2,3;
+
+-- Refreshing around the bucket should not update the aggregate
+CALL refresh_continuous_aggregate('cond_1', -1, 0);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+CALL refresh_continuous_aggregate('cond_1', 1, 2);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Refresh only the invalidated bucket
+CALL refresh_continuous_aggregate('cond_1', 0, 1);
+
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       WHERE materialization_id = :cond_1_id
+       ORDER BY 1,2,3;
+
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Refresh 1 extra bucket on the left
+INSERT INTO conditions VALUES (0, 1, 2.0);
+CALL refresh_continuous_aggregate('cond_1', -1, 1);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Refresh 1 extra bucket on the right
+INSERT INTO conditions VALUES (0, 1, 3.0);
+CALL refresh_continuous_aggregate('cond_1', 0, 2);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Refresh 1 extra bucket on each side
+INSERT INTO conditions VALUES (0, 1, 4.0);
+CALL refresh_continuous_aggregate('cond_1', -1, 2);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Clear to reset aggregate
+DELETE FROM conditions;
+CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
+
+-- Test invalidation of size 2
+INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
+
+-- Refresh one bucket at a time
+CALL refresh_continuous_aggregate('cond_1', 0, 1);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+CALL refresh_continuous_aggregate('cond_1', 1, 2);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Repeat the same thing but refresh the whole invalidation at once
+DELETE FROM conditions;
+CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
+
+INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0);
+CALL refresh_continuous_aggregate('cond_1', 0, 2);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Test invalidation of size 3
+DELETE FROM conditions;
+CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
+
+INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
+
+-- Invalidation extends beyond the refresh window on both ends
+CALL refresh_continuous_aggregate('cond_1', 1, 2);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Should leave one invalidation on each side of the refresh window
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       WHERE materialization_id = :cond_1_id
+       ORDER BY 1,2,3;
+
+-- Refresh the two remaining invalidations
+CALL refresh_continuous_aggregate('cond_1', 0, 1);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+CALL refresh_continuous_aggregate('cond_1', 2, 3);
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Clear and repeat but instead refresh the whole range in one go. The
+-- result should be the same as the three partial refreshes
+DELETE FROM conditions;
+CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
+INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
+
+CALL refresh_continuous_aggregate('cond_1', 0, 3);
+SELECT * FROM cond_1
+ORDER BY 1,2;
