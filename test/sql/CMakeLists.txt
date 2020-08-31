@@ -11,6 +11,7 @@ set(TEST_FILES
   create_hypertable.sql
   create_table.sql
   cursor.sql
+  ddl.sql
   ddl_alter_column.sql
   ddl_errors.sql
   delete.sql
@@ -118,7 +119,6 @@ endif()
 set(TEST_TEMPLATES
   agg_bookends.sql.in
   append.sql.in
-  ddl.sql.in
   insert.sql.in
   chunk_adaptive.sql.in
   parallel.sql.in
