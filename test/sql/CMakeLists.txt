@@ -119,7 +119,6 @@ set(TEST_TEMPLATES
   agg_bookends.sql.in
   append.sql.in
   ddl.sql.in
-  ddl_single.sql.in
   insert.sql.in
   chunk_adaptive.sql.in
   parallel.sql.in
