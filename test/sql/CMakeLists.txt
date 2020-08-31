@@ -12,7 +12,6 @@ set(TEST_FILES
   create_table.sql
   cursor.sql
   ddl.sql
-  ddl_alter_column.sql
   ddl_errors.sql
   delete.sql
   drop_extension.sql
