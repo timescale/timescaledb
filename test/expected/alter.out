@@ -415,6 +415,8 @@ SELECT detach_tablespace('tablespace1', 'hyper_in_space');
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (5, 23, 1);
 INSERT INTO hyper_in_space(time, temp, device) VALUES (7, 23, 1);
+-- Since we have detached tablespace1 the new chunk should not be
+-- placed there.
 SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
      tablename     | tablespace  
@@ -422,8 +424,8 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_10_chunk | tablespace1
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
- _hyper_4_13_chunk | tablespace1
- hyper_in_space    | tablespace1
+ _hyper_4_13_chunk | 
+ hyper_in_space    | 
 (5 rows)
 
 SELECT * FROM _timescaledb_catalog.tablespace;
@@ -451,8 +453,8 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_10_chunk | tablespace1
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
- _hyper_4_13_chunk | tablespace1
- hyper_in_space    | tablespace1
+ _hyper_4_13_chunk | 
+ hyper_in_space    | tablespace2
 (5 rows)
 
 SELECT * FROM _timescaledb_catalog.tablespace;
@@ -471,10 +473,10 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_10_chunk | tablespace1
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
- _hyper_4_13_chunk | tablespace1
+ _hyper_4_13_chunk | 
  _hyper_4_14_chunk | 
  _hyper_4_15_chunk | tablespace2
- hyper_in_space    | tablespace1
+ hyper_in_space    | tablespace2
 (7 rows)
 
 SELECT detach_tablespace('pg_default', 'hyper_in_space');

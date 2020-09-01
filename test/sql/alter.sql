@@ -220,6 +220,8 @@ SELECT detach_tablespace('tablespace1', 'hyper_in_space');
 INSERT INTO hyper_in_space(time, temp, device) VALUES (5, 23, 1);
 INSERT INTO hyper_in_space(time, temp, device) VALUES (7, 23, 1);
 
+-- Since we have detached tablespace1 the new chunk should not be
+-- placed there.
 SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
 SELECT * FROM _timescaledb_catalog.tablespace;

@@ -2513,7 +2513,9 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 	if (tspcs->num_tablespaces == 1)
 	{
 		Assert(ts_hypertable_has_tablespace(ht, tspcs->tablespaces[0].tablespace_oid));
-		ts_tablespace_delete(ht->fd.id, NameStr(tspcs->tablespaces[0].fd.tablespace_name));
+		ts_tablespace_delete(ht->fd.id,
+							 NameStr(tspcs->tablespaces[0].fd.tablespace_name),
+							 tspcs->tablespaces[0].tablespace_oid);
 	}
 
 	ts_tablespace_attach_internal(&tspc_name, ht->main_table_relid, true);

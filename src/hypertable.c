@@ -699,7 +699,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 								   Anum_hypertable_compressed_hypertable_id,
 								   &compressed_hypertable_id_isnull));
 
-	ts_tablespace_delete(hypertable_id, NULL);
+	ts_tablespace_delete(hypertable_id, NULL, InvalidOid);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
 	ts_hypertable_data_node_delete_by_hypertable_id(hypertable_id);
