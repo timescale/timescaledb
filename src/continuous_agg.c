@@ -359,34 +359,6 @@ ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id,
 	return ignore_invalidation_older_than;
 }
 
-TSDLLEXPORT int64
-ts_continuous_aggs_min_completed_threshold(int32 raw_hypertable_id, FormData_continuous_agg *entry)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	int64 min_threshold = PG_INT64_MAX;
-
-	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
-	ts_scanner_foreach(&iterator)
-	{
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
-		int64 completed_threshold =
-			ts_continuous_agg_get_completed_threshold(data->mat_hypertable_id);
-
-		if (min_threshold > completed_threshold)
-			min_threshold = completed_threshold;
-		if (entry != NULL)
-			memcpy(entry, data, sizeof(*entry));
-
-		if (should_free)
-			heap_freetuple(tuple);
-	}
-
-	return min_threshold;
-}
-
 /* returns the inclusive value for the minimum time to invalidate */
 TSDLLEXPORT int64
 ts_continuous_aggs_get_minimum_invalidation_time(int64 modification_time,

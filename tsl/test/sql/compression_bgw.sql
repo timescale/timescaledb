@@ -125,7 +125,7 @@ SELECT device,
 FROM conditions
 GROUP BY device, time_bucket(INTERVAL '1 hour', "time");
 
-REFRESH MATERIALIZED VIEW conditions_summary;
+CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 
 ALTER TABLE conditions SET (timescaledb.compress);
 ALTER MATERIALIZED VIEW conditions_summary SET (

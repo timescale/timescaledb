@@ -3090,94 +3090,6 @@ ts_chunk_drop_preserve_catalog_row(const Chunk *chunk, DropBehavior behavior, in
 }
 
 static void
-ts_chunk_drop_process_invalidations(Oid hypertable_relid, int64 older_than, int64 newer_than,
-									Chunk *chunks, int num_chunks)
-{
-	Dimension *time_dimension;
-	int64 ignore_invalidation_older_than;
-	int64 minimum_invalidation_time;
-	int64 lowest_completion_time;
-	List *continuous_aggs;
-	ListCell *lc;
-	Cache *hcache;
-	Hypertable *ht;
-	int i;
-	FormData_continuous_agg cagg;
-
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid, CACHE_FLAG_NONE, &hcache);
-	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-
-	ignore_invalidation_older_than =
-		ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id, &cagg);
-	minimum_invalidation_time =
-		ts_continuous_aggs_get_minimum_invalidation_time(ts_get_now_internal(time_dimension),
-														 ignore_invalidation_older_than);
-
-	/* minimum_invalidation_time is inclusive; older_than_time is exclusive */
-	if (minimum_invalidation_time < older_than)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("older_than must be greater than the "
-						"timescaledb.ignore_invalidation_older_than "
-						"parameter of %s.%s",
-						cagg.user_view_schema.data,
-						cagg.user_view_name.data)));
-
-	/* error for now, maybe better as a warning and ignoring the chunks? */
-	/* We cannot move a completion threshold up transactionally without taking locks
-	 * that would block the system. So, just bail. The completion threshold
-	 * should be much higher than this anyway */
-	lowest_completion_time = ts_continuous_aggs_min_completed_threshold(ht->fd.id, &cagg);
-	if (lowest_completion_time < older_than)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("the continuous aggregate %s.%s is too far behind",
-						cagg.user_view_schema.data,
-						cagg.user_view_name.data)));
-
-	/* Lock all chunks in Exclusive mode, blocking everything but selects on the table. We have
-	 * to block all modifications so that we can't get new invalidation entries. This makes sure
-	 * that all future modifying txns on this data region will have a now() that higher than
-	 * ours and thus will not invalidate. Otherwise, we could have an old txn with a now() in
-	 * the past that all of a sudden decides to to insert data right after we
-	 * process_invalidations. */
-	for (i = 0; i < num_chunks; i++)
-	{
-		LockRelationOid(chunks[i].table_id, ExclusiveLock);
-	}
-
-	continuous_aggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
-	foreach (lc, continuous_aggs)
-	{
-		ContinuousAgg *ca = lfirst(lc);
-		ContinuousAggMatOptions mat_options = {
-			.verbose = true,
-			.within_single_transaction = true,
-			.process_only_invalidation = true,
-			.invalidate_prior_to_time = older_than,
-		};
-		bool finished_all_invalidation = false;
-
-		/* This will loop until all invalidations are done, each iteration of the loop will do
-		 * max_interval_per_job's worth of data. We don't want to ignore max_interval_per_job
-		 * here to avoid large sorts. */
-		while (!finished_all_invalidation)
-		{
-			elog(NOTICE,
-				 "making sure all invalidations for %s.%s have been processed prior to "
-				 "dropping "
-				 "chunks",
-				 NameStr(ca->data.user_view_schema),
-				 NameStr(ca->data.user_view_name));
-			finished_all_invalidation =
-				ts_cm_functions->continuous_agg_materialize(ca->data.mat_hypertable_id,
-															&mat_options);
-		}
-	}
-	ts_cache_release(hcache);
-}
-
-static void
 lock_referenced_tables(Oid table_relid)
 {
 	List *fk_relids = NIL;
@@ -3278,13 +3190,44 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	DEBUG_WAITPOINT("drop_chunks_chunks_found");
 
 	if (has_continuous_aggs)
-		ts_chunk_drop_process_invalidations(ht->main_table_relid,
-											older_than,
-											newer_than,
-											chunks,
-											num_chunks);
+	{
+		int i;
 
-	for (; i < num_chunks; i++)
+		/* Exclusively lock all chunks, and also refresh and invalidate the
+		 * continuous aggregates in the regions covered by the chunks. Locking
+		 * prevents further modification of the dropped region during this
+		 * transaction, which allows moving the invalidation threshold without
+		 * having to worry about new invalidations while refreshing. */
+		for (i = 0; i < num_chunks; i++)
+		{
+			int64 start = chunk_primary_dimension_start(&chunks[i]);
+			int64 end = chunk_primary_dimension_end(&chunks[i]);
+
+			LockRelationOid(chunks[i].table_id, ExclusiveLock);
+
+			Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
+				   chunks[i].cube->slices[0]->fd.dimension_id);
+
+			/* Refresh all continuous aggregates on the hypertable in the
+			 * region covered by the dropped chunk. Note that we cannot assume
+			 * that all dropped chunks exists in one single contiguous region,
+			 * so we refresh all chunk regions individually rather than the
+			 * region defined by the min and max chunk. An optimization is to
+			 * merge adjecent regions into a larger one for a larger
+			 * refresh. However, such merging needs to account for
+			 * multi-dimensional tables where some chunks have the same
+			 * primary dimension ranges. */
+			ts_cm_functions->continuous_agg_refresh_all(ht, start, end);
+
+			/* Invalidate the dropped region to indicate that it was
+			 * modified. The invalidation will allow the refresh command on a
+			 * continuous aggregate to see that this region was dropped and
+			 * and will therefore be able to refresh accordingly.*/
+			ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+		}
+	}
+
+	for (i = 0; i < num_chunks; i++)
 	{
 		char *chunk_name;
 		ListCell *lc;

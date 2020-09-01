@@ -11,7 +11,7 @@ CREATE TABLE clients (
        UNIQUE(name)
 );
 CREATE TABLE records (
-    time TIMESTAMPTZ NOT NULL, 
+    time TIMESTAMPTZ NOT NULL,
     clientId INT NOT NULL REFERENCES clients(id),
     value DOUBLE PRECISION,
     UNIQUE(time, clientId)
@@ -23,13 +23,13 @@ SELECT * FROM create_hypertable('records', 'time',
              1 | public      | records    | t
 (1 row)
 
-CREATE MATERIALIZED VIEW records_monthly 
+CREATE MATERIALIZED VIEW records_monthly
     WITH (timescaledb.continuous)
-    AS 
-        SELECT time_bucket('1d', time) as bucket, 
-            clientId, 
+    AS
+        SELECT time_bucket('1d', time) as bucket,
+            clientId,
             avg(value) as value_avg,
-            max(value)-min(value) as value_spread 
+            max(value)-min(value) as value_spread
         FROM records GROUP BY bucket, clientId;
 NOTICE:  adding index _materialized_hypertable_2_clientid_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(clientid, bucket)
 INSERT INTO clients(name) VALUES ('test-client');
@@ -76,15 +76,15 @@ SELECT * FROM records_monthly;
 ALTER MATERIALIZED VIEW records_monthly SET (
    timescaledb.ignore_invalidation_older_than = '15 days'
 );
-SELECT chunk_name, range_start, range_end 
-FROM timescaledb_information.chunks 
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'records_monthly' ORDER BY range_start;
  chunk_name | range_start | range_end 
 ------------+-------------+-----------
 (0 rows)
 
-SELECT chunk_name, range_start, range_end 
-FROM timescaledb_information.chunks 
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'records' ORDER BY range_start;
     chunk_name     |         range_start          |          range_end           
 -------------------+------------------------------+------------------------------
@@ -122,12 +122,9 @@ WHERE hypertable_name = 'records' ORDER BY range_start;
  _hyper_1_32_chunk | Sat Apr 01 00:00:00 2000 PST | Sat Apr 01 01:00:00 2000 PST
 (32 rows)
 
-REFRESH MATERIALIZED VIEW records_monthly;
-WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
-REFRESH MATERIALIZED VIEW records_monthly;
+CALL refresh_continuous_aggregate('records_monthly', NULL, NULL);
 \set VERBOSITY default
 SELECT drop_chunks('records', '2000-03-16'::timestamptz);
-NOTICE:  making sure all invalidations for public.records_monthly have been processed prior to dropping chunks
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

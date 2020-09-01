@@ -14,7 +14,7 @@ CREATE TABLE clients (
 );
 
 CREATE TABLE records (
-    time TIMESTAMPTZ NOT NULL, 
+    time TIMESTAMPTZ NOT NULL,
     clientId INT NOT NULL REFERENCES clients(id),
     value DOUBLE PRECISION,
     UNIQUE(time, clientId)
@@ -23,13 +23,13 @@ CREATE TABLE records (
 SELECT * FROM create_hypertable('records', 'time',
        chunk_time_interval => INTERVAL '1h');
 
-CREATE MATERIALIZED VIEW records_monthly 
+CREATE MATERIALIZED VIEW records_monthly
     WITH (timescaledb.continuous)
-    AS 
-        SELECT time_bucket('1d', time) as bucket, 
-            clientId, 
+    AS
+        SELECT time_bucket('1d', time) as bucket,
+            clientId,
             avg(value) as value_avg,
-            max(value)-min(value) as value_spread 
+            max(value)-min(value) as value_spread
         FROM records GROUP BY bucket, clientId;
 
 INSERT INTO clients(name) VALUES ('test-client');
@@ -45,17 +45,15 @@ ALTER MATERIALIZED VIEW records_monthly SET (
    timescaledb.ignore_invalidation_older_than = '15 days'
 );
 
-SELECT chunk_name, range_start, range_end 
-FROM timescaledb_information.chunks 
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'records_monthly' ORDER BY range_start;
 
-SELECT chunk_name, range_start, range_end 
-FROM timescaledb_information.chunks 
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
 WHERE hypertable_name = 'records' ORDER BY range_start;
 
-REFRESH MATERIALIZED VIEW records_monthly;
-REFRESH MATERIALIZED VIEW records_monthly;
+CALL refresh_continuous_aggregate('records_monthly', NULL, NULL);
 
 \set VERBOSITY default
 SELECT drop_chunks('records', '2000-03-16'::timestamptz);
-

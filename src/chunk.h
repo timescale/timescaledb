@@ -168,4 +168,8 @@ extern List *ts_chunk_data_nodes_copy(const Chunk *chunk);
 											 CurrentMemoryContext,                                 \
 											 fail_if_not_found)
 
+#define chunk_primary_dimension_start(chunk) (chunk)->cube->slices[0]->fd.range_start
+
+#define chunk_primary_dimension_end(chunk) (chunk)->cube->slices[0]->fd.range_end
+
 #endif /* TIMESCALEDB_CHUNK_H */

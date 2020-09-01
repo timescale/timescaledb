@@ -56,6 +56,7 @@
 #include "dimension_vector.h"
 #include "indexing.h"
 #include "scan_iterator.h"
+#include "time_utils.h"
 #include "trigger.h"
 #include "utils.h"
 #include "with_clause_parser.h"
@@ -791,7 +792,9 @@ process_truncate(ProcessUtilityArgs *args)
 
 					if (agg_status == HypertableIsRawTable)
 						/* The truncation invalidates all associated continuous aggregates */
-						ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+						ts_cm_functions->continuous_agg_invalidate(ht,
+																   TS_TIME_NOBEGIN,
+																   TS_TIME_NOEND);
 
 					if (!relation_should_recurse(rv))
 						ereport(ERROR,
@@ -874,6 +877,7 @@ static void
 process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 {
 	ListCell *lc;
+	Cache *hcache = ts_hypertable_cache_pin();
 
 	foreach (lc, stmt->objects)
 	{
@@ -887,8 +891,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 		relid = RangeVarGetRelid(relation, NoLock, true);
 		chunk = ts_chunk_get_by_relid(relid, false);
+
 		if (chunk != NULL)
 		{
+			Hypertable *ht;
+
 			if (ts_chunk_contains_compressed_data(chunk))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -906,8 +913,26 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 				if (compressed_chunk != NULL)
 					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
 			}
+
+			ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
+
+			Assert(ht != NULL);
+
+			/* If the hypertable has continuous aggregates, then invalidate
+			 * the dropped region. */
+			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+			{
+				int64 start = chunk_primary_dimension_start(chunk);
+				int64 end = chunk_primary_dimension_end(chunk);
+
+				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
+					   chunk->cube->slices[0]->fd.dimension_id);
+				ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+			}
 		}
 	}
+
+	ts_cache_release(hcache);
 }
 
 /*

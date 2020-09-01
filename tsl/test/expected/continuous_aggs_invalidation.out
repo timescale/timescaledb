@@ -1101,3 +1101,65 @@ SELECT materialization_id AS cagg_id,
        8 |                   16 | 9223372036854775807
 (2 rows)
 
+----------------------------------------------------------------------
+-- Test that dropping a chunk invalidates the dropped region. First
+-- create another chunk so that we have two chunks. One of the chunks
+-- will be dropped.
+---------------------------------------------------------------------
+INSERT INTO conditions VALUES (10, 1, 10.0);
+-- Chunks currently associated with the hypertable
+SELECT show_chunks AS chunk_to_drop
+FROM show_chunks('conditions');
+              chunk_to_drop              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_34_chunk
+ _timescaledb_internal._hyper_1_40_chunk
+(2 rows)
+
+-- Pick the first one to drop
+SELECT show_chunks AS chunk_to_drop
+FROM show_chunks('conditions')
+ORDER BY 1
+LIMIT 1 \gset
+-- Show the data before dropping one of the chunks
+SELECT * FROM conditions
+ORDER BY 1,2;
+ time | device | temp 
+------+--------+------
+    0 |      1 |    1
+    1 |      1 |    2
+    2 |      1 |    3
+   10 |      1 |   10
+(4 rows)
+
+-- Drop one chunk
+DROP TABLE :chunk_to_drop;
+-- The chunk's data no longer exists in the hypertable
+SELECT * FROM conditions
+ORDER BY 1,2;
+ time | device | temp 
+------+--------+------
+   10 |      1 |   10
+(1 row)
+
+-- Aggregate still remains in continuous aggregate, however
+SELECT * FROM cond_1
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+      0 |      1 |        1
+      1 |      1 |        2
+      2 |      1 |        3
+(3 rows)
+
+-- Refresh the continuous aggregate to make the dropped data be
+-- reflected in the aggregate
+CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
+-- Aggregate now up-to-date with the source hypertable
+SELECT * FROM cond_1
+ORDER BY 1,2;
+ bucket | device | avg_temp 
+--------+--------+----------
+     10 |      1 |       10
+(1 row)
+
