@@ -117,7 +117,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
@@ -184,7 +184,7 @@ SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint 
 
 --alter the refresh interval and check if next_scheduled_run is altered
 SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
-SELECT job_id, next_start- last_finish as until_next, total_runs
+SELECT job_id, next_start - last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id;;
 
@@ -241,7 +241,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish , last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
@@ -259,7 +259,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 
 SELECT * FROM sorted_bgw_log;
 
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
@@ -298,7 +298,7 @@ SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \g
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
 -- job fails
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
@@ -341,7 +341,7 @@ SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \g
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
 SELECT id, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id ;
-SELECT job_id, next_start, last_finish, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 
@@ -363,7 +363,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint *
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 
 --should show a failing execution because no longer has permissions (due to lack of permission on partial view owner's part)
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
 

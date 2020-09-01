@@ -632,6 +632,3 @@ SELECT show_chunks('test_drop_chunks_table');
  _timescaledb_internal._hyper_2_12_chunk
 (4 rows)
 
---drop the view to allow drop chunks to work
-DROP MATERIALIZED VIEW tdc_view;
-NOTICE:  drop cascades to 3 other objects

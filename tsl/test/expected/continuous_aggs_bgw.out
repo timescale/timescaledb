@@ -159,12 +159,12 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
 (1 row)
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |          next_start          |         last_finish          | until_next | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+------------------------------+------------------------------+------------+------------------+------------+-----------------+----------------+---------------
-   1000 | Sat Jan 01 04:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST | @ 12 hours | t                |          1 |               1 |              0 |             0
+ job_id | until_next | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------+------------------+------------+-----------------+----------------+---------------
+   1000 | @ 12 hours | t                |          1 |               1 |              0 |             0
 (1 row)
 
 --clear log for next run of scheduler.
@@ -267,7 +267,7 @@ SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
  (1000,"@ 1 min","@ 0",-1,"@ 1 min",t,"{""end_interval"": 4, ""start_interval"": null, ""mat_hypertable_id"": 2}","Sat Jan 01 04:01:00 2000 PST")
 (1 row)
 
-SELECT job_id, next_start- last_finish as until_next, total_runs
+SELECT job_id, next_start - last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat
 WHERE job_id=:job_id;;
  job_id | until_next | total_runs 
@@ -388,12 +388,12 @@ SELECT * FROM sorted_bgw_log;
 (3 rows)
 
 -- job ran once, successfully
-SELECT job_id, next_start, last_finish , last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |          next_start          |         last_finish          |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+------------------------------+------------------------------+----------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Sat Jan 01 04:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST | @ 12 hours ago | t                |          1 |               1 |              0 |             0
+ job_id |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+----------------+------------------+------------+-----------------+----------------+---------------
+   1001 | @ 12 hours ago | t                |          1 |               1 |              0 |             0
 (1 row)
 
 -- should have refreshed everything we have so far
@@ -435,12 +435,12 @@ SELECT * FROM sorted_bgw_log;
       0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range 0 , 12
 (6 rows)
 
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
-   1001 | Sat Jan 01 16:00:00 2000 PST | Sat Jan 01 04:00:00 2000 PST | t                |          2 |               2 |              0 |             0
+ job_id | until_next | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------+------------------+------------+-----------------+----------------+---------------
+   1001 | @ 12 hours | t                |          2 |               2 |              0 |             0
 (1 row)
 
 -- should have updated data for time=6 
@@ -511,12 +511,12 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 -- job fails
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |            next_start            |            until_next            | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+----------------------------------+----------------------------------+------------------+------------+-----------------+----------------+---------------
-   1002 | Sat Jan 01 15:48:45.025 2000 PST | Sat Jan 01 04:00:00.025 2000 PST | f                |          1 |               0 |              1 |             0
+ job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------+------------+-----------------+----------------+---------------
+   1002 | f                |          1 |               0 |              1 |             0
 (1 row)
 
 DROP MATERIALIZED VIEW test_continuous_agg_view;
@@ -597,12 +597,12 @@ SELECT id, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id ;
  1003 | default_perm_user_2
 (1 row)
 
-SELECT job_id, next_start, last_finish, last_finish - next_start as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |          next_start          |         last_finish          |   until_next   | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+------------------------------+------------------------------+----------------+------------------+------------+-----------------+----------------+---------------
-   1003 | Sat Jan 01 04:00:00 2000 PST | Fri Dec 31 16:00:00 1999 PST | @ 12 hours ago | t                |          1 |               1 |              0 |             0
+ job_id | until_next | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------+------------------+------------+-----------------+----------------+---------------
+   1003 | @ 12 hours | t                |          1 |               1 |              0 |             0
 (1 row)
 
 --view is populated
@@ -633,12 +633,12 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 (1 row)
 
 --should show a failing execution because no longer has permissions (due to lack of permission on partial view owner's part)
-SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
- job_id |          next_start          |          until_next          | last_run_success | total_runs | total_successes | total_failures | total_crashes 
---------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------
-   1003 | Sat Jan 01 15:48:45 2000 PST | Sat Jan 01 04:00:00 2000 PST | f                |          2 |               1 |              1 |             0
+ job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------+------------+-----------------+----------------+---------------
+   1003 | f                |          2 |               1 |              1 |             0
 (1 row)
 
 --view was NOT updated; but the old stuff is still there
