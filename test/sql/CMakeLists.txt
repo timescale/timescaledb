@@ -37,7 +37,6 @@ set(TEST_FILES
   pg_dump_unprivileged.sql
   plain.sql
   plan_ordered_append.sql
-  reindex.sql
   relocate_extension.sql
   reloptions.sql
   size_utils.sql
