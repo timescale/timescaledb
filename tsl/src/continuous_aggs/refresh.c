@@ -307,15 +307,41 @@ emit_up_to_date_notice(const ContinuousAgg *cagg)
 		 NameStr(cagg->data.user_view_name));
 }
 
+static bool
+process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
+									   const InternalTimeRange *refresh_window)
+{
+	InvalidationStore *invalidations;
+	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id);
+
+	/* Lock the continuous aggregate's materialized hypertable to protect
+	 * against concurrent refreshes. Only concurrent reads will be
+	 * allowed. This is a heavy lock that serializes all refreshes on the same
+	 * continuous aggregate. We might want to consider relaxing this in the
+	 * future, e.g., we'd like to at least allow concurrent refreshes on the
+	 * same continuous aggregate when they don't have overlapping refresh
+	 * windows.
+	 */
+	LockRelationOid(hyper_relid, ExclusiveLock);
+	invalidations = invalidation_process_cagg_log(cagg, refresh_window);
+
+	if (invalidations != NULL)
+	{
+		continuous_agg_refresh_with_window(cagg, refresh_window, invalidations);
+		invalidation_store_free(invalidations);
+		return true;
+	}
+
+	return false;
+}
+
 void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg)
 {
 	Catalog *catalog = ts_catalog_get();
-	Hypertable *cagg_ht;
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window;
-	InvalidationStore *invalidations = NULL;
 	int64 computed_invalidation_threshold;
 	int64 invalidation_threshold;
 
@@ -396,24 +422,49 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	CommitTransactionCommand();
 	StartTransactionCommand();
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
-	cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 
-	/* Lock the continuous aggregate's materialized hypertable to protect
-	 * against concurrent refreshes. Only concurrent reads will be
-	 * allowed. This is a heavy lock that serializes all refreshes on the same
-	 * continuous aggregate. We might want to consider relaxing this in the
-	 * future, e.g., we'd like to at least allow concurrent refreshes on the
-	 * same continuous aggregate when they don't have overlapping refresh
-	 * windows.
-	 */
-	LockRelationOid(cagg_ht->main_table_relid, ExclusiveLock);
-	invalidations = invalidation_process_cagg_log(cagg, &refresh_window);
-
-	if (invalidations != NULL)
-	{
-		continuous_agg_refresh_with_window(cagg, &refresh_window, invalidations);
-		invalidation_store_free(invalidations);
-	}
-	else
+	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window))
 		emit_up_to_date_notice(cagg);
+}
+
+/*
+ * Refresh all continuous aggregates on a hypertable.
+ *
+ * The refreshing happens in a single transaction. For this to work correctly,
+ * there must be no new invalidations written in the refreshed region during
+ * the refresh. Therefore, the caller is responsible for proper locking to
+ * ensure there are no invalidations (INSERTs, DELETEs, etc.). For instance,
+ * exclusively locking the hypertable or the individual chunks covered by the
+ * region would work.
+ */
+void
+continuous_agg_refresh_all(const Hypertable *ht, int64 start, int64 end)
+{
+	Catalog *catalog = ts_catalog_get();
+	List *caggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
+	Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
+	InternalTimeRange refresh_window = {
+		.type = ts_dimension_get_partition_type(dim),
+		.start = start,
+		.end = end,
+	};
+	ListCell *lc;
+
+	Assert(list_length(caggs) > 0);
+	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+					AccessExclusiveLock);
+	invalidation_threshold_set_or_get(ht->fd.id, refresh_window.end);
+
+	/* It is enough to process the hypertable invalidation log once,
+	 * so do it only for the first continuous aggregate */
+	invalidation_process_hypertable_log(linitial(caggs), &refresh_window);
+	/* Must make invalidation processing visible */
+	CommandCounterIncrement();
+
+	foreach (lc, caggs)
+	{
+		const ContinuousAgg *cagg = lfirst(lc);
+
+		process_cagg_invalidations_and_refresh(cagg, &refresh_window);
+	}
 }

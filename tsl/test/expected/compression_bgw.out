@@ -195,14 +195,13 @@ SELECT device,
 FROM conditions
 GROUP BY device, time_bucket(INTERVAL '1 hour', "time");
 NOTICE:  adding index _materialized_hypertable_8_device_day_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(device, day)
-REFRESH MATERIALIZED VIEW conditions_summary;
+CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 ALTER TABLE conditions SET (timescaledb.compress);
 ALTER MATERIALIZED VIEW conditions_summary SET (
       timescaledb.ignore_invalidation_older_than = '15 days'
 );
 SELECT COUNT(*) AS dropped_chunks_count
   FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00');
-NOTICE:  making sure all invalidations for public.conditions_summary have been processed prior to dropping chunks
  dropped_chunks_count 
 ----------------------
                    14

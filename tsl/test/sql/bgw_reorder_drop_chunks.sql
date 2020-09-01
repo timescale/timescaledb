@@ -285,26 +285,3 @@ SELECT show_chunks('test_drop_chunks_table');
 
 --test that views work
 SELECT * FROM timescaledb_information.policy_stats;
-
--- continuous aggregate blocks drop_chunks
-INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '12 months', 0);
-
-CREATE MATERIALIZED VIEW tdc_view
-  WITH (timescaledb.continuous)
-  AS SELECT time_bucket('1 hour', time), count(drop_order)
-     FROM test_drop_chunks_table
-     GROUP BY 1;
-SELECT add_refresh_continuous_aggregate_policy('tdc_view', NULL, '2 h'::interval, '12 h'::interval);
-SELECT show_chunks('test_drop_chunks_table');
-
-SELECT alter_job(:drop_chunks_job_id, max_retries => 0);
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(10000);
-
-SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
-
--- should now have a failure
-SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last_finish) as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
-    FROM _timescaledb_internal.bgw_job_stat
-    where job_id=:drop_chunks_job_id;
-
-SELECT show_chunks('test_drop_chunks_table');

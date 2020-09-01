@@ -136,6 +136,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_refresh = continuous_agg_refresh,
+	.continuous_agg_refresh_all = continuous_agg_refresh_all,
 	.continuous_agg_invalidate = invalidation_add_entry,
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,

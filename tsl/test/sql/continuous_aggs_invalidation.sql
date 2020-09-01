@@ -647,3 +647,43 @@ SELECT materialization_id AS cagg_id,
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        WHERE materialization_id = :thresh_cagg_id
        ORDER BY 1,2,3;
+
+----------------------------------------------------------------------
+-- Test that dropping a chunk invalidates the dropped region. First
+-- create another chunk so that we have two chunks. One of the chunks
+-- will be dropped.
+---------------------------------------------------------------------
+INSERT INTO conditions VALUES (10, 1, 10.0);
+
+-- Chunks currently associated with the hypertable
+SELECT show_chunks AS chunk_to_drop
+FROM show_chunks('conditions');
+
+-- Pick the first one to drop
+SELECT show_chunks AS chunk_to_drop
+FROM show_chunks('conditions')
+ORDER BY 1
+LIMIT 1 \gset
+
+-- Show the data before dropping one of the chunks
+SELECT * FROM conditions
+ORDER BY 1,2;
+
+-- Drop one chunk
+DROP TABLE :chunk_to_drop;
+
+-- The chunk's data no longer exists in the hypertable
+SELECT * FROM conditions
+ORDER BY 1,2;
+
+-- Aggregate still remains in continuous aggregate, however
+SELECT * FROM cond_1
+ORDER BY 1,2;
+
+-- Refresh the continuous aggregate to make the dropped data be
+-- reflected in the aggregate
+CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
+
+-- Aggregate now up-to-date with the source hypertable
+SELECT * FROM cond_1
+ORDER BY 1,2;
