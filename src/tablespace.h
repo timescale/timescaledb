@@ -30,7 +30,7 @@ extern bool ts_tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid);
 extern Tablespaces *ts_tablespace_scan(int32 hypertable_id);
 extern TSDLLEXPORT void ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid,
 													  bool if_not_attached);
-extern int ts_tablespace_delete(int32 hypertable_id, const char *tspcname);
+extern int ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid);
 extern int ts_tablespace_count_attached(const char *tspcname);
 extern void ts_tablespace_validate_revoke(GrantStmt *stmt);
 extern void ts_tablespace_validate_revoke_role(GrantRoleStmt *stmt);

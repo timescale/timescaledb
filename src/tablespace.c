@@ -11,6 +11,7 @@
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
 #include <commands/tablespace.h>
+#include <commands/tablecmds.h>
 #include <access/xact.h>
 #include <miscadmin.h>
 #include <funcapi.h>
@@ -137,6 +138,7 @@ typedef struct TablespaceScanInfo
 	Oid userid;
 	int num_filtered;
 	int stopcount;
+	List *hypertables; /* Hypertables affected, where applicable */
 	void *data;
 } TablespaceScanInfo;
 
@@ -343,17 +345,24 @@ static ScanTupleResult
 tablespace_tuple_delete(TupleInfo *ti, void *data)
 {
 	TablespaceScanInfo *info = data;
+	bool should_free;
 	CatalogSecurityContext sec_ctx;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_tablespace *form = (FormData_tablespace *) GETSTRUCT(tuple);
 
 	ts_catalog_database_info_become_owner(info->database_info, &sec_ctx);
 	ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
+	info->hypertables = lappend_int(info->hypertables, form->hypertable_id);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return (info->stopcount == 0 || ti->count < info->stopcount) ? SCAN_CONTINUE : SCAN_DONE;
 }
 
 int
-ts_tablespace_delete(int32 hypertable_id, const char *tspcname)
+ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
 
 {
 	ScanKeyData scankey[2];
@@ -416,8 +425,17 @@ tablespace_tuple_owner_filter(TupleInfo *ti, void *data)
 	return result;
 }
 
+/*
+ * Detach a tablespace from all hypertables it is attached to.
+ *
+ * Output parameters:
+ *   - `hypertables`: the list of hypertables that the tablespace was removed from.
+ *
+ * Returns:
+ *   integer giving the number of tablespaces deleted.
+ */
 static int
-tablespace_delete_from_all(const char *tspcname, Oid userid)
+tablespace_delete_from_all(const char *tspcname, Oid userid, List **hypertables)
 {
 	ScanKeyData scankey[1];
 	TablespaceScanInfo info = {
@@ -453,6 +471,8 @@ tablespace_delete_from_all(const char *tspcname, Oid userid)
 						tspcname,
 						info.num_filtered)));
 
+	*hypertables = info.hypertables;
+
 	return num_deleted;
 }
 
@@ -464,6 +484,7 @@ ts_tablespace_attach(PG_FUNCTION_ARGS)
 	Name tspcname = PG_ARGISNULL(0) ? NULL : PG_GETARG_NAME(0);
 	Oid hypertable_oid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	Relation rel;
 
 	PreventCommandIfReadOnly("attach_tablespace()");
 
@@ -472,6 +493,18 @@ ts_tablespace_attach(PG_FUNCTION_ARGS)
 
 	ts_tablespace_attach_internal(tspcname, hypertable_oid, if_not_attached);
 
+	/* If the hypertable did not have a tablespace assigned, we set one */
+	rel = relation_open(hypertable_oid, AccessShareLock);
+	if (!OidIsValid(rel->rd_rel->reltablespace))
+	{
+		AlterTableCmd *const cmd = makeNode(AlterTableCmd);
+
+		cmd->subtype = AT_SetTableSpace;
+		cmd->name = NameStr(*tspcname);
+
+		AlterTableInternal(hypertable_oid, list_make1(cmd), false);
+	}
+	relation_close(rel, AccessShareLock);
 	PG_RETURN_VOID();
 }
 
@@ -572,7 +605,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	if (ts_hypertable_has_tablespace(ht, tspcoid))
-		ret = ts_tablespace_delete(ht->fd.id, tspcname);
+		ret = ts_tablespace_delete(ht->fd.id, tspcname, tspcoid);
 	else if (if_attached)
 		ereport(NOTICE,
 				(errcode(ERRCODE_TS_TABLESPACE_NOT_ATTACHED),
@@ -602,11 +635,31 @@ tablespace_detach_all(Oid hypertable_oid)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
-	ret = ts_tablespace_delete(ht->fd.id, NULL);
+	ret = ts_tablespace_delete(ht->fd.id, NULL, InvalidOid);
 
 	ts_cache_release(hcache);
 
 	return ret;
+}
+
+static void
+detach_tablespace_from_hypertable_if_set(Oid hypertable_oid, Oid tspcoid)
+{
+	Relation rel;
+
+	Assert(OidIsValid(hypertable_oid) && OidIsValid(tspcoid));
+
+	rel = relation_open(hypertable_oid, AccessShareLock);
+	if (OidIsValid(rel->rd_rel->reltablespace) && rel->rd_rel->reltablespace == tspcoid)
+	{
+		AlterTableCmd *const cmd = makeNode(AlterTableCmd);
+
+		cmd->subtype = AT_SetTableSpace;
+		cmd->name = "pg_default";
+
+		AlterTableInternal(hypertable_oid, list_make1(cmd), false);
+	}
+	relation_close(rel, AccessShareLock);
 }
 
 TS_FUNCTION_INFO_V1(ts_tablespace_detach);
@@ -640,9 +693,23 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 				 errmsg("tablespace \"%s\" does not exist", NameStr(*tspcname))));
 
 	if (OidIsValid(hypertable_oid))
+	{
 		ret = tablespace_detach_one(hypertable_oid, NameStr(*tspcname), tspcoid, if_attached);
+		detach_tablespace_from_hypertable_if_set(hypertable_oid, tspcoid);
+	}
 	else
-		ret = tablespace_delete_from_all(NameStr(*tspcname), GetUserId());
+	{
+		List *hypertables = NIL;
+		ListCell *cell;
+
+		ret = tablespace_delete_from_all(NameStr(*tspcname), GetUserId(), &hypertables);
+		foreach (cell, hypertables)
+		{
+			const int32 hypertable_id = lfirst_int(cell);
+			detach_tablespace_from_hypertable_if_set(ts_hypertable_id_to_relid(hypertable_id),
+													 tspcoid);
+		}
+	}
 
 	PG_RETURN_INT32(ret);
 }
@@ -652,6 +719,13 @@ TS_FUNCTION_INFO_V1(ts_tablespace_detach_all_from_hypertable);
 Datum
 ts_tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 {
+	const Oid hypertable_relid = PG_GETARG_OID(0);
+	int32 result;
+	AlterTableCmd *const cmd = makeNode(AlterTableCmd);
+
+	cmd->subtype = AT_SetTableSpace;
+	cmd->name = "pg_default";
+
 	PreventCommandIfReadOnly("detach_tablespaces()");
 
 	if (PG_NARGS() != 1)
@@ -660,7 +734,10 @@ ts_tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0))
 		elog(ERROR, "invalid argument");
 
-	PG_RETURN_INT32(tablespace_detach_all(PG_GETARG_OID(0)));
+	result = tablespace_detach_all(hypertable_relid);
+	AlterTableInternal(hypertable_relid, list_make1(cmd), false);
+
+	PG_RETURN_INT32(result);
 }
 
 TS_FUNCTION_INFO_V1(ts_tablespace_show);

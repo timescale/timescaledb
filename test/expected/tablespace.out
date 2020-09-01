@@ -3,11 +3,16 @@
 -- LICENSE-APACHE for a copy of the license.
 \set ON_ERROR_STOP 0
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SET client_min_messages = ERROR;
-DROP TABLESPACE IF EXISTS tablespace1;
-DROP TABLESPACE IF EXISTS tablespace2;
-SET client_min_messages = NOTICE;
---test hypertable with tablespace
+CREATE VIEW hypertable_tablespaces AS
+SELECT cls.relname AS hypertable,
+       (SELECT spcname FROM pg_tablespace WHERE oid = reltablespace) AS tablespace
+  FROM _timescaledb_catalog.hypertable,
+  LATERAL (SELECT * FROM pg_class WHERE oid = format('%s.%s', schema_name, table_name)::regclass) AS cls
+  ORDER BY hypertable, tablespace;
+GRANT SELECT ON hypertable_tablespaces TO PUBLIC;
+--Test hypertable with tablespace. Tablespaces are cluster-wide, so we
+--attach the test name as prefix to allow tests to be executed in
+--parallel.
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --assigning a tablespace via the main table should work
@@ -20,6 +25,19 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 INSERT INTO tspace_2dim VALUES ('2017-01-20T09:00:01', 24.3, 'blue');
+-- Tablespace for tspace_2dim should be set
+SELECT * FROM hypertable_tablespaces WHERE hypertable = 'tspace_2dim';
+ hypertable  | tablespace  
+-------------+-------------
+ tspace_2dim | tablespace1
+(1 row)
+
+SELECT show_tablespaces('tspace_2dim');
+ show_tablespaces 
+------------------
+ tablespace1
+(1 row)
+
 --verify that the table chunk has the correct tablespace
 SELECT relname, spcname FROM pg_class c
 INNER JOIN pg_tablespace t ON (c.reltablespace = t.oid)
@@ -64,6 +82,8 @@ NOTICE:  tablespace "tablespace1" is already attached to hypertable "tspace_2dim
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+--Tablespaces are cluster-wide, so we attach the test name as prefix
+--to allow tests to be executed in parallel.
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TABLESPACE2_PATH;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 --attach without permissions on the table should fail
@@ -146,6 +166,20 @@ SELECT attach_tablespace('tablespace2', 'tspace_1dim');
  
 (1 row)
 
+-- Tablespace for tspace_1dim should be set and attached
+SELECT * FROM hypertable_tablespaces WHERE hypertable = 'tspace_1dim';
+ hypertable  | tablespace  
+-------------+-------------
+ tspace_1dim | tablespace1
+(1 row)
+
+SELECT show_tablespaces('tspace_1dim');
+ show_tablespaces 
+------------------
+ tablespace1
+ tablespace2
+(2 rows)
+
 --trying to revoke permissions while attached should fail
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 REVOKE CREATE ON TABLESPACE tablespace1 FROM :ROLE_DEFAULT_PERM_USER_2;
@@ -196,6 +230,13 @@ SELECT detach_tablespace('tablespace1', 'tspace_2dim');
 ERROR:  must be owner of hypertable "tspace_2dim"
 --detach tablespace1 from all tables. Should only detach from
 --'tspace_1dim' (1 tablespace) due to lack of permissions
+SELECT * FROM hypertable_tablespaces;
+ hypertable  | tablespace  
+-------------+-------------
+ tspace_1dim | tablespace1
+ tspace_2dim | tablespace1
+(2 rows)
+
 SELECT detach_tablespace('tablespace1');
 NOTICE:  tablespace "tablespace1" remains attached to 1 hypertable(s) due to lack of permissions
  detach_tablespace 
@@ -222,6 +263,13 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 ------------------
  tablespace1
  tablespace2
+(2 rows)
+
+SELECT * FROM hypertable_tablespaces;
+ hypertable  | tablespace  
+-------------+-------------
+ tspace_1dim | 
+ tspace_2dim | tablespace1
 (2 rows)
 
 --it should now be possible to revoke permissions on tablespace1
@@ -252,6 +300,13 @@ SELECT * FROM show_tablespaces('tspace_2dim');
 ------------------
  tablespace1
  tablespace2
+(2 rows)
+
+SELECT * FROM hypertable_tablespaces;
+ hypertable  | tablespace  
+-------------+-------------
+ tspace_1dim | 
+ tspace_2dim | tablespace1
 (2 rows)
 
 --detaching tablespace2 from a table without permissions should fail
@@ -340,23 +395,156 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 ----+---------------+-----------------
 (0 rows)
 
--- verify that one cannot DROP a tablespace while it is attached to a
--- hypertable
-CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
-SELECT create_hypertable('tspace_1dim', 'time');
+-- Create two tables and attach multiple tablespaces to them. Verify
+-- that dropping a tablespace from multiple tables work as expected.
+CREATE TABLE tbl_1(time timestamp, temp float, device text);
+SELECT create_hypertable('tbl_1', 'time');
 NOTICE:  adding not-null constraint to column "time"
-    create_hypertable     
---------------------------
- (3,public,tspace_1dim,t)
+ create_hypertable  
+--------------------
+ (3,public,tbl_1,t)
 (1 row)
 
-SELECT attach_tablespace('tablespace1', 'tspace_1dim');
+CREATE TABLE tbl_2(time timestamp, temp float, device text);
+SELECT create_hypertable('tbl_2', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable  
+--------------------
+ (4,public,tbl_2,t)
+(1 row)
+
+CREATE TABLE tbl_3(time timestamp, temp float, device text);
+SELECT create_hypertable('tbl_3', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable  
+--------------------
+ (5,public,tbl_3,t)
+(1 row)
+
+SELECT * FROM hypertable_tablespaces;
+ hypertable | tablespace 
+------------+------------
+ tbl_1      | 
+ tbl_2      | 
+ tbl_3      | 
+(3 rows)
+
+SELECT * FROM show_tablespaces('tbl_1');
+ show_tablespaces 
+------------------
+(0 rows)
+
+SELECT * FROM show_tablespaces('tbl_2');
+ show_tablespaces 
+------------------
+(0 rows)
+
+SELECT * FROM show_tablespaces('tbl_3');
+ show_tablespaces 
+------------------
+(0 rows)
+
+SELECT attach_tablespace('tablespace1', 'tbl_1');
  attach_tablespace 
 -------------------
  
 (1 row)
 
-SELECT * FROM show_tablespaces('tspace_1dim');
+SELECT attach_tablespace('tablespace2', 'tbl_1');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT attach_tablespace('tablespace2', 'tbl_2');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT attach_tablespace('tablespace2', 'tbl_3');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM hypertable_tablespaces;
+ hypertable | tablespace  
+------------+-------------
+ tbl_1      | tablespace1
+ tbl_2      | tablespace2
+ tbl_3      | tablespace2
+(3 rows)
+
+SELECT * FROM show_tablespaces('tbl_1');
+ show_tablespaces 
+------------------
+ tablespace1
+ tablespace2
+(2 rows)
+
+SELECT * FROM show_tablespaces('tbl_2');
+ show_tablespaces 
+------------------
+ tablespace2
+(1 row)
+
+SELECT * FROM show_tablespaces('tbl_3');
+ show_tablespaces 
+------------------
+ tablespace2
+(1 row)
+
+SELECT detach_tablespace('tablespace2');
+ detach_tablespace 
+-------------------
+                 3
+(1 row)
+
+SELECT * FROM hypertable_tablespaces;
+ hypertable | tablespace  
+------------+-------------
+ tbl_1      | tablespace1
+ tbl_2      | 
+ tbl_3      | 
+(3 rows)
+
+SELECT * FROM show_tablespaces('tbl_1');
+ show_tablespaces 
+------------------
+ tablespace1
+(1 row)
+
+SELECT * FROM show_tablespaces('tbl_2');
+ show_tablespaces 
+------------------
+(0 rows)
+
+SELECT * FROM show_tablespaces('tbl_3');
+ show_tablespaces 
+------------------
+(0 rows)
+
+DROP TABLE tbl_1;
+DROP TABLE tbl_2;
+DROP TABLE tbl_3;
+-- verify that one cannot DROP a tablespace while it is attached to a
+-- hypertable
+CREATE TABLE tbl_1(time timestamp, temp float, device text);
+SELECT create_hypertable('tbl_1', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable  
+--------------------
+ (6,public,tbl_1,t)
+(1 row)
+
+SELECT attach_tablespace('tablespace1', 'tbl_1');
+ attach_tablespace 
+-------------------
+ 
+(1 row)
+
+SELECT * FROM show_tablespaces('tbl_1');
  show_tablespaces 
 ------------------
  tablespace1
@@ -365,7 +553,7 @@ SELECT * FROM show_tablespaces('tspace_1dim');
 DROP TABLESPACE tablespace1;
 ERROR:  tablespace "tablespace1" is still attached to 1 hypertables
 --after detaching we should now be able to drop the tablespace
-SELECT detach_tablespace('tablespace1', 'tspace_1dim');
+SELECT detach_tablespace('tablespace1', 'tbl_1');
  detach_tablespace 
 -------------------
                  1
