@@ -515,7 +515,8 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	/* Initialize the invalidation log for the cagg. Initially, everything is
 	 * invalid. */
 	if (OidIsValid(origquery_tblinfo->nowfunc))
-		current_time = DatumGetInt64(OidFunctionCall0(origquery_tblinfo->nowfunc));
+		current_time = ts_time_value_to_internal(OidFunctionCall0(origquery_tblinfo->nowfunc),
+												 get_func_rettype(origquery_tblinfo->nowfunc));
 	else
 		current_time = GetCurrentTransactionStartTimestamp();
 

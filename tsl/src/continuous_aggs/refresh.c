@@ -207,10 +207,10 @@ continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange 
 
 		if (client_min_messages <= DEBUG1)
 		{
-			Datum start_ts = ts_internal_to_time_value(DatumGetInt64(bucketed_refresh_window.start),
-													   refresh_window->type);
-			Datum end_ts = ts_internal_to_time_value(DatumGetInt64(bucketed_refresh_window.end),
-													 refresh_window->type);
+			Datum start_ts =
+				ts_internal_to_time_value(bucketed_refresh_window.start, refresh_window->type);
+			Datum end_ts =
+				ts_internal_to_time_value(bucketed_refresh_window.end, refresh_window->type);
 			Oid outfuncid = InvalidOid;
 			bool isvarlena;
 
