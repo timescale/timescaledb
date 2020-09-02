@@ -208,14 +208,28 @@ SET
   proc_schema = '_timescaledb_internal',
   proc_name = 'policy_refresh_continuous_aggregate',
   job_type = 'custom',
-  config = jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id,
-                              'start_interval', NULL,
-                              'end_interval',
-             CASE  ts_tmp_get_time_type(cagg.raw_hypertable_id)
-                   WHEN 'TIMESTAMP'::regtype THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT
-                   WHEN 'TIMESTAMPTZ'::regtype THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT
-                   WHEN 'DATE'::regtype THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT
-                   ELSE cagg.refresh_lag::TEXT END ),
+  config = jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_interval', 
+   CASE WHEN cagg.ignore_invalidation_older_than IS NULL 
+      THEN NULL 
+      WHEN cagg.ignore_invalidation_older_than = 9223372036854775807 
+         AND  
+            ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+      THEN NULL 
+      ELSE
+         CASE WHEN 
+            ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+            THEN ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
+            ELSE cagg.ignore_invalidation_older_than::TEXT 
+         END
+   END,
+   'end_interval', 
+   CASE
+      WHEN 
+            ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+      THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT 
+      ELSE cagg.refresh_lag::TEXT 
+   END
+),
   hypertable_id = cagg.mat_hypertable_id,
   owner = (
     SELECT relowner::regrole::text

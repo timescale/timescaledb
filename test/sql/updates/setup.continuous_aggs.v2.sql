@@ -76,6 +76,7 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+
   ELSE
     CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
@@ -125,8 +126,7 @@ BEGIN
 END $$;
 
 REFRESH MATERIALIZED VIEW mat_before;
-
-
+    
 -- we create separate schema for realtime agg since we dump all view definitions in public schema
 -- but realtime agg view definition is not stable across versions
 CREATE SCHEMA cagg;
@@ -230,3 +230,39 @@ BEGIN
 END $$;
 
 REFRESH MATERIALIZED VIEW cagg.realtime_mat;
+
+-- test ignore_invalidation_older_than migration --
+DO LANGUAGE PLPGSQL $$
+DECLARE
+  ts_version TEXT;
+BEGIN
+  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version < '2.0.0' THEN
+    CREATE VIEW mat_ignoreinval
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, 
+           timescaledb.refresh_lag='-30 day',
+           timescaledb.ignore_invalidation_older_than='30 days', 
+           timescaledb.max_interval_per_job = '100000 days')
+    AS
+      SELECT time_bucket('1 week', timec) as bucket,
+    max(temperature) as maxtemp
+      FROM conditions_before
+      GROUP BY bucket;
+  ELSE
+    CREATE MATERIALIZED VIEW IF NOT EXISTS  mat_ignoreinval
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, 
+           timescaledb.refresh_lag='-30 day',
+           timescaledb.ignore_invalidation_older_than='30 days', 
+           timescaledb.max_interval_per_job = '100000 days')
+    AS
+      SELECT time_bucket('1 week', timec) as bucket,
+    max(temperature) as maxtemp
+      FROM conditions_before
+      GROUP BY bucket WITH NO DATA;
+    
+    PERFORM add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h'); 
+  END IF;
+END $$;
+
+REFRESH MATERIALIZED VIEW mat_ignoreinval;
