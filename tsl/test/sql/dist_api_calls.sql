@@ -82,15 +82,15 @@ SELECT reorder_chunk('_timescaledb_internal._dist_hyper_1_4_chunk', verbose => T
 
 DROP TABLESPACE tablespace1;
 
--- Ensure hypertable_approximate_row_count() works with distributed hypertable
+-- Ensure approximate_row_count() works with distributed hypertable
 --
 SELECT * FROM disttable ORDER BY time;
 
 ANALYZE disttable;
 
 SELECT count(*) FROM disttable;
-SELECT hypertable_approximate_row_count('disttable');
-SELECT * FROM test.remote_exec(NULL, $$ SELECT hypertable_approximate_row_count('disttable'); $$);
+SELECT approximate_row_count('disttable');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT approximate_row_count('disttable'); $$);
 
 -- Test with native replication
 --
@@ -115,9 +115,9 @@ SELECT * FROM show_chunks('disttable_repl');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable_repl'); $$);
 
 SELECT count(*) FROM disttable_repl;
-SELECT hypertable_approximate_row_count('disttable_repl');
+SELECT approximate_row_count('disttable_repl');
 
 ANALYZE disttable_repl;
-SELECT hypertable_approximate_row_count('disttable_repl');
+SELECT approximate_row_count('disttable_repl');
 
 DROP TABLE disttable_repl;

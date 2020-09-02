@@ -153,6 +153,217 @@ SELECT * FROM chunks_detailed_size('toast_test');
  _timescaledb_internal | _hyper_4_9_chunk |       24576 |       16384 |        8192 |       49152 | 
 (1 row)
 
+-- Tests for approximate_row_count()
+--
+-- Regular table
+--
+CREATE TABLE approx_count(time TIMESTAMP, value int);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:01', 1);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:02', 2);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:03', 3);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:04', 4);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:05', 5);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:06', 6);
+INSERT INTO approx_count VALUES('2004-01-01 10:00:07', 7);
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
+ANALYZE approx_count;
+SELECT count(*) FROM approx_count;
+ count 
+-------
+     7
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     7
+(1 row)
+
+DROP TABLE approx_count;
+-- Regular table with basic inheritance
+--
+CREATE TABLE approx_count(id int);
+CREATE TABLE approx_count_child(id2 int) INHERITS (approx_count);
+INSERT INTO approx_count_child VALUES(0);
+INSERT INTO approx_count VALUES(1);
+SELECT count(*) FROM approx_count;
+ count 
+-------
+     2
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
+ANALYZE approx_count;
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     1
+(1 row)
+
+ANALYZE approx_count_child;
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     2
+(1 row)
+
+DROP TABLE approx_count CASCADE;
+NOTICE:  drop cascades to table approx_count_child
+-- Regular table with nested inheritance
+--
+CREATE TABLE approx_count(id int);
+CREATE TABLE approx_count_a(id2 int) INHERITS (approx_count);
+CREATE TABLE approx_count_b(id3 int) INHERITS (approx_count_a);
+CREATE TABLE approx_count_c(id4 int) INHERITS (approx_count_b);
+INSERT INTO approx_count_a VALUES(0);
+INSERT INTO approx_count_b VALUES(1);
+INSERT INTO approx_count_c VALUES(2);
+INSERT INTO approx_count VALUES(3);
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
+ANALYZE approx_count_a;
+ANALYZE approx_count_b;
+ANALYZE approx_count_c;
+ANALYZE approx_count;
+SELECT count(*) FROM approx_count;
+ count 
+-------
+     4
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     4
+(1 row)
+
+SELECT count(*) FROM approx_count_a;
+ count 
+-------
+     3
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_a');
+ approximate_row_count 
+-----------------------
+                     3
+(1 row)
+
+SELECT count(*) FROM approx_count_b;
+ count 
+-------
+     2
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_b');
+ approximate_row_count 
+-----------------------
+                     2
+(1 row)
+
+SELECT count(*) FROM approx_count_c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_c');
+ approximate_row_count 
+-----------------------
+                     1
+(1 row)
+
+DROP TABLE approx_count CASCADE;
+NOTICE:  drop cascades to 3 other objects
+-- Regular table with declarative partitioning
+--
+CREATE TABLE approx_count_dp(time TIMESTAMP, value int) PARTITION BY RANGE(time);
+CREATE TABLE approx_count_dp0 PARTITION OF approx_count_dp
+FOR VALUES FROM ('2004-01-01 00:00:00') TO ('2005-01-01 00:00:00');
+CREATE TABLE approx_count_dp1 PARTITION OF approx_count_dp
+FOR VALUES FROM ('2005-01-01 00:00:00') TO ('2006-01-01 00:00:00');
+CREATE TABLE approx_count_dp2 PARTITION OF approx_count_dp
+FOR VALUES FROM ('2006-01-01 00:00:00') TO ('2007-01-01 00:00:00');
+INSERT INTO approx_count_dp VALUES('2004-01-01 10:00:00', 1);
+INSERT INTO approx_count_dp VALUES('2004-01-01 11:00:00', 1);
+INSERT INTO approx_count_dp VALUES('2004-01-01 12:00:01', 1);
+INSERT INTO approx_count_dp VALUES('2005-01-01 10:00:00', 1);
+INSERT INTO approx_count_dp VALUES('2005-01-01 11:00:00', 1);
+INSERT INTO approx_count_dp VALUES('2005-01-01 12:00:01', 1);
+INSERT INTO approx_count_dp VALUES('2006-01-01 10:00:00', 1);
+INSERT INTO approx_count_dp VALUES('2006-01-01 11:00:00', 1);
+INSERT INTO approx_count_dp VALUES('2006-01-01 12:00:01', 1);
+SELECT count(*) FROM approx_count_dp;
+ count 
+-------
+     9
+(1 row)
+
+SELECT count(*) FROM approx_count_dp0;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(*) FROM approx_count_dp1;
+ count 
+-------
+     3
+(1 row)
+
+SELECT count(*) FROM approx_count_dp2;
+ count 
+-------
+     3
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_dp');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
+ANALYZE approx_count_dp;
+SELECT * FROM approximate_row_count('approx_count_dp');
+ approximate_row_count 
+-----------------------
+                     9
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_dp0');
+ approximate_row_count 
+-----------------------
+                     3
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_dp1');
+ approximate_row_count 
+-----------------------
+                     3
+(1 row)
+
+SELECT * FROM approximate_row_count('approx_count_dp2');
+ approximate_row_count 
+-----------------------
+                     3
+(1 row)
+
+-- Hypertable
+--
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
 NOTICE:  adding not-null constraint to column "time"
@@ -171,34 +382,37 @@ INSERT INTO approx_count VALUES('2004-01-01 10:00:07', 7);
 INSERT INTO approx_count VALUES('2004-01-01 10:00:08', 8);
 INSERT INTO approx_count VALUES('2004-01-01 10:00:09', 9);
 INSERT INTO approx_count VALUES('2004-01-01 10:00:10', 10);
-ANALYZE approx_count;
-SELECT * FROM hypertable_approximate_row_count('approx_count');
- schema_name |  table_name  | row_estimate 
--------------+--------------+--------------
- public      | approx_count |           10
+SELECT count(*) FROM approx_count;
+ count 
+-------
+    10
 (1 row)
 
--- all hypertables
-SELECT * FROM hypertable_approximate_row_count();
- schema_name |       table_name        | row_estimate 
--------------+-------------------------+--------------
- public      | approx_count            |           10
- public      | timestamp_partitioned   |            0
- public      | timestamp_partitioned_2 |            0
- public      | toast_test              |            0
- public      | two_Partitions          |            0
-(5 rows)
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
 
-SELECT * FROM hypertable_approximate_row_count(NULL);
- schema_name |       table_name        | row_estimate 
--------------+-------------------------+--------------
- public      | approx_count            |           10
- public      | timestamp_partitioned   |            0
- public      | timestamp_partitioned_2 |            0
- public      | toast_test              |            0
- public      | two_Partitions          |            0
-(5 rows)
+ANALYZE approx_count;
+SELECT * FROM approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                    10
+(1 row)
 
+\set ON_ERROR_STOP 0
+SELECT * FROM approximate_row_count('unexisting');
+ERROR:  relation "unexisting" does not exist at character 37
+SELECT * FROM approximate_row_count();
+ERROR:  function approximate_row_count() does not exist at character 15
+SELECT * FROM approximate_row_count(NULL);
+ approximate_row_count 
+-----------------------
+                      
+(1 row)
+
+\set ON_ERROR_STOP 1
 SELECT * FROM chunks_detailed_size(NULL);
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------

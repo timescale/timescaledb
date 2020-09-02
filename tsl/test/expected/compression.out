@@ -1346,3 +1346,36 @@ SELECT reloptions FROM pg_class WHERE relname = :statchunk;
 (1 row)
 
 DROP TABLE stattest;
+-- Test approximate_row_count() with compressed hypertable
+--
+CREATE TABLE approx_count(time timestamptz not null, device int, temp float);
+SELECT create_hypertable('approx_count', 'time');
+     create_hypertable      
+----------------------------
+ (29,public,approx_count,t)
+(1 row)
+
+INSERT INTO approx_count SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+SELECT count(*) FROM approx_count;
+ count 
+-------
+    49
+(1 row)
+
+ALTER TABLE approx_count SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  adding index _compressed_hypertable_30_device__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_30 USING BTREE(device, _ts_meta_sequence_num)
+SELECT approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
+ANALYZE approx_count;
+SELECT approximate_row_count('approx_count');
+ approximate_row_count 
+-----------------------
+                    49
+(1 row)
+
+DROP TABLE approx_count;

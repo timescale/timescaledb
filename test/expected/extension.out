@@ -28,6 +28,7 @@ WHERE oid IN (
  add_retention_policy
  allow_new_chunks
  alter_job
+ approximate_row_count
  attach_data_node
  attach_tablespace
  block_new_chunks
@@ -47,7 +48,6 @@ WHERE oid IN (
  first
  get_telemetry_report
  histogram
- hypertable_approximate_row_count
  hypertable_compression_stats
  hypertable_detailed_size
  hypertable_index_size

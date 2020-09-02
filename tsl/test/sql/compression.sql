@@ -557,3 +557,16 @@ SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
 
 DROP TABLE stattest;
+
+-- Test approximate_row_count() with compressed hypertable
+--
+CREATE TABLE approx_count(time timestamptz not null, device int, temp float);
+SELECT create_hypertable('approx_count', 'time');
+INSERT INTO approx_count SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+SELECT count(*) FROM approx_count;
+ALTER TABLE approx_count SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+SELECT approximate_row_count('approx_count');
+ANALYZE approx_count;
+SELECT approximate_row_count('approx_count');
+DROP TABLE approx_count;
