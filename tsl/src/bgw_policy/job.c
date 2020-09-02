@@ -260,7 +260,6 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 bool
 policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 {
-	bool start_isnull, end_isnull;
 	int32 materialization_id;
 	Hypertable *mat_ht;
 	Dimension *open_dim;
@@ -277,17 +276,16 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
 	open_dim = get_open_dimension_for_hypertable(mat_ht);
 	dim_type = ts_dimension_get_partition_type(open_dim);
-	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
-	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
+	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config);
+	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config);
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
-	refresh_window = (InternalTimeRange){ .type = dim_type,
-										  .start = (start_isnull ? PG_INT64_MIN : refresh_start),
-										  .end = (end_isnull ? PG_INT64_MAX : refresh_end) };
-	continuous_agg_refresh_internal(cagg, &refresh_window, false);
+	refresh_window =
+		(InternalTimeRange){ .type = dim_type, .start = refresh_start, .end = refresh_end };
 	elog(LOG,
 		 "refresh continuous aggregate range %s , %s",
-		 start_isnull ? "NULL" : ts_internal_to_time_string(refresh_start, dim_type),
-		 end_isnull ? "NULL" : ts_internal_to_time_string(refresh_end, dim_type));
+		 ts_internal_to_time_string(refresh_start, dim_type),
+		 ts_internal_to_time_string(refresh_end, dim_type));
+	continuous_agg_refresh_internal(cagg, &refresh_window, false);
 	return true;
 }
 
