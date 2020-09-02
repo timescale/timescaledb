@@ -230,7 +230,7 @@ NOTICE:  adding not-null constraint to column "a"
  smallint_tab
 (1 row)
 
-CREATE OR REPLACE FUNCTION integer_now_smallint_tab() returns smallint LANGUAGE SQL STABLE as $$ SELECT 20::smallint $$;
+CREATE OR REPLACE FUNCTION integer_now_smallint_tab() returns smallint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a)::smallint, 0::smallint) FROM smallint_tab ; $$;
 SELECT set_integer_now_func('smallint_tab', 'integer_now_smallint_tab');
  set_integer_now_func 
 ----------------------
@@ -256,22 +256,117 @@ INSERT INTO smallint_tab VALUES(5);
 INSERT INTO smallint_tab VALUES(10);
 INSERT INTO smallint_tab VALUES(20);
 CALL run_job(:job_id);
-SELECT * FROM mat_smallint;
+SELECT * FROM mat_smallint ORDER BY 1;
  a  | countb 
 ----+--------
   5 |      1
  10 |      1
 (2 rows)
 
-\set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 10::smallint, '1h'::interval, if_not_exists=>true);
-WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
+--remove all the data--
+TRUNCATE table smallint_tab;
+CALL refresh_continuous_aggregate('mat_smallint', NULL, NULL);
+SELECT * FROM mat_smallint ORDER BY 1;
+ a | countb 
+---+--------
+(0 rows)
+
+-- Case 1: overflow by subtracting from PG_INT16_MIN
+--overflow start_interval, end_interval [-32768, -32768)
+SELECT remove_continuous_aggregate_policy('mat_smallint');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
 (1 row)
 
+INSERT INTO smallint_tab VALUES( -32768 );
+SELECT integer_now_smallint_tab();
+ integer_now_smallint_tab 
+--------------------------
+                   -32768
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_smallint', 10::smallint, 5::smallint , '1 h'::interval) as job_id \gset
+\set ON_ERROR_STOP 0
+CALL run_job(:job_id);
+ERROR:  invalid refresh window
 \set ON_ERROR_STOP 1
+SELECT * FROM mat_smallint ORDER BY 1;
+ a | countb 
+---+--------
+(0 rows)
+
+-- overflow start_interval. now this runs as range is capped [-32768, -32765) 
+INSERT INTO smallint_tab VALUES( -32760 );
+SELECT maxval, maxval - 10, maxval -5 FROM integer_now_smallint_tab() as maxval;
+ maxval | ?column? | ?column? 
+--------+----------+----------
+ -32760 |   -32770 |   -32765
+(1 row)
+
+CALL run_job(:job_id);
+SELECT * FROM mat_smallint ORDER BY 1;
+   a    | countb 
+--------+--------
+ -32768 |      1
+(1 row)
+
+--remove all the data--
+TRUNCATE table smallint_tab;
+CALL refresh_continuous_aggregate('mat_smallint', NULL, NULL);
+SELECT * FROM mat_smallint ORDER BY 1;
+ a | countb 
+---+--------
+(0 rows)
+
+-- Case 2: overflow by subtracting from PG_INT16_MAX
+--overflow start and end . will fail as range is [32767, 32767] 
+SELECT remove_continuous_aggregate_policy('mat_smallint');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+INSERT INTO smallint_tab VALUES( 32766 );
+INSERT INTO smallint_tab VALUES( 32767 );
+SELECT maxval, maxval - (-1), maxval - (-2) FROM integer_now_smallint_tab() as maxval;
+ maxval | ?column? | ?column? 
+--------+----------+----------
+  32767 |    32768 |    32769
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_smallint', -1::smallint, -2::smallint , '1 h'::interval) as job_id \gset
+\set ON_ERROR_STOP 0
+CALL run_job(:job_id);
+ERROR:  invalid refresh window
+\set ON_ERROR_STOP 1
+SELECT * FROM mat_smallint ORDER BY 1;
+ a | countb 
+---+--------
+(0 rows)
+
+SELECT remove_continuous_aggregate_policy('mat_smallint');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+--overflow end . will work range is [32765, 32767)  
+SELECT maxval, maxval - (1), maxval - (-2) FROM integer_now_smallint_tab() as maxval;
+ maxval | ?column? | ?column? 
+--------+----------+----------
+  32767 |    32766 |    32769
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_smallint', 1::smallint, -2::smallint , '1 h'::interval) as job_id \gset
+\set ON_ERROR_STOP 0
+CALL run_job(:job_id);
+SELECT * FROM mat_smallint ORDER BY 1;
+   a   | countb 
+-------+--------
+ 32766 |      1
+(1 row)
+
 -- tests for interval argument conversions
 --
 \set ON_ERROR_STOP 0
@@ -288,7 +383,7 @@ WARNING:  could not add refresh policy due to existing policy on continuous aggr
 
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW mat_smallint;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_7_chunk
+NOTICE:  drop cascades to 3 other objects
 DROP TABLE smallint_tab CASCADE;
 --bigint table
 CREATE TABLE bigint_tab (a bigint);
@@ -327,5 +422,21 @@ SELECT * FROM mat_bigint;
   5 |      1
  10 |      1
 (2 rows)
+
+-- test NULL for end
+SELECT remove_continuous_aggregate_policy('mat_bigint');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_bigint', 1::smallint, NULL , '1 h'::interval) as job_id \gset
+INSERT INTO bigint_tab VALUES(500);
+CALL run_job(:job_id);
+SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
+  a  | countb 
+-----+--------
+ 500 |      1
+(1 row)
 
 -- end of coverage tests

@@ -151,7 +151,7 @@ DROP MATERIALIZED VIEW max_mat_view_timestamp;
 --smallint table
 CREATE TABLE smallint_tab (a smallint);
 SELECT table_name FROM create_hypertable('smallint_tab', 'a', chunk_time_interval=> 10);
-CREATE OR REPLACE FUNCTION integer_now_smallint_tab() returns smallint LANGUAGE SQL STABLE as $$ SELECT 20::smallint $$;
+CREATE OR REPLACE FUNCTION integer_now_smallint_tab() returns smallint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a)::smallint, 0::smallint) FROM smallint_tab ; $$;
 SELECT set_integer_now_func('smallint_tab', 'integer_now_smallint_tab');
 
 CREATE MATERIALIZED VIEW mat_smallint( a, countb )
@@ -170,11 +170,55 @@ INSERT INTO smallint_tab VALUES(5);
 INSERT INTO smallint_tab VALUES(10);
 INSERT INTO smallint_tab VALUES(20);
 CALL run_job(:job_id);
-SELECT * FROM mat_smallint;
+SELECT * FROM mat_smallint ORDER BY 1;
+
+--remove all the data--
+TRUNCATE table smallint_tab;
+CALL refresh_continuous_aggregate('mat_smallint', NULL, NULL);
+SELECT * FROM mat_smallint ORDER BY 1;
+
+-- Case 1: overflow by subtracting from PG_INT16_MIN
+--overflow start_interval, end_interval [-32768, -32768)
+SELECT remove_continuous_aggregate_policy('mat_smallint');
+INSERT INTO smallint_tab VALUES( -32768 );
+SELECT integer_now_smallint_tab();
+SELECT add_continuous_aggregate_policy('mat_smallint', 10::smallint, 5::smallint , '1 h'::interval) as job_id \gset
 
 \set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 10::smallint, '1h'::interval, if_not_exists=>true);
+CALL run_job(:job_id);
 \set ON_ERROR_STOP 1
+SELECT * FROM mat_smallint ORDER BY 1;
+
+-- overflow start_interval. now this runs as range is capped [-32768, -32765) 
+INSERT INTO smallint_tab VALUES( -32760 );
+SELECT maxval, maxval - 10, maxval -5 FROM integer_now_smallint_tab() as maxval;
+CALL run_job(:job_id);
+SELECT * FROM mat_smallint ORDER BY 1;
+
+--remove all the data--
+TRUNCATE table smallint_tab;
+CALL refresh_continuous_aggregate('mat_smallint', NULL, NULL);
+SELECT * FROM mat_smallint ORDER BY 1;
+
+-- Case 2: overflow by subtracting from PG_INT16_MAX
+--overflow start and end . will fail as range is [32767, 32767] 
+SELECT remove_continuous_aggregate_policy('mat_smallint');
+INSERT INTO smallint_tab VALUES( 32766 );
+INSERT INTO smallint_tab VALUES( 32767 );
+SELECT maxval, maxval - (-1), maxval - (-2) FROM integer_now_smallint_tab() as maxval;
+SELECT add_continuous_aggregate_policy('mat_smallint', -1::smallint, -2::smallint , '1 h'::interval) as job_id \gset
+\set ON_ERROR_STOP 0
+CALL run_job(:job_id);
+\set ON_ERROR_STOP 1
+SELECT * FROM mat_smallint ORDER BY 1;
+
+SELECT remove_continuous_aggregate_policy('mat_smallint');
+--overflow end . will work range is [32765, 32767)  
+SELECT maxval, maxval - (1), maxval - (-2) FROM integer_now_smallint_tab() as maxval;
+SELECT add_continuous_aggregate_policy('mat_smallint', 1::smallint, -2::smallint , '1 h'::interval) as job_id \gset
+\set ON_ERROR_STOP 0
+CALL run_job(:job_id);
+SELECT * FROM mat_smallint ORDER BY 1;
 
 -- tests for interval argument conversions
 --
@@ -209,5 +253,11 @@ INSERT INTO bigint_tab VALUES(20);
 CALL run_job(:job_mid);
 SELECT * FROM mat_bigint;
 
--- end of coverage tests
+-- test NULL for end
+SELECT remove_continuous_aggregate_policy('mat_bigint');
+SELECT add_continuous_aggregate_policy('mat_bigint', 1::smallint, NULL , '1 h'::interval) as job_id \gset
+INSERT INTO bigint_tab VALUES(500);
+CALL run_job(:job_id);
+SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 
+-- end of coverage tests

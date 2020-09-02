@@ -84,5 +84,6 @@ extern TSDLLEXPORT int64 ts_time_get_noend(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_noend_or_max(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype);
 extern TSDLLEXPORT int64 ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype);
-
+extern TSDLLEXPORT int64 ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval,
+																 Oid timetype);
 #endif /* TIMESCALEDB_TIME_UTILS_H */

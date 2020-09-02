@@ -504,3 +504,41 @@ ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype)
 
 	return timeval - interval;
 }
+
+int64
+ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval, Oid timetype)
+{
+	Datum now = OidFunctionCall0(now_func);
+	int64 time_min = ts_time_get_min(timetype);
+	int64 time_max = ts_time_get_max(timetype);
+	int64 nowval, res;
+
+	Assert(IS_INTEGER_TYPE(timetype));
+	switch (timetype)
+	{
+		case INT2OID:
+		{
+			nowval = DatumGetInt16(now);
+			break;
+		}
+		case INT4OID:
+		{
+			nowval = DatumGetInt32(now);
+			break;
+		}
+		case INT8OID:
+		{
+			nowval = DatumGetInt64(now);
+			break;
+		}
+		default:
+			elog(ERROR, "unsupported integer time type \"%s\"", format_type_be(timetype));
+	}
+	if (nowval > 0 && interval < 0 && nowval > time_max + interval)
+		res = time_max;
+	else if (nowval < 0 && interval > 0 && nowval < time_min + interval)
+		res = time_min;
+	else
+		res = nowval - interval;
+	return res;
+}
