@@ -19,6 +19,7 @@
 #include "hypertable_cache.h"
 #include "time_utils.h"
 #include "policy_utils.h"
+#include "time_utils.h"
 
 #define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
 #define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
@@ -60,13 +61,12 @@ get_interval_from_config(const Dimension *dim, const Jsonb *config, const char *
 		if (!found)
 		{
 			*isnull = true;
-			return (Datum) 0;
+			return 0;
 		}
 		Oid now_func = ts_get_integer_now_func(dim);
 
 		Assert(now_func);
-
-		return subtract_integer_from_now(interval_val, partitioning_type, now_func);
+		return ts_subtract_integer_from_now_saturating(now_func, interval_val, partitioning_type);
 	}
 	else
 	{
@@ -83,15 +83,24 @@ get_interval_from_config(const Dimension *dim, const Jsonb *config, const char *
 }
 
 int64
-policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config, bool *start_isnull)
+policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config)
 {
-	return get_interval_from_config(dim, config, CONFIG_KEY_START_OFFSET, start_isnull);
+	bool start_isnull;
+	int64 res = get_interval_from_config(dim, config, CONFIG_KEY_START_OFFSET, &start_isnull);
+	/* interpret NULL as min value for that type */
+	if (start_isnull)
+		return ts_time_get_min(ts_dimension_get_partition_type(dim));
+	return res;
 }
 
 int64
-policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, bool *end_isnull)
+policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config)
 {
-	return get_interval_from_config(dim, config, CONFIG_KEY_END_OFFSET, end_isnull);
+	bool end_isnull;
+	int64 res = get_interval_from_config(dim, config, CONFIG_KEY_END_OFFSET, &end_isnull);
+	if (end_isnull)
+		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
+	return res;
 }
 
 Datum

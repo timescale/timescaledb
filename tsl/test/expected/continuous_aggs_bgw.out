@@ -138,11 +138,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                     msg                     
---------+-----------+--------------------------------------------+---------------------------------------------
+ msg_no | mock_time |              application_name              |                        msg                         
+--------+-----------+--------------------------------------------+----------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Refresh Continuous Aggregate Policy [1000] | refresh continuous aggregate range NULL , 6
+      0 |         0 | Refresh Continuous Aggregate Policy [1000] | refresh continuous aggregate range -2147483648 , 6
 (3 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
@@ -371,11 +371,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                     msg                      
---------+-----------+--------------------------------------------+----------------------------------------------
+ msg_no | mock_time |              application_name              |                         msg                         
+--------+-----------+--------------------------------------------+-----------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range NULL , 12
+      0 |         0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range -2147483648 , 12
 (3 rows)
 
 -- job ran once, successfully
@@ -420,10 +420,10 @@ SELECT * FROM sorted_bgw_log;
 --------+-------------+--------------------------------------------+----------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |           0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range NULL , 12
+      0 |           0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range -2147483648 , 12
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
-      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range NULL , 12
+      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range -2147483648 , 12
 (6 rows)
 
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -639,7 +639,7 @@ SELECT * from sorted_bgw_log;
 --------+-------------+--------------------------------------------+---------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |           0 | Refresh Continuous Aggregate Policy [1003] | refresh continuous aggregate range NULL , 3
+      0 |           0 | Refresh Continuous Aggregate Policy [1003] | refresh continuous aggregate range -2147483648 , 3
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
       0 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | job 1003 threw an error
