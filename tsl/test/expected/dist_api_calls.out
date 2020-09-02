@@ -231,7 +231,7 @@ SELECT reorder_chunk('_timescaledb_internal._dist_hyper_1_4_chunk', verbose => T
 ERROR:  move_chunk() and reorder_chunk() cannot be used with distributed hypertables
 \set ON_ERROR_STOP 1
 DROP TABLESPACE tablespace1;
--- Ensure hypertable_approximate_row_count() works with distributed hypertable
+-- Ensure approximate_row_count() works with distributed hypertable
 --
 SELECT * FROM disttable ORDER BY time;
              time             | device |  value   
@@ -253,34 +253,34 @@ SELECT count(*) FROM disttable;
      8
 (1 row)
 
-SELECT hypertable_approximate_row_count('disttable');
- hypertable_approximate_row_count 
-----------------------------------
- (public,disttable,8)
+SELECT approximate_row_count('disttable');
+ approximate_row_count 
+-----------------------
+                     8
 (1 row)
 
-SELECT * FROM test.remote_exec(NULL, $$ SELECT hypertable_approximate_row_count('disttable'); $$);
-NOTICE:  [data_node_1]:  SELECT hypertable_approximate_row_count('disttable')
+SELECT * FROM test.remote_exec(NULL, $$ SELECT approximate_row_count('disttable'); $$);
+NOTICE:  [data_node_1]:  SELECT approximate_row_count('disttable')
 NOTICE:  [data_node_1]:
-hypertable_approximate_row_count
---------------------------------
-(public,disttable,3)            
+approximate_row_count
+---------------------
+                    3
 (1 row)
 
 
-NOTICE:  [data_node_2]:  SELECT hypertable_approximate_row_count('disttable')
+NOTICE:  [data_node_2]:  SELECT approximate_row_count('disttable')
 NOTICE:  [data_node_2]:
-hypertable_approximate_row_count
---------------------------------
-(public,disttable,2)            
+approximate_row_count
+---------------------
+                    2
 (1 row)
 
 
-NOTICE:  [data_node_3]:  SELECT hypertable_approximate_row_count('disttable')
+NOTICE:  [data_node_3]:  SELECT approximate_row_count('disttable')
 NOTICE:  [data_node_3]:
-hypertable_approximate_row_count
---------------------------------
-(public,disttable,3)            
+approximate_row_count
+---------------------
+                    3
 (1 row)
 
 
@@ -380,17 +380,17 @@ SELECT count(*) FROM disttable_repl;
      8
 (1 row)
 
-SELECT hypertable_approximate_row_count('disttable_repl');
- hypertable_approximate_row_count 
-----------------------------------
- (public,disttable_repl,0)
+SELECT approximate_row_count('disttable_repl');
+ approximate_row_count 
+-----------------------
+                     0
 (1 row)
 
 ANALYZE disttable_repl;
-SELECT hypertable_approximate_row_count('disttable_repl');
- hypertable_approximate_row_count 
-----------------------------------
- (public,disttable_repl,8)
+SELECT approximate_row_count('disttable_repl');
+ approximate_row_count 
+-----------------------
+                     8
 (1 row)
 
 DROP TABLE disttable_repl;

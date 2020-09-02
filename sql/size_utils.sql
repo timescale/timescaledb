@@ -367,52 +367,48 @@ $BODY$;
 
 -- Convenience function to return approximate row count
 --
--- main_table - hypertable to get approximate row count for; if NULL, get count
---              for all hypertables
+-- main_table - table or hypertable to get approximate row count for
 --
 -- Returns:
--- schema_name      - Schema name of the hypertable
--- table_name       - Table name of the hypertable
--- row_estimate     - Estimated number of rows according to catalog tables
-CREATE OR REPLACE FUNCTION hypertable_approximate_row_count(
-    main_table REGCLASS = NULL
-)
-    RETURNS TABLE (schema_name NAME,
-                   table_name NAME,
-                   row_estimate BIGINT
-                  ) LANGUAGE PLPGSQL VOLATILE
-    AS
+-- Estimated number of rows according to catalog tables
+CREATE OR REPLACE FUNCTION approximate_row_count(relation REGCLASS)
+RETURNS BIGINT
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
-<<main>>
 DECLARE
-        table_name       NAME;
-        schema_name      NAME;
+	table_name       NAME;
+	schema_name      NAME;
+	row_count_parent BIGINT;
+	row_count        BIGINT;
 BEGIN
-        IF main_table IS NOT NULL THEN
-            SELECT relname, nspname
-            INTO STRICT table_name, schema_name
-            FROM pg_class c
-            INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-            WHERE c.OID = main_table;
-        END IF;
+	SELECT relname, nspname, c.reltuples::bigint
+	INTO table_name, schema_name, row_count_parent
+	FROM pg_class c
+	INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+	WHERE c.OID = relation;
 
--- Thanks to @fvannee on Github for providing the initial draft
--- of this query
-        RETURN QUERY
-        SELECT h.schema_name,
-            h.table_name,
-            row_estimate.row_estimate
-        FROM _timescaledb_catalog.hypertable h
-        CROSS JOIN LATERAL (
-            SELECT sum(cl.reltuples)::BIGINT AS row_estimate
-            FROM _timescaledb_catalog.chunk c
-            JOIN pg_class cl ON cl.relname = c.table_name
-            WHERE c.hypertable_id = h.id
-            GROUP BY h.schema_name, h.table_name
-        ) row_estimate
-        WHERE (main.table_name IS NULL OR h.table_name = main.table_name)
-        AND (main.schema_name IS NULL OR h.schema_name = main.schema_name)
-        ORDER BY h.schema_name, h.table_name;
+	WITH RECURSIVE inherited_id AS
+	(
+		SELECT i.inhrelid AS oid
+		FROM pg_inherits i
+		JOIN pg_class base ON i.inhparent = base.oid
+		JOIN pg_namespace base_ns ON base.relnamespace = base_ns.oid
+		WHERE base_ns.nspname = schema_name AND base.relname = table_name
+		UNION
+		SELECT i.inhrelid AS oid
+		FROM pg_inherits i
+		JOIN inherited_id b ON i.inhparent = b.oid
+	)
+	SELECT sum(child.reltuples)::bigint
+	INTO row_count
+	FROM inherited_id i
+	JOIN pg_class child ON i.oid = child.oid
+	JOIN pg_namespace child_ns ON child.relnamespace = child_ns.oid;
+
+	IF row_count IS NULL THEN
+		RETURN row_count_parent;
+	END IF;
+	RETURN row_count_parent + row_count;
 END
 $BODY$;
 
