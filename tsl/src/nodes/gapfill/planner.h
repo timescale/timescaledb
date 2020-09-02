@@ -8,6 +8,19 @@
 
 #include <postgres.h>
 
+typedef struct gapfill_walker_context
+{
+	union
+	{
+		Node *node;
+		Expr *expr;
+		FuncExpr *func;
+		WindowFunc *window;
+	} call;
+	int count;
+} gapfill_walker_context;
+
+bool gapfill_function_walker(Node *node, gapfill_walker_context *context);
 void plan_add_gapfill(PlannerInfo *, RelOptInfo *);
 void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,
 									  RelOptInfo *output_rel);

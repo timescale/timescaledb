@@ -46,6 +46,7 @@
 #include "data_node_scan_plan.h"
 #include "data_node_scan_exec.h"
 #include "fdw_utils.h"
+#include "nodes/gapfill/planner.h"
 
 /*
  * DataNodeScan is a custom scan implementation for scanning hypertables on
@@ -352,9 +353,14 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 {
 	Dimension *dim;
 	bool overlaps;
+	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
 
 	Assert(hs->num_dimensions >= 1);
 	Assert(hyper_rel->part_scheme->partnatts == hs->num_dimensions);
+
+	gapfill_function_walker((Node *) root->parse->targetList, &context);
+	if (context.count > 0)
+		return;
 
 	/* Check for special case when there is only one data node with chunks. This
 	 * can always be safely pushed down irrespective of partitioning */

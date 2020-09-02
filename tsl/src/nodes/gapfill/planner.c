@@ -33,18 +33,6 @@ static CustomScanMethods gapfill_plan_methods = {
 	.CreateCustomScanState = gapfill_state_create,
 };
 
-typedef struct gapfill_walker_context
-{
-	union
-	{
-		Node *node;
-		Expr *expr;
-		FuncExpr *func;
-		WindowFunc *window;
-	} call;
-	int count;
-} gapfill_walker_context;
-
 /*
  * FuncExpr is locf or interpolate function call
  */
@@ -59,7 +47,7 @@ is_marker_function_call(FuncExpr *call)
 /*
  * Find time_bucket_gapfill function call
  */
-static bool
+bool
 gapfill_function_walker(Node *node, gapfill_walker_context *context)
 {
 	if (node == NULL)

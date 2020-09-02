@@ -39,8 +39,8 @@ GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 -- Create a distributed hypertable with data
 SET ROLE :ROLE_1;
 CREATE TABLE disttable(
-    time timestamptz NOT NULL, 
-    device int, 
+    time timestamptz NOT NULL,
+    device int,
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
@@ -242,6 +242,305 @@ GROUP BY 1;
  Mon Jul 02 08:00:00 2018 PDT |     0 |       0
 (16 rows)
 
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+     time_bucket_gapfill      | device |  first   |   avg    
+------------------------------+--------+----------+----------
+ Sun Jan 01 04:00:00 2017 PST |      1 |      1.2 |      1.2
+ Sun Jan 01 07:00:00 2017 PST |      1 |      7.3 |      7.3
+ Sun Jan 01 10:00:00 2017 PST |      1 |          |         
+ Sun Jan 01 13:00:00 2017 PST |      1 |          |         
+ Sun Jan 01 16:00:00 2017 PST |      1 |          |         
+ Sun Jan 01 04:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 07:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 10:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 13:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 16:00:00 2017 PST |      2 |          |         
+ Mon Jan 02 07:00:00 2017 PST |      2 |     0.23 |     0.23
+ Sun Jan 01 04:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 07:00:00 2017 PST |      3 |      4.3 |      4.3
+ Sun Jan 01 10:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 13:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 16:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 04:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     13 |          |         
+ Sun Jul 01 05:00:00 2018 PDT |     13 |      3.1 |      3.1
+ Sun Jan 01 04:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     29 |          |         
+ Sun Jul 01 08:00:00 2018 PDT |     29 |       64 |       64
+ Sun Jan 01 04:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     87 |          |         
+ Mon Jul 02 08:00:00 2018 PDT |     87 |        0 |        0
+ Sun Jan 01 04:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     90 |          |         
+ Sun Jul 01 08:00:00 2018 PDT |     90 | 10303.12 | 10303.12
+(40 rows)
+
+-- Explain the same simple queries with time_bucket_gapfill
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+                                                                                                                                QUERY PLAN                                                                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (GapFill)
+   Output: (time_bucket_gapfill('@ 3 hours'::interval, "time")), (first(value, "time")), (avg(value))
+   ->  Sort
+         Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), (first(disttable.value, disttable."time")), (avg(disttable.value))
+         Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone))
+         ->  HashAggregate
+               Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), first(disttable.value, disttable."time"), avg(disttable.value)
+               Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone))
+               ->  Append
+                     ->  Custom Scan (DataNodeScan) on public.disttable
+                           Output: time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone), disttable.value, disttable."time"
+                           Data node: data_node_1
+                           Chunks: _dist_hyper_1_4_chunk, _dist_hyper_1_7_chunk
+                           Remote SQL: SELECT "time", value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                     ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                           Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone), disttable_1.value, disttable_1."time"
+                           Data node: data_node_2
+                           Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk
+                           Remote SQL: SELECT "time", value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                     ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                           Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone), disttable_2.value, disttable_2."time"
+                           Data node: data_node_3
+                           Chunks: _dist_hyper_1_6_chunk, _dist_hyper_1_8_chunk
+                           Remote SQL: SELECT "time", value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+(24 rows)
+
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+                                                                                                                                         QUERY PLAN                                                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (GapFill)
+   Output: (time_bucket_gapfill('@ 3 hours'::interval, "time")), device, (first(value, "time")), (avg(value))
+   ->  Sort
+         Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, (first(disttable.value, disttable."time")), (avg(disttable.value))
+         Sort Key: disttable.device, (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone))
+         ->  GroupAggregate
+               Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, first(disttable.value, disttable."time"), avg(disttable.value)
+               Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device
+               ->  Sort
+                     Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, disttable.value, disttable."time"
+                     Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device
+                     ->  Append
+                           ->  Custom Scan (DataNodeScan) on public.disttable
+                                 Output: time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone), disttable.device, disttable.value, disttable."time"
+                                 Data node: data_node_1
+                                 Chunks: _dist_hyper_1_4_chunk, _dist_hyper_1_7_chunk
+                                 Remote SQL: SELECT "time", device, value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                           ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                                 Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone), disttable_1.device, disttable_1.value, disttable_1."time"
+                                 Data node: data_node_2
+                                 Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk
+                                 Remote SQL: SELECT "time", device, value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                           ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                                 Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone), disttable_2.device, disttable_2.value, disttable_2."time"
+                                 Data node: data_node_3
+                                 Chunks: _dist_hyper_1_6_chunk, _dist_hyper_1_8_chunk
+                                 Remote SQL: SELECT "time", device, value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+(27 rows)
+
+-- Test the same queries with enabled partitionwise aggregate
+SET enable_partitionwise_aggregate = 'on';
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+     time_bucket_gapfill      | first |   avg   
+------------------------------+-------+---------
+ Sun Jan 01 04:00:00 2017 PST |   1.2 |     1.2
+ Sun Jan 01 07:00:00 2017 PST |   7.3 |     5.8
+ Sun Jan 01 10:00:00 2017 PST |       |        
+ Sun Jan 01 13:00:00 2017 PST |       |        
+ Sun Jan 01 16:00:00 2017 PST |       |        
+ Sun Jan 01 19:00:00 2017 PST |       |        
+ Sun Jan 01 22:00:00 2017 PST |       |        
+ Mon Jan 02 01:00:00 2017 PST |       |        
+ Mon Jan 02 04:00:00 2017 PST |       |        
+ Mon Jan 02 07:00:00 2017 PST |  0.23 |    0.23
+ Mon Jan 02 10:00:00 2017 PST |       |        
+ Mon Jan 02 13:00:00 2017 PST |       |        
+ Mon Jan 02 16:00:00 2017 PST |       |        
+ Sun Jul 01 05:00:00 2018 PDT |   3.1 |     3.1
+ Sun Jul 01 08:00:00 2018 PDT |    64 | 5183.56
+ Mon Jul 02 08:00:00 2018 PDT |     0 |       0
+(16 rows)
+
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+     time_bucket_gapfill      | device |  first   |   avg    
+------------------------------+--------+----------+----------
+ Sun Jan 01 04:00:00 2017 PST |      1 |      1.2 |      1.2
+ Sun Jan 01 07:00:00 2017 PST |      1 |      7.3 |      7.3
+ Sun Jan 01 10:00:00 2017 PST |      1 |          |         
+ Sun Jan 01 13:00:00 2017 PST |      1 |          |         
+ Sun Jan 01 16:00:00 2017 PST |      1 |          |         
+ Sun Jan 01 04:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 07:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 10:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 13:00:00 2017 PST |      2 |          |         
+ Sun Jan 01 16:00:00 2017 PST |      2 |          |         
+ Mon Jan 02 07:00:00 2017 PST |      2 |     0.23 |     0.23
+ Sun Jan 01 04:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 07:00:00 2017 PST |      3 |      4.3 |      4.3
+ Sun Jan 01 10:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 13:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 16:00:00 2017 PST |      3 |          |         
+ Sun Jan 01 04:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     13 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     13 |          |         
+ Sun Jul 01 05:00:00 2018 PDT |     13 |      3.1 |      3.1
+ Sun Jan 01 04:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     29 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     29 |          |         
+ Sun Jul 01 08:00:00 2018 PDT |     29 |       64 |       64
+ Sun Jan 01 04:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     87 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     87 |          |         
+ Mon Jul 02 08:00:00 2018 PDT |     87 |        0 |        0
+ Sun Jan 01 04:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 07:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 10:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 13:00:00 2017 PST |     90 |          |         
+ Sun Jan 01 16:00:00 2017 PST |     90 |          |         
+ Sun Jul 01 08:00:00 2018 PDT |     90 | 10303.12 | 10303.12
+(40 rows)
+
+-- Explain the same simple queries with time_bucket_gapfill
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1;
+                                                                                                                                                  QUERY PLAN                                                                                                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (GapFill)
+   Output: (time_bucket_gapfill('@ 3 hours'::interval, "time")), (first(value, "time")), (avg(value))
+   ->  Finalize GroupAggregate
+         Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), first(disttable.value, disttable."time"), avg(disttable.value)
+         Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone))
+         ->  Sort
+               Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), (PARTIAL first(disttable.value, disttable."time")), (PARTIAL avg(disttable.value))
+               Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), PARTIAL first(disttable.value, disttable."time"), PARTIAL avg(disttable.value)
+                           Group Key: time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)
+                           ->  Custom Scan (DataNodeScan) on public.disttable
+                                 Output: time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone), disttable.value, disttable."time"
+                                 Data node: data_node_1
+                                 Chunks: _dist_hyper_1_4_chunk, _dist_hyper_1_7_chunk
+                                 Remote SQL: SELECT "time", value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                     ->  Partial HashAggregate
+                           Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), PARTIAL first(disttable_1.value, disttable_1."time"), PARTIAL avg(disttable_1.value)
+                           Group Key: time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)
+                           ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                                 Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone), disttable_1.value, disttable_1."time"
+                                 Data node: data_node_2
+                                 Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk
+                                 Remote SQL: SELECT "time", value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                     ->  Partial HashAggregate
+                           Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)), PARTIAL first(disttable_2.value, disttable_2."time"), PARTIAL avg(disttable_2.value)
+                           Group Key: time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone)
+                           ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                                 Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Mon Jan 02 18:00:00 2017 PST'::timestamp with time zone), disttable_2.value, disttable_2."time"
+                                 Data node: data_node_3
+                                 Chunks: _dist_hyper_1_6_chunk, _dist_hyper_1_8_chunk
+                                 Remote SQL: SELECT "time", value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+(33 rows)
+
+EXPLAIN (verbose, costs off)
+SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
+       device,
+       first(value, time),
+       avg(value)
+FROM disttable
+GROUP BY 1,2;
+                                                                                                                                                            QUERY PLAN                                                                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (GapFill)
+   Output: (time_bucket_gapfill('@ 3 hours'::interval, "time")), device, (first(value, "time")), (avg(value))
+   ->  Sort
+         Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, (first(disttable.value, disttable."time")), (avg(disttable.value))
+         Sort Key: disttable.device, (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone))
+         ->  Finalize GroupAggregate
+               Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, first(disttable.value, disttable."time"), avg(disttable.value)
+               Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device
+               ->  Merge Append
+                     Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device
+                     ->  Partial GroupAggregate
+                           Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, PARTIAL first(disttable.value, disttable."time"), PARTIAL avg(disttable.value)
+                           Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device
+                           ->  Sort
+                                 Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device, disttable.value, disttable."time"
+                                 Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable.device
+                                 ->  Custom Scan (DataNodeScan) on public.disttable
+                                       Output: time_bucket_gapfill('@ 3 hours'::interval, disttable."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone), disttable.device, disttable.value, disttable."time"
+                                       Data node: data_node_1
+                                       Chunks: _dist_hyper_1_4_chunk, _dist_hyper_1_7_chunk
+                                       Remote SQL: SELECT "time", device, value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                     ->  Partial GroupAggregate
+                           Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_1.device, PARTIAL first(disttable_1.value, disttable_1."time"), PARTIAL avg(disttable_1.value)
+                           Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_1.device
+                           ->  Sort
+                                 Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_1.device, disttable_1.value, disttable_1."time"
+                                 Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_1.device
+                                 ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                                       Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_1."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone), disttable_1.device, disttable_1.value, disttable_1."time"
+                                       Data node: data_node_2
+                                       Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk
+                                       Remote SQL: SELECT "time", device, value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+                     ->  Partial GroupAggregate
+                           Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_2.device, PARTIAL first(disttable_2.value, disttable_2."time"), PARTIAL avg(disttable_2.value)
+                           Group Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_2.device
+                           ->  Sort
+                                 Output: (time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_2.device, disttable_2.value, disttable_2."time"
+                                 Sort Key: (time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone)), disttable_2.device
+                                 ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                                       Output: time_bucket_gapfill('@ 3 hours'::interval, disttable_2."time", 'Sun Jan 01 06:00:00 2017 PST'::timestamp with time zone, 'Sun Jan 01 18:00:00 2017 PST'::timestamp with time zone), disttable_2.device, disttable_2.value, disttable_2."time"
+                                       Data node: data_node_3
+                                       Chunks: _dist_hyper_1_6_chunk, _dist_hyper_1_8_chunk
+                                       Remote SQL: SELECT "time", device, value FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 3])
+(43 rows)
+
+SET enable_partitionwise_aggregate = 'off';
 -- Ensure that move_chunk() and reorder_chunk() functions cannot be used
 -- with distributed hypertable
 SET ROLE TO DEFAULT;
