@@ -14,3 +14,4 @@ SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
 
 SELECT view_name, refresh_interval, materialized_only, materialization_hypertable FROM timescaledb_information.continuous_aggregates ORDER BY view_name::text;
 
+SELECT maxtemp FROM mat_ignoreinval ORDER BY 1;
