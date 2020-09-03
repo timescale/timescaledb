@@ -475,6 +475,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	Hypertable *ht = NULL;
 	Oid owner = GetUserId();
 	int64 current_time;
+	Dimension *mat_time_dim;
 
 	create = makeNode(CreateStmt);
 	create->relation = mat_rel;
@@ -514,11 +515,9 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 
 	/* Initialize the invalidation log for the cagg. Initially, everything is
 	 * invalid. */
-	if (OidIsValid(origquery_tblinfo->nowfunc))
-		current_time = ts_time_value_to_internal(OidFunctionCall0(origquery_tblinfo->nowfunc),
-												 get_func_rettype(origquery_tblinfo->nowfunc));
-	else
-		current_time = GetCurrentTransactionStartTimestamp();
+	mat_time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Assert(mat_time_dim != NULL);
+	current_time = ts_get_now_internal(mat_time_dim);
 
 	/* Add an infinite invalidation for the continuous aggregate. This is the
 	 * initial state of the aggregate before any refreshes. */
