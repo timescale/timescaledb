@@ -11,8 +11,7 @@ CREATE OR REPLACE FUNCTION test.ptr_eq() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_test_utils_ptr_eq' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION test.double_eq() RETURNS VOID
     AS :MODULE_PATHNAME, 'ts_test_utils_double_eq' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-
-\c :TEST_DBNAME  :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- We're testing that the test utils work and generate errors on
 -- failing conditions

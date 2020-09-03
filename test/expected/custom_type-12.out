@@ -25,39 +25,35 @@ CREATE TYPE customtype (
  SEND = customtype_send,
  LIKE = TIMESTAMPTZ
 );
-CREATE CAST (customtype AS bigint)
-WITHOUT FUNCTION AS ASSIGNMENT;
-CREATE CAST (bigint AS customtype)
-WITHOUT FUNCTION AS IMPLICIT;
-CREATE CAST (customtype AS timestamptz)
-WITHOUT FUNCTION AS ASSIGNMENT;
-CREATE CAST (timestamptz AS customtype)
-WITHOUT FUNCTION AS ASSIGNMENT;
 CREATE OR REPLACE FUNCTION customtype_lt(customtype, customtype) RETURNS bool AS
 'timestamp_lt'
 LANGUAGE internal IMMUTABLE STRICT;
 CREATE OPERATOR < (
-	LEFTARG = customtype,
-	RIGHTARG = customtype,
-	PROCEDURE = customtype_lt,
-	COMMUTATOR = >,
-	NEGATOR = >=,
-	RESTRICT = scalarltsel,
-	JOIN = scalarltjoinsel
+    LEFTARG = customtype,
+    RIGHTARG = customtype,
+    PROCEDURE = customtype_lt,
+    COMMUTATOR = >,
+    NEGATOR = >=,
+    RESTRICT = scalarltsel,
+    JOIN = scalarltjoinsel
 );
 CREATE OR REPLACE FUNCTION customtype_ge(customtype, customtype) RETURNS bool AS
 'timestamp_ge'
 LANGUAGE internal IMMUTABLE STRICT;
 CREATE OPERATOR >= (
-	LEFTARG = customtype,
-	RIGHTARG = customtype,
-	PROCEDURE = customtype_ge,
-	COMMUTATOR = <=,
-	NEGATOR = <,
-	RESTRICT = scalargtsel,
-	JOIN = scalargtjoinsel
+    LEFTARG = customtype,
+    RIGHTARG = customtype,
+    PROCEDURE = customtype_ge,
+    COMMUTATOR = <=,
+    NEGATOR = <,
+    RESTRICT = scalargtsel,
+    JOIN = scalargtjoinsel
 );
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE CAST (customtype AS bigint)
+WITHOUT FUNCTION AS ASSIGNMENT;
+CREATE CAST (bigint AS customtype)
+WITHOUT FUNCTION AS ASSIGNMENT;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE customtype_test(time_custom customtype, val int);
 SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time_custom"
@@ -66,8 +62,17 @@ NOTICE:  adding not-null constraint to column "time_custom"
  (1,public,customtype_test,t)
 (1 row)
 
+\set ON_ERROR_STOP 0
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
-INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
+ERROR:  unsupported time type "customtype"
+\set ON_ERROR_STOP 1
+-- Add implicit casts
+RESET ROLE;
+CREATE CAST (customtype AS timestamptz)
+WITHOUT FUNCTION AS IMPLICIT;
+CREATE CAST (timestamptz AS customtype)
+WITHOUT FUNCTION AS IMPLICIT;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 EXPLAIN (costs off) SELECT * FROM customtype_test;
           QUERY PLAN          
@@ -88,8 +93,6 @@ SELECT * FROM customtype_test;
          time_custom          | val 
 ------------------------------+-----
  Mon Jan 01 01:02:03 2001 PST |  10
- Mon Jan 01 01:02:03 2001 PST |  10
- Mon Jan 01 01:02:03 2001 PST |  10
  Mon Jan 01 01:02:23 2001 PST |  11
-(4 rows)
+(2 rows)
 

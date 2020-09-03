@@ -32,6 +32,7 @@
 
 #include "utils.h"
 #include "time_bucket.h"
+#include "time_utils.h"
 
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/invalidation_threshold.h"
@@ -98,48 +99,9 @@ continuous_agg_materialize_window_max(Oid timetype)
 {
 	InternalTimeRange maxrange = {
 		.type = timetype,
+		.start = ts_time_get_min(timetype),
+		.end = ts_time_get_end_or_max(timetype),
 	};
-
-	/* PG checks for valid timestamps and dates in the range MIN <= time <
-	 * END. So, for those types we subtract 1 from the MAX to get into the
-	 * valid range. The MAX values account for ability to convert to UNIX time
-	 * without overflow. */
-	switch (timetype)
-	{
-		case DATEOID:
-			/* Since our internal conversion turns a date into a timestamp,
-			 * dates are governed by the same limits as timestamps. This is
-			 * probably a limitation we want to do away with, even though it
-			 * has little effect in practice. */
-			maxrange.start = TS_DATE_MIN;
-			maxrange.end = TS_DATE_END - 1;
-			break;
-		case TIMESTAMPTZOID:
-		case TIMESTAMPOID:
-			maxrange.start = TS_TIMESTAMP_MIN;
-			maxrange.end = TS_TIMESTAMP_END - 1;
-			break;
-			/* There is no "date"/"time" range for integers so they can take
-			 * any value. */
-		case INT8OID:
-			maxrange.start = PG_INT64_MIN;
-			maxrange.end = PG_INT64_MAX;
-			break;
-		case INT4OID:
-			maxrange.start = PG_INT32_MIN;
-			maxrange.end = PG_INT32_MAX;
-			break;
-		case INT2OID:
-			maxrange.start = PG_INT16_MIN;
-			maxrange.end = PG_INT16_MAX;
-			break;
-		default:
-			elog(ERROR, "unrecognized time type %d", timetype);
-			break;
-	}
-
-	maxrange.start = ts_time_value_to_internal(Int64GetDatum(maxrange.start), timetype);
-	maxrange.end = ts_time_value_to_internal(Int64GetDatum(maxrange.end), timetype);
 
 	return maxrange;
 }

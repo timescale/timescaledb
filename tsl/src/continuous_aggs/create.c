@@ -74,6 +74,7 @@
 #include "dimension.h"
 #include "continuous_agg.h"
 #include "options.h"
+#include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
 
@@ -524,7 +525,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 
 	/* Add an infinite invalidation for the continuous aggregate. This is the
 	 * initial state of the aggregate before any refreshes. */
-	invalidation_cagg_log_add_entry(mat_htid, current_time, PG_INT64_MIN, PG_INT64_MAX);
+	invalidation_cagg_log_add_entry(mat_htid, current_time, TS_TIME_NOBEGIN, TS_TIME_NOEND);
 
 	ts_cache_release(hcache);
 	return mat_htid;

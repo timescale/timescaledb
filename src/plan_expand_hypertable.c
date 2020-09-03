@@ -45,6 +45,7 @@
 #include "extension_constants.h"
 #include "partitioning.h"
 #include "cross_module_fn.h"
+#include "time_utils.h"
 
 typedef struct CollectQualCtx
 {
