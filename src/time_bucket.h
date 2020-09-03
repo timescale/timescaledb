@@ -17,7 +17,6 @@ extern TSDLLEXPORT Datum ts_int64_bucket(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_date_bucket(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_timestamp_bucket(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_timestamptz_bucket(PG_FUNCTION_ARGS);
-
 extern TSDLLEXPORT int64 ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid type);
 
 #endif /* TIMESCALEDB_TIME_BUCKET_H */

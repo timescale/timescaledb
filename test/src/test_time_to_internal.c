@@ -11,6 +11,7 @@
 
 #include "export.h"
 
+#include "time_utils.h"
 #include "utils.h"
 
 #include "test_utils.h"
@@ -111,16 +112,17 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPOID),
 													TIMESTAMPOID));
 
-	TestAssertInt64Eq(PG_INT64_MIN,
-					  ts_time_value_to_internal(Int64GetDatum(DT_NOBEGIN), TIMESTAMPOID));
-	TestAssertInt64Eq(PG_INT64_MAX,
-					  ts_time_value_to_internal(Int64GetDatum(DT_NOEND), TIMESTAMPOID));
+	TestAssertInt64Eq(TS_TIME_NOBEGIN,
+					  ts_time_value_to_internal(TimestampGetDatum(DT_NOBEGIN), TIMESTAMPOID));
+	TestAssertInt64Eq(TS_TIME_NOEND,
+					  ts_time_value_to_internal(TimestampGetDatum(DT_NOEND), TIMESTAMPOID));
 
-	TestAssertInt64Eq(DT_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPOID));
-	TestEnsureError(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN - 1, TIMESTAMPOID));
+	TestAssertInt64Eq(DT_NOBEGIN,
+					  DatumGetTimestamp(ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPOID)));
+	TestEnsureError(ts_internal_to_time_value(TS_TIMESTAMP_INTERNAL_MIN - 1, TIMESTAMPOID));
 
-	TestAssertInt64Eq(TS_INTERNAL_TIMESTAMP_MIN,
-					  ts_time_value_to_internal(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN,
+	TestAssertInt64Eq(TS_TIMESTAMP_INTERNAL_MIN,
+					  ts_time_value_to_internal(ts_internal_to_time_value(TS_TIMESTAMP_INTERNAL_MIN,
 																		  TIMESTAMPOID),
 												TIMESTAMPOID));
 
@@ -145,16 +147,17 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPTZOID),
 													TIMESTAMPTZOID));
 
-	TestAssertInt64Eq(PG_INT64_MIN,
-					  ts_time_value_to_internal(Int64GetDatum(DT_NOBEGIN), TIMESTAMPTZOID));
-	TestAssertInt64Eq(PG_INT64_MAX,
-					  ts_time_value_to_internal(Int64GetDatum(DT_NOEND), TIMESTAMPTZOID));
+	TestAssertInt64Eq(TS_TIME_NOBEGIN,
+					  ts_time_value_to_internal(TimestampTzGetDatum(DT_NOBEGIN), TIMESTAMPTZOID));
+	TestAssertInt64Eq(TS_TIME_NOEND,
+					  ts_time_value_to_internal(TimestampTzGetDatum(DT_NOEND), TIMESTAMPTZOID));
 
-	TestAssertInt64Eq(DT_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPTZOID));
-	TestEnsureError(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN - 1, TIMESTAMPTZOID));
+	TestAssertInt64Eq(DT_NOBEGIN,
+					  DatumGetTimestampTz(ts_internal_to_time_value(PG_INT64_MIN, TIMESTAMPTZOID)));
+	TestEnsureError(ts_internal_to_time_value(TS_TIMESTAMP_INTERNAL_MIN - 1, TIMESTAMPTZOID));
 
-	TestAssertInt64Eq(TS_INTERNAL_TIMESTAMP_MIN,
-					  ts_time_value_to_internal(ts_internal_to_time_value(TS_INTERNAL_TIMESTAMP_MIN,
+	TestAssertInt64Eq(TS_TIMESTAMP_INTERNAL_MIN,
+					  ts_time_value_to_internal(ts_internal_to_time_value(TS_TIMESTAMP_INTERNAL_MIN,
 																		  TIMESTAMPTZOID),
 												TIMESTAMPTZOID));
 
@@ -169,8 +172,10 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, DATEOID),
 													DATEOID));
-	TestAssertInt64Eq(DATEVAL_NOBEGIN, ts_internal_to_time_value(PG_INT64_MIN, DATEOID));
-	TestAssertInt64Eq(DATEVAL_NOEND, ts_internal_to_time_value(PG_INT64_MAX, DATEOID));
+	TestAssertInt64Eq(DATEVAL_NOBEGIN,
+					  DatumGetDateADT(ts_internal_to_time_value(PG_INT64_MIN, DATEOID)));
+	TestAssertInt64Eq(DATEVAL_NOEND,
+					  DatumGetDateADT(ts_internal_to_time_value(PG_INT64_MAX, DATEOID)));
 	TestEnsureError(ts_time_value_to_internal(DateADTGetDatum(DATEVAL_NOBEGIN + 1), DATEOID));
 	TestEnsureError(ts_time_value_to_internal(DateADTGetDatum(DATEVAL_NOEND - 1), DATEOID));
 
@@ -281,71 +286,4 @@ ts_test_interval_to_internal_conversion(PG_FUNCTION_ARGS)
 													INTERVALOID));
 
 	PG_RETURN_VOID();
-}
-
-/*
- * Functions to show TimescaleDB-specific limits of timestamps and dates:
- */
-TS_FUNCTION_INFO_V1(ts_timestamptz_pg_min);
-
-Datum
-ts_timestamptz_pg_min(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TIMESTAMPTZ(MIN_TIMESTAMP);
-}
-
-TS_FUNCTION_INFO_V1(ts_timestamptz_pg_end);
-
-Datum
-ts_timestamptz_pg_end(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TIMESTAMPTZ(END_TIMESTAMP);
-}
-
-TS_FUNCTION_INFO_V1(ts_timestamptz_min);
-
-Datum
-ts_timestamptz_min(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TIMESTAMPTZ(TS_TIMESTAMP_MIN);
-}
-
-TS_FUNCTION_INFO_V1(ts_timestamptz_end);
-
-Datum
-ts_timestamptz_end(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TIMESTAMPTZ(TS_TIMESTAMP_END);
-}
-
-TS_FUNCTION_INFO_V1(ts_date_pg_min);
-
-Datum
-ts_date_pg_min(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATEADT(DATETIME_MIN_JULIAN - POSTGRES_EPOCH_JDATE);
-}
-
-TS_FUNCTION_INFO_V1(ts_date_pg_end);
-
-Datum
-ts_date_pg_end(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATEADT(DATE_END_JULIAN - POSTGRES_EPOCH_JDATE);
-}
-
-TS_FUNCTION_INFO_V1(ts_date_min);
-
-Datum
-ts_date_min(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATEADT(TS_DATE_MIN);
-}
-
-TS_FUNCTION_INFO_V1(ts_date_end);
-
-Datum
-ts_date_end(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_DATEADT(TS_DATE_END);
 }

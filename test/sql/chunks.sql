@@ -15,6 +15,7 @@
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_range_open(
         dimension_value   BIGINT,
         interval_length   BIGINT,
+        dimension_type    CSTRING,
     OUT range_start       BIGINT,
     OUT range_end         BIGINT)
     AS :MODULE_PATHNAME, 'ts_dimension_calculate_open_range_default' LANGUAGE C STABLE;
@@ -29,36 +30,69 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_calculate_default_ran
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --open
 SELECT assert_equal(0::bigint, actual_range_start), assert_equal(10::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(0,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(0,10, 'int8') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(0::bigint, actual_range_start), assert_equal(10::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(9,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(9,10, 'int4') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(10::bigint, actual_range_start), assert_equal(20::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(10,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(10,10, 'int2') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(-10::bigint, actual_range_start), assert_equal(0::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(-1,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-1,10, 'int8') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(-10::bigint, actual_range_start), assert_equal(0::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(-10,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-10,10, 'int4') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(-20::bigint, actual_range_start), assert_equal(-10::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(-11,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-11,10, 'int2') AS res(actual_range_start, actual_range_end);
 
 --test that the ends are cut as needed to prevent overflow/undeflow.
+
+---------------
+-- BIGINT
+---------------
 SELECT assert_equal(-9223372036854775808, actual_range_start), assert_equal(-9223372036854775800::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(-9223372036854775808,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-9223372036854775808,10, 'int8') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(-9223372036854775808, actual_range_start), assert_equal(-9223372036854775800::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(-9223372036854775807,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-9223372036854775807,10, 'int8') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(9223372036854775800::bigint, actual_range_start), assert_equal(9223372036854775807::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(9223372036854775807,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(9223372036854775807,10, 'int8') AS res(actual_range_start, actual_range_end);
 
 SELECT assert_equal(9223372036854775800::bigint, actual_range_start), assert_equal(9223372036854775807::bigint, actual_range_end)
-FROM _timescaledb_internal.dimension_calculate_default_range_open(9223372036854775806,10) AS res(actual_range_start, actual_range_end);
+FROM _timescaledb_internal.dimension_calculate_default_range_open(9223372036854775806,10, 'int8') AS res(actual_range_start, actual_range_end);
 
+---------------
+-- INT
+---------------
+SELECT assert_equal(-9223372036854775808, actual_range_start), assert_equal(-2147483640::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-2147483648,10, 'int4') AS res(actual_range_start, actual_range_end);
+
+SELECT assert_equal(-9223372036854775808, actual_range_start), assert_equal(-2147483640::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-2147483647,10, 'int4') AS res(actual_range_start, actual_range_end);
+
+SELECT assert_equal(2147483640::bigint, actual_range_start), assert_equal(9223372036854775807::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(2147483647,10, 'int4') AS res(actual_range_start, actual_range_end);
+
+SELECT assert_equal(2147483640::bigint, actual_range_start), assert_equal(9223372036854775807::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(2147483646,10, 'int4') AS res(actual_range_start, actual_range_end);
+
+---------------
+-- SMALLINT
+---------------
+SELECT assert_equal(-9223372036854775808, actual_range_start), assert_equal(-32760::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-32768,10, 'int2') AS res(actual_range_start, actual_range_end);
+
+SELECT assert_equal(-9223372036854775808, actual_range_start), assert_equal(-32760::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(-32767,10, 'int2') AS res(actual_range_start, actual_range_end);
+
+SELECT assert_equal(32760::bigint, actual_range_start), assert_equal(9223372036854775807::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(32767,10, 'int2') AS res(actual_range_start, actual_range_end);
+
+SELECT assert_equal(32760::bigint, actual_range_start), assert_equal(9223372036854775807::bigint, actual_range_end)
+FROM _timescaledb_internal.dimension_calculate_default_range_open(32766,10, 'int2') AS res(actual_range_start, actual_range_end);
 
 
 --closed

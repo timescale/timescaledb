@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <catalog/namespace.h>
 #include <access/relscan.h>
 #include <commands/tablecmds.h>
 #include <utils/lsyscache.h>
@@ -26,6 +27,7 @@
 #include "hypertable_cache.h"
 #include "partitioning.h"
 #include "scanner.h"
+#include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
 
@@ -214,37 +216,34 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 }
 
 static DimensionSlice *
-calculate_open_range_default(Dimension *dim, int64 value)
+calculate_open_range_default(const Dimension *dim, int64 value)
 {
 	int64 range_start, range_end;
+	Oid dimtype = ts_dimension_get_partition_type(dim);
 
 	if (value < 0)
 	{
+		const int64 dim_min = ts_time_get_min(dimtype);
+
 		range_end = ((value + 1) / dim->fd.interval_length) * dim->fd.interval_length;
 
 		/* prevent integer underflow */
-		if (DIMENSION_SLICE_MINVALUE - range_end > -dim->fd.interval_length)
-		{
+		if (dim_min - range_end > -dim->fd.interval_length)
 			range_start = DIMENSION_SLICE_MINVALUE;
-		}
 		else
-		{
 			range_start = range_end - dim->fd.interval_length;
-		}
 	}
 	else
 	{
+		const int64 dim_end = ts_time_get_max(dimtype);
+
 		range_start = (value / dim->fd.interval_length) * dim->fd.interval_length;
 
 		/* prevent integer overflow */
-		if (DIMENSION_SLICE_MAXVALUE - range_start < dim->fd.interval_length)
-		{
+		if (dim_end - range_start < dim->fd.interval_length)
 			range_end = DIMENSION_SLICE_MAXVALUE;
-		}
 		else
-		{
 			range_end = range_start + dim->fd.interval_length;
-		}
 	}
 
 	return ts_dimension_slice_create(dim->fd.id, range_start, range_end);
@@ -263,6 +262,7 @@ ts_dimension_calculate_open_range_default(PG_FUNCTION_ARGS)
 		.type = DIMENSION_TYPE_OPEN,
 		.fd.id = 0,
 		.fd.interval_length = PG_GETARG_INT64(1),
+		.fd.column_type = TypenameGetTypid(PG_GETARG_CSTRING(2)),
 	};
 	DimensionSlice *slice = calculate_open_range_default(&dim, value);
 

@@ -3,18 +3,20 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION ts_test_time_to_internal_conversion() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.time_to_internal_conversion() RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_time_to_internal_conversion' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION ts_test_interval_to_internal_conversion() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION test.interval_to_internal_conversion() RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_interval_to_internal_conversion' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION ts_test_adts() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE OR REPLACE FUNCTION test.adts() RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_adts' LANGUAGE C VOLATILE;
 
-SELECT ts_test_time_to_internal_conversion();
+CREATE OR REPLACE FUNCTION test.time_utils() RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_time_utils' LANGUAGE C;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-SELECT ts_test_interval_to_internal_conversion();
-
-SELECT ts_test_adts();
+SELECT test.time_to_internal_conversion();
+SELECT test.interval_to_internal_conversion();
+SELECT test.adts();
+SELECT test.time_utils();

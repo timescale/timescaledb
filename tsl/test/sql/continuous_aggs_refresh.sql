@@ -80,7 +80,6 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03');
 CALL refresh_continuous_aggregate('daily_temp', 'xyz', '2020-05-05');
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
-CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');

@@ -66,9 +66,9 @@ get_largest_bucketed_window(Oid timetype, int64 bucket_width)
 	/* For the MIN value, the corresponding bucket either falls on the exact
 	 * MIN or it will be below it. Therefore, we add (bucket_width - 1) to
 	 * move to the next bucket to be within the allowed range. */
-	maxwindow.start = maxwindow.start + bucket_width - 1;
+	maxwindow.start = ts_time_saturating_add(maxwindow.start, bucket_width - 1, timetype);
 	maxbuckets.start = ts_time_bucket_by_type(bucket_width, maxwindow.start, timetype);
-	maxbuckets.end = ts_time_bucket_by_type(bucket_width, maxwindow.end, timetype);
+	maxbuckets.end = ts_time_get_end_or_max(timetype);
 
 	return maxbuckets;
 }
@@ -109,12 +109,12 @@ compute_bucketed_refresh_window(const InternalTimeRange *refresh_window, int64 b
 		 * we are at the start of the bucket (we don't want to remove a
 		 * bucket). The last  */
 		if (result.end > result.start)
-			exclusive_end = int64_saturating_sub(result.end, 1);
+			exclusive_end = ts_time_saturating_sub(result.end, 1, result.type);
 
 		bucketed_end = ts_time_bucket_by_type(bucket_width, exclusive_end, result.type);
 		/* We get the time value for the start of the bucket, so need to add
 		 * bucket_width to get the end of it */
-		result.end = bucketed_end + bucket_width;
+		result.end = ts_time_saturating_add(bucketed_end, bucket_width, refresh_window->type);
 	}
 
 	return result;
@@ -172,8 +172,34 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 }
 
 static void
-continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
-								   InvalidationStore *invalidations)
+log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+				   const char *msg)
+{
+	Datum start_ts;
+	Datum end_ts;
+	Oid outfuncid = InvalidOid;
+	bool isvarlena;
+
+	if (client_min_messages > elevel)
+		return;
+
+	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
+	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
+	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
+	Assert(!isvarlena);
+
+	elog(elevel,
+		 "%s \"%s\" in window [ %s, %s ]",
+		 msg,
+		 NameStr(cagg->data.user_view_name),
+		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
+}
+
+static void
+continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
+								   const InternalTimeRange *refresh_window,
+								   const InvalidationStore *invalidations)
 {
 	CaggRefreshState refresh;
 	TupleTableSlot *slot;
@@ -200,30 +226,12 @@ continuous_agg_refresh_with_window(ContinuousAgg *cagg, const InternalTimeRange 
 			.start = DatumGetInt64(start),
 			/* Invalidations are inclusive at the end, while refresh windows
 			 * aren't, so add one to the end of the invalidated region */
-			.end = int64_saturating_add(DatumGetInt64(end), 1),
+			.end = ts_time_saturating_add(DatumGetInt64(end), 1, refresh_window->type),
 		};
 		InternalTimeRange bucketed_refresh_window =
 			compute_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
 
-		if (client_min_messages <= DEBUG1)
-		{
-			Datum start_ts =
-				ts_internal_to_time_value(bucketed_refresh_window.start, refresh_window->type);
-			Datum end_ts =
-				ts_internal_to_time_value(bucketed_refresh_window.end, refresh_window->type);
-			Oid outfuncid = InvalidOid;
-			bool isvarlena;
-
-			getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
-			Assert(!isvarlena);
-
-			elog(DEBUG1,
-				 "refreshing continuous aggregate \"%s\" in window [ %s, %s ]",
-				 NameStr(cagg->data.user_view_name),
-				 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-				 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
-		}
-
+		log_refresh_window(DEBUG1, cagg, &bucketed_refresh_window, "invalidation refresh on");
 		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
 	}
 
@@ -285,7 +293,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 }
 
 void
-continuous_agg_refresh_internal(ContinuousAgg *cagg, InternalTimeRange *refresh_window_arg)
+continuous_agg_refresh_internal(const ContinuousAgg *cagg,
+								const InternalTimeRange *refresh_window_arg)
 {
 	Catalog *catalog = ts_catalog_get();
 	Hypertable *cagg_ht;
@@ -311,11 +320,7 @@ continuous_agg_refresh_internal(ContinuousAgg *cagg, InternalTimeRange *refresh_
 				 errhint("The start of the window must be before the end.")));
 
 	refresh_window = compute_bucketed_refresh_window(refresh_window_arg, cagg->data.bucket_width);
-
-	elog(DEBUG1,
-		 "computed refresh window at [ " INT64_FORMAT ", " INT64_FORMAT "]",
-		 refresh_window.start,
-		 refresh_window.end);
+	log_refresh_window(DEBUG1, cagg, &refresh_window, "refreshing continuous aggregate");
 
 	/* Perform the refresh across two transactions.
 	 *
