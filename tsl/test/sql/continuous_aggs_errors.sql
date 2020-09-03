@@ -456,8 +456,6 @@ select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
 
-\set ON_ERROR_STOP 1
-
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647')
 as
@@ -465,21 +463,23 @@ select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec);
 
--- Should print a useful error message, but not fail.
-CREATE MATERIALIZED VIEW IF NOT EXISTS mat_with_test
-WITH (timescaledb.continuous) AS
-SELECT time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
-  FROM conditions
-GROUP BY time_bucket(100, timec);
-
 \set ON_ERROR_STOP 0
-ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.refresh_lag = '1h');
-ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.refresh_lag = '2147483648');
-ALTER TABLE conditions ALTER timec type bigint;
-\set ON_ERROR_STOP 1
-DROP MATERIALIZED VIEW mat_with_test;
+DROP TABLE conditions cascade;
 
-ALTER TABLE conditions ALTER timec type bigint;
+CREATE TABLE conditions (
+      timec       BIGINT       NOT NULL,
+      location    TEXT              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL,
+      lowp        double precision NULL,
+      highp       double precision null,
+      allnull     double precision null
+    );
+
+select table_name from create_hypertable( 'conditions', 'timec', chunk_time_interval=> 100);
+CREATE OR REPLACE FUNCTION integer_now_test_b() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0)::bigint FROM conditions $$;
+SELECT set_integer_now_func('conditions', 'integer_now_test_b');
+
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647')
 as

@@ -182,7 +182,6 @@ typedef struct CAggTimebucketInfo
 	Oid htpartcoltype;
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
 	int64 bucket_width;			  /*bucket_width of time_bucket */
-	Oid nowfunc;
 } CAggTimebucketInfo;
 
 typedef struct AggPartCxt
@@ -212,7 +211,7 @@ static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *ma
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
 									Oid hypertable_partition_coltype,
-									int64 hypertable_partition_col_interval, Oid now_func);
+									int64 hypertable_partition_col_interval);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause,
 									List *targetList);
 static void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
@@ -475,9 +474,10 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
-	Hypertable *ht = NULL;
+	Hypertable *ht = NULL, *mat_ht = NULL;
 	Oid owner = GetUserId();
 	int64 current_time;
+	Dimension *ht_time_dim;
 
 	create = makeNode(CreateStmt);
 	create->relation = mat_rel;
@@ -508,20 +508,23 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
 	/* retrieve the hypertable id from the cache */
-	ht = ts_hypertable_cache_get_cache_and_entry(mat_relid, CACHE_FLAG_NONE, &hcache);
-	mat_htid = ht->fd.id;
+	mat_ht = ts_hypertable_cache_get_cache_and_entry(mat_relid, CACHE_FLAG_NONE, &hcache);
+	mat_htid = mat_ht->fd.id;
 
 	/* create additional index on the group-by columns for the materialization table */
 	if (create_addl_index)
-		mattablecolumninfo_add_mattable_index(matcolinfo, ht);
+		mattablecolumninfo_add_mattable_index(matcolinfo, mat_ht);
 
 	/* Initialize the invalidation log for the cagg. Initially, everything is
-	 * invalid. */
-	if (OidIsValid(origquery_tblinfo->nowfunc))
-		current_time = ts_time_value_to_internal(OidFunctionCall0(origquery_tblinfo->nowfunc),
-												 get_func_rettype(origquery_tblinfo->nowfunc));
-	else
-		current_time = GetCurrentTransactionStartTimestamp();
+	 * invalid.
+	 * Integer time dimensions have now functions. These settings
+	 * are derived from the original hypertable since they are not explicitly
+	 * set on the materialization hypertable
+	 */
+	ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
+	ht_time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Assert(ht_time_dim != NULL);
+	current_time = ts_get_now_internal(ht_time_dim);
 
 	/* Add an infinite invalidation for the continuous aggregate. This is the
 	 * initial state of the aggregate before any refreshes. */
@@ -600,7 +603,7 @@ create_view_for_query(Query *selquery, RangeVar *viewrel)
 static void
 caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
 						AttrNumber hypertable_partition_colno, Oid hypertable_partition_coltype,
-						int64 hypertable_partition_col_interval, Oid nowfunc)
+						int64 hypertable_partition_col_interval)
 {
 	src->htid = hypertable_id;
 	src->htoid = hypertable_oid;
@@ -608,7 +611,6 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
 	src->bucket_width = 0; /*invalid value */
-	src->nowfunc = nowfunc;
 }
 
 /* Check if the group-by clauses has exactly 1 time_bucket(.., <col>)
@@ -801,7 +803,6 @@ cagg_validate_query(Query *query)
 	if (rte->relkind == RELKIND_RELATION)
 	{
 		Dimension *part_dimension = NULL;
-		Oid now_func = InvalidOid;
 
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
 
@@ -843,8 +844,6 @@ cagg_validate_query(Query *query)
 
 		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)))
 		{
-			List *now_funcname;
-			Oid argtypes[] = { 0 };
 			const char *funcschema = NameStr(part_dimension->fd.integer_now_func_schema);
 			const char *funcname = NameStr(part_dimension->fd.integer_now_func);
 
@@ -856,11 +855,6 @@ cagg_validate_query(Query *query)
 						 errdetail("An integer-based hypertable requires and integer-now function "
 								   "before creating continuous aggregates."),
 						 errhint("Set an integer-now function to create continuous aggregates.")));
-
-			now_funcname =
-				list_make2(makeString((char *) funcschema), makeString((char *) funcname));
-			now_func = LookupFuncName(now_funcname, 0, argtypes, false);
-			Assert(OidIsValid(now_func));
 		}
 
 		caggtimebucketinfo_init(&ret,
@@ -868,8 +862,7 @@ cagg_validate_query(Query *query)
 								ht->main_table_relid,
 								part_dimension->column_attno,
 								part_dimension->fd.column_type,
-								part_dimension->fd.interval_length,
-								now_func);
+								part_dimension->fd.interval_length);
 
 		ts_cache_release(hcache);
 	}
