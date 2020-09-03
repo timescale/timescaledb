@@ -112,6 +112,7 @@ set(SOLO_TESTS
   bgw_reorder_drop_chunks
   chunk_api
   compress_bgw_reorder_drop_chunks
+  compression_ddl
   continuous_aggs_bgw
   continuous_aggs_dump
   data_fetcher
@@ -126,6 +127,8 @@ set(SOLO_TESTS
   dist_hypertable_with_oids
   dist_partial_agg
   issues
+  move-11
+  move-12
   read_only
   remote_connection_cache
   remote_copy
