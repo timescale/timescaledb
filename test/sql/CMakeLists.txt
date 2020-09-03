@@ -65,11 +65,14 @@ endif()
 # tests that fail or are unreliable when run in parallel
 # bgw tests need to run first otherwise they are flaky
 set(SOLO_TESTS
+  alter
+  alternate_users
   bgw_db_scheduler
   bgw_launcher
-  alternate_users
+  index
   net
   pg_dump_unprivileged
+  tablespace
   telemetry
 )
 
