@@ -486,6 +486,11 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	ts_cache_release(hcache);
 }
 
+/*
+ * Creates CustomScanPath for the data node and adds to output_rel. No custom_path is added,
+ * i.e., it is encapsulated by the CustomScanPath, so it doesn't inflate continuation of the
+ * planning and will be planned locally on the data node.
+ */
 void
 data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 								  RelOptInfo *output_rel, void *extra)

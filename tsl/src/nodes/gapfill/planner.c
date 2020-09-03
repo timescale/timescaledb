@@ -396,10 +396,12 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 }
 
 /*
- * Prepend GapFill node to every group_rel path
+ * Prepend GapFill node to every group_rel path.
+ * The implementation assumes that TimescaleDB planning hook is called only once
+ * per grouping.
  */
 void
-plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
+plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel, bool dist_ht)
 {
 	ListCell *lc;
 	Query *parse = root->parse;
@@ -409,7 +411,10 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 		return;
 
 	/*
-	 * look for time_bucket_gapfill function call
+	 * Look for time_bucket_gapfill function call in the target list, which
+	 * will succeed on every call to plan_add_gapfill, thus it will lead to
+	 * incorrect query plan if plan_add_gapfill is called more than once per
+	 * grouping.
 	 */
 	gapfill_function_walker((Node *) parse->targetList, &context);
 
@@ -420,6 +425,17 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("multiple time_bucket_gapfill calls not allowed")));
+
+	/* Executing time_bucket_gapfill on distributed hypertable produces incorrect result,
+	 * returns internal planning error or crashes if grouping includes a space dimension.
+	 * Thus time_bucket_gapfill is temporary disabled until it is fixed.
+	 */
+	if (dist_ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("time_bucket_gapfill not implemented for distributed hypertable"),
+				 errdetail("Current version doesn't implement support for time_bucket_gapfill on "
+						   "distributed hypertables.")));
 
 	if (context.count == 1)
 	{
