@@ -49,11 +49,13 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
 							void *extra)
 {
+	bool dist_ht = false;
 	switch (input_reltype)
 	{
 		case TS_REL_HYPERTABLE:
 		case TS_REL_HYPERTABLE_CHILD:
-			if (hypertable_is_distributed(ht))
+			dist_ht = hypertable_is_distributed(ht);
+			if (dist_ht)
 				data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
 			break;
 		default:
@@ -61,7 +63,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	}
 
 	if (UPPERREL_GROUP_AGG == stage)
-		plan_add_gapfill(root, output_rel);
+		plan_add_gapfill(root, output_rel, dist_ht);
 	else if (UPPERREL_WINDOW == stage && IsA(linitial(input_rel->pathlist), CustomPath))
 		gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 	else if (ts_guc_enable_async_append && UPPERREL_FINAL == stage &&
