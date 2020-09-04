@@ -1,3 +1,5 @@
+\#*#
+.#*
 *~
 **/CMakeFiles/
 **/CMakeCache.txt
@@ -22,6 +24,7 @@ typedef.list
 /.vs
 /compile_commands.json
 /.DS_Store
+/.clangd
 
 /CMakeSettings.json
 /out/*
