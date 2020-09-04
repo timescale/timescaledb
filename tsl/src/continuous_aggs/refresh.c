@@ -304,11 +304,11 @@ continuous_agg_refresh_internal(ContinuousAgg *cagg, InternalTimeRange *refresh_
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
 
-	if (refresh_window_arg->start >= refresh_window_arg->end)
+	if (refresh_window_arg->start > refresh_window_arg->end)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid refresh window"),
-				 errhint("The start of the window must be before the end.")));
+				 errhint("The start of the window must be before or the same as the end.")));
 
 	refresh_window = compute_bucketed_refresh_window(refresh_window_arg, cagg->data.bucket_width);
 

@@ -177,8 +177,6 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
 ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
 ERROR:  invalid refresh window
-CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-03');
-ERROR:  invalid refresh window
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 ERROR:  invalid type of time argument
