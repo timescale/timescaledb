@@ -15,6 +15,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_validate_server_version(re
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry_main_conn(text, text)
 RETURNS BOOLEAN AS :MODULE_PATHNAME, 'ts_test_telemetry_main_conn' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_telemetry(host text = NULL, servname text = NULL, port int = NULL) RETURNS JSONB AS :MODULE_PATHNAME, 'ts_test_telemetry' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_internal.test_privacy() RETURNS BOOLEAN
+    AS :MODULE_PATHNAME, 'ts_test_privacy' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION test_check_version_response(response text)
        RETURNS VOID
@@ -200,3 +202,16 @@ SELECT :'installed_time' = :'installed_time2' AS equal, length(:'installed_time'
 
 RESET datestyle;
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.metadata;
+
+SET timescaledb.telemetry_level=off;
+-- returns false which means telemetry got canceled
+SELECT * FROM _timescaledb_internal.test_privacy();
+
+RESET timescaledb.telemetry_level;
+-- returns false which means telemetry got canceled
+SELECT * FROM _timescaledb_internal.test_privacy();
+
+-- To make sure nothing was sent, we check the UUID table to make sure no exported UUID row was created
+SELECT key from _timescaledb_catalog.metadata;
