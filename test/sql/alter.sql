@@ -378,3 +378,31 @@ SELECT * from _timescaledb_catalog.hypertable;
 SELECT * from _timescaledb_catalog.chunk;
 
 DROP TABLE my_table;
+
+-- test renaming unique constraints/indexes
+CREATE TABLE t_hypertable ( id INTEGER NOT NULL, time TIMESTAMPTZ NOT NULL, value FLOAT NOT NULL CHECK (value > 0), UNIQUE(id, time));
+SELECT create_hypertable('t_hypertable', 'time');
+
+INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:00:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
+INSERT INTO t_hypertable AS h VALUES ( 1, '2021-01-01 00:00:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
+
+BEGIN;
+ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
+
+-- chunk_index and chunk_constraint should both have updated constraint names
+SELECT hypertable_index_name, index_name from _timescaledb_catalog.chunk_index WHERE hypertable_index_name = 't_new_constraint' ORDER BY 1,2;
+SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
+
+INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
+ROLLBACK;
+
+BEGIN;
+ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_constraint;
+
+-- chunk_index and chunk_constraint should both have updated constraint names
+SELECT hypertable_index_name, index_name from _timescaledb_catalog.chunk_index WHERE hypertable_index_name = 't_new_constraint' ORDER BY 1,2;
+SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
+
+INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
+ROLLBACK;
+

@@ -853,11 +853,63 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 										   NameStr(new_chunk_constraint_name));
 
 	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, repl);
+
+	ts_chunk_index_adjust_meta(chunk_id,
+							   newname,
+							   NameStr(*old_chunk_constraint_name),
+							   NameStr(new_chunk_constraint_name));
+
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
 	if (should_free)
 		heap_freetuple(tuple);
+}
+
+/*
+ * Adjust internal metadata after index/constraint rename
+ */
+int
+ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name, const char *oldname,
+								const char *newname)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
+
+	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, oldname);
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool nulls[Natts_chunk_constraint];
+		bool repl[Natts_chunk_constraint] = { false };
+		Datum values[Natts_chunk_constraint];
+		bool should_free;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+		HeapTuple new_tuple;
+
+		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
+
+		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
+			CStringGetDatum(ht_constraint_name);
+		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
+		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] =
+			CStringGetDatum(newname);
+		repl[AttrNumberGetAttrOffset(Anum_chunk_constraint_constraint_name)] = true;
+
+		new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, repl);
+
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
+		count++;
+	}
+
+	return count;
 }
 
 int
