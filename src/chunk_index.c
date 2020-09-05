@@ -37,6 +37,7 @@
 #include "hypertable_cache.h"
 #include "catalog.h"
 #include "scanner.h"
+#include "scan_iterator.h"
 #include "chunk.h"
 
 static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
@@ -888,6 +889,11 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 			chunk_index_choose_name(NameStr(chunk->fd.table_name), info->newname, chunk_schemaoid);
 		Oid chunk_indexrelid = get_relname_relid(NameStr(chunk_index->index_name), chunk_schemaoid);
 
+		ts_chunk_constraint_adjust_meta(chunk->fd.id,
+										info->newname,
+										NameStr(chunk_index->index_name),
+										chunk_index_name);
+
 		/* Update the metadata */
 		namestrcpy(&chunk_index->index_name, chunk_index_name);
 		namestrcpy(&chunk_index->hypertable_index_name, info->newname);
@@ -905,6 +911,68 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 		return SCAN_CONTINUE;
 
 	return SCAN_DONE;
+}
+
+static void
+init_scan_by_chunk_id_index_name(ScanIterator *iterator, int32 chunk_id, const char *index_name)
+{
+	iterator->ctx.index =
+		catalog_get_index(ts_catalog_get(), CHUNK_INDEX, CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX);
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_index_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_chunk_index_index_name,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(index_name));
+}
+
+/*
+ * Adjust internal metadata after index/constraint rename
+ */
+int
+ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char *oldname,
+						   const char *newname)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_INDEX, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
+
+	init_scan_by_chunk_id_index_name(&iterator, chunk_id, oldname);
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool nulls[Natts_chunk_index];
+		bool repl[Natts_chunk_index] = { false };
+		Datum values[Natts_chunk_index];
+		bool should_free;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+		HeapTuple new_tuple;
+
+		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
+
+		values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
+			CStringGetDatum(ht_index_name);
+		repl[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
+		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = CStringGetDatum(newname);
+		repl[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
+
+		new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, repl);
+
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+			heap_freetuple(tuple);
+
+		count++;
+	}
+	return count;
 }
 
 int
