@@ -60,6 +60,7 @@ GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
 
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
+static bool is_telemetry_job(BgwJob *job);
 
 typedef enum JobLockLifetime
 {
@@ -185,6 +186,13 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 
 		if (should_free)
 			heap_freetuple(tuple);
+
+		/* ignore telemetry jobs if telemetry is disabled */
+		if (!ts_telemetry_on() && is_telemetry_job(job))
+		{
+			pfree(job);
+			continue;
+		}
 
 		/* handle NULL columns */
 		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);

@@ -91,10 +91,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     timestamp_limits.sql
     with_clause_parser.sql
   )
-  if (USE_OPENSSL)
-    list(APPEND TEST_FILES
-      privacy.sql)
-  endif (USE_OPENSSL)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 if(${PG_VERSION_MAJOR} EQUAL "11")
