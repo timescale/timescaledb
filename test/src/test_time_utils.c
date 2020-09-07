@@ -195,9 +195,9 @@ ts_test_time_utils(PG_FUNCTION_ARGS)
 	TestEnsureError(ts_time_get_end(INT4OID));
 	TestEnsureError(ts_time_get_nobegin(INT4OID));
 	TestEnsureError(ts_time_get_noend(INT4OID));
-	TestAssertInt64Eq(DatumGetInt64(ts_time_datum_get_nobegin_or_min(INT4OID)), PG_INT32_MIN);
-	TestAssertInt64Eq(DatumGetInt64(ts_time_datum_get_min(INT4OID)), PG_INT32_MIN);
-	TestAssertInt64Eq(DatumGetInt64(ts_time_datum_get_max(INT4OID)), PG_INT32_MAX);
+	TestAssertInt64Eq(DatumGetInt32(ts_time_datum_get_nobegin_or_min(INT4OID)), PG_INT32_MIN);
+	TestAssertInt64Eq(DatumGetInt32(ts_time_datum_get_min(INT4OID)), PG_INT32_MIN);
+	TestAssertInt64Eq(DatumGetInt32(ts_time_datum_get_max(INT4OID)), PG_INT32_MAX);
 	TestEnsureError(ts_time_datum_get_end(INT4OID));
 	TestEnsureError(ts_time_datum_get_nobegin(INT4OID));
 	TestEnsureError(ts_time_datum_get_noend(INT4OID));
@@ -208,9 +208,9 @@ ts_test_time_utils(PG_FUNCTION_ARGS)
 	TestEnsureError(ts_time_get_end(INT2OID));
 	TestEnsureError(ts_time_get_nobegin(INT2OID));
 	TestEnsureError(ts_time_get_noend(INT2OID));
-	TestAssertInt64Eq(DatumGetInt64(ts_time_datum_get_nobegin_or_min(INT2OID)), PG_INT16_MIN);
-	TestAssertInt64Eq(DatumGetInt64(ts_time_datum_get_min(INT2OID)), PG_INT16_MIN);
-	TestAssertInt64Eq(DatumGetInt64(ts_time_datum_get_max(INT2OID)), PG_INT16_MAX);
+	TestAssertInt64Eq(DatumGetInt16(ts_time_datum_get_nobegin_or_min(INT2OID)), PG_INT16_MIN);
+	TestAssertInt64Eq(DatumGetInt16(ts_time_datum_get_min(INT2OID)), PG_INT16_MIN);
+	TestAssertInt64Eq(DatumGetInt16(ts_time_datum_get_max(INT2OID)), PG_INT16_MAX);
 	TestEnsureError(ts_time_datum_get_end(INT2OID));
 	TestEnsureError(ts_time_datum_get_nobegin(INT2OID));
 	TestEnsureError(ts_time_datum_get_noend(INT2OID));
