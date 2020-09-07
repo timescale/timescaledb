@@ -4,6 +4,18 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 1.7.4 (2020-09-07)
+
+This maintenance release contains bugfixes since the 1.7.3 release. We deem it
+high priority for upgrading if TimescaleDB is deployed with replicas (synchronous
+or asynchronous).
+
+In particular the fixes contained in this maintenance release address an issue with
+running queries on compressed hypertables on standby nodes.
+
+**Bugfixes**
+* #2340 Remove tuple lock on select path
+
 ## 1.7.3 (2020-07-27)
 
 This maintenance release contains bugfixes since the 1.7.2 release. We deem it high
