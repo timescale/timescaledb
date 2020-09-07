@@ -133,15 +133,15 @@ CREATE MATERIALIZED VIEW max_mat_view_date
         FROM continuous_agg_max_mat_date
         GROUP BY 1;
 \set ON_ERROR_STOP 0
-SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, 10 , '1 h'::interval); 
+SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '2 days'::interval, 10 , '1 day'::interval); 
 ERROR:  invalid parameter value for end_interval
 \set ON_ERROR_STOP 1
-SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '1 h'::interval , '1 h'::interval) as job_id \gset
+SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '2 day'::interval, '1 day'::interval , '1 day'::interval) as job_id \gset
 SELECT config FROM _timescaledb_config.bgw_job 
 WHERE id = :job_id;
                                       config                                       
 -----------------------------------------------------------------------------------
- {"end_interval": "@ 1 hour", "start_interval": "@ 1 day", "mat_hypertable_id": 4}
+ {"end_interval": "@ 1 day", "start_interval": "@ 2 days", "mat_hypertable_id": 4}
 (1 row)
 
 INSERT INTO continuous_agg_max_mat_date
