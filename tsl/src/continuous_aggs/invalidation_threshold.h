@@ -8,9 +8,14 @@
 
 #include <postgres.h>
 
-extern int64 continuous_agg_invalidation_threshold_get(int32 hypertable_id);
-extern bool continuous_agg_invalidation_threshold_set(int32 raw_hypertable_id,
-													  int64 invalidation_threshold);
-extern void continuous_agg_invalidation_threshold_lock(int32 raw_hypertable_id);
+typedef struct InternalTimeRange InternalTimeRange;
+typedef struct ContinuousAgg ContinuousAgg;
+
+extern int64 invalidation_threshold_get(int32 hypertable_id);
+extern int64 invalidation_threshold_set_or_get(int32 raw_hypertable_id,
+											   int64 invalidation_threshold);
+extern void invalidation_threshold_lock(int32 raw_hypertable_id);
+extern int64 invalidation_threshold_compute(const ContinuousAgg *cagg,
+											const InternalTimeRange *refresh_window);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_H */

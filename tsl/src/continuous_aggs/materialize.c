@@ -222,7 +222,7 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 	 * (github issue 1940)
 	 * Prevent this by serializing on the raw hypertable row
 	 */
-	continuous_agg_invalidation_threshold_lock(cagg_data.raw_hypertable_id);
+	invalidation_threshold_lock(cagg_data.raw_hypertable_id);
 	drain_invalidation_log(cagg_data.raw_hypertable_id, &invalidations);
 	materialization_invalidation_log_table_relation =
 		table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG),
@@ -292,8 +292,8 @@ continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *op
 	{
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						AccessExclusiveLock);
-		continuous_agg_invalidation_threshold_set(cagg_data.raw_hypertable_id,
-												  materialization_invalidation_threshold);
+		invalidation_threshold_set_or_get(cagg_data.raw_hypertable_id,
+										  materialization_invalidation_threshold);
 	}
 
 	table_close(materialization_invalidation_log_table_relation, NoLock);

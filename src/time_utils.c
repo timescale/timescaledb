@@ -436,6 +436,15 @@ ts_time_get_noend(Oid timetype)
 	return ts_time_get_noend(coerce_to_time_type(timetype));
 }
 
+int64
+ts_time_get_noend_or_max(Oid timetype)
+{
+	if (TS_TIME_IS_INTEGER_TIME(timetype))
+		return ts_time_get_max(timetype);
+
+	return ts_time_get_noend(timetype);
+}
+
 /*
  * Add an interval to a time value in a saturating way.
  *

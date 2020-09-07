@@ -15,7 +15,6 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
-#include <executor/spi.h>
 #include <fmgr.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
@@ -1020,7 +1019,6 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 {
 	const int32 hyper_id = PG_GETARG_INT32(0);
 	ContinuousAgg *cagg;
-	StringInfo command;
 	Hypertable *ht;
 	Dimension *dim;
 	Datum maxdat;
@@ -1028,7 +1026,6 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	int64 watermark;
 	Oid timetype;
 	AclResult aclresult;
-	int res;
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1051,34 +1048,7 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	Assert(NULL != ht);
 	dim = hyperspace_get_open_dimension(ht->space, 0);
 	timetype = ts_dimension_get_partition_type(dim);
-
-	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
-
-	/* Query for the last bucket in the materialized hypertable */
-	command = makeStringInfo();
-	appendStringInfo(command,
-					 "SELECT max(%s) FROM %s.%s",
-					 quote_identifier(NameStr(dim->fd.column_name)),
-					 quote_identifier(NameStr(ht->fd.schema_name)),
-					 quote_identifier(NameStr(ht->fd.table_name)));
-
-	res = SPI_execute_with_args(command->data,
-								0 /*=nargs*/,
-								NULL,
-								NULL,
-								NULL /*=Nulls*/,
-								true /*=read_only*/,
-								0 /*count*/);
-	if (res < 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 (errmsg("could not find the maximum time value for hypertable"),
-				  errdetail("SPI error when calculating continuous aggregate watermark: %d.",
-							res))));
-
-	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype);
-	maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
+	maxdat = ts_hypertable_get_open_dim_max_value(ht, 0, &max_isnull);
 
 	if (!max_isnull)
 	{
@@ -1091,9 +1061,6 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 		/* Nothing materialized, so return min */
 		watermark = ts_time_get_min(timetype);
 	}
-
-	res = SPI_finish();
-	Assert(res == SPI_OK_FINISH);
 
 	PG_RETURN_INT64(watermark);
 }
