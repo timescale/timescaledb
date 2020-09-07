@@ -16,16 +16,29 @@ setup
  SELECT 1,1, generate_series( '2018-12-01 00:00'::timestamp, '2018-12-31 12:00','1 minute') ;
 }
 
-teardown
-{ DROP TABLE DT; DROP table ST; DROP table SL; }
+teardown {
+    DROP TABLE DT;
+    DROP table ST;
+    DROP table SL;
+}
 
 session "s1"
-setup	{ BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms'; }
+setup	{
+    BEGIN;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    SET LOCAL lock_timeout = '5000ms';
+    SET LOCAL deadlock_timeout = '10ms';
+}
 step "s1a"	{ SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamptz); }
 step "s1b"	{ COMMIT; }
 
 session "s2"
-setup	{ BEGIN; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms'; }
-step "s2a"	{  SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ; }
+setup	{
+    BEGIN;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    SET LOCAL lock_timeout = '5000ms';
+    SET LOCAL deadlock_timeout = '10ms';
+}
+step "s2a"	{ SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ; }
 step "s2b"	{ COMMIT; }
 
