@@ -253,9 +253,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	Dimension *time_dim;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
-		.start = PG_INT64_MIN,
-		.end = PG_INT64_MAX,
 	};
+
 	if (!OidIsValid(cagg_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid continuous aggregate")));
@@ -275,6 +274,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
 	}
+
 	cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	Assert(cagg_ht != NULL);
 	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
@@ -285,13 +285,26 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
 													  get_fn_expr_argtype(fcinfo->flinfo, 1),
 													  refresh_window.type);
+	else
+		refresh_window.start = ts_time_get_min(refresh_window.type);
 
 	if (!PG_ARGISNULL(2))
 		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
 													get_fn_expr_argtype(fcinfo->flinfo, 2),
 													refresh_window.type);
+	else
+		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
+
 	continuous_agg_refresh_internal(cagg, &refresh_window);
 	PG_RETURN_VOID();
+}
+
+static void
+emit_up_to_date_notice(const ContinuousAgg *cagg)
+{
+	elog(NOTICE,
+		 "continuous aggregate \"%s\" is already up-to-date",
+		 NameStr(cagg->data.user_view_name));
 }
 
 void
@@ -303,6 +316,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window;
 	InvalidationStore *invalidations = NULL;
+	int64 computed_invalidation_threshold;
+	int64 invalidation_threshold;
 
 	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
 
@@ -342,7 +357,37 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 */
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 					AccessExclusiveLock);
-	continuous_agg_invalidation_threshold_set(cagg->data.raw_hypertable_id, refresh_window.end);
+
+	/* Compute new invalidation threshold. Note that this computation caps the
+	 * threshold at the end of the last bucket that holds data in the
+	 * underlying hypertable. */
+	computed_invalidation_threshold = invalidation_threshold_compute(cagg, &refresh_window);
+
+	/* Set the new invalidation threshold. Note that this only updates the
+	 * threshold if the new value is greater than the old one. Otherwise, the
+	 * existing threshold is returned. */
+	invalidation_threshold = invalidation_threshold_set_or_get(cagg->data.raw_hypertable_id,
+															   computed_invalidation_threshold);
+
+	/* We must also cap the refresh window at the invalidation threshold. If
+	 * we process invalidations after the threshold, the continuous aggregates
+	 * won't be refreshed when the threshold is moved forward in the
+	 * future. The invalidation threshold should already be aligned on bucket
+	 * boundary. */
+	if (refresh_window.end > invalidation_threshold)
+	{
+		refresh_window.end = invalidation_threshold;
+
+		/* Capping the end might have made the window 0, or negative, so
+		 * nothing to refresh in that case */
+		if (refresh_window.start >= refresh_window.end)
+		{
+			emit_up_to_date_notice(cagg);
+			return;
+		}
+	}
+
+	/* Process invalidations in the hypertable invalidation log */
 	invalidation_process_hypertable_log(cagg, &refresh_window);
 
 	/* Start a new transaction. Note that this invalidates previous memory
@@ -370,7 +415,5 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		invalidation_store_free(invalidations);
 	}
 	else
-		elog(NOTICE,
-			 "continuous aggregate \"%s\" is already up-to-date",
-			 NameStr(cagg->data.user_view_name));
+		emit_up_to_date_notice(cagg);
 }

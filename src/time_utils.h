@@ -54,6 +54,10 @@
 	(TS_TIME_IS_INTEGER_TIME(type) || TS_TIME_DATUM_IS_NOBEGIN(timeval, type) ||                   \
 	 TS_TIME_DATUM_IS_NOEND(timeval, type))
 
+#define TS_TIME_IS_MIN(timeval, type) (timeval == ts_time_get_min(type))
+#define TS_TIME_IS_MAX(timeval, type) (timeval == ts_time_get_max(type))
+#define TS_TIME_IS_END(timeval, type)                                                              \
+	(!TS_TIME_IS_INTEGER_TIME(type) && timeval == ts_time_get_end(type))
 #define TS_TIME_IS_NOBEGIN(timeval, type)                                                          \
 	(!TS_TIME_IS_INTEGER_TIME(type) && timeval == ts_time_get_nobegin(type))
 #define TS_TIME_IS_NOEND(timeval, type)                                                            \
@@ -76,6 +80,7 @@ extern TSDLLEXPORT int64 ts_time_get_end(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_end_or_max(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_nobegin(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_get_noend(Oid timetype);
+extern TSDLLEXPORT int64 ts_time_get_noend_or_max(Oid timetype);
 extern TSDLLEXPORT int64 ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype);
 extern TSDLLEXPORT int64 ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype);
 

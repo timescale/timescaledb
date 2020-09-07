@@ -55,7 +55,7 @@ ts_run_continuous_agg_materialization(PG_FUNCTION_ARGS)
 
 	if (partial_view.name == NULL)
 		elog(ERROR, "view cannot be NULL");
-	invalidation_threshold = continuous_agg_invalidation_threshold_get(hypertable_id);
+	invalidation_threshold = invalidation_threshold_get(hypertable_id);
 	completed_threshold = ts_continuous_agg_get_completed_threshold(materialization_id);
 
 	if (lmv > completed_threshold)

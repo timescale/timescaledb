@@ -19,6 +19,7 @@
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
+#include <executor/spi.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
@@ -2680,4 +2681,52 @@ ts_hypertable_func_call_on_data_nodes(Hypertable *ht, FunctionCallInfo fcinfo)
 {
 	if (hypertable_is_distributed(ht))
 		ts_cm_functions->func_call_on_data_nodes(fcinfo, ts_hypertable_get_data_node_name_list(ht));
+}
+
+/*
+ * Get the max value of an open dimension.
+ */
+Datum
+ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, bool *isnull)
+{
+	StringInfo command;
+	Dimension *dim;
+	int res;
+	bool max_isnull;
+	Datum maxdat;
+
+	dim = hyperspace_get_open_dimension(ht->space, dimension_index);
+
+	if (NULL == dim)
+		elog(ERROR, "invalid open dimension index %d", dimension_index);
+
+	/* Query for the last bucket in the materialized hypertable */
+	command = makeStringInfo();
+	appendStringInfo(command,
+					 "SELECT max(%s) FROM %s.%s",
+					 quote_identifier(NameStr(dim->fd.column_name)),
+					 quote_identifier(NameStr(ht->fd.schema_name)),
+					 quote_identifier(NameStr(ht->fd.table_name)));
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == ts_dimension_get_partition_type(dim));
+	maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
+
+	if (isnull)
+		*isnull = max_isnull;
+
+	res = SPI_finish();
+	Assert(res == SPI_OK_FINISH);
+
+	return maxdat;
 }

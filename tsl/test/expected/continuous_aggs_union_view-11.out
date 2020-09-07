@@ -766,11 +766,17 @@ FROM timestamptz_table
 GROUP BY 1;
 -- Refresh first without data
 CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
+NOTICE:  continuous aggregate "int_agg" is already up-to-date
 CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
+NOTICE:  continuous aggregate "smallint_agg" is already up-to-date
 CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
+NOTICE:  continuous aggregate "bigint_agg" is already up-to-date
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
+NOTICE:  continuous aggregate "date_agg" is already up-to-date
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
+NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
 -- Watermarks at min for the above caggs:
 SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
 FROM _timescaledb_catalog.continuous_agg

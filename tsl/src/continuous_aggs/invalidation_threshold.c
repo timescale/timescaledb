@@ -10,6 +10,7 @@
 #include <nodes/memnodes.h>
 #include <storage/lockdefs.h>
 #include <storage/lmgr.h>
+#include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 
@@ -17,6 +18,8 @@
 #include <scanner.h>
 #include <scan_iterator.h>
 #include <compat.h>
+#include <time_utils.h>
+#include <time_bucket.h>
 
 #include "continuous_agg.h"
 #include "continuous_aggs/materialize.h"
@@ -84,11 +87,12 @@ scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 	else
 	{
 		elog(DEBUG1,
-			 "hypertable %d existing  watermark >= new invalidation threshold " INT64_FORMAT
+			 "hypertable %d existing watermark >= new invalidation threshold " INT64_FORMAT
 			 " " INT64_FORMAT,
 			 form->hypertable_id,
 			 form->watermark,
 			 invthresh->threshold);
+		invthresh->threshold = form->watermark;
 	}
 
 	if (should_free)
@@ -97,12 +101,17 @@ scan_update_invalidation_threshold(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
-/* every cont. agg calculates its invalidation_threshold point based on its
- *refresh_lag etc. We update the raw hypertable's invalidation threshold
- * only if this new value is greater than the existsing one.
+/*
+ * Set a new invalidation threshold.
+ *
+ * The threshold is only updated if the new threshold is greater than the old
+ * one.
+ *
+ * On success, the new threshold is returned, otherwise the existing threshold
+ * is returned instead.
  */
-bool
-continuous_agg_invalidation_threshold_set(int32 raw_hypertable_id, int64 invalidation_threshold)
+int64
+invalidation_threshold_set_or_get(int32 raw_hypertable_id, int64 invalidation_threshold)
 {
 	bool threshold_found;
 	InvalidationThresholdData data = {
@@ -156,10 +165,9 @@ continuous_agg_invalidation_threshold_set(int32 raw_hypertable_id, int64 invalid
 
 		ts_catalog_insert_values(rel, desc, values, nulls);
 		table_close(rel, NoLock);
-		data.was_updated = true;
 	}
 
-	return data.was_updated;
+	return data.threshold;
 }
 
 static ScanTupleResult
@@ -177,7 +185,7 @@ invalidation_threshold_tuple_found(TupleInfo *ti, void *data)
 }
 
 int64
-continuous_agg_invalidation_threshold_get(int32 hypertable_id)
+invalidation_threshold_get(int32 hypertable_id)
 {
 	int64 threshold = 0;
 	ScanKeyData scankey[1];
@@ -220,7 +228,7 @@ invalidation_threshold_htid_found(TupleInfo *tinfo, void *data)
  * block till lock is acquired.
  */
 void
-continuous_agg_invalidation_threshold_lock(int32 raw_hypertable_id)
+invalidation_threshold_lock(int32 raw_hypertable_id)
 {
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
@@ -258,4 +266,48 @@ continuous_agg_invalidation_threshold_lock(int32 raw_hypertable_id)
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("found multiple invalidation rows for hypertable %d", raw_hypertable_id)));
 	}
+}
+
+/*
+ * Compute a new invalidation threshold.
+ *
+ * The new invalidation threshold returned is the end of the given refresh
+ * window, unless it ends at "infinity" in which case the threshold is capped
+ * at the end of the last bucket materialized.
+ */
+int64
+invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window)
+{
+	bool max_refresh = false;
+	Hypertable *ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+
+	if (TS_TIME_IS_INTEGER_TIME(refresh_window->type))
+		max_refresh = TS_TIME_IS_MAX(refresh_window->end, refresh_window->type);
+	else
+		max_refresh = TS_TIME_IS_END(refresh_window->end, refresh_window->type) ||
+					  TS_TIME_IS_NOEND(refresh_window->end, refresh_window->type);
+
+	if (max_refresh)
+	{
+		bool isnull;
+		Datum maxdat = ts_hypertable_get_open_dim_max_value(ht, 0, &isnull);
+
+		if (isnull)
+		{
+			/* No data in hypertable, so return min (start of time) */
+			return ts_time_get_min(refresh_window->type);
+		}
+		else
+		{
+			int64 maxval = ts_time_value_to_internal(maxdat, refresh_window->type);
+			int64 bucket_start =
+				ts_time_bucket_by_type(cagg->data.bucket_width, maxval, refresh_window->type);
+			/* Add one bucket to get to the end of the last bucket */
+			return ts_time_saturating_add(bucket_start,
+										  cagg->data.bucket_width,
+										  refresh_window->type);
+		}
+	}
+
+	return refresh_window->end;
 }

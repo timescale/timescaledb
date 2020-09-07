@@ -15,22 +15,22 @@ SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
 
-CREATE OR REPLACE FUNCTION cond_now()
+CREATE OR REPLACE FUNCTION bigint_now()
 RETURNS bigint LANGUAGE SQL STABLE AS
 $$
     SELECT coalesce(max(time), 0)
     FROM conditions
 $$;
 
-CREATE OR REPLACE FUNCTION measure_now()
+CREATE OR REPLACE FUNCTION int_now()
 RETURNS int LANGUAGE SQL STABLE AS
 $$
     SELECT coalesce(max(time), 0)
     FROM measurements
 $$;
 
-SELECT set_integer_now_func('conditions', 'cond_now');
-SELECT set_integer_now_func('measurements', 'measure_now');
+SELECT set_integer_now_func('conditions', 'bigint_now');
+SELECT set_integer_now_func('measurements', 'int_now');
 
 INSERT INTO conditions
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int,
@@ -515,3 +515,135 @@ INSERT INTO conditions VALUES (0, 1, 1.0), (1, 1, 2.0), (2, 1, 3.0);
 CALL refresh_continuous_aggregate('cond_1', 0, 3);
 SELECT * FROM cond_1
 ORDER BY 1,2;
+
+----------------------------------------------
+-- Test that invalidation threshold is capped
+----------------------------------------------
+CREATE table threshold_test (time int, value int);
+SELECT create_hypertable('threshold_test', 'time', chunk_time_interval => 4);
+SELECT set_integer_now_func('threshold_test', 'int_now');
+
+CREATE MATERIALIZED VIEW thresh_2
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(2, time) AS bucket, max(value) AS max
+FROM threshold_test
+GROUP BY 1;
+
+SELECT raw_hypertable_id AS thresh_hyper_id, mat_hypertable_id AS thresh_cagg_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'thresh_2' \gset
+
+-- There's no invalidation threshold initially
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id
+ORDER BY 1,2;
+
+-- Test that threshold is initilized to min value when there's no data
+-- and we specify an infinite end. Note that the min value may differ
+-- depending on time type.
+CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id
+ORDER BY 1,2;
+
+INSERT INTO threshold_test
+SELECT v, v FROM generate_series(1, 10) v;
+
+CALL refresh_continuous_aggregate('thresh_2', 0, 5);
+
+-- Threshold should move to end of refresh window (note that window
+-- expands to end of bucket).
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id
+ORDER BY 1,2;
+
+-- Refresh where both the start and end of the window is above the
+-- max data value
+CALL refresh_continuous_aggregate('thresh_2', 14, NULL);
+
+SELECT watermark AS thresh_hyper_id_watermark
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id \gset
+
+-- Refresh where we start from the current watermark to infinity
+CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_watermark, NULL);
+
+-- Now refresh with max end of the window to test that the
+-- invalidation threshold is capped at the last bucket of data
+CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id
+ORDER BY 1,2;
+
+-- Should not have processed invalidations beyond the invalidation
+-- threshold.
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       WHERE materialization_id = :thresh_cagg_id
+       ORDER BY 1,2,3;
+
+-- Check that things are properly materialized
+SELECT * FROM thresh_2
+ORDER BY 1;
+
+-- Delete the last data
+SELECT show_chunks AS chunk_to_drop
+FROM show_chunks('threshold_test')
+ORDER BY 1 DESC
+LIMIT 1 \gset
+
+DELETE FROM threshold_test
+WHERE time > 6;
+
+-- The last data in the hypertable is gone
+SELECT time_bucket(2, time) AS bucket, max(value) AS max
+FROM threshold_test
+GROUP BY 1
+ORDER BY 1;
+
+-- The aggregate still holds data
+SELECT * FROM thresh_2
+ORDER BY 1;
+
+-- Refresh the aggregate to bring it up-to-date
+CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
+
+-- Data also gone from the aggregate
+SELECT * FROM thresh_2
+ORDER BY 1;
+
+-- The invalidation threshold remains the same
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id
+ORDER BY 1,2;
+
+-- Insert new data beyond the invalidation threshold to move it
+-- forward
+INSERT INTO threshold_test
+SELECT v, v FROM generate_series(7, 15) v;
+
+CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
+
+-- Aggregate now updated to reflect newly aggregated data
+SELECT * FROM thresh_2
+ORDER BY 1;
+
+-- The invalidation threshold should have moved forward to the end of
+-- the new data
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :thresh_hyper_id
+ORDER BY 1,2;
+
+-- The aggregate remains invalid beyond the invalidation threshold
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       WHERE materialization_id = :thresh_cagg_id
+       ORDER BY 1,2,3;
