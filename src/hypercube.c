@@ -172,25 +172,33 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 	for (i = 0; i < constraints->num_constraints; i++)
 	{
 		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
+		ScanTupLock tuplock = {
+			.lockmode = LockTupleKeyShare,
+			.waitpolicy = LockWaitBlock,
+#if PG12_GE
+			.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+#endif
+		};
 
 		if (is_dimension_constraint(cc))
 		{
 			DimensionSlice *slice;
-			ScanTupLock tuplock = {
-				.lockmode = LockTupleKeyShare,
-				.waitpolicy = LockWaitBlock,
-#if PG12_GE
-				.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
-#endif
-			};
+			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
+
 			/* When building the hypercube, we reference the dimension slices
-			 * to construct the hypercube. This means that we need to add a
-			 * tuple lock on the dimension slices to prevent them from being
-			 * removed by a concurrently executing operation. */
-			slice =
-				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id, &tuplock, mctx);
+			 * to construct the hypercube.
+			 *
+			 * However, we cannot add a tuple lock when running in recovery
+			 * mode since that prevents SELECT statements (which reach this
+			 * point) from running on a read-only secondary (which runs in
+			 * ephemeral recovery mode), so we only take the lock if we are not
+			 * in recovery mode.
+			 */
+			slice = ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
+														   tuplock_ptr,
+														   mctx);
 			Assert(slice != NULL);
 			hc->slices[hc->num_slices++] = slice;
 		}
