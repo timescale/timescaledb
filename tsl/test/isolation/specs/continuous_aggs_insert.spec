@@ -16,6 +16,16 @@ setup
         AS SELECT time_bucket('5', time), COUNT(location)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
+
+    CREATE OR REPLACE FUNCTION lock_cagg(cagg name) RETURNS void AS $$
+    DECLARE
+      mattable text;
+    BEGIN
+      SELECT format('%I.%I', user_view_schema, user_view_name)
+      FROM _timescaledb_catalog.continuous_agg
+      INTO mattable;
+      EXECUTE format('LOCK table %s IN EXCLUSIVE MODE', mattable);
+    END; $$ LANGUAGE plpgsql;
 }
 
 teardown {
@@ -42,15 +52,15 @@ step "SV1"	{ SELECT * FROM continuous_view order by 1; }
 
 session "R"
 setup { SET client_min_messages TO LOG; }
-step "Refresh"	{ REFRESH MATERIALIZED VIEW continuous_view; }
+step "Refresh"	{ CALL refresh_continuous_aggregate('continuous_view', NULL, 15); }
 
 session "R1"
 setup { SET client_min_messages TO LOG; }
-step "Refresh1"	{ REFRESH MATERIALIZED VIEW continuous_view; }
+step "Refresh1"	{ CALL refresh_continuous_aggregate('continuous_view', NULL, 15); }
 
 session "R2"
 setup { SET lock_timeout = '500ms'; SET deadlock_timeout = '10ms'; }
-step "Refresh2"	{ REFRESH MATERIALIZED VIEW continuous_view; }
+step "Refresh2"	{ CALL refresh_continuous_aggregate('continuous_view', NULL, 15); }
 teardown { SET lock_timeout TO default; SET deadlock_timeout to default; }
 
 # the invalidation log is copied in the first materialization tranasction
@@ -68,26 +78,28 @@ session "LIE"
 step "LockInvalThrEx" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold ; }
 step "UnlockInvalThrEx" { ROLLBACK; }
 
-#the completed threshold will block the REFRESH in the second materialization
-# txn , but not the INSERT
+# locking a cagg's materialized hypertable will block the REFRESH in
+# the second transaction, but not INSERTs.
 session "LC"
-step "LockCompleted" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold; }
-step "UnlockCompleted" { ROLLBACK; }
+step "LockCagg" { BEGIN; SELECT lock_cagg('continuous_view'); }
+step "UnlockCagg" { ROLLBACK; }
 
 # the materialization invalidation log
 session "LM"
 step "LockMatInval" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log; }
 step "UnlockMatInval" { ROLLBACK; }
 #only one refresh
-permutation "LockCompleted" "Refresh2" "Refresh"  "UnlockCompleted"
+permutation "LockInvalThrEx" "Refresh2" "Refresh"  "UnlockInvalThrEx"
 
-#refresh and insert do not block each other
-permutation "Ib" "LockCompleted" "I1" "Refresh" "Ic" "UnlockCompleted"
-permutation "Ib" "LockCompleted" "Refresh" "I1" "Ic" "UnlockCompleted"
-#refresh and select can run concurrently. refresh blocked only by lock on
-# completed. Needs RowExclusive for 2nd txn.
-permutation "Sb" "LockCompleted" "Refresh" "S1" "Sc" "UnlockCompleted"
-permutation "Sb" "LockCompleted" "S1" "Refresh" "Sc" "UnlockCompleted"
+#refresh and insert do not block each other once refresh is out of the
+#first transaction where it moves the invalidation threshold
+permutation "Ib" "LockCagg" "I1" "Refresh" "Ic" "UnlockCagg"
+permutation "Ib" "LockCagg" "Refresh" "I1" "Ic" "UnlockCagg"
+
+#refresh and select can run concurrently. Refresh blocked only by lock on
+# cagg's materialized hypertable. Needs RowExclusive for 2nd txn.
+permutation "Sb" "LockCagg" "Refresh" "S1" "Sc" "UnlockCagg"
+permutation "Sb" "LockCagg" "S1" "Refresh" "Sc" "UnlockCagg"
 
 #refresh will see new invalidations (you can tell since they are waiting on the invalidation log lock)
 permutation "Ib" "LockInvalThr" "Refresh" "I1" "Ic" "UnlockInvalThr"
@@ -96,7 +108,10 @@ permutation "Ib" "LockInvalThr" "I1" "Refresh" "Ic" "UnlockInvalThr"
 #with no invalidation threshold, inserts will not write to the invalidation log
 permutation "Ib" "LockInval" "I1" "Ic" "Refresh" "UnlockInval"
 
-#inserts beyond the invalidation will not write to the log
+#inserts beyond the invalidation will not write to the log, but since
+#the refresh currently takes an exclusive lock on the invalidation
+#threshold table (even if not updating the threshold) it will block
+#inserts in the first transaction of the refresh
 permutation "Ipb" "LockInval" "Refresh" "Ip1" "Ipc" "UnlockInval"
 permutation "Ipb" "LockInval" "Ip1" "Refresh" "Ipc" "UnlockInval"
 permutation "Ipb" "LockInval" "Ip1" "Ipc" "Refresh" "UnlockInval"

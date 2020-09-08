@@ -12,7 +12,7 @@ CREATE TABLE conditions (
       location    TEXT              NOT NULL,
       temperature integer  NULL,
       humidity    DOUBLE PRECISION  NULL,
-	  timemeasure TIMESTAMPTZ,
+      timemeasure TIMESTAMPTZ,
       timeinterval INTERVAL
     );
 select table_name from create_hypertable( 'conditions', 'timec');
@@ -349,25 +349,8 @@ CREATE TABLE conditions (
 
 select table_name from create_hypertable( 'conditions', 'timec');
 
-\set ON_ERROR_STOP 0
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 joules')
-as
-select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket('1day', timec) WITH NO DATA;
-\set ON_ERROR_STOP 1
-
-create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours')
-as
-select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket('1day', timec) WITH NO DATA;
-
-create materialized view mat_with_test_no_inval( timec, minl, sumt , sumh)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '5 hours',
-               timescaledb.ignore_invalidation_older_than='0')
+WITH (timescaledb.continuous)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -385,10 +368,7 @@ WHERE user_view_name = 'mat_with_test'
 \set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
-ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.refresh_lag = '1 joule');
-ALTER MATERIALIZED VIEW mat_with_test RESET(timescaledb.refresh_lag);
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;
-ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET(timescaledb.refresh_lag = '1 hour');
 \set ON_ERROR_STOP 1
 
 DROP TABLE conditions CASCADE;
@@ -411,14 +391,14 @@ SELECT set_integer_now_func('conditions', 'integer_now_test_s');
 
 \set ON_ERROR_STOP 0
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '1 hour')
+WITH (timescaledb.continuous)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '32768')
+WITH (timescaledb.continuous)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -427,37 +407,7 @@ group by time_bucket(100, timec) WITH NO DATA;
 ALTER TABLE conditions ALTER timec type int;
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483648')
-as
-select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket(100, timec) WITH NO DATA;
-
--- max_interval_per_job must be at least time_bucket
-create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='10')
-as
-select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket(100, timec) WITH NO DATA;
-
---ignore_invalidation_older_than must be positive
-create materialized view mat_with_test( timec, minl, sumt , sumh)
-        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='-10')
-as
-select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket(100, timec) WITH NO DATA;
-
-create materialized view mat_with_test( timec, minl, sumt , sumh)
-        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='1 hour')
-as
-select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
-from conditions
-group by time_bucket(100, timec) WITH NO DATA;
-
-create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647')
+WITH (timescaledb.continuous)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -481,7 +431,7 @@ CREATE OR REPLACE FUNCTION integer_now_test_b() returns bigint LANGUAGE SQL STAB
 SELECT set_integer_now_func('conditions', 'integer_now_test_b');
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '2147483647')
+WITH (timescaledb.continuous)
 as
 select time_bucket(BIGINT '100', timec), min(location), sum(temperature),sum(humidity)
 from conditions

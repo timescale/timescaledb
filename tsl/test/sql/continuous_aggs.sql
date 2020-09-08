@@ -592,15 +592,13 @@ WHERE user_view_name = 'mat_drop_test'
 \gset
 
 SET client_min_messages TO LOG;
-SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
-REFRESH MATERIALIZED VIEW mat_drop_test;
+CALL refresh_continuous_aggregate('mat_drop_test', NULL, NULL);
 
 --force invalidation
 insert into conditions
 select generate_series('2017-11-01 00:00'::timestamp, '2017-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL;
 
 select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-select count(*) from _timescaledb_catalog.continuous_aggs_completed_threshold;
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 DROP TABLE conditions CASCADE;
@@ -610,7 +608,6 @@ SELECT count(*)
 FROM _timescaledb_catalog.continuous_agg ca
 WHERE user_view_name = 'mat_drop_test';
 select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-select count(*) from _timescaledb_catalog.continuous_aggs_completed_threshold;
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 
@@ -636,7 +633,8 @@ CREATE TABLE conditions (
 select table_name from create_hypertable( 'conditions', 'timec');
 
 CREATE MATERIALIZED VIEW mat_with_test(timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours')
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -645,11 +643,8 @@ group by time_bucket('1day', timec), location, humidity, temperature WITH NO DAT
 SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval);
 SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
-SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 
-ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.refresh_lag = '6 h');
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 
 select indexname, indexdef from pg_indexes where tablename =
@@ -662,7 +657,9 @@ order by indexname;
 DROP MATERIALIZED VIEW mat_with_test;
 --no additional indexes
 CREATE MATERIALIZED VIEW mat_with_test(timec, minl, sumt , sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '5 hours', timescaledb.create_group_indexes=false)
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true,
+      timescaledb.create_group_indexes=false)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -693,7 +690,8 @@ CREATE OR REPLACE FUNCTION integer_now_conditions() returns int LANGUAGE SQL STA
 SELECT set_integer_now_func('conditions', 'integer_now_conditions');
 
 CREATE MATERIALIZED VIEW mat_with_test(timec, minl, sumt , sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '500')
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -703,14 +701,6 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
-SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
-
-ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.refresh_lag = '100');
-SELECT refresh_lag FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
-
--- we can SET multiple options in one commad
-ALTER MATERIALIZED VIEW mat_with_test SET (timescaledb.refresh_lag = '100', timescaledb.max_interval_per_job='400');
-SELECT refresh_lag, max_interval_per_job FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
 
 DROP TABLE conditions CASCADE;
 
@@ -733,7 +723,8 @@ CREATE OR REPLACE FUNCTION integer_now_space_table() returns BIGINT LANGUAGE SQL
 SELECT set_integer_now_func('space_table', 'integer_now_space_table');
 
 CREATE MATERIALIZED VIEW space_view
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-2')
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
 AS SELECT time_bucket('4', time), COUNT(data)
    FROM space_table
    GROUP BY 1 WITH NO DATA;
@@ -757,7 +748,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
   ORDER BY time_bucket, chunk_id;
 
 
-REFRESH MATERIALIZED VIEW space_view;
+CALL refresh_continuous_aggregate('space_view', NULL, NULL);
 
 SELECT * FROM space_view ORDER BY 1;
 
@@ -767,7 +758,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (3, 2, 1);
 
-REFRESH MATERIALIZED VIEW space_view;
+CALL refresh_continuous_aggregate('space_view', NULL, NULL);
 
 SELECT * FROM space_view ORDER BY 1;
 
@@ -777,7 +768,7 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 
 INSERT INTO space_table VALUES (2, 3, 1);
 
-REFRESH MATERIALIZED VIEW space_view;
+CALL refresh_continuous_aggregate('space_view', NULL, NULL);
 
 SELECT * FROM space_view ORDER BY 1;
 
@@ -839,33 +830,29 @@ select generate_series(0, 200, 10), 'POR', 55, 75, 40, 70, NULL;
 
 
 CREATE MATERIALIZED VIEW mat_ffunc_test
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test'::text)
 from conditions
-group by time_bucket(100, timec) WITH NO DATA;
-
-REFRESH MATERIALIZED VIEW mat_ffunc_test;
+group by time_bucket(100, timec);
 
 SELECT * FROM mat_ffunc_test;
 
 DROP MATERIALIZED view mat_ffunc_test;
 
 CREATE MATERIALIZED VIEW mat_ffunc_test
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigint '123')
 from conditions
-group by time_bucket(100, timec) WITH NO DATA;
-
-REFRESH MATERIALIZED VIEW mat_ffunc_test;
+group by time_bucket(100, timec);
 
 SELECT * FROM mat_ffunc_test;
 
 --refresh mat view test when time_bucket is not projected --
 DROP MATERIALIZED VIEW mat_ffunc_test;
 CREATE MATERIALIZED VIEW mat_refresh_test
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select location, max(humidity)
 from conditions
@@ -874,75 +861,20 @@ group by time_bucket(100, timec), location WITH NO DATA;
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 
-REFRESH MATERIALIZED VIEW mat_refresh_test;
+CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
 SELECT * FROM mat_refresh_test order by 1,2 ;
 
 -- test for bug when group by is not in project list
-CREATE MATERIALIZED VIEW conditions_grpby_view with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
-select time_bucket(100, timec),  sum(humidity) 
-from conditions 
-group by time_bucket(100, timec), location WITH NO DATA;
-REFRESH MATERIALIZED VIEW conditions_grpby_view;
+CREATE MATERIALIZED VIEW conditions_grpby_view with (timescaledb.continuous) as
+select time_bucket(100, timec),  sum(humidity)
+from conditions
+group by time_bucket(100, timec), location;
 select * from conditions_grpby_view order by 1, 2;
 
-CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as
+CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous) as
 select time_bucket(100, timec), sum(humidity)
 from conditions
 group by time_bucket(100, timec), location
-having avg(temperature) > 0
- WITH NO DATA;
-REFRESH MATERIALIZED VIEW conditions_grpby_view2;
+having avg(temperature) > 0;
+
 select * from conditions_grpby_view2 order by 1, 2;
-
-
---test ignore_invalidation_older_than on timestamps-based ht
-
-DROP TABLE conditions CASCADE;
-CREATE TABLE conditions (
-                            time       TIMESTAMPTZ       NOT NULL,
-                            temperature DOUBLE PRECISION  NULL
-);
-
-select table_name from create_hypertable( 'conditions', 'time');
-
-create materialized view mat_test5( timec, maxt)
-        WITH ( timescaledb.continuous, timescaledb.ignore_invalidation_older_than='30 day', timescaledb.refresh_lag='-1day',
-               timescaledb.max_interval_per_job='260 day')
-as
-select time_bucket('1day', time), max(temperature)
-from conditions
-group by time_bucket('1day', time) WITH NO DATA;
-
-SET timescaledb.current_timestamp_mock = '2001-03-11';
-insert into conditions values('2001-03-10', '1');
-insert into conditions values('2001-03-10', '2');
-
-REFRESH MATERIALIZED VIEW mat_test5;
-SELECT * FROM mat_test5;
-
-insert into conditions values('2001-02-15', '1');
-insert into conditions values('2001-01-15', '1');
-
-REFRESH MATERIALIZED VIEW mat_test5;
---will see the feb but not the january change
-SELECT * FROM mat_test5;
-
---what matters is the time at insertion not materialization
-SET timescaledb.current_timestamp_mock = '2001-03-11';
---will see this change
-insert into conditions values('2001-02-15', '3');
-SET timescaledb.current_timestamp_mock = '2001-05-11';
---but not this one
-insert into conditions values('2001-02-20', '4');
-REFRESH MATERIALIZED VIEW mat_test5;
-SELECT * FROM mat_test5;
---verify that watermark is limited by max value and not by
--- the current time (now value)--
-SET timescaledb.current_timestamp_mock = '2018-05-11';
-SELECT view_name, completed_threshold, invalidation_threshold
-FROM timescaledb_information.continuous_aggregate_stats
-where view_name::text like 'mat_test5';
-REFRESH MATERIALIZED VIEW mat_test5;
-SELECT view_name, completed_threshold, invalidation_threshold
-FROM timescaledb_information.continuous_aggregate_stats
-where view_name::text like 'mat_test5';

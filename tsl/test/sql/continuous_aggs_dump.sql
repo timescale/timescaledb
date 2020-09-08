@@ -86,21 +86,20 @@ DROP MATERIALIZED VIEW IF EXISTS mat_test;
 --materialize this VIEW before dump this tests
 --that the partial state survives the dump intact
 CREATE MATERIALIZED VIEW mat_before
-WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
+WITH (timescaledb.continuous)
 AS :QUERY_BEFORE WITH NO DATA;
 
 --materialize this VIEW after dump this tests
 --that the partialize VIEW and refresh mechanics
 --survives the dump intact
 CREATE MATERIALIZED VIEW mat_after
-WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
+WITH (timescaledb.continuous)
 AS :QUERY_AFTER WITH NO DATA;
 
 --materialize mat_before
 
 SET client_min_messages TO LOG;
-SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
-REFRESH MATERIALIZED VIEW mat_before;
+CALL refresh_continuous_aggregate('mat_before', NULL, NULL);
 
 SELECT count(*) FROM conditions_before;
 SELECT count(*) FROM conditions_after;
@@ -141,8 +140,7 @@ DROP VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME";
 \set ON_ERROR_STOP 1
 
 --materialize mat_after
-SET timescaledb.current_timestamp_mock = '2019-02-01 00:00';
-REFRESH MATERIALIZED VIEW mat_after;
+CALL refresh_continuous_aggregate('mat_after', NULL, NULL);
 SELECT count(*) FROM mat_after;
 
 --compare results

@@ -48,12 +48,9 @@ SELECT * FROM device_summary;
 --------+-----------+------------+---------------
 (0 rows)
 
---Normally, the continuous view will be updated automatically on a schedule but, you can also do it manually.
---We alter max_interval_per_job too since we are not using background workers
-ALTER MATERIALIZED VIEW device_summary SET (timescaledb.max_interval_per_job = '60 day');
-SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
-REFRESH MATERIALIZED VIEW device_summary;
-LOG:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to Sun Dec 30 22:00:00 2018 PST
+-- Simulate a policy that refreshes with lag, i.e., it doesn't refresh
+-- the entire data set. In this case up to the given date.
+CALL refresh_continuous_aggregate('device_summary', NULL, '2018-12-30 22:00');
 --Now you can run selects over your view as normal
 SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, device_id LIMIT 10;
             bucket            | device_id | metric_avg | metric_spread 
@@ -91,7 +88,7 @@ view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_re
 SELECT * FROM timescaledb_information.continuous_aggregate_stats;
 -[ RECORD 1 ]----------+-----------------------------
 view_name              | device_summary
-completed_threshold    | Sun Dec 30 22:00:00 2018 PST
+completed_threshold    | 
 invalidation_threshold | Sun Dec 30 22:00:00 2018 PST
 job_id                 | 
 last_run_started_at    | 
@@ -130,12 +127,11 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 (1 row)
 
 --
--- Refresh lag
+-- Refresh with lag
 --
--- Materialization have a refresh lag, which means that the materialization will not contain
--- the most up-to-date data.
--- Namely, it will only contain data where: bucket end < (max(time)-refresh_lag)
---By default refresh_lag is 2 x bucket_width
+-- It is possible to use a policy or manual refresh with a lag, which
+-- means the materialization will not contain the most up-to-date
+-- data.
 SELECT max(observation_time) FROM device_readings;
              max              
 ------------------------------
@@ -148,13 +144,7 @@ SELECT max(bucket) FROM device_summary;
  Sun Dec 30 21:00:00 2018 PST
 (1 row)
 
---You can change the refresh_lag (equivalently, specify in WITH clause of CREATE VIEW)
---Negative values create materialization where the bucket ends after the max of the raw data.
---So to have you data always up-to-date make the refresh_lag (-bucket_width). Note this
---will slow down your inserts because of invalidation.
-ALTER MATERIALIZED VIEW device_summary SET (timescaledb.refresh_lag = '-1 hour');
-REFRESH MATERIALIZED VIEW device_summary;
-LOG:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to Mon Dec 31 01:00:00 2018 PST
+CALL refresh_continuous_aggregate('device_summary', NULL, '2018-12-31 01:00');
 SELECT max(observation_time) FROM device_readings;
              max              
 ------------------------------
@@ -186,10 +176,7 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
  Sun Dec 30 13:00:00 2018 PST | device_1  | 1546175700 |          1800
 (1 row)
 
-SET timescaledb.current_timestamp_mock = 'Sun Dec 30 13:01:00 2018 PST';
-REFRESH MATERIALIZED VIEW device_summary;
-LOG:  new materialization range not found for public.device_readings (time column observation_time): not enough new data past completion threshold of Mon Dec 31 01:00:00 2018 PST as of Sun Dec 30 13:01:00 2018 PST
-LOG:  materializing continuous aggregate public.device_summary: processing invalidations, no new range
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL);
 --But is reflected after.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
             bucket            | device_id |    metric_avg    | metric_spread 
@@ -253,12 +240,9 @@ SELECT
   max(metric)-min(metric) as metric_spread
 FROM
   device_readings
-GROUP BY bucket, device_id WITH NO DATA;
+GROUP BY bucket, device_id WITH DATA;
 NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, bucket)
-REFRESH MATERIALIZED VIEW device_summary;
-LOG:  new materialization range for public.device_readings (time column observation_time) larger than allowed in one run, truncating Sun Dec 30 11:00:00 2018 PST to Sat Dec 01 20:00:00 2018 PST
-LOG:  materializing continuous aggregate public.device_summary: nothing to invalidate, new range up to Sat Dec 01 20:00:00 2018 PST
-WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
+NOTICE:  refreshing continuous aggregate "device_summary"
 SELECT min(min_time)::timestamp FROM device_summary;
            min            
 --------------------------
@@ -313,10 +297,10 @@ SELECT * FROM device_readings_jit ORDER BY time_bucket;
           40 | 400
 (4 rows)
 
-REFRESH MATERIALIZED VIEW device_readings_mat_only;
-LOG:  materializing continuous aggregate public.device_readings_mat_only: nothing to invalidate, new range up to 30
-REFRESH MATERIALIZED VIEW device_readings_jit;
-LOG:  materializing continuous aggregate public.device_readings_jit: nothing to invalidate, new range up to 30
+-- simulate a refresh policy with lag, i.e., one that doesn't refresh
+-- up to the latest data. Max value is 40.
+CALL refresh_continuous_aggregate('device_readings_mat_only', NULL, 30);
+CALL refresh_continuous_aggregate('device_readings_jit', NULL, 30);
 -- materialization only should have 2 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
  time_bucket | avg 
@@ -364,10 +348,8 @@ $BODY$
   SELECT 100;
 $BODY$;
 -- refresh should materialize all now
-REFRESH MATERIALIZED VIEW device_readings_mat_only;
-LOG:  materializing continuous aggregate public.device_readings_mat_only: nothing to invalidate, new range up to 70
-REFRESH MATERIALIZED VIEW device_readings_jit;
-LOG:  materializing continuous aggregate public.device_readings_jit: nothing to invalidate, new range up to 70
+CALL refresh_continuous_aggregate('device_readings_mat_only', NULL, NULL);
+CALL refresh_continuous_aggregate('device_readings_jit', NULL, NULL);
 -- materialization only should have 6 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
  time_bucket | avg 
@@ -407,10 +389,10 @@ SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
   FROM whatever GROUP BY bucket WITH NO DATA;
 SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
           FROM _timescaledb_catalog.hypertable
-	 WHERE id = raw_hypertable_id) AS raw_table
+     WHERE id = raw_hypertable_id) AS raw_table
      , (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
           FROM _timescaledb_catalog.hypertable
-	 WHERE id = mat_hypertable_id) AS mat_table
+     WHERE id = mat_hypertable_id) AS mat_table
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'whatever_summary' \gset
 SELECT relname FROM pg_class WHERE oid = :mat_table;

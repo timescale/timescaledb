@@ -49,7 +49,7 @@ CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABL
 
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
 
-CREATE MATERIALIZED VIEW drop_chunks_view1 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.max_interval_per_job=100)
+CREATE MATERIALIZED VIEW drop_chunks_view1 WITH (timescaledb.continuous)
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
@@ -60,7 +60,7 @@ SELECT set_chunk_time_interval('_timescaledb_internal._materialized_hypertable_2
 \set ON_ERROR_STOP 0
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(1, 39) AS i;
 \set ON_ERROR_STOP 1
-REFRESH MATERIALIZED VIEW drop_chunks_view1;
+CALL refresh_continuous_aggregate('drop_chunks_view1', NULL, NULL);
 
 --TEST1  specify drop chunks policy on mat. hypertable by
 -- directly does not work

@@ -29,7 +29,6 @@ set(TEST_FILES_DEBUG
   continuous_aggs_ddl.sql
   continuous_aggs_drop_chunks.sql
   continuous_aggs_dump.sql
-  continuous_aggs_materialize.sql
   continuous_aggs_multi.sql
   continuous_aggs.sql
   continuous_aggs_usage.sql
@@ -107,7 +106,7 @@ endif()
 
 # the following tests will run by itself before the parallel
 # tests because they fail or are flaky when run in parallel
-# dist_views.sql sets some global information, so do not run it 
+# dist_views.sql sets some global information, so do not run it
 # in parallel
 set(SOLO_TESTS
   bgw_reorder_drop_chunks

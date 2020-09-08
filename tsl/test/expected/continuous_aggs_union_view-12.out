@@ -144,7 +144,7 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 (1 row)
 
 -- refresh
-REFRESH MATERIALIZED VIEW metrics_summary;
+CALL refresh_continuous_aggregate('metrics_summary', NULL, NULL);
 -- result should not change after refresh for union view
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
          time_bucket          | avg 
@@ -288,7 +288,7 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
  Fri Dec 31 16:00:00 1999 PST | 0.5
 (1 row)
 
-REFRESH MATERIALIZED VIEW metrics_summary;
+CALL refresh_continuous_aggregate('metrics_summary', NULL, NULL);
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
 -- materialized only view should return data now too because refresh has happened
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
@@ -316,8 +316,7 @@ SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
 (2 rows)
 
 -- and after refresh non union view should have new data too
-REFRESH MATERIALIZED VIEW metrics_summary;
-WARNING:  REFRESH did not materialize the entire range since it was limited by the max_interval_per_job setting
+CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-30');
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.materialized_only=true);
 SELECT time_bucket,avg FROM metrics_summary ORDER BY 1;
          time_bucket          | avg 
@@ -394,7 +393,9 @@ SELECT * FROM boundary_view ORDER BY time_bucket;
           40 | 400
 (4 rows)
 
-REFRESH MATERIALIZED VIEW boundary_view;
+-- Refresh up to 30 to leave some unmaterialized data at the head and
+-- thus have something to union.
+CALL refresh_continuous_aggregate('boundary_view', NULL, 30);
 -- watermark should be 30
 SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
  cagg_watermark 
@@ -465,21 +466,15 @@ SELECT set_integer_now_func('ht_intdata', 'integer_now_ht_intdata');
 (1 row)
 
 CREATE MATERIALIZED VIEW mat_m1(a, countb, sumbc, spreadcb, avgc)
-WITH (timescaledb.continuous, timescaledb.refresh_lag = 10)
+WITH (timescaledb.continuous)
 AS
 SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
 FROM ht_intdata
 WHERE b < 16
 GROUP BY time_bucket(1, a)
 HAVING sum(c) > 50 WITH NO DATA;
-REFRESH MATERIALIZED VIEW mat_m1;
-SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
-WHERE view_name::text like 'mat_m1';
- view_name | completed_threshold 
------------+---------------------
- mat_m1    | 11
-(1 row)
-
+-- Do partial refresh to have something to union
+CALL refresh_continuous_aggregate('mat_m1', NULL, 11);
 --results from real time cont.agg and direct query should match
 SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
 FROM ht_intdata
@@ -521,14 +516,7 @@ SELECT * FROM mat_m1 ORDER BY 1;
  31 |      2 |   129 |       56 |   50
 (3 rows)
 
-REFRESH MATERIALIZED VIEW mat_m1;
-SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
-WHERE view_name::text like 'mat_m1';
- view_name | completed_threshold 
------------+---------------------
- mat_m1    | 21
-(1 row)
-
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
 SELECT * FROM mat_m1 ORDER BY 1;
  a  | countb | sumbc | spreadcb | avgc 
 ----+--------+-------+----------+------
@@ -555,8 +543,7 @@ DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_12_chunk
 --- TEST union view with multiple WHERE and HAVING clauses
 CREATE MATERIALIZED VIEW mat_m1
-WITH (timescaledb.continuous, timescaledb.refresh_lag = 10,
-      timescaledb.max_interval_per_job = 100)
+WITH (timescaledb.continuous)
 AS
 SELECT time_bucket(5, a), sum(b+c)
 FROM ht_intdata
@@ -566,7 +553,8 @@ HAVING sum(c) > 50 and avg(b)::int > 12  WITH NO DATA;
 INSERT into ht_intdata values( 42 , 15 , 80);
 INSERT into ht_intdata values( 42 , 15 , 18);
 INSERT into ht_intdata values( 41 , 18 , 21);
-REFRESH MATERIALIZED VIEW mat_m1;
+-- Do partial refresh so that we leave data to UNION
+CALL refresh_continuous_aggregate('mat_m1', NULL, 25);
 SELECT mat_hypertable_id AS mat_m1_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'mat_m1' \gset
@@ -580,14 +568,6 @@ SELECT _timescaledb_internal.cagg_watermark(:mat_m1_id);
 -- Data inserted after refresh and after cagg_watermark should be
 -- reflected in the real-time aggregation
 INSERT into ht_intdata VALUES (34, 13, 65), (26, 12, 78), (28, 9, 32);
-SELECT view_name, completed_threshold
-FROM timescaledb_information.continuous_aggregate_stats
-WHERE view_name::text LIKE 'mat_m1';
- view_name | completed_threshold 
------------+---------------------
- mat_m1    | 30
-(1 row)
-
 --view and direct query should return same results
 SELECT * from mat_m1 ORDER BY 1;
  time_bucket | sum 
