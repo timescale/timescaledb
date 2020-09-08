@@ -461,7 +461,7 @@ jobs:
 
     # Coverity tests
 
-    - if: (branch = prerelease_test) OR (branch = coverity_scan)
+    - if: branch = coverity_scan
       name: "Coverity PG 11"
       env:
       before_install:
@@ -480,9 +480,9 @@ jobs:
           notification_email: ci@timescale.com
           build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && cd build"
           build_command: "make"
-          branch_pattern: coverity_scan|prerelease_test
+          branch_pattern: coverity_scan
 
-    - if: (branch = prerelease_test) OR (branch = coverity_scan)
+    - if: branch = coverity_scan
       name: "Coverity PG 12"
       env:
       before_install:
@@ -501,4 +501,4 @@ jobs:
           notification_email: ci@timescale.com
           build_command_prepend: "./bootstrap -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && cd build"
           build_command: "make"
-          branch_pattern: coverity_scan|prerelease_test
+          branch_pattern: coverity_scan
