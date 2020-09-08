@@ -319,3 +319,9 @@ SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_nam
        16384 |       65536 |           0 |       81920 | db_dist_compression_3
 (3 rows)
 
+-- Test compression policy with distributed hypertable
+--
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('compressed', '60d'::interval);
+ERROR:  add_compression_policy not implemented for distributed hypertable
+\set ON_ERROR_STOP 1

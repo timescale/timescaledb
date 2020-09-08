@@ -100,3 +100,8 @@ SELECT * FROM chunks_detailed_size('compressed'::regclass)
 ORDER BY chunk_name, node_name;
 SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_name;
 
+-- Test compression policy with distributed hypertable
+--
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('compressed', '60d'::interval);
+\set ON_ERROR_STOP 1
