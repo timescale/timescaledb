@@ -3456,10 +3456,14 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		 * CASCADE (we don't support it), so we replace the hint with a more
 		 * accurate hint for our situation. */
 		ErrorData *edata;
+
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
 		FlushErrorState();
-		edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+
+		if (edata->sqlerrcode == ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST)
+			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+
 		ts_cache_release(hcache);
 		ReThrowError(edata);
 	}
