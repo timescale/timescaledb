@@ -37,13 +37,7 @@ INSERT INTO clients(name) VALUES ('test-client');
 INSERT INTO records
 SELECT generate_series('2000-03-01'::timestamptz,'2000-04-01','1 day'),1,3.14;
 
-SET timescaledb.current_timestamp_mock = '2000-04-01';
-
 SELECT * FROM records_monthly;
-
-ALTER MATERIALIZED VIEW records_monthly SET (
-   timescaledb.ignore_invalidation_older_than = '15 days'
-);
 
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks

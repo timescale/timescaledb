@@ -3,7 +3,6 @@ set(SOURCES
   deparse.c
   test_chunk_stats.c
   test_compression.c
-  test_continuous_aggs.c
   test_ddl_hook.c
   test_dist_util.c
 )

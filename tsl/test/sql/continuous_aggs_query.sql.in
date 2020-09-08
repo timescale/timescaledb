@@ -46,30 +46,28 @@ insert into location_tab values( 2, 'NYC');
 insert into location_tab values( 3, 'por');
 
 create materialized view mat_m1( location, timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
+WITH (timescaledb.continuous)
 as
 select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location WITH NO DATA;
 
-SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 --compute time_bucketted max+bucket_width for the materialized view
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
-FROM ( select max(timec)as timeval from conditions ) as q; 
-REFRESH MATERIALIZED VIEW mat_m1;
+FROM ( select max(timec)as timeval from conditions ) as q;
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
 
 --test first/last
 create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
-WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
+WITH (timescaledb.continuous)
 as
 select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
 from conditions
 group by time_bucket('1day', timec), location WITH NO DATA;
 --time that refresh assumes as now() for repeatability
-SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
-FROM ( select max(timec)as timeval from conditions ) as q; 
-REFRESH MATERIALIZED VIEW mat_m2;
+FROM ( select max(timec)as timeval from conditions ) as q;
+CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
 
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
@@ -118,7 +116,7 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
 --plans with CTE
 :EXPLAIN
 with m1 as (
-Select * from mat_m2 where timec > '2018-10-01' order by timec desc ) 
+Select * from mat_m2 where timec > '2018-10-01' order by timec desc )
 select * from m1;
 
 -- should reorder mat_m1 group by only based on mat_m1 order-by
@@ -142,7 +140,7 @@ select * from mat_m2 where timec > '2018-10-01' order by timec desc;
 RESET client_min_messages;
 \set ECHO all
 
----- Run the same queries with hash agg enabled now 
+---- Run the same queries with hash agg enabled now
 set enable_hashagg = true;
 \set ECHO none
 SET client_min_messages TO error;
@@ -167,7 +165,7 @@ SELECT location, time_bucket('1day', timec) as timec, min(location) as minl, sum
 order by location, timec desc;
 SELECT location, time_bucket('1day', timec) as timec, min(location) as minl, sum(temperature) as sumt, sum(humidity) as sumh from conditions group by time_bucket('1day', timec) , location
 order by location, timec asc;
-select * from (SELECT location, time_bucket('1day', timec) as timec, min(location) as minl, sum(temperature) as sumt, sum(humidity) as sumh from conditions 
+select * from (SELECT location, time_bucket('1day', timec) as timec, min(location) as minl, sum(temperature) as sumt, sum(humidity) as sumh from conditions
 group by time_bucket('1day', timec) , location ) as q
 where timec > '2018-10-01' order by timec desc;
 --comparison for mat_m2 queries

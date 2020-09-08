@@ -23,12 +23,12 @@ session "SetupContinue"
 step "Setup2"
 {
     CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
     CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
+        WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
@@ -45,19 +45,19 @@ step "S1"	{ SELECT count(*) FROM ts_continuous_test; }
 
 session "R1"
 setup { SET client_min_messages TO LOG; }
-step "Refresh1"	{ REFRESH MATERIALIZED VIEW continuous_view_1; }
+step "Refresh1"	{ CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); }
 
 session "R1_sel"
 step "Refresh1_sel"	{ select * from continuous_view_1 where bkt = 0 or bkt > 30 }
 
 session "R2"
 setup { SET client_min_messages TO LOG; }
-step "Refresh2"	{ REFRESH MATERIALIZED VIEW continuous_view_2; }
+step "Refresh2"	{ CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL); }
 
 session "R2_sel"
 step "Refresh2_sel"	{ select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt; }
 
-#the completed threshold will block the REFRESH from writing 
+#the completed threshold will block the REFRESH from writing
 session "LC"
 step "LockCompleted" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE; }
 step "UnlockCompleted" { ROLLBACK; }
@@ -68,23 +68,19 @@ step "LockMat1" { BEGIN; select lock_mattable(materialization_hypertable::text) 
 }
 step "UnlockMat1" { ROLLBACK; }
 
-#alter the refresh_lag for continuous_view_1
-session "CVddl"
-step "AlterLag1" { alter materialized view continuous_view_1 set (timescaledb.refresh_lag = 10); }
-
 #update the hypertable
 session "Upd"
-step "U1" { update ts_continuous_test SET val = 5555 where time < 10; } 
-step "U2" { update ts_continuous_test SET val = 5 where time > 15 and time < 25; } 
+step "U1" { update ts_continuous_test SET val = 5555 where time < 10; }
+step "U2" { update ts_continuous_test SET val = 5 where time > 15 and time < 25; }
 
 #simulate an update to the invalidation threshold table that would lock the hypertable row
 #this would block refresh that needs to get a row lock for the hypertable
 session "LInv"
-step "LInvRow" { BEGIN; update _timescaledb_catalog.continuous_aggs_invalidation_threshold set watermark = 20 where hypertable_id in ( select raw_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1' ); 
+step "LInvRow" { BEGIN; update _timescaledb_catalog.continuous_aggs_invalidation_threshold set watermark = 20 where hypertable_id in ( select raw_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1' );
 }
 step "UnlockInvRow" { ROLLBACK; }
 
- 
+
 #refresh1, refresh2 can run concurrently
 permutation "Setup2" "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1"
 
@@ -93,9 +89,9 @@ permutation "Setup2" "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCom
 permutation "Setup2" "Refresh1" "Refresh2" "LockCompleted" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
 
 ##test2 - continuous_view_2 should see results from insert but not the other one.
-## Refresh2 will complete first due to LockMat1 and write the invalidation logs out. 
-permutation "Setup2" "AlterLag1" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCompleted" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+## Refresh2 will complete first due to LockMat1 and write the invalidation logs out.
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCompleted" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
 
 #test3 - both see the updates i.e. the invalidations
 ##Refresh1 and Refresh2 are blocked by LockInvRow, when that is unlocked, they should complete serially
-permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "U1" "U2" "LInvRow" "Refresh1" "Refresh2" "UnlockInvRow" "Refresh1_sel" "Refresh2_sel"   
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "U1" "U2" "LInvRow" "Refresh1" "Refresh2" "UnlockInvRow" "Refresh1_sel" "Refresh2_sel"

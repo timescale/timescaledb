@@ -2956,9 +2956,7 @@ SELECT time_bucket ('1d', time) AS time,
 FROM :TEST_TABLE
 WHERE device_id = 1
 GROUP BY 1,
-    2 WITH NO DATA;
-SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
-REFRESH MATERIALIZED VIEW cagg_test;
+    2 WITH DATA;
 SELECT time
 FROM cagg_test
 ORDER BY time
@@ -6702,9 +6700,7 @@ SELECT time_bucket ('1d', time) AS time,
 FROM :TEST_TABLE
 WHERE device_id = 1
 GROUP BY 1,
-    2 WITH NO DATA;
-SET timescaledb.current_timestamp_mock = 'Wed Jan 19 15:55:00 2000 PST';
-REFRESH MATERIALIZED VIEW cagg_test;
+    2 WITH DATA;
 SELECT time
 FROM cagg_test
 ORDER BY time

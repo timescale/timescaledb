@@ -42,42 +42,38 @@ insert into location_tab values( 1, 'SFO');
 insert into location_tab values( 2, 'NYC');
 insert into location_tab values( 3, 'por');
 create materialized view mat_m1( location, timec, minl, sumt , sumh)
-WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
+WITH (timescaledb.continuous)
 as
 select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_2_location_timec_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, timec)
-SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 --compute time_bucketted max+bucket_width for the materialized view
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
-FROM ( select max(timec)as timeval from conditions ) as q; 
+FROM ( select max(timec)as timeval from conditions ) as q;
          time_bucket          
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
 (1 row)
 
-REFRESH MATERIALIZED VIEW mat_m1;
-LOG:  materializing continuous aggregate public.mat_m1: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
+CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
 --test first/last
 create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
-WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
+WITH (timescaledb.continuous)
 as
 select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
 from conditions
 group by time_bucket('1day', timec), location WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_3_location_timec_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, timec)
 --time that refresh assumes as now() for repeatability
-SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
-FROM ( select max(timec)as timeval from conditions ) as q; 
+FROM ( select max(timec)as timeval from conditions ) as q;
          time_bucket          
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
 (1 row)
 
-REFRESH MATERIALIZED VIEW mat_m2;
-LOG:  materializing continuous aggregate public.mat_m2: nothing to invalidate, new range up to Sat Nov 03 17:00:00 2018 PDT
+CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
 --normal view --
 create or replace view regview( location, timec, minl, sumt , sumh)
 as
@@ -488,7 +484,7 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
 --plans with CTE
 :EXPLAIN
 with m1 as (
-Select * from mat_m2 where timec > '2018-10-01' order by timec desc ) 
+Select * from mat_m2 where timec > '2018-10-01' order by timec desc )
 select * from m1;
                                                                                                                                                                                                                                                                                                                                                                                                                                                         QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -674,7 +670,7 @@ select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01'
 (3 rows)
 
 \set ECHO none
----- Run the same queries with hash agg enabled now 
+---- Run the same queries with hash agg enabled now
 set enable_hashagg = true;
 \set ECHO none
 --- Run the queries directly on the table now

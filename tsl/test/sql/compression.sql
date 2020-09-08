@@ -37,7 +37,7 @@ select tgname , tgtype, tgenabled , relname
 from pg_trigger t, pg_class rel
 where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
 \x
-select * from chunk_compression_stats('foo') 
+select * from chunk_compression_stats('foo')
 order by chunk_name limit 2;
 \x
 select compress_chunk( '_timescaledb_internal._hyper_1_1_chunk');
@@ -158,7 +158,7 @@ SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
 SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
 
 \x
-SELECT chunk_id, numrows_pre_compression, numrows_post_compression 
+SELECT chunk_id, numrows_pre_compression, numrows_post_compression
 FROM _timescaledb_catalog.chunk srcch,
       _timescaledb_catalog.compression_chunk_size map,
      _timescaledb_catalog.hypertable srcht
@@ -168,18 +168,18 @@ order by chunk_id;
 
 select * from chunk_compression_stats('conditions')
 order by chunk_name;
-select * from hypertable_compression_stats('foo'); 
-select * from hypertable_compression_stats('conditions'); 
+select * from hypertable_compression_stats('foo');
+select * from hypertable_compression_stats('conditions');
 vacuum full foo;
 vacuum full conditions;
 -- After vacuum, table_bytes is 0, but any associated index/toast storage is not
 -- completely reclaimed. Sets it at 8K (page size). So a chunk which has
 -- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
-pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('foo');
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
-pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('conditions');
 select * from timescaledb_information.hypertables
 where table_name like 'foo' or table_name like 'conditions'
@@ -333,8 +333,7 @@ SELECT
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 
-SET timescaledb.current_timestamp_mock = '2000-01-10';
-REFRESH MATERIALIZED VIEW cagg_expr;
+CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
 ALTER TABLE metrics set(timescaledb.compress);
@@ -446,13 +445,13 @@ SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
 select chunk_name from chunk_compression_stats('ht5')
 order by chunk_name;
 
--- Test enabling compression for a table with compound foreign key 
+-- Test enabling compression for a table with compound foreign key
 -- (Issue https://github.com/timescale/timescaledb/issues/2000)
 CREATE TABLE table2(col1 INT, col2 int, primary key (col1,col2));
 CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
 ALTER TABLE table1 ADD CONSTRAINT fk_table1 FOREIGN KEY (col1,col2) REFERENCES table2(col1,col2);
 SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
--- Trying to list an incomplete set of fields of the compound key (should fail with a nice message) 
+-- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');

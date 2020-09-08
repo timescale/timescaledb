@@ -115,8 +115,7 @@ SELECT time, (random()*30)::int, random()*80 - 40
 FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
 
 CREATE MATERIALIZED VIEW conditions_summary
-WITH (timescaledb.continuous,
-      timescaledb.max_interval_per_job = '60 days') AS
+WITH (timescaledb.continuous) AS
 SELECT device,
        time_bucket(INTERVAL '1 hour', "time") AS day,
        AVG(temperature) AS avg_temperature,
@@ -128,9 +127,6 @@ GROUP BY device, time_bucket(INTERVAL '1 hour', "time") WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 
 ALTER TABLE conditions SET (timescaledb.compress);
-ALTER MATERIALIZED VIEW conditions_summary SET (
-      timescaledb.ignore_invalidation_older_than = '15 days'
-);
 
 SELECT COUNT(*) AS dropped_chunks_count
   FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00');

@@ -26,7 +26,7 @@ SELECT set_integer_now_func('conditions', 'integer_now_test1');
 
 
 CREATE MATERIALIZED VIEW mat_refresh_test
-WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
+WITH (timescaledb.continuous)
 as
 select location, max(humidity)
 from conditions
@@ -37,7 +37,7 @@ SELECT add_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, 
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 
-REFRESH MATERIALIZED VIEW  mat_refresh_test;
+CALL refresh_continuous_aggregate(' mat_refresh_test', NULL, NULL);
 
 SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
 SELECT materialization_hypertable FROM timescaledb_information.continuous_aggregates  WHERE view_name = 'mat_refresh_test'::regclass \gset
@@ -103,17 +103,17 @@ select from alter_job(:cagg_job_id, max_runtime => NULL);
 
 --make sure that commands fail
 
-ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
 DROP MATERIALIZED VIEW mat_refresh_test;
-REFRESH MATERIALIZED VIEW mat_refresh_test;
+CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
+
 SELECT * FROM mat_refresh_test;
 SELECT * FROM :materialization_hypertable;
 SELECT * FROM :"mat_chunk_schema".:"mat_chunk_table";
 
 --cannot create a mat view without select and trigger grants
 CREATE MATERIALIZED VIEW mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select location, max(humidity)
 from conditions_for_perm_check
@@ -121,7 +121,7 @@ group by time_bucket(100, timec), location WITH NO DATA;
 
 --cannot create mat view in a schema without create privileges
 CREATE MATERIALIZED VIEW custom_schema.mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select location, max(humidity)
 from conditions_for_perm_check_w_grant
@@ -130,25 +130,25 @@ group by time_bucket(100, timec), location WITH NO DATA;
 --cannot use a function without EXECUTE privileges
 --you can create a VIEW but cannot refresh it
 CREATE MATERIALIZED VIEW mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select location, max(humidity), get_constant()
 from conditions_for_perm_check_w_grant
 group by time_bucket(100, timec), location WITH NO DATA;
 
 --this should fail
-REFRESH MATERIALIZED VIEW mat_perm_view_test;
+CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
 DROP MATERIALIZED VIEW mat_perm_view_test;
 
 --can create a mat view on something with select and trigger grants
 CREATE MATERIALIZED VIEW mat_perm_view_test
-WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-200')
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select location, max(humidity)
 from conditions_for_perm_check_w_grant
 group by time_bucket(100, timec), location WITH NO DATA;
 
-REFRESH MATERIALIZED VIEW mat_perm_view_test;
+CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
 SELECT * FROM mat_perm_view_test;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -160,7 +160,7 @@ select generate_series(100, 130, 10), 'POR', 65, 85, 30, 90, NULL;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 --refresh mat view should now fail due to lack of permissions
-REFRESH MATERIALIZED VIEW mat_perm_view_test;
+CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
 
 --but the old data will still be there
 SELECT * FROM mat_perm_view_test;

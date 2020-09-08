@@ -88,7 +88,7 @@ where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgnam
 (1 row)
 
 \x
-select * from chunk_compression_stats('foo') 
+select * from chunk_compression_stats('foo')
 order by chunk_name limit 2;
 -[ RECORD 1 ]------------------+----------------------
 chunk_schema                   | _timescaledb_internal
@@ -360,7 +360,7 @@ SELECT _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME;
 (2 rows)
 
 \x
-SELECT chunk_id, numrows_pre_compression, numrows_post_compression 
+SELECT chunk_id, numrows_pre_compression, numrows_post_compression
 FROM _timescaledb_catalog.chunk srcch,
       _timescaledb_catalog.compression_chunk_size map,
      _timescaledb_catalog.hypertable srcht
@@ -405,7 +405,7 @@ after_compression_toast_bytes  | 8192
 after_compression_total_bytes  | 32768
 node_name                      | 
 
-select * from hypertable_compression_stats('foo'); 
+select * from hypertable_compression_stats('foo');
 -[ RECORD 1 ]------------------+------
 total_chunks                   | 4
 number_compressed_chunks       | 1
@@ -419,7 +419,7 @@ after_compression_toast_bytes  | 8192
 after_compression_total_bytes  | 49152
 node_name                      | 
 
-select * from hypertable_compression_stats('conditions'); 
+select * from hypertable_compression_stats('conditions');
 -[ RECORD 1 ]------------------+------
 total_chunks                   | 2
 number_compressed_chunks       | 2
@@ -439,7 +439,7 @@ vacuum full conditions;
 -- completely reclaimed. Sets it at 8K (page size). So a chunk which has
 -- been compressed still incurs an overhead of n * 8KB (for every index + toast table) storage on the original uncompressed chunk.
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
-pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('foo');
 -[ RECORD 1 ]--+-----------
 pg_size_pretty | 32 kB
@@ -448,7 +448,7 @@ pg_size_pretty | 8192 bytes
 pg_size_pretty | 184 kB
 
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
-pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes) 
+pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('conditions');
 -[ RECORD 1 ]--+------
 pg_size_pretty | 16 kB
@@ -948,8 +948,7 @@ NOTICE:  adding index _materialized_hypertable_14_const_time_idx ON _timescaledb
 NOTICE:  adding index _materialized_hypertable_14_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(numeric, time)
 NOTICE:  adding index _materialized_hypertable_14_case_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(case, time)
 NOTICE:  adding index _materialized_hypertable_14_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(coalesce, time)
-SET timescaledb.current_timestamp_mock = '2000-01-10';
-REFRESH MATERIALIZED VIEW cagg_expr;
+CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
 ------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
@@ -1136,7 +1135,7 @@ order by chunk_name;
  _hyper_20_45_chunk
 (1 row)
 
--- Test enabling compression for a table with compound foreign key 
+-- Test enabling compression for a table with compound foreign key
 -- (Issue https://github.com/timescale/timescaledb/issues/2000)
 CREATE TABLE table2(col1 INT, col2 int, primary key (col1,col2));
 CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
@@ -1147,7 +1146,7 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
  (22,public,table1,t)
 (1 row)
 
--- Trying to list an incomplete set of fields of the compound key (should fail with a nice message) 
+-- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compress_segmentby column for compression
 -- Listing all fields of the compound key should succeed:

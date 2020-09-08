@@ -168,8 +168,7 @@ SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
 -- create 3 chunks, with 3 time bucket
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
 -- Only refresh up to bucket 15 initially. Matches the old refresh
--- behavior that didn't materialize everything (seemingly limited by
--- max_interval_per_job).
+-- behavior that didn't materialize everything
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, 15);
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
 SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
@@ -322,7 +321,6 @@ SELECT
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 
-SET timescaledb.current_timestamp_mock = '2000-01-10';
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
