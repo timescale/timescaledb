@@ -88,9 +88,9 @@ jobs:
         - python3 ./scripts/githooks/commit_msg_tests.py
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Regression 9.6.17 32 bit"
+      name: "Regression 9.6.19 32 bit"
       env:
-        - PG_VERSION=9.6.17
+        - PG_VERSION=9.6.19
         - RETRY_PREFIX=""
       before_install:
         - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
@@ -255,28 +255,28 @@ jobs:
       env: PG_VERSION=9.6.6 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      name: "Regression 9.6.17"
-      env: PG_VERSION=9.6.17
+      name: "Regression 9.6.19"
+      env: PG_VERSION=9.6.19
 
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 10.2"
       env: PG_VERSION=10.2 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      name: "Regression 10.12"
-      env: PG_VERSION=10.12
+      name: "Regression 10.14"
+      env: PG_VERSION=10.14
 
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 11.0"
       env: PG_VERSION=11.0 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      name: "Regression 11.7"
-      env: PG_VERSION=11.7
+      name: "Regression 11.9"
+      env: PG_VERSION=11.9
 
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
-      name: "Regression 12.2"
-      env: PG_VERSION=12.2
+      name: "Regression 12.4"
+      env: PG_VERSION=12.4
 
     #get codecov info, we only run 12.0 on PRs and the rest in cron
     - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
@@ -291,23 +291,23 @@ jobs:
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "CodeCov 9.6.17"
-      env: PG_VERSION=9.6.17 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 9.6.19"
+      env: PG_VERSION=9.6.19 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "CodeCov 11.7"
-      env: PG_VERSION=11.7 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 11.9"
+      env: PG_VERSION=11.9 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
 
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "CodeCov 10.12"
-      env: PG_VERSION=10.12 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
+      name: "CodeCov 10.14"
+      env: PG_VERSION=10.14 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=Debug  -DTS_COVERAGE_ONLY=TRUE -DCMAKE_C_FLAGS='-O0 -coverage -fprofile-arcs -ftest-coverage -DNDEBUG'" CODECOV_FLAGS="-F cron"
       after_success:
         - ci_env=`bash <(curl -s https://codecov.io/env)`
         - docker exec -it $ci_env pgbuild /bin/bash -c "cd /build/debug && bash <(curl -s https://codecov.io/bash) -c ${CODECOV_FLAGS} || echo \"Codecov did not collect coverage reports\" "
@@ -417,20 +417,20 @@ jobs:
 
     # Release mode regression tests
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 12.2"
-      env: PG_VERSION=12.2 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 12.4"
+      env: PG_VERSION=12.4 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 11.7"
-      env: PG_VERSION=11.7 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 11.9"
+      env: PG_VERSION=11.9 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 10.12"
-      env: PG_VERSION=10.12 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 10.14"
+      env: PG_VERSION=10.14 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 9.6.17"
-      env: PG_VERSION=9.6.17 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 9.6.19"
+      env: PG_VERSION=9.6.19 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
