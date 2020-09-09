@@ -204,6 +204,9 @@ static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo 
 															 CAggTimebucketInfo *origquery_tblinfo,
 															 bool create_addl_index,
 															 char *tablespacename,
+#if PG12_GE
+															 char *table_access_method,
+#endif
 															 ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
 														  Query *userview_query);
@@ -451,17 +454,25 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
  * Reuse the information from ViewStmt:
  *   Remove the options on the into clause that we will not honour
  *   Modify the relname to ts_internal_<name>
+ *
  *  Parameters:
- *  mat_rel - relation information for the materialization table
- *  origquery_tblinfo - user query's tbale information. used for setting up thr partitioning of the
- * hypertable mataddress - return the ObjectAddress RETURNS: hypertable id of the materialization
- * table
+ *    mat_rel: relation information for the materialization table
+ *    origquery_tblinfo: - user query's tbale information. used for setting up
+ *        thr partitioning of the hypertable.
+ *    tablespace_name: Name of the tablespace for the materialization table.
+ *    table_access_method: Name of the table access method to use for the
+ *        materialization table.
+ *    mataddress: return the ObjectAddress RETURNS: hypertable id of the
+ *        materialization table
  */
 static int32
 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
 												RangeVar *mat_rel,
 												CAggTimebucketInfo *origquery_tblinfo,
 												bool create_addl_index, char *const tablespacename,
+#if PG12_GE
+												char *const table_access_method,
+#endif
 												ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
@@ -488,6 +499,9 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
 	create->tablespacename = tablespacename;
+#if PG12_GE
+	create->accessMethod = table_access_method;
+#endif
 	create->if_not_exists = false;
 
 	/*  Create the materialization table.  */
@@ -1718,6 +1732,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													origquery_ht,
 													is_create_mattbl_index,
 													create_stmt->into->tableSpaceName,
+#if PG12_GE
+													create_stmt->into->accessMethod,
+#endif
 													&mataddress);
 	/* Step 2: create view with select finalize from materialization
 	 * table
