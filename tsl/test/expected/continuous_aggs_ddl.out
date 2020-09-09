@@ -899,12 +899,12 @@ SELECT set_integer_now_func('whatever', 'integer_now_test');
 
 CREATE MATERIALIZED VIEW whatever_view_1
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT time_bucket('2', time), COUNT(data)
+SELECT time_bucket('5', time), COUNT(data)
   FROM whatever GROUP BY 1;
 CREATE MATERIALIZED VIEW whatever_view_2
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 TABLESPACE tablespace1 AS
-SELECT time_bucket('2', time), COUNT(data)
+SELECT time_bucket('5', time), COUNT(data)
   FROM whatever GROUP BY 1;
 INSERT INTO whatever SELECT i, i FROM generate_series(0, 29) AS i;
 CALL refresh_continuous_aggregate('whatever_view_1', NULL, NULL);
