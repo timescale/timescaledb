@@ -640,16 +640,10 @@ SELECT * FROM max_mat_view_date ORDER BY 1;
 SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
 
-SELECT view_name, refresh_lag, max_interval_per_job
-    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
-
 SET SESSION timezone TO 'EST';
 
 SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
-
-SELECT view_name, refresh_lag, max_interval_per_job
-    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
 
 -- test timezone is respected when materializing cagg with TIMESTAMP time column
 RESET client_min_messages;

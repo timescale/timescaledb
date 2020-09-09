@@ -12,5 +12,5 @@ REFRESH MATERIALIZED VIEW cagg.realtime_mat;
 
 SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
 
-SELECT view_name, refresh_lag, refresh_interval, max_interval_per_job, ignore_invalidation_older_than, materialized_only, materialization_hypertable FROM timescaledb_information.continuous_aggregates ORDER BY view_name::text;
+SELECT view_name, refresh_interval, materialized_only, materialization_hypertable FROM timescaledb_information.continuous_aggregates ORDER BY view_name::text;
 

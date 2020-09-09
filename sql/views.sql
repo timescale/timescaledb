@@ -57,39 +57,7 @@ CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
   SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,
     viewinfo.viewowner as view_owner,
-    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
-      WHEN 'TIMESTAMP'::regtype
-        THEN _timescaledb_internal.to_interval(cagg.refresh_lag)::TEXT
-      WHEN 'TIMESTAMPTZ'::regtype
-        THEN _timescaledb_internal.to_interval(cagg.refresh_lag)::TEXT
-      WHEN 'DATE'::regtype
-        THEN _timescaledb_internal.to_interval(cagg.refresh_lag)::TEXT
-      ELSE cagg.refresh_lag::TEXT
-    END AS refresh_lag,
     bgwjob.schedule_interval as refresh_interval,
-    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
-      WHEN 'TIMESTAMP'::regtype
-        THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
-      WHEN 'TIMESTAMPTZ'::regtype
-        THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
-      WHEN 'DATE'::regtype
-        THEN _timescaledb_internal.to_interval(cagg.max_interval_per_job)::TEXT
-      ELSE cagg.max_interval_per_job::TEXT
-    END AS max_interval_per_job,
-    CASE
-      WHEN cagg.ignore_invalidation_older_than = BIGINT '9223372036854775807'
-        THEN NULL
-      ELSE
-    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
-          WHEN 'TIMESTAMP'::regtype
-            THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
-          WHEN 'TIMESTAMPTZ'::regtype
-            THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
-          WHEN 'DATE'::regtype
-            THEN _timescaledb_internal.to_interval(cagg.ignore_invalidation_older_than)::TEXT
-          ELSE cagg.ignore_invalidation_older_than::TEXT
-        END
-    END AS ignore_invalidation_older_than,
     cagg.materialized_only,
     format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
     directview.viewdefinition as view_definition

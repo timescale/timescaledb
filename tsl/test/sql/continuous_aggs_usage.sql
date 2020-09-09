@@ -78,7 +78,6 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 -- Namely, it will only contain data where: bucket end < (max(time)-refresh_lag)
 
 --By default refresh_lag is 2 x bucket_width
-SELECT refresh_lag FROM timescaledb_information.continuous_aggregates;
 SELECT max(observation_time) FROM device_readings;
 SELECT max(bucket) FROM device_summary;
 

@@ -1403,16 +1403,6 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
  max_mat_view_date      | 2019-09-16             | 2019-09-16             |        |            | 
 (4 rows)
 
-SELECT view_name, refresh_lag, max_interval_per_job
-    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
-       view_name        |  refresh_lag  | max_interval_per_job 
-------------------------+---------------+----------------------
- max_mat_view           | -2            | 4
- max_mat_view_t         | @ 2 hours ago | @ 4 hours
- max_mat_view_timestamp | @ 2 hours ago | @ 1 day 16 hours
- max_mat_view_date      | @ 7 days ago  | @ 140 days
-(4 rows)
-
 SET SESSION timezone TO 'EST';
 SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_status, last_run_duration
     FROM timescaledb_information.continuous_aggregate_stats ORDER BY 1;
@@ -1422,16 +1412,6 @@ SELECT view_name, completed_threshold, invalidation_threshold, job_id, job_statu
  max_mat_view_t         | 2019-09-09 07:00:00-05 | 2019-09-09 07:00:00-05 |        |            | 
  max_mat_view_timestamp | 2019-09-09 12:00:00    | 2019-09-09 12:00:00    |        |            | 
  max_mat_view_date      | 2019-09-16             | 2019-09-16             |        |            | 
-(4 rows)
-
-SELECT view_name, refresh_lag, max_interval_per_job
-    FROM timescaledb_information.continuous_aggregates ORDER BY 1;
-       view_name        |  refresh_lag  | max_interval_per_job 
-------------------------+---------------+----------------------
- max_mat_view           | -2            | 4
- max_mat_view_t         | @ 2 hours ago | @ 4 hours
- max_mat_view_timestamp | @ 2 hours ago | @ 1 day 16 hours
- max_mat_view_date      | @ 7 days ago  | @ 140 days
 (4 rows)
 
 -- test timezone is respected when materializing cagg with TIMESTAMP time column
