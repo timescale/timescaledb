@@ -268,7 +268,7 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x on
 --check the information views --
-select view_name, view_owner, refresh_lag, max_interval_per_job, materialization_hypertable
+select view_name, view_owner, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 

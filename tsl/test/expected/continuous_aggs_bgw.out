@@ -457,14 +457,12 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x on
 --check the information views --
-select view_name, view_owner, refresh_lag, max_interval_per_job, materialization_hypertable
+select view_name, view_owner, materialization_hypertable
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 -[ RECORD 1 ]--------------+-------------------------------------------------
 view_name                  | test_continuous_agg_view
 view_owner                 | default_perm_user
-refresh_lag                | -2
-max_interval_per_job       | 2
 materialization_hypertable | _timescaledb_internal._materialized_hypertable_3
 
 select view_name, view_definition from timescaledb_information.continuous_aggregates

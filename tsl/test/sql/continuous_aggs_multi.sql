@@ -31,8 +31,8 @@ AS
     FROM continuous_agg_test
     GROUP BY 1, 2;
 
-select view_name, view_owner, refresh_lag, max_interval_per_job , materialization_hypertable 
-from timescaledb_information.continuous_aggregates;
+select view_name, view_owner, materialization_hypertable 
+from timescaledb_information.continuous_aggregates ORDER BY 1;
 
 --TEST1: cagg_1 is materialized, not cagg_2.
 refresh materialized view cagg_1;
