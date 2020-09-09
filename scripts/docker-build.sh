@@ -78,6 +78,10 @@ build_timescaledb()
     # Build and install the extension with debug symbols and assertions
     tar -c -C ${BASE_DIR} {src,sql,test,scripts,tsl,version.config,CMakeLists.txt,timescaledb.control.in} | docker cp - ${BUILD_CONTAINER_NAME}:/build/
     docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c "cd /build/debug && cmake -DUSE_OPENSSL=${USE_OPENSSL} -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=${BUILD_TYPE} .. && make && make install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample && cd / && rm -rf /build"
+    if [ $? -ne 0 ]; then
+      echo "Building timescaledb failed"
+      return 1
+    fi
     docker commit -a $USER -m "TimescaleDB development image" ${BUILD_CONTAINER_NAME} ${TS_IMAGE}
 }
 
