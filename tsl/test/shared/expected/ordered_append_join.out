@@ -365,6 +365,7 @@ ORDER BY time;
 (28 rows)
 
 RESET enable_hashjoin;
+SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
 :PREFIX
@@ -829,6 +830,7 @@ LIMIT 100;
                                        Heap Fetches: 0
 (40 rows)
 
+RESET enable_seqscan;
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -1388,6 +1390,7 @@ ORDER BY time;
 (52 rows)
 
 RESET enable_hashjoin;
+SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
 :PREFIX
@@ -1730,8 +1733,8 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=1 loops=1)
@@ -1744,13 +1747,16 @@ LIMIT 100;
                      Filter: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Append (actual rows=100 loops=1)
-                     ->  Seq Scan on _hyper_2_10_chunk o2 (actual rows=100 loops=1)
-                           Filter: (device_id = 1)
-                     ->  Seq Scan on _hyper_2_4_chunk o2_1 (never executed)
-                           Filter: (device_id = 1)
-                     ->  Seq Scan on _hyper_2_7_chunk o2_2 (never executed)
-                           Filter: (device_id = 1)
-(18 rows)
+                     ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk o2 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 1)
+                           Heap Fetches: 100
+                     ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk o2_1 (never executed)
+                           Index Cond: (device_id = 1)
+                           Heap Fetches: 0
+                     ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 1)
+                           Heap Fetches: 0
+(21 rows)
 
 -- test JOIN on time column with implicit join
 -- should use 2 ChunkAppend
@@ -1840,6 +1846,7 @@ LIMIT 100;
                                        Heap Fetches: 0
 (34 rows)
 
+RESET enable_seqscan;
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -2239,6 +2246,7 @@ ORDER BY time;
 (24 rows)
 
 RESET enable_hashjoin;
+SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
 :PREFIX
@@ -2549,8 +2557,8 @@ FROM :TEST_TABLE o1
     AND o1.time = o2.time
   ORDER BY o1.time
   LIMIT 100;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: ((o1."time" = o2."time") AND (o1.device_id = o2.device_id))
@@ -2559,21 +2567,21 @@ FROM :TEST_TABLE o1
                Sort Method: quicksort 
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o1 (actual rows=17990 loops=1)
-                           ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk (actual rows=20 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o1_1 (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
+                           ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk (actual rows=30 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o1_2 (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=30 loops=1)
+                           ->  Index Scan using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk (actual rows=30 loops=1)
          ->  Sort (actual rows=100 loops=1)
                Sort Key: o2."time", o2.device_id
                Sort Method: quicksort 
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk o2 (actual rows=17990 loops=1)
-                           ->  Seq Scan on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_1 (actual rows=20 loops=1)
+                           ->  Index Scan using compress_hyper_4_18_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_18_chunk compress_hyper_4_18_chunk_1 (actual rows=20 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_14_chunk o2_1 (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (actual rows=30 loops=1)
+                           ->  Index Scan using compress_hyper_4_17_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_17_chunk compress_hyper_4_17_chunk_1 (actual rows=30 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk o2_2 (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (actual rows=30 loops=1)
+                           ->  Index Scan using compress_hyper_4_16_chunk__compressed_hypertable_4_device_id__t on compress_hyper_4_16_chunk compress_hyper_4_16_chunk_1 (actual rows=30 loops=1)
 (23 rows)
 
 -- test JOIN on device_id
@@ -2710,6 +2718,7 @@ LIMIT 100;
                                              Index Cond: (device_id = 2)
 (40 rows)
 
+RESET enable_seqscan;
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
@@ -3351,6 +3360,7 @@ ORDER BY time;
 (36 rows)
 
 RESET enable_hashjoin;
+SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
 :PREFIX
@@ -3361,50 +3371,35 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test JOIN on time column with USING
 -- should use 2 ChunkAppend
@@ -3416,50 +3411,35 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test NATURAL JOIN on time column
 -- should use 2 ChunkAppend
@@ -3491,50 +3471,35 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test RIGHT JOIN on time column
 -- should use 2 ChunkAppend
@@ -3546,50 +3511,35 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test JOIN on time column with ON clause expression order switched
 -- should use 2 ChunkAppend
@@ -3601,50 +3551,35 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test JOIN on time column with equality condition in WHERE clause
 -- should use 2 ChunkAppend
@@ -3657,50 +3592,35 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test JOIN on time column with ORDER BY 2nd hypertable
 -- should use 2 ChunkAppend
@@ -3712,50 +3632,35 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test JOIN on time column and device_id
 -- should use 2 ChunkAppend
@@ -3766,8 +3671,8 @@ FROM :TEST_TABLE o1
     AND o1.time = o2.time
   ORDER BY o1.time
   LIMIT 100;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+                                                                                            QUERY PLAN                                                                                            
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: ((o1."time" = o2."time") AND (o1.device_id = o2.device_id))
@@ -3776,45 +3681,45 @@ FROM :TEST_TABLE o1
                Sort Method: quicksort 
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1 (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=4 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o1_1 (actual rows=10794 loops=1)
-                           ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=12 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk o1_2 (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_6_34_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_34_chunk (actual rows=4 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_3 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (actual rows=6 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o1_4 (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
+                           ->  Index Scan using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (actual rows=18 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk o1_5 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_31_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_31_chunk (actual rows=6 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_6 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (actual rows=6 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o1_7 (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=18 loops=1)
+                           ->  Index Scan using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (actual rows=18 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o1_8 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_28_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_28_chunk (actual rows=6 loops=1)
          ->  Sort (actual rows=100 loops=1)
                Sort Key: o2."time", o2.device_id
                Sort Method: quicksort 
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o2 (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (actual rows=4 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=10794 loops=1)
-                           ->  Seq Scan on compress_hyper_6_35_chunk compress_hyper_6_35_chunk_1 (actual rows=12 loops=1)
+                           ->  Index Scan using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk compress_hyper_6_35_chunk_1 (actual rows=12 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk o2_2 (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_6_34_chunk compress_hyper_6_34_chunk_1 (actual rows=4 loops=1)
+                           ->  Index Scan using compress_hyper_6_34_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_34_chunk compress_hyper_6_34_chunk_1 (actual rows=4 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o2_3 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (actual rows=6 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_4 (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_6_32_chunk compress_hyper_6_32_chunk_1 (actual rows=18 loops=1)
+                           ->  Index Scan using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk compress_hyper_6_32_chunk_1 (actual rows=18 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk o2_5 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_31_chunk compress_hyper_6_31_chunk_1 (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_31_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_31_chunk compress_hyper_6_31_chunk_1 (actual rows=6 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o2_6 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=6 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_7 (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_1 (actual rows=18 loops=1)
+                           ->  Index Scan using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk compress_hyper_6_29_chunk_1 (actual rows=18 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o2_8 (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_1 (actual rows=6 loops=1)
+                           ->  Index Scan using compress_hyper_6_28_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_28_chunk compress_hyper_6_28_chunk_1 (actual rows=6 loops=1)
 (47 rows)
 
 -- test JOIN on device_id
@@ -3826,40 +3731,33 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=1 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=1 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Append (actual rows=100 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o2 (actual rows=100 loops=1)
-                           ->  Seq Scan on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=1 loops=1)
-                                 Filter: (device_id = 1)
+                           ->  Index Scan using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk compress_hyper_6_30_chunk_1 (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o2_1 (never executed)
-                           ->  Seq Scan on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (never executed)
-                                 Filter: (device_id = 1)
+                           ->  Index Scan using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk compress_hyper_6_36_chunk_1 (never executed)
+                                 Index Cond: (device_id = 1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o2_2 (never executed)
-                           ->  Seq Scan on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (never executed)
-                                 Filter: (device_id = 1)
-(31 rows)
+                           ->  Index Scan using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk compress_hyper_6_33_chunk_1 (never executed)
+                                 Index Cond: (device_id = 1)
+(24 rows)
 
 -- test JOIN on time column with implicit join
 -- should use 2 ChunkAppend
@@ -3872,50 +3770,35 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                           Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                      Order: o2."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 8
+                           ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                       Filter: (device_id = 2)
+                           ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                 Index Cond: (device_id = 2)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                           ->  Sort (never executed)
-                                 Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                 ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                       Filter: (device_id = 2)
-(41 rows)
+                           ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                 Index Cond: (device_id = 2)
+(26 rows)
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
@@ -3929,72 +3812,51 @@ WHERE o1.device_id = 1
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                                                        QUERY PLAN                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o3."time" = o1."time")
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o3 (actual rows=100 loops=1)
                Order: o3."time"
                ->  Custom Scan (DecompressChunk) on _hyper_5_21_chunk o3_1 (actual rows=100 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_6_34_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = 3)
+                     ->  Index Scan Backward using compress_hyper_6_34_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_34_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 3)
                ->  Custom Scan (DecompressChunk) on _hyper_5_24_chunk o3_2 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_31_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
-                                 Filter: (device_id = 3)
+                     ->  Index Scan Backward using compress_hyper_6_31_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_31_chunk (never executed)
+                           Index Cond: (device_id = 3)
                ->  Custom Scan (DecompressChunk) on _hyper_5_27_chunk o3_3 (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_6_28_chunk._ts_meta_sequence_num DESC
-                           ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-                                 Filter: (device_id = 3)
+                     ->  Index Scan Backward using compress_hyper_6_28_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_28_chunk (never executed)
+                           Index Cond: (device_id = 3)
          ->  Materialize (actual rows=100 loops=1)
                ->  Merge Join (actual rows=100 loops=1)
                      Merge Cond: (o1."time" = o2."time")
                      ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                            Order: o1."time"
                            ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk o1_1 (actual rows=100 loops=1)
-                                 ->  Sort (actual rows=1 loops=1)
-                                       Sort Key: compress_hyper_6_36_chunk._ts_meta_sequence_num DESC
-                                       Sort Method: quicksort 
-                                       ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=4 loops=1)
-                                             Filter: (device_id = 1)
+                                 ->  Index Scan Backward using compress_hyper_6_36_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_36_chunk (actual rows=1 loops=1)
+                                       Index Cond: (device_id = 1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_22_chunk o1_2 (never executed)
-                                 ->  Sort (never executed)
-                                       Sort Key: compress_hyper_6_33_chunk._ts_meta_sequence_num DESC
-                                       ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                             Filter: (device_id = 1)
+                                 ->  Index Scan Backward using compress_hyper_6_33_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_33_chunk (never executed)
+                                       Index Cond: (device_id = 1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_25_chunk o1_3 (never executed)
-                                 ->  Sort (never executed)
-                                       Sort Key: compress_hyper_6_30_chunk._ts_meta_sequence_num DESC
-                                       ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                             Filter: (device_id = 1)
+                                 ->  Index Scan Backward using compress_hyper_6_30_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_30_chunk (never executed)
+                                       Index Cond: (device_id = 1)
                      ->  Materialize (actual rows=100 loops=1)
                            ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=100 loops=1)
                                  Order: o2."time"
                                  ->  Custom Scan (DecompressChunk) on _hyper_5_20_chunk o2_1 (actual rows=100 loops=1)
-                                       ->  Sort (actual rows=1 loops=1)
-                                             Sort Key: compress_hyper_6_35_chunk._ts_meta_sequence_num DESC
-                                             Sort Method: quicksort 
-                                             ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=4 loops=1)
-                                                   Filter: (device_id = 2)
-                                                   Rows Removed by Filter: 8
+                                       ->  Index Scan Backward using compress_hyper_6_35_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_35_chunk (actual rows=1 loops=1)
+                                             Index Cond: (device_id = 2)
                                  ->  Custom Scan (DecompressChunk) on _hyper_5_23_chunk o2_2 (never executed)
-                                       ->  Sort (never executed)
-                                             Sort Key: compress_hyper_6_32_chunk._ts_meta_sequence_num DESC
-                                             ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                                   Filter: (device_id = 2)
+                                       ->  Index Scan Backward using compress_hyper_6_32_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_32_chunk (never executed)
+                                             Index Cond: (device_id = 2)
                                  ->  Custom Scan (DecompressChunk) on _hyper_5_26_chunk o2_3 (never executed)
-                                       ->  Sort (never executed)
-                                             Sort Key: compress_hyper_6_29_chunk._ts_meta_sequence_num DESC
-                                             ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                                   Filter: (device_id = 2)
-(62 rows)
+                                       ->  Index Scan Backward using compress_hyper_6_29_chunk__compressed_hypertable_6_device_id__t on compress_hyper_6_29_chunk (never executed)
+                                             Index Cond: (device_id = 2)
+(40 rows)
 
+RESET enable_seqscan;
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''

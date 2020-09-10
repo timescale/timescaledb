@@ -145,6 +145,8 @@ ORDER BY time;
 
 RESET enable_hashjoin;
 
+SET enable_seqscan TO false;
+
 -- test JOIN on time column
 -- should use 2 ChunkAppend
 :PREFIX
@@ -278,3 +280,5 @@ WHERE o1.device_id = 1
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
+
+RESET enable_seqscan;

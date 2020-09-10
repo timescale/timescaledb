@@ -72,6 +72,7 @@ LIMIT 1;
 
 -- test equality constraint on ORDER BY prefix
 -- currently not optimized
+SET enable_seqscan TO false;
 :PREFIX
 SELECT time,
   device_id
@@ -80,6 +81,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
+RESET enable_seqscan;
 
 -- queries without LIMIT should use ordered append
 :PREFIX
