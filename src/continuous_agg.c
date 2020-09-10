@@ -87,20 +87,6 @@ init_scan_by_raw_hypertable_id(ScanIterator *iterator, const int32 raw_hypertabl
 }
 
 static void
-init_completed_threshold_scan_by_mat_id(ScanIterator *iterator, const int32 mat_hypertable_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
-											CONTINUOUS_AGGS_COMPLETED_THRESHOLD_PKEY);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_completed_threshold_pkey_materialization_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(mat_hypertable_id));
-}
-
-static void
 init_invalidation_threshold_scan_by_hypertable_id(ScanIterator *iterator,
 												  const int32 raw_hypertable_id)
 {
@@ -157,48 +143,6 @@ number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
 	ts_scanner_foreach(&iterator) { count++; }
 	return count;
-}
-
-TSDLLEXPORT
-int64
-ts_continuous_agg_get_completed_threshold(int32 materialization_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
-													AccessShareLock,
-													CurrentMemoryContext);
-	int64 threshold = PG_INT64_MIN;
-	int count = 0;
-
-	init_completed_threshold_scan_by_mat_id(&iterator, materialization_id);
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
-								   Anum_continuous_aggs_completed_threshold_watermark,
-								   &isnull);
-
-		Assert(!isnull);
-		threshold = DatumGetInt64(datum);
-		count++;
-	}
-	Assert(count <= 1);
-	return threshold;
-}
-
-static void
-completed_threshold_delete(int32 materialization_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	init_completed_threshold_scan_by_mat_id(&iterator, materialization_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
 }
 
 static void
@@ -531,8 +475,6 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 	if (!raw_hypertable_has_other_caggs)
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
 						RowExclusiveLock);
-	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_COMPLETED_THRESHOLD),
-					RowExclusiveLock);
 	if (!raw_hypertable_has_other_caggs)
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						RowExclusiveLock);
@@ -588,8 +530,6 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 		/* delete all related rows */
 		if (!raw_hypertable_has_other_caggs)
 			hypertable_invalidation_log_delete(form->raw_hypertable_id);
-
-		completed_threshold_delete(form->mat_hypertable_id);
 
 		if (!raw_hypertable_has_other_caggs)
 			invalidation_threshold_delete(form->raw_hypertable_id);

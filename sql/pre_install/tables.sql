@@ -272,14 +272,6 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_invalidation_thr
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_invalidation_threshold', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_completed_threshold(
-    materialization_id INTEGER PRIMARY KEY
-        REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
-        ON DELETE CASCADE,
-    watermark BIGINT NOT NULL --exclusive (everything up to but not including watermark is done)
-);
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_completed_threshold', '');
-
 -- this does not have an FK on the materialization table since INSERTs to this
 -- table are performance critical
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log(

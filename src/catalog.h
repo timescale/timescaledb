@@ -48,7 +48,6 @@ typedef enum CatalogTable
 	METADATA,
 	BGW_POLICY_CHUNK_STATS,
 	CONTINUOUS_AGG,
-	CONTINUOUS_AGGS_COMPLETED_THRESHOLD,
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
@@ -933,40 +932,6 @@ typedef enum Anum_continuous_agg_raw_hypertable_id_idx
 
 #define Natts_continuous_agg_raw_hypertable_id_idx                                                 \
 	(_Anum_continuous_agg_raw_hypertable_id_idx_max - 1)
-
-/****** CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE definitions*/
-#define CONTINUOUS_AGGS_COMPLETED_THRESHOLD_TABLE_NAME "continuous_aggs_completed_threshold"
-typedef enum Anum_continuous_aggs_completed_threshold
-{
-	Anum_continuous_aggs_completed_threshold_materialization_id = 1,
-	Anum_continuous_aggs_completed_threshold_watermark,
-	_Anum_continuous_aggs_completed_threshold_max,
-} Anum_continuous_aggs_completed_threshold;
-
-#define Natts_continuous_aggs_completed_threshold                                                  \
-	(_Anum_continuous_aggs_completed_threshold_max - 1)
-
-typedef struct FormData_continuous_aggs_completed_threshold
-{
-	int32 materialization_id;
-	int64 watermark;
-} FormData_continuous_aggs_completed_threshold;
-
-typedef FormData_continuous_aggs_completed_threshold *Form_continuous_aggs_completed_threshold;
-
-enum
-{
-	CONTINUOUS_AGGS_COMPLETED_THRESHOLD_PKEY = 0,
-	_MAX_CONTINUOUS_AGGS_COMPLETED_THRESHOLD_INDEX,
-};
-typedef enum Anum_continuous_aggs_completed_threshold_pkey
-{
-	Anum_continuous_aggs_completed_threshold_pkey_materialization_id = 1,
-	_Anum_continuous_aggs_completed_threshold_pkey_max,
-} Anum_continuous_aggs_completed_threshold_pkey;
-
-#define Natts_continuous_aggs_completed_threshold_pkey                                             \
-	(_Anum_continuous_aggs_completed_threshold_pkey_max - 1)
 
 /****** CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions*/
 #define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \

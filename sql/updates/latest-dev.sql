@@ -303,10 +303,13 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE
 GRANT SELECT ON _timescaledb_config.bgw_job TO PUBLIC;
 GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
 
+-- drop completed_threshold table, which is no longer used
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_completed_threshold;
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_completed_threshold;
+
 -- rebuild continuous aggregate table
 CREATE TABLE _timescaledb_catalog.continuous_agg_tmp AS SELECT * FROM _timescaledb_catalog.continuous_agg;
 
-ALTER TABLE _timescaledb_catalog.continuous_aggs_completed_threshold DROP CONSTRAINT continuous_aggs_completed_threshold_materialization_id_fkey;
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log DROP CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
@@ -339,5 +342,4 @@ GRANT SELECT ON _timescaledb_catalog.continuous_agg TO PUBLIC;
 INSERT INTO _timescaledb_catalog.continuous_agg SELECT mat_hypertable_id,raw_hypertable_id,user_view_schema,user_view_name,partial_view_schema,partial_view_name,bucket_width,refresh_lag,direct_view_schema,direct_view_name,max_interval_per_job,ignore_invalidation_older_than,materialized_only FROM _timescaledb_catalog.continuous_agg_tmp;
 DROP TABLE _timescaledb_catalog.continuous_agg_tmp;
 
-ALTER TABLE _timescaledb_catalog.continuous_aggs_completed_threshold ADD CONSTRAINT continuous_aggs_completed_threshold_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);

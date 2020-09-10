@@ -57,11 +57,6 @@ step "Refresh2"	{ CALL refresh_continuous_aggregate('continuous_view_2', NULL, N
 session "R2_sel"
 step "Refresh2_sel"	{ select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt; }
 
-#the completed threshold will block the REFRESH from writing
-session "LC"
-step "LockCompleted" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE; }
-step "UnlockCompleted" { ROLLBACK; }
-
 #locking the materialized table will block refresh1
 session "LM1"
 step "LockMat1" { BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
@@ -82,15 +77,15 @@ step "UnlockInvRow" { ROLLBACK; }
 
 
 #refresh1, refresh2 can run concurrently
-permutation "Setup2" "LockCompleted" "LockMat1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1"
+permutation "Setup2" "LockMat1" "Refresh1" "Refresh2" "UnlockMat1"
 
 #refresh1 and refresh2 run concurrently and see the correct invalidation
 #test1 - both see the same invalidation
-permutation "Setup2" "Refresh1" "Refresh2" "LockCompleted" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+permutation "Setup2" "Refresh1" "Refresh2" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
 
 ##test2 - continuous_view_2 should see results from insert but not the other one.
 ## Refresh2 will complete first due to LockMat1 and write the invalidation logs out.
-permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCompleted" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockCompleted" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
 
 #test3 - both see the updates i.e. the invalidations
 ##Refresh1 and Refresh2 are blocked by LockInvRow, when that is unlocked, they should complete serially
