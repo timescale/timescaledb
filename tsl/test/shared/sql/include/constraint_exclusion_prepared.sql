@@ -37,6 +37,8 @@ LIMIT 100;
 DEALLOCATE prep;
 
 -- runtime exclusion with LATERAL and 2 hypertables
+SET enable_seqscan TO false;
+
 PREPARE prep AS
 SELECT m1.time,
   m2.time
@@ -56,6 +58,8 @@ LIMIT 100;
 :PREFIX EXECUTE prep;
 :PREFIX EXECUTE prep;
 DEALLOCATE prep;
+
+RESET enable_seqscan;
 
 -- executor startup exclusion with subquery
 PREPARE prep AS
