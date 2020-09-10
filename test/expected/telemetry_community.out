@@ -46,6 +46,7 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket;
+NOTICE:  continuous aggregate "device_summary" is already up-to-date
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs');
  json_object_field 
 -------------------

@@ -27,7 +27,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 -- The continuous aggregate should be empty
 SELECT * FROM daily_temp
@@ -96,7 +96,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions_date
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 
@@ -127,7 +127,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 \set ON_ERROR_STOP 1
 
 SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
@@ -138,7 +138,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint);
 
@@ -171,7 +171,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
 
@@ -204,7 +204,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
 
@@ -213,3 +213,30 @@ ORDER BY 1,2;
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_bigint', NULL, NULL);
+
+-- Test that WITH NO DATA and WITH DATA works (we use whatever is the
+-- default for Postgres, so we do not need to have test for the
+-- default).
+
+CREATE MATERIALIZED VIEW weekly_temp_without_data
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+
+CREATE MATERIALIZED VIEW weekly_temp_with_data
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH DATA;
+
+SELECT * FROM weekly_temp_without_data;
+SELECT * FROM weekly_temp_with_data;
+
+CALL refresh_continuous_aggregate('weekly_temp_without_data', NULL, NULL);
+
+SELECT * FROM weekly_temp_without_data;

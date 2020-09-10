@@ -112,7 +112,7 @@ CREATE MATERIALIZED VIEW cit_view
     WITH ( timescaledb.continuous)
     AS SELECT time_bucket('5', time), COUNT(time)
         FROM ca_inval_test
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO ca_inval_test SELECT generate_series(0, 5);
 
@@ -168,7 +168,7 @@ CREATE MATERIALIZED VIEW continuous_view
     WITH ( timescaledb.continuous)
     AS SELECT time_bucket('5', time), COUNT(location)
         FROM ts_continuous_test
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;

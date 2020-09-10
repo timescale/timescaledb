@@ -53,7 +53,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(BIGINT '10', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW cond_20
 WITH (timescaledb.continuous,
@@ -61,7 +61,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW measure_10
 WITH (timescaledb.continuous,
@@ -69,7 +69,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(10, time) AS bucket, device, avg(temp) AS avg_temp
 FROM measurements
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 -- There should be three continuous aggregates, two on one hypertable
 -- and one on the other:
@@ -398,7 +398,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(BIGINT '1', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 
 SELECT mat_hypertable_id AS cond_1_id
 FROM _timescaledb_catalog.continuous_agg
@@ -529,7 +529,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(2, time) AS bucket, max(value) AS max
 FROM threshold_test
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 
 SELECT raw_hypertable_id AS thresh_hyper_id, mat_hypertable_id AS thresh_cagg_id
 FROM _timescaledb_catalog.continuous_agg

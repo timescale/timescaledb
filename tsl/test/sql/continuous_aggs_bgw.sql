@@ -79,7 +79,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
 
 -- even before running, stats shows something
@@ -229,7 +229,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
 
@@ -289,7 +289,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
         FROM test_continuous_agg_table
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
 
 
@@ -333,7 +333,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
         timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset

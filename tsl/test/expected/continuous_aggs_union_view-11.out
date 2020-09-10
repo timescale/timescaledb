@@ -27,7 +27,7 @@ INSERT INTO metrics(time, device_id, value) SELECT '2000-01-01'::timestamptz, de
 CREATE MATERIALIZED VIEW metrics_summary
   WITH (timescaledb.continuous)
 AS
-  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1;
+  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
 ALTER TABLE metrics DROP COLUMN f2;
 -- this should be union view
 SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
@@ -183,7 +183,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 CREATE MATERIALIZED VIEW metrics_summary
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
-  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1;
+  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
 -- this should be view without union
 SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
  user_view_name  | materialized_only 
@@ -266,7 +266,7 @@ DROP MATERIALIZED VIEW metrics_summary;
 CREATE MATERIALIZED VIEW metrics_summary
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
-  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1;
+  SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
 -- should be marked as materialized_only in catalog
 SELECT user_view_name, materialized_only FROM _timescaledb_catalog.continuous_agg WHERE user_view_name='metrics_summary';
  user_view_name  | materialized_only 
@@ -349,7 +349,7 @@ SELECT set_integer_now_func('boundary_test','boundary_test_int_now');
 CREATE MATERIALIZED VIEW boundary_view
   WITH (timescaledb.continuous)
 AS
-  SELECT time_bucket(10,time), avg(value) FROM boundary_test GROUP BY 1;
+  SELECT time_bucket(10,time), avg(value) FROM boundary_test GROUP BY 1 WITH NO DATA;
 INSERT INTO boundary_test SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
 SELECT mat_hypertable_id AS boundary_view_id
 FROM _timescaledb_catalog.continuous_agg
@@ -471,7 +471,7 @@ SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
 FROM ht_intdata
 WHERE b < 16
 GROUP BY time_bucket(1, a)
-HAVING sum(c) > 50;
+HAVING sum(c) > 50 WITH NO DATA;
 REFRESH MATERIALIZED VIEW mat_m1;
 SELECT view_name, completed_threshold from timescaledb_information.continuous_aggregate_stats
 WHERE view_name::text like 'mat_m1';
@@ -562,7 +562,7 @@ SELECT time_bucket(5, a), sum(b+c)
 FROM ht_intdata
 WHERE b < 16 and c > 20
 GROUP BY time_bucket(5, a)
-HAVING sum(c) > 50 and avg(b)::int > 12 ;
+HAVING sum(c) > 50 and avg(b)::int > 12  WITH NO DATA;
 INSERT into ht_intdata values( 42 , 15 , 80);
 INSERT into ht_intdata values( 42 , 15 , 18);
 INSERT into ht_intdata values( 41 , 18 , 21);
@@ -733,37 +733,37 @@ WITH (timescaledb.continuous)
 AS
 SELECT time_bucket(SMALLINT '10', time) AS bucket, avg(value)
 FROM smallint_table
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW int_agg
 WITH (timescaledb.continuous)
 AS
 SELECT time_bucket(5, time) AS bucket, avg(value)
 FROM int_table
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW bigint_agg
 WITH (timescaledb.continuous)
 AS
 SELECT time_bucket(BIGINT '10', time) AS bucket, avg(value)
 FROM bigint_table
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW date_agg
 WITH (timescaledb.continuous)
 AS
 SELECT time_bucket('2 days', time) AS bucket, avg(value)
 FROM date_table
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW timestamp_agg
 WITH (timescaledb.continuous)
 AS
 SELECT time_bucket('2 days', time) AS bucket, avg(value)
 FROM timestamp_table
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW timestamptz_agg
 WITH (timescaledb.continuous)
 AS
 SELECT time_bucket('2 days', time) AS bucket, avg(value)
 FROM timestamptz_table
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 -- Refresh first without data
 CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
 NOTICE:  continuous aggregate "int_agg" is already up-to-date

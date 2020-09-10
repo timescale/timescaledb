@@ -37,11 +37,11 @@ INSERT INTO whatever SELECT i, i FROM generate_series(0, 29) AS i;
 CREATE MATERIALIZED VIEW tableam_view USING heap2
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket('5', time), COUNT(data)
-  FROM whatever GROUP BY 1;
+  FROM whatever GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW notableam_view
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket('5', time), COUNT(data)
-  FROM whatever GROUP BY 1;
+  FROM whatever GROUP BY 1 WITH NO DATA;
 SELECT user_view, mat_table, amname
 FROM cagg_info,
      LATERAL (SELECT relam FROM pg_class WHERE relname = mat_table) AS cls,

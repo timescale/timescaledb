@@ -10,7 +10,7 @@ DROP MATERIALIZED VIEW IF EXISTS mat_test;
 CREATE MATERIALIZED VIEW mat_test
 WITH ( timescaledb.continuous)
 as :QUERY
-;
+ WITH NO DATA;
 
 select h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",

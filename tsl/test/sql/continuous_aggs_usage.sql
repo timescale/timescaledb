@@ -28,7 +28,7 @@ SELECT
   max(metric)-min(metric) as metric_spread --We can also use expressions on aggregates and constants
 FROM
   device_readings
-GROUP BY bucket, device_id; --We have to group by the bucket column, but can also add other group-by columns
+GROUP BY bucket, device_id WITH NO DATA; --We have to group by the bucket column, but can also add other group-by columns
 
 SELECT add_refresh_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
 --Next, insert some data into the raw hypertable
@@ -128,7 +128,7 @@ SELECT
   max(metric)-min(metric) as metric_spread
 FROM
   device_readings
-GROUP BY bucket, device_id;
+GROUP BY bucket, device_id WITH NO DATA;
 --note the error.
 
 -- You have two options:
@@ -146,7 +146,7 @@ SELECT
   max(metric)-min(metric) as metric_spread
 FROM
   device_readings
-GROUP BY bucket, device_id;
+GROUP BY bucket, device_id WITH NO DATA;
 DROP MATERIALIZED VIEW device_summary;
 
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
@@ -164,7 +164,7 @@ SELECT
   max(metric)-min(metric) as metric_spread
 FROM
   device_readings
-GROUP BY bucket, device_id;
+GROUP BY bucket, device_id WITH NO DATA;
 REFRESH MATERIALIZED VIEW device_summary;
 SELECT min(min_time)::timestamp FROM device_summary;
 
@@ -187,12 +187,12 @@ SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
 CREATE MATERIALIZED VIEW device_readings_mat_only
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
-  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
+  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW device_readings_jit
   WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
-  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1;
+  SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1 WITH NO DATA;
 
 INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
 
@@ -243,7 +243,7 @@ CREATE TABLE whatever(time TIMESTAMPTZ NOT NULL, metric INTEGER);
 SELECT * FROM create_hypertable('whatever', 'time');
 CREATE MATERIALIZED VIEW whatever_summary WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
-  FROM whatever GROUP BY bucket;
+  FROM whatever GROUP BY bucket WITH NO DATA;
 
 SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
           FROM _timescaledb_catalog.hypertable

@@ -39,7 +39,7 @@ CREATE MATERIALIZED VIEW rename_test
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -156,7 +156,7 @@ CREATE MATERIALIZED VIEW drop_chunks_view
   )
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
         schema_name AS drop_chunks_mat_schema,
@@ -206,7 +206,7 @@ CREATE MATERIALIZED VIEW drop_chunks_view
   )
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 
 SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
         schema_name AS drop_chunks_mat_schema,
@@ -286,7 +286,7 @@ CREATE MATERIALIZED VIEW new_name_view
   )
 AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
     FROM new_name
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 
 -- cannot create a continuous aggregate on a continuous aggregate view
 CREATE MATERIALIZED VIEW drop_chunks_view_view
@@ -296,7 +296,7 @@ CREATE MATERIALIZED VIEW drop_chunks_view_view
   )
 AS SELECT time_bucket('6', time_bucket), SUM(count)
     FROM drop_chunks_view
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 1
 
 DROP INDEX new_name_idx;
@@ -320,7 +320,7 @@ SELECT
   avg(v1) + avg(v2) AS avg1,
   avg(v1+v2) AS avg2
 FROM metrics
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 
 SET timescaledb.current_timestamp_mock = '2000-01-10';
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
@@ -343,7 +343,7 @@ CREATE MATERIALIZED VIEW drop_chunks_view
   )
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 --dropping chunks will process the invalidations
@@ -541,13 +541,13 @@ SELECT set_integer_now_func('whatever', 'integer_now_test');
 CREATE MATERIALIZED VIEW whatever_view_1
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket('5', time), COUNT(data)
-  FROM whatever GROUP BY 1;
+  FROM whatever GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW whatever_view_2
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 TABLESPACE tablespace1 AS
 SELECT time_bucket('5', time), COUNT(data)
-  FROM whatever GROUP BY 1;
+  FROM whatever GROUP BY 1 WITH NO DATA;
 
 INSERT INTO whatever SELECT i, i FROM generate_series(0, 29) AS i;
 CALL refresh_continuous_aggregate('whatever_view_1', NULL, NULL);

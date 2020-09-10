@@ -274,7 +274,7 @@ CREATE MATERIALIZED VIEW test_t_mat_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_test_t
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 SELECT mat_hypertable_id, raw_hypertable_id, user_view_schema, user_view_name,
        partial_view_schema, partial_view_name,
@@ -372,7 +372,7 @@ CREATE MATERIALIZED VIEW extreme_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('1', time), SUM(data) as value
         FROM continuous_agg_extreme
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='continuous_agg_extreme' \gset
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE raw_hypertable_id=:raw_table_id \gset
 
@@ -447,7 +447,7 @@ CREATE MATERIALIZED VIEW negative_view_5
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('5', time), COUNT(data) as value
         FROM continuous_agg_negative
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 -- two chunks, 4 buckets
 INSERT INTO continuous_agg_negative
@@ -478,7 +478,7 @@ CREATE MATERIALIZED VIEW negative_view_5
             WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2')
 AS SELECT time_bucket('5', time), COUNT(data) as value
    FROM continuous_agg_negative
-   GROUP BY 1;
+   GROUP BY 1 WITH NO DATA;
 
 -- we can handle values near max
 INSERT INTO continuous_agg_negative VALUES (:big_int_max-3, 201);
@@ -509,7 +509,7 @@ CREATE MATERIALIZED VIEW max_mat_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4', timescaledb.refresh_lag='-2')
     AS SELECT time_bucket('2', time), COUNT(data) as value
         FROM continuous_agg_max_mat
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO continuous_agg_max_mat SELECT i, i FROM generate_series(0, 10) AS i;
 SET client_min_messages TO LOG;
@@ -580,7 +580,7 @@ CREATE MATERIALIZED VIEW max_mat_view_t
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.max_interval_per_job='4 hours', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time), COUNT(data) as value
         FROM continuous_agg_max_mat_t
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO continuous_agg_max_mat_t
     SELECT i, i FROM
@@ -609,7 +609,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', time)
         FROM continuous_agg_max_mat_timestamp
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO continuous_agg_max_mat_timestamp
     SELECT generate_series('2019-09-09 1:00'::TIMESTAMPTZ, '2019-09-09 10:00', '1 hour');
@@ -626,7 +626,7 @@ CREATE MATERIALIZED VIEW max_mat_view_date
     WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-7 days')
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_max_mat_date
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO continuous_agg_max_mat_date
     SELECT generate_series('2019-09-01'::DATE, '2019-09-010 10:00', '1 day');
@@ -662,7 +662,7 @@ CREATE MATERIALIZED VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 REFRESH MATERIALIZED VIEW timezone_test_summary;
 
@@ -684,7 +684,7 @@ CREATE MATERIALIZED VIEW timezone_test_summary
     WITH (timescaledb.continuous,timescaledb.materialized_only=true)
     AS SELECT time_bucket('5m', time)
         FROM timezone_test
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 REFRESH MATERIALIZED VIEW timezone_test_summary;
 
@@ -706,7 +706,7 @@ CREATE MATERIALIZED VIEW continuous_agg_int_max
     WITH (timescaledb.continuous, timescaledb.refresh_lag='0')
     AS SELECT time_bucket('10', time), COUNT(data) as value
         FROM continuous_agg_int
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO continuous_agg_int values (-10, 100), (1,100), (10, 100);
 select chunk_name, range_start_integer, range_end_integer 
@@ -728,7 +728,7 @@ CREATE MATERIALIZED VIEW continuous_agg_ts_max_view
     WITH (timescaledb.continuous, timescaledb.max_interval_per_job='365 days', timescaledb.refresh_lag='-2 hours')
     AS SELECT time_bucket('2 hours', timecol), COUNT(data) as value
         FROM continuous_agg_ts_max_t
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 INSERT INTO continuous_agg_ts_max_t
     values ('1969-01-01 1:00'::timestamptz, 10);

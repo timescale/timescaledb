@@ -33,14 +33,14 @@ setup
     AS
       SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
-      GROUP BY 1;
+      GROUP BY 1 WITH NO DATA;
     CREATE MATERIALIZED VIEW cond_20
     WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
     AS
       SELECT time_bucket(20, time) AS bucket, avg(temp) AS avg_temp
       FROM conditions
-      GROUP BY 1;
+      GROUP BY 1 WITH NO DATA;
 
     CREATE OR REPLACE FUNCTION cagg_bucket_count(cagg regclass)
     RETURNS int AS

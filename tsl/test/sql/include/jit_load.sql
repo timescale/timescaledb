@@ -27,7 +27,7 @@ SELECT
   max(metric)-min(metric) as metric_spread
 FROM
   jit_test_contagg
-GROUP BY bucket, device_id;
+GROUP BY bucket, device_id WITH NO DATA;
 
 INSERT INTO jit_test_contagg
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;

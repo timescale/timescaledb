@@ -516,7 +516,7 @@ INSERT INTO disttable VALUES
 CREATE MATERIALIZED VIEW disttable_cagg WITH (timescaledb.continuous)
 AS SELECT time_bucket('2 days', time), device, max(value)
     FROM disttable
-    GROUP BY 1, 2;
+    GROUP BY 1, 2 WITH NO DATA;
 \set ON_ERROR_STOP 1
 
 DROP TABLE disttable;
