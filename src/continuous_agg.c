@@ -400,21 +400,63 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
 }
 
 ContinuousAgg *
-ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
+ts_continuous_agg_find_by_view_name(const char *schema, const char *name,
+									ContinuousAggViewType type)
 {
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ScanIterator iterator;
 	ContinuousAgg *ca = NULL;
+	AttrNumber view_name_attrnum = 0;
+	AttrNumber schema_name_attrnum = 0;
 	int count = 0;
+
+	Assert(schema);
+	Assert(name);
+
+	switch (type)
+	{
+		case ContinuousAggUserView:
+			schema_name_attrnum = Anum_continuous_agg_user_view_schema;
+			view_name_attrnum = Anum_continuous_agg_user_view_name;
+			break;
+		case ContinuousAggPartialView:
+			schema_name_attrnum = Anum_continuous_agg_partial_view_schema;
+			view_name_attrnum = Anum_continuous_agg_partial_view_name;
+			break;
+		case ContinuousAggDirectView:
+			schema_name_attrnum = Anum_continuous_agg_direct_view_schema;
+			view_name_attrnum = Anum_continuous_agg_direct_view_name;
+			break;
+		case ContinuousAggAnyView:
+			break;
+	}
+
+	iterator = ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	if (type != ContinuousAggAnyView)
+	{
+		ts_scan_iterator_scan_key_init(&iterator,
+									   schema_name_attrnum,
+									   BTEqualStrategyNumber,
+									   F_NAMEEQ,
+									   CStringGetDatum(schema));
+		ts_scan_iterator_scan_key_init(&iterator,
+									   view_name_attrnum,
+									   BTEqualStrategyNumber,
+									   F_NAMEEQ,
+									   CStringGetDatum(name));
+	}
 
 	ts_scanner_foreach(&iterator)
 	{
 		bool should_free;
 		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
-		ContinuousAggViewType vtyp = ts_continuous_agg_view_type(data, schema, name);
+		ContinuousAggViewType vtype = type;
 
-		if (vtyp != ContinuousAggNone)
+		if (vtype == ContinuousAggAnyView)
+			vtype = ts_continuous_agg_view_type(data, schema, name);
+
+		if (vtype != ContinuousAggAnyView)
 		{
 			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
 			continuous_agg_init(ca, data);
@@ -424,48 +466,16 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name)
 		if (should_free)
 			heap_freetuple(tuple);
 	}
+
 	Assert(count <= 1);
+
 	return ca;
 }
 
 ContinuousAgg *
 ts_continuous_agg_find_userview_name(const char *schema, const char *name)
 {
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ContinuousAgg *ca = NULL;
-	int count = 0;
-	const char *chkschema = schema;
-
-	ts_scanner_foreach(&iterator)
-	{
-		ContinuousAggViewType vtyp;
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
-
-		if (schema == NULL)
-		{
-			/* only user visible views will be returned */
-			Oid relid = RelnameGetRelid(NameStr(data->user_view_name));
-			if (relid == InvalidOid)
-				continue;
-			chkschema = NameStr(data->user_view_schema);
-		}
-
-		vtyp = ts_continuous_agg_view_type(data, chkschema, name);
-		if (vtyp == ContinuousAggUserView)
-		{
-			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
-			continuous_agg_init(ca, data);
-			count++;
-		}
-
-		if (should_free)
-			heap_freetuple(tuple);
-	}
-	Assert(count <= 1);
-	return ca;
+	return ts_continuous_agg_find_by_view_name(schema, name, ContinuousAggUserView);
 }
 
 /*
@@ -479,6 +489,9 @@ ts_continuous_agg_find_by_relid(Oid relid)
 {
 	const char *relname = get_rel_name(relid);
 	const char *schemaname = get_namespace_name(get_rel_namespace(relid));
+
+	if (NULL == relname || NULL == schemaname)
+		return NULL;
 
 	return ts_continuous_agg_find_userview_name(schemaname, relname);
 }
@@ -761,7 +774,7 @@ ts_continuous_agg_view_type(FormData_continuous_agg *data, const char *schema, c
 			 CHECK_NAME_MATCH(&data->direct_view_name, name))
 		return ContinuousAggDirectView;
 	else
-		return ContinuousAggNone;
+		return ContinuousAggAnyView;
 }
 
 static FormData_continuous_agg *

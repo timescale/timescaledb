@@ -2785,8 +2785,6 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
 	const Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-	NameData view_name;
-	NameData view_schema;
 	ContinuousAgg *cagg;
 	ListCell *lc;
 	Hypertable *ht;
@@ -2795,9 +2793,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
 
-	namestrcpy(&view_name, get_rel_name(view_relid));
-	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(view_relid)));
-	cagg = ts_continuous_agg_find_by_view_name(NameStr(view_schema), NameStr(view_name));
+	cagg = ts_continuous_agg_find_by_relid(view_relid);
 
 	if (cagg == NULL)
 		return DDL_CONTINUE;
@@ -2848,11 +2844,12 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
 	ContinuousAgg *cagg;
 	ContinuousAggViewType vtyp;
-	NameData view_name;
-	NameData view_schema;
+	const char *view_name;
+	const char *view_schema;
 
 	/* Check if this is a materialized view and give error if it is. */
 	cagg = ts_continuous_agg_find_by_relid(relid);
+
 	if (cagg)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -2861,14 +2858,14 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 
 	/* Check if this is an internal view of a continuous aggregate and give
 	 * error if attempts are made to alter them. */
-	namestrcpy(&view_name, get_rel_name(relid));
-	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(relid)));
-	cagg = ts_continuous_agg_find_by_view_name(NameStr(view_schema), NameStr(view_name));
+	view_name = get_rel_name(relid);
+	view_schema = get_namespace_name(get_rel_namespace(relid));
+	cagg = ts_continuous_agg_find_by_view_name(view_schema, view_name, ContinuousAggAnyView);
 
 	if (cagg == NULL)
 		return DDL_CONTINUE;
 
-	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
+	vtyp = ts_continuous_agg_view_type(&cagg->data, view_schema, view_name);
 
 	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
 		ereport(ERROR,
@@ -3326,44 +3323,15 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 {
 	RefreshMatViewStmt *stmt = castNode(RefreshMatViewStmt, args->parsetree);
 	Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-	int32 materialization_id = -1;
-	ScanIterator continuous_aggregate_iter;
-	NameData view_name;
-	NameData view_schema;
+	const ContinuousAgg *cagg;
 	LOCAL_FCINFO(fcinfo, 3);
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
 
-	namestrcpy(&view_name, get_rel_name(view_relid));
-	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(view_relid)));
+	cagg = ts_continuous_agg_find_by_relid(view_relid);
 
-	continuous_aggregate_iter =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-
-	ts_scan_iterator_scan_key_init(&continuous_aggregate_iter,
-								   Anum_continuous_agg_user_view_name,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   NameGetDatum(&view_name));
-	ts_scan_iterator_scan_key_init(&continuous_aggregate_iter,
-								   Anum_continuous_agg_user_view_schema,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   NameGetDatum(&view_schema));
-
-	ts_scanner_foreach(&continuous_aggregate_iter)
-	{
-		bool isnull;
-		Datum hyper_id = slot_getattr(ts_scan_iterator_slot(&continuous_aggregate_iter),
-									  Anum_continuous_agg_mat_hypertable_id,
-									  &isnull);
-		Assert(!isnull);
-		Assert(materialization_id == -1);
-		materialization_id = DatumGetInt32(hyper_id);
-	}
-
-	if (materialization_id == -1)
+	if (NULL == cagg)
 		return DDL_CONTINUE;
 
 	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
@@ -3613,7 +3581,10 @@ process_drop_view(EventTriggerDropView *dropped_view)
 {
 	ContinuousAgg *ca;
 
-	ca = ts_continuous_agg_find_by_view_name(dropped_view->schema, dropped_view->view_name);
+	ca = ts_continuous_agg_find_by_view_name(dropped_view->schema,
+											 dropped_view->view_name,
+											 ContinuousAggAnyView);
+
 	if (ca != NULL)
 		ts_continuous_agg_drop_view_callback(ca, dropped_view->schema, dropped_view->view_name);
 }

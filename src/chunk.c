@@ -3318,12 +3318,14 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid)
 	Hypertable *ht;
 
 	rel_name = get_rel_name(relid);
+
 	if (!rel_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("invalid hypertable or continuous aggregate")));
 
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+
 	if (ht)
 	{
 		const ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
@@ -3344,29 +3346,23 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid)
 	}
 	else
 	{
-		/* Using the name to look up the continuous aggregate, but we should
-		 * refactor the code to use the relid directly. */
-		const char *const schema_name = get_namespace_name(get_rel_namespace(relid));
-		ContinuousAgg *const cagg = ts_continuous_agg_find_userview_name(schema_name, rel_name);
-
-		Assert(schema_name && rel_name);
+		ContinuousAgg *const cagg = ts_continuous_agg_find_by_relid(relid);
 
 		if (!cagg)
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-					 errmsg("\"%s.%s\" is not a hypertable or a continuous aggregate view",
-							schema_name,
-							rel_name),
+					 errmsg("\"%s\" is not a hypertable or a continuous aggregate", rel_name),
 					 errhint("The operation is only possible on a hypertable or continuous"
-							 " aggregate view")));
+							 " aggregate.")));
+
 		ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+
 		if (!ht)
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_INTERNAL_ERROR),
-					 errmsg("no materialized table for continuous aggregate view"),
-					 errdetail("Continuous aggregate \"%s.%s\" had a materialized hypertable"
+					 errmsg("no materialized table for continuous aggregate"),
+					 errdetail("Continuous aggregate \"%s\" had a materialized hypertable"
 							   " with id %d but it was not found in the hypertable catalog.",
-							   schema_name,
 							   rel_name,
 							   cagg->data.mat_hypertable_id)));
 	}
