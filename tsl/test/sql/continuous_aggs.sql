@@ -8,6 +8,9 @@
 CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION test.continuous_aggs_find_view(cagg REGCLASS) RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_continuous_agg_find_by_view_name' LANGUAGE C;
+
 \set WAIT_ON_JOB 0
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
@@ -883,3 +886,6 @@ group by time_bucket(100, timec), location
 having avg(temperature) > 0;
 
 select * from conditions_grpby_view2 order by 1, 2;
+
+-- Test internal functions for continuous aggregates
+SELECT test.continuous_aggs_find_view('mat_refresh_test');

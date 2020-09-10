@@ -1106,15 +1106,11 @@ check_cagg_view_rte(RangeTblEntry *rte)
 	foreach (rtlc, viewq->rtable)
 	{
 		RangeTblEntry *rte = lfirst_node(RangeTblEntry, rtlc);
-		char *schema;
-		char *table;
 
 		if (!OidIsValid(rte->relid))
 			break;
 
-		schema = get_namespace_name(get_rel_namespace(rte->relid));
-		table = get_rel_name(rte->relid);
-		if ((cagg = ts_continuous_agg_find_by_view_name(schema, table)) != NULL)
+		if ((cagg = ts_continuous_agg_find_by_relid(rte->relid)) != NULL)
 			found = true;
 	}
 	return found;

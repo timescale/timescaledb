@@ -29,7 +29,7 @@ typedef enum ContinuousAggViewType
 	ContinuousAggUserView = 0,
 	ContinuousAggPartialView,
 	ContinuousAggDirectView,
-	ContinuousAggNone
+	ContinuousAggAnyView
 } ContinuousAggViewType;
 
 extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const List *defelems);
@@ -71,7 +71,8 @@ TSDLLEXPORT
 int64 ts_continuous_agg_get_completed_threshold(int32 materialization_id);
 
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
-																	  const char *name);
+																	  const char *name,
+																	  ContinuousAggViewType type);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_relid(Oid relid);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_rv(const RangeVar *rv);
 

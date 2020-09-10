@@ -117,15 +117,15 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 	{
 		/*check if this is a cont aggregate view */
 		int32 mat_id;
-		char *schema = get_namespace_name(get_rel_namespace(user_htoid));
-		char *view_name = get_rel_name(user_htoid);
-		ContinuousAgg *ca = NULL;
-		ca = ts_continuous_agg_find_by_view_name(schema, view_name);
+		ContinuousAgg *ca;
+
+		ca = ts_continuous_agg_find_by_relid(user_htoid);
+
 		if (ca == NULL)
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-					 errmsg("\"%s\" is not a hypertable or a continuous aggregate view",
-							view_name)));
+					 errmsg("\"%s\" is not a hypertable or a continuous aggregate",
+							get_rel_name(user_htoid))));
 		mat_id = ca->data.mat_hypertable_id;
 		ht = ts_hypertable_get_by_id(mat_id);
 	}
@@ -307,8 +307,8 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 		}
 		else
 		{
-			char *schema_name = get_namespace_name(get_rel_namespace(table_oid));
-			ContinuousAgg *ca = ts_continuous_agg_find_by_view_name(schema_name, view_name);
+			ContinuousAgg *ca = ts_continuous_agg_find_by_relid(table_oid);
+
 			if (!ca)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
