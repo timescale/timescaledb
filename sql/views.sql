@@ -48,8 +48,22 @@ CREATE OR REPLACE VIEW timescaledb_information.license AS
          _timescaledb_internal.license_expiration_time() AS expiration_time;
 
 CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, j.id AS job_id, js.last_run_success, js.last_finish, js.last_successful_finish, js.last_start, js.next_start,
-    js.total_runs, js.total_failures
+  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, j.id AS job_id, 
+   js.last_start as last_run_started_at, 
+   js.last_successful_finish as last_successful_finish, 
+   CASE WHEN js.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL
+        WHEN js.last_finish IS NOT NULL THEN
+              CASE WHEN js.last_run_success = 't' THEN 'Success'
+                   WHEN js.last_run_success = 'f' THEN 'Failed'
+              END
+    END as last_run_status,
+    CASE WHEN js.last_finish < '4714-11-24 00:00:00+00 BC' THEN 'Running'
+         WHEN js.next_start IS NOT NULL THEN 'Scheduled'
+    END as job_status,
+    CASE WHEN js.last_finish > js.last_start THEN (js.last_finish - js.last_start)
+    END as last_run_duration,
+    js.next_start as next_scheduled_run,
+    js.total_runs, js.total_successes, js.total_failures
   FROM _timescaledb_config.bgw_job j
     INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
     INNER JOIN _timescaledb_internal.bgw_job_stat js on j.id = js.job_id
