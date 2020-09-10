@@ -1,6 +1,6 @@
-Parsed test spec with 10 sessions
+Parsed test spec with 9 sessions
 
-starting permutation: Setup2 LockCompleted LockMat1 Refresh1 Refresh2 UnlockCompleted UnlockMat1
+starting permutation: Setup2 LockMat1 Refresh1 Refresh2 UnlockMat1
 step Setup2: 
     CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
@@ -16,7 +16,6 @@ step Setup2:
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;
 
-step LockCompleted: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE;
 step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
 
 lock_mattable  
@@ -24,11 +23,10 @@ lock_mattable
                
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step UnlockCompleted: ROLLBACK;
 step UnlockMat1: ROLLBACK;
 step Refresh1: <... completed>
 
-starting permutation: Setup2 Refresh1 Refresh2 LockCompleted LockMat1 I1 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
+starting permutation: Setup2 Refresh1 Refresh2 LockMat1 I1 Refresh1 Refresh2 UnlockMat1 Refresh1_sel Refresh2_sel
 step Setup2: 
     CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
@@ -46,7 +44,6 @@ step Setup2:
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step LockCompleted: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE;
 step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
 
 lock_mattable  
@@ -55,7 +52,6 @@ lock_mattable
 step I1: INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_series(0, 10) AS i) AS i;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step UnlockCompleted: ROLLBACK;
 step UnlockMat1: ROLLBACK;
 step Refresh1: <... completed>
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
@@ -67,7 +63,7 @@ bkt            maxl
 
 0              100            
 
-starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockCompleted LockMat1 I2 Refresh1 Refresh2 UnlockCompleted UnlockMat1 Refresh1_sel Refresh2_sel
+starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockMat1 I2 Refresh1 Refresh2 UnlockMat1 Refresh1_sel Refresh2_sel
 step Setup2: 
     CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
@@ -93,7 +89,6 @@ step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 ord
 bkt            maxl           
 
 0              4              
-step LockCompleted: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_completed_threshold IN SHARE MODE;
 step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
 
 lock_mattable  
@@ -102,7 +97,6 @@ lock_mattable
 step I2: INSERT INTO ts_continuous_test SELECT 40, 1000 ;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step UnlockCompleted: ROLLBACK;
 step UnlockMat1: ROLLBACK;
 R1: NOTICE:  continuous aggregate "continuous_view_1" is already up-to-date
 step Refresh1: <... completed>
