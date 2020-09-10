@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - prerelease_test
+  pull_request:
 jobs:
   regress_linux_32bit:
     name: Regression PG${{ matrix.pg }} [${{ matrix.build_type }}]
@@ -21,9 +22,9 @@ jobs:
         build_type: [ Debug ]
         include:
           - pg: 11.9
-            installcheck_ignores: append-11 continuous_aggs_bgw chunk_adaptive-11 ordered_append-11 transparent_decompression-11
+            ignores: append-11 chunk_adaptive-11 continuous_aggs_bgw_drop_chunks continuous_aggs_materialize remote_txn transparent_decompression-11
           - pg: 12.4
-            installcheck_ignores: append-12 continuous_aggs_bgw chunk_adaptive-12 ordered_append-12 transparent_decompression-12
+            ignores: append-12 chunk_adaptive-12 continuous_aggs_bgw_drop_chunks continuous_aggs_materialize remote_txn transparent_decompression-12
 
     steps:
 
@@ -54,7 +55,7 @@ jobs:
       id: installcheck
       run: |
         set -o pipefail
-        sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.installcheck_ignores }}" | tee installcheck.log
+        sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
