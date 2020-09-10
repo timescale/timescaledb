@@ -485,19 +485,6 @@ ts_hypertable_get_all(void)
 	return result;
 }
 
-/* Lazy-load the maximum ignore_invalidation_older_than setting from all associated continuous aggs
- */
-TSDLLEXPORT int64
-ts_hypertable_get_max_ignore_invalidation_older_than(Hypertable *ht)
-{
-	if (ht->max_ignore_invalidation_older_than < 0)
-		ht->max_ignore_invalidation_older_than =
-			ts_continuous_aggs_max_ignore_invalidation_older_than(ht->fd.id, NULL);
-
-	Assert(ht->max_ignore_invalidation_older_than >= 0);
-	return ht->max_ignore_invalidation_older_than;
-}
-
 static ScanTupleResult
 hypertable_tuple_update(TupleInfo *ti, void *data)
 {

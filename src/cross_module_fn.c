@@ -185,13 +185,6 @@ job_execute_default_fn(BgwJob *job)
 }
 
 static bool
-cagg_materialize_default_fn(int32 materialization_id, ContinuousAggMatOptions *options)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static bool
 process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
 							   WithClauseResult *with_clause_options)
 {
@@ -377,7 +370,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_refresh_all = continuous_agg_invalidate_or_refresh_all_default,
 	.continuous_agg_invalidate = continuous_agg_invalidate_or_refresh_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
-	.continuous_agg_materialize = cagg_materialize_default_fn,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

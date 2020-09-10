@@ -45,7 +45,6 @@ typedef struct CrossModuleFunctions
 	void (*print_tsl_license_expiration_info_hook)(void);
 	void (*module_shutdown_hook)(void);
 	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
-	bool (*continuous_agg_materialize)(int32 materialization_id, ContinuousAggMatOptions *options);
 
 	PGFunction policy_compression_add;
 	PGFunction policy_compression_proc;

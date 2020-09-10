@@ -63,13 +63,7 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
 extern TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
-extern TSDLLEXPORT int64 ts_continuous_aggs_max_ignore_invalidation_older_than(
-	int32 raw_hypertable_id, FormData_continuous_agg *entry);
-extern TSDLLEXPORT int64 ts_continuous_aggs_get_minimum_invalidation_time(
-	int64 modification_time, int64 ignore_invalidation_older_than);
-TSDLLEXPORT
-int64 ts_continuous_agg_get_completed_threshold(int32 materialization_id);
-
+extern TSDLLEXPORT int64 ts_continuous_agg_get_completed_threshold(int32 materialization_id);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name,
 																	  ContinuousAggViewType type);

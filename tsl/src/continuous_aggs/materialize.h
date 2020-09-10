@@ -36,12 +36,6 @@ typedef struct InternalTimeRange
 } InternalTimeRange;
 
 InternalTimeRange continuous_agg_materialize_window_max(Oid timetype);
-bool continuous_agg_materialize(int32 materialization_id, ContinuousAggMatOptions *options);
-void continuous_agg_execute_materialization(int64 bucket_width, int32 hypertable_id,
-											int32 materialization_id, SchemaAndName partial_view,
-											int64 invalidation_range_start,
-											int64 invalidation_range_end,
-											int64 materialization_invalidation_threshold);
 void continuous_agg_update_materialization(SchemaAndName partial_view,
 										   SchemaAndName materialization_table,
 										   Name time_column_name,

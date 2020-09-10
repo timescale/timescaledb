@@ -24,7 +24,6 @@
 #include "compression/segment_meta.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
-#include "continuous_aggs/materialize.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/invalidation.h"
@@ -92,7 +91,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.print_tsl_license_expiration_info_hook = license_print_expiration_info,
 	.module_shutdown_hook = module_shutdown,
 	.add_tsl_telemetry_info = tsl_telemetry_add_info,
-	.continuous_agg_materialize = continuous_agg_materialize,
 
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
