@@ -295,7 +295,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	else
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-	continuous_agg_refresh_internal(cagg, &refresh_window);
+	continuous_agg_refresh_internal(cagg, &refresh_window, false);
 	PG_RETURN_VOID();
 }
 
@@ -309,7 +309,7 @@ emit_up_to_date_notice(const ContinuousAgg *cagg)
 
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
-									   const InternalTimeRange *refresh_window)
+									   const InternalTimeRange *refresh_window, bool verbose)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id);
@@ -327,6 +327,15 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 
 	if (invalidations != NULL)
 	{
+		if (verbose)
+		{
+			Assert(OidIsValid(cagg->relid));
+			ereport(NOTICE,
+					(errmsg("refreshing continuous aggregate \"%s\"", get_rel_name(cagg->relid)),
+					 errhint(
+						 "Use WITH NO DATA if you do not want to refresh the continuous aggregate "
+						 "on creation.")));
+		}
 		continuous_agg_refresh_with_window(cagg, refresh_window, invalidations);
 		invalidation_store_free(invalidations);
 		return true;
@@ -337,7 +346,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 
 void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
-								const InternalTimeRange *refresh_window_arg)
+								const InternalTimeRange *refresh_window_arg, bool verbose)
 {
 	Catalog *catalog = ts_catalog_get();
 	int32 mat_id = cagg->data.mat_hypertable_id;
@@ -423,7 +432,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	StartTransactionCommand();
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 
-	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window))
+	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, verbose))
 		emit_up_to_date_notice(cagg);
 }
 
@@ -465,6 +474,6 @@ continuous_agg_refresh_all(const Hypertable *ht, int64 start, int64 end)
 	{
 		const ContinuousAgg *cagg = lfirst(lc);
 
-		process_cagg_invalidations_and_refresh(cagg, &refresh_window);
+		process_cagg_invalidations_and_refresh(cagg, &refresh_window, false);
 	}
 }

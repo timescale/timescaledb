@@ -31,7 +31,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 SELECT a, count(b)
 FROM int_tab
-GROUP BY time_bucket(1, a), a;
+GROUP BY time_bucket(1, a), a WITH NO DATA;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
@@ -83,7 +83,7 @@ CREATE MATERIALIZED VIEW max_mat_view_date
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_max_mat_date
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 \set ON_ERROR_STOP 0
 SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '2 days'::interval, 10 , '1 day'::interval); 
@@ -104,7 +104,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_timestamp
-        GROUP BY 1;
+        GROUP BY 1 WITH NO DATA;
 
 SELECT add_refresh_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 h'::interval , '1 h'::interval) as job_id \gset
 CALL run_job(:job_id);
@@ -136,7 +136,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 SELECT time_bucket( SMALLINT '1', a) , count(*)
 FROM smallint_tab
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
 SELECT add_refresh_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
 SELECT add_refresh_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);

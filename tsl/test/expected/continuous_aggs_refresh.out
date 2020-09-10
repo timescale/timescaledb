@@ -50,7 +50,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_2_device_day_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device, day)
 -- The continuous aggregate should be empty
 SELECT * FROM daily_temp
@@ -198,7 +198,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions_date
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_4_device_day_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device, day)
 CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 -- Try max refresh window size
@@ -229,7 +229,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 ERROR:  missing integer-now function on hypertable "conditions_smallint"
 \set ON_ERROR_STOP 1
 SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
@@ -244,7 +244,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_6_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_6 USING BTREE(device, bucket)
 CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint);
 SELECT * FROM cond_20_smallint
@@ -296,7 +296,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_8_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(device, bucket)
 CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
 SELECT * FROM cond_20_int
@@ -348,7 +348,7 @@ WITH (timescaledb.continuous,
 AS
 SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
-GROUP BY 1,2;
+GROUP BY 1,2 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_10_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(device, bucket)
 CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
 SELECT * FROM cond_20_bigint
@@ -371,3 +371,55 @@ ORDER BY 1,2;
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_bigint', NULL, NULL);
+-- Test that WITH NO DATA and WITH DATA works (we use whatever is the
+-- default for Postgres, so we do not need to have test for the
+-- default).
+CREATE MATERIALIZED VIEW weekly_temp_without_data
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+NOTICE:  adding index _materialized_hypertable_11_device_day_idx ON _timescaledb_internal._materialized_hypertable_11 USING BTREE(device, day)
+CREATE MATERIALIZED VIEW weekly_temp_with_data
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH DATA;
+NOTICE:  adding index _materialized_hypertable_12_device_day_idx ON _timescaledb_internal._materialized_hypertable_12 USING BTREE(device, day)
+NOTICE:  refreshing continuous aggregate "weekly_temp_with_data"
+SELECT * FROM weekly_temp_without_data;
+ day | device | avg_temp 
+-----+--------+----------
+(0 rows)
+
+SELECT * FROM weekly_temp_with_data;
+             day              | device |     avg_temp     
+------------------------------+--------+------------------
+ Sun Apr 26 17:00:00 2020 PDT |      3 | 21.5631067961165
+ Sun Apr 26 17:00:00 2020 PDT |      1 | 17.2474226804124
+ Sun May 03 17:00:00 2020 PDT |      0 | 16.7659574468085
+ Sun May 03 17:00:00 2020 PDT |      1 | 22.7272727272727
+ Sun Apr 26 17:00:00 2020 PDT |      0 | 17.8181818181818
+ Sun Apr 26 17:00:00 2020 PDT |      2 | 18.9803921568627
+ Sun May 03 17:00:00 2020 PDT |      2 |  15.811320754717
+ Sun May 03 17:00:00 2020 PDT |      3 |               19
+(8 rows)
+
+CALL refresh_continuous_aggregate('weekly_temp_without_data', NULL, NULL);
+SELECT * FROM weekly_temp_without_data;
+             day              | device |     avg_temp     
+------------------------------+--------+------------------
+ Sun Apr 26 17:00:00 2020 PDT |      3 | 21.5631067961165
+ Sun Apr 26 17:00:00 2020 PDT |      1 | 17.2474226804124
+ Sun May 03 17:00:00 2020 PDT |      0 | 16.7659574468085
+ Sun May 03 17:00:00 2020 PDT |      1 | 22.7272727272727
+ Sun Apr 26 17:00:00 2020 PDT |      0 | 17.8181818181818
+ Sun Apr 26 17:00:00 2020 PDT |      2 | 18.9803921568627
+ Sun May 03 17:00:00 2020 PDT |      2 |  15.811320754717
+ Sun May 03 17:00:00 2020 PDT |      3 |               19
+(8 rows)
+

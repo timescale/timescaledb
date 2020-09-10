@@ -239,7 +239,7 @@ SELECT
   max(metric)-min(metric) as metric_spread
 FROM
   test_contagg
-GROUP BY bucket, device_id;
+GROUP BY bucket, device_id WITH NO DATA;
 
 -- policy API
 CALL _timescaledb_internal.policy_compression(1,'{}');

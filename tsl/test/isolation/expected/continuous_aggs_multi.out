@@ -6,12 +6,12 @@ step Setup2:
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
         WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;
@@ -37,12 +37,12 @@ step Setup2:
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
         WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;
@@ -83,12 +83,12 @@ step Setup2:
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
         WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;
@@ -137,12 +137,12 @@ step Setup2:
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-5', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), COUNT(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
         WITH ( timescaledb.continuous,timescaledb.refresh_lag='-10', timescaledb.materialized_only = true)
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
     CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;

@@ -47,7 +47,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select a, count(b)
 from foo
-group by time_bucket(1, a), a;
+group by time_bucket(1, a), a WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
 SELECT add_refresh_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval); 
  add_refresh_continuous_aggregate_policy 
@@ -127,7 +127,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec);
+group by time_bucket('1day', timec) WITH NO DATA;
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -201,7 +201,7 @@ as
 select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
-group by time_bucket('1week', timec) ;
+group by time_bucket('1week', timec)  WITH NO DATA;
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -257,7 +257,7 @@ min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec)
-;
+ WITH NO DATA;
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -310,7 +310,7 @@ select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by time_bucket('1week', timec)
-having stddev(humidity) is not null;
+having stddev(humidity) is not null WITH NO DATA;
 ;
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
@@ -383,7 +383,7 @@ as
 select time_bucket('1week', timec) as bucket, location as loc, sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by bucket, loc
-having min(location) >= 'NYC' and avg(temperature) > 20;
+having min(location) >= 'NYC' and avg(temperature) > 20 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_10_loc_bucket_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(loc, bucket)
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
@@ -418,7 +418,7 @@ as
 select time_bucket('1week', timec), location, sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by 1,2
-having min(location) >= 'NYC' and avg(temperature) > 20;
+having min(location) >= 'NYC' and avg(temperature) > 20 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_11_location_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_11 USING BTREE(location, time_bucket)
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
@@ -453,7 +453,7 @@ as
 select time_bucket('1week', timec), location, sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by 1,2
-having min(location) >= 'NYC' and avg(temperature) > 20;
+having min(location) >= 'NYC' and avg(temperature) > 20 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_12_loc_bucket_idx ON _timescaledb_internal._materialized_hypertable_12 USING BTREE(loc, bucket)
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
@@ -488,7 +488,7 @@ select time_bucket('1week', timec) ,
 min(location), sum(temperature)+sum(humidity), stddev(humidity)
 from conditions
 group by  time_bucket('1week', timec)
-having min(location) >= 'NYC' and avg(temperature) > 20;
+having min(location) >= 'NYC' and avg(temperature) > 20 WITH NO DATA;
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -735,7 +735,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec);
+group by time_bucket('1day', timec) WITH NO DATA;
 \set ON_ERROR_STOP 0
 DROP TABLE conditions;
 ERROR:  cannot drop table conditions because other objects depend on it
@@ -864,7 +864,7 @@ WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.r
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec), location, humidity, temperature;
+group by time_bucket('1day', timec), location, humidity, temperature WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_5_5, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_6_6, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_7_7, timec)
@@ -932,7 +932,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.re
 as
 select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec), location, humidity, temperature;
+group by time_bucket('1day', timec), location, humidity, temperature WITH NO DATA;
 select indexname, indexdef from pg_indexes where tablename =
 (SELECT h.table_name
 FROM _timescaledb_catalog.continuous_agg ca
@@ -973,7 +973,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.re
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket(100, timec);
+group by time_bucket(100, timec) WITH NO DATA;
 SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval); 
  add_refresh_continuous_aggregate_policy 
 -----------------------------------------
@@ -1044,7 +1044,7 @@ CREATE MATERIALIZED VIEW space_view
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag = '-2')
 AS SELECT time_bucket('4', time), COUNT(data)
    FROM space_table
-   GROUP BY 1;
+   GROUP BY 1 WITH NO DATA;
 INSERT INTO space_table VALUES
   (0, 1, 1), (0, 2, 1), (1, 1, 1), (1, 2, 1),
   (10, 1, 1), (10, 2, 1), (11, 1, 1), (11, 2, 1);
@@ -1185,7 +1185,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.re
 as
 select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test'::text)
 from conditions
-group by time_bucket(100, timec);
+group by time_bucket(100, timec) WITH NO DATA;
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
 LOG:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 300
 SELECT * FROM mat_ffunc_test;
@@ -1206,7 +1206,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.re
 as
 select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigint '123')
 from conditions
-group by time_bucket(100, timec);
+group by time_bucket(100, timec) WITH NO DATA;
 REFRESH MATERIALIZED VIEW mat_ffunc_test;
 LOG:  materializing continuous aggregate public.mat_ffunc_test: nothing to invalidate, new range up to 300
 SELECT * FROM mat_ffunc_test;
@@ -1228,7 +1228,7 @@ WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.re
 as
 select location, max(humidity)
 from conditions
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_29_location_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_29 USING BTREE(location, time_partition_col)
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
@@ -1247,7 +1247,7 @@ SELECT * FROM mat_refresh_test order by 1,2 ;
 CREATE MATERIALIZED VIEW conditions_grpby_view with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
 select time_bucket(100, timec),  sum(humidity) 
 from conditions 
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_30_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_30 USING BTREE(grp_3_3, time_bucket)
 REFRESH MATERIALIZED VIEW conditions_grpby_view;
 LOG:  materializing continuous aggregate public.conditions_grpby_view: nothing to invalidate, new range up to 300
@@ -1265,7 +1265,7 @@ select time_bucket(100, timec), sum(humidity)
 from conditions
 group by time_bucket(100, timec), location  
 having avg(temperature) > 0
-;
+ WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_31_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_31 USING BTREE(grp_3_3, time_bucket)
 REFRESH MATERIALIZED VIEW conditions_grpby_view2;
 LOG:  materializing continuous aggregate public.conditions_grpby_view2: nothing to invalidate, new range up to 300
@@ -1300,7 +1300,7 @@ create materialized view mat_test5( timec, maxt)
 as
 select time_bucket('1day', time), max(temperature)
 from conditions
-group by time_bucket('1day', time);
+group by time_bucket('1day', time) WITH NO DATA;
 SET timescaledb.current_timestamp_mock = '2001-03-11';
 insert into conditions values('2001-03-10', '1');
 insert into conditions values('2001-03-10', '2');

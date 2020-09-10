@@ -77,6 +77,7 @@
 #include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
+#include "refresh.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -1810,7 +1811,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	};
 
 	nspid = RangeVarGetCreationNamespace(stmt->into->rel);
-
 	if (get_relname_relid(stmt->into->rel->relname, nspid))
 	{
 		if (stmt->if_not_exists)
@@ -1835,6 +1835,33 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery);
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
+	if (!stmt->into->skipData)
+	{
+		Oid relid;
+		ContinuousAgg *cagg;
+		Hypertable *cagg_ht;
+		Dimension *time_dim;
+		InternalTimeRange refresh_window = {
+			.type = InvalidOid,
+		};
+
+		CommandCounterIncrement();
+
+		/* We are creating a refresh window here in a similar way to how it's
+		 * done in continuous_agg_refresh. We do not call the PG function
+		 * directly since we want to be able to surpress the output in that
+		 * function and adding a 'verbose' parameter to is not useful for a
+		 * user. */
+		relid = get_relname_relid(stmt->into->rel->relname, nspid);
+		cagg = ts_continuous_agg_find_by_relid(relid);
+		cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+		time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
+		refresh_window.type = ts_dimension_get_partition_type(time_dim);
+		refresh_window.start = ts_time_get_min(refresh_window.type);
+		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
+
+		continuous_agg_refresh_internal(cagg, &refresh_window, true);
+	}
 	return DDL_DONE;
 }
 

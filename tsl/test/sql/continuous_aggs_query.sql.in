@@ -50,7 +50,7 @@ WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
 as
 select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
-group by time_bucket('1day', timec), location;
+group by time_bucket('1day', timec), location WITH NO DATA;
 
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 --compute time_bucketted max+bucket_width for the materialized view
@@ -64,7 +64,7 @@ WITH ( timescaledb.continuous, timescaledb.max_interval_per_job='365 days')
 as
 select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
 from conditions
-group by time_bucket('1day', timec), location;
+group by time_bucket('1day', timec), location WITH NO DATA;
 --time that refresh assumes as now() for repeatability
 SET timescaledb.current_timestamp_mock = '2018-12-31 00:00';
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)

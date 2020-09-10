@@ -30,7 +30,7 @@ CREATE MATERIALIZED VIEW records_monthly
             clientId,
             avg(value) as value_avg,
             max(value)-min(value) as value_spread
-        FROM records GROUP BY bucket, clientId;
+        FROM records GROUP BY bucket, clientId WITH NO DATA;
 
 INSERT INTO clients(name) VALUES ('test-client');
 

@@ -123,7 +123,7 @@ SELECT device,
        MAX(temperature) AS max_temperature,
        MIN(temperature) AS min_temperature
 FROM conditions
-GROUP BY device, time_bucket(INTERVAL '1 hour', "time");
+GROUP BY device, time_bucket(INTERVAL '1 hour', "time") WITH NO DATA;
 
 CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 

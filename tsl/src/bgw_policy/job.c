@@ -283,7 +283,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	refresh_window = (InternalTimeRange){ .type = dim_type,
 										  .start = (start_isnull ? PG_INT64_MIN : refresh_start),
 										  .end = (end_isnull ? PG_INT64_MAX : refresh_end) };
-	continuous_agg_refresh_internal(cagg, &refresh_window);
+	continuous_agg_refresh_internal(cagg, &refresh_window, false);
 	elog(LOG,
 		 "refresh continuous aggregate range %s , %s",
 		 ts_internal_to_time_string(refresh_start, dim_type),

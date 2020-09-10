@@ -30,7 +30,7 @@ CREATE MATERIALIZED VIEW records_monthly
             clientId,
             avg(value) as value_avg,
             max(value)-min(value) as value_spread
-        FROM records GROUP BY bucket, clientId;
+        FROM records GROUP BY bucket, clientId WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_2_clientid_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(clientid, bucket)
 INSERT INTO clients(name) VALUES ('test-client');
 INSERT INTO records

@@ -87,14 +87,14 @@ DROP MATERIALIZED VIEW IF EXISTS mat_test;
 --that the partial state survives the dump intact
 CREATE MATERIALIZED VIEW mat_before
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
-AS :QUERY_BEFORE;
+AS :QUERY_BEFORE WITH NO DATA;
 
 --materialize this VIEW after dump this tests
 --that the partialize VIEW and refresh mechanics
 --survives the dump intact
 CREATE MATERIALIZED VIEW mat_after
 WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day')
-AS :QUERY_AFTER;
+AS :QUERY_AFTER WITH NO DATA;
 
 --materialize mat_before
 

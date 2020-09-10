@@ -22,14 +22,14 @@ WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.mate
 AS
     SELECT time_bucket( 2, timeval), COUNT(col1) 
     FROM continuous_agg_test
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW cagg_2( timed, grp, maxval) 
 WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.materialized_only=true   )
 AS
     SELECT time_bucket(2, timeval), col1, max(col2) 
     FROM continuous_agg_test
-    GROUP BY 1, 2;
+    GROUP BY 1, 2 WITH NO DATA;
 
 select view_name, view_owner, materialization_hypertable 
 from timescaledb_information.continuous_aggregates ORDER BY 1;
@@ -108,13 +108,13 @@ WITH ( timescaledb.continuous , timescaledb.refresh_lag = '-2', timescaledb.mate
 AS
     SELECT time_bucket( 2, timeval), COUNT(col1) 
     FROM continuous_agg_test
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 CREATE MATERIALIZED VIEW cagg_2( timed, maxval) 
 WITH ( timescaledb.continuous , timescaledb.refresh_lag = '2', timescaledb.materialized_only = true)
 AS
     SELECT time_bucket(2, timeval), max(col2) 
     FROM continuous_agg_test
-    GROUP BY 1;
+    GROUP BY 1 WITH NO DATA;
 refresh materialized view cagg_1;
 select * from cagg_1 order by 1;
 refresh materialized view cagg_2;
@@ -163,21 +163,21 @@ CREATE MATERIALIZED VIEW cagg_iia1( timed, cnt )
 AS
 SELECT time_bucket( 2, timeval), COUNT(col1)
 FROM continuous_agg_test_ignore_invalidation_older_than
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW cagg_iia2( timed, maxval)
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 10, timescaledb.materialized_only=true)
 AS
 SELECT time_bucket(2, timeval), max(col2)
 FROM continuous_agg_test_ignore_invalidation_older_than
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW cagg_iia3( timed, maxval)
         WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-2', timescaledb.ignore_invalidation_older_than = 0, timescaledb.materialized_only=true)
 AS
 SELECT time_bucket(2, timeval), max(col2)
 FROM continuous_agg_test_ignore_invalidation_older_than
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 
 refresh materialized view cagg_iia1;
 select * from cagg_iia1 order by 1;
@@ -278,14 +278,14 @@ WITH (timescaledb.continuous, timescaledb.refresh_lag = 10, timescaledb.max_inte
 AS
 SELECT time_bucket(10, a), count(*)
 FROM foo
-GROUP BY time_bucket(10, a);
+GROUP BY time_bucket(10, a) WITH NO DATA;
 
 CREATE MATERIALIZED VIEW mat_m2(a, countb)
 WITH (timescaledb.continuous, timescaledb.refresh_lag = 0, timescaledb.max_interval_per_job=100)
 AS
 SELECT time_bucket(5, a), count(*)
 FROM foo
-GROUP BY time_bucket(5, a);
+GROUP BY time_bucket(5, a) WITH NO DATA;
 
 select view_name, materialized_only from timescaledb_information.continuous_aggregates
 WHERE view_name::text like 'mat_m%'

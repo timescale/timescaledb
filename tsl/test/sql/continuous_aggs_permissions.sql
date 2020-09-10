@@ -30,7 +30,7 @@ WITH ( timescaledb.continuous, timescaledb.refresh_lag = '-200')
 as
 select location, max(humidity)
 from conditions
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 
 SELECT add_refresh_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
 
@@ -117,7 +117,7 @@ WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.r
 as
 select location, max(humidity)
 from conditions_for_perm_check
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 
 --cannot create mat view in a schema without create privileges
 CREATE MATERIALIZED VIEW custom_schema.mat_perm_view_test
@@ -125,7 +125,7 @@ WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.r
 as
 select location, max(humidity)
 from conditions_for_perm_check_w_grant
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 
 --cannot use a function without EXECUTE privileges
 --you can create a VIEW but cannot refresh it
@@ -134,7 +134,7 @@ WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.r
 as
 select location, max(humidity), get_constant()
 from conditions_for_perm_check_w_grant
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 
 --this should fail
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
@@ -146,7 +146,7 @@ WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.r
 as
 select location, max(humidity)
 from conditions_for_perm_check_w_grant
-group by time_bucket(100, timec), location;
+group by time_bucket(100, timec), location WITH NO DATA;
 
 REFRESH MATERIALIZED VIEW mat_perm_view_test;
 SELECT * FROM mat_perm_view_test;

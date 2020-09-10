@@ -15,7 +15,7 @@ setup
         WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
         AS SELECT time_bucket('5', time), COUNT(location)
             FROM ts_continuous_test
-            GROUP BY 1;
+            GROUP BY 1 WITH NO DATA;
 }
 
 teardown {

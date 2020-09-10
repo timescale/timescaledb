@@ -331,7 +331,7 @@ SELECT
   avg(v1) + avg(v2) AS avg1,
   avg(v1+v2) AS avg2
 FROM metrics
-GROUP BY 1;
+GROUP BY 1 WITH NO DATA;
 
 SET timescaledb.current_timestamp_mock = '2000-01-10';
 REFRESH MATERIALIZED VIEW cagg_expr;
