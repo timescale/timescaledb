@@ -60,7 +60,11 @@ cagg_get_hypertable_or_fail(int32 hypertable_id)
 static InternalTimeRange
 get_largest_bucketed_window(Oid timetype, int64 bucket_width)
 {
-	InternalTimeRange maxwindow = continuous_agg_materialize_window_max(timetype);
+	InternalTimeRange maxwindow = {
+		.type = timetype,
+		.start = ts_time_get_min(timetype),
+		.end = ts_time_get_end_or_max(timetype),
+	};
 	InternalTimeRange maxbuckets;
 
 	/* For the MIN value, the corresponding bucket either falls on the exact

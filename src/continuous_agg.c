@@ -319,56 +319,6 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 	return continuous_aggs;
 }
 
-TSDLLEXPORT int64
-ts_continuous_aggs_max_ignore_invalidation_older_than(int32 raw_hypertable_id,
-													  FormData_continuous_agg *entry)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	int64 ignore_invalidation_older_than = -1;
-
-	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
-	ts_scanner_foreach(&iterator)
-	{
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-
-		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
-
-		if (ignore_invalidation_older_than < data->ignore_invalidation_older_than)
-			ignore_invalidation_older_than = data->ignore_invalidation_older_than;
-		if (entry != NULL)
-			memcpy(entry, data, sizeof(*entry));
-
-		if (should_free)
-			heap_freetuple(tuple);
-	}
-
-	return ignore_invalidation_older_than;
-}
-
-/* returns the inclusive value for the minimum time to invalidate */
-TSDLLEXPORT int64
-ts_continuous_aggs_get_minimum_invalidation_time(int64 modification_time,
-												 int64 ignore_invalidation_older_than)
-{
-	if (ignore_invalidation_older_than == PG_INT64_MAX ||
-		ignore_invalidation_older_than > modification_time)
-	{
-		/* invalidate everything */
-		return PG_INT64_MIN;
-	}
-	else if (ignore_invalidation_older_than == 0)
-	{
-		/* don't invalidate anything */
-		return PG_INT64_MAX;
-	}
-	else
-	{
-		return modification_time - ignore_invalidation_older_than;
-	}
-}
-
 /* Find a continuous aggregate by the materialized hypertable id */
 ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)

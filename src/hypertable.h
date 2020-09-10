@@ -116,7 +116,6 @@ extern TSDLLEXPORT int ts_hypertable_update(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
-extern TSDLLEXPORT int64 ts_hypertable_get_max_ignore_invalidation_older_than(Hypertable *ht);
 extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt,
 															  const char *query);
