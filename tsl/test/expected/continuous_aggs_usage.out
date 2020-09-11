@@ -83,25 +83,6 @@ view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_re
                            |    FROM device_readings                                                                                     +
                            |   GROUP BY (time_bucket('@ 1 hour'::interval, device_readings.observation_time)), device_readings.device_id;
 
---You can also view information about your background workers.
---Note: (some fields are empty because there are no background workers used in tests)
-SELECT * FROM timescaledb_information.continuous_aggregate_stats;
--[ RECORD 1 ]----------+-----------------------------
-view_name              | device_summary
-completed_threshold    | 
-invalidation_threshold | Sun Dec 30 22:00:00 2018 PST
-job_id                 | 
-last_run_started_at    | 
-last_successful_finish | 
-last_run_status        | 
-job_status             | 
-last_run_duration      | 
-next_scheduled_run     | 
-total_runs             | 
-total_successes        | 
-total_failures         | 
-total_crashes          | 
-
 \x
 -- Refresh interval
 --

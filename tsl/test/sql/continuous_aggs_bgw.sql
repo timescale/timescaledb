@@ -83,10 +83,6 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
 
 SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
 
--- even before running, stats shows something
-SELECT view_name, invalidation_threshold, job_status, last_run_duration
-    FROM timescaledb_information.continuous_aggregate_stats;
-
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 
 -- min distance from end should be 1
@@ -275,7 +271,10 @@ where view_name::text like '%test_continuous_agg_view';
 select view_name, view_definition from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
 
-select view_name, invalidation_threshold, job_status, last_run_duration from timescaledb_information.continuous_aggregate_stats where view_name::text like '%test_continuous_agg_view';
+select job_status, last_run_duration
+from timescaledb_information.policy_stats ps, timescaledb_information.continuous_aggregates cagg 
+where cagg.view_name::text like '%test_continuous_agg_view'
+and cagg.materialization_hypertable = ps.hypertable;
 
 \x off
 
