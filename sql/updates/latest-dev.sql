@@ -265,10 +265,16 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_job;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_config.bgw_job_id_seq;
 ALTER TABLE _timescaledb_internal.bgw_job_stat DROP CONSTRAINT IF EXISTS bgw_job_stat_job_id_fkey;
 ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT IF EXISTS bgw_policy_chunk_stats_job_id_fkey;
+
+-- remember sequence values so they can be restored in new sequence
+CREATE TABLE tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
+
 DROP TABLE _timescaledb_config.bgw_job;
 
 CREATE SEQUENCE IF NOT EXISTS _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
+SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM tmp_bgw_job_seq_value;
+DROP TABLE tmp_bgw_job_seq_value;
 
 CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
     id                  INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
