@@ -51,6 +51,9 @@ set(SOURCE_FILES
   restoring.sql
   timescaledb_fdw.sql
   remote_txn.sql
+  job_api.sql
+  policy_api.sql
+  policy_internal.sql
 )
 
 # These files should be pre-pended to update scripts so that they are
