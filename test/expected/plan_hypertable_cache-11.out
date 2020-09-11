@@ -44,3 +44,60 @@ $f$;
                      Filter: ("time" >= now())
 (7 rows)
 
+-- check hypertable detection in views
+CREATE TABLE metrics (
+  time timestamptz,
+  value float
+);
+SELECT create_hypertable ('metrics', 'time');
+NOTICE:  adding not-null constraint to column "time"
+  create_hypertable   
+----------------------
+ (2,public,metrics,t)
+(1 row)
+
+INSERT INTO metrics
+  VALUES ('2000-01-01', 4.56);
+CREATE VIEW ht_view AS
+SELECT *,
+  0 AS res
+FROM metrics
+UNION ALL
+SELECT *,
+  1 AS res
+FROM metrics;
+CREATE FUNCTION ht_func() RETURNS SETOF metrics LANGUAGE SQL STABLE AS
+$sql$
+  SELECT time,
+    value
+  FROM ht_view
+  WHERE res = 0;
+$sql$;
+ALTER TABLE metrics SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('metrics'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_2_5_chunk
+(1 row)
+
+-- should have decompresschunk node
+:PREFIX SELECT * FROM ht_func();
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Append
+   ->  Seq Scan on metrics
+   ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
+         ->  Seq Scan on compress_hyper_3_6_chunk
+(4 rows)
+
+\c
+-- plan should be identical to previous plan in fresh session
+:PREFIX SELECT * FROM ht_func();
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Append
+   ->  Seq Scan on metrics
+   ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk
+         ->  Seq Scan on compress_hyper_3_6_chunk
+(4 rows)
+

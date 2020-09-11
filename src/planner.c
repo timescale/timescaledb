@@ -383,12 +383,13 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 		case RELOPT_BASEREL:
 			rte = planner_rt_fetch(rel->relid, root);
 			/*
-			 * to correctly classify relations in subqueries we cannot call get_hypertable
-			 * with CACHE_FLAG_NOCREATE flag because the rel might not be in cache yet
+			 * To correctly classify relations in subqueries we cannot call get_hypertable
+			 * with CACHE_FLAG_CHECK which includes CACHE_FLAG_NOCREATE flag because
+			 * the rel might not be in cache yet.
 			 */
 			ht = get_hypertable(rte->relid, rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
 
-			if (NULL != ht)
+			if (ht != NULL)
 				reltype = TS_REL_HYPERTABLE;
 			else
 			{
@@ -400,7 +401,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 				 * there if we need to speed this up. */
 				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
 
-				if (NULL != chunk)
+				if (chunk != NULL)
 				{
 					reltype = TS_REL_CHUNK;
 					ht = get_hypertable(chunk->hypertable_relid, CACHE_FLAG_NONE);
@@ -420,7 +421,9 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 			 */
 			if (parent_rte->rtekind == RTE_SUBQUERY)
 			{
-				ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+				ht =
+					get_hypertable(rte->relid, rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
+
 				if (ht != NULL)
 					reltype = TS_REL_HYPERTABLE;
 			}
@@ -428,7 +431,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 			{
 				ht = get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
 
-				if (NULL != ht)
+				if (ht != NULL)
 				{
 					if (parent_rte->relid == rte->relid)
 						reltype = TS_REL_HYPERTABLE_CHILD;

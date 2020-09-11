@@ -24,3 +24,40 @@ $f$;
 
 -- plan output should be identical to previous session
 :PREFIX SELECT * FROM test_f(now());
+
+-- check hypertable detection in views
+CREATE TABLE metrics (
+  time timestamptz,
+  value float
+);
+
+SELECT create_hypertable ('metrics', 'time');
+
+INSERT INTO metrics
+  VALUES ('2000-01-01', 4.56);
+
+CREATE VIEW ht_view AS
+SELECT *,
+  0 AS res
+FROM metrics
+UNION ALL
+SELECT *,
+  1 AS res
+FROM metrics;
+
+CREATE FUNCTION ht_func() RETURNS SETOF metrics LANGUAGE SQL STABLE AS
+$sql$
+  SELECT time,
+    value
+  FROM ht_view
+  WHERE res = 0;
+$sql$;
+
+ALTER TABLE metrics SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('metrics'));
+
+-- should have decompresschunk node
+:PREFIX SELECT * FROM ht_func();
+\c
+-- plan should be identical to previous plan in fresh session
+:PREFIX SELECT * FROM ht_func();
