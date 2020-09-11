@@ -45,7 +45,7 @@ select a, count(b)
 from foo
 group by time_bucket(1, a), a WITH NO DATA;
 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval); 
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval);
 SELECT * FROM _timescaledb_config.bgw_job;
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
@@ -642,7 +642,7 @@ select time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location, humidity, temperature WITH NO DATA;
 
-SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval); 
+SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval);
 SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 SELECT _timescaledb_internal.to_interval(refresh_lag) FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_with_test';
@@ -699,7 +699,7 @@ select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
 
-SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval); 
+SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval);
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -885,10 +885,10 @@ group by time_bucket(100, timec), location WITH NO DATA;
 REFRESH MATERIALIZED VIEW conditions_grpby_view;
 select * from conditions_grpby_view order by 1, 2;
 
-CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
+CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as
 select time_bucket(100, timec), sum(humidity)
 from conditions
-group by time_bucket(100, timec), location  
+group by time_bucket(100, timec), location
 having avg(temperature) > 0
  WITH NO DATA;
 REFRESH MATERIALIZED VIEW conditions_grpby_view2;
@@ -939,10 +939,10 @@ SELECT * FROM mat_test5;
 --verify that watermark is limited by max value and not by
 -- the current time (now value)--
 SET timescaledb.current_timestamp_mock = '2018-05-11';
-SELECT view_name, completed_threshold, invalidation_threshold 
+SELECT view_name, completed_threshold, invalidation_threshold
 FROM timescaledb_information.continuous_aggregate_stats
 where view_name::text like 'mat_test5';
 REFRESH MATERIALIZED VIEW mat_test5;
-SELECT view_name, completed_threshold, invalidation_threshold 
+SELECT view_name, completed_threshold, invalidation_threshold
 FROM timescaledb_information.continuous_aggregate_stats
 where view_name::text like 'mat_test5';

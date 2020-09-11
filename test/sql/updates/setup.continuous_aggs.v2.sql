@@ -120,7 +120,7 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    PERFORM add_refresh_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h'); 
+    PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h'); 
   END IF;
 END $$;
 
@@ -225,7 +225,7 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    PERFORM add_refresh_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h'); 
+    PERFORM add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h'); 
   END IF;
 END $$;
 

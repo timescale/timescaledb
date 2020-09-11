@@ -30,7 +30,7 @@ FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA; --We have to group by the bucket column, but can also add other group-by columns
 
-SELECT add_refresh_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
+SELECT add_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
 --Next, insert some data into the raw hypertable
 INSERT INTO device_readings
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;

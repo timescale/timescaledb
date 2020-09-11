@@ -49,10 +49,10 @@ select a, count(b)
 from foo
 group by time_bucket(1, a), a WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval); 
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1000
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1000
 (1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job;
@@ -868,10 +868,10 @@ group by time_bucket('1day', timec), location, humidity, temperature WITH NO DAT
 NOTICE:  adding index _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_5_5, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_6_6, timec)
 NOTICE:  adding index _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING BTREE(grp_7_7, timec)
-SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval); 
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1001
+SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1001
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
@@ -974,10 +974,10 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval); 
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1002
+SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1002
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
@@ -1260,10 +1260,10 @@ select * from conditions_grpby_view order by 1, 2;
          200 |  75
 (4 rows)
 
-CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as 
+CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous, timescaledb.refresh_lag = '-200') as
 select time_bucket(100, timec), sum(humidity)
 from conditions
-group by time_bucket(100, timec), location  
+group by time_bucket(100, timec), location
 having avg(temperature) > 0
  WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_31_grp_3_3_time_bucket_idx ON _timescaledb_internal._materialized_hypertable_31 USING BTREE(grp_3_3, time_bucket)
@@ -1345,7 +1345,7 @@ SELECT * FROM mat_test5;
 --verify that watermark is limited by max value and not by
 -- the current time (now value)--
 SET timescaledb.current_timestamp_mock = '2018-05-11';
-SELECT view_name, completed_threshold, invalidation_threshold 
+SELECT view_name, completed_threshold, invalidation_threshold
 FROM timescaledb_information.continuous_aggregate_stats
 where view_name::text like 'mat_test5';
  view_name |     completed_threshold      |    invalidation_threshold    
@@ -1357,7 +1357,7 @@ REFRESH MATERIALIZED VIEW mat_test5;
 LOG:  new materialization range not found for public.conditions (time column time): not enough new data past completion threshold of Sat Mar 10 16:00:00 2001 PST as of Fri May 11 00:00:00 2018 PDT
 LOG:  materializing continuous aggregate public.mat_test5: nothing to invalidate, no new range
 LOG:  materializing continuous aggregate public.mat_test5: no new range to materialize or invalidations found, exiting early
-SELECT view_name, completed_threshold, invalidation_threshold 
+SELECT view_name, completed_threshold, invalidation_threshold
 FROM timescaledb_information.continuous_aggregate_stats
 where view_name::text like 'mat_test5';
  view_name |     completed_threshold      |    invalidation_threshold    

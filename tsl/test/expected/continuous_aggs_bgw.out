@@ -88,10 +88,10 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1000
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1000
 (1 row)
 
 -- even before running, stats shows something
@@ -365,10 +365,10 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1001
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1001
 (1 row)
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
@@ -495,10 +495,10 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
 NOTICE:  adding index _materialized_hypertable_4_get_constant_no_perms_time_bucke_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(get_constant_no_perms, time_bucket)
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1002
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1002
 (1 row)
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
@@ -576,10 +576,10 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
         GROUP BY 1 WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1003
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1003
 (1 row)
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset

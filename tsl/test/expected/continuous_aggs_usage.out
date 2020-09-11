@@ -31,10 +31,10 @@ FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA; --We have to group by the bucket column, but can also add other group-by columns
 NOTICE:  adding index _materialized_hypertable_2_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device_id, bucket)
-SELECT add_refresh_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
- add_refresh_continuous_aggregate_policy 
------------------------------------------
-                                    1000
+SELECT add_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1000
 (1 row)
 
 --Next, insert some data into the raw hypertable
