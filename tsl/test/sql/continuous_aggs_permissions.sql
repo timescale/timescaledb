@@ -32,7 +32,7 @@ select location, max(humidity)
 from conditions
 group by time_bucket(100, timec), location WITH NO DATA;
 
-SELECT add_refresh_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, '12 h'::interval);
 
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
@@ -40,13 +40,13 @@ select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
 REFRESH MATERIALIZED VIEW  mat_refresh_test;
 
 SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
-SELECT materialization_hypertable FROM timescaledb_information.continuous_aggregates  WHERE view_name = 'mat_refresh_test'::regclass \gset 
+SELECT materialization_hypertable FROM timescaledb_information.continuous_aggregates  WHERE view_name = 'mat_refresh_test'::regclass \gset
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
 
-SELECT schema_name as mat_chunk_schema, table_name as mat_chunk_table 
-FROM _timescaledb_catalog.chunk 
-WHERE hypertable_id = :mat_hypertable_id 
+SELECT schema_name as mat_chunk_schema, table_name as mat_chunk_table
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id = :mat_hypertable_id
 ORDER BY id desc
 LIMIT 1 \gset
 
@@ -105,7 +105,7 @@ select from alter_job(:cagg_job_id, max_runtime => NULL);
 
 ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.refresh_lag = '6 h', timescaledb.refresh_interval = '2h');
 ALTER MATERIALIZED VIEW mat_refresh_test SET(timescaledb.materialized_only = true);
-DROP MATERIALIZED VIEW mat_refresh_test; 
+DROP MATERIALIZED VIEW mat_refresh_test;
 REFRESH MATERIALIZED VIEW mat_refresh_test;
 SELECT * FROM mat_refresh_test;
 SELECT * FROM :materialization_hypertable;

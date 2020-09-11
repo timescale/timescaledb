@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- test add and remove refresh policy apis 
+-- test add and remove refresh policy apis
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
@@ -40,38 +40,38 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT count(*) FROM _timescaledb_config.bgw_job;
 
 \set ON_ERROR_STOP 0
-SELECT add_refresh_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval); 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval); 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 ); 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval); 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
+SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 
---adding again should warn/error 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false); 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 10, 20, '1h'::interval, if_not_exists=>true); 
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true); 
+--adding again should warn/error
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
+SELECT add_continuous_aggregate_policy('mat_m1', 10, 20, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
 
 -- modify config and try to add, should error out
 SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_id \gset
 \c :TEST_DBNAME :ROLE_SUPERUSER
-UPDATE _timescaledb_config.bgw_job 
+UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
 
-SELECT remove_refresh_continuous_aggregate_policy('int_tab');
-SELECT remove_refresh_continuous_aggregate_policy('mat_m1');
+SELECT remove_continuous_aggregate_policy('int_tab');
+SELECT remove_continuous_aggregate_policy('mat_m1');
 --this one will fail
-SELECT remove_refresh_continuous_aggregate_policy('mat_m1');
-SELECT remove_refresh_continuous_aggregate_policy('mat_m1', if_not_exists=>true);
+SELECT remove_continuous_aggregate_policy('mat_m1');
+SELECT remove_continuous_aggregate_policy('mat_m1', if_not_exists=>true);
 
 --now try to add a policy as a different user than the one that created the cagg
 --should fail
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-SELECT add_refresh_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id ;
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id ;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP MATERIALIZED VIEW mat_m1;
@@ -86,10 +86,10 @@ CREATE MATERIALIZED VIEW max_mat_view_date
         GROUP BY 1 WITH NO DATA;
 
 \set ON_ERROR_STOP 0
-SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '2 days'::interval, 10 , '1 day'::interval); 
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days'::interval, 10 , '1 day'::interval);
 \set ON_ERROR_STOP 1
-SELECT add_refresh_continuous_aggregate_policy('max_mat_view_date', '2 day'::interval, '1 day'::interval , '1 day'::interval) as job_id \gset
-SELECT config FROM _timescaledb_config.bgw_job 
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 day'::interval, '1 day'::interval , '1 day'::interval) as job_id \gset
+SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
 
 INSERT INTO continuous_agg_max_mat_date
@@ -106,21 +106,21 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
         FROM continuous_agg_timestamp
         GROUP BY 1 WITH NO DATA;
 
-SELECT add_refresh_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 h'::interval , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 h'::interval , '1 h'::interval) as job_id \gset
 CALL run_job(:job_id);
 
-SELECT config FROM _timescaledb_config.bgw_job 
+SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-UPDATE _timescaledb_config.bgw_job 
+UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 \set ON_ERROR_STOP 0
-SELECT add_refresh_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 day'::interval, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 day'::interval, '1h'::interval, if_not_exists=>true);
 \set ON_ERROR_STOP 1
 
 DROP MATERIALIZED VIEW max_mat_view_timestamp;
@@ -138,10 +138,10 @@ SELECT time_bucket( SMALLINT '1', a) , count(*)
 FROM smallint_tab
 GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
-SELECT add_refresh_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
-SELECT add_refresh_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);
 \set ON_ERROR_STOP 1
-SELECT add_refresh_continuous_aggregate_policy('mat_smallint', 15::smallint, 0::smallint , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 0::smallint , '1 h'::interval) as job_id \gset
 INSERT INTO smallint_tab VALUES(5);
 INSERT INTO smallint_tab VALUES(10);
 INSERT INTO smallint_tab VALUES(20);
@@ -149,7 +149,7 @@ CALL run_job(:job_id);
 SELECT * FROM mat_smallint;
 
 \set ON_ERROR_STOP 0
-SELECT add_refresh_continuous_aggregate_policy('mat_smallint', 15, 10, '1h'::interval, if_not_exists=>true); 
+SELECT add_continuous_aggregate_policy('mat_smallint', 15, 10, '1h'::interval, if_not_exists=>true);
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW mat_smallint;
 

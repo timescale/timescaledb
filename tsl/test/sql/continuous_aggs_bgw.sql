@@ -80,7 +80,8 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
+
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::integer, '12 h'::interval);
 
 -- even before running, stats shows something
 SELECT view_name, completed_threshold, invalidation_threshold, job_status, last_run_duration
@@ -231,7 +232,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
 
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
@@ -290,8 +291,8 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
 
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
@@ -334,7 +335,8 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table_w_grant
         GROUP BY 1 WITH NO DATA;
-SELECT add_refresh_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
+
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
