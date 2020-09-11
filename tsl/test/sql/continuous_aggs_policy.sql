@@ -44,11 +44,13 @@ SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h':
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
+--start_interval < end_interval
+SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval) as job_id \gset
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
-SELECT add_continuous_aggregate_policy('mat_m1', 10, 20, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
 
 -- modify config and try to add, should error out
@@ -87,6 +89,8 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', 10, '1 day'::interval);
+--start_interval < end_interval
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '2 days'::interval , '1 day'::interval) ;
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', '1 day', '1 day'::interval) as job_id \gset
 SELECT config FROM _timescaledb_config.bgw_job
@@ -106,6 +110,18 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
         FROM continuous_agg_timestamp
         GROUP BY 1 WITH NO DATA;
 
+\set ON_ERROR_STOP 0
+--will overflow at runtime even though policy check works 
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval) as job_id \gset
+CALL run_job(:job_id);
+
+-- bad timestamps at runtime even though policy check works
+SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '301 days', '10 months' , '1 h'::interval) as job_id \gset
+CALL run_job(:job_id);
+
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 h'::interval , '1 h'::interval) as job_id \gset
 CALL run_job(:job_id);
 
@@ -141,6 +157,7 @@ GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
 SELECT add_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_smallint', 5::smallint, 10::smallint , '1 h'::interval) as job_id \gset
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 0::smallint , '1 h'::interval) as job_id \gset
 INSERT INTO smallint_tab VALUES(5);
@@ -153,9 +170,7 @@ SELECT * FROM mat_smallint;
 SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 10::smallint, '1h'::interval, if_not_exists=>true);
 \set ON_ERROR_STOP 1
 
--- end of coverage tests
-
--- tests for interval argument convertions
+-- tests for interval argument conversions
 --
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 10, '1h'::interval, if_not_exists=>true);
@@ -164,3 +179,29 @@ SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interva
 \set ON_ERROR_STOP 1
 
 DROP MATERIALIZED VIEW mat_smallint;
+DROP TABLE smallint_tab CASCADE;
+
+--bigint table
+CREATE TABLE bigint_tab (a bigint);
+SELECT table_name FROM create_hypertable('bigint_tab', 'a', chunk_time_interval=> 10);
+CREATE OR REPLACE FUNCTION integer_now_bigint_tab() returns bigint LANGUAGE SQL STABLE as $$ SELECT 20::bigint $$;
+SELECT set_integer_now_func('bigint_tab', 'integer_now_bigint_tab');
+
+CREATE MATERIALIZED VIEW mat_bigint( a, countb )
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+as
+SELECT time_bucket( BIGINT '1', a) , count(*)
+FROM bigint_tab
+GROUP BY 1 WITH NO DATA;
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_bigint', 5::bigint, 10::bigint , '1 h'::interval) ;
+\set ON_ERROR_STOP 1
+SELECT add_continuous_aggregate_policy('mat_bigint', 15::bigint, 0::bigint , '1 h'::interval) as job_mid \gset
+INSERT INTO bigint_tab VALUES(5);
+INSERT INTO bigint_tab VALUES(10);
+INSERT INTO bigint_tab VALUES(20);
+CALL run_job(:job_mid);
+SELECT * FROM mat_bigint;
+
+-- end of coverage tests
+
