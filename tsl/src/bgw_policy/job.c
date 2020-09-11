@@ -102,12 +102,13 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-		int64 lag = int_getter(config);
+		int64 res, lag = int_getter(config);
 		Oid now_func = ts_get_integer_now_func(dim);
 
 		Assert(now_func);
 
-		return subtract_integer_from_now(lag, partitioning_type, now_func);
+		res = subtract_integer_from_now(lag, partitioning_type, now_func);
+		return Int64GetDatum(res);
 	}
 	else
 	{
@@ -285,8 +286,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	continuous_agg_refresh_internal(cagg, &refresh_window, false);
 	elog(LOG,
 		 "refresh continuous aggregate range %s , %s",
-		 ts_internal_to_time_string(refresh_start, dim_type),
-		 ts_internal_to_time_string(refresh_end, dim_type));
+		 start_isnull ? "NULL" : ts_internal_to_time_string(refresh_start, dim_type),
+		 end_isnull ? "NULL" : ts_internal_to_time_string(refresh_end, dim_type));
 	return true;
 }
 

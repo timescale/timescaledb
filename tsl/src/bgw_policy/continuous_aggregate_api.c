@@ -176,6 +176,47 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 	return ts_time_datum_convert_arg(interval, interval_type, convert_to);
 }
 
+static void
+check_valid_interval_values(Oid interval_type, Datum start_interval, Datum end_interval)
+{
+	bool valid = true;
+	if (IS_INTEGER_TYPE(interval_type))
+	{
+		switch (interval_type)
+		{
+			case INT2OID:
+			{
+				if (DatumGetInt16(start_interval) <= DatumGetInt16(end_interval))
+					valid = false;
+				break;
+			}
+			case INT4OID:
+			{
+				if (DatumGetInt32(start_interval) <= DatumGetInt32(end_interval))
+					valid = false;
+				break;
+			}
+			case INT8OID:
+			{
+				if (DatumGetInt64(start_interval) <= DatumGetInt64(end_interval))
+					valid = false;
+				break;
+			}
+		}
+	}
+	else
+	{
+		Assert(interval_type == INTERVALOID);
+		valid = DatumGetBool(DirectFunctionCall2(interval_gt, start_interval, end_interval));
+	}
+	if (!valid)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("start interval should be greater than end interval")));
+	}
+}
+
 Datum
 policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 {
@@ -192,6 +233,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	Oid dim_type, start_interval_type, end_interval_type;
 	Oid cagg_oid, owner_id;
 	List *jobs;
+	JsonbParseState *parse_state = NULL;
 	bool if_not_exists, start_isnull, end_isnull;
 
 	/* Verify that the owner can create a background worker */
@@ -228,6 +270,12 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	if (!end_isnull)
 		end_interval =
 			convert_interval_arg(dim_type, end_interval, &end_interval_type, "end_interval");
+
+	if (!start_isnull && !end_isnull)
+	{
+		Assert(start_interval_type == end_interval_type);
+		check_valid_interval_values(start_interval_type, start_interval, end_interval);
+	}
 
 	if (PG_ARGISNULL(3))
 		ereport(ERROR,
@@ -285,7 +333,6 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
-	JsonbParseState *parse_state = NULL;
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, CONFIG_KEY_MAT_HYPERTABLE_ID, mat_htid);
 	if (!start_isnull)

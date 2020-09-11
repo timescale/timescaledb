@@ -10,6 +10,6 @@
 #include <postgres.h>
 bool policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_label,
 												 Oid dim_type, Oid lag_type, Datum lag_datum);
-Datum subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func);
+int64 subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func);
 Datum subtract_interval_from_now(Interval *interval, Oid time_dim_type);
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_UTILS_H */

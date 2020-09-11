@@ -53,11 +53,14 @@ SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
 ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist at character 8
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
 ERROR:  invalid parameter value for end_interval
+--start_interval < end_interval
+SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval) as job_id \gset
+ERROR:  start interval should be greater than end interval
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
 ERROR:  refresh policy already exists for continuous aggregate "mat_m1"
-SELECT add_continuous_aggregate_policy('mat_m1', 10, 20, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
 WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -134,6 +137,9 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', 10, '1 day'::interval);
 ERROR:  invalid parameter value for end_interval
+--start_interval < end_interval
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '2 days'::interval , '1 day'::interval) ;
+ERROR:  start interval should be greater than end interval
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', '1 day', '1 day'::interval) as job_id \gset
 SELECT config FROM _timescaledb_config.bgw_job
@@ -161,6 +167,28 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_timestamp
         GROUP BY 1 WITH NO DATA;
+\set ON_ERROR_STOP 0
+--will overflow at runtime even though policy check works 
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval) as job_id \gset
+CALL run_job(:job_id);
+ERROR:  timestamp out of range
+-- bad timestamps at runtime even though policy check works
+SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '301 days', '10 months' , '1 h'::interval) as job_id \gset
+CALL run_job(:job_id);
+ERROR:  invalid refresh window
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 h'::interval , '1 h'::interval) as job_id \gset
 CALL run_job(:job_id);
 SELECT config FROM _timescaledb_config.bgw_job
@@ -215,6 +243,8 @@ SELECT add_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
 ERROR:  invalid parameter value for start_interval
 SELECT add_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);
 ERROR:  smallint out of range
+SELECT add_continuous_aggregate_policy('mat_smallint', 5::smallint, 10::smallint , '1 h'::interval) as job_id \gset
+ERROR:  start interval should be greater than end interval
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 0::smallint , '1 h'::interval) as job_id \gset
 INSERT INTO smallint_tab VALUES(5);
@@ -237,8 +267,7 @@ WARNING:  could not add refresh policy due to existing policy on continuous aggr
 (1 row)
 
 \set ON_ERROR_STOP 1
--- end of coverage tests
--- tests for interval argument convertions
+-- tests for interval argument conversions
 --
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 10, '1h'::interval, if_not_exists=>true);
@@ -255,3 +284,43 @@ WARNING:  could not add refresh policy due to existing policy on continuous aggr
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW mat_smallint;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_7_chunk
+DROP TABLE smallint_tab CASCADE;
+--bigint table
+CREATE TABLE bigint_tab (a bigint);
+SELECT table_name FROM create_hypertable('bigint_tab', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ bigint_tab
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_bigint_tab() returns bigint LANGUAGE SQL STABLE as $$ SELECT 20::bigint $$;
+SELECT set_integer_now_func('bigint_tab', 'integer_now_bigint_tab');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW mat_bigint( a, countb )
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+as
+SELECT time_bucket( BIGINT '1', a) , count(*)
+FROM bigint_tab
+GROUP BY 1 WITH NO DATA;
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_bigint', 5::bigint, 10::bigint , '1 h'::interval) ;
+ERROR:  start interval should be greater than end interval
+\set ON_ERROR_STOP 1
+SELECT add_continuous_aggregate_policy('mat_bigint', 15::bigint, 0::bigint , '1 h'::interval) as job_mid \gset
+INSERT INTO bigint_tab VALUES(5);
+INSERT INTO bigint_tab VALUES(10);
+INSERT INTO bigint_tab VALUES(20);
+CALL run_job(:job_mid);
+SELECT * FROM mat_bigint;
+ a  | countb 
+----+--------
+  5 |      1
+ 10 |      1
+(2 rows)
+
+-- end of coverage tests
