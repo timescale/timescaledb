@@ -90,56 +90,6 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
           and N.nspname = cagg.direct_view_schema ) directview
   WHERE cagg.mat_hypertable_id = ht.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregate_stats as
-  SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,
-    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
-      WHEN 'TIMESTAMP'::regtype
-        THEN _timescaledb_internal.to_timestamp_without_timezone(ct.watermark)::TEXT
-      WHEN 'TIMESTAMPTZ'::regtype
-        THEN _timescaledb_internal.to_timestamp(ct.watermark)::TEXT
-      WHEN 'DATE'::regtype
-        THEN _timescaledb_internal.to_date(ct.watermark)::TEXT
-      ELSE ct.watermark::TEXT
-    END AS completed_threshold,
-    CASE _timescaledb_internal.get_time_type(cagg.raw_hypertable_id)
-      WHEN 'TIMESTAMP'::regtype
-        THEN _timescaledb_internal.to_timestamp_without_timezone(it.watermark)::TEXT
-      WHEN 'TIMESTAMPTZ'::regtype
-        THEN _timescaledb_internal.to_timestamp(it.watermark)::TEXT
-      WHEN 'DATE'::regtype
-        THEN _timescaledb_internal.to_date(it.watermark)::TEXT
-      ELSE it.watermark::TEXT
-    END AS invalidation_threshold,
-    bgw_job_stat.job_id,
-    bgw_job_stat.last_start as last_run_started_at,
-    bgw_job_stat.last_successful_finish as last_successful_finish,
-    CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL
-         WHEN bgw_job_stat.last_finish IS NOT NULL THEN
-              CASE WHEN bgw_job_stat.last_run_success = 't' THEN 'Success'
-                   WHEN bgw_job_stat.last_run_success = 'f' THEN 'Failed'
-              END
-    END as last_run_status,
-    CASE WHEN bgw_job_stat.last_finish < '4714-11-24 00:00:00+00 BC' THEN 'Running'
-       WHEN bgw_job_stat.next_start IS NOT NULL THEN 'Scheduled'
-    END as job_status,
-    CASE WHEN bgw_job_stat.last_finish > bgw_job_stat.last_start THEN (bgw_job_stat.last_finish - bgw_job_stat.last_start)
-    END as last_run_duration,
-    bgw_job_stat.next_start as next_scheduled_run,
-    bgw_job_stat.total_runs,
-    bgw_job_stat.total_successes,
-    bgw_job_stat.total_failures,
-    bgw_job_stat.total_crashes
-  FROM
-    _timescaledb_catalog.continuous_agg as cagg
-    LEFT JOIN _timescaledb_config.bgw_job as bgw_job
-    ON  ( cagg.mat_hypertable_id = bgw_job.hypertable_id )
-    LEFT JOIN _timescaledb_internal.bgw_job_stat as bgw_job_stat
-    ON  ( bgw_job.id = bgw_job_stat.job_id )
-    LEFT JOIN _timescaledb_catalog.continuous_aggs_invalidation_threshold as it
-    ON ( cagg.raw_hypertable_id = it.hypertable_id)
-    LEFT JOIN _timescaledb_catalog.continuous_aggs_completed_threshold as ct
-    ON ( cagg.mat_hypertable_id = ct.materialization_id);
-
 CREATE OR REPLACE VIEW timescaledb_information.data_node AS
   SELECT s.node_name, s.owner, s.options
   FROM (SELECT srvname AS node_name, srvowner::regrole::name AS owner, srvoptions AS options

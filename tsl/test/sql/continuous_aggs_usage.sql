@@ -51,9 +51,6 @@ SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, de
 \x
 SELECT * FROM timescaledb_information.continuous_aggregates;
 
---You can also view information about your background workers.
---Note: (some fields are empty because there are no background workers used in tests)
-SELECT * FROM timescaledb_information.continuous_aggregate_stats;
 \x
 
 -- Refresh interval
