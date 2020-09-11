@@ -2,10 +2,13 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir post.v2.sql
-\ir catalog_missing_columns.sql
-\ir post.compression.sql
-\ir post.continuous_aggs.v2.sql
-\ir post.policies.sql
-\ir post.sequences.sql
+-- check sequences did not get reset
+SELECT seqrelid::regclass,
+  nextval(seqrelid),
+  seqstart,
+  seqincrement,
+  seqmax,
+  seqmin
+FROM pg_sequence
+ORDER BY seqrelid::regclass::text;
 
