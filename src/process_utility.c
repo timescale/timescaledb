@@ -2864,6 +2864,10 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	namestrcpy(&view_name, get_rel_name(relid));
 	namestrcpy(&view_schema, get_namespace_name(get_rel_namespace(relid)));
 	cagg = ts_continuous_agg_find_by_view_name(NameStr(view_schema), NameStr(view_name));
+
+	if (cagg == NULL)
+		return DDL_CONTINUE;
+
 	vtyp = ts_continuous_agg_view_type(&cagg->data, NameStr(view_schema), NameStr(view_name));
 
 	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
