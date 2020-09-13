@@ -135,7 +135,7 @@ AS
 Select max(temperature)
 from conditions
  group by time_bucket( timeinterval, timec) , location WITH NO DATA;
-ERROR:  first argument to time_bucket function should be a constant for continuous aggregate query
+ERROR:  first argument to time_bucket function should be an immutable expression for continuous aggregate query
 -- ordered set aggr
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
