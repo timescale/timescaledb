@@ -106,6 +106,9 @@ jobs:
         set -o pipefail
         make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
 
+    - name: pginstallcheck
+      run: make -C build pginstallcheck
+
     - name: coverage
       if: matrix.coverage
       run: make -j $MAKE_JOBS -k -C build coverage
