@@ -315,7 +315,7 @@ dimension_number  | 1
 column_name       | time
 column_type       | timestamp with time zone
 dimension_type    | Time
-time_interval     | @ 7 days
+time_interval     | @ 168 hours
 integer_interval  | 
 integer_now_func  | 
 num_partitions    | 

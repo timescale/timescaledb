@@ -936,8 +936,17 @@ ts_hyperspace_calculate_point(Hyperspace *hs, TupleTableSlot *slot)
 static inline int64
 interval_to_usec(Interval *interval)
 {
-	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
-		   interval->time;
+	int64 result = interval->time;
+	int64 day_usecs = interval->day * USECS_PER_DAY;
+	int64 month_usecs = interval->month * DAYS_PER_MONTH * USECS_PER_DAY;
+
+	if (pg_add_s64_overflow(result, day_usecs, &result))
+		ereport(ERROR, (errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("invalid interval")));
+
+	if (pg_add_s64_overflow(result, month_usecs, &result))
+		ereport(ERROR, (errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("invalid interval")));
+
+	return result;
 }
 
 #define INT_TYPE_MAX(type)                                                                         \

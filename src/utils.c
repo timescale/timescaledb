@@ -22,6 +22,7 @@
 #include <parser/parse_func.h>
 #include <parser/parse_coerce.h>
 #include <parser/scansup.h>
+#include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
@@ -171,8 +172,11 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 
 			return DatumGetInt64(res);
 		default:
-			elog(ERROR, "unknown time type OID %d", type_oid);
-			return -1;
+			if (ts_type_is_int8_binary_compatible(type_oid))
+				return DatumGetInt64(time_val);
+
+			elog(ERROR, "unknown time type %s", format_type_be(type_oid));
+			pg_unreachable();
 	}
 }
 
@@ -188,17 +192,25 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 		case INTERVALOID:
 		{
 			Interval *interval = DatumGetIntervalP(time_val);
+			int64 result = interval->time;
+			int64 day_usecs = interval->day * USECS_PER_DAY;
+
 			if (interval->month != 0)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("months and years not supported"),
 						 errdetail("An interval must be defined as a fixed duration (such as "
 								   "weeks, days, hours, minutes, seconds, etc.).")));
-			return interval->time + (interval->day * USECS_PER_DAY);
+
+			if (pg_add_s64_overflow(result, day_usecs, &result))
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("invalid interval")));
+
+			return result;
 		}
 		default:
-			elog(ERROR, "unknown interval type OID %d", type_oid);
-			return -1;
+			elog(ERROR, "unknown interval type %s", format_type_be(type_oid));
+			pg_unreachable();
 	}
 }
 
@@ -360,8 +372,7 @@ ts_pg_unix_microseconds_to_interval(PG_FUNCTION_ARGS)
 {
 	int64 microseconds = PG_GETARG_INT64(0);
 	Interval *interval = palloc0(sizeof(*interval));
-	interval->day = microseconds / USECS_PER_DAY;
-	interval->time = microseconds % USECS_PER_DAY;
+	interval->time = microseconds;
 	PG_RETURN_INTERVAL_P(interval);
 }
 

@@ -86,7 +86,7 @@ SELECT * from timescaledb_information.dimensions
 ORDER BY hypertable_name, dimension_number;
  hypertable_schema | hypertable_name | dimension_number | column_name |       column_type        | dimension_type | time_interval | integer_interval | integer_now_func | num_partitions 
 -------------------+-----------------+------------------+-------------+--------------------------+----------------+---------------+------------------+------------------+----------------
- public            | dist_table      |                1 | time        | timestamp with time zone | Time           | @ 7 days      |                  |                  |               
+ public            | dist_table      |                1 | time        | timestamp with time zone | Time           | @ 168 hours   |                  |                  |               
  public            | dist_table      |                2 | device      | integer                  | Space          |               |                  |                  |              3
  public            | dist_table      |                3 | timedim     | date                     | Time           | @ 7 days      |                  |                  |               
 (3 rows)

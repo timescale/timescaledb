@@ -639,18 +639,18 @@ range_end   | Wed Mar 08 19:19:53.713701 2017 PST
 SELECT *
 FROM  timescaledb_information.dimensions
 WHERE hypertable_name = 'test_adaptive_space' ORDER BY dimension_number;
--[ RECORD 1 ]-----+----------------------------------------
+-[ RECORD 1 ]-----+----------------------------------
 hypertable_schema | public
 hypertable_name   | test_adaptive_space
 dimension_number  | 1
 column_name       | time
 column_type       | timestamp with time zone
 dimension_type    | Time
-time_interval     | @ 19 days 5 hours 6 mins 50.695333 secs
+time_interval     | @ 461 hours 6 mins 50.695333 secs
 integer_interval  | 
 integer_now_func  | 
 num_partitions    | 
--[ RECORD 2 ]-----+----------------------------------------
+-[ RECORD 2 ]-----+----------------------------------
 hypertable_schema | public
 hypertable_name   | test_adaptive_space
 dimension_number  | 2
