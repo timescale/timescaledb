@@ -324,6 +324,8 @@ GROUP BY 1 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
+
+
 --test materialization of invalidation before drop
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
@@ -573,6 +575,128 @@ SELECT user_view,
 
 DROP MATERIALIZED VIEW whatever_view_1;
 DROP MATERIALIZED VIEW whatever_view_2;
+
+-- test bucket width expressions on integer hypertables
+CREATE TABLE metrics_int2 (
+  time int2 NOT NULL,
+  device_id int,
+  v1 float,
+  v2 float
+);
+
+CREATE TABLE metrics_int4 (
+  time int4 NOT NULL,
+  device_id int,
+  v1 float,
+  v2 float
+);
+
+CREATE TABLE metrics_int8 (
+  time int8 NOT NULL,
+  device_id int,
+  v1 float,
+  v2 float
+);
+
+SELECT create_hypertable (('metrics_' || dt)::regclass, 'time', chunk_time_interval => 10)
+FROM (
+  VALUES ('int2'),
+    ('int4'),
+    ('int8')) v (dt);
+
+CREATE OR REPLACE FUNCTION int2_now ()
+  RETURNS int2
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int2
+$$;
+
+CREATE OR REPLACE FUNCTION int4_now ()
+  RETURNS int4
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int4
+$$;
+
+CREATE OR REPLACE FUNCTION int8_now ()
+  RETURNS int8
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int8
+$$;
+
+SELECT set_integer_now_func (('metrics_' || dt)::regclass, (dt || '_now')::regproc)
+FROM (
+  VALUES ('int2'),
+    ('int4'),
+    ('int8')) v (dt);
+
+-- width expression for int2 hypertables
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(1::smallint, time)
+FROM metrics_int2
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW width_expr;
+
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(1::smallint + 2::smallint, time)
+FROM metrics_int2
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW width_expr;
+
+-- width expression for int4 hypertables
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(1, time)
+FROM metrics_int4
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW width_expr;
+
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(1 + 2, time)
+FROM metrics_int4
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW width_expr;
+
+-- width expression for int8 hypertables
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(1, time)
+FROM metrics_int8
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW width_expr;
+
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(1 + 2, time)
+FROM metrics_int8
+GROUP BY 1;
+
+DROP MATERIALIZED VIEW width_expr;
+
+\set ON_ERROR_STOP 0
+-- non-immutable expresions should be rejected
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(extract(year FROM now())::smallint, time)
+FROM metrics_int2
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(extract(year FROM now())::int, time)
+FROM metrics_int4
+GROUP BY 1;
+
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+SELECT time_bucket(extract(year FROM now())::int, time)
+FROM metrics_int8
+GROUP BY 1;
+
+\set ON_ERROR_STOP 1
 
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

@@ -643,7 +643,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 		if (IsA(tle->expr, FuncExpr))
 		{
 			FuncExpr *fe = ((FuncExpr *) tle->expr);
-			Const *width_arg;
+			Node *width_arg;
 			Node *col_arg;
 
 			if (!is_valid_bucketing_function(fe->funcid))
@@ -658,20 +658,31 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 			/*only column allowed : time_bucket('1day', <column> ) */
 			col_arg = lsecond(fe->args);
+
 			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
 				elog(ERROR,
 					 "time_bucket function for continuous aggregate query should be called "
 					 "on the dimension column of the hypertable ");
-			if (!IsA(linitial(fe->args), Const))
+
+			/*
+			 * We constify width expression here so any immutable expression will be allowed
+			 * otherwise it would make it harder to create caggs for hypertables with e.g. int8
+			 * partitioning column as int constants default to int4 and so expression would
+			 * have a cast and not be a Const.
+			 */
+			width_arg = eval_const_expressions(NULL, linitial(fe->args));
+			if (IsA(width_arg, Const))
 			{
+				Const *width = castNode(Const, width_arg);
+
+				tbinfo->bucket_width =
+					ts_interval_value_to_internal(width->constvalue, width->consttype);
+			}
+			else
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("first argument to time_bucket function should be a constant for "
-								"continuous aggregate query")));
-			}
-			width_arg = (Const *) linitial(fe->args);
-			tbinfo->bucket_width =
-				ts_interval_value_to_internal(width_arg->constvalue, width_arg->consttype);
+						 errmsg("first argument to time_bucket function should be an immutable "
+								"expression for continuous aggregate query")));
 		}
 	}
 	if (!found)
