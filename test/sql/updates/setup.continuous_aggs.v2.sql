@@ -79,7 +79,7 @@ BEGIN
 
   ELSE
     CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
     AS
       SELECT time_bucket('1week', timec) as bucket,
 	location,
@@ -183,7 +183,7 @@ BEGIN
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
   ELSE
     CREATE MATERIALIZED VIEW IF NOT EXISTS cagg.realtime_mat
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=false)
     AS
       SELECT time_bucket('1week', timec) as bucket,
 	location,
@@ -251,10 +251,7 @@ BEGIN
       GROUP BY bucket;
   ELSE
     CREATE MATERIALIZED VIEW IF NOT EXISTS  mat_ignoreinval
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, 
-           timescaledb.refresh_lag='-30 day',
-           timescaledb.ignore_invalidation_older_than='30 days', 
-           timescaledb.max_interval_per_job = '100000 days')
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
     AS
       SELECT time_bucket('1 week', timec) as bucket,
     max(temperature) as maxtemp

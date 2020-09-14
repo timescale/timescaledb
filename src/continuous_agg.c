@@ -42,22 +42,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(false),
 		},
-		[ContinuousViewOptionRefreshLag] = {
-			 .arg_name = "refresh_lag",
-			 .type_id = TEXTOID,
-		},
-		[ContinuousViewOptionMaxIntervalPerRun] = {
-			.arg_name = "max_interval_per_job",
-			.type_id = TEXTOID,
-		},
 		[ContinuousViewOptionCreateGroupIndex] = {
 			.arg_name = "create_group_indexes",
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(true),
-		},
-		[ContinuousViewOptionIgnoreInvalidationOlderThan] = {
-			.arg_name = "ignore_invalidation_older_than",
-			.type_id = TEXTOID,
 		},
 		[ContinuousViewOptionMaterializedOnly] = {
 			.arg_name = "materialized_only",

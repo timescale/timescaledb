@@ -680,36 +680,6 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	}
 }
 
-static int64
-get_refresh_lag(Oid column_type, int64 bucket_width, WithClauseResult *with_clause_options)
-{
-	if (with_clause_options[ContinuousViewOptionRefreshLag].is_default)
-		return bucket_width * 2;
-	return continuous_agg_parse_refresh_lag(column_type, with_clause_options);
-}
-
-static int64
-get_max_interval_per_job(Oid column_type, WithClauseResult *with_clause_options, int64 bucket_width)
-{
-	if (with_clause_options[ContinuousViewOptionMaxIntervalPerRun].is_default)
-	{
-		return (bucket_width < DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH) ?
-				   DEFAULT_MAX_INTERVAL_MULTIPLIER * bucket_width :
-				   PG_INT64_MAX;
-	}
-	return continuous_agg_parse_max_interval_per_job(column_type,
-													 with_clause_options,
-													 bucket_width);
-}
-
-static int64
-get_ignore_invalidation_older_than(Oid column_type, WithClauseResult *with_clause_options)
-{
-	if (with_clause_options[ContinuousViewOptionIgnoreInvalidationOlderThan].is_default)
-		return PG_INT64_MAX;
-	return continuous_agg_parse_ignore_invalidation_older_than(column_type, with_clause_options);
-}
-
 static bool
 cagg_agg_validate(Node *node, void *context)
 {
@@ -1692,14 +1662,12 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	int32 materialize_hypertable_id;
 	char trigarg[NAMEDATALEN];
 	int ret;
-	int64 refresh_lag = get_refresh_lag(origquery_ht->htpartcoltype,
-										origquery_ht->bucket_width,
-										with_clause_options);
-	int64 max_interval_per_job = get_max_interval_per_job(origquery_ht->htpartcoltype,
-														  with_clause_options,
-														  origquery_ht->bucket_width);
-	int64 ignore_invalidation_older_than =
-		get_ignore_invalidation_older_than(origquery_ht->htpartcoltype, with_clause_options);
+	int64 refresh_lag = origquery_ht->bucket_width * 2;
+	int64 max_interval_per_job =
+		(origquery_ht->bucket_width < DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH) ?
+			DEFAULT_MAX_INTERVAL_MULTIPLIER * origquery_ht->bucket_width :
+			PG_INT64_MAX;
+	int64 ignore_invalidation_older_than = PG_INT64_MAX;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 

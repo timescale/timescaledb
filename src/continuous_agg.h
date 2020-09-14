@@ -20,10 +20,7 @@
 typedef enum ContinuousAggViewOption
 {
 	ContinuousEnabled = 0,
-	ContinuousViewOptionRefreshLag,
-	ContinuousViewOptionMaxIntervalPerRun,
 	ContinuousViewOptionCreateGroupIndex,
-	ContinuousViewOptionIgnoreInvalidationOlderThan,
 	ContinuousViewOptionMaterializedOnly,
 } ContinuousAggViewOption;
 
