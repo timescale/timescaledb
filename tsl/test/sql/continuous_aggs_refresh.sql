@@ -240,3 +240,50 @@ SELECT * FROM weekly_temp_with_data;
 CALL refresh_continuous_aggregate('weekly_temp_without_data', NULL, NULL);
 
 SELECT * FROM weekly_temp_without_data;
+
+-- These should fail since we do not allow refreshing inside a
+-- transaction, not even as part of CREATE MATERIALIZED VIEW.
+\set ON_ERROR_STOP 0
+DO LANGUAGE PLPGSQL $$ BEGIN
+CREATE MATERIALIZED VIEW weekly_conditions
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH DATA;
+END $$;
+
+BEGIN;
+CREATE MATERIALIZED VIEW weekly_conditions
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH DATA;
+COMMIT;
+
+\set ON_ERROR_STOP 1
+
+-- This should not fail since we do not refresh the continuous
+-- aggregate.
+DO LANGUAGE PLPGSQL $$ BEGIN
+CREATE MATERIALIZED VIEW weekly_conditions_1
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+END $$;
+
+BEGIN;
+CREATE MATERIALIZED VIEW weekly_conditions_2
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+COMMIT;

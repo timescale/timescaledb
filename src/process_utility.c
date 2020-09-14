@@ -3307,6 +3307,11 @@ process_create_table_as(ProcessUtilityArgs *args)
 							   "parameters."),
 					 errhint("Use only parameters with the \"timescaledb.\" prefix when "
 							 "creating a continuous aggregate.")));
+
+		if (!stmt->into->skipData)
+			PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL,
+									  "CREATE MATERIALIZED VIEW ... WITH DATA");
+
 		return ts_cm_functions->process_cagg_viewstmt(args->parsetree,
 													  args->query_string,
 													  args->pstmt,
