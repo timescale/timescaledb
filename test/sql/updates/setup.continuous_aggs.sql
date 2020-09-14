@@ -77,7 +77,7 @@ BEGIN
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
   ELSE
     CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
-    WITH ( timescaledb.continuous, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+    WITH ( timescaledb.continuous)
     AS
       SELECT time_bucket('1week', timec) as bucket,
 	location,
