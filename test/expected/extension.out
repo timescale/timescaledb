@@ -26,12 +26,10 @@ WHERE oid IN (
  add_job
  add_reorder_policy
  add_retention_policy
- allow_new_chunks
  alter_job
  approximate_row_count
  attach_data_node
  attach_tablespace
- block_new_chunks
  chunk_compression_stats
  chunks_detailed_size
  compress_chunk
@@ -76,5 +74,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(57 rows)
+(55 rows)
 
