@@ -1,5 +1,5 @@
 # GitHub Actions configuration for TimescaleDB
-name: Windows
+name: Regression Windows
 on:
   push:
     branches:
@@ -7,7 +7,7 @@ on:
   pull_request:
 jobs:
   build:
-    name: PG${{ matrix.pg }} [${{ matrix.build_type }}]
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
