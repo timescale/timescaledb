@@ -237,7 +237,9 @@ GROUP BY 1,2 WITH DATA;
 SELECT * FROM weekly_temp_without_data;
 SELECT * FROM weekly_temp_with_data;
 
-CALL refresh_continuous_aggregate('weekly_temp_without_data', NULL, NULL);
+-- Test that REFRESH MATERIALIZED VIEW works as an alternative to
+-- refresh_continuous_aggregate()
+REFRESH MATERIALIZED VIEW weekly_temp_without_data;
 
 SELECT * FROM weekly_temp_without_data;
 
