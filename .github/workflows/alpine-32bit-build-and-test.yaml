@@ -9,7 +9,7 @@ on:
   pull_request:
 jobs:
   regress_linux_32bit:
-    name: Regression PG${{ matrix.pg }} [${{ matrix.build_type }}]
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
     runs-on: ubuntu-18.04
     container:
       image: i386/postgres:${{ matrix.pg }}-alpine
