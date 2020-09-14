@@ -409,7 +409,9 @@ SELECT * FROM weekly_temp_with_data;
  Sun May 03 17:00:00 2020 PDT |      3 |               19
 (8 rows)
 
-CALL refresh_continuous_aggregate('weekly_temp_without_data', NULL, NULL);
+-- Test that REFRESH MATERIALIZED VIEW works as an alternative to
+-- refresh_continuous_aggregate()
+REFRESH MATERIALIZED VIEW weekly_temp_without_data;
 SELECT * FROM weekly_temp_without_data;
              day              | device |     avg_temp     
 ------------------------------+--------+------------------

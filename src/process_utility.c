@@ -3330,8 +3330,7 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	ScanIterator continuous_aggregate_iter;
 	NameData view_name;
 	NameData view_schema;
-	bool cagg_fullrange;
-	ContinuousAggMatOptions mat_options;
+	LOCAL_FCINFO(fcinfo, 3);
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
@@ -3369,24 +3368,11 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 
 	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
 
-	PopActiveSnapshot();
-	CommitTransactionCommand();
+	FC_SET_ARG(fcinfo, 0, ObjectIdGetDatum(view_relid));
+	FC_SET_NULL(fcinfo, 1);
+	FC_SET_NULL(fcinfo, 2);
+	ts_cm_functions->continuous_agg_refresh(fcinfo);
 
-	mat_options = (ContinuousAggMatOptions){
-		.verbose = true,
-		.within_single_transaction = false,
-		.process_only_invalidation = false,
-		.invalidate_prior_to_time = PG_INT64_MAX,
-	};
-	cagg_fullrange = ts_cm_functions->continuous_agg_materialize(materialization_id, &mat_options);
-	if (!cagg_fullrange)
-	{
-		elog(WARNING,
-			 "REFRESH did not materialize the entire range since it was limited by the "
-			 "max_interval_per_job setting");
-	}
-
-	StartTransactionCommand();
 	return DDL_DONE;
 }
 
