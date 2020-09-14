@@ -860,14 +860,14 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 (6 rows)
 
 -- Block one data node for specific hypertable
-SELECT * FROM block_new_chunks('data_node_1', 'disttable');
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', 'disttable');
  block_new_chunks 
 ------------------
                 1
 (1 row)
 
 -- Block one data node for all hypertables
-SELECT * FROM block_new_chunks('data_node_1');
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1');
 NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "disttable"
  block_new_chunks 
 ------------------
@@ -911,26 +911,26 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 -- some ERROR cases
 \set ON_ERROR_STOP 0
 -- Will error due to under-replication
-SELECT * FROM block_new_chunks('data_node_2');
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_2');
 ERROR:  blocking new chunks on data node "data_node_2" risks making new data for hypertable "disttable" under-replicated
 -- can't block/allow non-existing data node
-SELECT * FROM block_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_12345', 'disttable');
 ERROR:  server "data_node_12345" does not exist
-SELECT * FROM allow_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_12345', 'disttable');
 ERROR:  server "data_node_12345" does not exist
 -- NULL data node
-SELECT * FROM block_new_chunks(NULL, 'disttable');
+SELECT * FROM _timescaledb_internal.block_new_chunks(NULL, 'disttable');
 ERROR:  invalid node_name: cannot be NULL
-SELECT * FROM allow_new_chunks(NULL, 'disttable');
+SELECT * FROM _timescaledb_internal.allow_new_chunks(NULL, 'disttable');
 ERROR:  invalid node_name: cannot be NULL
 -- can't block/allow on non hypertable
-SELECT * FROM block_new_chunks('data_node_1', 'devices');
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', 'devices');
 ERROR:  table "devices" is not a hypertable
-SELECT * FROM allow_new_chunks('data_node_1', 'devices');
+SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_1', 'devices');
 ERROR:  table "devices" is not a hypertable
 \set ON_ERROR_STOP 1
 -- Force block all data nodes
-SELECT * FROM block_new_chunks('data_node_2', force => true);
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_2', force => true);
 WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on data node "data_node_2"
 WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on data node "data_node_2"
  block_new_chunks 
@@ -938,7 +938,7 @@ WARNING:  new data for hypertable "disttable_2" will be under-replicated due to 
                 2
 (1 row)
 
-SELECT * FROM block_new_chunks('data_node_1', force => true);
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', force => true);
 NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "disttable"
 NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "disttable_2"
  block_new_chunks 
@@ -946,7 +946,7 @@ NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "d
                 0
 (1 row)
 
-SELECT * FROM block_new_chunks('data_node_3', force => true);
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_3', force => true);
 WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on data node "data_node_3"
 WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on data node "data_node_3"
  block_new_chunks 
@@ -972,19 +972,19 @@ INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
 ERROR:  no available data nodes (detached or blocked for new chunks) for hypertable "disttable"
 \set ON_ERROR_STOP 1
 -- unblock data nodes for all hypertables
-SELECT * FROM allow_new_chunks('data_node_1');
+SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_1');
  allow_new_chunks 
 ------------------
                 2
 (1 row)
 
-SELECT * FROM allow_new_chunks('data_node_2');
+SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_2');
  allow_new_chunks 
 ------------------
                 2
 (1 row)
 
-SELECT * FROM allow_new_chunks('data_node_3');
+SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_3');
  allow_new_chunks 
 ------------------
                 2
@@ -1173,9 +1173,9 @@ NOTICE:  adding not-null constraint to column "time"
 -- error due to missing permissions
 SELECT * FROM detach_data_node('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
-SELECT * FROM block_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
-SELECT * FROM allow_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
 \set ON_ERROR_STOP 1
 -- detach table(s) where user has permissions, otherwise show NOTICE
