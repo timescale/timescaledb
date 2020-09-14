@@ -423,3 +423,49 @@ SELECT * FROM weekly_temp_without_data;
  Sun May 03 17:00:00 2020 PDT |      3 |               19
 (8 rows)
 
+-- These should fail since we do not allow refreshing inside a
+-- transaction, not even as part of CREATE MATERIALIZED VIEW.
+\set ON_ERROR_STOP 0
+DO LANGUAGE PLPGSQL $$ BEGIN
+CREATE MATERIALIZED VIEW weekly_conditions
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH DATA;
+END $$;
+ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot be executed from a function
+BEGIN;
+CREATE MATERIALIZED VIEW weekly_conditions
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH DATA;
+ERROR:  CREATE MATERIALIZED VIEW ... WITH DATA cannot run inside a transaction block
+COMMIT;
+\set ON_ERROR_STOP 1
+-- This should not fail since we do not refresh the continuous
+-- aggregate.
+DO LANGUAGE PLPGSQL $$ BEGIN
+CREATE MATERIALIZED VIEW weekly_conditions_1
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+END $$;
+NOTICE:  adding index _materialized_hypertable_13_device_day_idx ON _timescaledb_internal._materialized_hypertable_13 USING BTREE(device, day)
+BEGIN;
+CREATE MATERIALIZED VIEW weekly_conditions_2
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
+FROM conditions
+GROUP BY 1,2 WITH NO DATA;
+NOTICE:  adding index _materialized_hypertable_14_device_day_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(device, day)
+COMMIT;
