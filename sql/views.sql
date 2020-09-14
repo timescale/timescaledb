@@ -25,6 +25,8 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
         INNER JOIN pg_tables t
         ON ht.table_name=t.tablename
            AND ht.schema_name=t.schemaname
+        LEFT OUTER JOIN _timescaledb_catalog.continuous_agg ca
+        ON ca.mat_hypertable_id=ht.id
         LEFT OUTER JOIN (
             SELECT hypertable_id,
             array_agg(tablespace_name ORDER BY id) as tablespace_list
@@ -38,7 +40,7 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
                       GROUP BY hypertable_id) dn
     ON ht.id = dn.hypertable_id
     WHERE ht.compressed is false --> no internal compression tables
-;
+    AND ca.mat_hypertable_id IS NULL;
 
 CREATE OR REPLACE VIEW timescaledb_information.license AS
   SELECT _timescaledb_internal.license_edition() as edition,
