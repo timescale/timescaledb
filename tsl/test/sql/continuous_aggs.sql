@@ -114,6 +114,11 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
 
+-- Materialized hypertable for mat_m1 should not be visible in the
+-- hypertables view:
+SELECT table_schema, table_name
+FROM timescaledb_information.hypertables;
+
 SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
