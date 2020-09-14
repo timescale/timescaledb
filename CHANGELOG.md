@@ -4,6 +4,24 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.0.0-beta6 (2020-09-14)
+
+**For beta releases**, upgrading from an earlier version of the
+extension (including previous beta releases) is not supported.
+
+This beta release includes breaking changes to APIs. The most 
+notable changes since the beta-5 release are the following, which will 
+be reflected in forthcoming documentation for the 2.0 release.
+
+* Existing information views were reorganized. Retrieving information 
+about sizes and statistics was moved to functions. New views were added 
+to expose information, which was previously available only internally.
+* New ability to create custom jobs was added.
+* Continuous aggregate API was redesigned. Its policy creation is separated 
+from the view creation.
+* compress_chunk_policy and drop_chunk_policy were renamed to compression_policy and 
+retention_policy.
+
 ## 1.7.4 (2020-09-07)
 
 This maintenance release contains bugfixes since the 1.7.3 release. We deem it
