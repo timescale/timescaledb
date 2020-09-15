@@ -111,7 +111,7 @@ if event_type != "pull_request":
     "llvm_config": "/usr/bin/llvm-config-8",
     "clang": "clang-8",
     "extra_packages": "llvm-8 llvm-8-dev llvm-8-tools",
-    "installcheck_args": "IGNORES='continuous_aggs_insert continuous_aggs_multi'"
+    "installcheck_args": "IGNORES='continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh'"
   }
   m["include"].append(build_debug_config(pg11_debug_earliest))
 
