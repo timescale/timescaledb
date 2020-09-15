@@ -263,3 +263,50 @@ BEGIN
 END $$;
 
 REFRESH MATERIALIZED VIEW mat_ignoreinval;
+
+-- test new data beyond the invalidation threshold is properly handled --
+CREATE TABLE inval_test (time TIMESTAMPTZ, location TEXT, temperature DOUBLE PRECISION);
+SELECT create_hypertable('inval_test', 'time', chunk_time_interval => INTERVAL '1 week');
+ 
+INSERT INTO inval_test
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timestamp, '1 day'), 'POR', generate_series(40.5, 50.0, 0.5);
+INSERT INTO inval_test
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timestamp, '1 day'), 'NYC', generate_series(31.0, 50.0, 1.0);
+
+DO LANGUAGE PLPGSQL $$
+DECLARE
+  ts_version TEXT;
+BEGIN
+  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version < '2.0.0' THEN
+    CREATE VIEW mat_inval
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
+           timescaledb.refresh_lag='-20 days',
+           timescaledb.refresh_interval='12 hours',
+           timescaledb.max_interval_per_job='100000 days' )
+    AS 
+      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
+        max(temperature) as max_temp, avg(temperature) as avg_temp
+      FROM inval_test
+      GROUP BY bucket, location;
+
+  ELSE
+    CREATE MATERIALIZED VIEW mat_inval
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+    AS 
+      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp, 
+        max(temperature) as max_temp, avg(temperature) as avg_temp
+      FROM inval_test
+      GROUP BY bucket, location WITH NO DATA;
+
+    PERFORM add_continuous_aggregate_policy('mat_inval', NULL, '-20 days'::interval, '12 hours');
+  END IF;
+END $$;
+
+REFRESH MATERIALIZED VIEW mat_inval;
+
+INSERT INTO inval_test
+SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'POR', generate_series(135.25, 140.0, 0.25);
+INSERT INTO inval_test
+SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'NYC', generate_series(131.0, 150.0, 1.0);

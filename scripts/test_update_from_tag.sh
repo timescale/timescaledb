@@ -175,14 +175,14 @@ docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${
 echo "Executing ALTER EXTENSION timescaledb UPDATE"
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE"
 
-docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
-docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
-
 echo "Executing setup script on clean"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 
 echo "Testing updated vs clean"
-docker_pgdiff ${CONTAINER_UPDATED} ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/test-rerun.sql
+docker_pgdiff ${CONTAINER_UPDATED} ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/test-rerun.${TEST_VERSION}.sql
+
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
+docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
 
 echo "Restoring database on clean version"
 docker cp ${TEST_TMPDIR}/single.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/single.sql
