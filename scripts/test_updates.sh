@@ -30,7 +30,7 @@ do
             docker rmi -f ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
             ;;
         d)
-            echo "Keeping temporary directory"
+            echo "Keeping temporary directory ${TEST_TMPDIR}"
             KEEP_TEMP_DIRS=true
             TEST_UPDATE_FROM_TAGS_EXTRA_ARGS="-d"
             ;;

@@ -303,6 +303,15 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE
 GRANT SELECT ON _timescaledb_config.bgw_job TO PUBLIC;
 GRANT SELECT ON _timescaledb_config.bgw_job_id_seq TO PUBLIC;
 
+-- Add entry to materialization invalidation log to indicate that [watermark, +infinity) is invalid
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT materialization_id, BIGINT '-9223372036854775808', watermark, 9223372036854775807
+FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
+-- Also handle continuous aggs that have never been run
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg EXCEPT SELECT materialization_id FROM _timescaledb_catalog.continuous_aggs_completed_threshold), 
+-9223372036854775808, -9223372036854775808, 9223372036854775807;
+
 -- drop completed_threshold table, which is no longer used
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_completed_threshold;
 DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_completed_threshold;
