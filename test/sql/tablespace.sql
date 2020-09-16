@@ -84,6 +84,10 @@ SELECT * FROM test.show_subtables('tspace_2dim');
 --indexes should inherit the tablespace of their chunk
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
+\x
+SELECT * FROM timescaledb_information.hypertables ORDER BY table_name;
+SELECT * FROM timescaledb_information.chunks ORDER BY chunk_name;
+\x
 --
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
