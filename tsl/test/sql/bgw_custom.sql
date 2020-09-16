@@ -59,4 +59,12 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- test altering job with NULL config
 SELECT job_id FROM alter_job(1,scheduled:=false);
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
 
+-- test updating job settings
+SELECT job_id FROM alter_job(1,config:='{"test":"test"}');
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
+SELECT job_id FROM alter_job(1,scheduled:=true);
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
+SELECT job_id FROM alter_job(1,scheduled:=false);
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
