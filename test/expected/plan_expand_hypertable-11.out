@@ -2753,4 +2753,42 @@ SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
 (0 rows)
 
 \set ECHO errors
+RESET timescaledb.enable_optimizations;
+CREATE TABLE test (a int, time timestamptz NOT NULL);
+SELECT create_hypertable('public.test', 'time');
+ create_hypertable  
+--------------------
+ (15,public,test,t)
+(1 row)
+
+INSERT INTO test SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
+CREATE OR REPLACE FUNCTION test_f(_ts timestamptz)
+RETURNS SETOF test LANGUAGE SQL STABLE PARALLEL SAFE
+AS $f$
+   SELECT DISTINCT ON (a) * FROM test WHERE time >= _ts ORDER BY a, time DESC
+$f$;
+EXPLAIN (costs off) SELECT * FROM test_f(now());
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: test.a, test."time" DESC
+         ->  Custom Scan (ChunkAppend) on test
+               Chunks excluded during startup: 4
+               ->  Index Scan using test_time_idx on test test_1
+                     Index Cond: ("time" >= now())
+(7 rows)
+
+EXPLAIN (costs off) SELECT * FROM test_f(now());
+                   QUERY PLAN                    
+-------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: test.a, test."time" DESC
+         ->  Custom Scan (ChunkAppend) on test
+               Chunks excluded during startup: 4
+               ->  Seq Scan on test test_1
+                     Filter: ("time" >= now())
+(7 rows)
+
 --TEST END--
