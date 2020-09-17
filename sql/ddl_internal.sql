@@ -20,3 +20,17 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
 -- distributed hypertables
 CREATE OR REPLACE FUNCTION _timescaledb_internal.allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
+
+-- Freeze a continuous aggregate across the given window.
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.freeze_continuous_aggregate(
+	cagg                     REGCLASS,
+	window_start             "any" = NULL,
+	window_end               "any" = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_freeze';
+
+-- Unfreeze a continuous aggregate across the given window.
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.unfreeze_continuous_aggregate(
+	cagg                     REGCLASS,
+	window_start             "any" = NULL,
+	window_end               "any" = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_unfreeze';

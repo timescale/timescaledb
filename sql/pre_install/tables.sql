@@ -289,12 +289,13 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_
         ON DELETE CASCADE,
     modification_time BIGINT NOT NULL, --now time for txn when the raw table was modified
     lowest_modified_value BIGINT NOT NULL,
-    greatest_modified_value BIGINT NOT NULL
+    greatest_modified_value BIGINT NOT NULL,
+	frozen BOOLEAN NOT NULL DEFAULT false
 );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_invalidation_log', '');
 
 CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
-    ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
+    ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC, frozen);
 
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.

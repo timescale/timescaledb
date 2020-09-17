@@ -1002,12 +1002,14 @@ typedef enum Anum_continuous_aggs_invalidation_threshold_pkey
 /****** CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE definitions*/
 #define CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME                                \
 	"continuous_aggs_materialization_invalidation_log"
+
 typedef enum Anum_continuous_aggs_materialization_invalidation_log
 {
 	Anum_continuous_aggs_materialization_invalidation_log_materialization_id = 1,
 	Anum_continuous_aggs_materialization_invalidation_log_modification_time,
 	Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+	Anum_continuous_aggs_materialization_invalidation_log_frozen,
 	_Anum_continuous_aggs_materialization_invalidation_log_max,
 } Anum_continuous_aggs_materialization_invalidation_log;
 
@@ -1020,6 +1022,7 @@ typedef struct FormData_continuous_aggs_materialization_invalidation_log
 	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
+	bool frozen;
 } FormData_continuous_aggs_materialization_invalidation_log;
 
 typedef FormData_continuous_aggs_materialization_invalidation_log
@@ -1034,6 +1037,7 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
 {
 	Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id = 1,
 	Anum_continuous_aggs_materialization_invalidation_log_idx_lowest_modified_value,
+	Anum_continuous_aggs_materialization_invalidation_log_idx_frozen,
 	_Anum_continuous_aggs_materialization_invalidation_log_idx_max,
 } Anum_continuous_aggs_materialization_invalidation_log_idx;
 

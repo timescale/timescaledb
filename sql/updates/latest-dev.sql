@@ -309,7 +309,7 @@ DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_completed_threshold;
 
 -- rebuild continuous aggregate table
 CREATE TABLE _timescaledb_catalog.continuous_agg_tmp AS SELECT * FROM _timescaledb_catalog.continuous_agg;
-
+-- Drop foreign key that points to continuous_agg table
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log DROP CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
@@ -339,4 +339,28 @@ GRANT SELECT ON _timescaledb_catalog.continuous_agg TO PUBLIC;
 INSERT INTO _timescaledb_catalog.continuous_agg SELECT mat_hypertable_id,raw_hypertable_id,user_view_schema,user_view_name,partial_view_schema,partial_view_name,bucket_width,direct_view_schema,direct_view_name,materialized_only FROM _timescaledb_catalog.continuous_agg_tmp;
 DROP TABLE _timescaledb_catalog.continuous_agg_tmp;
 
-ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
+-- Update materialization invalidation log to add constraint and frozen column
+-- This requires a rebuild to force a table rewrite for the default value of "frozen"
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log_tmp AS SELECT * FROM  _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log CASCADE;
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log(
+    materialization_id INTEGER
+        REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id)
+        ON DELETE CASCADE,
+    modification_time BIGINT NOT NULL, --now time for txn when the raw table was modified
+    lowest_modified_value BIGINT NOT NULL,
+    greatest_modified_value BIGINT NOT NULL,
+    frozen BOOLEAN NOT NULL DEFAULT false
+);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_invalidation_log', '');
+
+GRANT SELECT ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log TO PUBLIC;
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+  SELECT materialization_id, modification_time, lowest_modified_value, greatest_modified_value, false
+  FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log_tmp;
+DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log_tmp;
+
+CREATE INDEX continuous_aggs_materialization_invalidation_log_idx
+    ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC, frozen);

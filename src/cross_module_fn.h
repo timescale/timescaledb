@@ -93,6 +93,8 @@ typedef struct CrossModuleFunctions
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_invalidation_trigger;
 	PGFunction continuous_agg_refresh;
+	PGFunction continuous_agg_freeze;
+	PGFunction continuous_agg_unfreeze;
 	void (*continuous_agg_refresh_all)(const Hypertable *ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate)(const Hypertable *ht, int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,

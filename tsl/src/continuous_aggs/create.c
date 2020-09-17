@@ -537,7 +537,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 
 	/* Add an infinite invalidation for the continuous aggregate. This is the
 	 * initial state of the aggregate before any refreshes. */
-	invalidation_cagg_log_add_entry(mat_htid, current_time, TS_TIME_NOBEGIN, TS_TIME_NOEND);
+	invalidation_cagg_log_add_entry(mat_htid, current_time, TS_TIME_NOBEGIN, TS_TIME_NOEND, false);
 
 	ts_cache_release(hcache);
 	return mat_htid;

@@ -10,30 +10,7 @@
 #include <fmgr.h>
 #include <nodes/pg_list.h>
 #include "continuous_agg.h"
-
-typedef struct SchemaAndName
-{
-	Name schema;
-	Name name;
-} SchemaAndName;
-
-/***********************
- * Time ranges
- ***********************/
-
-typedef struct TimeRange
-{
-	Oid type;
-	Datum start;
-	Datum end;
-} TimeRange;
-
-typedef struct InternalTimeRange
-{
-	Oid type;
-	int64 start; /* inclusive */
-	int64 end;   /* exclusive */
-} InternalTimeRange;
+#include "common.h"
 
 InternalTimeRange continuous_agg_materialize_window_max(Oid timetype);
 void continuous_agg_update_materialization(SchemaAndName partial_view,
