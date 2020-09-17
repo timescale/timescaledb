@@ -187,15 +187,15 @@ INSERT into test_table_int SELECT generate_series( 1, 20), 100;
  SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'ht1' ORDER BY chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |    chunk_name    | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace | data_nodes 
 -------------------+-----------------+-----------------------+------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+------------
- public            | ht1             | _timescaledb_internal | _hyper_1_1_chunk | time              | timestamp with time zone | Wed Dec 29 16:00:00 1999 PST | Wed Jan 05 16:00:00 2000 PST |                     |                   | false         |                  | 
+ public            | ht1             | _timescaledb_internal | _hyper_1_1_chunk | time              | timestamp with time zone | Wed Dec 29 16:00:00 1999 PST | Wed Jan 05 16:00:00 2000 PST |                     |                   | f             |                  | 
 (1 row)
 
  SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORDER BY chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |    chunk_name    | primary_dimension | primary_dimension_type | range_start | range_end | range_start_integer | range_end_integer | is_compressed | chunk_tablespace | data_nodes 
 -------------------+-----------------+-----------------------+------------------+-------------------+------------------------+-------------+-----------+---------------------+-------------------+---------------+------------------+------------
- public            | test_table_int  | _timescaledb_internal | _hyper_5_7_chunk | time              | bigint                 |             |           |                   0 |                10 | false         |                  | 
- public            | test_table_int  | _timescaledb_internal | _hyper_5_8_chunk | time              | bigint                 |             |           |                  10 |                20 | false         |                  | 
- public            | test_table_int  | _timescaledb_internal | _hyper_5_9_chunk | time              | bigint                 |             |           |                  20 |                30 | false         |                  | 
+ public            | test_table_int  | _timescaledb_internal | _hyper_5_7_chunk | time              | bigint                 |             |           |                   0 |                10 | f             |                  | 
+ public            | test_table_int  | _timescaledb_internal | _hyper_5_8_chunk | time              | bigint                 |             |           |                  10 |                20 | f             |                  | 
+ public            | test_table_int  | _timescaledb_internal | _hyper_5_9_chunk | time              | bigint                 |             |           |                  20 |                30 | f             |                  | 
 (3 rows)
 
 \x 

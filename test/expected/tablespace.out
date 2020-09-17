@@ -162,7 +162,7 @@ range_start            | Wed Jan 18 16:00:00 2017 PST
 range_end              | Wed Jan 25 16:00:00 2017 PST
 range_start_integer    | 
 range_end_integer      | 
-is_compressed          | false
+is_compressed          | f
 chunk_tablespace       | tablespace1
 data_nodes             | 
 -[ RECORD 2 ]----------+-----------------------------
@@ -176,7 +176,7 @@ range_start            | Wed Jan 18 16:00:00 2017 PST
 range_end              | Wed Jan 25 16:00:00 2017 PST
 range_start_integer    | 
 range_end_integer      | 
-is_compressed          | false
+is_compressed          | f
 chunk_tablespace       | tablespace2
 data_nodes             | 
 

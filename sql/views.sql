@@ -150,8 +150,8 @@ SELECT
         THEN NULL
         ELSE dimsl.range_end
     END as integer_range_end,
-    CASE WHEN srcch.compressed_chunk_id is not null THEN 'true'
-         ELSE 'false'
+    CASE WHEN srcch.compressed_chunk_id is not null THEN true
+         ELSE false
     END as is_compressed,
     pgtab.spcname as chunk_table_space,
     chdn.node_list
