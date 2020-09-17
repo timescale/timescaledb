@@ -239,3 +239,29 @@ SET max_parallel_workers_per_gather TO 0;
 \ir include/transparent_decompression_undiffed.sql
 -- diff compressed and uncompressed results
 :DIFF_CMD
+
+-- check hypertable detection in views
+CREATE VIEW ht_view AS
+SELECT *,
+  0 AS res
+FROM metrics
+UNION ALL
+SELECT *,
+  1 AS res
+FROM metrics;
+
+CREATE FUNCTION ht_func() RETURNS SETOF metrics LANGUAGE SQL STABLE AS
+$sql$
+  SELECT time,
+    device_id,
+    device_id_peer,
+    v0, v1, v2, v3
+  FROM ht_view
+  WHERE res = 0;
+$sql$;
+
+-- should have decompresschunk node
+:PREFIX SELECT * FROM ht_func();
+\c
+-- plan should be identical to previous plan in fresh session
+:PREFIX SELECT * FROM ht_func();

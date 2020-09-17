@@ -123,7 +123,6 @@ set(TEST_TEMPLATES
   plan_expand_hypertable.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg.sql.in
-  plan_hypertable_cache.sql.in
   query.sql.in
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in

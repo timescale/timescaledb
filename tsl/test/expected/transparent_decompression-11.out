@@ -8625,3 +8625,48 @@ EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER 
 SET enable_seqscan TO true;
 -- diff compressed and uncompressed results
 :DIFF_CMD
+-- check hypertable detection in views
+CREATE VIEW ht_view AS
+SELECT *,
+  0 AS res
+FROM metrics
+UNION ALL
+SELECT *,
+  1 AS res
+FROM metrics;
+CREATE FUNCTION ht_func() RETURNS SETOF metrics LANGUAGE SQL STABLE AS
+$sql$
+  SELECT time,
+    device_id,
+    device_id_peer,
+    v0, v1, v2, v3
+  FROM ht_view
+  WHERE res = 0;
+$sql$;
+-- should have decompresschunk node
+:PREFIX SELECT * FROM ht_func();
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Append (actual rows=6840 loops=1)
+   ->  Seq Scan on metrics (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1800 loops=1)
+         ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+   ->  Seq Scan on _hyper_1_2_chunk (actual rows=2520 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=2520 loops=1)
+         ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+(7 rows)
+
+\c
+-- plan should be identical to previous plan in fresh session
+:PREFIX SELECT * FROM ht_func();
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Append (actual rows=6840 loops=1)
+   ->  Seq Scan on metrics (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1800 loops=1)
+         ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+   ->  Seq Scan on _hyper_1_2_chunk (actual rows=2520 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=2520 loops=1)
+         ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
+(7 rows)
+
