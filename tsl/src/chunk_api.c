@@ -315,10 +315,17 @@ chunk_create(PG_FUNCTION_ARGS)
 	HeapTuple tuple;
 	bool created;
 	const char *parse_err;
+	AclResult acl_result;
 
 	Assert(NULL != ht);
 
-	ts_hypertable_permissions_check(hypertable_relid, GetUserId());
+	acl_result = pg_class_aclcheck(hypertable_relid, GetUserId(), ACL_INSERT);
+	if (acl_result != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("permission denied for table \"%s\"", get_rel_name(hypertable_relid)),
+				 errdetail("Insert privileges required on \"%s\" to create chunks.",
+						   get_rel_name(hypertable_relid))));
 
 	if (NULL == slices)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
