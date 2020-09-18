@@ -358,6 +358,12 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int64 computed_invalidation_threshold;
 	int64 invalidation_threshold;
 
+	/* Like regular materialized views, require owner to refresh. */
+	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
+					   get_rel_name(cagg->relid));
+
 	PreventCommandIfReadOnly(REFRESH_FUNCTION_NAME);
 
 	/* Prevent running refresh if we're in a transaction block since a refresh
@@ -462,6 +468,12 @@ continuous_agg_refresh_all(const Hypertable *ht, int64 start, int64 end)
 		.end = end,
 	};
 	ListCell *lc;
+
+	/* We're not doing any specific permissions checks here. It's assumed that
+	 * whoever calls this function has done appropriate checks for the
+	 * operation. For instance, if this is called as a result of
+	 * "refresh-on-drop", it is assumed that refresh can happen if the user is
+	 * permitted to drop data. */
 
 	Assert(list_length(caggs) > 0);
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
