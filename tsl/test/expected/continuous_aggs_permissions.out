@@ -118,7 +118,7 @@ ERROR:  must be owner of continuous aggregate "mat_refresh_test"
 DROP MATERIALIZED VIEW mat_refresh_test;
 ERROR:  must be owner of view mat_refresh_test
 CALL refresh_continuous_aggregate('mat_refresh_test', NULL, NULL);
-ERROR:  permission denied for table conditions
+ERROR:  must be owner of view mat_refresh_test
 SELECT * FROM mat_refresh_test;
 ERROR:  permission denied for materialized view mat_refresh_test
 SELECT * FROM :materialization_hypertable;
