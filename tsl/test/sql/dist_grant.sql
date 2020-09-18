@@ -183,3 +183,36 @@ GRANT UPDATE ON _timescaledb_internal._hyper_3_35_chunk TO PUBLIC;
 \z _timescaledb_internal._hyper_3_35_chunk
 REVOKE SELECT ON _timescaledb_internal._hyper_3_35_chunk FROM PUBLIC;
 \z _timescaledb_internal._hyper_3_35_chunk
+
+DROP TABLE conditions;
+
+-- Test that we can create a writer role, assign users to that role,
+-- and allow the users to insert data and create new chunks.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+CREATE TABLE conditions(
+       time timestamptz,
+       device int CHECK (device > 0),
+       temp float,
+       PRIMARY KEY (time,device)
+);
+
+SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device', 3);
+
+-- Test that we can create a writer role, assign users to that role,
+-- and allow the users to insert data and create new chunks.
+
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+\set ON_ERROR_STOP 0
+INSERT INTO conditions
+SELECT time, 1 + (random()*30)::int, random()*80
+FROM generate_series('2019-01-01 00:00:00'::timestamptz, '2019-02-01 00:00:00', '1 min') AS time;
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
+GRANT INSERT ON conditions TO :ROLE_DEFAULT_PERM_USER_2;
+
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+INSERT INTO conditions
+SELECT time, 1 + (random()*30)::int, random()*80
+FROM generate_series('2019-01-01 00:00:00'::timestamptz, '2019-02-01 00:00:00', '1 min') AS time;

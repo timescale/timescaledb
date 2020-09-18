@@ -80,17 +80,23 @@ CONTEXT:  JSON data, line 1:  {"time: [1515024000000000] "device...
 -- Valid chunk, but no permissions
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
-ERROR:  must be owner of hypertable "chunkapi"
-SET ROLE :ROLE_DEFAULT_PERM_USER;
+ERROR:  permission denied for table "chunkapi"
+DETAIL:  Insert privileges required on "chunkapi" to create chunks.
 \set ON_ERROR_STOP 1
-\set VERBOSITY terse
--- Create a chunk that does not collide and with custom schema and name
+-- Test that granting insert on tables allow create_chunk to be
+-- called. This will also create a chunk that does not collide and has
+-- a custom schema and name.
+SET ROLE :ROLE_SUPERUSER;
+GRANT INSERT ON chunkapi TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
  chunk_id | hypertable_id | schema_name |     table_name      | relkind |                                            slices                                            | created 
 ----------+---------------+-------------+---------------------+---------+----------------------------------------------------------------------------------------------+---------
         2 |             1 | ChunkSchema | My_chunk_Table_name | r       | {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]} | t
 (1 row)
 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set VERBOSITY terse
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
