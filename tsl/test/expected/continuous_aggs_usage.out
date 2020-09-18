@@ -73,7 +73,7 @@ SELECT * FROM timescaledb_information.continuous_aggregates;
 -[ RECORD 1 ]--------------+-------------------------------------------------------------------------------------------------------------
 view_name                  | device_summary
 view_owner                 | default_perm_user
-refresh_interval           | @ 2 hours
+schedule_interval          | @ 2 hours
 materialized_only          | t
 materialization_hypertable | _timescaledb_internal._materialized_hypertable_2
 view_definition            |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS bucket,                      +
