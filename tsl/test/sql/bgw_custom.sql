@@ -39,6 +39,8 @@ SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
 SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
 
+SELECT * FROM timescaledb_information.jobs ORDER BY 1;
+
 CALL run_job(1000);
 CALL run_job(1001);
 CALL run_job(1002);
@@ -54,17 +56,17 @@ SELECT delete_job(1003);
 SELECT delete_job(1004);
 
 -- check jobs got removed
-SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1000;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- test altering job with NULL config
 SELECT job_id FROM alter_job(1,scheduled:=false);
-SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
+SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
 
 -- test updating job settings
 SELECT job_id FROM alter_job(1,config:='{"test":"test"}');
-SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
+SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
 SELECT job_id FROM alter_job(1,scheduled:=true);
-SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
+SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
 SELECT job_id FROM alter_job(1,scheduled:=false);
-SELECT * FROM _timescaledb_config.bgw_job WHERE id = 1;
+SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
