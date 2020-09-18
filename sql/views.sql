@@ -69,6 +69,27 @@ CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
     INNER JOIN _timescaledb_internal.bgw_job_stat js on j.id = js.job_id
   ORDER BY ht.schema_name, ht.table_name;
 
+-- view for background worker jobs
+CREATE OR REPLACE VIEW timescaledb_information.jobs AS
+SELECT j.id AS job_id,
+  j.application_name,
+  j.schedule_interval,
+  j.max_runtime,
+  j.max_retries,
+  j.retry_period,
+  j.proc_schema,
+  j.proc_name,
+  j.owner,
+  j.scheduled,
+  j.config,
+  js.next_start,
+  ht.schema_name AS hypertable_schema,
+  ht.table_name AS hypertable_name
+FROM _timescaledb_config.bgw_job j
+  LEFT JOIN _timescaledb_catalog.hypertable ht ON ht.id = j.hypertable_id
+  LEFT JOIN _timescaledb_internal.bgw_job_stat js ON js.job_id = j.id
+ORDER BY j.id;
+
 -- views for continuous aggregate queries ---
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
   SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,

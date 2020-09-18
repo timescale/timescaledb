@@ -21,7 +21,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_config.bgw_job;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE public.bgw_log(
@@ -101,10 +101,10 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 -- job was created
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
-  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                              config                               
-------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-------------------------------------------------------------------
- 1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled |                              config                               | next_start | hypertable_schema |  hypertable_name   
+--------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+-------------------------------------------------------------------+------------+-------------------+--------------------
+   1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1} |            | public            | test_reorder_table
 (1 row)
 
 -- no stats
@@ -137,10 +137,10 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
 (2 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
-  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                              config                               
-------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-------------------------------------------------------------------
- 1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled |                              config                               |          next_start          | hypertable_schema |  hypertable_name   
+--------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+-------------------------------------------------------------------+------------------------------+-------------------+--------------------
+   1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1} | Fri Dec 31 16:00:00 1999 PST | public            | test_reorder_table
 (1 row)
 
 -- job ran once, successfully
@@ -177,10 +177,10 @@ SELECT * FROM sorted_bgw_log;
       1 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
 (4 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
-  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                              config                               
-------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-------------------------------------------------------------------
- 1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled |                              config                               |            next_start            | hypertable_schema |  hypertable_name   
+--------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+-------------------------------------------------------------------+----------------------------------+-------------------+--------------------
+   1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1} | Fri Dec 31 16:00:00.025 1999 PST | public            | test_reorder_table
 (1 row)
 
 -- two runs
@@ -221,10 +221,10 @@ SELECT * FROM sorted_bgw_log;
       1 |     50000 | DB Scheduler     | [TESTING] Wait until 100000, started at 50000
 (6 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
-  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                              config                               
-------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-------------------------------------------------------------------
- 1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled |                              config                               |           next_start            | hypertable_schema |  hypertable_name   
+--------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+-------------------------------------------------------------------+---------------------------------+-------------------+--------------------
+   1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1} | Tue Jan 04 16:00:00.05 2000 PST | public            | test_reorder_table
 (1 row)
 
 SELECT *
@@ -265,10 +265,10 @@ SELECT * FROM sorted_bgw_log;
       0 |    100000 | DB Scheduler     | [TESTING] Wait until 200000, started at 100000
 (7 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
-  id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                              config                               
-------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+---------------+-------------------------------------------------------------------
- 1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         |             1 | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled |                              config                               |           next_start            | hypertable_schema |  hypertable_name   
+--------+-----------------------+-------------------+-------------+-------------+--------------+-----------------------+----------------+-------------------+-----------+-------------------------------------------------------------------+---------------------------------+-------------------+--------------------
+   1000 | Reorder Policy [1000] | @ 4 days          | @ 0         |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder | default_perm_user | t         | {"index_name": "test_reorder_table_time_idx", "hypertable_id": 1} | Tue Jan 04 16:00:00.05 2000 PST | public            | test_reorder_table
 (1 row)
 
 SELECT *
@@ -304,9 +304,9 @@ SELECT remove_reorder_policy('test_reorder_table');
  
 (1 row)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | config | next_start | hypertable_schema | hypertable_name 
+--------+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+--------+------------+-------------------+-----------------
 (0 rows)
 
 SELECT job_id, next_start, last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -335,9 +335,9 @@ SELECT * FROM sorted_bgw_log;
       0 |    200000 | DB Scheduler     | [TESTING] Wait until 325000, started at 200000
 (8 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:reorder_job_id;
- id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | hypertable_id | config 
-----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
+ job_id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | config | next_start | hypertable_schema | hypertable_name 
+--------+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+--------+------------+-------------------+-----------------
 (0 rows)
 
 -- still only 3 chunks clustered
@@ -414,10 +414,10 @@ SELECT alter_job(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
  (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""hypertable_id"": 2, ""retention_window"": ""@ 4 mons""}",-infinity)
 (1 row)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
-  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                        config                        
-------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+------------------------------------------------------
- 1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             2 | {"hypertable_id": 2, "retention_window": "@ 4 mons"}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        | next_start | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} |            | public            | test_drop_chunks_table
 (1 row)
 
 -- no stats
@@ -453,10 +453,10 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | DB Scheduler     | [TESTING] Wait until 25000, started at 0
 (2 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
-  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                        config                        
-------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+------------------------------------------------------
- 1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             2 | {"hypertable_id": 2, "retention_window": "@ 4 mons"}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        |          next_start          | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------------------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} | Fri Dec 31 16:00:01 1999 PST | public            | test_drop_chunks_table
 (1 row)
 
 -- job ran once, successfully
@@ -492,10 +492,10 @@ SELECT * FROM sorted_bgw_log;
       0 |     25000 | DB Scheduler     | [TESTING] Wait until 50000, started at 25000
 (3 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
-  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                        config                        
-------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+------------------------------------------------------
- 1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             2 | {"hypertable_id": 2, "retention_window": "@ 4 mons"}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        |          next_start          | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------------------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} | Fri Dec 31 16:00:01 1999 PST | public            | test_drop_chunks_table
 (1 row)
 
 -- still only 1 run
@@ -544,10 +544,10 @@ SELECT * FROM sorted_bgw_log;
       2 |   1000000 | DB Scheduler     | [TESTING] Wait until 10050000, started at 1000000
 (6 rows)
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:drop_chunks_job_id;
-  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                        config                        
-------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+------------------------------------------------------
- 1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             2 | {"hypertable_id": 2, "retention_window": "@ 4 mons"}
+SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        |          next_start          | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------------------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} | Fri Dec 31 16:00:02 1999 PST | public            | test_drop_chunks_table
 (1 row)
 
 -- 2 runs
