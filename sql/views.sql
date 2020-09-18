@@ -73,7 +73,7 @@ CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
   SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,
     viewinfo.viewowner as view_owner,
-    bgwjob.schedule_interval as refresh_interval,
+    bgwjob.schedule_interval,
     cagg.materialized_only,
     format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
     directview.viewdefinition as view_definition
