@@ -39,15 +39,20 @@ SELECT setseed(1);
  
 (1 row)
 
-CREATE TABLE dist_table(time timestamptz, device int, temp float);
+CREATE TABLE dist_table(time timestamptz NOT NULL, device int, temp float, timedim date NOT NULL);
 SELECT create_distributed_hypertable('dist_table', 'time', 'device', replication_factor => 2);
-NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
  (1,public,dist_table,t)
 (1 row)
 
-INSERT INTO dist_table SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 80
+SELECT add_dimension('dist_table', 'timedim', chunk_time_interval=>'7 days'::interval);
+          add_dimension          
+---------------------------------
+ (3,public,dist_table,timedim,t)
+(1 row)
+
+INSERT INTO dist_table SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 80, '2020-01-01'
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
 ALTER TABLE dist_table SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
 -- Test views with compression 
@@ -65,7 +70,7 @@ SELECT * FROM timescaledb_information.hypertables
 WHERE table_name = 'dist_table';
  table_schema | table_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |              data_nodes               | tablespaces 
 --------------+------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------+-------------
- public       | dist_table | test_role_1 |              2 |          3 | f                   | t              |                  2 | {view_node_1,view_node_2,view_node_3} | 
+ public       | dist_table | test_role_1 |              3 |          3 | f                   | t              |                  2 | {view_node_1,view_node_2,view_node_3} | 
 (1 row)
 
 SELECT * from timescaledb_information.chunks 
@@ -83,7 +88,8 @@ ORDER BY hypertable_name, dimension_number;
 -------------------+-----------------+------------------+-------------+--------------------------+----------------+---------------+------------------+------------------+----------------
  public            | dist_table      |                1 | time        | timestamp with time zone | Time           | @ 7 days      |                  |                  |               
  public            | dist_table      |                2 | device      | integer                  | Space          |               |                  |                  |              3
-(2 rows)
+ public            | dist_table      |                3 | timedim     | date                     | Time           | @ 7 days      |                  |                  |               
+(3 rows)
 
 SELECT * FROM chunks_detailed_size('dist_table'::regclass) 
 ORDER BY chunk_name, node_name;
