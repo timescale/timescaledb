@@ -530,10 +530,15 @@ ts_populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
 #endif
 
 static int
+#if PG13_LT
 cmp_next_start(const void *left, const void *right)
 {
 	const ListCell *left_cell = *((ListCell **) left);
 	const ListCell *right_cell = *((ListCell **) right);
+#else
+cmp_next_start(const ListCell *left_cell, const ListCell *right_cell)
+{
+#endif
 	ScheduledBgwJob *left_sjob = lfirst(left_cell);
 	ScheduledBgwJob *right_sjob = lfirst(right_cell);
 
@@ -549,10 +554,18 @@ cmp_next_start(const void *left, const void *right)
 static void
 start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 {
+	List *ordered_scheduled_jobs;
 	ListCell *lc;
 	Assert(CurrentMemoryContext == scratch_mctx);
+
 	/* Order jobs by increasing next_start */
-	List *ordered_scheduled_jobs = list_qsort(scheduled_jobs, cmp_next_start);
+#if PG13_LT
+	ordered_scheduled_jobs = list_qsort(scheduled_jobs, cmp_next_start);
+#else
+	/* PG13 does in-place sort */
+	ordered_scheduled_jobs = scheduled_jobs;
+	list_sort(ordered_scheduled_jobs, cmp_next_start);
+#endif
 
 	foreach (lc, ordered_scheduled_jobs)
 	{
