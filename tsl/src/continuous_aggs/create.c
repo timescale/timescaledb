@@ -1566,7 +1566,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 			if (tle->resjunk)
 				continue;
 			tle->resname = pstrdup(strVal(lfirst(alist_item)));
-			alist_item = lnext(alist_item);
+			alist_item = lnext_compat(tlist_aliases, alist_item);
 			if (alist_item == NULL)
 				break; /* done assigning aliases */
 		}

@@ -121,7 +121,8 @@ initialize_column_state(DecompressChunkState *state)
 
 	state->columns = palloc0(state->num_columns * sizeof(DecompressChunkColumnState));
 
-	for (i = 0, lc = list_head(state->varattno_map); i < state->num_columns; lc = lnext(lc), i++)
+	for (i = 0, lc = list_head(state->varattno_map); i < state->num_columns;
+		 lc = lnext_compat(state->varattno_map, lc), i++)
 	{
 		DecompressChunkColumnState *column = &state->columns[i];
 		column->attno = lfirst_int(lc);

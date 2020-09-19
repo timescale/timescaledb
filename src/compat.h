@@ -358,4 +358,20 @@ get_vacuum_options(const VacuumStmt *stmt)
 	pg_b64_decode((src), (srclen), (dst), (dstlen))
 #endif
 
+/* PG13 changes the List implementation from a linked list to an array
+ * while most of the API functions did not change a few them have slightly
+ * different signature in PG13, additionally the list_make5 functions
+ * got removed. */
+#if PG13_LT
+#define lnext_compat(l, lc) lnext((lc))
+#define list_delete_cell_compat(l, lc, prev) list_delete_cell((l), (lc), (prev))
+#define for_each_cell_compat(cell, list, initcell) for_each_cell ((cell), (initcell))
+#else
+#define lnext_compat(l, lc) lnext((l), (lc))
+#define list_delete_cell_compat(l, lc, prev) list_delete_cell((l), (lc))
+#define list_make5(x1, x2, x3, x4, x5) lappend(list_make4(x1, x2, x3, x4), x5)
+#define list_make5_oid(x1, x2, x3, x4, x5) lappend_oid(list_make4_oid(x1, x2, x3, x4), x5)
+#define for_each_cell_compat(cell, list, initcell) for_each_cell ((cell), (list), (initcell))
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

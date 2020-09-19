@@ -13,6 +13,7 @@
 #include <access/htup_details.h>
 #include <utils/memutils.h>
 
+#include "compat.h"
 #include "export.h"
 #include "bgw/scheduler.h"
 
@@ -70,7 +71,7 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 		memset(nulls, 0, sizeof(*nulls) * funcctx->tuple_desc->natts);
 		tuple = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 
-		funcctx->user_fctx = lnext(lc);
+		funcctx->user_fctx = lnext_compat(cur_scheduled_jobs, lc);
 		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 	}
 

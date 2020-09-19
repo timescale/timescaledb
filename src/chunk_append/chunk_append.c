@@ -209,7 +209,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				if (is_not_pruned)
 				{
 					merge_childs = lappend(merge_childs, child);
-					flat = lnext(flat);
+					flat = lnext_compat(children, flat);
 					if (flat == NULL)
 						break;
 				}

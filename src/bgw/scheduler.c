@@ -456,7 +456,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 			 */
 			terminate_and_cleanup_job(cur_sjob);
 
-			cur_ptr = lnext(cur_ptr);
+			cur_ptr = lnext_compat(cur_jobs_list, cur_ptr);
 			continue;
 		}
 		if (cur_sjob->job.fd.id == new_sjob->job.fd.id)
@@ -472,15 +472,15 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 			if (cur_sjob->state == JOB_STATE_SCHEDULED)
 				scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
 
-			cur_ptr = lnext(cur_ptr);
-			new_ptr = lnext(new_ptr);
+			cur_ptr = lnext_compat(cur_jobs_list, cur_ptr);
+			new_ptr = lnext_compat(new_jobs, new_ptr);
 		}
 		else if (cur_sjob->job.fd.id > new_sjob->job.fd.id)
 		{
 			scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
 
 			/* Advance the new_job list until we catch up to cur_list */
-			new_ptr = lnext(new_ptr);
+			new_ptr = lnext_compat(new_jobs, new_ptr);
 		}
 	}
 
@@ -489,7 +489,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 	{
 		ListCell *ptr;
 
-		for_each_cell (ptr, cur_ptr)
+		for_each_cell_compat (ptr, cur_jobs_list, cur_ptr)
 			terminate_and_cleanup_job(lfirst(ptr));
 	}
 
@@ -498,7 +498,7 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 		/* Then there are more new jobs. Initialize all of them. */
 		ListCell *ptr;
 
-		for_each_cell (ptr, new_ptr)
+		for_each_cell_compat (ptr, new_jobs, new_ptr)
 			scheduled_bgw_job_transition_state_to(lfirst(ptr), JOB_STATE_SCHEDULED);
 	}
 
