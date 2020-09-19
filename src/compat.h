@@ -347,4 +347,15 @@ get_vacuum_options(const VacuumStmt *stmt)
 #endif
 }
 
+/* PG13 added a dstlen parameter to pg_b64_decode and pg_b64_encode */
+#if PG13_LT
+#define pg_b64_encode_compat(src, srclen, dst, dstlen) pg_b64_encode((src), (srclen), (dst))
+#define pg_b64_decode_compat(src, srclen, dst, dstlen) pg_b64_decode((src), (srclen), (dst))
+#else
+#define pg_b64_encode_compat(src, srclen, dst, dstlen)                                             \
+	pg_b64_encode((src), (srclen), (dst), (dstlen))
+#define pg_b64_decode_compat(src, srclen, dst, dstlen)                                             \
+	pg_b64_decode((src), (srclen), (dst), (dstlen))
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
