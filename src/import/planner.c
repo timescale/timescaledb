@@ -196,7 +196,7 @@ ts_make_partial_grouping_target(struct PlannerInfo *root, PathTarget *grouping_t
 	struct List *non_group_cols;
 	struct List *non_group_exprs;
 	int i;
-	struct ListCell *lc;
+	ListCell *lc;
 
 	partial_target = create_empty_pathtarget();
 	non_group_cols = NIL;

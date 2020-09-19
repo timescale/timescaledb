@@ -182,7 +182,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 
 		for (lc = list_head(chunk_pathkeys);
 			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
-			 lc = lnext(lc))
+			 lc = lnext_compat(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
 			var = (Var *) ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
@@ -1210,7 +1210,7 @@ build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 		 * we keep looping even if we found all segmentby columns in case a
 		 * columns appears both in baserestrictinfo and in ORDER BY clause
 		 */
-		for (; lc != NULL; lc = lnext(lc))
+		for (; lc != NULL; lc = lnext_compat(pathkeys, lc))
 		{
 			Assert(bms_num_members(segmentby_columns) <= info->num_segmentby_columns);
 			pk = lfirst(lc);
@@ -1250,7 +1250,7 @@ build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 	 * loop over the rest of pathkeys
 	 * this needs to exactly match the configured compress_orderby
 	 */
-	for (pk_index = 1; lc != NULL; lc = lnext(lc), pk_index++)
+	for (pk_index = 1; lc != NULL; lc = lnext_compat(pathkeys, lc), pk_index++)
 	{
 		bool reverse = false;
 		pk = lfirst(lc);

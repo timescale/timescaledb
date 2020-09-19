@@ -2211,7 +2211,7 @@ deparseSubscriptingRef(SubscriptingRef *node, deparse_expr_cxt *context)
 		{
 			deparseExpr(lfirst(lowlist_item), context);
 			appendStringInfoChar(buf, ':');
-			lowlist_item = lnext(lowlist_item);
+			lowlist_item = lnext_compat(node->reflowerindexpr, lowlist_item);
 		}
 		deparseExpr(lfirst(uplist_item), context);
 		appendStringInfoChar(buf, ']');
@@ -2273,7 +2273,7 @@ deparseFuncExpr(FuncExpr *node, deparse_expr_cxt *context)
 	{
 		if (!first)
 			appendStringInfoString(buf, ", ");
-		if (use_variadic && lnext(arg) == NULL)
+		if (use_variadic && lnext_compat(node->args, arg) == NULL)
 			appendStringInfoString(buf, "VARIADIC ");
 		deparseExpr((Expr *) lfirst(arg), context);
 		first = false;
@@ -2601,7 +2601,7 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 				first = false;
 
 				/* Add VARIADIC */
-				if (use_variadic && lnext(arg) == NULL)
+				if (use_variadic && lnext_compat(node->args, arg) == NULL)
 					appendStringInfoString(buf, "VARIADIC ");
 
 				deparseExpr((Expr *) n, context);

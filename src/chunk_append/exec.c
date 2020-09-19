@@ -344,8 +344,8 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 				state->runtime_number_exclusions++;
 		}
 
-		lc_clauses = lnext(lc_clauses);
-		lc_constraints = lnext(lc_constraints);
+		lc_clauses = lnext_compat(state->filtered_ri_clauses, lc_clauses);
+		lc_constraints = lnext_compat(state->filtered_constraints, lc_constraints);
 	}
 
 	state->runtime_initialized = true;
