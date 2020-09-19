@@ -1424,7 +1424,11 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 
 	decoded_len = pg_b64_dec_len(input_len);
 	decoded = palloc(decoded_len + 1);
-	decoded_len = pg_b64_decode(input, input_len, decoded);
+	decoded_len = pg_b64_decode_compat(input, input_len, decoded, decoded_len);
+
+	if (decoded_len < 0)
+		elog(ERROR, "could not decode base64-encoded compressed data");
+
 	decoded[decoded_len] = '\0';
 	data = (StringInfoData){
 		.data = decoded,
@@ -1446,7 +1450,11 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	const char *raw_data = VARDATA(bytes);
 	int encoded_len = pg_b64_enc_len(raw_len);
 	char *encoded = palloc(encoded_len + 1);
-	encoded_len = pg_b64_encode(raw_data, raw_len, encoded);
+	encoded_len = pg_b64_encode_compat(raw_data, raw_len, encoded, encoded_len);
+
+	if (encoded_len < 0)
+		elog(ERROR, "could not base64-encode compressed data");
+
 	encoded[encoded_len] = '\0';
 
 	PG_RETURN_CSTRING(encoded);
