@@ -31,11 +31,5 @@ extern int ts_chunk_data_node_delete_by_node_name(const char *node_name);
 extern TSDLLEXPORT List *
 ts_chunk_data_node_scan_by_node_name_and_hypertable_id(const char *node_name, int32 hypertable_id,
 													   MemoryContext mctx);
-extern TSDLLEXPORT bool ts_chunk_data_node_contains_non_replicated_chunks(List *chunk_data_nodes);
-
-extern TSDLLEXPORT void ts_chunk_data_node_update_foreign_table_server(Oid relid,
-																	   Oid new_server_id);
-extern TSDLLEXPORT void
-ts_chunk_data_node_update_foreign_table_server_if_needed(int32 chunk_id, Oid existing_server_id);
 
 #endif /* TIMESCALEDB_CHUNK_DATA_NODE_H */
