@@ -700,6 +700,13 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	return NULL;
 }
 
+/*
+ * Find an equivalence class member expression, all of whose Vars, come from
+ * the indicated relation.
+ *
+ * This function has been copied from find_em_expr_for_rel in
+ * contrib/postgres_fdw/postgres_fdw.c in postgres source.
+ */
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {

@@ -19,7 +19,6 @@ typedef struct DeparsedInsertStmt
 	List *retrieved_attrs;
 } DeparsedInsertStmt;
 
-extern Expr *find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 extern void deparse_insert_stmt(DeparsedInsertStmt *stmt, RangeTblEntry *rte, Index rtindex,
 								Relation rel, List *target_attrs, bool do_nothing,
 								List *returning_list);
