@@ -109,19 +109,6 @@ typedef struct DimensionInfo
 #define DIMENSION_INFO_IS_SET(di)                                                                  \
 	(di != NULL && OidIsValid((di)->table_relid) && (di)->colname != NULL)
 
-/* add_dimension record attribute numbers */
-enum Anum_add_dimension
-{
-	Anum_add_dimension_id = 1,
-	Anum_add_dimension_schema_name,
-	Anum_add_dimension_table_name,
-	Anum_add_dimension_column_name,
-	Anum_add_dimension_created,
-	_Anum_add_dimension_max,
-};
-
-#define Natts_add_dimension (_Anum_add_dimension_max - 1)
-
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
 extern DimensionSlice *ts_dimension_calculate_default_slice(Dimension *dim, int64 value);
@@ -146,17 +133,6 @@ extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid, Name column_name,
 																Datum interval, Oid interval_type,
 																regproc partitioning_func);
-
-static inline DimensionInfo *
-ts_dimension_info_create_open_interval_usec(Oid table_relid, Name column_name, int64 interval_usec,
-											regproc partitioning_func)
-{
-	return ts_dimension_info_create_open(table_relid,
-										 column_name,
-										 Int64GetDatum(interval_usec),
-										 INT8OID,
-										 partitioning_func);
-}
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_relid, Name column_name,
 																  int32 num_slices,
