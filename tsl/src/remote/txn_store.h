@@ -34,6 +34,4 @@ extern void remote_txn_store_destroy(RemoteTxnStore *store);
 	for (hash_seq_init(&store->scan, store->hashtable);                                            \
 		 NULL != (remote_txn = (RemoteTxn *) hash_seq_search(&store->scan));)
 
-#define remote_txn_store_foreach_break(store) (hash_seq_term(&ums->scan); break)
-
 #endif /* TIMESCALEDB_TSL_REMOTE_TXN_STORE_H */

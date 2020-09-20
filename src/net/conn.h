@@ -40,8 +40,4 @@ extern void ts_connection_destroy(Connection *conn);
 extern int ts_connection_set_timeout_millis(Connection *conn, unsigned long millis);
 extern const char *ts_connection_get_and_clear_error(Connection *conn);
 
-/*  Called in init.c */
-extern void ts_connection_init(void);
-extern void ts_connection_fini(void);
-
 #endif /* TIMESCALEDB_NET_CONN_H */

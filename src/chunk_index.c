@@ -404,15 +404,6 @@ ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hyp
 					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
 }
 
-static inline Oid
-chunk_index_get_schemaid(Form_chunk_index chunk_index, bool missing_ok)
-{
-	return ts_chunk_get_schema_id(chunk_index->chunk_id, missing_ok);
-}
-
-#define chunk_index_tuple_get_schema(tuple)                                                        \
-	chunk_index_get_schema((FormData_chunk_index *) GETSTRUCT(tuple));
-
 /*
  * Create all indexes on a chunk, given the indexes that exists on the chunk's
  * hypertable.
@@ -626,7 +617,7 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	Oid schemaid = chunk_index_get_schemaid(chunk_index, true);
+	Oid schemaid = ts_chunk_get_schema_id(chunk_index->chunk_id, true);
 	ChunkIndexDeleteData *cid = data;
 
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
@@ -1041,7 +1032,7 @@ chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	Oid schemaoid = chunk_index_get_schemaid(chunk_index, false);
+	Oid schemaoid = ts_chunk_get_schema_id(chunk_index->chunk_id, false);
 	Oid indexrelid = get_relname_relid(NameStr(chunk_index->index_name), schemaoid);
 	AlterTableCmd *cmd = makeNode(AlterTableCmd);
 	List *cmds = NIL;
