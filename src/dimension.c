@@ -31,6 +31,19 @@
 #include "utils.h"
 #include "errors.h"
 
+/* add_dimension record attribute numbers */
+enum Anum_add_dimension
+{
+	Anum_add_dimension_id = 1,
+	Anum_add_dimension_schema_name,
+	Anum_add_dimension_table_name,
+	Anum_add_dimension_column_name,
+	Anum_add_dimension_created,
+	_Anum_add_dimension_max,
+};
+
+#define Natts_add_dimension (_Anum_add_dimension_max - 1)
+
 static int
 cmp_dimension_id(const void *left, const void *right)
 {
