@@ -41,6 +41,45 @@ subtract_interval_from_now(Oid timetype, const Interval *interval)
 	return res;
 }
 
+Datum
+ts_time_datum_convert_arg(Datum arg, Oid *argtype, Oid timetype)
+{
+	Oid type = *argtype;
+
+	if (!OidIsValid(type) || type == UNKNOWNOID)
+	{
+		Oid infuncid = InvalidOid;
+		Oid typeioparam;
+
+		type = timetype;
+		getTypeInputInfo(type, &infuncid, &typeioparam);
+
+		switch (get_func_nargs(infuncid))
+		{
+			case 1:
+				/* Functions that take one input argument, e.g., the Date function */
+				arg = OidFunctionCall1(infuncid, arg);
+				break;
+			case 3:
+				/* Timestamp functions take three input arguments */
+				arg = OidFunctionCall3(infuncid,
+									   arg,
+									   ObjectIdGetDatum(InvalidOid),
+									   Int32GetDatum(-1));
+				break;
+			default:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid time argument"),
+						 errhint("Time argument requires an explicit cast.")));
+		}
+
+		*argtype = type;
+	}
+
+	return arg;
+}
+
 /*
  * Get the internal time value from a pseudo-type function argument.
  *
@@ -75,36 +114,9 @@ subtract_interval_from_now(Oid timetype, const Interval *interval)
 int64
 ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype)
 {
-	if (!OidIsValid(argtype) || argtype == UNKNOWNOID)
-	{
-		/* No explicit cast was done by the user. Try to convert the argument
-		 * to the time type used by the continuous aggregate. */
-		Oid infuncid = InvalidOid;
-		Oid typeioparam;
-
-		argtype = timetype;
-		getTypeInputInfo(argtype, &infuncid, &typeioparam);
-
-		switch (get_func_nargs(infuncid))
-		{
-			case 1:
-				/* Functions that take one input argument, e.g., the Date function */
-				arg = OidFunctionCall1(infuncid, arg);
-				break;
-			case 3:
-				/* Timestamp functions take three input arguments */
-				arg = OidFunctionCall3(infuncid,
-									   arg,
-									   ObjectIdGetDatum(InvalidOid),
-									   Int32GetDatum(-1));
-				break;
-			default:
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("invalid time argument"),
-						 errhint("Time argument requires an explicit cast.")));
-		}
-	}
+	/* If no explicit cast was done by the user, try to convert the argument
+	 * to the time type used by the continuous aggregate. */
+	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
 
 	if (argtype == INTERVALOID)
 	{

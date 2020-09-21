@@ -68,6 +68,7 @@
 	 TS_TIME_IS_NOEND(timeval, type))
 
 extern TSDLLEXPORT int64 ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype);
+extern TSDLLEXPORT Datum ts_time_datum_convert_arg(Datum arg, Oid *argtype, Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_min(Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_max(Oid timetype);
 extern TSDLLEXPORT Datum ts_time_datum_get_end(Oid timetype);
