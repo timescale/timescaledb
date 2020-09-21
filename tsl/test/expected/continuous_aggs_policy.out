@@ -133,10 +133,10 @@ CREATE MATERIALIZED VIEW max_mat_view_date
         FROM continuous_agg_max_mat_date
         GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days'::interval, 10 , '1 day'::interval);
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', 10, '1 day'::interval);
 ERROR:  invalid parameter value for end_interval
 \set ON_ERROR_STOP 1
-SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 day'::interval, '1 day'::interval , '1 day'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', '1 day', '1 day'::interval) as job_id \gset
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
                                       config                                       
@@ -161,7 +161,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
     AS SELECT time_bucket('7 days', time)
         FROM continuous_agg_timestamp
         GROUP BY 1 WITH NO DATA;
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 h'::interval , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 h'::interval , '1 h'::interval) as job_id \gset
 CALL run_job(:job_id);
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
@@ -182,8 +182,10 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day'::interval, '1 day'::interval, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 day', '1h'::interval, if_not_exists=>true);
 ERROR:  could not find start_interval in config for job
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', 'xyz', '1 day', '1h'::interval, if_not_exists=>true);
+ERROR:  invalid input syntax for type interval: "xyz"
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW max_mat_view_timestamp;
 --smallint table
@@ -227,7 +229,23 @@ SELECT * FROM mat_smallint;
 (2 rows)
 
 \set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 10::smallint, '1h'::interval, if_not_exists=>true);
+WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+\set ON_ERROR_STOP 1
+-- end of coverage tests
+-- tests for interval argument convertions
+--
+\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 10, '1h'::interval, if_not_exists=>true);
+ERROR:  invalid parameter value for start_interval
+SELECT add_continuous_aggregate_policy('mat_smallint', '15', 10, '1h'::interval, if_not_exists=>true);
+ERROR:  invalid parameter value for end_interval
+SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interval, if_not_exists=>true);
 WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -237,4 +255,3 @@ WARNING:  could not add refresh policy due to existing policy on continuous aggr
 \set ON_ERROR_STOP 1
 DROP MATERIALIZED VIEW mat_smallint;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_7_chunk
--- end of coverage tests
