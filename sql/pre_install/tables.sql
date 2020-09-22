@@ -251,11 +251,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     partial_view_schema NAME NOT NULL,
     partial_view_name NAME NOT NULL,
     bucket_width  BIGINT NOT NULL,
-    refresh_lag BIGINT NOT NULL,
     direct_view_schema NAME NOT NULL,
     direct_view_name NAME NOT NULL,
-    max_interval_per_job BIGINT NOT NULL,
-    ignore_invalidation_older_than BIGINT NOT NULL DEFAULT BIGINT '9223372036854775807',
     materialized_only BOOL NOT NULL DEFAULT false,
     UNIQUE(user_view_schema, user_view_name),
     UNIQUE(partial_view_schema, partial_view_name)
