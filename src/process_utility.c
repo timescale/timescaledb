@@ -1063,6 +1063,18 @@ process_drop_tablespace(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+static void
+process_grant_add_by_rel(GrantStmt *stmt, RangeVar *relation)
+{
+	stmt->objects = lappend(stmt->objects, relation);
+}
+
+static void
+process_grant_add_by_name(GrantStmt *stmt, Name schema_name, Name table_name)
+{
+	process_grant_add_by_rel(stmt, makeRangeVar(NameStr(*schema_name), NameStr(*table_name), -1));
+}
+
 /*
  * Handle GRANT / REVOKE.
  *
@@ -1090,6 +1102,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 			ts_tablespace_validate_revoke(stmt);
 			result = DDL_DONE;
 			break;
+
 		case OBJECT_TABLE:
 			/*
 			 * Collect the hypertables in the grant statement. We only need to
@@ -1099,6 +1112,27 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 				Cache *hcache = ts_hypertable_cache_pin();
 				ListCell *cell;
 
+				/* First process all continuous aggregates in the list and add
+				 * the associated hypertables and views to the list of objects
+				 * to process */
+				foreach (cell, stmt->objects)
+				{
+					RangeVar *relation = lfirst_node(RangeVar, cell);
+					ContinuousAgg *const cagg = ts_continuous_agg_find_by_rv(relation);
+					if (cagg)
+					{
+						Hypertable *ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+						process_grant_add_by_name(stmt, &ht->fd.schema_name, &ht->fd.table_name);
+						process_grant_add_by_name(stmt,
+												  &cagg->data.direct_view_schema,
+												  &cagg->data.direct_view_name);
+						process_grant_add_by_name(stmt,
+												  &cagg->data.partial_view_schema,
+												  &cagg->data.partial_view_name);
+					}
+				}
+
+				/* Process all hypertables, including those added in the loop above */
 				foreach (cell, stmt->objects)
 				{
 					RangeVar *relation = lfirst_node(RangeVar, cell);
