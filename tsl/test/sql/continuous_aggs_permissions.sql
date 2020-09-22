@@ -8,6 +8,28 @@
 -- remove any default jobs, e.g., telemetry so bgw_job isn't polluted
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 
+CREATE VIEW cagg_info AS
+WITH
+  caggs AS (
+    SELECT format('%I.%I', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%I.%I', direct_view_schema, direct_view_name)::regclass AS direct_view,
+           format('%I.%I', partial_view_schema, partial_view_name)::regclass AS partial_view,
+           format('%I.%I', ht.schema_name, ht.table_name)::regclass AS mat_relid
+      FROM _timescaledb_catalog.hypertable ht,
+           _timescaledb_catalog.continuous_agg cagg
+     WHERE ht.id = cagg.mat_hypertable_id
+  )
+SELECT user_view,
+       (SELECT relacl FROM pg_class WHERE oid = user_view) AS user_view_perm,
+       relname AS mat_table,
+       (relacl) AS mat_table_perm,
+       direct_view,
+       (SELECT relacl FROM pg_class WHERE oid = direct_view) AS direct_view_perm,
+       partial_view,
+       (SELECT relacl FROM pg_class WHERE oid = partial_view) AS partial_view_perm
+  FROM pg_class JOIN caggs ON pg_class.oid = caggs.mat_relid;
+GRANT SELECT ON cagg_info TO PUBLIC;
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE conditions (
@@ -164,3 +186,38 @@ CALL refresh_continuous_aggregate('mat_perm_view_test', NULL, NULL);
 
 --but the old data will still be there
 SELECT * FROM mat_perm_view_test;
+
+\set VERBOSITY default
+
+-- Test that grants and revokes are propagated to the implementation
+-- objects, that is, the user view, the partial view, the direct view,
+-- and the materialization table.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE devices (
+   time TIMESTAMPTZ NOT NULL,
+   device INT,
+   temp DOUBLE PRECISION NULL,
+   PRIMARY KEY(time, device)
+);
+
+SELECT create_hypertable('devices', 'time');
+GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
+
+INSERT INTO devices
+SELECT time, (random() * 30)::int, random() * 80
+FROM generate_series('2020-02-01 00:00:00'::timestamptz, '2020-03-01 00:00:00', '1 hour') AS time;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+
+CREATE MATERIALIZED VIEW devices_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
+FROM devices GROUP BY bucket, device WITH NO DATA;
+
+\x on
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+\x off

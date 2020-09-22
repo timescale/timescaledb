@@ -5,6 +5,27 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- remove any default jobs, e.g., telemetry so bgw_job isn't polluted
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+CREATE VIEW cagg_info AS
+WITH
+  caggs AS (
+    SELECT format('%I.%I', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%I.%I', direct_view_schema, direct_view_name)::regclass AS direct_view,
+           format('%I.%I', partial_view_schema, partial_view_name)::regclass AS partial_view,
+           format('%I.%I', ht.schema_name, ht.table_name)::regclass AS mat_relid
+      FROM _timescaledb_catalog.hypertable ht,
+           _timescaledb_catalog.continuous_agg cagg
+     WHERE ht.id = cagg.mat_hypertable_id
+  )
+SELECT user_view,
+       (SELECT relacl FROM pg_class WHERE oid = user_view) AS user_view_perm,
+       relname AS mat_table,
+       (relacl) AS mat_table_perm,
+       direct_view,
+       (SELECT relacl FROM pg_class WHERE oid = direct_view) AS direct_view_perm,
+       partial_view,
+       (SELECT relacl FROM pg_class WHERE oid = partial_view) AS partial_view_perm
+  FROM pg_class JOIN caggs ON pg_class.oid = caggs.mat_relid;
+GRANT SELECT ON cagg_info TO PUBLIC;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE conditions (
       timec       INT       NOT NULL,
@@ -188,3 +209,67 @@ SELECT * FROM mat_perm_view_test;
  POR      |  75
 (1 row)
 
+\set VERBOSITY default
+-- Test that grants and revokes are propagated to the implementation
+-- objects, that is, the user view, the partial view, the direct view,
+-- and the materialization table.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE devices (
+   time TIMESTAMPTZ NOT NULL,
+   device INT,
+   temp DOUBLE PRECISION NULL,
+   PRIMARY KEY(time, device)
+);
+SELECT create_hypertable('devices', 'time');
+  create_hypertable   
+----------------------
+ (9,public,devices,t)
+(1 row)
+
+GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
+INSERT INTO devices
+SELECT time, (random() * 30)::int, random() * 80
+FROM generate_series('2020-02-01 00:00:00'::timestamptz, '2020-03-01 00:00:00', '1 hour') AS time;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+CREATE MATERIALIZED VIEW devices_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
+FROM devices GROUP BY bucket, device WITH NO DATA;
+NOTICE:  adding index _materialized_hypertable_10_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(device, bucket)
+\x on
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+-[ RECORD 1 ]-----+---------------------------------------
+user_view         | devices_summary
+user_view_perm    | 
+mat_table         | _materialized_hypertable_10
+mat_table_perm    | 
+direct_view       | _timescaledb_internal._direct_view_10
+direct_view_perm  | 
+partial_view      | _timescaledb_internal._partial_view_10
+partial_view_perm | 
+
+GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+-[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------
+user_view         | devices_summary
+user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+mat_table         | _materialized_hypertable_10
+mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+direct_view       | _timescaledb_internal._direct_view_10
+direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+partial_view      | _timescaledb_internal._partial_view_10
+partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
+
+REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
+-[ RECORD 1 ]-----+----------------------------------------------------------------------------------------------
+user_view         | devices_summary
+user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+mat_table         | _materialized_hypertable_10
+mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+direct_view       | _timescaledb_internal._direct_view_10
+direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+partial_view      | _timescaledb_internal._partial_view_10
+partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
+
+\x off
