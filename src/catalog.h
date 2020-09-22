@@ -854,11 +854,8 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_partial_view_schema,
 	Anum_continuous_agg_partial_view_name,
 	Anum_continuous_agg_bucket_width,
-	Anum_continuous_agg_refresh_lag,
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
-	Anum_continuous_agg_max_interval_per_job,
-	Anum_continuous_agg_ignore_invalidation_older_than,
 	Anum_continuous_agg_materialize_only,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
@@ -874,11 +871,8 @@ typedef struct FormData_continuous_agg
 	NameData partial_view_schema;
 	NameData partial_view_name;
 	int64 bucket_width;
-	int64 refresh_lag;
 	NameData direct_view_schema;
 	NameData direct_view_name;
-	int64 max_interval_per_job;
-	int64 ignore_invalidation_older_than;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;

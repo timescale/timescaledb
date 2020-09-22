@@ -232,11 +232,10 @@ static Query *build_union_query(CAggTimebucketInfo *tbinfo, MatTableColumnInfo *
 
 /* create a entry for the materialization table in table CONTINUOUS_AGGS */
 static void
-create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, char *user_view,
-						  char *partial_schema, char *partial_view, int64 bucket_width,
-						  int64 refresh_lag, int64 max_interval_per_job,
-						  int64 ignore_invalidation_older_than, bool materialized_only,
-						  char *direct_schema, char *direct_view)
+create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
+						  const char *user_view, const char *partial_schema,
+						  const char *partial_view, int64 bucket_width, bool materialized_only,
+						  const char *direct_schema, const char *direct_view)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -267,15 +266,10 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, char *user_schema, cha
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)] =
 		NameGetDatum(&partial_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = Int64GetDatum(bucket_width);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_refresh_lag)] = Int64GetDatum(refresh_lag);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)] =
 		NameGetDatum(&direct_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)] =
 		NameGetDatum(&direct_viewnm);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_max_interval_per_job)] =
-		Int64GetDatum(max_interval_per_job);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_ignore_invalidation_older_than)] =
-		Int64GetDatum(ignore_invalidation_older_than);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
 
@@ -1673,12 +1667,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	int32 materialize_hypertable_id;
 	char trigarg[NAMEDATALEN];
 	int ret;
-	int64 refresh_lag = origquery_ht->bucket_width * 2;
-	int64 max_interval_per_job =
-		(origquery_ht->bucket_width < DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH) ?
-			DEFAULT_MAX_INTERVAL_MULTIPLIER * origquery_ht->bucket_width :
-			PG_INT64_MAX;
-	int64 ignore_invalidation_older_than = PG_INT64_MAX;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 
@@ -1756,9 +1744,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  part_rel->schemaname,
 							  part_rel->relname,
 							  origquery_ht->bucket_width,
-							  refresh_lag,
-							  max_interval_per_job,
-							  ignore_invalidation_older_than,
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname);

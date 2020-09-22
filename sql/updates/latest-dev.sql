@@ -323,11 +323,8 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     partial_view_schema NAME NOT NULL,
     partial_view_name NAME NOT NULL,
     bucket_width  BIGINT NOT NULL,
-    refresh_lag BIGINT NOT NULL,
     direct_view_schema NAME NOT NULL,
     direct_view_name NAME NOT NULL,
-    max_interval_per_job BIGINT NOT NULL,
-    ignore_invalidation_older_than BIGINT NOT NULL DEFAULT BIGINT '9223372036854775807',
     materialized_only BOOL NOT NULL DEFAULT false,
     UNIQUE(user_view_schema, user_view_name),
     UNIQUE(partial_view_schema, partial_view_name)
@@ -339,7 +336,7 @@ CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 GRANT SELECT ON _timescaledb_catalog.continuous_agg TO PUBLIC;
 
-INSERT INTO _timescaledb_catalog.continuous_agg SELECT mat_hypertable_id,raw_hypertable_id,user_view_schema,user_view_name,partial_view_schema,partial_view_name,bucket_width,refresh_lag,direct_view_schema,direct_view_name,max_interval_per_job,ignore_invalidation_older_than,materialized_only FROM _timescaledb_catalog.continuous_agg_tmp;
+INSERT INTO _timescaledb_catalog.continuous_agg SELECT mat_hypertable_id,raw_hypertable_id,user_view_schema,user_view_name,partial_view_schema,partial_view_name,bucket_width,direct_view_schema,direct_view_name,materialized_only FROM _timescaledb_catalog.continuous_agg_tmp;
 DROP TABLE _timescaledb_catalog.continuous_agg_tmp;
 
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);

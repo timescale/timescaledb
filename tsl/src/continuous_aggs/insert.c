@@ -64,7 +64,6 @@ typedef struct ContinuousAggsCacheInvalEntry
 	int64 modification_time;
 	Oid previous_chunk_relid;
 	AttrNumber previous_chunk_open_dimension;
-
 	bool value_is_set;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
