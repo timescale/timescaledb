@@ -869,15 +869,24 @@ CREATE VIEW cagg_info AS
 WITH
   caggs AS (
     SELECT format('%s.%s', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%s.%s', direct_view_schema, direct_view_name)::regclass AS direct_view,
+           format('%s.%s', partial_view_schema, partial_view_name)::regclass AS partial_view,
            format('%s.%s', ht.schema_name, ht.table_name)::regclass AS mat_relid
       FROM _timescaledb_catalog.hypertable ht,
            _timescaledb_catalog.continuous_agg cagg
      WHERE ht.id = cagg.mat_hypertable_id
   )
 SELECT user_view,
+       pg_get_userbyid(relowner) AS user_view_owner,
        relname AS mat_table,
+       (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = mat_relid) AS mat_table_owner,
+       direct_view,
+       (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = direct_view) AS direct_view_owner,
+       partial_view,
+       (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = partial_view) AS partial_view_owner,
        (SELECT spcname FROM pg_tablespace WHERE oid = reltablespace) AS tablespace
   FROM pg_class JOIN caggs ON pg_class.oid = caggs.mat_relid;
+GRANT SELECT ON cagg_info TO PUBLIC;
 CREATE VIEW chunk_info AS
 SELECT ht.schema_name, ht.table_name, relname AS chunk_name,
        (SELECT spcname FROM pg_tablespace WHERE oid = reltablespace) AS tablespace
@@ -1061,5 +1070,49 @@ FROM metrics_int8
 GROUP BY 1;
 ERROR:  first argument to time_bucket function should be an immutable expression for continuous aggregate query
 \set ON_ERROR_STOP 1
+-- Test various ALTER MATERIALIZED VIEW statements.
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+CREATE MATERIALIZED VIEW owner_check WITH (timescaledb.continuous) AS
+SELECT time_bucket(1 + 2, time)
+FROM metrics_int8
+GROUP BY 1
+WITH NO DATA;
+\x on
+SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
+-[ RECORD 1 ]------+---------------------------------------
+user_view          | owner_check
+user_view_owner    | default_perm_user
+mat_table          | _materialized_hypertable_24
+mat_table_owner    | default_perm_user
+direct_view        | _timescaledb_internal._direct_view_24
+direct_view_owner  | default_perm_user
+partial_view       | _timescaledb_internal._partial_view_24
+partial_view_owner | default_perm_user
+tablespace         | 
+
+\x off
+-- This should not work since the target user has the wrong role, but
+-- we test that the normal checks are done when changing the owner.
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
+ERROR:  must be member of role "test_role_1"
+\set ON_ERROR_STOP 1
+-- Superuser can always change owner 
+SET ROLE :ROLE_SUPERUSER;
+ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
+\x on
+SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
+-[ RECORD 1 ]------+---------------------------------------
+user_view          | owner_check
+user_view_owner    | test_role_1
+mat_table          | _materialized_hypertable_24
+mat_table_owner    | test_role_1
+direct_view        | _timescaledb_internal._direct_view_24
+direct_view_owner  | test_role_1
+partial_view       | _timescaledb_internal._partial_view_24
+partial_view_owner | test_role_1
+tablespace         | 
+
+\x off
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

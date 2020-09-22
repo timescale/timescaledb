@@ -2780,6 +2780,37 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 	}
 }
 
+/* Run an alter table command on a relation */
+static void
+alter_table_by_relation(RangeVar *relation, AlterTableCmd *cmd)
+{
+	const Oid relid = RangeVarGetRelid(relation, NoLock, true);
+	AlterTableInternal(relid, list_make1(cmd), false);
+}
+
+/* Run an alter table command on a relation given by name */
+static void
+alter_table_by_name(Name schema_name, Name table_name, AlterTableCmd *cmd)
+{
+	alter_table_by_relation(makeRangeVar(NameStr(*schema_name), NameStr(*table_name), -1), cmd);
+}
+
+/* Alter a hypertable and do some extra processing */
+static void
+alter_hypertable_by_id(int32 hypertable_id, AlterTableStmt *stmt, AlterTableCmd *cmd,
+					   void (*extra)(Hypertable *, AlterTableCmd *))
+{
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(hcache, hypertable_id);
+	Assert(ht); /* Broken continuous aggregate */
+	ts_hypertable_permissions_check_by_id(ht->fd.id);
+	check_alter_table_allowed_on_ht_with_compression(ht, stmt);
+	relation_not_only(stmt->relation);
+	AlterTableInternal(ht->main_table_relid, list_make1(cmd), false);
+	(*extra)(ht, cmd);
+	ts_cache_release(hcache);
+}
+
 static DDLResult
 process_altertable_start_matview(ProcessUtilityArgs *args)
 {
@@ -2787,8 +2818,6 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	const Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	ContinuousAgg *cagg;
 	ListCell *lc;
-	Hypertable *ht;
-	Cache *hcache;
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
@@ -2814,16 +2843,25 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				break;
 
+			case AT_ChangeOwner:
+				alter_table_by_relation(stmt->relation, cmd);
+				alter_table_by_name(&cagg->data.partial_view_schema,
+									&cagg->data.partial_view_name,
+									cmd);
+				alter_table_by_name(&cagg->data.direct_view_schema,
+									&cagg->data.direct_view_name,
+									cmd);
+				alter_hypertable_by_id(cagg->data.mat_hypertable_id,
+									   stmt,
+									   cmd,
+									   process_altertable_change_owner);
+				break;
+
 			case AT_SetTableSpace:
-				hcache = ts_hypertable_cache_pin();
-				ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
-				Assert(ht); /* Broken continuous aggregate */
-				ts_hypertable_permissions_check_by_id(ht->fd.id);
-				check_alter_table_allowed_on_ht_with_compression(ht, stmt);
-				relation_not_only(stmt->relation);
-				process_altertable_set_tablespace_end(ht, cmd);
-				AlterTableInternal(ht->main_table_relid, list_make1(cmd), false);
-				ts_cache_release(hcache);
+				alter_hypertable_by_id(cagg->data.mat_hypertable_id,
+									   stmt,
+									   cmd,
+									   process_altertable_set_tablespace_end);
 				break;
 
 			default:
