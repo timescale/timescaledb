@@ -7,7 +7,7 @@ CREATE VIEW hypertable_tablespaces AS
 SELECT cls.relname AS hypertable,
        (SELECT spcname FROM pg_tablespace WHERE oid = reltablespace) AS tablespace
   FROM _timescaledb_catalog.hypertable,
-  LATERAL (SELECT * FROM pg_class WHERE oid = format('%s.%s', schema_name, table_name)::regclass) AS cls
+  LATERAL (SELECT * FROM pg_class WHERE oid = format('%I.%I', schema_name, table_name)::regclass) AS cls
   ORDER BY hypertable, tablespace;
 GRANT SELECT ON hypertable_tablespaces TO PUBLIC;
 --Test hypertable with tablespace. Tablespaces are cluster-wide, so we

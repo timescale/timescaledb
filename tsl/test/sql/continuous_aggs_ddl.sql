@@ -158,7 +158,7 @@ AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
 
-SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table,
+SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table,
         schema_name AS drop_chunks_mat_schema,
         table_name AS drop_chunks_mat_table_name
     FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
@@ -207,7 +207,7 @@ AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
     GROUP BY 1 WITH NO DATA;
 
-SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_table_u,
+SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table_u,
         schema_name AS drop_chunks_mat_schema,
         table_name AS drop_chunks_mat_table_u_name
     FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
@@ -401,7 +401,7 @@ CALL refresh_continuous_aggregate('drop_chunks_view', 30, 40);
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
 
-SELECT format('%s.%s', schema_name, table_name) AS drop_chunks_mat_tablen,
+SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_tablen,
         schema_name AS drop_chunks_mat_schema,
         table_name AS drop_chunks_mat_table_name
     FROM _timescaledb_catalog.hypertable, _timescaledb_catalog.continuous_agg
@@ -511,10 +511,10 @@ ORDER BY 1;
 CREATE VIEW cagg_info AS
 WITH
   caggs AS (
-    SELECT format('%s.%s', user_view_schema, user_view_name)::regclass AS user_view,
-           format('%s.%s', direct_view_schema, direct_view_name)::regclass AS direct_view,
-           format('%s.%s', partial_view_schema, partial_view_name)::regclass AS partial_view,
-           format('%s.%s', ht.schema_name, ht.table_name)::regclass AS mat_relid
+    SELECT format('%I.%I', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%I.%I', direct_view_schema, direct_view_name)::regclass AS direct_view,
+           format('%I.%I', partial_view_schema, partial_view_name)::regclass AS partial_view,
+           format('%I.%I', ht.schema_name, ht.table_name)::regclass AS mat_relid
       FROM _timescaledb_catalog.hypertable ht,
            _timescaledb_catalog.continuous_agg cagg
      WHERE ht.id = cagg.mat_hypertable_id
