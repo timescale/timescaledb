@@ -155,7 +155,11 @@ prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_i
 	newec->ec_merged = NULL;
 
 	/* Prepend the ec */
+#if PG13_GE
+	root->eq_classes = lappend(root->eq_classes, newec);
+#else
 	root->eq_classes = lcons(newec, root->eq_classes);
+#endif
 
 	MemoryContextSwitchTo(oldcontext);
 }
@@ -824,8 +828,12 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+#if PG13_GE
+			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
+#else
 			/* Prepend the ec member because it's likely to be accessed soon */
 			cur_ec->ec_members = lcons(em, cur_ec->ec_members);
+#endif
 
 			return;
 		}
