@@ -7,8 +7,8 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE VIEW cagg_info AS
 WITH
   caggs AS (
-    SELECT format('%s.%s', user_view_schema, user_view_name)::regclass AS user_view,
-           format('%s.%s', ht.schema_name, ht.table_name)::regclass AS mat_relid
+    SELECT format('%I.%I', user_view_schema, user_view_name)::regclass AS user_view,
+           format('%I.%I', ht.schema_name, ht.table_name)::regclass AS mat_relid
       FROM _timescaledb_catalog.hypertable ht,
            _timescaledb_catalog.continuous_agg cagg
      WHERE ht.id = cagg.mat_hypertable_id
