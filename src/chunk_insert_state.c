@@ -379,8 +379,11 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch, AttrNu
 
 		if (NULL == chunk_attnos)
 			chunk_attnos = convert_tuples_by_name_map(RelationGetDescr(chunk_rel),
-													  RelationGetDescr(first_rel),
-													  gettext_noop("could not convert row type"));
+													  RelationGetDescr(first_rel)
+#if PG13_LT
+                            , gettext_noop("could not convert row type")
+#endif
+                            );
 
 		onconflset = translate_clause(ts_chunk_dispatch_get_on_conflict_set(dispatch),
 									  chunk_attnos,
@@ -484,8 +487,11 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 		 * to work correctly in mapping hypertable attnos->chunk attnos.
 		 */
 		chunk_attnos = convert_tuples_by_name_map(RelationGetDescr(chunk_rel),
-												  RelationGetDescr(hyper_rel),
-												  gettext_noop("could not convert row type"));
+												  RelationGetDescr(hyper_rel)
+#if PG13_LT
+												  ,gettext_noop("could not convert row type")
+#endif
+                          );
 
 		chunk_rri->ri_projectReturning =
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
@@ -590,8 +596,11 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel),
-								   RelationGetDescr(rel),
-								   gettext_noop("could not convert row type"));
+								   RelationGetDescr(rel)
+#if PG13_LT
+								   ,gettext_noop("could not convert row type")
+#endif
+                   );
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
