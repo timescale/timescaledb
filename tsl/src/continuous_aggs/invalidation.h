@@ -41,8 +41,7 @@ extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 modtime, int6
 extern void invalidation_add_entry(const Hypertable *ht, int64 start, int64 end);
 extern void invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 														   int32 hyper_id);
-extern void invalidation_process_hypertable_log(const ContinuousAgg *cagg,
-												const InternalTimeRange *refresh_window);
+extern void invalidation_process_hypertable_log(const ContinuousAgg *cagg);
 extern InvalidationStore *invalidation_process_cagg_log(const ContinuousAgg *cagg,
 														const InternalTimeRange *refresh_window);
 extern void invalidation_store_free(InvalidationStore *store);

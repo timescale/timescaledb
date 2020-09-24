@@ -433,7 +433,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	/* Process invalidations in the hypertable invalidation log */
-	invalidation_process_hypertable_log(cagg, &refresh_window);
+	invalidation_process_hypertable_log(cagg);
 
 	/* Start a new transaction. Note that this invalidates previous memory
 	 * allocations (and locks). */
@@ -481,8 +481,8 @@ continuous_agg_refresh_all(const Hypertable *ht, int64 start, int64 end)
 	invalidation_threshold_set_or_get(ht->fd.id, refresh_window.end);
 
 	/* It is enough to process the hypertable invalidation log once,
-	 * so do it only for the first continuous aggregate */
-	invalidation_process_hypertable_log(linitial(caggs), &refresh_window);
+	 * so do it only for the first continuous aggregate. */
+	invalidation_process_hypertable_log(linitial(caggs));
 	/* Must make invalidation processing visible */
 	CommandCounterIncrement();
 
