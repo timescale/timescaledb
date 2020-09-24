@@ -15,17 +15,15 @@
 \z _timescaledb_config.*
 \z _timescaledb_internal.*
 
-\di+ _timescaledb_catalog.*
--- Do not list sequence details because of potentially different state
--- of the sequence between updated and restored versions of a database
-\ds _timescaledb_catalog.*;
+\di _timescaledb_catalog.*
+\ds+ _timescaledb_catalog.*;
 \df _timescaledb_internal.*;
 \df+ _timescaledb_internal.*;
 \df public.*;
 \df+ public.*;
 
 \dy
-\d+ PUBLIC.*
+\d+ public.*
 
 \dx+ timescaledb
 SELECT count(*)

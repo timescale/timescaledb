@@ -41,7 +41,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: Extension update diff ${{ matrix.pg }}
-        path: update_test.diff.*
+        path: update_test.*.diff.*
 
     - name: Slack Notification
       if: failure() && github.event_name != 'pull_request'
