@@ -869,7 +869,7 @@ process_settings(Oid databaseid)
 	if (!IsUnderPostmaster)
 		return;
 
-	relsetting = heap_open(DbRoleSettingRelationId, AccessShareLock);
+	relsetting = table_open(DbRoleSettingRelationId, AccessShareLock);
 
 	/* read all the settings under the same snapshot for efficiency */
 	snapshot = RegisterSnapshot(GetCatalogSnapshot(DbRoleSettingRelationId));
@@ -879,7 +879,7 @@ process_settings(Oid databaseid)
 	ApplySetting(snapshot, InvalidOid, InvalidOid, relsetting, PGC_S_GLOBAL);
 
 	UnregisterSnapshot(snapshot);
-	heap_close(relsetting, AccessShareLock);
+	table_close(relsetting, AccessShareLock);
 }
 
 /*
