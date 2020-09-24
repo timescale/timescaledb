@@ -564,9 +564,8 @@ invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 }
 
 static void
-cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state,
-									 const InternalTimeRange *refresh_window,
-									 const Invalidation *entry, int32 cagg_hyper_id)
+cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state, const Invalidation *entry,
+									 int32 cagg_hyper_id)
 {
 	CatalogSecurityContext sec_ctx;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
@@ -586,11 +585,7 @@ cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state,
 /*
  * Process invalidations in the hypertable invalidation log.
  *
- * Copy and delete all entries from the hypertable invalidation log. For the
- * continuous aggregate that is getting refreshed, we also match the
- * invalidation against the refresh window and perform additional processing
- * (cutting or deleting and merging); work that we'd otherwise have to do
- * later in the cagg invalidation log.
+ * Copy and delete all entries from the hypertable invalidation log.
  *
  * Note that each entry gets one copy per continuous aggregate in the cagg
  * invalidation log (unless it was merged or matched the refresh
@@ -601,8 +596,7 @@ cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state,
  * invalidation log.
  */
 static void
-move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
-										  const InternalTimeRange *refresh_window)
+move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 {
 	int32 hyper_id = state->cagg.data.raw_hypertable_id;
 	List *cagg_ids = get_cagg_ids(hyper_id);
@@ -652,10 +646,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 			}
 			else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
 			{
-				cut_and_insert_new_cagg_invalidation(state,
-													 refresh_window,
-													 &mergedentry,
-													 cagg_hyper_id);
+				cut_and_insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
 				mergedentry = logentry;
 			}
 
@@ -679,10 +670,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state,
 
 		/* Handle the last merged invalidation */
 		if (IS_VALID_INVALIDATION(&mergedentry))
-			cut_and_insert_new_cagg_invalidation(state,
-												 refresh_window,
-												 &mergedentry,
-												 cagg_hyper_id);
+			cut_and_insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
 	}
 }
 
@@ -851,8 +839,7 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 }
 
 static void
-invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg,
-						const InternalTimeRange *refresh_window)
+invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg)
 {
 	state->cagg = *cagg;
 	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
@@ -871,13 +858,12 @@ invalidation_state_cleanup(const CaggInvalidationState *state)
 }
 
 void
-invalidation_process_hypertable_log(const ContinuousAgg *cagg,
-									const InternalTimeRange *refresh_window)
+invalidation_process_hypertable_log(const ContinuousAgg *cagg)
 {
 	CaggInvalidationState state;
 
-	invalidation_state_init(&state, cagg, refresh_window);
-	move_invalidations_from_hyper_to_cagg_log(&state, refresh_window);
+	invalidation_state_init(&state, cagg);
+	move_invalidations_from_hyper_to_cagg_log(&state);
 	invalidation_state_cleanup(&state);
 }
 
@@ -887,7 +873,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 	CaggInvalidationState state;
 	InvalidationStore *store = NULL;
 
-	invalidation_state_init(&state, cagg, refresh_window);
+	invalidation_state_init(&state, cagg);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
 	clear_cagg_invalidations_for_refresh(&state, refresh_window);
 
