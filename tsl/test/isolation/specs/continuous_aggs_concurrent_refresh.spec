@@ -128,7 +128,7 @@ setup
 }
 step "R1_refresh"
 {
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
 }
 
 
@@ -154,7 +154,7 @@ setup
 }
 step "R3_refresh"
 {
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
 }
 
 # Overlapping refresh on another continuous aggregate (cond_20)
