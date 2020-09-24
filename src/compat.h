@@ -374,4 +374,19 @@ get_vacuum_options(const VacuumStmt *stmt)
 #define for_each_cell_compat(cell, list, initcell) for_each_cell ((cell), (list), (initcell))
 #endif
 
+/* PG13 removes the natts parameter from map_variable_attnos */
+#if PG13_LT
+#define map_variable_attnos_compat(node, varno, sublevels_up, map, natts, rowtype, found_wholerow) \
+	map_variable_attnos((node),                                                                    \
+						(varno),                                                                   \
+						(sublevels_up),                                                            \
+						(map),                                                                     \
+						(natts),                                                                   \
+						(rowtype),                                                                 \
+						(found_wholerow))
+#else
+#define map_variable_attnos_compat(node, varno, sublevels_up, map, natts, rowtype, found_wholerow) \
+	map_variable_attnos((node), (varno), (sublevels_up), (map), (rowtype), (found_wholerow))
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
