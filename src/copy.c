@@ -535,7 +535,12 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 {
 	ListCell *cur;
 	char *xactReadOnly;
-#if PG12_GE
+#if PG13_GE
+	ParseNamespaceItem *nsitem =
+		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
+	RangeTblEntry *rte = nsitem->p_rte;
+	addNSItemToQuery(pstate, nsitem, true, true, true);
+#elif PG12
 	RangeTblEntry *rte =
 		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
 	addRTEtoQuery(pstate, rte, false, true, true);
