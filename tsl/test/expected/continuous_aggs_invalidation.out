@@ -1163,3 +1163,23 @@ ORDER BY 1,2;
      10 |      1 |       10
 (1 row)
 
+-- Test that adjacent invalidations are merged
+INSERT INTO conditions VALUES(1, 1, 1.0), (2, 1, 2.0);
+INSERT INTO conditions VALUES(3, 1, 1.0);
+INSERT INTO conditions VALUES(4, 1, 1.0);
+INSERT INTO conditions VALUES(6, 1, 1.0);
+CALL refresh_continuous_aggregate('cond_1', 10, NULL);
+NOTICE:  continuous aggregate "cond_1" is already up-to-date
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       WHERE materialization_id = :cond_1_id
+       ORDER BY 1,2,3;
+ cagg_id | start |         end         
+---------+-------+---------------------
+       6 |     1 |                   4
+       6 |     6 |                   6
+       6 |   110 | 9223372036854775807
+(3 rows)
+

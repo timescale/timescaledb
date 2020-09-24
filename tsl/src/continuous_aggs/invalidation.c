@@ -522,6 +522,23 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
 }
 
 /*
+ * Check if two invalidations can be merged into one.
+ *
+ * Since invalidations are inclusive in both ends, two adjacent invalidations
+ * can be merged.
+ */
+static bool
+invalidations_can_be_merged(const Invalidation *a, const Invalidation *b)
+{
+	/* To account for adjacency, expand one window 1 step in each
+	 * direction. This makes adjacent invalidations overlapping. */
+	int64 a_start = int64_saturating_sub(a->lowest_modified_value, 1);
+	int64 a_end = int64_saturating_add(a->greatest_modified_value, 1);
+
+	return a_end >= b->lowest_modified_value && a_start <= b->greatest_modified_value;
+}
+
+/*
  * Try to merge two invalidations into one.
  *
  * Returns true if the invalidations were merged, otherwise false.
@@ -535,10 +552,11 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
  * |-------------|
  *    |++++++++|
  *
- * The closest non-overlapping case is:
+ * The closest non-overlapping case is (note that adjacent invalidations can
+ * be merged since they are inclusive in both ends):
  *
  * |--|
- *    |++++++++|
+ *     |++++++++|
  *
  */
 static bool
@@ -548,11 +566,9 @@ invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 		return false;
 
 	/* Quick exit if no overlap */
-	if (entry->greatest_modified_value < newentry->lowest_modified_value)
-	{
-		Assert(entry->lowest_modified_value <= newentry->lowest_modified_value);
+	if (!invalidations_can_be_merged(entry, newentry))
 		return false;
-	}
+
 	/* Check if the new entry expands beyond the old one (first case above) */
 	if (entry->greatest_modified_value < newentry->greatest_modified_value)
 	{
@@ -765,8 +781,10 @@ cut_cagg_invalidation_and_compute_remainder(const CaggInvalidationState *state,
  * Clear all cagg invalidations that match a refresh window.
  *
  * This function clears all invalidations in the cagg invalidation log that
- * matches a window. Note that the refresh currently doesn't make use of the
- * invalidations to optimize the materialization.
+ * matches a window, and adds the invalidation segments covered by the window
+ * to the invalidation store (tuple store) in the state argument. The
+ * remaining segments that are added to the invalidation store are regions
+ * that require materialization.
  *
  * An invalidation entry that gets processed is either completely enclosed
  * (covered) by the refresh window, or it partially overlaps. In the former
@@ -774,7 +792,8 @@ cut_cagg_invalidation_and_compute_remainder(const CaggInvalidationState *state,
  * cut. Thus, an entry can either disappear, reduce in size, or be cut in two.
  *
  * Note that the refresh window is inclusive at the start and exclusive at the
- * end.
+ * end. This function also assumes that invalidations are scanned in order of
+ * lowest_modified_value.
  */
 static void
 clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
@@ -808,7 +827,7 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 		{
 			/*
 			 * The previous and current invalidation were merged into
-			 * one entry (i.e., they overlapped or were adjecent).
+			 * one entry (i.e., they overlapped or were adjacent).
 			 */
 			ts_catalog_delete_tid_only(state->cagg_log_rel, &logentry.tid);
 		}

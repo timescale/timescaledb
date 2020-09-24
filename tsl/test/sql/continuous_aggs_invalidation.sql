@@ -687,3 +687,17 @@ CALL refresh_continuous_aggregate('cond_1', NULL, NULL);
 -- Aggregate now up-to-date with the source hypertable
 SELECT * FROM cond_1
 ORDER BY 1,2;
+
+-- Test that adjacent invalidations are merged
+INSERT INTO conditions VALUES(1, 1, 1.0), (2, 1, 2.0);
+INSERT INTO conditions VALUES(3, 1, 1.0);
+INSERT INTO conditions VALUES(4, 1, 1.0);
+INSERT INTO conditions VALUES(6, 1, 1.0);
+
+CALL refresh_continuous_aggregate('cond_1', 10, NULL);
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       WHERE materialization_id = :cond_1_id
+       ORDER BY 1,2,3;
