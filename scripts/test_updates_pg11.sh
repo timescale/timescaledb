@@ -14,7 +14,6 @@ if [ $EXIT_CODE -ne 0 ]; then
   exit $EXIT_CODE
 fi
 
-
 TAGS="1.3.0-pg11 1.3.1-pg11 1.3.2-pg11 1.4.0-pg11 1.4.1-pg11 1.4.2-pg11"
 TEST_VERSION="v4"
 

@@ -122,6 +122,12 @@ BEGIN
     PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
 
   END IF;
+
+  IF ts_version >= '2.0.0' THEN
+    ALTER MATERIALIZED VIEW mat_before SET (timescaledb.materialized_only=true);
+  ELSIF ts_version >= '1.7.0' THEN
+    ALTER VIEW mat_before SET (timescaledb.materialized_only=true);
+  END IF;
 END $$;
 
 REFRESH MATERIALIZED VIEW mat_before;
