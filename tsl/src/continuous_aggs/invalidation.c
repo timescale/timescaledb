@@ -686,7 +686,7 @@ cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hy
 											CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX);
 	ts_scan_iterator_scan_key_init(
 		iterator,
-		Anum_continuous_aggs_materialization_invalidation_log_materialization_id,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
 		BTEqualStrategyNumber,
 		F_INT4EQ,
 		Int32GetDatum(cagg_hyper_id));
