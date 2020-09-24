@@ -18,7 +18,6 @@ values( 8864 , '001407000001DD2E' , 228 , '2019-12-14 02:52:05.863');
 insert into test_chartab
 values( 8890 , '001407000001DD2E' , 228 , '2019-12-20 02:52:05.863');
 ALTER TABLE test_chartab SET (timescaledb.compress, timescaledb.compress_segmentby = 'mac_id', timescaledb.compress_orderby = 'ts DESC');
-NOTICE:  adding index _compressed_hypertable_2_mac_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(mac_id, _ts_meta_sequence_num)
 select * from test_chartab order by mac_id , ts limit 2;
  job_run_id |      mac_id      | rtt |              ts              
 ------------+------------------+-----+------------------------------
@@ -63,8 +62,6 @@ SELECT create_hypertable('merge_sort', 'time');
 (1 row)
 
 ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
-NOTICE:  adding index _compressed_hypertable_4_measure_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(measure_id, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_4_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_4 USING BTREE(device_id, _ts_meta_sequence_num)
 INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1h'::interval) g1(time);
 ANALYZE merge_sort;
 --compress first chunk

@@ -27,7 +27,6 @@ ERROR:  compression not enabled on hypertable "conditions"
 -- TEST2 --
 --add a policy to compress chunks --
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
-NOTICE:  adding index _compressed_hypertable_2_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(location, _ts_meta_sequence_num)
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
@@ -193,7 +192,6 @@ SELECT device,
        MIN(temperature) AS min_temperature
 FROM conditions
 GROUP BY device, time_bucket(INTERVAL '1 hour', "time") WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_8_device_day_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(device, day)
 CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 ALTER TABLE conditions SET (timescaledb.compress);
 SELECT COUNT(*) AS dropped_chunks_count

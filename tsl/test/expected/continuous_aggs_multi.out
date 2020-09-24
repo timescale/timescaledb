@@ -38,7 +38,6 @@ AS
     SELECT time_bucket(2, timeval), col1, max(col2)
     FROM continuous_agg_test
     GROUP BY 1, 2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_3_grp_timed_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(grp, timed)
 select view_name, view_owner, materialization_hypertable
 from timescaledb_information.continuous_aggregates ORDER BY 1;
  view_name |    view_owner     |            materialization_hypertable            

@@ -47,7 +47,6 @@ as
 select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket('1day', timec), location WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_2_location_timec_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(location, timec)
 --compute time_bucketted max+bucket_width for the materialized view
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
 FROM ( select max(timec)as timeval from conditions ) as q;
@@ -64,7 +63,6 @@ as
 select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
 from conditions
 group by time_bucket('1day', timec), location WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_3_location_timec_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, timec)
 --time that refresh assumes as now() for repeatability
 SELECT time_bucket('1day' , q.timeval+ '1day'::interval)
 FROM ( select max(timec)as timeval from conditions ) as q;

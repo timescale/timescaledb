@@ -30,7 +30,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA; --We have to group by the bucket column, but can also add other group-by columns
-NOTICE:  adding index _materialized_hypertable_2_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device_id, bucket)
 SELECT add_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -204,7 +203,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_3_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(device_id, bucket)
 DROP MATERIALIZED VIEW device_summary;
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
@@ -222,7 +220,6 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH DATA;
-NOTICE:  adding index _materialized_hypertable_4_device_id_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device_id, bucket)
 NOTICE:  refreshing continuous aggregate "device_summary"
 SELECT min(min_time)::timestamp FROM device_summary;
            min            

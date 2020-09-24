@@ -35,7 +35,6 @@ as
 SELECT a, count(b)
 FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_2_a_time_partition_col_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(a, time_partition_col)
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
