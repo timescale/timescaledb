@@ -361,7 +361,7 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 		/*
 		 * Entry completely enclosed so can be deleted:
 		 *
-		 * |---------------|
+		 * [---------------)
 		 *     [+++++]
 		 */
 
@@ -380,7 +380,7 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 			/*
 			 * Need to cut in right end:
 			 *
-			 *     |------|
+			 *     [------)
 			 * [++++++]
 			 *
 			 * [++]
@@ -404,12 +404,20 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 			invalidation->greatest_modified_value >= refresh_window->end)
 		{
 			/*
+			 * If the invalidation is already cut on the left above, the reminder is set and
+			 * will be reset here. The assert prevents from losing information from the reminder.
+			 */
+			Assert((result == INVAL_CUT &&
+					remainder->lowest_modified_value == refresh_window->start) ||
+				   result == INVAL_NOMATCH);
+
+			/*
 			 * Need to cut in left end:
 			 *
-			 * |------|
+			 * [------)
 			 *    [++++++++]
 			 *
-			 *         [+++]
+			 *        [++++]
 			 */
 			upper = create_invalidation_tup(tupdesc,
 											cagg_hyper_id,

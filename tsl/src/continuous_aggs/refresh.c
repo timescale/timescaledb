@@ -78,50 +78,134 @@ get_largest_bucketed_window(Oid timetype, int64 bucket_width)
 }
 
 /*
- * Adjust the refresh window to align with buckets in an inclusive manner.
+ * Adjust the refresh window to align with inscribed buckets, so it includes buckets, which are
+ * fully covered by the refresh window.
  *
- * It is OK to refresh more than the given refresh window, but not less. Since
- * we can only refresh along bucket boundaries, we need to adjust the refresh
- * window to be inclusive in both ends to be able to refresh the given
- * region. For example, if the dotted region below is the original window, the
- * adjusted refresh window includes all four buckets shown.
+ * Bucketing refresh window is necessary for a continuous aggregate refresh, which can refresh only
+ * entire buckets. The result of the function is a bucketed window, where its start is at the start
+ * of the first bucket, which is  fully inside the refresh window, and its end is at the end of the
+ * last fully covered bucket.
  *
- * | ....|.....|..   |
+ * Example1, the window needs to shrink:
+ *    [---------)      - given refresh window
+ * .|....|....|....|.  - buckets
+ *       [----)        - inscribed bucketed window
+ *
+ * Example2, the window is already aligned:
+ *       [----)        - given refresh window
+ * .|....|....|....|.  - buckets
+ *       [----)        - inscribed bucketed window
+ *
+ * This function is called for the continuous aggregate policy and manual refresh. In such case
+ * excluding buckets, which are not fully covered by the refresh window, avoids refreshing a bucket,
+ * where part of its data were dropped by a retention policy. See #2198 for details.
  */
 static InternalTimeRange
-compute_bucketed_refresh_window(const InternalTimeRange *refresh_window, int64 bucket_width)
+compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
+										  const int64 bucket_width)
 {
 	InternalTimeRange result = *refresh_window;
 	InternalTimeRange largest_bucketed_window =
 		get_largest_bucketed_window(refresh_window->type, bucket_width);
 
-	if (result.start <= largest_bucketed_window.start)
+	if (refresh_window->start <= largest_bucketed_window.start)
+	{
 		result.start = largest_bucketed_window.start;
-	else
-		result.start = ts_time_bucket_by_type(bucket_width, result.start, result.type);
-
-	if (result.end >= largest_bucketed_window.end)
-		result.end = largest_bucketed_window.end;
+	}
 	else
 	{
-		int64 exclusive_end = result.end;
+		/* The start time needs to be aligned with the first fully enclosed bucket.
+		 * So the original window start is moved to next bucket, except if the start is
+		 * already aligned with a bucket, thus 1 is subtracted to avoid moving into next
+		 * bucket in the aligned case. */
+		int64 included_bucket =
+			ts_time_saturating_add(refresh_window->start, bucket_width - 1, refresh_window->type);
+		/* Get the start of the included bucket. */
+		result.start = ts_time_bucket_by_type(bucket_width, included_bucket, refresh_window->type);
+	}
+
+	if (refresh_window->end >= largest_bucketed_window.end)
+	{
+		result.end = largest_bucketed_window.end;
+	}
+	else
+	{
+		/* The window is reduced to the beginning of the bucket, which contains the exclusive
+		 * end of the refresh window. */
+		result.end =
+			ts_time_bucket_by_type(bucket_width, refresh_window->end, refresh_window->type);
+	}
+	return result;
+}
+
+/*
+ * Adjust the refresh window to align with circumscribed buckets, so it includes buckets, which
+ * fully cover the refresh window.
+ *
+ * Bucketing refresh window is necessary for a continuous aggregate refresh, which can refresh only
+ * entire buckets. The result of the function is a bucketed window, where its start is at the start
+ * of a bucket, which contains the start of the refresh window, and its end is at the end of a
+ * bucket, which contains the end of the refresh window.
+ *
+ * Example1, the window needs to expand:
+ *    [---------)      - given refresh window
+ * .|....|....|....|.  - buckets
+ *  [--------------)   - circumscribed bucketed window
+ *
+ * Example2, the window is already aligned:
+ *       [----)        - given refresh window
+ * .|....|....|....|.  - buckets
+ *       [----)        - inscribed bucketed window
+ *
+ * This function is called for an invalidation window before refreshing it and after the
+ * invalidation window was adjusted to be fully inside a refresh window. In the case of a
+ * continuous aggregate policy or manual refresh, the refresh window is the inscribed bucketed
+ * window.
+ *
+ * The circumscribed behaviour is also used for a refresh on drop, when the refresh is called during
+ * dropping chunks manually or as part of retention policy.
+ */
+static InternalTimeRange
+compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
+											  const int64 bucket_width)
+{
+	InternalTimeRange result = *refresh_window;
+	InternalTimeRange largest_bucketed_window =
+		get_largest_bucketed_window(refresh_window->type, bucket_width);
+
+	if (refresh_window->start <= largest_bucketed_window.start)
+	{
+		result.start = largest_bucketed_window.start;
+	}
+	else
+	{
+		/* For alignment with a bucket, which includes the start of the refresh window, we just
+		 * need to get start of the bucket. */
+		result.start =
+			ts_time_bucket_by_type(bucket_width, refresh_window->start, refresh_window->type);
+	}
+
+	if (refresh_window->end >= largest_bucketed_window.end)
+	{
+		result.end = largest_bucketed_window.end;
+	}
+	else
+	{
+		int64 exclusive_end;
 		int64 bucketed_end;
+
+		Assert(refresh_window->end > result.start);
 
 		/* The end of the window is non-inclusive so subtract one before
 		 * bucketing in case we're already at the end of the bucket (we don't
-		 * want to add an extra bucket). But we also don't want to subtract if
-		 * we are at the start of the bucket (we don't want to remove a
-		 * bucket). The last  */
-		if (result.end > result.start)
-			exclusive_end = ts_time_saturating_sub(result.end, 1, result.type);
-
-		bucketed_end = ts_time_bucket_by_type(bucket_width, exclusive_end, result.type);
+		 * want to add an extra bucket).  */
+		exclusive_end = ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
+		bucketed_end = ts_time_bucket_by_type(bucket_width, exclusive_end, refresh_window->type);
 
 		/* We get the time value for the start of the bucket, so need to add
-		 * bucket_width to get the end of it */
+		 * bucket_width to get the end of it. */
 		result.end = ts_time_saturating_add(bucketed_end, bucket_width, refresh_window->type);
 	}
-
 	return result;
 }
 
@@ -235,7 +319,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 		};
 
 		InternalTimeRange bucketed_refresh_window =
-			compute_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
+			compute_circumscribed_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
 
 		log_refresh_window(DEBUG1, cagg, &bucketed_refresh_window, "invalidation refresh on");
 		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
@@ -336,9 +420,8 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 			Assert(OidIsValid(cagg->relid));
 			ereport(NOTICE,
 					(errmsg("refreshing continuous aggregate \"%s\"", get_rel_name(cagg->relid)),
-					 errhint(
-						 "Use WITH NO DATA if you do not want to refresh the continuous aggregate "
-						 "on creation.")));
+					 errhint("Use WITH NO DATA if you do not want to refresh the continuous "
+							 "aggregate on creation.")));
 		}
 		continuous_agg_refresh_with_window(cagg, refresh_window, invalidations);
 		invalidation_store_free(invalidations);
@@ -381,7 +464,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				 errmsg("invalid refresh window"),
 				 errhint("The start of the window must be before the end.")));
 
-	refresh_window = compute_bucketed_refresh_window(refresh_window_arg, cagg->data.bucket_width);
+	refresh_window =
+		compute_inscribed_bucketed_refresh_window(refresh_window_arg, cagg->data.bucket_width);
 	log_refresh_window(DEBUG1, cagg, &refresh_window, "refreshing continuous aggregate");
 
 	/* Perform the refresh across two transactions.
@@ -419,17 +503,15 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * won't be refreshed when the threshold is moved forward in the
 	 * future. The invalidation threshold should already be aligned on bucket
 	 * boundary. */
-	if (refresh_window.end > invalidation_threshold)
-	{
+	if (refresh_window_arg->end > invalidation_threshold)
 		refresh_window.end = invalidation_threshold;
 
-		/* Capping the end might have made the window 0, or negative, so
-		 * nothing to refresh in that case */
-		if (refresh_window.start >= refresh_window.end)
-		{
-			emit_up_to_date_notice(cagg);
-			return;
-		}
+	/* Capping the end might have made the window 0, or negative, so
+	 * nothing to refresh in that case */
+	if (refresh_window.start >= refresh_window.end)
+	{
+		emit_up_to_date_notice(cagg);
+		return;
 	}
 
 	/* Process invalidations in the hypertable invalidation log */

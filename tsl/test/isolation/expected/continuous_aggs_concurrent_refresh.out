@@ -2,7 +2,7 @@ Parsed test spec with 8 sessions
 
 starting permutation: R1_refresh S1_select R3_refresh S1_select L2_read_unlock_threshold_table L3_unlock_cagg_table L1_unlock_threshold_table
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
 
 step S1_select: 
     SELECT bucket, avg_temp
@@ -31,7 +31,7 @@ hypertable     threshold
 
 conditions     70             
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
 
 step S1_select: 
     SELECT bucket, avg_temp
@@ -78,7 +78,7 @@ step L2_read_lock_threshold_table:
     IN ACCESS SHARE MODE;
 
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
@@ -118,14 +118,14 @@ step L1_unlock_threshold_table:
 
 starting permutation: R1_refresh L2_read_lock_threshold_table R3_refresh L2_read_unlock_threshold_table S1_select L3_unlock_cagg_table L1_unlock_threshold_table
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
 
 step L2_read_lock_threshold_table: 
     LOCK _timescaledb_catalog.continuous_aggs_invalidation_threshold
     IN ACCESS SHARE MODE;
 
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
@@ -169,14 +169,14 @@ step L1_unlock_threshold_table:
 
 starting permutation: R3_refresh L2_read_lock_threshold_table R1_refresh L2_read_unlock_threshold_table S1_select L3_unlock_cagg_table L1_unlock_threshold_table
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
 
 step L2_read_lock_threshold_table: 
     LOCK _timescaledb_catalog.continuous_aggs_invalidation_threshold
     IN ACCESS SHARE MODE;
 
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
@@ -226,7 +226,7 @@ lock_cagg
 
                
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -273,7 +273,7 @@ lock_cagg
 
                
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
 step R2_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 35, 62);
@@ -325,10 +325,10 @@ lock_cagg
 
                
 step R1_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -379,7 +379,7 @@ lock_cagg
 
                
 step R3_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 71, 97);
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
 step R4_refresh: 
     CALL refresh_continuous_aggregate('cond_20', 39, 84);

@@ -110,12 +110,16 @@ ORDER BY 1,2;
 -- invalidation log:
 SELECT * FROM cagg_invals;
 
--- Now refresh up to 50, and the threshold should be updated accordingly:
+-- Now refresh up to 50 without the first bucket, and the threshold should be updated accordingly:
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 
--- Invalidations should be cleared for the refresh window:
+-- Invalidations should be cleared inside the refresh window:
+SELECT * FROM cagg_invals;
+
+-- Refresh up to 50 from the beginning
+CALL refresh_continuous_aggregate('cond_10', 0, 50);
 SELECT * FROM cagg_invals;
 
 -- Refreshing below the threshold does not move it:
@@ -128,7 +132,7 @@ ORDER BY 1,2;
 SELECT * FROM cagg_invals;
 
 -- Refreshing measure_10 moves the threshold only for the other hypertable:
-CALL refresh_continuous_aggregate('measure_10', 1, 30);
+CALL refresh_continuous_aggregate('measure_10', 0, 30);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 SELECT * FROM cagg_invals;
@@ -218,7 +222,7 @@ CALL refresh_continuous_aggregate('cond_20', 20, 60);
 SELECT * FROM cagg_invals;
 
 -- Refresh cond_10 to completely remove an invalidation:
-CALL refresh_continuous_aggregate('cond_10', 1, 20);
+CALL refresh_continuous_aggregate('cond_10', 0, 20);
 
 -- The 1-19 invalidation should be deleted:
 SELECT * FROM cagg_invals;
@@ -479,8 +483,9 @@ SELECT v, v FROM generate_series(1, 10) v;
 
 CALL refresh_continuous_aggregate('thresh_2', 0, 5);
 
--- Threshold should move to end of refresh window (note that window
--- expands to end of bucket).
+-- Threshold should move to end of the last refreshed bucket, which is
+-- the last bucket fully included in the window, i.e., the window
+-- shrinks to end of previous bucket.
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;

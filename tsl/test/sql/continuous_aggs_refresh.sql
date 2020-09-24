@@ -34,14 +34,14 @@ SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
 -- Refresh the most recent few days:
-CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-05');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
 
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
 -- Refresh the rest (and try DEBUG output)
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('daily_temp', '2020-05-01', '2020-05-03');
+CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
 RESET client_min_messages;
 
 -- Compare the aggregate to the equivalent query on the source table
@@ -140,7 +140,7 @@ SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2 WITH NO DATA;
 
-CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint);
+CALL refresh_continuous_aggregate('cond_20_smallint', 0::smallint, 70::smallint);
 
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
@@ -173,7 +173,7 @@ SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
 GROUP BY 1,2 WITH NO DATA;
 
-CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_int', 0, 65);
 
 SELECT * FROM cond_20_int
 ORDER BY 1,2;
@@ -206,7 +206,7 @@ SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
 GROUP BY 1,2 WITH NO DATA;
 
-CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
+CALL refresh_continuous_aggregate('cond_20_bigint', 0, 75);
 
 SELECT * FROM cond_20_bigint
 ORDER BY 1,2;

@@ -146,6 +146,7 @@ WHERE id = :job_id;
 INSERT INTO continuous_agg_max_mat_date
     SELECT generate_series('2019-09-01'::date, '2019-09-10'::date, '1 day');
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate "max_mat_view_date" is already up-to-date
 DROP MATERIALIZED VIEW max_mat_view_date;
 CREATE TABLE continuous_agg_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_timestamp', 'time');
