@@ -95,6 +95,24 @@ is_time_bucket_function(Expr *node)
 	return false;
 }
 
+#if PG13_GE
+/* PG13 merged setup_append_rel_array with setup_simple_rel_arrays */
+static void
+setup_append_rel_array(PlannerInfo *root)
+{
+	root->append_rel_array =
+		repalloc(root->append_rel_array, root->simple_rel_array_size * sizeof(AppendRelInfo *));
+	ListCell *lc;
+	foreach (lc, root->append_rel_list)
+	{
+		AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
+		int child_relid = appinfo->child_relid;
+
+		root->append_rel_array[child_relid] = appinfo;
+	}
+}
+#endif
+
 /*
  * Pre-check to determine if an expression is eligible for constification.
  * A more thorough check is in constify_timestamptz_op_interval.
@@ -1141,7 +1159,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.join_conditions = NIL,
 		.propagate_conditions = NIL,
 	};
-	Size old_rel_array_len;
 	Index first_chunk_index = 0;
 #if PG12_GE
 	Index i;
@@ -1173,6 +1190,11 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		propagate_join_quals(root, rel, &ctx);
 
 	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
+
+	/* nothing to do here if we have no chunks and no data nodes */
+	if (list_length(inh_oids) + list_length(ht->data_nodes) == 0)
+		return;
+
 	oldrelation = table_open(parent_oid, NoLock);
 
 	/*
@@ -1180,7 +1202,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-	old_rel_array_len = root->simple_rel_array_size;
+#if PG12_GE
+	expand_planner_arrays(root, list_length(inh_oids) + list_length(ht->data_nodes));
+#else
+	Size old_rel_array_len = root->simple_rel_array_size;
 	root->simple_rel_array_size += (list_length(inh_oids) + list_length(ht->data_nodes));
 	root->simple_rel_array =
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
@@ -1195,6 +1220,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	memset(root->simple_rte_array + old_rel_array_len,
 		   0,
 		   list_length(inh_oids) * sizeof(*root->simple_rte_array));
+#endif
 
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
