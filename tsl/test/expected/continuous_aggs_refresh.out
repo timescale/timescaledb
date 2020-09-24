@@ -51,7 +51,6 @@ AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_2_device_day_idx ON _timescaledb_internal._materialized_hypertable_2 USING BTREE(device, day)
 -- The continuous aggregate should be empty
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
@@ -199,7 +198,6 @@ AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions_date
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_4_device_day_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(device, day)
 CALL refresh_continuous_aggregate('daily_temp_date', '2020-05-01', '2020-05-03');
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('daily_temp_date', NULL, NULL);
@@ -245,7 +243,6 @@ AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_6_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_6 USING BTREE(device, bucket)
 CALL refresh_continuous_aggregate('cond_20_smallint', 5::smallint, 50::smallint);
 SELECT * FROM cond_20_smallint
 ORDER BY 1,2;
@@ -297,7 +294,6 @@ AS
 SELECT time_bucket(INT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_int
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_8_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_8 USING BTREE(device, bucket)
 CALL refresh_continuous_aggregate('cond_20_int', 5, 50);
 SELECT * FROM cond_20_int
 ORDER BY 1,2;
@@ -349,7 +345,6 @@ AS
 SELECT time_bucket(BIGINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_bigint
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_10_device_bucket_idx ON _timescaledb_internal._materialized_hypertable_10 USING BTREE(device, bucket)
 CALL refresh_continuous_aggregate('cond_20_bigint', 5, 50);
 SELECT * FROM cond_20_bigint
 ORDER BY 1,2;
@@ -381,7 +376,6 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_11_device_day_idx ON _timescaledb_internal._materialized_hypertable_11 USING BTREE(device, day)
 CREATE MATERIALIZED VIEW weekly_temp_with_data
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
@@ -389,7 +383,6 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH DATA;
-NOTICE:  adding index _materialized_hypertable_12_device_day_idx ON _timescaledb_internal._materialized_hypertable_12 USING BTREE(device, day)
 NOTICE:  refreshing continuous aggregate "weekly_temp_with_data"
 SELECT * FROM weekly_temp_without_data;
  day | device | avg_temp 
@@ -460,7 +453,6 @@ SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
 END $$;
-NOTICE:  adding index _materialized_hypertable_13_device_day_idx ON _timescaledb_internal._materialized_hypertable_13 USING BTREE(device, day)
 BEGIN;
 CREATE MATERIALIZED VIEW weekly_conditions_2
 WITH (timescaledb.continuous,
@@ -469,5 +461,4 @@ AS
 SELECT time_bucket('7 days', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
 GROUP BY 1,2 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_14_device_day_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(device, day)
 COMMIT;

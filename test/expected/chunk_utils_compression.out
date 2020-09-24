@@ -29,7 +29,6 @@ SELECT create_hypertable('public.table_to_compress', 'time', chunk_time_interval
 (1 row)
 
 ALTER TABLE public.table_to_compress SET (timescaledb.compress, timescaledb.compress_segmentby = 'acq_id');
-NOTICE:  adding index _compressed_hypertable_3_acq_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_3 USING BTREE(acq_id, _ts_meta_sequence_num)
 INSERT INTO public.table_to_compress VALUES ('2020-01-01', 1234567, 777888);
 INSERT INTO public.table_to_compress VALUES ('2020-02-01', 567567, 890890);
 INSERT INTO public.table_to_compress VALUES ('2020-02-10', 1234, 5678);

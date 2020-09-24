@@ -39,8 +39,6 @@ insert into foo values( 10 , 10 , 20, NULL);
 insert into foo values( 20 , 11 , 20, NULL);
 insert into foo values( 30 , 12 , 20, NULL);
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
-NOTICE:  adding index _compressed_hypertable_2_a__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(a, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_2_b__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_2 USING BTREE(b, _ts_meta_sequence_num)
 --test self-refencing updates
 SET timescaledb.enable_transparent_decompression to ON;
 update foo set c = 40
@@ -257,7 +255,6 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 (1 row)
 
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
-NOTICE:  adding index _compressed_hypertable_6_location__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_6 USING BTREE(location, _ts_meta_sequence_num)
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 insert into conditions
@@ -602,8 +599,6 @@ alter table test_collation set (timescaledb.compress, timescaledb.compress_segme
 ERROR:  unable to parse timescaledb.compress_orderby option 'val_1 COLLATE "POSIX", val2, time'
 \set ON_ERROR_STOP 1
 alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1, val_2, time');
-NOTICE:  adding index _compressed_hypertable_10_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(device_id, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_10_device_id_2__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_10 USING BTREE(device_id_2, _ts_meta_sequence_num)
 insert into test_collation
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_1', 'device_3', gen_rand_minstd(), gen_rand_minstd();
 insert into test_collation
@@ -944,10 +939,6 @@ SELECT
   avg(v1+v2) AS avg2
 FROM metrics
 GROUP BY 1 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_14_const_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(const, time)
-NOTICE:  adding index _materialized_hypertable_14_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(numeric, time)
-NOTICE:  adding index _materialized_hypertable_14_case_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(case, time)
-NOTICE:  adding index _materialized_hypertable_14_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_14 USING BTREE(coalesce, time)
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
@@ -970,7 +961,6 @@ SELECT create_hypertable('rescan_test', 't', chunk_time_interval => interval '1 
 
 -- compression
 ALTER TABLE rescan_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'id');
-NOTICE:  adding index _compressed_hypertable_17_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_17 USING BTREE(id, _ts_meta_sequence_num)
 -- INSERT dummy data
 INSERT INTO rescan_test SELECT 1, time, random() FROM generate_series('2000-01-01'::timestamptz, '2000-01-05'::timestamptz, '1h'::interval) g(time);
 SELECT count(*) FROM rescan_test;
@@ -1031,7 +1021,6 @@ ALTER TABLE hyper SET (
     timescaledb.compress,
     timescaledb.compress_orderby = 'time',
     timescaledb.compress_segmentby = 'device_id');
-NOTICE:  adding index _compressed_hypertable_19_device_id__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_19 USING BTREE(device_id, _ts_meta_sequence_num)
 INSERT INTO meta VALUES (1), (2), (3), (4), (5);
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2);
 SELECT ch1.table_name AS "CHUNK_NAME", ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_FULL_NAME"
@@ -1151,8 +1140,6 @@ ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = '
 ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compress_segmentby column for compression
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
-NOTICE:  adding index _compressed_hypertable_23_col1__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col1, _ts_meta_sequence_num)
-NOTICE:  adding index _compressed_hypertable_23_col2__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_23 USING BTREE(col2, _ts_meta_sequence_num)
 SELECT * FROM timescaledb_information.compression_settings ORDER BY table_name;
  schema_name |   table_name   |   attname   | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------+----------------+-------------+------------------------+----------------------+-------------+--------------------
@@ -1363,7 +1350,6 @@ SELECT count(*) FROM approx_count;
 (1 row)
 
 ALTER TABLE approx_count SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
-NOTICE:  adding index _compressed_hypertable_30_device__ts_meta_sequence_num_idx ON _timescaledb_internal._compressed_hypertable_30 USING BTREE(device, _ts_meta_sequence_num)
 SELECT approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------

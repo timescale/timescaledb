@@ -474,10 +474,6 @@ SELECT
   avg(v1+v2) AS avg2
 FROM metrics
 GROUP BY 1 WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_9_const_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(const, time)
-NOTICE:  adding index _materialized_hypertable_9_numeric_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(numeric, time)
-NOTICE:  adding index _materialized_hypertable_9_case_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(case, time)
-NOTICE:  adding index _materialized_hypertable_9_coalesce_time_idx ON _timescaledb_internal._materialized_hypertable_9 USING BTREE(coalesce, time)
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
              time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 

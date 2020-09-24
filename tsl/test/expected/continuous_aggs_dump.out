@@ -89,14 +89,12 @@ NOTICE:  materialized view "mat_test" does not exist, skipping
 CREATE MATERIALIZED VIEW mat_before
 WITH (timescaledb.continuous)
 AS :QUERY_BEFORE WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_3_location_bucket_idx ON _timescaledb_internal._materialized_hypertable_3 USING BTREE(location, bucket)
 --materialize this VIEW after dump this tests
 --that the partialize VIEW and refresh mechanics
 --survives the dump intact
 CREATE MATERIALIZED VIEW mat_after
 WITH (timescaledb.continuous)
 AS :QUERY_AFTER WITH NO DATA;
-NOTICE:  adding index _materialized_hypertable_4_location_bucket_idx ON _timescaledb_internal._materialized_hypertable_4 USING BTREE(location, bucket)
 --materialize mat_before
 SET client_min_messages TO LOG;
 CALL refresh_continuous_aggregate('mat_before', NULL, NULL);
