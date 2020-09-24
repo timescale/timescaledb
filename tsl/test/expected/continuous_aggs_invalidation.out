@@ -130,6 +130,19 @@ ORDER BY 1 DESC, 2;
 --------+--------+----------
 (0 rows)
 
+CREATE VIEW hyper_invals AS
+SELECT hypertable_id AS hyper_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end
+       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+       ORDER BY 1,2,3;
+CREATE VIEW cagg_invals AS
+SELECT materialization_id AS cagg_id,
+       lowest_modified_value AS start,
+       greatest_modified_value AS end,
+	   frozen
+       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+       ORDER BY 1,2,3;
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, there is no threshold
 -- set:
@@ -141,13 +154,12 @@ ORDER BY 1,2;
 
 -- There should be only "infinite" invalidations in the cagg
 -- invalidation log:
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-ORDER BY 1,2,3;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value | frozen 
---------------------+-------------------+-----------------------+-------------------------+--------
-                  3 |               100 |  -9223372036854775808 |     9223372036854775807 | f
-                  4 |               100 |  -9223372036854775808 |     9223372036854775807 | f
-                  5 |               100 |  -9223372036854775808 |     9223372036854775807 | f
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 | 9223372036854775807 | f
+       4 | -9223372036854775808 | 9223372036854775807 | f
+       5 | -9223372036854775808 | 9223372036854775807 | f
 (3 rows)
 
 -- Now refresh up to 50, and the threshold should be updated accordingly:
@@ -160,14 +172,13 @@ ORDER BY 1,2;
 (1 row)
 
 -- Invalidations should be cleared for the refresh window:
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-ORDER BY 1,2,3;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value | frozen 
---------------------+-------------------+-----------------------+-------------------------+--------
-                  3 |               100 |  -9223372036854775808 |                      -1 | f
-                  3 |               100 |                    50 |     9223372036854775807 | f
-                  4 |               100 |  -9223372036854775808 |     9223372036854775807 | f
-                  5 |               100 |  -9223372036854775808 |     9223372036854775807 | f
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   50 | 9223372036854775807 | f
+       4 | -9223372036854775808 | 9223372036854775807 | f
+       5 | -9223372036854775808 | 9223372036854775807 | f
 (4 rows)
 
 -- Refreshing below the threshold does not move it:
@@ -182,14 +193,13 @@ ORDER BY 1,2;
 
 -- Nothing changes with invalidations either since the region was
 -- already refreshed and no new invalidations have been generated:
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-ORDER BY 1,2,3;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value | frozen 
---------------------+-------------------+-----------------------+-------------------------+--------
-                  3 |               100 |  -9223372036854775808 |                      -1 | f
-                  3 |               100 |                    50 |     9223372036854775807 | f
-                  4 |               100 |  -9223372036854775808 |     9223372036854775807 | f
-                  5 |               100 |  -9223372036854775808 |     9223372036854775807 | f
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   50 | 9223372036854775807 | f
+       4 | -9223372036854775808 | 9223372036854775807 | f
+       5 | -9223372036854775808 | 9223372036854775807 | f
 (4 rows)
 
 -- Refreshing measure_10 moves the threshold only for the other hypertable:
@@ -202,15 +212,14 @@ ORDER BY 1,2;
              2 |        30
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-ORDER BY 1,2,3;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value | frozen 
---------------------+-------------------+-----------------------+-------------------------+--------
-                  3 |               100 |  -9223372036854775808 |                      -1 | f
-                  3 |               100 |                    50 |     9223372036854775807 | f
-                  4 |               100 |  -9223372036854775808 |     9223372036854775807 | f
-                  5 |               100 |  -9223372036854775808 |                      -1 | f
-                  5 |               100 |                    30 |     9223372036854775807 | f
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   50 | 9223372036854775807 | f
+       4 | -9223372036854775808 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (5 rows)
 
 -- Refresh on the second continuous aggregate, cond_20, on the first
@@ -224,42 +233,33 @@ ORDER BY 1,2;
              2 |        30
 (2 rows)
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-ORDER BY 1,2,3;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value | frozen 
---------------------+-------------------+-----------------------+-------------------------+--------
-                  3 |               100 |  -9223372036854775808 |                      -1 | f
-                  3 |               100 |                    50 |     9223372036854775807 | f
-                  4 |               100 |  -9223372036854775808 |                      59 | f
-                  4 |               100 |                   100 |     9223372036854775807 | f
-                  5 |               100 |  -9223372036854775808 |                      -1 | f
-                  5 |               100 |                    30 |     9223372036854775807 | f
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   50 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  59 | f
+       4 |                  100 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (6 rows)
 
 	  
 -- There should be no hypertable invalidations initially:
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
 (0 rows)
 
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                   50 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
-       4 |                  100 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   50 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  59 | f
+       4 |                  100 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (6 rows)
 
 -- Create invalidations across different ranges. Some of these should
@@ -271,11 +271,7 @@ INSERT INTO conditions VALUES (10, 4, 23.7);
 INSERT INTO conditions VALUES (10, 5, 23.8), (19, 3, 23.6);
 INSERT INTO conditions VALUES (60, 3, 23.7), (70, 4, 23.7);
 -- Should see some invaliations in the hypertable invalidation log:
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         1 |    10 |  10
@@ -287,11 +283,7 @@ SELECT hypertable_id AS hyper_id,
 INSERT INTO measurements VALUES (20, 4, 23.7);
 INSERT INTO measurements VALUES (30, 5, 23.8), (80, 3, 23.6);
 -- Should now see invalidations for both hypertables
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         1 |    10 |  10
@@ -316,32 +308,24 @@ ORDER BY 1,2;
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
 -- the refreshed aggregate belongs to:
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
 (1 row)
 
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                   10 |                  19
-       3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
-       4 |                   10 |                  19
-       4 |                   60 |                  70
-       4 |                  100 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   10 |                  19 | f
+       3 |                   60 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  59 | f
+       4 |                   10 |                  19 | f
+       4 |                   60 |                  70 | f
+       4 |                  100 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (9 rows)
 
 -- Now add more invalidations to test a refresh that overlaps with them.
@@ -361,11 +345,7 @@ INSERT INTO conditions VALUES (3, 2, 23.5), (80, 1, 23.4);
 INSERT INTO conditions VALUES (60, 3, 23.6), (90, 3, 23.6);
 INSERT INTO conditions VALUES (20, 5, 23.8), (100, 3, 23.6);
 -- New invalidations in the hypertable invalidation log:
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         1 |     1 |  25
@@ -380,93 +360,73 @@ SELECT hypertable_id AS hyper_id,
 (9 rows)
 
 -- But nothing has yet changed in the cagg invalidation log:
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                   10 |                  19
-       3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
-       4 |                   10 |                  19
-       4 |                   60 |                  70
-       4 |                  100 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   10 |                  19 | f
+       3 |                   60 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  59 | f
+       4 |                   10 |                  19 | f
+       4 |                   60 |                  70 | f
+       4 |                  100 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (9 rows)
 
 -- Refresh to process invalidations for daily temperature:
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log.
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
 (1 row)
 
 -- Only the cond_10 cagg should have its entries cut:
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                    1 |                  19
-       3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
-       4 |                    1 |                 100
-       4 |                   10 |                  19
-       4 |                   60 |                  70
-       4 |                  100 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                    1 |                  19 | f
+       3 |                   60 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  59 | f
+       4 |                    1 |                 100 | f
+       4 |                   10 |                  19 | f
+       4 |                   60 |                  70 | f
+       4 |                  100 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (10 rows)
 
 -- Refresh also cond_20:
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
 -- The cond_20 cagg should also have its entries cut:
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                    1 |                  19
-       3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
-       4 |                   60 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                    1 |                  19 | f
+       3 |                   60 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  19 | f
+       4 |                   60 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (7 rows)
 
 -- Refresh cond_10 to completely remove an invalidation:
 CALL refresh_continuous_aggregate('cond_10', 1, 20);
 -- The 1-19 invalidation should be deleted:
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
-       4 |                   60 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   60 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  19 | f
+       4 |                   60 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (6 rows)
 
 -- Clear everything between 0 and 100 to make way for new
@@ -476,22 +436,18 @@ CALL refresh_continuous_aggregate('cond_10', 0, 100);
 INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
 INSERT INTO conditions VALUES (30, 1, 23.4), (46, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 1, 40);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                   40 |                  46
-       3 |                  100 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
-       4 |                   20 |                  25
-       4 |                   30 |                  46
-       4 |                   60 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   40 |                  46 | f
+       3 |                  100 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  19 | f
+       4 |                   20 |                  25 | f
+       4 |                   30 |                  46 | f
+       4 |                   60 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (9 rows)
 
 -- Refresh whithout cutting (in area where there are no
@@ -499,50 +455,38 @@ SELECT materialization_id AS cagg_id,
 INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 90, 100);
 NOTICE:  continuous aggregate "cond_10" is already up-to-date
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
-       3 |                   15 |                  46
-       3 |                  100 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
-       4 |                   15 |                  42
-       4 |                   20 |                  25
-       4 |                   30 |                  46
-       4 |                   60 | 9223372036854775807
-       5 | -9223372036854775808 |                  -1
-       5 |                   30 | 9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       3 | -9223372036854775808 |                  -1 | f
+       3 |                   15 |                  46 | f
+       3 |                  100 | 9223372036854775807 | f
+       4 | -9223372036854775808 |                  19 | f
+       4 |                   15 |                  42 | f
+       4 |                   20 |                  25 | f
+       4 |                   30 |                  46 | f
+       4 |                   60 | 9223372036854775807 | f
+       5 | -9223372036854775808 |                  -1 | f
+       5 |                   30 | 9223372036854775807 | f
 (10 rows)
 
 -- Test max refresh window
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end          
----------+----------------------+----------------------
-       3 | -9223372036854775808 | -9223372036854775801
-       3 |                  110 |  9223372036854775807
-       4 | -9223372036854775808 |                   19
-       4 |                   15 |                   42
-       4 |                   20 |                   25
-       4 |                   30 |                   46
-       4 |                   60 |  9223372036854775807
-       5 | -9223372036854775808 |                   -1
-       5 |                   30 |  9223372036854775807
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end          | frozen 
+---------+----------------------+----------------------+--------
+       3 | -9223372036854775808 | -9223372036854775801 | f
+       3 |                  110 |  9223372036854775807 | f
+       4 | -9223372036854775808 |                   19 | f
+       4 |                   15 |                   42 | f
+       4 |                   20 |                   25 | f
+       4 |                   30 |                   46 | f
+       4 |                   60 |  9223372036854775807 | f
+       5 | -9223372036854775808 |                   -1 | f
+       5 |                   30 |  9223372036854775807 | f
 (9 rows)
 
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
@@ -557,11 +501,7 @@ SELECT * FROM conditions;
 (0 rows)
 
 -- Should see an infinite invalidation entry for conditions
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id |        start         |         end         
 ----------+----------------------+---------------------
         1 | -9223372036854775808 | 9223372036854775807
@@ -719,11 +659,7 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_1' \gset
 -- Test invalidations with bucket size 1
 INSERT INTO conditions VALUES (0, 1, 1.0);
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         1 |     0 |   0
@@ -747,16 +683,12 @@ ORDER BY 1,2;
 
 -- Refresh only the invalidated bucket
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_1_id
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       6 | -9223372036854775808 |                  -2
-       6 |                    2 | 9223372036854775807
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_1_id;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       6 | -9223372036854775808 |                  -2 | f
+       6 |                    2 | 9223372036854775807 | f
 (2 rows)
 
 SELECT * FROM cond_1
@@ -846,17 +778,13 @@ ORDER BY 1,2;
 (1 row)
 
 -- Should leave one invalidation on each side of the refresh window
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_1_id
-       ORDER BY 1,2,3;
- cagg_id | start |         end         
----------+-------+---------------------
-       6 |     0 |                   0
-       6 |     2 |                   2
-       6 |   110 | 9223372036854775807
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_1_id;
+ cagg_id | start |         end         | frozen 
+---------+-------+---------------------+--------
+       6 |     0 |                   0 | f
+       6 |     2 |                   2 | f
+       6 |   110 | 9223372036854775807 | f
 (3 rows)
 
 -- Refresh the two remaining invalidations
@@ -979,16 +907,12 @@ ORDER BY 1,2;
 
 -- Should not have processed invalidations beyond the invalidation
 -- threshold.
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :thresh_cagg_id
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       8 | -9223372036854775808 |                  -1
-       8 |                   12 | 9223372036854775807
+SELECT * FROM cagg_invals
+WHERE cagg_id = :thresh_cagg_id;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       8 | -9223372036854775808 |                  -1 | f
+       8 |                   12 | 9223372036854775807 | f
 (2 rows)
 
 -- Check that things are properly materialized
@@ -1090,16 +1014,12 @@ ORDER BY 1,2;
 (1 row)
 
 -- The aggregate remains invalid beyond the invalidation threshold
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :thresh_cagg_id
-       ORDER BY 1,2,3;
- cagg_id |        start         |         end         
----------+----------------------+---------------------
-       8 | -9223372036854775808 |                  -1
-       8 |                   16 | 9223372036854775807
+SELECT * FROM cagg_invals
+WHERE cagg_id = :thresh_cagg_id;
+ cagg_id |        start         |         end         | frozen 
+---------+----------------------+---------------------+--------
+       8 | -9223372036854775808 |                  -1 | f
+       8 |                   16 | 9223372036854775807 | f
 (2 rows)
 
 ----------------------------------------------------------------------
@@ -1178,26 +1098,16 @@ NOTICE:  adding index _materialized_hypertable_9_device_bucket_idx ON _timescale
 SELECT mat_hypertable_id AS cond_2_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_2' \gset
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
 (1 row)
 
 CALL _timescaledb_internal.freeze_continuous_aggregate('cond_2', 0, 6);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
@@ -1208,13 +1118,8 @@ SELECT materialization_id AS cagg_id,
 -- frozen invalidations
 CALL _timescaledb_internal.freeze_continuous_aggregate('cond_2', 0, 6);
 CALL _timescaledb_internal.freeze_continuous_aggregate('cond_2', 2, 4);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
@@ -1223,13 +1128,8 @@ SELECT materialization_id AS cagg_id,
 
 -- Overlapping freeze should merge ranges
 CALL _timescaledb_internal.freeze_continuous_aggregate('cond_2', 2, 8);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
@@ -1237,13 +1137,8 @@ SELECT materialization_id AS cagg_id,
 (2 rows)
 
 CALL _timescaledb_internal.freeze_continuous_aggregate('cond_2', 8, 11);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
@@ -1252,13 +1147,8 @@ SELECT materialization_id AS cagg_id,
 
 -- Non-overlapping should not merge
 CALL _timescaledb_internal.freeze_continuous_aggregate('cond_2', 14, 18);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
@@ -1267,13 +1157,8 @@ SELECT materialization_id AS cagg_id,
 (3 rows)
 
 INSERT INTO conditions VALUES (13, 1, 12.3);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 | 9223372036854775807 | f
@@ -1295,13 +1180,8 @@ INSERT INTO conditions VALUES (1, 2, 1.0), (4, 2, 2.0);
 CALL refresh_continuous_aggregate('cond_2', 1, 4);
 ERROR:  continuous aggregate is frozen
 \set ON_ERROR_STOP 1
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 |                  11 | f
@@ -1313,13 +1193,8 @@ SELECT materialization_id AS cagg_id,
 
 -- Unfreeze a region
 CALL _timescaledb_internal.unfreeze_continuous_aggregate('cond_2', 1, 4);
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 |                  11 | f
@@ -1342,13 +1217,8 @@ ORDER BY 1,2;
 
 -- Unfreeze the whole continuous aggregate
 CALL _timescaledb_internal.unfreeze_continuous_aggregate('cond_2');
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end,
-	   frozen
-       FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       WHERE materialization_id = :cond_2_id
-       ORDER BY 1,2,3;
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_2_id;
  cagg_id |        start         |         end         | frozen 
 ---------+----------------------+---------------------+--------
        9 | -9223372036854775808 |                  -1 | f
