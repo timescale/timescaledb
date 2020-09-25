@@ -29,12 +29,12 @@ UPDATE "one_Partition"
 SET series_1 = 8
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
 
-SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
+SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
 UPDATE "one_Partition"
 SET series_1 = 8
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
-SELECT * FROM "one_Partition"  ORDER BY "timeCustom", device_id;
+SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
 
 UPDATE "one_Partition" SET series_1 = 47;
 UPDATE "one_Partition" SET series_bool = true;
-SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
+SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
