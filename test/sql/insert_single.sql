@@ -5,7 +5,7 @@
 \ir include/insert_single.sql
 
 SELECT * FROM test.show_columnsp('"one_Partition".%');
-SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
+SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
 
 --test that we can insert data into a 1-dimensional table (only time partitioning)
 CREATE TABLE "1dim"(time timestamp PRIMARY KEY, temp float);

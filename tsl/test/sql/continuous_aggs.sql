@@ -120,7 +120,7 @@ WHERE user_view_name = 'mat_m1'
 -- Materialized hypertable for mat_m1 should not be visible in the
 -- hypertables view:
 SELECT table_schema, table_name
-FROM timescaledb_information.hypertables;
+FROM timescaledb_information.hypertables ORDER BY 1,2;
 
 SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"

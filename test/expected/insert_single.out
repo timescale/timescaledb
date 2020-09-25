@@ -101,7 +101,7 @@ SELECT * FROM test.show_columnsp('"one_Partition".%');
  "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx" | i    | series_bool | boolean          | f
 (51 rows)
 
-SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id;
+SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
 ---------------------+-----------+----------+----------+----------+-------------
  1257894000000000000 | dev1      |      1.5 |        1 |        2 | t
