@@ -3266,6 +3266,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_AddColumnRecurse:
 		case AT_DropColumn:
 		case AT_DropColumnRecurse:
+#if PG13_GE
+		case AT_DropExpression:
+#endif
 
 			/*
 			 * adding and dropping columns handled in
@@ -3276,9 +3279,11 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropConstraintRecurse:
 			/* drop constraints handled by process_ddl_sql_drop */
 			break;
-		case AT_ProcessedConstraint:	   /* internal command never hit in our
-											* test code, so don't know how to
-											* handle */
+#if PG13_LT
+		case AT_ProcessedConstraint: /* internal command never hit in our
+									  * test code, so don't know how to
+									  * handle */
+#endif
 		case AT_ReAddComment:			   /* internal command never hit in our test
 											* code, so don't know how to handle */
 		case AT_AddColumnToView:		   /* only used with views */
