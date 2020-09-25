@@ -42,7 +42,7 @@ AS '@MODULE_PATHNAME@', 'ts_policy_compression_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* continuous aggregates policy */
-CREATE OR REPLACE FUNCTION add_continuous_aggregate_policy(continuous_aggregate REGCLASS, start_interval "any", end_interval "any", schedule_interval INTERVAL, if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION add_continuous_aggregate_policy(continuous_aggregate REGCLASS, start_offset "any", end_offset "any", schedule_interval INTERVAL, if_not_exists BOOL = false)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
