@@ -349,3 +349,18 @@ INSERT INTO _timescaledb_catalog.continuous_agg SELECT mat_hypertable_id,raw_hyp
 DROP TABLE _timescaledb_catalog.continuous_agg_tmp;
 
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ADD CONSTRAINT continuous_aggs_materialization_invalid_materialization_id_fkey FOREIGN KEY(materialization_id) REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id);
+
+-- disable autovacuum for compressed chunks
+DO $$
+DECLARE
+  chunk regclass;
+BEGIN
+  FOR chunk IN
+  SELECT format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL
+  LOOP
+    EXECUTE format('ALTER TABLE %s SET (autovacuum_enabled=false);', chunk::text);
+  END LOOP;
+END
+$$;
+
