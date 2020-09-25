@@ -739,11 +739,15 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	if (var->varlevelsup == 0)
 	{
 		var->varno = context->compressed_relid_idx;
-		var->varnoold = context->compressed_relid_idx;
 		var->varattno =
 			get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
-
+#if PG13_GE
+		var->varnosyn = var->varno;
+		var->varattnosyn = var->varattno;
+#else
+		var->varnoold = var->varno;
 		var->varoattno = var->varattno;
+#endif
 
 		return (Node *) var;
 	}
