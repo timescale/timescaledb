@@ -127,8 +127,6 @@ static uint64
 copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*callback)(void *),
 		 void *arg)
 {
-	Datum *values;
-	bool *nulls;
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
@@ -274,9 +272,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	 * EACH ROW triggers that we already fire on COPY.
 	 */
 	ExecBSInsertTriggers(estate, resultRelInfo);
-
-	values = (Datum *) palloc(RelationGetDescr(ccstate->rel)->natts * sizeof(Datum));
-	nulls = (bool *) palloc(RelationGetDescr(ccstate->rel)->natts * sizeof(bool));
 
 	bistate = GetBulkInsertState();
 	econtext = GetPerTupleExprContext(estate);
@@ -439,9 +434,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 
 	/* Handle queued AFTER triggers */
 	AfterTriggerEndQuery(estate);
-
-	pfree(values);
-	pfree(nulls);
 
 	ExecResetTupleTable(estate->es_tupleTable, false);
 
