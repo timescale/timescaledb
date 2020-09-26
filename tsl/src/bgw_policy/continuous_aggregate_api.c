@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
+#include <utils/acl.h>
 
 #include <jsonb_utils.h>
 #include <utils/builtins.h>

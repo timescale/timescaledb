@@ -19,6 +19,7 @@
 #include <storage/lwlock.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
+#include <utils/acl.h>
 #include <utils/inval.h>
 #include <utils/jsonb.h>
 #include <utils/timestamp.h>

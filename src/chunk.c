@@ -29,6 +29,7 @@
 #include <fmgr.h>
 #include <utils/datum.h>
 #include <catalog/pg_type.h>
+#include <utils/acl.h>
 #include <utils/timestamp.h>
 #include <nodes/execnodes.h>
 #include <executor/executor.h>

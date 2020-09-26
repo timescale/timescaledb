@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <utils/acl.h>
 #include <utils/builtins.h>
 
 #include <bgw/job.h>

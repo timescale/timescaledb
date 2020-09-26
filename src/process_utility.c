@@ -22,6 +22,7 @@
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <storage/lmgr.h>
+#include <utils/acl.h>
 #include <utils/rel.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
