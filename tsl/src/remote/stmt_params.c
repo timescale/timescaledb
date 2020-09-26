@@ -6,7 +6,6 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <access/htup_details.h>
-#include <access/tuptoaster.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/builtins.h>

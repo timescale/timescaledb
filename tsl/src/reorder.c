@@ -19,7 +19,6 @@
 #include <access/relscan.h>
 #include <access/rewriteheap.h>
 #include <access/transam.h>
-#include <access/tuptoaster.h>
 #include <access/xact.h>
 #include <access/xlog.h>
 #include <catalog/catalog.h>
@@ -56,6 +55,12 @@
 #include "compat.h"
 #if PG12_LT
 #include <utils/tqual.h>
+#endif
+
+#if PG13_LT
+#include <access/tuptoaster.h>
+#else
+#include <access/toast_internals.h>
 #endif
 
 #include "chunk.h"
