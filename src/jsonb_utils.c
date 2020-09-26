@@ -9,9 +9,15 @@
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
-#include <utils/jsonapi.h>
 
 #include "compat.h"
+
+#if PG13_LT
+#include <utils/jsonapi.h>
+#else
+#include <common/jsonapi.h>
+#endif
+
 #include "export.h"
 
 #include "jsonb_utils.h"
