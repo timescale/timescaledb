@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <utils/acl.h>
 #include <utils/lsyscache.h>
 #include <utils/fmgrprotos.h>
 #include <utils/snapmgr.h>

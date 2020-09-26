@@ -18,6 +18,7 @@
 #include <access/relscan.h>
 #include <catalog/pg_extension.h>
 #include <catalog/pg_authid.h>
+#include <utils/acl.h>
 #include <utils/fmgroids.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
