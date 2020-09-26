@@ -13,7 +13,6 @@
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 #include <catalog/pg_type.h>
-#include <access/tuptoaster.h>
 
 #include "compat.h"
 #if PG12_GE
