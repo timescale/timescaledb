@@ -66,7 +66,7 @@ INSERT INTO public.bgw_dsm_handle_store VALUES (0);
 SELECT ts_bgw_params_create();
 
 SELECT * FROM _timescaledb_config.bgw_job;
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
 SELECT * FROM _timescaledb_catalog.continuous_agg;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -272,7 +272,7 @@ select view_name, view_definition from timescaledb_information.continuous_aggreg
 where view_name::text like '%test_continuous_agg_view';
 
 select job_status, last_run_duration
-from timescaledb_information.policy_stats ps, timescaledb_information.continuous_aggregates cagg 
+from timescaledb_information.job_stats ps, timescaledb_information.continuous_aggregates cagg 
 where cagg.view_name::text like '%test_continuous_agg_view'
 and cagg.materialization_hypertable = ps.hypertable;
 
