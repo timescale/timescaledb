@@ -12,7 +12,7 @@
 -- might be kept, but data within the window will never be deleted.
 CREATE OR REPLACE FUNCTION add_retention_policy(
        hypertable REGCLASS,
-       retention_window "any",
+       drop_after "any",
        if_not_exists BOOL = false
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
@@ -32,7 +32,7 @@ AS '@MODULE_PATHNAME@', 'ts_policy_reorder_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* compression policy */
-CREATE OR REPLACE FUNCTION add_compression_policy(hypertable REGCLASS, older_than "any", if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL = false)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
 LANGUAGE C VOLATILE STRICT;

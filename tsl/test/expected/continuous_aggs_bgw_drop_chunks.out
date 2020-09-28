@@ -69,7 +69,7 @@ CALL refresh_continuous_aggregate('drop_chunks_view1', NULL, NULL);
 --TEST1  specify drop chunks policy on mat. hypertable by
 -- directly does not work
 \set ON_ERROR_STOP 0
-SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', retention_window=> -50) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', drop_after => -50) as drop_chunks_job_id1 \gset
 ERROR:  cannot add retention policy to materialized hypertable "_materialized_hypertable_2" 
 \set ON_ERROR_STOP 1
 --TEST2  specify drop chunks policy on cont. aggregate
@@ -95,7 +95,7 @@ WHERE hypertable_name = '_materialized_hypertable_2' ORDER BY range_start_intege
  _hyper_2_43_chunk |                  30 |                40
 (4 rows)
 
-SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( 'drop_chunks_view1', drop_after => 10) as drop_chunks_job_id1 \gset
 SELECT alter_job(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
                                                 alter_job                                                 
 ----------------------------------------------------------------------------------------------------------
