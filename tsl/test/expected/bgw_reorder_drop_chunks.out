@@ -58,7 +58,7 @@ SELECT * FROM _timescaledb_config.bgw_job;
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
 (0 rows)
 
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
  hypertable | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_scheduled_run | total_runs | total_successes | total_failures 
 ------------+--------+---------------------+------------------------+-----------------+------------+-------------------+--------------------+------------+-----------------+----------------
 (0 rows)
@@ -291,7 +291,7 @@ SELECT indexrelid::regclass, indisclustered
 (3 rows)
 
 --check that views work correctly
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
      hypertable     | job_id |       last_run_started_at       |     last_successful_finish      | last_run_status | job_status | last_run_duration |       next_scheduled_run        | total_runs | total_successes | total_failures 
 --------------------+--------+---------------------------------+---------------------------------+-----------------+------------+-------------------+---------------------------------+------------+-----------------+----------------
  test_reorder_table |   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Success         | Scheduled  |                   | Tue Jan 04 16:00:00.05 2000 PST |          3 |               3 |              0
@@ -568,7 +568,7 @@ SELECT show_chunks('test_drop_chunks_table');
 (3 rows)
 
 --test that views work
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
        hypertable       | job_id |     last_run_started_at      |    last_successful_finish    | last_run_status | job_status | last_run_duration |      next_scheduled_run      | total_runs | total_successes | total_failures 
 ------------------------+--------+------------------------------+------------------------------+-----------------+------------+-------------------+------------------------------+------------+-----------------+----------------
  test_drop_chunks_table |   1001 | Fri Dec 31 16:00:01 1999 PST | Fri Dec 31 16:00:01 1999 PST | Success         | Scheduled  |                   | Fri Dec 31 16:00:02 1999 PST |          2 |               2 |              0

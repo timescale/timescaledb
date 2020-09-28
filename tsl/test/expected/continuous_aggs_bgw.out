@@ -57,7 +57,7 @@ SELECT * FROM _timescaledb_config.bgw_job;
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+---------------+--------
 (0 rows)
 
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
  hypertable | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_scheduled_run | total_runs | total_successes | total_failures 
 ------------+--------+---------------------+------------------------+-----------------+------------+-------------------+--------------------+------------+-----------------+----------------
 (0 rows)
@@ -466,7 +466,7 @@ view_definition |  SELECT time_bucket(2, test_continuous_agg_table."time") AS ti
                 |   GROUP BY (time_bucket(2, test_continuous_agg_table."time"));
 
 select job_status, last_run_duration
-from timescaledb_information.policy_stats ps, timescaledb_information.continuous_aggregates cagg 
+from timescaledb_information.job_stats ps, timescaledb_information.continuous_aggregates cagg 
 where cagg.view_name::text like '%test_continuous_agg_view'
 and cagg.materialization_hypertable = ps.hypertable;
 -[ RECORD 1 ]-----+----------

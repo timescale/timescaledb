@@ -541,7 +541,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  timescaledb_information.data_node
  timescaledb_information.continuous_aggregates
  timescaledb_information.jobs
- timescaledb_information.policy_stats
+ timescaledb_information.job_stats
  timescaledb_information.license
  timescaledb_information.hypertables
  _timescaledb_internal.compressed_chunk_stats

@@ -62,7 +62,7 @@ INSERT INTO public.bgw_dsm_handle_store VALUES (0);
 SELECT ts_bgw_params_create();
 
 SELECT * FROM _timescaledb_config.bgw_job;
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -169,7 +169,7 @@ SELECT indexrelid::regclass, indisclustered
     WHERE indisclustered = true ORDER BY 1;
 
 --check that views work correctly
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;
 
 -- test deleting the policy
 SELECT remove_reorder_policy('test_reorder_table');
@@ -284,4 +284,4 @@ SELECT job_id, time_bucket('1m',next_start) AS next_start, time_bucket('1m',last
 SELECT show_chunks('test_drop_chunks_table');
 
 --test that views work
-SELECT * FROM timescaledb_information.policy_stats;
+SELECT * FROM timescaledb_information.job_stats;

@@ -47,7 +47,7 @@ CREATE OR REPLACE VIEW timescaledb_information.license AS
          _timescaledb_internal.license_expiration_time() <= now() AS expired,
          _timescaledb_internal.license_expiration_time() AS expiration_time;
 
-CREATE OR REPLACE VIEW timescaledb_information.policy_stats as
+CREATE OR REPLACE VIEW timescaledb_information.job_stats as
   SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, j.id AS job_id, 
    js.last_start as last_run_started_at, 
    js.last_successful_finish as last_successful_finish, 
