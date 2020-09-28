@@ -1233,7 +1233,8 @@ ERROR:  cannot update/delete rows from chunk "_hyper_25_51_chunk" as it is compr
 \set ON_ERROR_STOP 1
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;
--- Test that pg_stats for uncompressed chunks are frozen at compression time
+-- Test that pg_stats and pg_class stats for uncompressed chunks are frozen at compression time
+-- Note that approximate_row_count pulls from pg_class
 CREATE TABLE stattest(time TIMESTAMPTZ NOT NULL, c1 int);
 SELECT create_hypertable('stattest', 'time');
    create_hypertable    
@@ -1250,10 +1251,22 @@ SELECT * FROM pg_stats WHERE tablename = :statchunk;
 (0 rows)
 
 ALTER TABLE stattest SET (timescaledb.compress);
+SELECT approximate_row_count('stattest');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_27_55_chunk
+(1 row)
+
+SELECT approximate_row_count('stattest');
+ approximate_row_count 
+-----------------------
+                    26
 (1 row)
 
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';

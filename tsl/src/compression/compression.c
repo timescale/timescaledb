@@ -157,6 +157,49 @@ static void row_compressor_finish(RowCompressor *row_compressor);
  ** compress_chunk **
  ********************/
 
+static void
+capture_pgclass_stats(Oid table_oid, int *out_pages, int *out_visible, float *out_tuples)
+{
+	Relation pg_class = table_open(RelationRelationId, RowExclusiveLock);
+	HeapTuple tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_oid));
+	Form_pg_class classform;
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "could not find tuple for relation %u", table_oid);
+
+	classform = (Form_pg_class) GETSTRUCT(tuple);
+
+	*out_pages = classform->relpages;
+	*out_visible = classform->relallvisible;
+	*out_tuples = classform->reltuples;
+
+	heap_freetuple(tuple);
+	table_close(pg_class, RowExclusiveLock);
+}
+
+static void
+restore_pgclass_stats(Oid table_oid, int pages, int visible, float tuples)
+{
+	Relation pg_class;
+	HeapTuple tuple;
+	Form_pg_class classform;
+
+	pg_class = table_open(RelationRelationId, RowExclusiveLock);
+	tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_oid));
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "could not find tuple for relation %u", table_oid);
+	classform = (Form_pg_class) GETSTRUCT(tuple);
+
+	classform->relpages = pages;
+	classform->relallvisible = visible;
+	classform->reltuples = tuples;
+
+	CatalogTupleUpdate(pg_class, &tuple->t_self, tuple);
+
+	heap_freetuple(tuple);
+	table_close(pg_class, RowExclusiveLock);
+}
+
 /* Truncate the relation WITHOUT applying triggers. This is the
  * main difference with ExecuteTruncate. Triggers aren't applied
  * because the data remains, just in compressed form. Also don't
@@ -173,6 +216,8 @@ truncate_relation(Oid table_oid)
 	MultiXactId minmulti;
 #endif
 	Oid toast_relid;
+	int pages, visible;
+	float tuples;
 
 	/* Chunks should never have fks into them, but double check */
 	if (fks != NIL)
@@ -183,6 +228,7 @@ truncate_relation(Oid table_oid)
 	minmulti = GetOldestMultiXactId();
 #endif
 
+	capture_pgclass_stats(table_oid, &pages, &visible, &tuples);
 	RelationSetNewRelfilenode(rel,
 							  rel->rd_rel->relpersistence
 #if PG12_LT
@@ -212,6 +258,10 @@ truncate_relation(Oid table_oid)
 	}
 
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, 0);
+	rel = table_open(table_oid, AccessExclusiveLock);
+	restore_pgclass_stats(table_oid, pages, visible, tuples);
+	CommandCounterIncrement();
+	table_close(rel, NoLock);
 }
 
 CompressionStats
