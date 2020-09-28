@@ -22,6 +22,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include "annotations.h"
 #include "dimension.h"
 #include "errors.h"
 #include "hypertable_cache.h"
@@ -61,7 +62,7 @@ index_has_attribute(List *indexelems, const char *attrname)
 					break;
 				}
 			}
-			/* FALLTHROUGH */
+				TS_FALLTHROUGH;
 			default:
 				elog(ERROR, "unsupported index list element");
 		}

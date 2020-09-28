@@ -12,6 +12,7 @@
 #include <miscadmin.h>
 #include <utils/syscache.h>
 
+#include "annotations.h"
 #include "catalog.h"
 #include "compat.h"
 #include "extension.h"
@@ -130,6 +131,7 @@ cache_invalidate_xact_end(XactEvent event, void *arg)
 			 * backends cannot have the invalid state.
 			 */
 			cache_invalidate_relcache_all();
+			break;
 		default:
 			break;
 	}
@@ -148,6 +150,7 @@ cache_invalidate_subxact_end(SubXactEvent event, SubTransactionId mySubid,
 			 * in cache_invalidate_xact_end.
 			 */
 			cache_invalidate_relcache_all();
+			break;
 		default:
 			break;
 	}

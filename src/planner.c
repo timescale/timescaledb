@@ -44,6 +44,7 @@
 
 #include <math.h>
 
+#include "annotations.h"
 #include "cross_module_fn.h"
 #include "license_guc.h"
 #include "hypertable_cache.h"
@@ -791,7 +792,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
 				break;
 			}
-			/* Fall through */
+			TS_FALLTHROUGH;
 		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;

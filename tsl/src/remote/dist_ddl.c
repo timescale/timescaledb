@@ -10,6 +10,7 @@
 #include <catalog/namespace.h>
 #include <nodes/parsenodes.h>
 
+#include <annotations.h>
 #include <guc.h>
 #include "hypertable_data_node.h"
 #include "chunk_index.h"
@@ -421,8 +422,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			/* Those commands are also targets for execute_on_start in since they
 			 * are not supported by event triggers. */
 			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
-
-			/* fall through */
+			TS_FALLTHROUGH;
 		default:
 			dist_ddl_error_raise_unsupported();
 			break;
