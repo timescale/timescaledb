@@ -519,8 +519,8 @@ WHERE series_id IN (SELECT series_id FROM compressed);
 DROP TABLE compressed_ht;
 DROP TABLE uncompressed_ht;
 
--- Test that pg_stats for uncompressed chunks are frozen at compression time
-
+-- Test that pg_stats and pg_class stats for uncompressed chunks are frozen at compression time
+-- Note that approximate_row_count pulls from pg_class
 CREATE TABLE stattest(time TIMESTAMPTZ NOT NULL, c1 int);
 SELECT create_hypertable('stattest', 'time');
 INSERT INTO stattest SELECT '2020/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(0,25) v;
@@ -529,7 +529,9 @@ SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE
 SELECT * FROM pg_stats WHERE tablename = :statchunk;
 
 ALTER TABLE stattest SET (timescaledb.compress);
+SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+SELECT approximate_row_count('stattest');
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
 -- Now verify stats are not changed when we analyze the hypertable
