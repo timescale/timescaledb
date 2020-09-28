@@ -66,7 +66,7 @@ CALL refresh_continuous_aggregate('drop_chunks_view1', NULL, NULL);
 -- directly does not work
 
 \set ON_ERROR_STOP 0
-SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', retention_window=> -50) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( '_timescaledb_internal._materialized_hypertable_2', drop_after => -50) as drop_chunks_job_id1 \gset
 \set ON_ERROR_STOP 1
 
 --TEST2  specify drop chunks policy on cont. aggregate
@@ -80,7 +80,7 @@ SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = '_materialized_hypertable_2' ORDER BY range_start_integer;
 
-SELECT add_retention_policy( 'drop_chunks_view1', retention_window=> 10) as drop_chunks_job_id1 \gset
+SELECT add_retention_policy( 'drop_chunks_view1', drop_after => 10) as drop_chunks_job_id1 \gset
 SELECT alter_job(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(2000000);
 SELECT count(c) from show_chunks('drop_chunks_view1') as c ;
