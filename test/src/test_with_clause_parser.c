@@ -18,6 +18,7 @@
 #include "export.h"
 #include "test_utils.h"
 #include "with_clause_parser.h"
+#include "annotations.h"
 
 static DefElem *
 def_elem_from_texts(Datum *texts, int nelems)
@@ -30,7 +31,7 @@ def_elem_from_texts(Datum *texts, int nelems)
 			break;
 		case 3:
 			elem->arg = (Node *) makeString(text_to_cstring(DatumGetTextP(texts[2])));
-			/* FALLTHROUGH */
+			TS_FALLTHROUGH;
 		case 2:
 			elem->defname = text_to_cstring(DatumGetTextP(texts[1]));
 			elem->defnamespace = text_to_cstring(DatumGetTextP(texts[0]));

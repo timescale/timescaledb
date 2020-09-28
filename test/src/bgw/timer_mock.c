@@ -18,6 +18,7 @@
 #include <utils/tqual.h>
 #endif
 
+#include "annotations.h"
 #include "timer_mock.h"
 #include "log.h"
 #include "scanner.h"
@@ -60,7 +61,7 @@ mock_wait(TimestampTz until)
 				WaitForBackgroundWorkerShutdown(bgw_handle);
 				bgw_handle = NULL;
 			}
-			/* FALLTHROUGH */
+			TS_FALLTHROUGH;
 		case IMMEDIATELY_SET_UNTIL:
 			ts_params_set_time(until, false);
 			return true;
