@@ -872,15 +872,32 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 				if (chunk->fd.compressed_chunk_id > 0)
 				{
+					Relation uncompressed_chunk = table_open(relation_objectid, NoLock);
+
 					ts_get_private_reloptinfo(rel)->compressed = true;
 
 					/* Planning indexes are expensive, and if this is a compressed chunk, we
-					 * know we'll never need to us indexes on the uncompressed version, since
+					 * know we'll never need to use indexes on the uncompressed version, since
 					 * all the data is in the compressed chunk anyway. Therefore, it is much
 					 * faster if we simply trash the indexlist here and never plan any useless
 					 * IndexPaths at all
 					 */
 					rel->indexlist = NIL;
+
+					/* Relation size estimates are messed up on compressed chunks due to there
+					 * being no actual pages for the table in the storage manager.
+					 */
+					rel->pages = (BlockNumber) uncompressed_chunk->rd_rel->relpages;
+					rel->tuples = (double) uncompressed_chunk->rd_rel->reltuples;
+					if (rel->pages == 0)
+						rel->allvisfrac = 0.0;
+					else if (uncompressed_chunk->rd_rel->relallvisible >= rel->pages)
+						rel->allvisfrac = 1.0;
+					else
+						rel->allvisfrac =
+							(double) uncompressed_chunk->rd_rel->relallvisible / rel->pages;
+
+					table_close(uncompressed_chunk, NoLock);
 				}
 			}
 			break;
