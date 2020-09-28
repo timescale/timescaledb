@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SELECT extversion < '2.0.0' AS has_refresh_mat_view from pg_extension WHERE extname = 'timescaledb' \gset
+
 CREATE TYPE custom_type AS (high int, low int);
 
 CREATE TABLE conditions_before (
@@ -121,12 +123,16 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h'); 
+    PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
   END IF;
 END $$;
 
+\if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_before;
-    
+\else
+CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
+\endif
+
 -- we create separate schema for realtime agg since we dump all view definitions in public schema
 -- but realtime agg view definition is not stable across versions
 CREATE SCHEMA cagg;
@@ -225,11 +231,15 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    PERFORM add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h'); 
+    PERFORM add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h');
   END IF;
 END $$;
 
+\if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW cagg.realtime_mat;
+\else
+CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
+\endif
 
 -- test ignore_invalidation_older_than migration --
 DO LANGUAGE PLPGSQL $$
@@ -240,9 +250,9 @@ BEGIN
 
   IF ts_version < '2.0.0' THEN
     CREATE VIEW mat_ignoreinval
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, 
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.refresh_lag='-30 day',
-           timescaledb.ignore_invalidation_older_than='30 days', 
+           timescaledb.ignore_invalidation_older_than='30 days',
            timescaledb.max_interval_per_job = '100000 days')
     AS
       SELECT time_bucket('1 week', timec) as bucket,
@@ -258,11 +268,15 @@ BEGIN
       FROM conditions_before
       GROUP BY bucket WITH NO DATA;
     
-    PERFORM add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h'); 
+    PERFORM add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h');
   END IF;
 END $$;
 
+\if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_ignoreinval;
+\else
+CALL refresh_continuous_aggregate('mat_ignoreinval',NULL,NULL);
+\endif
 
 -- test new data beyond the invalidation threshold is properly handled --
 CREATE TABLE inval_test (time TIMESTAMPTZ, location TEXT, temperature DOUBLE PRECISION);
@@ -304,7 +318,11 @@ BEGIN
   END IF;
 END $$;
 
+\if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_inval;
+\else
+CALL refresh_continuous_aggregate('mat_inval',NULL,NULL);
+\endif
 
 INSERT INTO inval_test
 SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'POR', generate_series(135.25, 140.0, 0.25);

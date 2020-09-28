@@ -237,15 +237,12 @@ GROUP BY 1,2 WITH DATA;
 SELECT * FROM weekly_temp_without_data;
 SELECT * FROM weekly_temp_with_data;
 
--- Test that REFRESH MATERIALIZED VIEW works as an alternative to
--- refresh_continuous_aggregate()
+\set ON_ERROR_STOP 0
+-- REFRESH MATERIALIZED VIEW is blocked on continuous aggregates
 REFRESH MATERIALIZED VIEW weekly_temp_without_data;
-
-SELECT * FROM weekly_temp_without_data;
 
 -- These should fail since we do not allow refreshing inside a
 -- transaction, not even as part of CREATE MATERIALIZED VIEW.
-\set ON_ERROR_STOP 0
 DO LANGUAGE PLPGSQL $$ BEGIN
 CREATE MATERIALIZED VIEW weekly_conditions
 WITH (timescaledb.continuous,

@@ -13,7 +13,7 @@ SELECT generate_series('2017-12-01 00:00'::timestamp, '2017-12-31 00:00'::timest
 
 SELECT * FROM mat_before ORDER BY bucket, location;
 
-REFRESH MATERIALIZED VIEW mat_before;
+CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
 
 --the max of the temp for the POR should now be 165
 SELECT * FROM mat_before ORDER BY bucket, location;

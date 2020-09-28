@@ -8,7 +8,7 @@
 
 SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
 
-REFRESH MATERIALIZED VIEW cagg.realtime_mat;
+CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
 
 SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
 
@@ -17,5 +17,5 @@ SELECT view_name, schedule_interval, materialized_only, materialization_hypertab
 SELECT maxtemp FROM mat_ignoreinval ORDER BY 1;
 
 SELECT count(*) FROM mat_inval;
-REFRESH MATERIALIZED VIEW mat_inval;
+CALL refresh_continuous_aggregate('mat_inval',NULL,NULL);
 SELECT count(*) FROM mat_inval;
