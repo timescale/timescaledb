@@ -130,4 +130,11 @@ BEGIN
   END IF;
 END $$;
 
+-- have to use psql conditional here because the procedure call can't be in transaction
+SELECT extversion < '2.0.0' AS has_refresh_mat_view from pg_extension WHERE extname = 'timescaledb' \gset
+\if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_before;
+\else
+CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
+\endif
+

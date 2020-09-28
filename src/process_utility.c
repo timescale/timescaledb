@@ -3397,24 +3397,21 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	RefreshMatViewStmt *stmt = castNode(RefreshMatViewStmt, args->parsetree);
 	Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	const ContinuousAgg *cagg;
-	LOCAL_FCINFO(fcinfo, 3);
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
 
 	cagg = ts_continuous_agg_find_by_relid(view_relid);
 
-	if (NULL == cagg)
-		return DDL_CONTINUE;
+	if (cagg)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("operation not supported on continuous aggregate"),
+				 errdetail("A continuous aggregate does not support REFRESH MATERIALIZED VIEW."),
+				 errhint("Use \"refresh_continuous_aggregate\" or set up a policy to refresh the "
+						 "continuous aggregate.")));
 
-	PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL, "REFRESH");
-
-	FC_SET_ARG(fcinfo, 0, ObjectIdGetDatum(view_relid));
-	FC_SET_NULL(fcinfo, 1);
-	FC_SET_NULL(fcinfo, 2);
-	ts_cm_functions->continuous_agg_refresh(fcinfo);
-
-	return DDL_DONE;
+	return DDL_CONTINUE;
 }
 
 /*
