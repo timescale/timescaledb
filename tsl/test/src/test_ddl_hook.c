@@ -80,7 +80,11 @@ test_ddl_command_end(EventTriggerData *command)
 	ListCell *cell;
 	Hypertable *ht;
 
+#if PG13_GE
+	elog(NOTICE, "test_ddl_command_end: %s", GetCommandTagName(command->tag));
+#else
 	elog(NOTICE, "test_ddl_command_end: %s", command->tag);
+#endif
 
 	if (tsl_delayed_execution_list == NIL)
 		return;

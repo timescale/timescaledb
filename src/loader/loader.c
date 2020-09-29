@@ -464,7 +464,14 @@ post_analyze_hook(ParseState *pstate, Query *query)
 static void
 loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 							ProcessUtilityContext context, ParamListInfo params,
-							QueryEnvironment *queryEnv, DestReceiver *dest, char *completion_tag)
+							QueryEnvironment *queryEnv, DestReceiver *dest,
+#if PG13_GE
+							QueryCompletion *completion_tag
+#else
+							char *completion_tag
+#endif
+
+)
 {
 	bool is_distributed_database = false;
 	char *dist_uuid = NULL;
