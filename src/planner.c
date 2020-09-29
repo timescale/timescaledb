@@ -278,7 +278,12 @@ preprocess_query(Node *node, Query *rootquery)
 }
 
 static PlannedStmt *
+#if PG13_GE
+timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
+					ParamListInfo bound_params)
+#else
 timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
+#endif
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
@@ -302,11 +307,19 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			preprocess_query((Node *) parse, parse);
 
 		if (prev_planner_hook != NULL)
-			/* Call any earlier hooks */
+		/* Call any earlier hooks */
+#if PG13_GE
+			stmt = (prev_planner_hook)(parse, query_string, cursor_opts, bound_params);
+#else
 			stmt = (prev_planner_hook)(parse, cursor_opts, bound_params);
+#endif
 		else
-			/* Call the standard planner */
+		/* Call the standard planner */
+#if PG13_GE
+			stmt = standard_planner(parse, query_string, cursor_opts, bound_params);
+#else
 			stmt = standard_planner(parse, cursor_opts, bound_params);
+#endif
 
 		if (ts_extension_is_loaded())
 		{
