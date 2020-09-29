@@ -17,6 +17,7 @@
 #include <optimizer/cost.h>
 #include "compat-msvc-exit.h"
 
+#include "compat.h"
 #include "plan_add_hashagg.h"
 #include "import/planner.h"
 #include "utils.h"
@@ -63,9 +64,8 @@ plan_add_parallel_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *
 		get_agg_clause_costs(root, parse->havingQual, AGGSPLIT_FINAL_DESERIAL, &agg_final_costs);
 	}
 
-	hashagg_table_size = ts_estimate_hashagg_tablesize(cheapest_partial_path,
-													   &agg_partial_costs,
-													   d_num_partial_groups);
+	hashagg_table_size =
+		estimate_hashagg_tablesize(cheapest_partial_path, &agg_partial_costs, d_num_partial_groups);
 
 	/*
 	 * Tentatively produce a partial HashAgg Path, depending on if it looks as
@@ -146,7 +146,7 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 	if (!IS_VALID_ESTIMATE(d_num_groups))
 		return;
 
-	hashaggtablesize = ts_estimate_hashagg_tablesize(cheapest_path, &agg_costs, d_num_groups);
+	hashaggtablesize = estimate_hashagg_tablesize(cheapest_path, &agg_costs, d_num_groups);
 
 	if (hashaggtablesize >= work_mem * UINT64CONST(1024))
 		return;

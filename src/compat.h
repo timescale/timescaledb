@@ -295,6 +295,14 @@
 #define create_append_path_compat create_append_path
 #endif
 
+/*
+ * estimate_hashagg_tablesize is a static function in PG11 and earlier, so we map
+ * to our own copy when it's not available.
+ */
+#if PG11
+#define estimate_hashagg_tablesize(p, c, n) ts_estimate_hashagg_tablesize(p, c, n)
+#endif
+
 #include <commands/vacuum.h>
 #include <commands/defrem.h>
 

@@ -161,6 +161,7 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 	*translated_vars = vars;
 }
 
+#if PG11
 /* copied exactly from planner.c */
 size_t
 ts_estimate_hashagg_tablesize(struct Path *path, const struct AggClauseCosts *agg_costs,
@@ -184,6 +185,7 @@ ts_estimate_hashagg_tablesize(struct Path *path, const struct AggClauseCosts *ag
 	 */
 	return hashentrysize * dNumGroups;
 }
+#endif
 
 /* copied verbatim from planner.c */
 struct PathTarget *
