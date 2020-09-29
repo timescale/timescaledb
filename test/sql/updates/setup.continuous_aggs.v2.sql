@@ -328,3 +328,69 @@ INSERT INTO inval_test
 SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'POR', generate_series(135.25, 140.0, 0.25);
 INSERT INTO inval_test
 SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'NYC', generate_series(131.0, 150.0, 1.0);
+
+-- Add an integer base table to ensure we handle it correctly
+CREATE TABLE int_time_test(timeval integer, col1 integer, col2 integer);
+select create_hypertable('int_time_test', 'timeval', chunk_time_interval=> 2);
+
+CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM int_time_test $$;
+SELECT set_integer_now_func('int_time_test', 'integer_now_test');
+
+INSERT INTO int_time_test VALUES
+(10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
+(15, -4, 22), (16, -4, 23);
+
+DO LANGUAGE PLPGSQL $$
+DECLARE
+  ts_version TEXT;
+BEGIN
+  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version < '2.0.0' THEN
+    CREATE VIEW mat_inttime
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
+           timescaledb.ignore_invalidation_older_than = 5,
+           timescaledb.refresh_lag = 2,
+           timescaledb.refresh_interval='12 hours')
+    AS 
+      SELECT time_bucket( 2, timeval), COUNT(col1)
+      FROM int_time_test
+      GROUP BY 1;
+
+    CREATE VIEW mat_inttime2
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
+           timescaledb.refresh_lag = 2,
+           timescaledb.refresh_interval='12 hours')
+    AS 
+      SELECT time_bucket( 2, timeval), COUNT(col1)
+      FROM int_time_test
+      GROUP BY 1;
+
+  ELSE
+    CREATE MATERIALIZED VIEW mat_inttime
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+    AS 
+      SELECT time_bucket( 2, timeval), COUNT(col1)
+      FROM int_time_test
+      GROUP BY 1 WITH NO DATA;
+
+    CREATE MATERIALIZED VIEW mat_inttime2
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+    AS 
+      SELECT time_bucket( 2, timeval), COUNT(col1)
+      FROM int_time_test
+      GROUP BY 1 WITH NO DATA;
+
+    PERFORM add_continuous_aggregate_policy('mat_inttime', 5, 2, '12 hours');
+    PERFORM add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
+  END IF;
+END $$;
+
+
+\if :has_refresh_mat_view
+REFRESH MATERIALIZED VIEW mat_inttime;
+REFRESH MATERIALIZED VIEW mat_inttime2;
+\else
+CALL refresh_continuous_aggregate('mat_inttime',NULL,NULL);
+CALL refresh_continuous_aggregate('mat_inttime2',NULL,NULL);
+\endif
