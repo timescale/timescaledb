@@ -16,6 +16,9 @@ SELECT view_name, schedule_interval, materialized_only, materialization_hypertab
 
 SELECT maxtemp FROM mat_ignoreinval ORDER BY 1;
 
+SELECT materialization_id FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE lowest_modified_value = -9223372036854775808 ORDER BY 1;
+
 SELECT count(*) FROM mat_inval;
 CALL refresh_continuous_aggregate('mat_inval',NULL,NULL);
 SELECT count(*) FROM mat_inval;

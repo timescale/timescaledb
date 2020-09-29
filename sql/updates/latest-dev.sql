@@ -215,28 +215,23 @@ SET
   proc_schema = '_timescaledb_internal',
   proc_name = 'policy_refresh_continuous_aggregate',
   job_type = 'custom',
-  config = jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_interval', 
-   CASE WHEN cagg.ignore_invalidation_older_than IS NULL 
-      THEN NULL 
-      WHEN cagg.ignore_invalidation_older_than = 9223372036854775807 
-         AND  
-            ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
-      THEN NULL 
-      ELSE
-         CASE WHEN 
-            ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
-            THEN ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
-            ELSE cagg.ignore_invalidation_older_than::TEXT 
-         END
-   END,
-   'end_interval', 
-   CASE
-      WHEN 
-            ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
-      THEN ts_tmp_get_interval(cagg.refresh_lag)::TEXT 
-      ELSE cagg.refresh_lag::TEXT 
-   END
-),
+  config = 
+    CASE WHEN ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+    THEN
+    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_interval', 
+        CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
+            THEN NULL 
+            ELSE ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
+        END 
+    , 'end_interval', ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
+    ELSE
+    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_interval', 
+        CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
+            THEN NULL 
+            ELSE cagg.ignore_invalidation_older_than::BIGINT
+        END
+    , 'end_interval', cagg.refresh_lag::BIGINT)
+    END,
   hypertable_id = cagg.mat_hypertable_id,
   owner = (
     SELECT relowner::regrole::text
@@ -316,8 +311,46 @@ SELECT materialization_id, BIGINT '-9223372036854775808', watermark, 92233720368
 FROM _timescaledb_catalog.continuous_aggs_completed_threshold;
 -- Also handle continuous aggs that have never been run
 INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-SELECT (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg EXCEPT SELECT materialization_id FROM _timescaledb_catalog.continuous_aggs_completed_threshold), 
--9223372036854775808, -9223372036854775808, 9223372036854775807;
+SELECT unrun_cagg.id, -9223372036854775808, -9223372036854775808, 9223372036854775807 FROM
+(SELECT mat_hypertable_id id FROM _timescaledb_catalog.continuous_agg EXCEPT SELECT materialization_id FROM _timescaledb_catalog.continuous_aggs_completed_threshold) as unrun_cagg;
+
+-- Also add an invalidation from [-infinity, now() - ignore_invaliation_older_than] to cover any missed invalidations
+-- For NULL or inf ignore_invalidations_older_than, use julian 0 for consistency with 2.0 (for int tables, use INT_MIN - 1)
+DO $$
+DECLARE
+  cagg _timescaledb_catalog.continuous_agg%ROWTYPE;
+  dimrow _timescaledb_catalog.dimension%ROWTYPE;
+  end_val bigint;
+  getendval text;
+BEGIN
+    FOR cagg in SELECT * FROM _timescaledb_catalog.continuous_agg
+    LOOP
+        SELECT * INTO dimrow 
+        FROM _timescaledb_catalog.dimension dim 
+        WHERE dim.hypertable_id = cagg.raw_hypertable_id AND dim.num_slices IS NULL AND dim.interval_length IS NOT NULL;
+
+        IF dimrow.column_type IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype)
+        THEN
+            IF cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
+            THEN
+                end_val := -210866803200000001;
+            ELSE
+                end_val := (extract(epoch from now()) * 1000000 - cagg.ignore_invalidation_older_than)::int8;
+            END IF;
+        ELSE
+            IF cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
+            THEN
+                end_val := -2147483649;
+            ELSE
+                getendval := format('SELECT %s.%s() - %s', dimrow.integer_now_func_schema, dimrow.integer_now_func, cagg.ignore_invalidation_older_than);
+                EXECUTE getendval INTO end_val;
+            END IF;
+        END IF;
+
+        INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log 
+          VALUES (cagg.mat_hypertable_id, -9223372036854775808, -9223372036854775808, end_val);
+    END LOOP;
+END $$;
 
 -- drop completed_threshold table, which is no longer used
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_completed_threshold;
