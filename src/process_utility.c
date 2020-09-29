@@ -511,8 +511,13 @@ process_copy(ProcessUtilityArgs *args)
 	/* Performs acl check in here inside `copy_security_check` */
 	timescaledb_DoCopy(stmt, args->query_string, &processed, ht);
 
+#if PG13_GE
+	args->completion_tag->commandTag = CMDTAG_COPY;
+	args->completion_tag->nprocessed = processed;
+#else
 	if (args->completion_tag)
 		snprintf(args->completion_tag, COMPLETION_TAG_BUFSIZE, "COPY " UINT64_FORMAT, processed);
+#endif
 
 	process_add_hypertable(args, ht);
 
@@ -3669,7 +3674,11 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		return false;
 
 	if (check_read_only)
+#if PG13_GE
+		PreventCommandIfReadOnly(CreateCommandName(args->parsetree));
+#else
 		PreventCommandIfReadOnly(CreateCommandTag(args->parsetree));
+#endif
 
 	return handler(args);
 }
@@ -3868,7 +3877,13 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 static void
 timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 							  ProcessUtilityContext context, ParamListInfo params,
-							  QueryEnvironment *queryEnv, DestReceiver *dest, char *completion_tag)
+							  QueryEnvironment *queryEnv, DestReceiver *dest,
+#if PG13_GE
+							  QueryCompletion *completion_tag
+#else
+							  char *completion_tag
+#endif
+)
 {
 	ProcessUtilityArgs args = { .query_string = query_string,
 								.context = context,
