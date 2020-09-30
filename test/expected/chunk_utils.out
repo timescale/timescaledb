@@ -874,7 +874,7 @@ BEGIN;
  _timescaledb_internal._hyper_5_21_chunk
 (1 row)
 
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', hypertable_or_cagg => \'drop_chunk_test_tstz\')::NAME'
+    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', relation => \'drop_chunk_test_tstz\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', interval \'1 minute\')::NAME'
     \set ECHO errors
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 

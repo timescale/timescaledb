@@ -11,14 +11,17 @@
 -- words, some data beyond the retention window
 -- might be kept, but data within the window will never be deleted.
 CREATE OR REPLACE FUNCTION add_retention_policy(
-       hypertable REGCLASS,
+       relation REGCLASS,
        drop_after "any",
        if_not_exists BOOL = false
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_retention_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
+CREATE OR REPLACE FUNCTION remove_retention_policy(
+    relation REGCLASS,
+    if_exists BOOL = false
+) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_retention_remove'
 LANGUAGE C VOLATILE STRICT;
 

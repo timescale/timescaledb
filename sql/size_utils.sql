@@ -153,16 +153,16 @@ $BODY$;
 -- Get relation size of hypertable
 -- like pg_relation_size(hypertable)
 --
--- main_table - hypertable to get size of
+-- hypertable - hypertable to get size of
 --
 -- Returns:
--- table_bytes        - Disk space used by main_table (like pg_relation_size(main_table))
+-- table_bytes        - Disk space used by hypertable (like pg_relation_size(hypertable))
 -- index_bytes        - Disk space used by indexes
 -- toast_bytes        - Disk space of toast tables
 -- total_bytes        - Total disk space used by the specified table, including all indexes and TOAST data
 
 CREATE OR REPLACE FUNCTION hypertable_detailed_size(
-    main_table              REGCLASS
+    hypertable              REGCLASS
 )
 RETURNS TABLE (table_bytes BIGINT,
                index_bytes BIGINT,
@@ -182,7 +182,7 @@ BEGIN
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
-        WHERE c.OID = main_table;
+        WHERE c.OID = hypertable;
 
         CASE WHEN is_distributed THEN
             RETURN QUERY SELECT * FROM _timescaledb_internal.hypertable_remote_size(schema_name, table_name);
@@ -194,7 +194,7 @@ $BODY$;
 
 --- returns total-bytes for a hypertable (includes table + index)
 CREATE OR REPLACE FUNCTION hypertable_size(
-    main_table              REGCLASS
+    hypertable              REGCLASS
 )
 RETURNS BIGINT 
 LANGUAGE PLPGSQL VOLATILE STRICT AS
@@ -203,7 +203,7 @@ DECLARE
   num_bytes BIGINT;
 BEGIN
    SELECT sum(hd.total_bytes) INTO STRICT num_bytes
-   FROM hypertable_detailed_size(main_table) hd;
+   FROM hypertable_detailed_size(hypertable) hd;
    RETURN num_bytes;
 END;
 $BODY$;
@@ -288,7 +288,7 @@ END;
 $BODY$;
 
 -- Get relation size of the chunks of an hypertable
--- main_table - hypertable to get size of
+-- hypertable - hypertable to get size of
 --
 -- Returns:
 -- chunk_schema                  - schema name for chunk
@@ -300,7 +300,7 @@ $BODY$;
 -- node_name                     - node on which chunk lives if this is
 --                              a distributed hypertable.
 CREATE OR REPLACE FUNCTION chunks_detailed_size(
-    main_table              REGCLASS
+    hypertable              REGCLASS
 )
 RETURNS TABLE (
                chunk_schema NAME,
@@ -322,7 +322,7 @@ BEGIN
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
-        WHERE c.OID = main_table;
+        WHERE c.OID = hypertable;
 
         CASE WHEN is_distributed THEN
             RETURN QUERY SELECT ch.chunk_schema, ch.chunk_name, ch.table_bytes, ch.index_bytes, 
@@ -367,7 +367,7 @@ $BODY$;
 
 -- Convenience function to return approximate row count
 --
--- main_table - table or hypertable to get approximate row count for
+-- relation - table or hypertable to get approximate row count for
 --
 -- Returns:
 -- Estimated number of rows according to catalog tables
@@ -539,7 +539,7 @@ $BODY$;
 
 -- Get per chunk compression statistics for a hypertable that has
 -- compression enabled
-CREATE OR REPLACE FUNCTION chunk_compression_stats (main_table REGCLASS)
+CREATE OR REPLACE FUNCTION chunk_compression_stats (hypertable REGCLASS)
     RETURNS TABLE (
         chunk_schema name,
         chunk_name name,
@@ -573,7 +573,7 @@ BEGIN
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname
                 AND ht.table_name = c.relname)
     WHERE
-        c.OID = main_table;
+        c.OID = hypertable;
     CASE WHEN is_distributed THEN
         RETURN QUERY
         SELECT
@@ -593,7 +593,7 @@ $BODY$;
 
 -- Get compression statistics for a hypertable that has
 -- compression enabled
-CREATE OR REPLACE FUNCTION hypertable_compression_stats (main_table REGCLASS)
+CREATE OR REPLACE FUNCTION hypertable_compression_stats (hypertable REGCLASS)
     RETURNS TABLE (
         total_chunks bigint,
         number_compressed_chunks bigint,
@@ -624,7 +624,7 @@ BEGIN
         sum(ch.after_compression_total_bytes)::bigint AS after_compression_total_bytes,
         ch.node_name
     FROM
-        chunk_compression_stats (main_table) ch
+        chunk_compression_stats (hypertable) ch
     GROUP BY
         ch.node_name;
 END;

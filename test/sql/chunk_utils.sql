@@ -314,7 +314,7 @@ BEGIN;
     SELECT show_chunks('drop_chunk_test_tstz', newer_than => now() - interval '1 minute');
     SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute');
 
-    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', hypertable_or_cagg => \'drop_chunk_test_tstz\')::NAME'
+    \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', relation => \'drop_chunk_test_tstz\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', interval \'1 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
