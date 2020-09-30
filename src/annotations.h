@@ -17,4 +17,14 @@
 #define TS_FALLTHROUGH /* FALLTHROUGH */
 #endif
 
+#ifdef __has_attribute
+#if __has_attribute(used)
+#define TS_USED __attribute__((used))
+#else
+#define TS_USED
+#endif
+#else
+#define TS_USED
+#endif
+
 #endif /* TIMESCALEDB_ANNOTATIONS_H */

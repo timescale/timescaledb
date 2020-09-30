@@ -1,11 +1,14 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
--- Test that get_git_commit returns text
-select pg_typeof(git) from _timescaledb_internal.get_git_commit() AS git;
- pg_typeof 
------------
- text
+-- Check what get_git_commit returns
+SELECT pg_typeof(commit_tag) AS commit_tag_type,
+       pg_typeof(commit_hash) AS commit_hash_type,
+       pg_typeof(commit_time) AS commit_time_type
+  FROM _timescaledb_internal.get_git_commit();
+ commit_tag_type | commit_hash_type |     commit_time_type     
+-----------------+------------------+--------------------------
+ text            | text             | timestamp with time zone
 (1 row)
 
 -- Test that get_os_info returns 3 x text
