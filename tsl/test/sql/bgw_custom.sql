@@ -47,6 +47,18 @@ CALL run_job(1002);
 CALL run_job(1003);
 CALL run_job(1004);
 
+-- test run_job on function inside transaction
+BEGIN;
+CALL run_job(1000);
+COMMIT;
+
+-- test run_job on procedure inside transaction
+\set ON_ERROR_STOP 0
+BEGIN;
+CALL run_job(1001);
+COMMIT;
+\set ON_ERROR_STOP 1
+
 SELECT * FROM custom_log ORDER BY job_id, extra;
 
 SELECT delete_job(1000);

@@ -72,16 +72,28 @@ CALL run_job(1001);
 CALL run_job(1002);
 CALL run_job(1003);
 CALL run_job(1004);
+-- test run_job on function inside transaction
+BEGIN;
+CALL run_job(1000);
+COMMIT;
+-- test run_job on procedure inside transaction
+\set ON_ERROR_STOP 0
+BEGIN;
+CALL run_job(1001);
+ERROR:  run_job cannot run inside a transaction block
+COMMIT;
+\set ON_ERROR_STOP 1
 SELECT * FROM custom_log ORDER BY job_id, extra;
  job_id |         args          |        extra         |      runner       
 --------+-----------------------+----------------------+-------------------
+   1000 | {"type": "function"}  | custom_func          | default_perm_user
    1000 | {"type": "function"}  | custom_func          | default_perm_user
    1001 | {"type": "procedure"} | custom_proc          | default_perm_user
    1002 | {"type": "procedure"} | custom_proc 1 COMMIT | default_perm_user
    1002 | {"type": "procedure"} | custom_proc 3 COMMIT | default_perm_user
    1003 | {"type": "function"}  | custom_func          | default_perm_user
    1004 | {"type": "function"}  | security definer     | default_perm_user
-(6 rows)
+(7 rows)
 
 SELECT delete_job(1000);
  delete_job 

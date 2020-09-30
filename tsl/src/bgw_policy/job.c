@@ -398,6 +398,9 @@ job_execute(BgwJob *job)
 
 	prokind = get_func_prokind(proc);
 
+	if (prokind == PROKIND_PROCEDURE)
+		PreventInTransactionBlock(true, "run_job");
+
 	/*
 	 * We need to switch back to parent MemoryContext as StartTransactionCommand
 	 * switched to CurTransactionContext and this context will be destroyed
