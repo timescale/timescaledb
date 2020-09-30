@@ -16,7 +16,7 @@ step Setup2:
     BEGIN EXECUTE format( 'lock table %s', name);
     END; $$ LANGUAGE plpgsql;
 
-step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
+step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
 lock_mattable  
 
@@ -44,7 +44,7 @@ step Setup2:
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
+step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
 lock_mattable  
 
@@ -89,7 +89,7 @@ step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 ord
 bkt            maxl           
 
 0              4              
-step LockMat1: BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
+step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
 lock_mattable  
 
