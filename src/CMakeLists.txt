@@ -72,30 +72,46 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 include(build-defs.cmake)
-set(GITCOMMIT_H ${CMAKE_CURRENT_BINARY_DIR}/gitcommit.h)
 
-if (WIN32)
-  add_custom_command(
-    OUTPUT ${GITCOMMIT_H}
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
-    COMMAND (${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags 2> NUL || call && echo "${PROJECT_VERSION_MOD}") >> ${GITCOMMIT_H}
-    COMMENT "Generating gitcommit.h"
-    VERBATIM)
-else ()
-  add_custom_command(
-    OUTPUT ${GITCOMMIT_H}
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E echo_append "#define EXT_GIT_COMMIT " > ${GITCOMMIT_H}
-    COMMAND sh -c "if `${GIT_EXECUTABLE} status > /dev/null 2>&1`; then ${GIT_EXECUTABLE} describe --abbrev=4 --dirty --always --tags ; else echo ${PROJECT_VERSION_MOD} ; fi" >> ${GITCOMMIT_H}
-    COMMENT "Generating gitcommit.h"
-    VERBATIM)
-endif (WIN32)
+if(GIT_FOUND)
+  # We use "git describe" to generate the tag. It will find the latest
+  # tag and also add some additional information if we are not on the
+  # tag.
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} describe --dirty --always --tags
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE EXT_GIT_COMMIT_TAG
+    RESULT_VARIABLE _describe_RESULT
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+  # Fetch the commit HASH of head (short version) using rev-parse
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE EXT_GIT_COMMIT_HASH
+    RESULT_VARIABLE _revparse_RESULT
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+  # Fetch the date of the head commit
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} log -1 --format=%aI
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE EXT_GIT_COMMIT_TIME
+    RESULT_VARIABLE _log_RESULT
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+  # Results are non-zero if there were an error
+  if(_describe_RESULT OR _revparse_RESULT OR _log_RESULT)
+    message(STATUS "Unable to get git commit information")
+  endif()
+endif()
+
+configure_file(gitcommit.h.in gitcommit.h)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
-add_library(${PROJECT_NAME} MODULE ${SOURCES} ${GITCOMMIT_H} $<TARGET_OBJECTS:${TESTS_LIB_NAME}>)
+  add_library(${PROJECT_NAME} MODULE ${SOURCES} ${GITCOMMIT_H} $<TARGET_OBJECTS:${TESTS_LIB_NAME}>)
 else ()
-add_library(${PROJECT_NAME} MODULE ${SOURCES} ${GITCOMMIT_H})
+  add_library(${PROJECT_NAME} MODULE ${SOURCES} ${GITCOMMIT_H})
 endif ()
 
 if (SEND_TELEMETRY_DEFAULT)
