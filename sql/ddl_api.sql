@@ -6,7 +6,7 @@
 
 -- Converts a regular postgres table to a hypertable.
 --
--- main_table - The OID of the table to be converted
+-- relation - The OID of the table to be converted
 -- time_column_name - Name of the column that contains time for a given record
 -- partitioning_column - Name of the column to partition data by
 -- number_partitions - (Optional) Number of partitions for data
@@ -23,7 +23,7 @@
 -- replication_factor - (Optional) A value of 1 or greater makes this hypertable distributed
 -- data_nodes - (Optional) The specific data nodes to distribute this hypertable across
 CREATE OR REPLACE FUNCTION  create_hypertable(
-    main_table              REGCLASS,
+    relation                REGCLASS,
     time_column_name        NAME,
     partitioning_column     NAME = NULL,
     number_partitions       INTEGER = NULL,
@@ -43,7 +43,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
 
 -- Same functionality as create_hypertable, only must have a replication factor > 0 (defaults to 1)
 CREATE OR REPLACE FUNCTION  create_distributed_hypertable(
-    main_table              REGCLASS,
+    relation                REGCLASS,
     time_column_name        NAME,
     partitioning_column     NAME = NULL,
     number_partitions       INTEGER = NULL,
@@ -71,20 +71,20 @@ CREATE OR REPLACE FUNCTION  set_adaptive_chunking(
 
 -- Update chunk_time_interval for a hypertable.
 --
--- main_table - The OID of the table corresponding to a hypertable whose time
+-- hypertable - The OID of the table corresponding to a hypertable whose time
 --     interval should be updated
 -- chunk_time_interval - The new time interval. For hypertables with integral
 --     time columns, this must be an integral type. For hypertables with a
 --     TIMESTAMP/TIMESTAMPTZ/DATE type, it can be integral which is treated as
 --     microseconds, or an INTERVAL type.
 CREATE OR REPLACE FUNCTION  set_chunk_time_interval(
-    main_table              REGCLASS,
+    hypertable              REGCLASS,
     chunk_time_interval     ANYELEMENT,
     dimension_name          NAME = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION  set_number_partitions(
-    main_table              REGCLASS,
+    hypertable              REGCLASS,
     number_partitions       INTEGER,
     dimension_name          NAME = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_num_slices' LANGUAGE C VOLATILE;
@@ -92,7 +92,7 @@ CREATE OR REPLACE FUNCTION  set_number_partitions(
 -- Drop chunks older than the given timestamp for the specific
 -- hypertable or continuous aggregate.
 CREATE OR REPLACE FUNCTION drop_chunks(
-    hypertable_or_cagg     REGCLASS,
+    relation               REGCLASS,
     older_than             "any" = NULL,
     newer_than             "any" = NULL,
     verbose                BOOLEAN = FALSE
@@ -100,9 +100,9 @@ CREATE OR REPLACE FUNCTION drop_chunks(
 LANGUAGE C VOLATILE PARALLEL UNSAFE;
 
 -- show chunks older than or newer than a specific time.
--- `hypertable` must be a valid hypertable or continuous aggregate.
+-- `relation` must be a valid hypertable or continuous aggregate.
 CREATE OR REPLACE FUNCTION show_chunks(
-    hypertable_or_cagg     REGCLASS,
+    relation               REGCLASS,
     older_than             "any" = NULL,
     newer_than             "any" = NULL
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
@@ -110,14 +110,14 @@ LANGUAGE C STABLE PARALLEL SAFE;
 
 -- Add a dimension (of partitioning) to a hypertable
 --
--- main_table - OID of the table to add a dimension to
+-- hypertable - OID of the table to add a dimension to
 -- column_name - NAME of the column to use in partitioning for this dimension
 -- number_partitions - Number of partitions, for non-time dimensions
 -- interval_length - Size of intervals for time dimensions (can be integral or INTERVAL)
 -- partitioning_func - Function used to partition the column
 -- if_not_exists - If set, and the dimension already exists, generate a notice instead of an error
 CREATE OR REPLACE FUNCTION  add_dimension(
-    main_table              REGCLASS,
+    hypertable              REGCLASS,
     column_name             NAME,
     number_partitions       INTEGER = NULL,
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,

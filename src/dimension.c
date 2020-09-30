@@ -1177,7 +1177,7 @@ TS_FUNCTION_INFO_V1(ts_dimension_set_interval);
 /*
  * Update chunk_time_interval for a hypertable.
  *
- * main_table - The OID of the table corresponding to a hypertable whose time
+ * hypertable - The OID of the table corresponding to a hypertable whose time
  *     interval should be updated
  * chunk_time_interval - The new time interval. For hypertables with integral
  *     time columns, this must be an integral type. For hypertables with a

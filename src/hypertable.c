@@ -1761,7 +1761,7 @@ TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
  * Create a hypertable from an existing table.
  *
  * Arguments:
- * main_table              REGCLASS
+ * relation              REGCLASS
  * time_column_name        NAME
  * partitioning_column     NAME = NULL
  * number_partitions       INTEGER = NULL
