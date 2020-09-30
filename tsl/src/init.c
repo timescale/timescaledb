@@ -35,7 +35,6 @@
 #include "fdw/fdw.h"
 #include "hypertable.h"
 #include "license_guc.h"
-#include "license.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/gapfill/gapfill.h"
 #include "partialize_finalize.h"
@@ -63,10 +62,6 @@ PG_MODULE_MAGIC;
 extern void PGDLLEXPORT _PG_init(void);
 extern void PGDLLEXPORT _PG_fini(void);
 
-static void module_shutdown(void);
-static bool enterprise_enabled_internal(void);
-static bool check_tsl_loaded(void);
-
 static void
 cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
 {
@@ -84,12 +79,6 @@ cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
  * Apache codebase.
  */
 CrossModuleFunctions tsl_cm_functions = {
-	.tsl_license_on_assign = tsl_license_on_assign,
-	.enterprise_enabled_internal = enterprise_enabled_internal,
-	.check_tsl_loaded = check_tsl_loaded,
-	.license_end_time = license_end_time,
-	.print_tsl_license_expiration_info_hook = license_print_expiration_info,
-	.module_shutdown_hook = module_shutdown,
 	.add_tsl_telemetry_info = tsl_telemetry_add_info,
 
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
@@ -213,39 +202,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
-/*
- * Currently we disallow shutting down this submodule in a live session,
- * but if we did, this would be the function we'd use.
- */
-static void
-module_shutdown(void)
-{
-	_continuous_aggs_cache_inval_fini();
-
-	/*
-	 * Order of items should be strict reverse order of ts_module_init. Please
-	 * document any exceptions.
-	 */
-	_remote_dist_txn_fini();
-	_remote_connection_cache_fini();
-	_tsl_process_utility_fini();
-
-	ts_cm_functions = &ts_cm_functions_default;
-}
-
 /* Informative functions */
-
-static bool
-enterprise_enabled_internal(void)
-{
-	return license_enterprise_enabled();
-}
-
-static bool
-check_tsl_loaded(void)
-{
-	return true;
-}
 
 PGDLLEXPORT void
 _PG_init(void)
@@ -255,7 +212,7 @@ _PG_init(void)
 	 * timescale library is loaded, after which we enable it from the loader.
 	 * In parallel workers the restore shared libraries function will load the
 	 * libraries itself, and we bypass the loader, so we need to ensure that
-	 * timescale is aware it can  use the tsl if needed. It is always safe to
+	 * timescale is aware it can use the tsl if needed. It is always safe to
 	 * do this here, because if we reach this point, we must have already
 	 * loaded the tsl, so we no longer need to worry about its load order
 	 * relative to the other libraries.

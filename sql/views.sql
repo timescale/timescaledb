@@ -42,11 +42,6 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
     WHERE ht.compressed is false --> no internal compression tables
     AND ca.mat_hypertable_id IS NULL;
 
-CREATE OR REPLACE VIEW timescaledb_information.license AS
-  SELECT _timescaledb_internal.license_edition() as edition,
-         _timescaledb_internal.license_expiration_time() <= now() AS expired,
-         _timescaledb_internal.license_expiration_time() AS expiration_time;
-
 CREATE OR REPLACE VIEW timescaledb_information.job_stats as
   SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, j.id AS job_id, 
    js.last_start as last_run_started_at, 

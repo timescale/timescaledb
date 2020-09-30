@@ -59,6 +59,7 @@
 #define REQ_RELATED_EXTENSIONS "related_extensions"
 #define REQ_METADATA "db_metadata"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
+#define REQ_LICENSE_EDITION_COMMUNITY "community"
 #define REQ_TS_LAST_TUNE_TIME "last_tuned_time"
 #define REQ_TS_LAST_TUNE_VERSION "last_tuned_version"
 #define REQ_INSTANCE_METADATA "instance_metadata"
@@ -376,22 +377,21 @@ build_version_body(void)
 	pushJsonbValue(&parse_state, WJB_KEY, &ext_key);
 	add_related_extensions(parse_state);
 
-	if (TS_CURRENT_LICENSE_IS_APACHE_ONLY())
-	{
-		/* license */
-		license_info_key.type = jbvString;
-		license_info_key.val.string.val = REQ_LICENSE_INFO;
-		license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
-		pushJsonbValue(&parse_state, WJB_KEY, &license_info_key);
-		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	/* license */
+	license_info_key.type = jbvString;
+	license_info_key.val.string.val = REQ_LICENSE_INFO;
+	license_info_key.val.string.len = strlen(REQ_LICENSE_INFO);
+	pushJsonbValue(&parse_state, WJB_KEY, &license_info_key);
+	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+	if (ts_license_is_apache())
 		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
-		pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-	}
 	else
-	{
-		/* add license and distributed database fields */
+		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_COMMUNITY);
+	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+
+	/* add distributed database fields */
+	if (!ts_license_is_apache())
 		ts_cm_functions->add_tsl_telemetry_info(&parse_state);
-	}
 
 	/* add tuned info, which is optional */
 	if (ts_last_tune_time != NULL)

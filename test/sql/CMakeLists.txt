@@ -21,7 +21,6 @@ set(TEST_FILES
   drop_schema.sql
   dump_meta.sql
   extension.sql
-  gapfill.sql
   generated_as_identity.sql
   grant_hypertable.sql
   hash.sql
@@ -51,23 +50,14 @@ set(TEST_FILES
   vacuum.sql
   version.sql
   views.sql
+  license.sql
 )
-
-# edition tests need community edition
-if(NOT APACHE_ONLY)
-  list(APPEND TEST_FILES
-    chunk_utils_compression.sql
-    edition.sql
-    telemetry_community.sql
-  )
-endif()
 
 # tests that fail or are unreliable when run in parallel
 # bgw tests need to run first otherwise they are flaky
 set(SOLO_TESTS
   alter
   alternate_users
-  bgw_db_scheduler
   bgw_launcher
   index
   net
@@ -79,7 +69,6 @@ set(SOLO_TESTS
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES
     bgw_launcher.sql
-    bgw_db_scheduler.sql
     c_unit_tests.sql
     guc_options.sql
     loader.sql

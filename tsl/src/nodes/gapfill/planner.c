@@ -23,7 +23,6 @@
 #include <optimizer/optimizer.h>
 #endif
 
-#include "license.h"
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/planner.h"
 #include "nodes/gapfill/exec.h"

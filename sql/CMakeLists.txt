@@ -25,7 +25,6 @@ set(SOURCE_FILES
   hypertable.sql
   chunk.sql
   ddl_internal.sql
-  edition.sql
   util_time.sql
   util_internal_table_ddl.sql
   chunk_constraint.sql

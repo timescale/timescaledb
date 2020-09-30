@@ -38,12 +38,6 @@ typedef struct CopyChunkState CopyChunkState;
 
 typedef struct CrossModuleFunctions
 {
-	void (*tsl_license_on_assign)(const char *newval, const void *license);
-	bool (*enterprise_enabled_internal)(void);
-	bool (*check_tsl_loaded)(void);
-	TimestampTz (*license_end_time)(void);
-	void (*print_tsl_license_expiration_info_hook)(void);
-	void (*module_shutdown_hook)(void);
 	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
 
 	PGFunction policy_compression_add;

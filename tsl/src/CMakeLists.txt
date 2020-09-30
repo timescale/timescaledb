@@ -8,7 +8,6 @@ set(SOURCES
   dist_util.c
   hypertable.c
   init.c
-  license.c
   partialize_finalize.c
   planner.c
   process_utility.c

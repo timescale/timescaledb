@@ -36,7 +36,6 @@
 #include "compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
-#include "license.h"
 #include "compression_chunk_size.h"
 
 #define CHUNK_DML_BLOCKER_TRIGGER "chunk_dml_blocker"

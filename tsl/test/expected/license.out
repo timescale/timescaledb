@@ -1,0 +1,16 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SHOW timescaledb.license;
+ timescaledb.license 
+---------------------
+ timescale
+(1 row)
+
+SELECT _timescaledb_internal.tsl_loaded();
+ tsl_loaded 
+------------
+ t
+(1 row)
+

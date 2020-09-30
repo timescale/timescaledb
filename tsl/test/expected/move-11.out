@@ -217,7 +217,6 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_2_chunk');
 \set ON_ERROR_STOP 0
 -- cannot move a chunk with no reorder index on first call 
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1');
-WARNING:  Timescale License expired
 ERROR:  there is no previously clustered index for table "_hyper_1_2_chunk"
 -- cannot move a chunk without a destination tablespace set
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>NULL, index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
@@ -249,7 +248,6 @@ END;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2 
 -- must be hypertable owner to move a chunk
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
-WARNING:  Timescale License expired
 ERROR:  must be owner of hypertable "cluster_test"
 \set ON_ERROR_STOP 1
 -- grant create permissions on tablespace2 so we can use it later
@@ -257,7 +255,6 @@ GRANT CREATE ON TABLESPACE tablespace2 TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- move with chunk index for reorder
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
-WARNING:  Timescale License expired
 INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan and sort
 INFO:  "_hyper_1_2_chunk": found 0 removable, 5 nonremovable row versions in 1 pages
  move_chunk 

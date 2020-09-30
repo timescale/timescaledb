@@ -14,6 +14,8 @@
 #define TSL_LIBRARY_NAME "timescaledb-tsl"
 #define TS_LIBDIR "$libdir/"
 #define EXTENSION_SO TS_LIBDIR "" EXTENSION_NAME
+#define EXTENSION_TSL_SO TS_LIBDIR TSL_LIBRARY_NAME "-" TIMESCALEDB_VERSION_MOD
+
 #define MAX_VERSION_LEN (NAMEDATALEN + 1)
 #define MAX_SO_NAME_LEN                                                                            \
 	(8 + NAMEDATALEN + 1 + MAX_VERSION_LEN) /* "$libdir/"+extname+"-"+version                      \
