@@ -13,6 +13,7 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.range_value_to_pretty;
 DROP FUNCTION IF EXISTS hypertable_approximate_row_count;
 DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
 DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
+DROP VIEW IF EXISTS timescaledb_information.license;
 
 -- Add new function definitions, columns and tables for distributed hypertables
 DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
@@ -23,6 +24,12 @@ DROP FUNCTION IF EXISTS show_chunks;
 DROP FUNCTION IF EXISTS add_compress_chunks_policy;
 DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
 DROP FUNCTION IF EXISTS alter_job_schedule;
+DROP FUNCTION IF EXISTS _timescaledb_internal.enterprise_enabled;
+DROP FUNCTION IF EXISTS _timescaledb_internal.current_license_key;
+DROP FUNCTION IF EXISTS _timescaledb_internal.license_expiration_time;
+DROP FUNCTION IF EXISTS _timescaledb_internal.print_license_expiration_info;
+DROP FUNCTION IF EXISTS _timescaledb_internal.license_edition;
+DROP FUNCTION IF EXISTS _timescaledb_internal.current_db_set_license_key;
 
 DROP VIEW IF EXISTS timescaledb_information.policy_stats;
 DROP VIEW IF EXISTS timescaledb_information.drop_chunks_policies;

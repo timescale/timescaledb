@@ -21,7 +21,6 @@
 #include "dimension.h"
 #include "errors.h"
 #include "hypertable.h"
-#include "license.h"
 #include "utils.h"
 #include "hypertable_cache.h"
 #include "chunk.h"

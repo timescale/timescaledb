@@ -11,3 +11,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.get_os_info()
 
 CREATE OR REPLACE FUNCTION get_telemetry_report(always_display_report boolean DEFAULT false) RETURNS TEXT
     AS '@MODULE_PATHNAME@', 'ts_get_telemetry_report' LANGUAGE C STABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_loaded() RETURNS BOOLEAN
+AS '@MODULE_PATHNAME@', 'ts_tsl_loaded' LANGUAGE C;

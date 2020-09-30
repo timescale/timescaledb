@@ -32,8 +32,8 @@ static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 bool ts_extension_invalidate(Oid relid);
 bool ts_extension_is_loaded(void);
 void ts_extension_check_version(const char *actual_version);
-bool ts_license_update_check(char **newval, void **extra, GucSource source);
-void ts_license_on_assign(const char *newval, void *extra);
+bool ts_license_guc_check_hook(char **newval, void **extra, GucSource source);
+void ts_license_guc_assign_hook(const char *newval, void *extra);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
@@ -121,12 +121,12 @@ ts_post_load_init(PG_FUNCTION_ARGS)
 }
 
 bool
-ts_license_update_check(char **newval, void **extra, GucSource source)
+ts_license_guc_check_hook(char **newval, void **extra, GucSource source)
 {
 	return true;
 }
 
 void
-ts_license_on_assign(const char *newval, void *extra)
+ts_license_guc_assign_hook(const char *newval, void *extra)
 {
 }

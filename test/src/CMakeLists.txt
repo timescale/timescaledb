@@ -20,10 +20,6 @@ set_target_properties(${TESTS_LIB_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(${TESTS_LIB_NAME} PUBLIC MODULE_NAME=timescaledb)
 target_include_directories(${TESTS_LIB_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-if(APACHE_ONLY)
-  add_definitions(-DAPACHE_ONLY)
-endif()
-
 add_subdirectory(bgw)
 add_subdirectory(net)
 add_subdirectory(telemetry)

@@ -14,7 +14,6 @@
 #include "errors.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "license.h"
 #include "policy_utils.h"
 #include "utils.h"
 #include "jsonb_utils.h"

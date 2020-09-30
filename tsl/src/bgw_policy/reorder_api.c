@@ -23,7 +23,6 @@
 #include "bgw_policy/reorder_api.h"
 #include "errors.h"
 #include "hypertable.h"
-#include "license.h"
 #include "reorder.h"
 #include "utils.h"
 

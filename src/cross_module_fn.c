@@ -127,45 +127,12 @@ error_no_default_fn_community(void)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("functionality not supported under the current license \"%s\", license",
-					ts_guc_license_key),
-			 errhint(
-				 "Upgrade to a Timescale-licensed binary to access this free community feature")));
-}
-
-static void
-error_no_default_fn_enterprise(void)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("functionality not supported under the current license \"%s\", license",
-					ts_guc_license_key),
-			 errhint("Request a trial license to try this feature for free or contact us for more "
-					 "information at https://www.timescale.com/pricing")));
+			 errmsg("functionality not supported under the current \"%s\" license", ts_guc_license),
+			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
 }
 
 static bool
 error_no_default_fn_bool_void_community(void)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static bool
-error_no_default_fn_bool_void_enterprise(void)
-{
-	error_no_default_fn_enterprise();
-	pg_unreachable();
-}
-
-static void
-tsl_license_on_assign_default_fn(const char *newval, const void *license)
-{
-	error_no_default_fn_community();
-}
-
-static TimestampTz
-license_end_time_default_fn(void)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -197,11 +164,10 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
+			 errmsg("function \"%s\" is not supported under the current \"%s\" license",
 					get_func_name(fcinfo->flinfo->fn_oid),
-					ts_guc_license_key),
-			 errhint(
-				 "Upgrade to a Timescale-licensed binary to access this free community feature")));
+					ts_guc_license),
+			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
 	pg_unreachable();
 }
 
@@ -224,19 +190,6 @@ static void
 cache_syscache_invalidate_default(Datum arg, int cacheid, uint32 hashvalue)
 {
 	/* The default is a no-op */
-}
-
-static Datum
-error_no_default_fn_pg_enterprise(PG_FUNCTION_ARGS)
-{
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("function \"%s\" is not supported under the current license \"%s\"",
-					get_func_name(fcinfo->flinfo->fn_oid),
-					ts_guc_license_key),
-			 errhint("Request a trial license to try this feature for free or contact us for more "
-					 "information at https://www.timescale.com/pricing")));
-	pg_unreachable();
 }
 
 static DDLResult
@@ -308,18 +261,20 @@ func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
 	pg_unreachable();
 }
 
+TS_FUNCTION_INFO_V1(ts_tsl_loaded);
+
+PGDLLEXPORT Datum
+ts_tsl_loaded(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_BOOL(ts_cm_functions != &ts_cm_functions_default);
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
  * exception.
  */
 TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
-	.tsl_license_on_assign = tsl_license_on_assign_default_fn,
-	.enterprise_enabled_internal = error_no_default_fn_bool_void_enterprise,
-	.check_tsl_loaded = error_no_default_fn_bool_void_community,
-	.license_end_time = license_end_time_default_fn,
-	.print_tsl_license_expiration_info_hook = NULL,
-	.module_shutdown_hook = NULL,
 	.add_tsl_telemetry_info = add_tsl_telemetry_info_default,
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
@@ -358,7 +313,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.job_run = error_no_default_fn_pg_community,
 	.job_execute = job_execute_default_fn,
 
-	.move_chunk = error_no_default_fn_pg_enterprise,
+	.move_chunk = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
 
 	.partialize_agg = error_no_default_fn_pg_community,

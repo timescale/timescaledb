@@ -27,12 +27,3 @@ BEGIN
     END IF;
 END
 $BODY$;
-
-\c :DBNAME :ROLE_SUPERUSER
-
-CREATE OR REPLACE FUNCTION allow_downgrade_to_apache()
-RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_allow_downgrade_to_apache'
-LANGUAGE C;
-
-\c :DBNAME :ROLE_DEFAULT_PERM_USER

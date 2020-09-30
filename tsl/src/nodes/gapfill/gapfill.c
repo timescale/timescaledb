@@ -7,7 +7,6 @@
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 
-#include "license.h"
 #include "time_bucket.h"
 #include "nodes/gapfill/gapfill.h"
 

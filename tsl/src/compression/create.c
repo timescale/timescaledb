@@ -39,7 +39,6 @@
 #include "hypertable_cache.h"
 #include "hypertable_compression.h"
 #include "custom_type_cache.h"
-#include "license.h"
 #include "trigger.h"
 #include "utils.h"
 

@@ -15,8 +15,10 @@ set(TEST_FILES
 )
 
 set(TEST_FILES_DEBUG
+  bgw_db_scheduler.sql
   bgw_reorder_drop_chunks.sql
   compress_bgw_reorder_drop_chunks.sql
+  chunk_utils_compression.sql
   compression_algos.sql
   compression_ddl.sql
   compression_errors.sql
@@ -55,9 +57,11 @@ set(TEST_FILES_DEBUG
   remote_txn_id.sql
   remote_txn_resolve.sql
   remote_txn.sql
+  telemetry_community.sql
   telemetry_distributed.sql
   transparent_decompression_queries.sql
   tsl_tables.sql
+  license.sql
 )
 
 set(TEST_TEMPLATES
@@ -109,6 +113,7 @@ endif()
 # dist_views.sql sets some global information, so do not run it
 # in parallel
 set(SOLO_TESTS
+  bgw_db_scheduler
   bgw_reorder_drop_chunks
   chunk_api
   compress_bgw_reorder_drop_chunks

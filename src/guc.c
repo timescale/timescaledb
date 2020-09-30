@@ -54,7 +54,7 @@ int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
 int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
 
-TSDLLEXPORT char *ts_guc_license_key = TS_DEFAULT_LICENSE;
+TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
 char *ts_telemetry_cloud = NULL;
@@ -360,15 +360,15 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomStringVariable(/* name= */ "timescaledb.license_key",
-							   /* short_dec= */ "TimescaleDB license key",
+	DefineCustomStringVariable(/* name= */ "timescaledb.license",
+							   /* short_dec= */ "TimescaleDB license type",
 							   /* long_dec= */ "Determines which features are enabled",
-							   /* valueAddr= */ &ts_guc_license_key,
-							   /* bootValue= */ TS_DEFAULT_LICENSE,
+							   /* valueAddr= */ &ts_guc_license,
+							   /* bootValue= */ TS_LICENSE_DEFAULT,
 							   /* context= */ PGC_SUSET,
-							   /* flags= */ GUC_SUPERUSER_ONLY,
-							   /* check_hook= */ ts_license_update_check,
-							   /* assign_hook= */ ts_license_on_assign,
+							   /* flags= */ 0,
+							   /* check_hook= */ ts_license_guc_check_hook,
+							   /* assign_hook= */ ts_license_guc_assign_hook,
 							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.last_tuned",
