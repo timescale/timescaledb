@@ -30,7 +30,7 @@ jobs:
 
     - name: Install build dependencies
       run: |
-        apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake openssl-dev sudo flex bison
+        apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake openssl-dev sudo flex bison git
 
     - name: Build pg_isolation_regress
       run: |

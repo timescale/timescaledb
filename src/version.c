@@ -10,32 +10,88 @@
 #include <funcapi.h>
 #include <fmgr.h>
 #include <storage/fd.h>
+#include <utils/timestamp.h>
 
 #include "fmgr.h"
 #include "compat.h"
+#include "annotations.h"
 #include "gitcommit.h"
 #include "version.h"
 #include "config.h"
 
-#define STR_EXPAND(x) #x
-#define STR(x) STR_EXPAND(x)
+/* Export the strings to that we can read them using strings(1). We add a
+ * prefix so that we can easily find it using grep(1). We only bother about
+ * generating them if the relevant symbol is defined. */
+#ifdef EXT_GIT_COMMIT_HASH
+static const char commit_hash[] TS_USED = "commit-hash:" EXT_GIT_COMMIT_HASH;
+#endif
 
-static const char *git_commit = STR(EXT_GIT_COMMIT);
+#ifdef EXT_GIT_COMMIT_TAG
+static const char commit_tag[] TS_USED = "commit-tag:" EXT_GIT_COMMIT_TAG;
+#endif
+
+#ifdef EXT_GIT_COMMIT_TIME
+static const char commit_time[] TS_USED = "commit-time:" EXT_GIT_COMMIT_TIME;
+#endif
 
 TS_FUNCTION_INFO_V1(ts_get_git_commit);
 
+/* Return git commit information defined in header file gitcommit.h. We
+ * support that some of the fields are defined and will only show the fields
+ * that are defined. If no fields are defined, we throw an error notifying the
+ * user that there is no git information available at all. */
+#if defined(EXT_GIT_COMMIT_HASH) || defined(EXT_GIT_COMMIT_TAG) || defined(EXT_GIT_COMMIT_TIME)
 Datum
 ts_get_git_commit(PG_FUNCTION_ARGS)
 {
-	size_t var_size = VARHDRSZ + strlen(git_commit);
-	text *version_text = (text *) palloc(var_size);
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	Datum values[3] = { 0 };
+	bool nulls[3] = { false };
 
-	SET_VARSIZE(version_text, var_size);
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
 
-	memcpy((void *) VARDATA(version_text), (void *) git_commit, var_size - VARHDRSZ);
+	tupdesc = BlessTupleDesc(tupdesc);
 
-	PG_RETURN_TEXT_P(version_text);
+#ifdef EXT_GIT_COMMIT_TAG
+	values[0] = CStringGetTextDatum(EXT_GIT_COMMIT_TAG);
+#else
+	nulls[0] = true;
+#endif
+
+#ifdef EXT_GIT_COMMIT_HASH
+	values[1] = CStringGetTextDatum(EXT_GIT_COMMIT_HASH);
+#else
+	nulls[1] = true;
+#endif
+
+#ifdef EXT_GIT_COMMIT_TIME
+	values[2] = DirectFunctionCall3(timestamptz_in,
+									CStringGetDatum(EXT_GIT_COMMIT_TIME),
+									Int32GetDatum(-1),
+									Int32GetDatum(-1));
+#else
+	nulls[2] = true;
+#endif
+
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
 }
+#else
+Datum
+ts_get_git_commit(PG_FUNCTION_ARGS)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("extension not built with any Git commit information")));
+}
+#endif
 
 #ifdef WIN32
 
