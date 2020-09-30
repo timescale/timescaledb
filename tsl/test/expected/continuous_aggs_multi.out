@@ -38,12 +38,12 @@ AS
     SELECT time_bucket(2, timeval), col1, max(col2)
     FROM continuous_agg_test
     GROUP BY 1, 2 WITH NO DATA;
-select view_name, view_owner, materialization_hypertable
+select view_name, view_owner, materialization_hypertable_name
 from timescaledb_information.continuous_aggregates ORDER BY 1;
- view_name |    view_owner     |            materialization_hypertable            
------------+-------------------+--------------------------------------------------
- cagg_1    | default_perm_user | _timescaledb_internal._materialized_hypertable_2
- cagg_2    | default_perm_user | _timescaledb_internal._materialized_hypertable_3
+ view_name |    view_owner     | materialization_hypertable_name 
+-----------+-------------------+---------------------------------
+ cagg_1    | default_perm_user | _materialized_hypertable_2
+ cagg_2    | default_perm_user | _materialized_hypertable_3
 (2 rows)
 
 --TEST1: cagg_1 is materialized, not cagg_2.

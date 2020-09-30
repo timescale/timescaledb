@@ -58,8 +58,8 @@ SELECT * FROM _timescaledb_config.bgw_job;
 (0 rows)
 
 SELECT * FROM timescaledb_information.job_stats;
- hypertable | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_scheduled_run | total_runs | total_successes | total_failures 
-------------+--------+---------------------+------------------------+-----------------+------------+-------------------+--------------------+------------+-----------------+----------------
+ hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_scheduled_run | total_runs | total_successes | total_failures 
+-------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+--------------------+------------+-----------------+----------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
@@ -448,13 +448,14 @@ SELECT * FROM test_continuous_agg_view ORDER BY 1;
 
 \x on
 --check the information views --
-select view_name, view_owner, materialization_hypertable
+select view_name, view_owner, materialization_hypertable_schema, materialization_hypertable_name
 from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
--[ RECORD 1 ]--------------+-------------------------------------------------
-view_name                  | test_continuous_agg_view
-view_owner                 | default_perm_user
-materialization_hypertable | _timescaledb_internal._materialized_hypertable_3
+-[ RECORD 1 ]---------------------+---------------------------
+view_name                         | test_continuous_agg_view
+view_owner                        | default_perm_user
+materialization_hypertable_schema | _timescaledb_internal
+materialization_hypertable_name   | _materialized_hypertable_3
 
 select view_name, view_definition from timescaledb_information.continuous_aggregates
 where view_name::text like '%test_continuous_agg_view';
@@ -468,7 +469,7 @@ view_definition |  SELECT time_bucket(2, test_continuous_agg_table."time") AS ti
 select job_status, last_run_duration
 from timescaledb_information.job_stats ps, timescaledb_information.continuous_aggregates cagg 
 where cagg.view_name::text like '%test_continuous_agg_view'
-and cagg.materialization_hypertable = ps.hypertable;
+and cagg.materialization_hypertable_name = ps.hypertable_name;
 -[ RECORD 1 ]-----+----------
 job_status        | Scheduled
 last_run_duration | 

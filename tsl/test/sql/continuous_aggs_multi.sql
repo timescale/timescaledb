@@ -33,7 +33,7 @@ AS
     FROM continuous_agg_test
     GROUP BY 1, 2 WITH NO DATA;
 
-select view_name, view_owner, materialization_hypertable
+select view_name, view_owner, materialization_hypertable_name
 from timescaledb_information.continuous_aggregates ORDER BY 1;
 
 --TEST1: cagg_1 is materialized, not cagg_2.

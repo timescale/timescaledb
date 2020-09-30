@@ -43,7 +43,10 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
     AND ca.mat_hypertable_id IS NULL;
 
 CREATE OR REPLACE VIEW timescaledb_information.job_stats as
-  SELECT format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as hypertable, j.id AS job_id, 
+  SELECT 
+   ht.schema_name AS hypertable_schema,
+   ht.table_name AS hypertable_name,
+   j.id AS job_id, 
    js.last_start as last_run_started_at, 
    js.last_successful_finish as last_successful_finish, 
    CASE WHEN js.last_finish < '4714-11-24 00:00:00+00 BC' THEN NULL
@@ -90,7 +93,8 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
     viewinfo.viewowner as view_owner,
     bgwjob.schedule_interval,
     cagg.materialized_only,
-    format('%1$I.%2$I', ht.schema_name, ht.table_name)::regclass as materialization_hypertable,
+    ht.schema_name as materialization_hypertable_schema,
+    ht.table_name as materialization_hypertable_name,
     directview.viewdefinition as view_definition
   FROM  _timescaledb_catalog.continuous_agg cagg
         LEFT JOIN _timescaledb_config.bgw_job bgwjob ON bgwjob.hypertable_id = cagg.mat_hypertable_id,

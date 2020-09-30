@@ -59,7 +59,7 @@ step "Refresh2_sel"	{ select * from continuous_view_2 where bkt = 0 or bkt > 30 
 
 #locking the materialized table will block refresh1
 session "LM1"
-step "LockMat1" { BEGIN; select lock_mattable(materialization_hypertable::text) from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1';
+step "LockMat1" { BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 }
 step "UnlockMat1" { ROLLBACK; }
 
