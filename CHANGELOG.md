@@ -4,6 +4,64 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.0.0-rc1 (2020-10-06)
+
+This release adds major new features and bugfixes since the 1.7.4 release.
+We deem it moderate priority for upgrading.
+
+This release adds the long-awaited support for distributed hypertables to
+TimescaleDB. With 2.0, users can create distributed hypertables across
+multiple instances of TimescaleDB, configured so that one instance serves
+as an access node and multiple others as data nodes. All queries for a
+distributed hypertable are issued to the access node, but inserted data
+and queries are pushed down across data nodes for greater scale and
+performance.
+
+This release also adds support for user-defined actions allowing users to
+define actions that are run by the TimescaleDB automation framework.
+
+In addition to these major new features, the 2.0 branch introduces _breaking_ changes
+to APIs and existing features, such as continuous aggregates. These changes are not
+backwards compatible and might require changes to clients and/or scripts that rely on
+the previous APIs. Please review our updated documentation and do proper testing to
+ensure compatibility with your existing applications.
+
+The noticeable breaking changes in APIs are:
+- Redefined functions for policies
+- A continuous aggregate is now created with `CREATE MATERIALIZED VIEW`
+  instead of `CREATE VIEW` and automated refreshing requires adding a policy
+  via `add_continuous_aggregate_policy`
+- Redesign of informational views, including new (and more general) views for
+  information about policies and user-defined actions
+
+This release candidate is upgradable, so if you are on a previous release (e.g., 1.7.4)
+you can upgrade to the release candidate and later expect to be able to upgrade to the
+final 2.0 release. However, please carefully consider your compatibility requirements
+_before_ upgrading.
+
+**Major Features**
+* #1923 Add support for distributed hypertables
+* #2006 Add support for user-defined actions
+* #2435 Move enterprise features to community
+* #2437 Update Timescale License
+
+**Minor Features**
+* #2011 Constify TIMESTAMPTZ OP INTERVAL in constraints
+* #2105 Support moving compressed chunks
+
+**Bugfixes**
+* #1843 Improve handling of "dropped" chunks
+* #1886 Change ChunkAppend leader to use worker subplan
+* #2116 Propagate privileges from hypertables to chunks
+* #2263 Fix timestamp overflow in time_bucket optimization
+* #2270 Fix handling of non-reference counted TupleDescs in gapfill
+* #2325 Fix rename constraint/rename index
+* #2370 Fix detection of hypertables in subqueries
+* #2376 Fix caggs width expression handling on int based hypertables
+* #2416 Check insert privileges to create chunk
+* #2428 Allow owner change of continuous aggregate
+* #2436 Propagate grants in continuous aggregates
+
 ## 2.0.0-beta6 (2020-09-14)
 
 **For beta releases**, upgrading from an earlier version of the
