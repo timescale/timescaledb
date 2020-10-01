@@ -27,6 +27,7 @@
 #include <parser/parse_collate.h>
 #include <parser/parse_relation.h>
 #include <storage/bufmgr.h>
+#include <storage/smgr.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
@@ -215,8 +216,10 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 		ccstate->rel->rd_newRelfilenodeSubid != InvalidSubTransactionId)
 	{
 		ti_options |= HEAP_INSERT_SKIP_FSM;
+#if PG13_LT
 		if (!XLogIsNeeded())
 			ti_options |= HEAP_INSERT_SKIP_WAL;
+#endif
 	}
 
 	/*
@@ -449,8 +452,13 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	 * If we skipped writing WAL, then we need to sync the heap (but not
 	 * indexes since those use WAL anyway)
 	 */
+#if PG13_LT
 	if (ti_options & HEAP_INSERT_SKIP_WAL)
 		heap_sync(ccstate->rel);
+#else
+	if (!RelationNeedsWAL(ccstate->rel))
+		smgrimmedsync(ccstate->rel->rd_smgr, MAIN_FORKNUM);
+#endif
 
 	return processed;
 }
