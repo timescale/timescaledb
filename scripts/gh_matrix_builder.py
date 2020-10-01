@@ -39,7 +39,7 @@ def build_debug_config(overrides):
     "build_type": "Debug",
     "pg_build_args": "--enable-debug --enable-cassert",
     "tsdb_build_args": "-DCODECOVERAGE=ON",
-    "installcheck_args": "IGNORES='bgw_db_scheduler continuous_aggs_policy'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
     "llvm_config": "llvm-config-9",
     "clang": "clang-9",
@@ -87,7 +87,7 @@ def macos_config(overrides):
     "tsdb_build_args": "-DASSERTIONS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
-    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection continuous_aggs_policy'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection'",
   })
   base_config.update(overrides)
   return base_config
@@ -111,7 +111,7 @@ if event_type != "pull_request":
     "llvm_config": "/usr/bin/llvm-config-8",
     "clang": "clang-8",
     "extra_packages": "llvm-8 llvm-8-dev llvm-8-tools",
-    "installcheck_args": "IGNORES='continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh continuous_aggs_policy'"
+    "installcheck_args": "IGNORES='continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh'"
   }
   m["include"].append(build_debug_config(pg11_debug_earliest))
 
