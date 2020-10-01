@@ -122,6 +122,8 @@ build_script:
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.ssl_dir='C:/projects/timescaledb/build/tsl/test'"
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.passfile='C:/projects/timescaledb/build/tsl/test/pgpass.conf'"
 
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.license = 'apache'"
+
     # Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "log_min_messages='debug5'"
 
 
@@ -183,9 +185,11 @@ test_script:
 
     #right now we only run timescale regression tests, others will be set up later
 
-    docker exec -e IGNORES="chunk_utils loader license" -e SKIPS="license" -e TEST_TABLESPACE1_PATH="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PATH="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -e PG_REGRESS_OPTS="--bindir=/usr/local/bin/" -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
+    docker exec -e IGNORES="chunk_utils loader" -e TEST_TABLESPACE1_PATH="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PATH="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -e PG_REGRESS_OPTS="--bindir=/usr/local/bin/" -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
 
     $TESTS1 = $?
+
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.license = 'timescale'"
 
     Restart-Service postgresql-x64-12
 
