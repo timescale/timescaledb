@@ -163,6 +163,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
         GROUP BY 1 WITH NO DATA;
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 h'::interval , '1 h'::interval) as job_id \gset
 CALL run_job(:job_id);
+NOTICE:  continuous aggregate "max_mat_view_timestamp" is already up-to-date
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
                                        config                                        
