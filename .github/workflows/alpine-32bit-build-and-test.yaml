@@ -22,9 +22,9 @@ jobs:
         build_type: [ Debug ]
         include:
           - pg: 11.9
-            ignores: append-11 chunk_adaptive-11 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-11 continuous_aggs_policy
+            ignores: append-11 chunk_adaptive-11 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-11
           - pg: 12.4
-            ignores: append-12 chunk_adaptive-12 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12 continuous_aggs_policy
+            ignores: append-12 chunk_adaptive-12 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12
 
     steps:
 
