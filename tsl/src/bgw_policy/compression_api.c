@@ -38,7 +38,7 @@
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_OLDER_THAN "older_than"
+#define CONFIG_KEY_COMPRESS_AFTER "compress_after"
 
 int32
 policy_compression_get_hypertable_id(const Jsonb *config)
@@ -55,28 +55,28 @@ policy_compression_get_hypertable_id(const Jsonb *config)
 }
 
 int64
-policy_compression_get_older_than_int(const Jsonb *config)
+policy_compression_get_compress_after_int(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int64_field(config, CONFIG_KEY_OLDER_THAN, &found);
+	int32 hypertable_id = ts_jsonb_get_int64_field(config, CONFIG_KEY_COMPRESS_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find older_than in config for job")));
+				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
 
 	return hypertable_id;
 }
 
 Interval *
-policy_compression_get_older_than_interval(const Jsonb *config)
+policy_compression_get_compress_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_OLDER_THAN);
+	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_COMPRESS_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find older_than in config for job")));
+				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
 
 	return interval;
 }
@@ -102,8 +102,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	Oid ht_oid = PG_GETARG_OID(0);
-	Datum older_than_datum = PG_GETARG_DATUM(1);
-	Oid older_than_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Datum compress_after_datum = PG_GETARG_DATUM(1);
+	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 
@@ -159,10 +159,10 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_OLDER_THAN,
+														CONFIG_KEY_COMPRESS_AFTER,
 														partitioning_type,
-														older_than_type,
-														older_than_datum))
+														compress_after_type,
+														compress_after_datum))
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
@@ -201,27 +201,34 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
 
-	switch (older_than_type)
+	switch (compress_after_type)
 	{
 		case INTERVALOID:
 			ts_jsonb_add_interval(parse_state,
-								  CONFIG_KEY_OLDER_THAN,
-								  DatumGetIntervalP(older_than_datum));
+								  CONFIG_KEY_COMPRESS_AFTER,
+								  DatumGetIntervalP(compress_after_datum));
 			break;
 		case INT2OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_OLDER_THAN, DatumGetInt16(older_than_datum));
+			ts_jsonb_add_int64(parse_state,
+							   CONFIG_KEY_COMPRESS_AFTER,
+							   DatumGetInt16(compress_after_datum));
 			break;
 		case INT4OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_OLDER_THAN, DatumGetInt32(older_than_datum));
+			ts_jsonb_add_int64(parse_state,
+							   CONFIG_KEY_COMPRESS_AFTER,
+							   DatumGetInt32(compress_after_datum));
 			break;
 		case INT8OID:
-			ts_jsonb_add_int64(parse_state, CONFIG_KEY_OLDER_THAN, DatumGetInt64(older_than_datum));
+			ts_jsonb_add_int64(parse_state,
+							   CONFIG_KEY_COMPRESS_AFTER,
+							   DatumGetInt64(compress_after_datum));
 			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("unsupported datatype for older_than: %s",
-							format_type_be(older_than_type))));
+					 errmsg("unsupported datatype for %s: %s",
+							CONFIG_KEY_COMPRESS_AFTER,
+							format_type_be(compress_after_type))));
 	}
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
