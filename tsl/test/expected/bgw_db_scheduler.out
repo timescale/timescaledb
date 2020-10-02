@@ -195,10 +195,10 @@ SELECT wait_for_logentry(:job_id);
  Before sleep
 (1 row)
 
-SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'Custom Job%';
- application_name  
--------------------
- Custom Job [1001]
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
+      application_name      
+----------------------------
+ User-Defined Action [1001]
 (1 row)
 
 -- have to suppress notices here as delete_job will print pid of the running background worker processes
@@ -210,7 +210,7 @@ SELECT delete_job(:job_id);
 (1 row)
 
 RESET client_min_messages;
-SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'Custom Job%';
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
  application_name 
 ------------------
 (0 rows)
