@@ -154,7 +154,7 @@ SET
   application_name = format('%s [%s]', 'Compression Policy', id),
   proc_schema = '_timescaledb_internal',
   proc_name = 'policy_compression',
-  config = jsonb_build_object('hypertable_id', c.hypertable_id, 'older_than', CASE WHEN (older_than).is_time_interval THEN
+  config = jsonb_build_object('hypertable_id', c.hypertable_id, 'compress_after', CASE WHEN (older_than).is_time_interval THEN
     (older_than).time_interval::text
   ELSE
     (older_than).integer_interval::text
@@ -177,7 +177,7 @@ SET
   application_name = format('%s [%s]', 'Retention Policy', id),
   proc_schema = '_timescaledb_internal',
   proc_name = 'policy_retention',
-  config = jsonb_build_object('hypertable_id', c.hypertable_id, 'retention_window', CASE WHEN (older_than).is_time_interval THEN
+  config = jsonb_build_object('hypertable_id', c.hypertable_id, 'drop_after', CASE WHEN (older_than).is_time_interval THEN
     (older_than).time_interval::text
   ELSE
     (older_than).integer_interval::text
@@ -221,19 +221,19 @@ SET
   config = 
     CASE WHEN ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
     THEN
-    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_interval', 
+    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
         CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
             THEN NULL 
             ELSE ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
         END 
-    , 'end_interval', ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
+    , 'end_offset', ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
     ELSE
-    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_interval', 
+    jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
         CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
             THEN NULL 
             ELSE cagg.ignore_invalidation_older_than::BIGINT
         END
-    , 'end_interval', cagg.refresh_lag::BIGINT)
+    , 'end_offset', cagg.refresh_lag::BIGINT)
     END,
   hypertable_id = cagg.mat_hypertable_id,
   owner = (
