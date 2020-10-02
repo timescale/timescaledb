@@ -180,7 +180,7 @@ SELECT wait_for_job_to_run(:job_id, 2);
 --advance clock 1us to make the scheduler realize the job is done
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+1, true);
 
---alter the refresh interval and check if next_scheduled_run is altered
+--alter the refresh interval and check if next_start is altered
 SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
 SELECT job_id, next_start - last_finish as until_next, total_runs
 FROM _timescaledb_internal.bgw_job_stat

@@ -58,8 +58,8 @@ SELECT * FROM _timescaledb_config.bgw_job;
 (0 rows)
 
 SELECT * FROM timescaledb_information.job_stats;
- hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_scheduled_run | total_runs | total_successes | total_failures 
--------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+--------------------+------------+-----------------+----------------
+ hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_start | total_runs | total_successes | total_failures 
+-------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+------------+------------+-----------------+----------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
@@ -253,7 +253,7 @@ SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint 
  
 (1 row)
 
---alter the refresh interval and check if next_scheduled_run is altered
+--alter the refresh interval and check if next_start is altered
 SELECT alter_job(:job_id, schedule_interval => '1m', retry_period => '1m');
                                                                     alter_job                                                                     
 --------------------------------------------------------------------------------------------------------------------------------------------------
