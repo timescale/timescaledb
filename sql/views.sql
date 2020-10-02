@@ -60,7 +60,7 @@ CREATE OR REPLACE VIEW timescaledb_information.job_stats as
     END as job_status,
     CASE WHEN js.last_finish > js.last_start THEN (js.last_finish - js.last_start)
     END as last_run_duration,
-    js.next_start as next_scheduled_run,
+    js.next_start as next_start,
     js.total_runs, js.total_successes, js.total_failures
   FROM _timescaledb_config.bgw_job j
     INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
