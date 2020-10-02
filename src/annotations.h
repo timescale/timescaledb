@@ -6,18 +6,14 @@
 #ifndef TIMESCALEDB_ANNOTATIONS_H
 #define TIMESCALEDB_ANNOTATIONS_H
 
-/* Fall-through annotation */
-#if defined(__clang__)
-#if (__clang_major__ >= 12) || (__clang_analyzer__)
+/* Supported since clang 12 and GCC 7 */
+#if defined __has_attribute
+#if __has_attribute(fallthrough)
 #define TS_FALLTHROUGH __attribute__((fallthrough))
 #else
 #define TS_FALLTHROUGH /* FALLTHROUGH */
-#endif				   /* __clang__ */
-#elif defined(__GNUC__)
-/* Supported since GCC 7 */
-#define TS_FALLTHROUGH __attribute__((fallthrough))
+#endif
 #else
-/*  MSVC and other compilers */
 #define TS_FALLTHROUGH /* FALLTHROUGH */
 #endif
 
