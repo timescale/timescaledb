@@ -125,8 +125,8 @@ get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
-										 policy_compression_get_older_than_int,
-										 policy_compression_get_older_than_interval);
+										 policy_compression_get_compress_after_int,
+										 policy_compression_get_compress_after_interval);
 
 	return ts_dimension_slice_get_chunkid_to_compress(dim->fd.id,
 													  InvalidStrategy, /*start_strategy*/
@@ -232,8 +232,8 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	open_dim = get_open_dimension_for_hypertable(hypertable);
 	boundary = get_window_boundary(open_dim,
 								   config,
-								   policy_retention_get_retention_window_int,
-								   policy_retention_get_retention_window_interval);
+								   policy_retention_get_drop_after_int,
+								   policy_retention_get_drop_after_interval);
 	boundary_type = ts_dimension_get_partition_type(open_dim);
 
 	/* We need to do a reverse lookup here since the given hypertable

@@ -48,11 +48,11 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  "int_tab" is not a continuous aggregate
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
-ERROR:  invalid parameter value for start_interval
+ERROR:  invalid parameter value for start_offset
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
 ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist at character 8
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
-ERROR:  invalid parameter value for end_interval
+ERROR:  invalid parameter value for end_offset
 --start_interval < end_interval
 SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval) as job_id \gset
 ERROR:  start interval should be greater than end interval
@@ -76,9 +76,9 @@ NOTICE:  refresh policy already exists on continuous aggregate "mat_m1", skippin
 
 -- modify config and try to add, should error out
 SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
-                               config                               
---------------------------------------------------------------------
- {"end_interval": 10, "start_interval": 20, "mat_hypertable_id": 2}
+                             config                             
+----------------------------------------------------------------
+ {"end_offset": 10, "start_offset": 20, "mat_hypertable_id": 2}
 (1 row)
 
 SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_id \gset
@@ -94,7 +94,7 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 (1 row)
 
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
-ERROR:  could not find start_interval in config for existing job
+ERROR:  could not find start_offset in config for existing job
 SELECT remove_continuous_aggregate_policy('int_tab');
 ERROR:  "int_tab" is not a continuous aggregate
 SELECT remove_continuous_aggregate_policy('mat_m1');
@@ -136,7 +136,7 @@ CREATE MATERIALIZED VIEW max_mat_view_date
         GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', 10, '1 day'::interval);
-ERROR:  invalid parameter value for end_interval
+ERROR:  invalid parameter value for end_offset
 --start_interval < end_interval
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '2 days'::interval , '1 day'::interval) ;
 ERROR:  start interval should be greater than end interval
@@ -144,9 +144,9 @@ ERROR:  start interval should be greater than end interval
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', '1 day', '1 day'::interval) as job_id \gset
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
-                                      config                                       
------------------------------------------------------------------------------------
- {"end_interval": "@ 1 day", "start_interval": "@ 2 days", "mat_hypertable_id": 4}
+                                    config                                     
+-------------------------------------------------------------------------------
+ {"end_offset": "@ 1 day", "start_offset": "@ 2 days", "mat_hypertable_id": 4}
 (1 row)
 
 INSERT INTO continuous_agg_max_mat_date
@@ -198,9 +198,9 @@ CALL run_job(:job_id);
 RESET client_min_messages ;
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
-                                       config                                        
--------------------------------------------------------------------------------------
- {"end_interval": "@ 1 hour", "start_interval": "@ 10 days", "mat_hypertable_id": 6}
+                                     config                                      
+---------------------------------------------------------------------------------
+ {"end_offset": "@ 1 hour", "start_offset": "@ 10 days", "mat_hypertable_id": 6}
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -216,7 +216,7 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 day', '1h'::interval, if_not_exists=>true);
-ERROR:  could not find start_interval in config for job
+ERROR:  could not find start_offset in config for job
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', 'xyz', '1 day', '1h'::interval, if_not_exists=>true);
 ERROR:  invalid input syntax for type interval: "xyz"
 \set ON_ERROR_STOP 1
@@ -245,7 +245,7 @@ FROM smallint_tab
 GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
-ERROR:  invalid parameter value for start_interval
+ERROR:  invalid parameter value for start_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);
 ERROR:  smallint out of range
 SELECT add_continuous_aggregate_policy('mat_smallint', 5::smallint, 10::smallint , '1 h'::interval) as job_id \gset
@@ -276,9 +276,9 @@ WARNING:  could not add refresh policy due to existing policy on continuous aggr
 --
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 10, '1h'::interval, if_not_exists=>true);
-ERROR:  invalid parameter value for start_interval
+ERROR:  invalid parameter value for start_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', 10, '1h'::interval, if_not_exists=>true);
-ERROR:  invalid parameter value for end_interval
+ERROR:  invalid parameter value for end_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interval, if_not_exists=>true);
 WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
  add_continuous_aggregate_policy 

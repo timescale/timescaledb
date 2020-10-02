@@ -22,8 +22,8 @@
 
 #define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
 #define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
-#define CONFIG_KEY_START_INTERVAL "start_interval"
-#define CONFIG_KEY_END_INTERVAL "end_interval"
+#define CONFIG_KEY_START_OFFSET "start_offset"
+#define CONFIG_KEY_END_OFFSET "end_offset"
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -85,13 +85,13 @@ get_interval_from_config(const Dimension *dim, const Jsonb *config, const char *
 int64
 policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config, bool *start_isnull)
 {
-	return get_interval_from_config(dim, config, CONFIG_KEY_START_INTERVAL, start_isnull);
+	return get_interval_from_config(dim, config, CONFIG_KEY_START_OFFSET, start_isnull);
 }
 
 int64
 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, bool *end_isnull)
 {
-	return get_interval_from_config(dim, config, CONFIG_KEY_END_INTERVAL, end_isnull);
+	return get_interval_from_config(dim, config, CONFIG_KEY_END_OFFSET, end_isnull);
 }
 
 Datum
@@ -177,7 +177,7 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 }
 
 static void
-check_valid_interval_values(Oid interval_type, Datum start_interval, Datum end_interval)
+check_valid_interval_values(Oid interval_type, Datum start_offset, Datum end_offset)
 {
 	bool valid = true;
 	if (IS_INTEGER_TYPE(interval_type))
@@ -186,19 +186,19 @@ check_valid_interval_values(Oid interval_type, Datum start_interval, Datum end_i
 		{
 			case INT2OID:
 			{
-				if (DatumGetInt16(start_interval) <= DatumGetInt16(end_interval))
+				if (DatumGetInt16(start_offset) <= DatumGetInt16(end_offset))
 					valid = false;
 				break;
 			}
 			case INT4OID:
 			{
-				if (DatumGetInt32(start_interval) <= DatumGetInt32(end_interval))
+				if (DatumGetInt32(start_offset) <= DatumGetInt32(end_offset))
 					valid = false;
 				break;
 			}
 			case INT8OID:
 			{
-				if (DatumGetInt64(start_interval) <= DatumGetInt64(end_interval))
+				if (DatumGetInt64(start_offset) <= DatumGetInt64(end_offset))
 					valid = false;
 				break;
 			}
@@ -207,7 +207,7 @@ check_valid_interval_values(Oid interval_type, Datum start_interval, Datum end_i
 	else
 	{
 		Assert(interval_type == INTERVALOID);
-		valid = DatumGetBool(DirectFunctionCall2(interval_gt, start_interval, end_interval));
+		valid = DatumGetBool(DirectFunctionCall2(interval_gt, start_offset, end_offset));
 	}
 	if (!valid)
 	{
@@ -228,9 +228,9 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	Dimension *dim;
 	ContinuousAgg *cagg;
 	int32 job_id, mat_htid;
-	Datum start_interval, end_interval;
+	Datum start_offset, end_offset;
 	Interval refresh_interval;
-	Oid dim_type, start_interval_type, end_interval_type;
+	Oid dim_type, start_offset_type, end_offset_type;
 	Oid cagg_oid, owner_id;
 	List *jobs;
 	JsonbParseState *parse_state = NULL;
@@ -256,25 +256,27 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 
 	/* Try to convert the argument to the time type used by the
 	 * continuous aggregate */
-	start_interval = PG_GETARG_DATUM(1);
-	end_interval = PG_GETARG_DATUM(2);
+	start_offset = PG_GETARG_DATUM(1);
+	end_offset = PG_GETARG_DATUM(2);
 	start_isnull = PG_ARGISNULL(1);
 	end_isnull = PG_ARGISNULL(2);
-	start_interval_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	end_interval_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
+	start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 
 	if (!start_isnull)
-		start_interval =
-			convert_interval_arg(dim_type, start_interval, &start_interval_type, "start_interval");
+		start_offset = convert_interval_arg(dim_type,
+											start_offset,
+											&start_offset_type,
+											CONFIG_KEY_START_OFFSET);
 
 	if (!end_isnull)
-		end_interval =
-			convert_interval_arg(dim_type, end_interval, &end_interval_type, "end_interval");
+		end_offset =
+			convert_interval_arg(dim_type, end_offset, &end_offset_type, CONFIG_KEY_END_OFFSET);
 
 	if (!start_isnull && !end_isnull)
 	{
-		Assert(start_interval_type == end_interval_type);
-		check_valid_interval_values(start_interval_type, start_interval, end_interval);
+		Assert(start_offset_type == end_offset_type);
+		check_valid_interval_values(start_offset_type, start_offset, end_offset);
 	}
 
 	if (PG_ARGISNULL(3))
@@ -300,15 +302,15 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 		BgwJob *existing = linitial(jobs);
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_START_INTERVAL,
+														CONFIG_KEY_START_OFFSET,
 														dim_type,
-														start_interval_type,
-														start_interval) &&
+														start_offset_type,
+														start_offset) &&
 			policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_END_INTERVAL,
+														CONFIG_KEY_END_OFFSET,
 														dim_type,
-														end_interval_type,
-														end_interval))
+														end_offset_type,
+														end_offset))
 		{
 			/* If all arguments are the same, do nothing */
 			ereport(NOTICE,
@@ -337,18 +339,18 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	ts_jsonb_add_int32(parse_state, CONFIG_KEY_MAT_HYPERTABLE_ID, mat_htid);
 	if (!start_isnull)
 		json_add_dim_interval_value(parse_state,
-									CONFIG_KEY_START_INTERVAL,
-									start_interval_type,
-									start_interval);
+									CONFIG_KEY_START_OFFSET,
+									start_offset_type,
+									start_offset);
 	else
-		ts_jsonb_add_null(parse_state, CONFIG_KEY_START_INTERVAL);
+		ts_jsonb_add_null(parse_state, CONFIG_KEY_START_OFFSET);
 	if (!end_isnull)
 		json_add_dim_interval_value(parse_state,
-									CONFIG_KEY_END_INTERVAL,
-									end_interval_type,
-									end_interval);
+									CONFIG_KEY_END_OFFSET,
+									end_offset_type,
+									end_offset);
 	else
-		ts_jsonb_add_null(parse_state, CONFIG_KEY_END_INTERVAL);
+		ts_jsonb_add_null(parse_state, CONFIG_KEY_END_OFFSET);
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 

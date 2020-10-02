@@ -409,15 +409,15 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 SELECT alter_job(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
-                                                     alter_job                                                      
---------------------------------------------------------------------------------------------------------------------
- (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""hypertable_id"": 2, ""retention_window"": ""@ 4 mons""}",-infinity)
+                                                  alter_job                                                   
+--------------------------------------------------------------------------------------------------------------
+ (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 2}",-infinity)
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
- job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        | next_start | hypertable_schema |    hypertable_name     
---------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------+-------------------+------------------------
-   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} |            | public            | test_drop_chunks_table
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                     config                     | next_start | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------+------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"drop_after": "@ 4 mons", "hypertable_id": 2} |            | public            | test_drop_chunks_table
 (1 row)
 
 -- no stats
@@ -454,9 +454,9 @@ SELECT * FROM sorted_bgw_log;
 (2 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
- job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        |          next_start          | hypertable_schema |    hypertable_name     
---------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------------------------+-------------------+------------------------
-   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} | Fri Dec 31 16:00:01 1999 PST | public            | test_drop_chunks_table
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                     config                     |          next_start          | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------+------------------------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"drop_after": "@ 4 mons", "hypertable_id": 2} | Fri Dec 31 16:00:01 1999 PST | public            | test_drop_chunks_table
 (1 row)
 
 -- job ran once, successfully
@@ -493,9 +493,9 @@ SELECT * FROM sorted_bgw_log;
 (3 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
- job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        |          next_start          | hypertable_schema |    hypertable_name     
---------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------------------------+-------------------+------------------------
-   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} | Fri Dec 31 16:00:01 1999 PST | public            | test_drop_chunks_table
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                     config                     |          next_start          | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------+------------------------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"drop_after": "@ 4 mons", "hypertable_id": 2} | Fri Dec 31 16:00:01 1999 PST | public            | test_drop_chunks_table
 (1 row)
 
 -- still only 1 run
@@ -545,9 +545,9 @@ SELECT * FROM sorted_bgw_log;
 (6 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
- job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                        config                        |          next_start          | hypertable_schema |    hypertable_name     
---------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------------+------------------------------+-------------------+------------------------
-   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"hypertable_id": 2, "retention_window": "@ 4 mons"} | Fri Dec 31 16:00:02 1999 PST | public            | test_drop_chunks_table
+ job_id |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled |                     config                     |          next_start          | hypertable_schema |    hypertable_name     
+--------+-------------------------+-------------------+-------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+------------------------------------------------+------------------------------+-------------------+------------------------
+   1001 | Retention Policy [1001] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         | {"drop_after": "@ 4 mons", "hypertable_id": 2} | Fri Dec 31 16:00:02 1999 PST | public            | test_drop_chunks_table
 (1 row)
 
 -- 2 runs
