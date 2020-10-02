@@ -146,13 +146,13 @@ SELECT add_job('ts_bgw_test_job_sleep','1h') AS job_id \gset
 SELECT ts_bgw_db_scheduler_test_run();
 
 SELECT wait_for_logentry(:job_id);
-SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'Custom Job%';
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 
 -- have to suppress notices here as delete_job will print pid of the running background worker processes
 SET client_min_messages TO WARNING;
 SELECT delete_job(:job_id);
 RESET client_min_messages;
-SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'Custom Job%';
+SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 
 --
 -- Test running a normal job

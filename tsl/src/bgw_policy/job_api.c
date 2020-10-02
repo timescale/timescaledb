@@ -71,7 +71,7 @@ job_add(PG_FUNCTION_ARGS)
 	ts_bgw_job_validate_job_owner(owner);
 
 	/* Next, insert a new job into jobs table */
-	namestrcpy(&application_name, "Custom Job");
+	namestrcpy(&application_name, "User-Defined Action");
 	namestrcpy(&custom_name, "custom");
 	namestrcpy(&proc_schema, get_namespace_name(get_func_namespace(proc)));
 	namestrcpy(&proc_name, func_name);
