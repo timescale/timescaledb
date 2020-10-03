@@ -2,14 +2,18 @@
 /alternate_users-*.sql
 /append-*.sql
 /chunk_adaptive-*.sql
+/constraint-*.sql
+/copy-*.sql
 /custom_type-*.sql
 /ddl-*.sql
+/delete-*.sql
 /insert-*.sql
 /insert_many-*.sql
 /multi_transaction_index-*.sql
 /parallel-*.sql
 /partition-*.sql
 /partitioning-*.sql
+/partitionwise-*.sql
 /plan_expand_hypertable-*.sql
 /plan_hashagg_optimized-*.sql
 /plan_hashagg-*.sql
@@ -21,3 +25,4 @@
 /sql_query_results_unoptimized-*.sql
 /sql_query_results_x_diff-*.sql
 /sql_query-*.sql
+/update-*.sql

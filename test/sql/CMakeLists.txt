@@ -5,15 +5,11 @@ set(TEST_FILES
   chunks.sql
   chunk_utils.sql
   cluster.sql
-  constraint.sql
-  copy.sql
   create_chunks.sql
   create_hypertable.sql
   create_table.sql
   cursor.sql
-  ddl.sql
   ddl_errors.sql
-  delete.sql
   drop_extension.sql
   drop_hypertable.sql
   drop_owned.sql
@@ -31,7 +27,6 @@ set(TEST_FILES
   join.sql
   lateral.sql
   partitioning.sql
-  partitionwise.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
@@ -43,7 +38,6 @@ set(TEST_FILES
   timestamp.sql
   triggers.sql
   truncate.sql
-  update.sql
   upsert.sql
   util.sql
   vacuum_multi.sql
@@ -109,8 +103,13 @@ set(TEST_TEMPLATES
   append.sql.in
   insert.sql.in
   chunk_adaptive.sql.in
+  constraint.sql.in
+  copy.sql.in
+  ddl.sql.in
+  delete.sql.in
   parallel.sql.in
   partition.sql.in
+  partitionwise.sql.in
   plan_expand_hypertable.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg.sql.in
@@ -118,7 +117,8 @@ set(TEST_TEMPLATES
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
   sql_query.sql.in
-  )
+  update.sql.in
+)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
