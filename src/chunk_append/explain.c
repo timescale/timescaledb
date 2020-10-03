@@ -84,7 +84,11 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 	initStringInfo(&sortkeybuf);
 
 	/* Set up deparsing context */
+#if PG13_GE
+	context = set_deparse_context_plan(es->deparse_cxt, plan, ancestors);
+#else
 	context = set_deparse_context_planstate(es->deparse_cxt, (Node *) state, ancestors);
+#endif
 	useprefix = (list_length(es->rtable) > 1 || es->verbose);
 
 	for (keyno = 0; keyno < nkeys; keyno++)
