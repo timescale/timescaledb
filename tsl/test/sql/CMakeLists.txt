@@ -130,12 +130,14 @@ set(SOLO_TESTS
   dist_partial_agg
   move-11
   move-12
+  move-13
   remote_connection_cache
   remote_copy
   remote_txn
   remote_txn_resolve
   reorder-11
   reorder-12
+  reorder-13
   telemetry_distributed
 )
 
