@@ -41,8 +41,6 @@ session "I"
 step "I1"	{ INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_series(0, 10) AS i) AS i; }
 step "I2"   { INSERT INTO ts_continuous_test SELECT 40, 1000 ; }
 
-step "S1"	{ SELECT count(*) FROM ts_continuous_test; }
-
 session "R1"
 setup { SET client_min_messages TO LOG; }
 step "Refresh1"	{ CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); }

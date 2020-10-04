@@ -20,16 +20,13 @@ teardown
 }
 
 session "I"
-step "Ib"   { BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';}
 step "I1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); }
 step "Ic"   { COMMIT; }
 
 session "S"
-step "St" {BEGIN;}
 step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT count(*) from _timescaledb_internal._hyper_1_1_chunk; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
-step "Sc" {COMMIT;}
 
 session "LC"
 step "LockChunk1" {
