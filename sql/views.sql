@@ -55,16 +55,19 @@ CREATE OR REPLACE VIEW timescaledb_information.job_stats as
                    WHEN js.last_run_success = 'f' THEN 'Failed'
               END
     END as last_run_status,
-    CASE WHEN js.last_finish < '4714-11-24 00:00:00+00 BC' THEN 'Running'
-         WHEN js.next_start IS NOT NULL THEN 'Scheduled'
+    CASE WHEN pgs.state = 'active' THEN 'Running'
+         WHEN j.scheduled = false THEN 'Paused'
+         ELSE 'Scheduled'
     END as job_status,
     CASE WHEN js.last_finish > js.last_start THEN (js.last_finish - js.last_start)
     END as last_run_duration,
-    js.next_start as next_start,
+    CASE WHEN j.scheduled THEN js.next_start 
+    END as next_start,
     js.total_runs, js.total_successes, js.total_failures
   FROM _timescaledb_config.bgw_job j
     INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
     INNER JOIN _timescaledb_internal.bgw_job_stat js on j.id = js.job_id
+    LEFT JOIN pg_stat_activity pgs ON pgs.datname = current_database() AND pgs.application_name = j.application_name
   ORDER BY ht.schema_name, ht.table_name;
 
 -- view for background worker jobs

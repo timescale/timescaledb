@@ -765,6 +765,31 @@ select next_start = now() from alter_job(:job_id, next_start=>now());
  t
 (1 row)
 
+--test pausing/resuming via scheduled parameter
+select job_id from alter_job(:job_id, scheduled=>false);
+ job_id 
+--------
+   1014
+(1 row)
+
+select job_status, next_start from timescaledb_information.job_stats where job_id = :job_id;
+ job_status | next_start 
+------------+------------
+ Paused     | 
+(1 row)
+
+select job_id from alter_job(:job_id, scheduled=>true);
+ job_id 
+--------
+   1014
+(1 row)
+
+select job_status from timescaledb_information.job_stats where job_id = :job_id;
+ job_status 
+------------
+ Scheduled
+(1 row)
+
 \set ON_ERROR_STOP 0
 -- negative infinity disallowed (used as special value)
 select * from alter_job(:job_id, next_start=>'-infinity');

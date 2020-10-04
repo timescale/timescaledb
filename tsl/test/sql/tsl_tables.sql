@@ -299,6 +299,11 @@ select * from alter_job(:job_id, schedule_interval=>'40 min', next_start=>'2004-
 select * from alter_job(:job_id, next_start=>'infinity');
 --test that you can use now() to unpause
 select next_start = now() from alter_job(:job_id, next_start=>now());
+--test pausing/resuming via scheduled parameter
+select job_id from alter_job(:job_id, scheduled=>false);
+select job_status, next_start from timescaledb_information.job_stats where job_id = :job_id;
+select job_id from alter_job(:job_id, scheduled=>true);
+select job_status from timescaledb_information.job_stats where job_id = :job_id;
 
 \set ON_ERROR_STOP 0
 -- negative infinity disallowed (used as special value)
