@@ -182,11 +182,6 @@ setup
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
 }
-step "L1_lock_threshold_table"
-{
-    LOCK _timescaledb_catalog.continuous_aggs_invalidation_threshold
-    IN ACCESS EXCLUSIVE MODE;
-}
 step "L1_unlock_threshold_table"
 {
     ROLLBACK;
