@@ -64,7 +64,7 @@ CALL refresh_continuous_aggregate(' mat_refresh_test', NULL, NULL);
 SELECT id as cagg_job_id FROM _timescaledb_config.bgw_job order by id desc limit 1 \gset
 SELECT format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name ) as materialization_hypertable 
 FROM timescaledb_information.continuous_aggregates 
-WHERE view_name = 'mat_refresh_test'::regclass \gset
+WHERE view_name = 'mat_refresh_test' \gset
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'mat_refresh_test' \gset
 
