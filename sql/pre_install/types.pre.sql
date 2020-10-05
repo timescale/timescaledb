@@ -5,7 +5,6 @@
 --
 -- The general compressed_data type;
 --
-
 CREATE TYPE _timescaledb_internal.compressed_data;
 
 --
