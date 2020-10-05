@@ -109,7 +109,7 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
           and N.nspname = cagg.direct_view_schema ) directview
   WHERE cagg.mat_hypertable_id = ht.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.data_node AS
+CREATE OR REPLACE VIEW timescaledb_information.data_nodes AS
   SELECT s.node_name, s.owner, s.options
   FROM (SELECT srvname AS node_name, srvowner::regrole::name AS owner, srvoptions AS options
         FROM pg_catalog.pg_foreign_server AS srv, pg_catalog.pg_foreign_data_wrapper AS fdw

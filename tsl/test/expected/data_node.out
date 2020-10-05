@@ -91,7 +91,7 @@ ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 ERROR:  alter owner not supported on a TimescaleDB data node
 \set ON_ERROR_STOP 1
 -- List foreign data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
  data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
@@ -107,7 +107,7 @@ SELECT * FROM delete_data_node('data_node_3');
 (1 row)
 
 -- List data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
  data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
@@ -127,7 +127,7 @@ NOTICE:  data node "data_node_3" does not exist, skipping
  f
 (1 row)
 
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
  data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
@@ -147,7 +147,7 @@ SELECT * FROM delete_data_node('data_node_2');
 (1 row)
 
 -- No data nodes left
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
  node_name | options 
 -----------+---------
 (0 rows)
@@ -188,7 +188,7 @@ GRANT USAGE
    ON FOREIGN SERVER data_node_1, data_node_2
    TO :ROLE_1;
 SELECT node_name, "options"
-  FROM timescaledb_information.data_node
+  FROM timescaledb_information.data_nodes
 ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
@@ -322,7 +322,7 @@ replication_factor
 -- Create one chunk
 INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
 -- Chunk mapping created
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
   node_name  |                    options                     
 -------------+------------------------------------------------
  data_node_1 | {host=localhost,port=55432,dbname=data_node_1}
@@ -720,7 +720,7 @@ SELECT * FROM delete_data_node('data_node_1');
  t
 (1 row)
 
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
  node_name | options 
 -----------+---------
 (0 rows)
@@ -756,7 +756,7 @@ DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
 -- there should be no data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
  node_name | options 
 -----------+---------
 (0 rows)

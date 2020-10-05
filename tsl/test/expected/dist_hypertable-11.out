@@ -23,7 +23,7 @@ GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC
 \unset ECHO
 SET ROLE :ROLE_1;
 -- Verify lack of tables
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
      node_name     |                       options                        
 -------------------+------------------------------------------------------
  dist_hypertable_1 | {host=localhost,port=55432,dbname=dist_hypertable_1}
@@ -363,7 +363,7 @@ Sun Jul 01 08:01:00 2018 PDT|    29| 1.5
  
 (1 row)
 
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
      node_name     |                       options                        
 -------------------+------------------------------------------------------
  dist_hypertable_1 | {host=localhost,port=55432,dbname=dist_hypertable_1}
