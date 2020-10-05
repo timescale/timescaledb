@@ -25,3 +25,6 @@ leak:ShmemInitHash
 leak:deserialize_test_parameters
 leak:ts_params_get
 leak:test_job_dispatcher
+
+#openssl
+leak:CRYPTO_zalloc
