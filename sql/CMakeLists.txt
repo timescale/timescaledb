@@ -9,6 +9,7 @@ set(PRE_INSTALL_SOURCE_FILES
   pre_install/tables.sql
   pre_install/insert_data.sql
   pre_install/bgw_scheduler_startup.sql
+  pre_install/timescaledb_fdw.sql
 )
 
 # Things like aggregate functions cannot be REPLACEd and really
@@ -48,7 +49,6 @@ set(SOURCE_FILES
   maintenance_utils.sql
   partialize_finalize.sql
   restoring.sql
-  timescaledb_fdw.sql
   remote_txn.sql
   job_api.sql
   policy_api.sql
