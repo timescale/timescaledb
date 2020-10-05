@@ -273,7 +273,7 @@ FROM _timescaledb_catalog.hypertable ht,
 WHERE dim.hypertable_id = ht.id;
 
 ---compression parameters information ---
-CREATE VIEW timescaledb_information.compression_settings AS
+CREATE OR REPLACE VIEW timescaledb_information.compression_settings AS
 SELECT ht.schema_name AS hypertable_schema,
   ht.table_name AS hypertable_name,
   segq.attname,
