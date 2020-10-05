@@ -85,7 +85,8 @@ SELECT * FROM test.show_subtables('tspace_2dim');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 \x
-SELECT * FROM timescaledb_information.hypertables ORDER BY table_name;
+SELECT * FROM timescaledb_information.hypertables
+ORDER BY hypertable_schema, hypertable_name;
 SELECT * FROM timescaledb_information.chunks ORDER BY chunk_name;
 \x
 --

@@ -137,10 +137,11 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 (4 rows)
 
 \x
-SELECT * FROM timescaledb_information.hypertables ORDER BY table_name;
+SELECT * FROM timescaledb_information.hypertables
+ORDER BY hypertable_schema, hypertable_name;
 -[ RECORD 1 ]-------+--------------------------
-table_schema        | public
-table_name          | tspace_2dim
+hypertable_schema   | public
+hypertable_name     | tspace_2dim
 owner               | default_perm_user
 num_dimensions      | 2
 num_chunks          | 2

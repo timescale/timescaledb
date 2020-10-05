@@ -61,13 +61,13 @@ select * from _timescaledb_catalog.hypertable_compression order by hypertable_id
              1 | d       |                        4 |                        |                    2 | t           | f
 (4 rows)
 
-select * from timescaledb_information.compression_settings ;
- schema_name | table_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
--------------+------------+---------+------------------------+----------------------+-------------+--------------------
- public      | foo        | a       |                      1 |                      |             | 
- public      | foo        | b       |                      2 |                      |             | 
- public      | foo        | c       |                        |                    1 | f           | t
- public      | foo        | d       |                        |                    2 | t           | f
+select * from timescaledb_information.compression_settings ORDER BY hypertable_name;
+ hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
+ public            | foo             | a       |                      1 |                      |             | 
+ public            | foo             | b       |                      2 |                      |             | 
+ public            | foo             | c       |                        |                    1 | f           | t
+ public            | foo             | d       |                        |                    2 | t           | f
 (4 rows)
 
 -- TEST2 compress-chunk for the chunks created earlier --
@@ -454,11 +454,11 @@ pg_size_pretty | 32 kB
 pg_size_pretty | 96 kB
 
 select * from timescaledb_information.hypertables
-where table_name like 'foo' or table_name like 'conditions'
-order by table_name;
+where hypertable_name like 'foo' or hypertable_name like 'conditions'
+order by hypertable_name;
 -[ RECORD 1 ]-------+------------------
-table_schema        | public
-table_name          | conditions
+hypertable_schema   | public
+hypertable_name     | conditions
 owner               | default_perm_user
 num_dimensions      | 1
 num_chunks          | 2
@@ -468,8 +468,8 @@ replication_factor  |
 data_nodes          | 
 tablespaces         | 
 -[ RECORD 2 ]-------+------------------
-table_schema        | public
-table_name          | foo
+hypertable_schema   | public
+hypertable_name     | foo
 owner               | default_perm_user
 num_dimensions      | 1
 num_chunks          | 4
@@ -1140,30 +1140,30 @@ ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = '
 ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compress_segmentby column for compression
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
-SELECT * FROM timescaledb_information.compression_settings ORDER BY table_name;
- schema_name |   table_name   |   attname   | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
--------------+----------------+-------------+------------------------+----------------------+-------------+--------------------
- public      | conditions     | location    |                      1 |                      |             | 
- public      | conditions     | time        |                        |                    1 | t           | f
- public      | datatype_test  | time        |                        |                    1 | f           | t
- public      | foo            | a           |                      1 |                      |             | 
- public      | foo            | b           |                      2 |                      |             | 
- public      | foo            | c           |                        |                    1 | f           | t
- public      | foo            | d           |                        |                    2 | t           | f
- public      | ht5            | time        |                        |                    1 | f           | t
- public      | hyper          | device_id   |                      1 |                      |             | 
- public      | hyper          | time        |                        |                    1 | t           | f
- public      | metrics        | time        |                        |                    1 | f           | t
- public      | plan_inval     | time        |                        |                    1 | f           | t
- public      | rescan_test    | id          |                      1 |                      |             | 
- public      | rescan_test    | t           |                        |                    1 | f           | t
- public      | table1         | col1        |                      1 |                      |             | 
- public      | table1         | col2        |                      2 |                      |             | 
- public      | test_collation | device_id   |                      1 |                      |             | 
- public      | test_collation | device_id_2 |                      2 |                      |             | 
- public      | test_collation | val_1       |                        |                    1 | t           | f
- public      | test_collation | val_2       |                        |                    2 | t           | f
- public      | test_collation | time        |                        |                    3 | t           | f
+SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
+ hypertable_schema | hypertable_name |   attname   | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------------+-----------------+-------------+------------------------+----------------------+-------------+--------------------
+ public            | conditions      | location    |                      1 |                      |             | 
+ public            | conditions      | time        |                        |                    1 | t           | f
+ public            | datatype_test   | time        |                        |                    1 | f           | t
+ public            | foo             | a           |                      1 |                      |             | 
+ public            | foo             | b           |                      2 |                      |             | 
+ public            | foo             | c           |                        |                    1 | f           | t
+ public            | foo             | d           |                        |                    2 | t           | f
+ public            | ht5             | time        |                        |                    1 | f           | t
+ public            | hyper           | device_id   |                      1 |                      |             | 
+ public            | hyper           | time        |                        |                    1 | t           | f
+ public            | metrics         | time        |                        |                    1 | f           | t
+ public            | plan_inval      | time        |                        |                    1 | f           | t
+ public            | rescan_test     | id          |                      1 |                      |             | 
+ public            | rescan_test     | t           |                        |                    1 | f           | t
+ public            | table1          | col1        |                      1 |                      |             | 
+ public            | table1          | col2        |                      2 |                      |             | 
+ public            | test_collation  | device_id   |                      1 |                      |             | 
+ public            | test_collation  | device_id_2 |                      2 |                      |             | 
+ public            | test_collation  | val_1       |                        |                    1 | t           | f
+ public            | test_collation  | val_2       |                        |                    2 | t           | f
+ public            | test_collation  | time        |                        |                    3 | t           | f
 (21 rows)
 
 -- test delete/update on non-compressed tables involving hypertables with compression
