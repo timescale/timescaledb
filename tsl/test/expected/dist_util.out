@@ -248,11 +248,11 @@ SELECT * FROM timescaledb_information.data_nodes ORDER BY node_name;
  data_node_2 | cluster_super_user | {host=localhost,port=55432,dbname=backend_x_2}
 (2 rows)
 
-SELECT * FROM timescaledb_information.hypertables;
- table_schema |  table_name  |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |        data_nodes         | tablespaces 
---------------+--------------+--------------------+----------------+------------+---------------------+----------------+--------------------+---------------------------+-------------
- public       | nondisttable | cluster_super_user |              1 |          3 | f                   | f              |                    |                           | 
- public       | disttable    | cluster_super_user |              1 |          3 | f                   | t              |                  1 | {data_node_1,data_node_2} | 
+SELECT * FROM timescaledb_information.hypertables ORDER BY hypertable_schema, hypertable_name;
+ hypertable_schema | hypertable_name |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |        data_nodes         | tablespaces 
+-------------------+-----------------+--------------------+----------------+------------+---------------------+----------------+--------------------+---------------------------+-------------
+ public            | disttable       | cluster_super_user |              1 |          3 | f                   | t              |                  1 | {data_node_1,data_node_2} | 
+ public            | nondisttable    | cluster_super_user |              1 |          3 | f                   | f              |                    |                           | 
 (2 rows)
 
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;

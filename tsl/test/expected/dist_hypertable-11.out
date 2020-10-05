@@ -1398,11 +1398,11 @@ time|device|temp|Color
 
 -- The hypertable view also shows no chunks and no data
 SELECT * FROM timescaledb_information.hypertables
-ORDER BY table_schema, table_name;
- table_schema |   table_name    |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |                       data_nodes                        | tablespaces 
---------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------------------------+-------------
- public       | disttable       | test_role_1 |              2 |          0 | f                   | t              |                  1 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
- public       | underreplicated | test_role_1 |              1 |          0 | f                   | t              |                  4 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
+ORDER BY hypertable_schema, hypertable_name;
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |                       data_nodes                        | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------------------------+-------------
+ public            | disttable       | test_role_1 |              2 |          0 | f                   | t              |                  1 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
+ public            | underreplicated | test_role_1 |              1 |          0 | f                   | t              |                  4 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
 (2 rows)
 
 -- Test underreplicated chunk warning
@@ -1640,11 +1640,11 @@ SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_
 ERROR:  invalid replication factor
 \set ON_ERROR_STOP 1
 SELECT * FROM timescaledb_information.hypertables
-ORDER BY table_schema, table_name;
- table_schema |   table_name    |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |                       data_nodes                        | tablespaces 
---------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------------------------+-------------
- public       | disttable       | test_role_1 |              2 |          0 | f                   | t              |                  1 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
- public       | underreplicated | test_role_1 |              1 |          1 | f                   | t              |                  4 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
+ORDER BY hypertable_schema, hypertable_name;
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |                       data_nodes                        | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------------------------+-------------
+ public            | disttable       | test_role_1 |              2 |          0 | f                   | t              |                  1 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
+ public            | underreplicated | test_role_1 |              1 |          1 | f                   | t              |                  4 | {dist_hypertable_1,dist_hypertable_2,dist_hypertable_3} | 
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters

@@ -7,8 +7,8 @@ CREATE SCHEMA IF NOT EXISTS timescaledb_information;
 -- Convenience view to list all hypertables
 CREATE OR REPLACE VIEW timescaledb_information.hypertables AS
   SELECT
-    ht.schema_name AS table_schema,
-    ht.table_name as table_name,
+    ht.schema_name AS hypertable_schema,
+    ht.table_name as hypertable_name,
     t.tableowner AS owner,
     ht.num_dimensions,
     (SELECT count(1)
@@ -241,8 +241,8 @@ WHERE dim.hypertable_id = ht.id
 CREATE VIEW timescaledb_information.compression_settings
 AS
 SELECT
-    ht.schema_name,
-    ht.table_name,
+    ht.schema_name AS hypertable_schema,
+    ht.table_name AS hypertable_name,
     segq.attname,
     segq.segmentby_column_index,
     segq.orderby_column_index,

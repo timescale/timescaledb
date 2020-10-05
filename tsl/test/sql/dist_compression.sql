@@ -89,7 +89,7 @@ LIMIT 1;
 
 \x
 SELECT * FROM timescaledb_information.hypertables
-WHERE table_name = 'compressed';
+WHERE hypertable_name = 'compressed';
 SELECT * from timescaledb_information.chunks 
 ORDER BY hypertable_name, chunk_name;
 SELECT * from timescaledb_information.dimensions 

@@ -140,12 +140,12 @@ WHERE user_view_name = 'mat_m1'
 \gset
 -- Materialized hypertable for mat_m1 should not be visible in the
 -- hypertables view:
-SELECT table_schema, table_name
+SELECT hypertable_schema, hypertable_name
 FROM timescaledb_information.hypertables ORDER BY 1,2;
- table_schema | table_name 
---------------+------------
- public       | conditions
- public       | foo
+ hypertable_schema | hypertable_name 
+-------------------+-----------------
+ public            | conditions
+ public            | foo
 (2 rows)
 
 SET ROLE :ROLE_SUPERUSER;

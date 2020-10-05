@@ -154,13 +154,13 @@ SELECT distributed_exec($$ SELECT setseed(1); $$);
 ANALYZE reference;
 ANALYZE hyper;
 ANALYZE hyper1d;
-SELECT table_schema, table_name, num_dimensions, num_chunks
+SELECT hypertable_schema, hypertable_name, num_dimensions, num_chunks
 FROM timescaledb_information.hypertables
 ORDER BY 1,2;
- table_schema | table_name | num_dimensions | num_chunks 
---------------+------------+----------------+------------
- public       | hyper      |              2 |         18
- public       | hyper1d    |              1 |          3
+ hypertable_schema | hypertable_name | num_dimensions | num_chunks 
+-------------------+-----------------+----------------+------------
+ public            | hyper           |              2 |         18
+ public            | hyper1d         |              1 |          3
 (2 rows)
 
 SELECT count(*) FROM hyper;
