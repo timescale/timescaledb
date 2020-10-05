@@ -138,9 +138,9 @@ insert into test4
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 insert into test4
 select generate_series('2018-02-01 00:00'::timestamp, '2018-02-14 00:00'::timestamp, '1 min'), 'POR', 'klick', 55, 75;
-select table_name, num_chunks
+select hypertable_name, num_chunks
 from timescaledb_information.hypertables
-where table_name like 'test4';
+where hypertable_name like 'test4';
 
 select location, count(*)
 from test4

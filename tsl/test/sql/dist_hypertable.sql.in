@@ -428,7 +428,7 @@ $$);
 
 -- The hypertable view also shows no chunks and no data
 SELECT * FROM timescaledb_information.hypertables
-ORDER BY table_schema, table_name;
+ORDER BY hypertable_schema, hypertable_name;
 
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
@@ -487,7 +487,7 @@ SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_
 \set ON_ERROR_STOP 1
 
 SELECT * FROM timescaledb_information.hypertables
-ORDER BY table_schema, table_name;
+ORDER BY hypertable_schema, hypertable_name;
 
 -- Test distributed hypertable creation with many parameters
 \c :DATA_NODE_1

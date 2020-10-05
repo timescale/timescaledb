@@ -67,10 +67,10 @@ LIMIT 1;
 (1 row)
 
 SELECT * FROM timescaledb_information.hypertables
-WHERE table_name = 'dist_table';
- table_schema | table_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |              data_nodes               | tablespaces 
---------------+------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------+-------------
- public       | dist_table | test_role_1 |              3 |          3 | f                   | t              |                  2 | {view_node_1,view_node_2,view_node_3} | 
+WHERE hypertable_name = 'dist_table';
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |              data_nodes               | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------+-------------
+ public            | dist_table      | test_role_1 |              3 |          3 | f                   | t              |                  2 | {view_node_1,view_node_2,view_node_3} | 
 (1 row)
 
 SELECT * from timescaledb_information.chunks 

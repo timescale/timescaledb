@@ -38,7 +38,7 @@ ORDER BY chunk
 LIMIT 1;
 
 SELECT * FROM timescaledb_information.hypertables
-WHERE table_name = 'dist_table';
+WHERE hypertable_name = 'dist_table';
 SELECT * from timescaledb_information.chunks 
 ORDER BY hypertable_name, chunk_name;
 SELECT * from timescaledb_information.dimensions 
