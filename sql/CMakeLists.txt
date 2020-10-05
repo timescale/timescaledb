@@ -49,7 +49,6 @@ set(SOURCE_FILES
   maintenance_utils.sql
   partialize_finalize.sql
   restoring.sql
-  remote_txn.sql
   job_api.sql
   policy_api.sql
   policy_internal.sql
