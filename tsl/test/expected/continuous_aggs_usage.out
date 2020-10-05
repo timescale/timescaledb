@@ -70,6 +70,7 @@ SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, de
 \x
 SELECT * FROM timescaledb_information.continuous_aggregates;
 -[ RECORD 1 ]---------------------+-------------------------------------------------------------------------------------------------------------
+view_schema                       | public
 view_name                         | device_summary
 view_owner                        | default_perm_user
 schedule_interval                 | @ 2 hours

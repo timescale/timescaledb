@@ -89,7 +89,9 @@ FROM _timescaledb_config.bgw_job j
 
 -- views for continuous aggregate queries ---
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates as
-  SELECT format('%1$I.%2$I', cagg.user_view_schema, cagg.user_view_name)::regclass as view_name,
+  SELECT
+    cagg.user_view_schema AS view_schema,
+    cagg.user_view_name AS view_name,
     viewinfo.viewowner as view_owner,
     bgwjob.schedule_interval,
     cagg.materialized_only,
