@@ -71,13 +71,13 @@ ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 \set ON_ERROR_STOP 1
 
 -- List foreign data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 -- Delete a data node
 SELECT * FROM delete_data_node('data_node_3');
 
 -- List data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Deleting a non-existing data node generates error
@@ -87,13 +87,13 @@ SELECT * FROM delete_data_node('data_node_3');
 -- Deleting non-existing data node with "if_exists" set does not generate error
 SELECT * FROM delete_data_node('data_node_3', if_exists => true);
 
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM delete_data_node('data_node_2');
 
 -- No data nodes left
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 -- Cleanup databases
 RESET ROLE;
@@ -119,7 +119,7 @@ GRANT USAGE
    TO :ROLE_1;
 
 SELECT node_name, "options"
-  FROM timescaledb_information.data_node
+  FROM timescaledb_information.data_nodes
 ORDER BY node_name;
 
 SELECT object_name, object_type, ARRAY_AGG(privilege_type)
@@ -182,7 +182,7 @@ FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
 INSERT INTO disttable VALUES ('2019-02-02 10:45', 1, 23.4);
 
 -- Chunk mapping created
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 DROP TABLE disttable;
 
@@ -380,7 +380,7 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -399,7 +399,7 @@ DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
 
 -- there should be no data nodes
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 -- let's add some
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
