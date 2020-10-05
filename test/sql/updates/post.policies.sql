@@ -2,5 +2,5 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
+SELECT * FROM _timescaledb_config.bgw_job WHERE id <> 1 ORDER BY id;
 
