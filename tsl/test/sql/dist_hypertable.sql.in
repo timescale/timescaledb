@@ -42,7 +42,7 @@ SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_1;
 
 -- Verify lack of tables
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 \set ON_ERROR_STOP 0
 -- Test that one cannot directly create TimescaleDB foreign tables
@@ -187,7 +187,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT * FROM disttable;
 $$);
 
-SELECT node_name, "options" FROM timescaledb_information.data_node ORDER BY node_name;
+SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 
 -- Show what some queries would look like on the frontend
