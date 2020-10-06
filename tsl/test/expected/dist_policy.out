@@ -303,3 +303,6 @@ INSERT INTO conditions
 SELECT time, device, random()*80
 FROM generate_series(1,10) AS time,
      generate_series(1,3) AS device;
+-- Make sure reorder policy is blocked for distributed hypertable
+SELECT add_reorder_policy('conditions', 'conditions_time_idx');
+ERROR:  could not add reorder policy because "conditions" is a distributed hypertable
