@@ -23,6 +23,13 @@ BEGIN
 END
 $BODY$;
 
+-- Replace the function with the version in the new shared library
+-- since it is used in a check constraint when updating the table
+-- bgw_policy_drop_chunks. Not replacing it would try to use the
+-- version in the previous library, which will fail the version check
+-- in ts_extension_check_version.
+CREATE OR REPLACE FUNCTION _timescaledb_internal.valid_ts_interval(invl _timescaledb_catalog.ts_interval)
+RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_valid_ts_interval' LANGUAGE C VOLATILE STRICT;
 
 ALTER TABLE  _timescaledb_catalog.continuous_agg
     ADD COLUMN  ignore_invalidation_older_than BIGINT NOT NULL DEFAULT BIGINT '9223372036854775807';
