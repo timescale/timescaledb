@@ -147,6 +147,14 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 				 errmsg("could not add reorder policy because \"%s\" is not a hypertable",
 						get_rel_name(ht_oid))));
 
+	if (hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("could not add reorder policy because \"%s\" is a distributed hypertable",
+						get_rel_name(ht_oid)),
+				 errdetail("Current version doesn't implement support for add_reorder_policy() on "
+						   "distributed hypertables.")));
+
 	/* Now verify that the index is an actual index on that hypertable */
 	check_valid_index(ht, index_name);
 
