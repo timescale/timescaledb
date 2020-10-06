@@ -2,8 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir setup.v2.sql
-\ir setup.continuous_aggs.v2.sql
-\ir setup.compression.sql
-\ir setup.policies.sql
-
+SELECT
+    *
+FROM
+    _timescaledb_config.bgw_policy_drop_chunks
+ORDER BY
+    job_id;
