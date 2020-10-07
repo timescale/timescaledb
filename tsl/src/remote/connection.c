@@ -915,23 +915,19 @@ remote_validate_extension_version(TSConnection *conn, const char *data_node_vers
  * Compare remote connection extension version with the one installed
  * locally on the access node.
  *
- * If `owner` is a non-null pointer, it will be updated with the name of the
- * owner of the extension.
- *
  * Return false if extension is not found, true otherwise.
  */
 bool
-remote_connection_check_extension(TSConnection *conn, const char **owner_name, Oid *owner_oid)
+remote_connection_check_extension(TSConnection *conn)
 {
 	PGresult *res;
 
 	res = remote_connection_execf(conn,
-								  "SELECT usename, extowner, extversion FROM pg_extension JOIN "
-								  "pg_user ON extowner = usesysid WHERE extname = %s",
+								  "SELECT extversion FROM pg_extension WHERE extname = %s",
 								  quote_literal_cstr(EXTENSION_NAME));
 
 	/* Just to capture any bugs in the SELECT above */
-	Assert(PQnfields(res) == 3);
+	Assert(PQnfields(res) == 1);
 
 	switch (PQntuples(res))
 	{
@@ -951,14 +947,7 @@ remote_connection_check_extension(TSConnection *conn, const char **owner_name, O
 
 	/* validate extension version on data node and make sure that it is
 	 * compatible */
-	remote_validate_extension_version(conn, PQgetvalue(res, 0, 2));
-
-	/* extract owner */
-	if (owner_name != NULL)
-		*owner_name = pstrdup(PQgetvalue(res, 0, 0));
-
-	if (owner_oid != NULL)
-		*owner_oid = pg_atoi(PQgetvalue(res, 0, 1), sizeof(int32), 0);
+	remote_validate_extension_version(conn, PQgetvalue(res, 0, 0));
 
 	PQclear(res);
 	return true;
@@ -1245,7 +1234,7 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 
 		/* Check a data node extension version and show a warning
 		 * message if it differs */
-		remote_connection_check_extension(conn, NULL, NULL);
+		remote_connection_check_extension(conn);
 
 		if (set_dist_id)
 		{

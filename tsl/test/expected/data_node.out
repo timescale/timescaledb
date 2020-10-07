@@ -1291,9 +1291,29 @@ NOTICE:  database "db_data_node" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
 ERROR:  [data_node_99]: cannot add the current database as a data node to itself
 \set ON_ERROR_STOP 1
+-- Test adding bootstrapped data node where extension owner is different from user adding a data node
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+CREATE DATABASE data_node_6;
+\c data_node_6
+SET client_min_messages = ERROR;
+-- Creating an extension as superuser
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
+-- Trying to add data node as non-superuser
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
+NOTICE:  database "data_node_6" already exists on data node, skipping
+NOTICE:  extension "timescaledb" already exists on data node, skipping
+  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------+--------------+------------------+-------------------
+ data_node_6 | localhost | 55432 | data_node_6 | t            | f                | f
+(1 row)
+
 RESET ROLE;
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
 DROP DATABASE data_node_5;
+DROP DATABASE data_node_6;
