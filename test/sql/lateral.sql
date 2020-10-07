@@ -54,3 +54,41 @@ ORDER BY user_id, first_order_time, time1, min_time;
 
 -- Cleanup
 DROP TABLE orders;
+
+---- OUTER JOIN tests ---
+--github issue 2500
+
+CREATE TABLE t1_timescale (a int, b int);
+CREATE TABLE t2 (a int, b int);
+SELECT create_hypertable('t1_timescale', 'a', chunk_time_interval=>1000);
+
+INSERT into t2 values (3, 3), (15 , 15);
+INSERT into t1_timescale select generate_series(5, 25, 1), 77;
+UPDATE t1_timescale SET b = 15 WHERE a = 15;
+
+SELECT * FROM t1_timescale
+FULL OUTER JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
+ORDER BY 1, 2, 3, 4;
+
+SELECT * FROM t1_timescale
+LEFT OUTER JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
+WHERE t1_timescale.a=5
+ORDER BY 1, 2, 3, 4;
+
+SELECT * FROM t1_timescale
+RIGHT JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20 
+ORDER BY 1, 2, 3, 4;
+
+SELECT * FROM t1_timescale
+RIGHT JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
+WHERE t1_timescale.a=5
+ORDER BY 1, 2, 3, 4;
+
+SELECT * FROM t1_timescale
+LEFT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20 
+WHERE t1_timescale.a IN ( 10, 15, 20, 25) 
+ORDER BY 1, 2, 3, 4;
+
+SELECT * FROM t1_timescale
+RIGHT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20 
+ORDER BY 1, 2, 3, 4;

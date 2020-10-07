@@ -1085,7 +1085,7 @@ timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 	{
 		JoinExpr *j = castNode(JoinExpr, node);
 		j->quals = timebucket_annotate(j->quals, ctx);
-		collect_join_quals(j->quals, ctx, !IS_OUTER_JOIN(j->jointype));
+		collect_join_quals(j->quals, ctx, IS_OUTER_JOIN(j->jointype));
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
