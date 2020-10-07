@@ -60,7 +60,7 @@ typedef struct DbInfo
 	NameData collation;
 } DbInfo;
 
-static void data_node_validate_database(TSConnection *conn, const DbInfo *database);
+static bool data_node_validate_database(TSConnection *conn, const DbInfo *database);
 
 /*
  * get_database_info - given a database OID, look up info about the database
@@ -326,50 +326,52 @@ create_data_node_options(const char *host, int32 port, const char *dbname, const
 	return list_make4(host_elm, port_elm, dbname_elm, user_elm);
 }
 
+/* Returns 'true' if the database was created. */
 static bool
 data_node_bootstrap_database(TSConnection *conn, const DbInfo *database)
 {
 	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 
-	PGresult *res;
-
 	Assert(database);
 
-	/* Create the database with the user as owner. This command might fail
-	 * if the database already exists, but we catch the error and continue
-	 * with the bootstrapping if it does. */
-	res = remote_connection_execf(conn,
-								  "CREATE DATABASE %s ENCODING %s LC_COLLATE %s LC_CTYPE %s "
-								  "TEMPLATE template0 OWNER %s",
-								  quote_identifier(NameStr(database->name)),
-								  quote_identifier(pg_encoding_to_char(database->encoding)),
-								  quote_literal_cstr(NameStr(database->collation)),
-								  quote_literal_cstr(NameStr(database->chartype)),
-								  quote_identifier(username));
-
-	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	if (data_node_validate_database(conn, database))
 	{
-		const char *const sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-		bool database_exists = (sqlstate && strcmp(sqlstate, ERRCODE_DUPLICATE_DATABASE_STR) == 0);
-
-		if (!database_exists)
-			remote_result_elog(res, ERROR);
-
-		/* If the database already existed on the remote node, we got a
-		 * duplicate database error above and the database was not created.
-		 *
-		 * In this case, we will log a notice and proceed since it is not an
-		 * error if the database already existed on the remote node. */
+		/* If the database already existed on the remote node, we will log a
+		 * notice and proceed since it is not an error if the database already
+		 * existed on the remote node. */
 		elog(NOTICE,
 			 "database \"%s\" already exists on data node, skipping",
 			 NameStr(database->name));
-		data_node_validate_database(conn, database);
+		return false;
 	}
 
-	return (PQresultStatus(res) == PGRES_COMMAND_OK);
+	/* Create the database with the user as owner. There is no need to
+	 * validate the database after this command since it should be created
+	 * correctly. */
+	PGresult *res =
+		remote_connection_execf(conn,
+								"CREATE DATABASE %s ENCODING %s LC_COLLATE %s LC_CTYPE %s "
+								"TEMPLATE template0 OWNER %s",
+								quote_identifier(NameStr(database->name)),
+								quote_identifier(pg_encoding_to_char(database->encoding)),
+								quote_literal_cstr(NameStr(database->collation)),
+								quote_literal_cstr(NameStr(database->chartype)),
+								quote_identifier(username));
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+		remote_result_elog(res, ERROR);
+	return true;
 }
 
-static void
+/* Validate the database.
+ *
+ * Errors:
+ *   Will abort with errors if the database exists but is not correctly set
+ *   up.
+ * Returns:
+ *   true if the database exists and is valid
+ *   false if it does not exist.
+ */
+static bool
 data_node_validate_database(TSConnection *conn, const DbInfo *database)
 {
 	PGresult *res;
@@ -386,15 +388,16 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 		ereport(ERROR,
 				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
 
-	/* This only fails if current database is not in pg_database, which would
-	 * very very strange. */
-	Assert(PQntuples(res) > 0 && PQnfields(res) > 2);
+	if (PQntuples(res) == 0)
+		return false;
+
+	Assert(PQnfields(res) > 2);
 
 	actual_encoding = atoi(PQgetvalue(res, 0, 0));
 	if (actual_encoding != database->encoding)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 errmsg("database encoding mismatch"),
+				 errmsg("database exists but has wrong encoding"),
 				 errdetail("Expected database encoding to be \"%s\" (%u) but it was \"%s\" (%u)",
 						   pg_encoding_to_char(database->encoding),
 						   database->encoding,
@@ -406,7 +409,7 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 	if (strcmp(actual_collation, NameStr(database->collation)) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 errmsg("database collation mismatch"),
+				 errmsg("database exists but has wrong collation"),
 				 errdetail("Expected collation \"%s\" but it was \"%s\"",
 						   NameStr(database->collation),
 						   actual_collation)));
@@ -416,10 +419,11 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 	if (strcmp(actual_chartype, NameStr(database->chartype)) != 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 errmsg("database LC_CTYPE mismatch"),
+				 errmsg("database exists but has wrong LC_CTYPE"),
 				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\"",
 						   NameStr(database->chartype),
 						   actual_chartype)));
+	return true;
 }
 
 static void
