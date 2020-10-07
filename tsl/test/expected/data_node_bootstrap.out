@@ -188,8 +188,7 @@ CREATE DATABASE bootstrap_test
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => true);
-NOTICE:  database "bootstrap_test" already exists on data node, skipping
-ERROR:  database encoding mismatch
+ERROR:  database exists but has wrong encoding
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
 ----------------------------------------------------------------------
@@ -224,7 +223,7 @@ SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
-ERROR:  database encoding mismatch
+ERROR:  database exists but has wrong encoding
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
 CREATE DATABASE bootstrap_test
@@ -242,7 +241,7 @@ SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
-ERROR:  database collation mismatch
+ERROR:  database exists but has wrong collation
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
 CREATE DATABASE bootstrap_test
@@ -260,7 +259,7 @@ SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
-ERROR:  database LC_CTYPE mismatch
+ERROR:  database exists but has wrong LC_CTYPE
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
 -----------------------------------------------------------------------
