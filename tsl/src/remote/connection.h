@@ -68,8 +68,7 @@ extern unsigned int remote_connection_get_cursor_number(void);
 extern void remote_connection_reset_cursor_number(void);
 extern unsigned int remote_connection_get_prep_stmt_number(void);
 extern bool remote_connection_configure(TSConnection *conn);
-extern bool remote_connection_check_extension(TSConnection *conn, const char **owner_name,
-											  Oid *owner_oid);
+extern bool remote_connection_check_extension(TSConnection *conn);
 extern void remote_validate_extension_version(TSConnection *conn, const char *data_node_version);
 
 extern bool remote_connection_cancel_query(TSConnection *conn);

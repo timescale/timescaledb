@@ -656,9 +656,25 @@ SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1
 SELECT * FROM add_data_node('data_node_99', host => 'localhost');
 \set ON_ERROR_STOP 1
 
+
+-- Test adding bootstrapped data node where extension owner is different from user adding a data node
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+CREATE DATABASE data_node_6;
+\c data_node_6
+SET client_min_messages = ERROR;
+-- Creating an extension as superuser
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_1;
+-- Trying to add data node as non-superuser
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
+
 RESET ROLE;
 DROP DATABASE data_node_1;
 DROP DATABASE data_node_2;
 DROP DATABASE data_node_3;
 DROP DATABASE data_node_4;
 DROP DATABASE data_node_5;
+DROP DATABASE data_node_6;

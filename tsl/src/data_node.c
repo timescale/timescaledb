@@ -427,12 +427,9 @@ data_node_validate_extension(TSConnection *conn)
 {
 	const char *const dbname = PQdb(remote_connection_get_pg_conn(conn));
 	const char *const host = PQhost(remote_connection_get_pg_conn(conn));
-	const char *const username = PQuser(remote_connection_get_pg_conn(conn));
 	const char *const port = PQport(remote_connection_get_pg_conn(conn));
 
-	const char *actual_username = NULL;
-
-	if (!remote_connection_check_extension(conn, &actual_username, NULL))
+	if (!remote_connection_check_extension(conn))
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database does not have TimescaleDB extension loaded"),
@@ -441,15 +438,6 @@ data_node_validate_extension(TSConnection *conn)
 						   dbname,
 						   host,
 						   port)));
-
-	/* Check that the owner is correct */
-	if (strcmp(actual_username, username) != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 errmsg("invalid extension owner"),
-				 errdetail("Expected TimescaleDB owner to be %s, but was %s",
-						   username,
-						   actual_username)));
 }
 
 static void
