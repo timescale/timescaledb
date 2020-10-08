@@ -508,11 +508,15 @@ SELECT * FROM detach_data_node(NULL, 'disttable');
 SELECT * FROM detach_data_node('data_node_1');
 -- can't detach already detached data node
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
+SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => false);
 -- can't detach b/c of replication factor for disttable_2
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2');
 -- can't detach non hypertable
 SELECT * FROM detach_data_node('data_node_3', 'devices');
 \set ON_ERROR_STOP 1
+
+-- do nothing if node is not attached
+SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => true);
 
 -- force detach data node to become under-replicated for new data
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
@@ -547,7 +551,7 @@ SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables
 ORDER BY foreign_table_name;
 
-SELECT * FROM detach_data_node('data_node_2', 'disttable', true);
+SELECT * FROM detach_data_node('data_node_2', 'disttable', force => true);
 
 -- Let's add more data nodes
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
