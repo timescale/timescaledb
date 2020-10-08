@@ -1133,14 +1133,14 @@ data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_d
 }
 
 static HypertableDataNode *
-get_hypertable_data_node(Oid table_id, const char *node_name, bool ownercheck)
+get_hypertable_data_node(Oid table_id, const char *node_name, bool owner_check, bool attach_check)
 {
 	HypertableDataNode *hdn = NULL;
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, table_id, CACHE_FLAG_NONE);
 	ListCell *lc;
 
-	if (ownercheck)
+	if (owner_check)
 		ts_hypertable_permissions_check(table_id, GetUserId());
 
 	foreach (lc, ht->data_nodes)
@@ -1153,11 +1153,21 @@ get_hypertable_data_node(Oid table_id, const char *node_name, bool ownercheck)
 	}
 
 	if (hdn == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_DATA_NODE_NOT_ATTACHED),
-				 errmsg("data node \"%s\" is not attached to hypertable \"%s\"",
-						node_name,
-						get_rel_name(table_id))));
+	{
+		if (attach_check)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_DATA_NODE_NOT_ATTACHED),
+					 errmsg("data node \"%s\" is not attached to hypertable \"%s\"",
+							node_name,
+							get_rel_name(table_id))));
+		else
+			ereport(NOTICE,
+					(errcode(ERRCODE_TS_DATA_NODE_NOT_ATTACHED),
+					 errmsg("data node \"%s\" is not attached to hypertable \"%s\", "
+							"skipping",
+							node_name,
+							get_rel_name(table_id))));
+	}
 
 	ts_cache_release(hcache);
 
@@ -1180,7 +1190,7 @@ data_node_block_or_allow_new_chunks(const char *node_name, Oid const table_id, b
 		/* Early abort on missing hypertable permissions */
 		ts_hypertable_permissions_check(table_id, GetUserId());
 		hypertable_data_nodes =
-			list_make1(get_hypertable_data_node(table_id, server->servername, true));
+			list_make1(get_hypertable_data_node(table_id, server->servername, true, true));
 	}
 	else
 	{
@@ -1226,8 +1236,9 @@ data_node_detach(PG_FUNCTION_ARGS)
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool all_hypertables = PG_ARGISNULL(1);
-	bool force = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
-	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	bool if_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	bool force = PG_ARGISNULL(3) ? InvalidOid : PG_GETARG_OID(3);
+	bool repartition = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	int removed = 0;
 	List *hypertable_data_nodes = NIL;
 	ForeignServer *server;
@@ -1239,10 +1250,14 @@ data_node_detach(PG_FUNCTION_ARGS)
 
 	if (OidIsValid(table_id))
 	{
+		HypertableDataNode *node;
+
 		/* Early abort on missing hypertable permissions */
 		ts_hypertable_permissions_check(table_id, GetUserId());
-		hypertable_data_nodes =
-			list_make1(get_hypertable_data_node(table_id, server->servername, true));
+
+		node = get_hypertable_data_node(table_id, server->servername, true, !if_attached);
+		if (node)
+			hypertable_data_nodes = list_make1(node);
 	}
 	else
 	{
