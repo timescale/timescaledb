@@ -50,7 +50,7 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 									int limit, ScanTupLock *tuplock);
 extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start,
 															 int64 range_end, int limit);
-extern bool ts_dimension_slice_scan_for_existing(DimensionSlice *slice);
+extern bool ts_dimension_slice_scan_for_existing(DimensionSlice *slice, ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
 															  ScanTupLock *tuplock,
 															  MemoryContext mctx);

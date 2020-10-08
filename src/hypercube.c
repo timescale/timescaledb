@@ -212,6 +212,35 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 }
 
 /*
+ * Find slices in the hypercube that already exists in metadata.
+ *
+ * If a slice exists in metadata, the slice ID will be filled in on the
+ * existing slice in the hypercube. Optionally, also lock the slice when
+ * found.
+ */
+int
+ts_hypercube_find_existing_slices(Hypercube *cube, ScanTupLock *tuplock)
+{
+	int i;
+	int num_found = 0;
+
+	for (i = 0; i < cube->num_slices; i++)
+	{
+		/*
+		 * Check if there's already an existing slice with the calculated
+		 * range. If a slice already exists, use that slice's ID instead
+		 * of a new one.
+		 */
+		bool found = ts_dimension_slice_scan_for_existing(cube->slices[i], tuplock);
+
+		if (found)
+			num_found++;
+	}
+
+	return num_found;
+}
+
+/*
  * Calculate the hypercube that encloses the given point.
  *
  * The hypercube's dimensions are calculated one by one, and depend on the
@@ -278,11 +307,8 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock
 			 * Check if there's already an existing slice with the calculated
 			 * range. If a slice already exists, use that slice's ID instead
 			 * of a new one.
-			 *
-			 * The tuples are already locked in
-			 * `chunk_create_from_point_after_lock`, so nothing to do here.
 			 */
-			ts_dimension_slice_scan_for_existing(cube->slices[i]);
+			ts_dimension_slice_scan_for_existing(cube->slices[i], tuplock);
 		}
 	}
 

@@ -110,7 +110,7 @@ extern Chunk *ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *s
 
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
-extern Chunk *ts_chunk_find(Hypertable *ht, Point *p);
+extern Chunk *ts_chunk_find(Hypertable *ht, Point *p, bool lock_slices);
 extern Chunk **ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
 extern List *ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode);
