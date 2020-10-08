@@ -179,6 +179,7 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_attach' LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION detach_data_node(
     node_name              NAME,
     hypertable             REGCLASS = NULL,
+    if_attached            BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE,
     repartition            BOOLEAN = TRUE
 ) RETURNS INTEGER

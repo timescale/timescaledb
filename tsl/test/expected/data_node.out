@@ -1026,6 +1026,8 @@ ERROR:  detaching data node "data_node_1" failed because it contains chunks for 
 -- can't detach already detached data node
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
 ERROR:  data node "data_node_2" is not attached to hypertable "disttable_2"
+SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => false);
+ERROR:  data node "data_node_2" is not attached to hypertable "disttable_2"
 -- can't detach b/c of replication factor for disttable_2
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2');
 ERROR:  detaching data node "data_node_3" risks making new data for hypertable "disttable_2" under-replicated
@@ -1033,6 +1035,14 @@ ERROR:  detaching data node "data_node_3" risks making new data for hypertable "
 SELECT * FROM detach_data_node('data_node_3', 'devices');
 ERROR:  table "devices" is not a hypertable
 \set ON_ERROR_STOP 1
+-- do nothing if node is not attached
+SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => true);
+NOTICE:  data node "data_node_2" is not attached to hypertable "disttable_2", skipping
+ detach_data_node 
+------------------
+                0
+(1 row)
+
 -- force detach data node to become under-replicated for new data
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
 WARNING:  new data for hypertable "disttable_2" will be under-replicated due to detaching data node "data_node_3"
@@ -1127,7 +1137,7 @@ ORDER BY foreign_table_name;
 --------------------+---------------------
 (0 rows)
 
-SELECT * FROM detach_data_node('data_node_2', 'disttable', true);
+SELECT * FROM detach_data_node('data_node_2', 'disttable', force => true);
 WARNING:  new data for hypertable "disttable" will be under-replicated due to detaching data node "data_node_2"
 NOTICE:  the number of partitions in dimension "device" was decreased to 1
  detach_data_node 
