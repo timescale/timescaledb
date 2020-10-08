@@ -113,7 +113,7 @@ static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_fu
 											 uint16 limit);
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
-static Chunk *chunk_find(Hypertable *ht, Point *p, bool resurrect);
+static Chunk *chunk_find(Hypertable *ht, Point *p, bool resurrect, bool lock_slices);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
 											  const char *table_name);
 static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid);
@@ -1075,6 +1075,14 @@ ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *
 
 	if (NULL == stub)
 	{
+		ScanTupLock tuplock = {
+			.lockmode = LockTupleKeyShare,
+			.waitpolicy = LockWaitBlock,
+		};
+
+		/* Lock all slices that already exist to ensure they remain when we
+		 * commit since we won't create those slices ourselves. */
+		ts_hypercube_find_existing_slices(hc, &tuplock);
 		chunk = chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
 
 		if (NULL != created)
@@ -1118,8 +1126,10 @@ ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const c
 	 */
 	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
 
-	/* Recheck if someone else created the chunk before we got the table lock */
-	chunk = chunk_find(ht, p, true);
+	/* Recheck if someone else created the chunk before we got the table
+	 * lock. The returned chunk will have all slices locked so that they
+	 * aren't removed. */
+	chunk = chunk_find(ht, p, true, true);
 
 	if (NULL == chunk)
 	{
@@ -1366,7 +1376,7 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, DimensionVec *v
  * to two chunks.
  */
 static void
-chunk_point_scan(ChunkScanCtx *scanctx, Point *p)
+chunk_point_scan(ChunkScanCtx *scanctx, Point *p, bool lock_slices)
 {
 	int i;
 
@@ -1374,11 +1384,15 @@ chunk_point_scan(ChunkScanCtx *scanctx, Point *p)
 	for (i = 0; i < scanctx->space->num_dimensions; i++)
 	{
 		DimensionVec *vec;
+		ScanTupLock tuplock = {
+			.lockmode = LockTupleKeyShare,
+			.waitpolicy = LockWaitBlock,
+		};
 
 		vec = ts_dimension_slice_scan_limit(scanctx->space->dimensions[i].fd.id,
 											p->coordinates[i],
 											0,
-											NULL);
+											lock_slices ? &tuplock : NULL);
 
 		dimension_slice_and_chunk_constraint_join(scanctx, vec);
 	}
@@ -1610,7 +1624,7 @@ chunk_resurrect(Hypertable *ht, ChunkStub *stub)
  * case it needs to live beyond the lifetime of the other data.
  */
 static Chunk *
-chunk_find(Hypertable *ht, Point *p, bool resurrect)
+chunk_find(Hypertable *ht, Point *p, bool resurrect, bool lock_slices)
 {
 	ChunkStub *stub;
 	Chunk *chunk = NULL;
@@ -1623,7 +1637,7 @@ chunk_find(Hypertable *ht, Point *p, bool resurrect)
 	ctx.early_abort = true;
 
 	/* Scan for the chunk matching the point */
-	chunk_point_scan(&ctx, p);
+	chunk_point_scan(&ctx, p, lock_slices);
 
 	/* Find the stub that has N matching dimension constraints */
 	stub = chunk_scan_ctx_get_chunk_stub(&ctx);
@@ -1657,9 +1671,9 @@ chunk_find(Hypertable *ht, Point *p, bool resurrect)
 }
 
 Chunk *
-ts_chunk_find(Hypertable *ht, Point *p)
+ts_chunk_find(Hypertable *ht, Point *p, bool lock_slices)
 {
-	return chunk_find(ht, p, false);
+	return chunk_find(ht, p, false, lock_slices);
 }
 
 /*
@@ -3256,6 +3270,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 
 	if (affected_data_nodes)
 		*affected_data_nodes = data_nodes;
+
+	DEBUG_WAITPOINT("drop_chunks_end");
 
 	return dropped_chunk_names;
 }

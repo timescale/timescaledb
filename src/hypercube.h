@@ -30,6 +30,7 @@ extern TSDLLEXPORT Hypercube *ts_hypercube_alloc(int16 num_dimensions);
 extern void ts_hypercube_free(Hypercube *hc);
 extern TSDLLEXPORT void ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
 extern Hypercube *ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx);
+extern int ts_hypercube_find_existing_slices(Hypercube *cube, ScanTupLock *tuplock);
 extern Hypercube *ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock);
 extern bool ts_hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
 extern TSDLLEXPORT DimensionSlice *ts_hypercube_get_slice_by_dimension_id(Hypercube *hc,
