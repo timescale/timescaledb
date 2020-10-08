@@ -256,11 +256,8 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock
 			 * Check if there's already an existing slice with the calculated
 			 * range. If a slice already exists, use that slice's ID instead
 			 * of a new one.
-			 *
-			 * The tuples are already locked in
-			 * `chunk_create_from_point_after_lock`, so nothing to do here.
 			 */
-			ts_dimension_slice_scan_for_existing(cube->slices[i]);
+			ts_dimension_slice_scan_for_existing(cube->slices[i], tuplock);
 		}
 	}
 

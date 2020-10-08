@@ -8,10 +8,10 @@ setup {
   SELECT create_hypertable('dropchunks_race_t1', 'time', 'device', 2);
   INSERT INTO dropchunks_race_t1 VALUES ('2020-01-03 10:30', 1, 32.2);
 
-  CREATE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+  CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
   AS '@TS_MODULE_PATHNAME@', 'ts_debug_waitpoint_enable';
 
-  CREATE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+  CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
   AS '@TS_MODULE_PATHNAME@', 'ts_debug_waitpoint_release';
 }
 
@@ -20,14 +20,35 @@ teardown {
 }
 
 session "s1"
-step "s1a"	{ SELECT COUNT(*) FROM drop_chunks(TIMESTAMPTZ '2020-03-01', 'dropchunks_race_t1'); }
+step "s1_drop_chunks"	{ SELECT count(*) FROM drop_chunks(TIMESTAMPTZ '2020-03-01', 'dropchunks_race_t1'); }
 
 session "s2"
-step "s2a"	{ SELECT COUNT(*) FROM drop_chunks(TIMESTAMPTZ '2020-03-01', 'dropchunks_race_t1'); }
+step "s2_drop_chunks"	{ SELECT count(*) FROM drop_chunks(TIMESTAMPTZ '2020-03-01', 'dropchunks_race_t1'); }
 
 session "s3"
-setup           { SELECT debug_waitpoint_enable('drop_chunks_chunks_found'); }
-step "s3a"      { SELECT debug_waitpoint_release('drop_chunks_chunks_found'); }
-step "s3b" 	{ SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice); }
+step "s3_chunks_found_wait"           { SELECT debug_waitpoint_enable('drop_chunks_chunks_found'); }
+step "s3_chunks_found_release"      { SELECT debug_waitpoint_release('drop_chunks_chunks_found'); }
+step "s3_show_missing_slices"	{ SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice); }
+step "s3_show_num_chunks"  { SELECT count(*) FROM show_chunks('dropchunks_race_t1') ORDER BY 1; }
+step "s3_show_data"  { SELECT * FROM dropchunks_race_t1 ORDER BY 1; }
 
-permutation "s1a" "s2a" "s3a" "s3b"
+session "s4"
+step "s4_chunks_dropped_wait"         { SELECT debug_waitpoint_enable('drop_chunks_end'); }
+step "s4_chunks_dropped_release"      { SELECT debug_waitpoint_release('drop_chunks_end'); }
+
+session "s5"
+step "s5_insert_old_chunk" { INSERT INTO dropchunks_race_t1 VALUES ('2020-01-02 10:31', 1, 1.1); }
+step "s5_insert_new_chunk" { INSERT INTO dropchunks_race_t1 VALUES ('2020-03-01 10:30', 1, 2.2); }
+
+# Test race between two drop_chunks processes.
+permutation "s3_chunks_found_wait" "s1_drop_chunks" "s2_drop_chunks" "s3_chunks_found_release" "s3_show_missing_slices" "s3_show_num_chunks" "s3_show_data"
+
+# Test race between drop_chunks and an insert into a new chunk. The
+# new chunk will share a slice with the chunk that is about to be
+# dropped. The shared slice must persist after drop_chunks completes,
+# or otherwise the new chunk will lack one slice.
+permutation "s4_chunks_dropped_wait" "s1_drop_chunks" "s5_insert_new_chunk" "s4_chunks_dropped_release" "s3_show_missing_slices" "s3_show_num_chunks" "s3_show_data"
+
+# Test race between drop_chunks and an insert into the chunk being
+# concurrently dropped. The chunk and slices should be recreated.
+permutation "s4_chunks_dropped_wait" "s1_drop_chunks" "s5_insert_old_chunk" "s4_chunks_dropped_release" "s3_show_missing_slices" "s3_show_num_chunks" "s3_show_data"
