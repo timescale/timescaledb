@@ -4,25 +4,26 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/jsonb.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/builtins.h>
-#include <catalog/indexing.h>
-#include <catalog/pg_type.h>
-#include <catalog/pg_class.h>
-#include <catalog/pg_inherits.h>
-#include <catalog/pg_operator.h>
-#include <catalog/pg_namespace.h>
-#include <access/htup.h>
 #include <access/htup_details.h>
+#include <access/htup.h>
+#include <access/multixact.h>
 #include <access/visibilitymap.h>
 #include <access/xact.h>
-#include <access/multixact.h>
+#include <catalog/indexing.h>
+#include <catalog/pg_class.h>
+#include <catalog/pg_inherits.h>
+#include <catalog/pg_namespace.h>
+#include <catalog/pg_operator.h>
+#include <catalog/pg_type.h>
 #include <commands/vacuum.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <utils/array.h>
+#include <utils/builtins.h>
+#include <utils/jsonb.h>
+#include <utils/lsyscache.h>
+#include <utils/syscache.h>
 
 #include <catalog.h>
 #include <compat.h>
@@ -949,8 +950,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 		Assert(HeapTupleIsValid(type_tuple));
 		type = (Form_pg_type) GETSTRUCT(type_tuple);
 		Assert(slot_values[k] != NULL);
-		nelems = DatumGetInt32(
-			DirectFunctionCall2(array_length, PointerGetDatum(slot_values[k]), Int32GetDatum(1)));
+		nelems = ARR_DIMS(slot_values[k])[0];
 
 		decoded_data = palloc0(nelems * sizeof(Datum));
 
