@@ -50,7 +50,7 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 									int limit, ScanTupLock *tuplock);
 extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start,
 															 int64 range_end, int limit);
-extern bool ts_dimension_slice_scan_for_existing(DimensionSlice *slice);
+extern bool ts_dimension_slice_scan_for_existing(DimensionSlice *slice, ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
 															  ScanTupLock *tuplock,
 															  MemoryContext mctx);
@@ -68,7 +68,7 @@ extern bool ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *
 extern bool ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2);
 extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);
-extern void ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
+extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, int num_slices);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 

@@ -1009,7 +1009,7 @@ hypertable_chunk_store_add(Hypertable *h, Chunk *chunk)
 }
 
 static inline Chunk *
-hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
+hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists, bool lock_chunk_slices)
 {
 	Chunk *chunk;
 	ChunkStoreEntry *cse = ts_subspace_store_get(h->chunk_cache, point);
@@ -1025,7 +1025,7 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 	 * allocates a lot of transient data. We don't want this allocated on
 	 * the cache's memory context.
 	 */
-	chunk = ts_chunk_find(h, point);
+	chunk = ts_chunk_find(h, point, lock_chunk_slices);
 
 	if (NULL == chunk)
 	{
@@ -1049,14 +1049,16 @@ hypertable_get_chunk(Hypertable *h, Point *point, bool create_if_not_exists)
 Chunk *
 ts_hypertable_find_chunk_if_exists(Hypertable *h, Point *point)
 {
-	return hypertable_get_chunk(h, point, false);
+	return hypertable_get_chunk(h, point, false, false);
 }
 
-/* gets the chunk for a given point, creating it if it does not exist */
+/* gets the chunk for a given point, creating it if it does not exist. If an
+ * existing chunk exists, all its dimension slices will be locked in FOR KEY
+ * SHARE mode. */
 Chunk *
 ts_hypertable_get_or_create_chunk(Hypertable *h, Point *point)
 {
-	return hypertable_get_chunk(h, point, true);
+	return hypertable_get_chunk(h, point, true, true);
 }
 
 bool

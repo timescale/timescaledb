@@ -101,7 +101,7 @@ typedef enum CascadeToMaterializationOption
 extern Chunk *ts_chunk_create(Hypertable *ht, Point *p, const char *schema, const char *prefix);
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
-extern Chunk *ts_chunk_find(Hypertable *ht, Point *p);
+extern Chunk *ts_chunk_find(Hypertable *ht, Point *p, bool lock_slices);
 extern Chunk **ts_chunk_find_all(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode,
 								 unsigned int *num_chunks);
 extern List *ts_chunk_find_all_oids(Hyperspace *hs, List *dimension_vecs, LOCKMODE lockmode);

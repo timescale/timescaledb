@@ -110,6 +110,12 @@ lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
 
 #if PG12_GE
 		case TM_Deleted:
+			ereport(ERROR,
+					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+					 errmsg("dimension slice %d deleted by other transaction", slice->fd.id),
+					 errhint("Retry the operation again.")));
+			pg_unreachable();
+			break;
 #endif
 		case TM_Updated:
 			ereport(ERROR,
@@ -144,9 +150,26 @@ static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionVec **slices = data;
-	DimensionSlice *slice = dimension_slice_from_tuple(ti->tuple);
+	DimensionSlice *slice;
 
-	lock_result_ok_or_abort(ti, slice);
+	switch (ti->lockresult)
+	{
+		case TM_SelfModified:
+		case TM_Ok:
+			break;
+#if PG12_GE
+		case TM_Deleted:
+#endif
+		case TM_Updated:
+			/* Treat as not found */
+			return SCAN_CONTINUE;
+		default:
+			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
+			pg_unreachable();
+			break;
+	}
+
+	slice = dimension_slice_from_tuple(ti->tuple);
 	*slices = ts_dimension_vec_add_slice(slices, slice);
 
 	return SCAN_CONTINUE;
@@ -522,9 +545,29 @@ ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraint
 static ScanTupleResult
 dimension_slice_fill(TupleInfo *ti, void *data)
 {
-	DimensionSlice **slice = data;
+	switch (ti->lockresult)
+	{
+		case TM_SelfModified:
+		case TM_Ok:
+		{
+			DimensionSlice **slice = data;
+			HeapTuple tuple = ti->tuple;
 
-	memcpy(&(*slice)->fd, GETSTRUCT(ti->tuple), sizeof(FormData_dimension_slice));
+			memcpy(&(*slice)->fd, GETSTRUCT(tuple), sizeof(FormData_dimension_slice));
+			break;
+		}
+#if PG12_GE
+		case TM_Deleted:
+#endif
+		case TM_Updated:
+			/* Same as not found */
+			break;
+		default:
+			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
+			pg_unreachable();
+			break;
+	}
+
 	return SCAN_DONE;
 }
 
@@ -537,7 +580,7 @@ dimension_slice_fill(TupleInfo *ti, void *data)
  * otherwise.
  */
 bool
-ts_dimension_slice_scan_for_existing(DimensionSlice *slice)
+ts_dimension_slice_scan_for_existing(DimensionSlice *slice, ScanTupLock *tuplock)
 {
 	ScanKeyData scankey[3];
 
@@ -565,7 +608,7 @@ ts_dimension_slice_scan_for_existing(DimensionSlice *slice)
 		&slice,
 		1,
 		AccessShareLock,
-		NULL,
+		tuplock,
 		CurrentMemoryContext);
 }
 
@@ -738,20 +781,36 @@ dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
 
 /*
  * Insert slices into the catalog.
+ *
+ * Only slices that don't already exist in the catalog will be inserted. Note
+ * that all slices that already exist (i.e., have a valid ID) MUST be locked
+ * with a tuple lock (e.g., FOR KEY SHARE) prior to calling this function
+ * since they won't be created. Otherwise it is not possible to guarantee that
+ * all slices still exist once the transaction commits.
+ *
+ * Returns the number of slices inserted.
  */
-void
-ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
+int
+ts_dimension_slice_insert_multi(DimensionSlice **slices, int num_slices)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
-	Size i;
+	int i, n = 0;
 
 	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
 
 	for (i = 0; i < num_slices; i++)
-		dimension_slice_insert_relation(rel, slices[i]);
+	{
+		if (slices[i]->fd.id == 0)
+		{
+			dimension_slice_insert_relation(rel, slices[i]);
+			n++;
+		}
+	}
 
 	table_close(rel, RowExclusiveLock);
+
+	return n;
 }
 
 static ScanTupleResult
