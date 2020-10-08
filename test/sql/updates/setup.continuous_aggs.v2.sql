@@ -4,6 +4,10 @@
 
 SELECT extversion < '2.0.0' AS has_refresh_mat_view from pg_extension WHERE extname = 'timescaledb' \gset
 
+-- disable background workers to prevent deadlocks between background processes
+-- on timescaledb 1.7.x
+SELECT _timescaledb_internal.stop_background_workers();
+
 CREATE TYPE custom_type AS (high int, low int);
 
 CREATE TABLE conditions_before (
