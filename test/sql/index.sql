@@ -310,3 +310,23 @@ SELECT * FROM _timescaledb_internal.chunk_index_replace('_timescaledb_internal."
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
 
+CREATE TABLE ht_dropped(time timestamptz, d0 int, d1 int, c0 int, c1 int, c2 int);
+SELECT create_hypertable('ht_dropped','time');
+INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2000-01-01',1,2,3;
+ALTER TABLE ht_dropped DROP COLUMN d0;
+INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2001-01-01',1,2,3;
+ALTER TABLE ht_dropped DROP COLUMN d1;
+INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2002-01-01',1,2,3;
+
+CREATE INDEX ON ht_dropped(c0,c1,c2) WHERE c1 IS NOT NULL;
+CREATE INDEX ON ht_dropped(c0,c1,c2) WITH(timescaledb.transaction_per_chunk) WHERE c2 IS NOT NULL;
+
+SELECT
+  oid::TEXT AS "Chunk",
+  i.*
+FROM
+  (SELECT tableoid::REGCLASS FROM ht_dropped GROUP BY tableoid) ch (oid)
+  LEFT JOIN LATERAL ( SELECT * FROM test.show_indexes (ch.oid)) i ON TRUE
+ORDER BY
+  1, 2;
+
