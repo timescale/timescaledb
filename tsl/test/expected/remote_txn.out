@@ -426,10 +426,11 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-0
  
 (1 row)
 
-COMMIT;
-WARNING:  kill event: pre-prepare-transaction
-WARNING:  transaction rollback on data node "loopback" failed
-ERROR:  [loopback]: SSL connection has been closed unexpectedly
+-- since the error messages/warnings from this COMMIT varies between
+-- platforms/environments we remove it from test output and show SQLSTATE instead.
+-- SQLSTATE should be 08006 connection_failure
+\echo 'COMMIT SQLSTATE' :SQLSTATE
+COMMIT SQLSTATE 08006
 --the connection was killed, so should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -463,10 +464,11 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-0
  
 (1 row)
 
-COMMIT;
-WARNING:  kill event: waiting-prepare-transaction
-WARNING:  transaction rollback on data node "loopback" failed
-ERROR:  [loopback]: SSL connection has been closed unexpectedly
+-- since the error messages/warnings from this COMMIT varies between
+-- platforms/environments we remove it from test output and show SQLSTATE instead.
+-- SQLSTATE should be 08006 connection_failure
+\echo 'COMMIT SQLSTATE' :SQLSTATE
+COMMIT SQLSTATE 08006
 --the connection should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -516,10 +518,11 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-0
  
 (1 row)
 
-COMMIT;
-WARNING:  kill event: post-prepare-transaction
-WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: SSL connection has been closed unexpectedly
+-- since the error messages/warnings from this COMMIT varies between
+-- platforms/environments we remove it from test output and show SQLSTATE instead.
+-- SQLSTATE should be 00000 successful_completion
+\echo 'COMMIT SQLSTATE' :SQLSTATE
+COMMIT SQLSTATE 00000
 --connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -597,10 +600,11 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-0
  
 (1 row)
 
-COMMIT;
-WARNING:  kill event: pre-commit-prepared
-WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: SSL connection has been closed unexpectedly
+-- since the error messages/warnings from this COMMIT varies between
+-- platforms/environments we remove it from test output and show SQLSTATE instead.
+-- SQLSTATE should be 00000 successful_completion
+\echo 'COMMIT SQLSTATE' :SQLSTATE
+COMMIT SQLSTATE 00000
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
@@ -665,10 +669,11 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-0
  
 (1 row)
 
-COMMIT;
-WARNING:  kill event: waiting-commit-prepared
-WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  [loopback]: SSL connection has been closed unexpectedly
+-- since the error messages/warnings from this COMMIT varies between
+-- platforms/environments we remove it from test output and show SQLSTATE instead.
+-- SQLSTATE should be 00000 successful_completion
+\echo 'COMMIT SQLSTATE' :SQLSTATE
+COMMIT SQLSTATE 00000
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state

@@ -70,17 +70,12 @@ SELECT test.remote_connection_tests();
  
 (1 row)
 
+SET client_min_messages TO ERROR;
 SELECT test.remote_async_tests();
-WARNING:  Expect warning about communication error:
-WARNING:  [testdb]: SSL connection has been closed unexpectedly
  remote_async_tests 
 --------------------
  
 (1 row)
 
-SELECT 'End Of Test';
-  ?column?   
--------------
- End Of Test
-(1 row)
-
+\echo 'End Of Test'
+End Of Test
