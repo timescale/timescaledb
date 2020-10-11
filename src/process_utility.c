@@ -2157,6 +2157,7 @@ process_index_start(ProcessUtilityArgs *args)
 	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
 	info.extended_options.n_ht_atts = main_table_desc->natts;
 	info.extended_options.ht_hasoid = TUPLE_DESC_HAS_OIDS(main_table_desc);
+	info.main_table_relid = ht->main_table_relid;
 
 	index_close(main_table_index_relation, NoLock);
 	table_close(main_table_relation, NoLock);
@@ -2181,9 +2182,6 @@ process_index_start(ProcessUtilityArgs *args)
 	}
 
 	/* create chunk indexes using a separate transaction for each chunk */
-
-	/* we're about to release the hcache so store the main_table_relid for later */
-	info.main_table_relid = ht->main_table_relid;
 
 	/*
 	 * Lock the index for the remainder of the command. Since we're using
