@@ -674,3 +674,39 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
  _timescaledb_internal._hyper_12_12_chunk_reindex_test_time_unique_idx | {time}      |      | t      | f       | f         | 
 (2 rows)
 
+CREATE TABLE ht_dropped(time timestamptz, d0 int, d1 int, c0 int, c1 int, c2 int);
+SELECT create_hypertable('ht_dropped','time');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable     
+--------------------------
+ (13,public,ht_dropped,t)
+(1 row)
+
+INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2000-01-01',1,2,3;
+ALTER TABLE ht_dropped DROP COLUMN d0;
+INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2001-01-01',1,2,3;
+ALTER TABLE ht_dropped DROP COLUMN d1;
+INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2002-01-01',1,2,3;
+CREATE INDEX ON ht_dropped(c0,c1,c2) WHERE c1 IS NOT NULL;
+CREATE INDEX ON ht_dropped(c0,c1,c2) WITH(timescaledb.transaction_per_chunk) WHERE c2 IS NOT NULL;
+SELECT
+  oid::TEXT AS "Chunk",
+  i.*
+FROM
+  (SELECT tableoid::REGCLASS FROM ht_dropped GROUP BY tableoid) ch (oid)
+  LEFT JOIN LATERAL ( SELECT * FROM test.show_indexes (ch.oid)) i ON TRUE
+ORDER BY
+  1, 2;
+                  Chunk                   |                               Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
+------------------------------------------+-------------------------------------------------------------------+------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal._hyper_13_17_chunk_ht_dropped_time_idx      | {time}     |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal._hyper_13_17_chunk_ht_dropped_c0_c1_c2_idx  | {c0,c1,c2} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_17_chunk | _timescaledb_internal._hyper_13_17_chunk_ht_dropped_c0_c1_c2_idx1 | {c0,c1,c2} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_18_chunk | _timescaledb_internal._hyper_13_18_chunk_ht_dropped_time_idx      | {time}     |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_18_chunk | _timescaledb_internal._hyper_13_18_chunk_ht_dropped_c0_c1_c2_idx  | {c0,c1,c2} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_18_chunk | _timescaledb_internal._hyper_13_18_chunk_ht_dropped_c0_c1_c2_idx1 | {c0,c1,c2} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_19_chunk | _timescaledb_internal._hyper_13_19_chunk_ht_dropped_time_idx      | {time}     |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_19_chunk | _timescaledb_internal._hyper_13_19_chunk_ht_dropped_c0_c1_c2_idx  | {c0,c1,c2} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_13_19_chunk | _timescaledb_internal._hyper_13_19_chunk_ht_dropped_c0_c1_c2_idx1 | {c0,c1,c2} |      | f      | f       | f         | 
+(9 rows)
+
