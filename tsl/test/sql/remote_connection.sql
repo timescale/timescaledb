@@ -68,6 +68,7 @@ SELECT test.send_remote_query_that_generates_exception();
 SELECT * FROM test.get_connection_stats();
 
 SELECT test.remote_connection_tests();
+SET client_min_messages TO ERROR;
 SELECT test.remote_async_tests();
 
-SELECT 'End Of Test';
+\echo 'End Of Test'
