@@ -1,6 +1,7 @@
 set(TEST_FILES_SHARED
   constraint_exclusion_prepared.sql
   decompress_placeholdervar.sql
+  dist_insert.sql
   ordered_append_join.sql
 )
 
