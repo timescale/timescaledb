@@ -12,7 +12,13 @@ CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
 
 SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
 
-SELECT view_name, schedule_interval, materialized_only, materialization_hypertable_name FROM timescaledb_information.continuous_aggregates ORDER BY view_name::text;
+SELECT view_name, materialized_only, materialization_hypertable_name 
+FROM timescaledb_information.continuous_aggregates 
+ORDER BY view_name::text;
+
+SELECT schedule_interval 
+FROM timescaledb_information.jobs 
+ORDER BY job_id;
 
 SELECT maxtemp FROM mat_ignoreinval ORDER BY 1;
 
