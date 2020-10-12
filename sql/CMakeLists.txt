@@ -9,6 +9,7 @@ set(PRE_INSTALL_SOURCE_FILES
   pre_install/tables.sql
   pre_install/insert_data.sql
   pre_install/bgw_scheduler_startup.sql
+  pre_install/fdw_functions.sql
   pre_install/timescaledb_fdw.sql
 )
 
@@ -23,6 +24,7 @@ set(IMMUTABLE_API_SOURCE_FILES
 # The rest of the source files defining mostly functions
 set(SOURCE_FILES
   pre_install/types.functions.sql
+  pre_install/fdw_functions.sql
   hypertable.sql
   chunk.sql
   ddl_internal.sql
