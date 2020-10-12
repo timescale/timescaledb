@@ -461,7 +461,7 @@ get_job_lock_for_delete(int32 job_id)
 	 * equivalent of a row-based FOR UPDATE lock */
 	got_lock = lock_job(job_id,
 						AccessExclusiveLock,
-						/* session_lock */ false,
+						TXN_LOCK,
 						&tag,
 						/* block */ false);
 	if (!got_lock)
@@ -487,7 +487,7 @@ get_job_lock_for_delete(int32 job_id)
 		/* We have to grab this lock before proceeding so grab it in a blocking manner now */
 		got_lock = lock_job(job_id,
 							AccessExclusiveLock,
-							/* session lock */ false,
+							TXN_LOCK,
 							&tag,
 							/* block */ true);
 	}
