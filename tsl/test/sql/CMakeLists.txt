@@ -48,7 +48,6 @@ set(TEST_FILES_DEBUG
   dist_partial_agg.sql
   dist_policy.sql
   dist_util.sql
-  issues.sql
   read_only.sql
   remote_connection_cache.sql
   remote_connection.sql
@@ -132,7 +131,6 @@ set(SOLO_TESTS
   dist_hypertable_am
   dist_hypertable_with_oids
   dist_partial_agg
-  issues
   move-11
   move-12
   remote_connection_cache
