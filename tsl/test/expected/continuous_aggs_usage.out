@@ -73,7 +73,6 @@ SELECT * FROM timescaledb_information.continuous_aggregates;
 view_schema                       | public
 view_name                         | device_summary
 view_owner                        | default_perm_user
-schedule_interval                 | @ 2 hours
 materialized_only                 | t
 materialization_hypertable_schema | _timescaledb_internal
 materialization_hypertable_name   | _materialized_hypertable_2

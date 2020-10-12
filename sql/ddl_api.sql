@@ -202,7 +202,7 @@ AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_set_replication_factor' LANGU
 
 -- Refresh a continuous aggregate across the given window.
 CREATE OR REPLACE PROCEDURE refresh_continuous_aggregate(
-    cagg                     REGCLASS,
+    continuous_aggregate     REGCLASS,
     window_start             "any",
     window_end               "any"
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';

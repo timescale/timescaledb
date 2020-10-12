@@ -110,13 +110,11 @@ CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates AS
 SELECT cagg.user_view_schema AS view_schema,
   cagg.user_view_name AS view_name,
   viewinfo.viewowner AS view_owner,
-  bgwjob.schedule_interval,
   cagg.materialized_only,
   ht.schema_name AS materialization_hypertable_schema,
   ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition
-FROM _timescaledb_catalog.continuous_agg cagg
-  LEFT JOIN _timescaledb_config.bgw_job bgwjob ON bgwjob.hypertable_id = cagg.mat_hypertable_id,
+FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (
     SELECT C.oid,
