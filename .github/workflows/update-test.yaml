@@ -34,7 +34,7 @@ jobs:
     - name: Update diff
       if: failure()
       run: |
-        find . -name "update_test.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+        find . -name "update_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
 
     - name: Upload Artifacts
       if: failure()
