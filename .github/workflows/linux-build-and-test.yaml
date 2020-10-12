@@ -45,8 +45,7 @@ jobs:
     # as cache suffix
     - name: Cache suffix
       if: runner.os == 'macOS'
-      run: |
-        echo "::set-env name=CACHE_SUFFIX::-${ImageVersion}"
+      run: echo "CACHE_SUFFIX=-${ImageVersion}" >> $GITHUB_ENV
 
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
