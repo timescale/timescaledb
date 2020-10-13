@@ -135,7 +135,6 @@ set(SOLO_TESTS
   issues
   move-11
   move-12
-  read_only
   remote_connection_cache
   remote_copy
   remote_txn
