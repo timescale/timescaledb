@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir post.v4.sql
-
+\ir post.catalog.sql
+\ir post.insert.sql
+\ir post.integrity_test.sql
+\ir post.continuous_aggs.sql
 \ir post.compression.sql
+\ir catalog_missing_columns.sql
+\ir post.functions.sql
