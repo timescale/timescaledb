@@ -929,7 +929,6 @@ typedef enum Anum_continuous_agg_raw_hypertable_id_idx
 typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 {
 	Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id = 1,
-	Anum_continuous_aggs_hypertable_invalidation_log_modification_time,
 	Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_hypertable_invalidation_log_greatest_modified_value,
 	_Anum_continuous_aggs_hypertable_invalidation_log_max,
@@ -941,7 +940,6 @@ typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 typedef struct FormData_continuous_aggs_hypertable_invalidation_log
 {
 	int32 hypertable_id;
-	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } FormData_continuous_aggs_hypertable_invalidation_log;
@@ -1005,7 +1003,6 @@ typedef enum Anum_continuous_aggs_invalidation_threshold_pkey
 typedef enum Anum_continuous_aggs_materialization_invalidation_log
 {
 	Anum_continuous_aggs_materialization_invalidation_log_materialization_id = 1,
-	Anum_continuous_aggs_materialization_invalidation_log_modification_time,
 	Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
 	Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
 	_Anum_continuous_aggs_materialization_invalidation_log_max,
@@ -1017,7 +1014,6 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log
 typedef struct FormData_continuous_aggs_materialization_invalidation_log
 {
 	int32 materialization_id;
-	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } FormData_continuous_aggs_materialization_invalidation_log;

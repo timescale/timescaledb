@@ -163,8 +163,7 @@ hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id, LOCKMO
 }
 
 static HeapTuple
-create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 modtime, int64 start,
-						int64 end)
+create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
 {
 	Datum values[Natts_continuous_aggs_materialization_invalidation_log] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_invalidation_log] = { false };
@@ -172,9 +171,6 @@ create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 modt
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_materialization_invalidation_log_materialization_id)] =
 		Int32GetDatum(cagg_hyper_id);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_invalidation_log_modification_time)] =
-		Int64GetDatum(modtime);
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value)] =
 		Int64GetDatum(start);
@@ -189,14 +185,14 @@ create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 modt
  * Add an entry to the continuous aggregate invalidation log.
  */
 void
-invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 modtime, int64 start, int64 end)
+invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 {
 	Relation rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
 	CatalogSecurityContext sec_ctx;
 	HeapTuple tuple;
 
 	Assert(start <= end);
-	tuple = create_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, modtime, start, end);
+	tuple = create_invalidation_tup(RelationGetDescr(rel), cagg_hyper_id, start, end);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(rel, tuple);
 	ts_catalog_restore_user(&sec_ctx);
@@ -205,7 +201,7 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 modtime, int64 start,
 }
 
 void
-invalidation_hyper_log_add_entry(int32 hyper_id, int64 modtime, int64 start, int64 end)
+invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 {
 	Relation rel = open_invalidation_log(LOG_HYPER, RowExclusiveLock);
 	CatalogSecurityContext sec_ctx;
@@ -215,9 +211,6 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 modtime, int64 start, int
 	Assert(start <= end);
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id)] = Int32GetDatum(hyper_id);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_hypertable_invalidation_log_modification_time)] =
-		Int64GetDatum(modtime);
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_hypertable_invalidation_log_lowest_modified_value)] =
 		Int64GetDatum(start);
@@ -248,8 +241,6 @@ void
 invalidation_add_entry(const Hypertable *ht, int64 start, int64 end)
 {
 	ContinuousAggHypertableStatus caggstatus;
-	Dimension *dim;
-	int64 timeval;
 
 	Assert(ht != NULL);
 	caggstatus = ts_continuous_agg_hypertable_status(ht->fd.id);
@@ -257,25 +248,16 @@ invalidation_add_entry(const Hypertable *ht, int64 start, int64 end)
 	switch (caggstatus)
 	{
 		case HypertableIsMaterialization:
-		{
-			ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
-			Hypertable *raw_ht;
+			invalidation_cagg_log_add_entry(ht->fd.id, start, end);
+			break;
 
-			/* Need to get the now function from the "raw" hypertable */
-			Assert(NULL != cagg);
-			raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
-			dim = hyperspace_get_open_dimension(raw_ht->space, 0);
-			timeval = ts_get_now_internal(dim);
-			invalidation_cagg_log_add_entry(ht->fd.id, timeval, start, end);
-			break;
-		}
 		case HypertableIsRawTable:
-			dim = hyperspace_get_open_dimension(ht->space, 0);
-			timeval = ts_get_now_internal(dim);
-			invalidation_hyper_log_add_entry(ht->fd.id, timeval, start, end);
+			invalidation_hyper_log_add_entry(ht->fd.id, start, end);
 			break;
+
 		case HypertableIsMaterializationAndRaw:
 			break;
+
 		case HypertableIsNotContinuousAgg:
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
@@ -307,7 +289,6 @@ save_invalidation_for_refresh(const CaggInvalidationState *state, const Invalida
 
 	refresh_tup = create_invalidation_tup(tupdesc,
 										  cagg_hyper_id,
-										  invalidation->modification_time,
 										  invalidation->lowest_modified_value,
 										  invalidation->greatest_modified_value);
 	tuplestore_puttuple(state->invalidations, refresh_tup);
@@ -317,12 +298,11 @@ save_invalidation_for_refresh(const CaggInvalidationState *state, const Invalida
 }
 
 static void
-set_remainder_after_cut(Invalidation *remainder, int32 hyper_id, int64 modification_time,
-						int64 lowest_modified_value, int64 greatest_modified_value)
+set_remainder_after_cut(Invalidation *remainder, int32 hyper_id, int64 lowest_modified_value,
+						int64 greatest_modified_value)
 {
 	MemSet(remainder, 0, sizeof(*remainder));
 	remainder->hyper_id = hyper_id;
-	remainder->modification_time = modification_time;
 	remainder->lowest_modified_value = lowest_modified_value;
 	remainder->greatest_modified_value = greatest_modified_value;
 }
@@ -368,7 +348,6 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 		result = INVAL_DELETE;
 		set_remainder_after_cut(remainder,
 								cagg_hyper_id,
-								invalidation->modification_time,
 								invalidation->lowest_modified_value,
 								invalidation->greatest_modified_value);
 	}
@@ -387,12 +366,10 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 			 */
 			lower = create_invalidation_tup(tupdesc,
 											cagg_hyper_id,
-											invalidation->modification_time,
 											invalidation->lowest_modified_value,
 											refresh_window->start - 1);
 			set_remainder_after_cut(remainder,
 									cagg_hyper_id,
-									invalidation->modification_time,
 									refresh_window->start,
 									/* Refresh window not exclusive at end */
 									MIN(refresh_window->end - 1,
@@ -421,12 +398,10 @@ cut_invalidation_along_refresh_window(const CaggInvalidationState *state,
 			 */
 			upper = create_invalidation_tup(tupdesc,
 											cagg_hyper_id,
-											invalidation->modification_time,
 											refresh_window->end,
 											invalidation->greatest_modified_value);
 			set_remainder_after_cut(remainder,
 									cagg_hyper_id,
-									invalidation->modification_time,
 									MAX(invalidation->lowest_modified_value, refresh_window->start),
 									/* Refresh window exclusive at end */
 									refresh_window->end - 1);
@@ -496,7 +471,6 @@ invalidation_entry_reset(Invalidation *entry)
 		type form;                                                                                 \
 		form = (type) GETSTRUCT(tuple);                                                            \
 		(entry)->hyper_id = form->hypertable_id;                                                   \
-		(entry)->modification_time = form->modification_time;                                      \
 		(entry)->lowest_modified_value = form->lowest_modified_value;                              \
 		(entry)->greatest_modified_value = form->greatest_modified_value;                          \
 		(entry)->is_modified = false;                                                              \
@@ -597,7 +571,6 @@ cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state, const I
 
 	newtup = create_invalidation_tup(tupdesc,
 									 cagg_hyper_id,
-									 entry->modification_time,
 									 entry->lowest_modified_value,
 									 entry->greatest_modified_value);
 
@@ -743,7 +716,6 @@ cut_cagg_invalidation(const CaggInvalidationState *state, const InternalTimeRang
 			{
 				HeapTuple tuple = create_invalidation_tup(RelationGetDescr(state->cagg_log_rel),
 														  entry->hyper_id,
-														  entry->modification_time,
 														  entry->lowest_modified_value,
 														  entry->greatest_modified_value);
 				ts_catalog_update_tid_only(state->cagg_log_rel, &tid, tuple);

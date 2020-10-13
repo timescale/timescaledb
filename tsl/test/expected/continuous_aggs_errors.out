@@ -427,9 +427,9 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
-ERROR:  invalid integer_now function
 \set ON_ERROR_STOP 0
 DROP TABLE conditions cascade;
+NOTICE:  drop cascades to 3 other objects
 CREATE TABLE conditions (
       timec       BIGINT       NOT NULL,
       location    TEXT              NOT NULL,

@@ -775,42 +775,6 @@ ts_get_reloptions(Oid relid)
 	return options;
 }
 
-int64
-ts_get_now_internal(const Dimension *open_dim)
-{
-	Oid dim_post_part_type = ts_dimension_get_partition_type(open_dim);
-
-	if (IS_INTEGER_TYPE(dim_post_part_type))
-	{
-		Datum now_datum;
-		Oid now_func = ts_get_integer_now_func(open_dim);
-		now_datum = OidFunctionCall0(now_func);
-		return ts_time_value_to_internal(now_datum, dim_post_part_type);
-	}
-#ifdef TS_DEBUG
-	Datum now_datum;
-	if (ts_current_timestamp_mock == NULL || strlen(ts_current_timestamp_mock) == 0)
-		now_datum = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
-	else
-		now_datum = DirectFunctionCall3(timestamptz_in,
-										CStringGetDatum(ts_current_timestamp_mock),
-										0,
-										Int32GetDatum(-1));
-#else
-	Datum now_datum = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
-#endif
-	Assert(IS_TIMESTAMP_TYPE(dim_post_part_type));
-
-	/*
-	 * If the type of the partitioning column is TIMESTAMP or DATE
-	 * we need to adjust the return value for the local timezone.
-	 */
-	if (dim_post_part_type == TIMESTAMPOID || dim_post_part_type == DATEOID)
-		now_datum = DirectFunctionCall1(timestamptz_timestamp, now_datum);
-
-	return ts_time_value_to_internal(now_datum, TIMESTAMPTZOID);
-}
-
 /*
  * Get the integer_now function for a dimension
  */

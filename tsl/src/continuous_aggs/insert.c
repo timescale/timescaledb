@@ -61,7 +61,6 @@ typedef struct ContinuousAggsCacheInvalEntry
 	int32 hypertable_id;
 	Oid hypertable_relid;
 	Dimension hypertable_open_dimension;
-	int64 modification_time;
 	Oid previous_chunk_relid;
 	AttrNumber previous_chunk_open_dimension;
 	bool value_is_set;
@@ -147,7 +146,6 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 		*open_dim_part_info = *cache_entry->hypertable_open_dimension.partitioning;
 		cache_entry->hypertable_open_dimension.partitioning = open_dim_part_info;
 	}
-	cache_entry->modification_time = ts_get_now_internal(&cache_entry->hypertable_open_dimension);
 	cache_entry->previous_chunk_relid = InvalidOid;
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = PG_INT64_MAX;
@@ -268,7 +266,6 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	if (IsolationUsesXactSnapshot())
 	{
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->modification_time,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
 		return;
@@ -278,7 +275,6 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 
 	if (entry->lowest_modified_value < liv)
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
-										 entry->modification_time,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
 };
