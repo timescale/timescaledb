@@ -480,10 +480,8 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
-	Hypertable *ht = NULL, *mat_ht = NULL;
+	Hypertable *mat_ht = NULL;
 	Oid owner = GetUserId();
-	int64 current_time;
-	Dimension *ht_time_dim;
 
 	create = makeNode(CreateStmt);
 	create->relation = mat_rel;
@@ -525,19 +523,10 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 		mattablecolumninfo_add_mattable_index(matcolinfo, mat_ht);
 
 	/* Initialize the invalidation log for the cagg. Initially, everything is
-	 * invalid.
-	 * Integer time dimensions have now functions. These settings
-	 * are derived from the original hypertable since they are not explicitly
-	 * set on the materialization hypertable
-	 */
-	ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
-	ht_time_dim = hyperspace_get_open_dimension(ht->space, 0);
-	Assert(ht_time_dim != NULL);
-	current_time = ts_get_now_internal(ht_time_dim);
-
-	/* Add an infinite invalidation for the continuous aggregate. This is the
-	 * initial state of the aggregate before any refreshes. */
-	invalidation_cagg_log_add_entry(mat_htid, current_time, TS_TIME_NOBEGIN, TS_TIME_NOEND);
+	 * invalid. Add an infinite invalidation for the continuous
+	 * aggregate. This is the initial state of the aggregate before any
+	 * refreshes. */
+	invalidation_cagg_log_add_entry(mat_htid, TS_TIME_NOBEGIN, TS_TIME_NOEND);
 
 	ts_cache_release(hcache);
 	return mat_htid;

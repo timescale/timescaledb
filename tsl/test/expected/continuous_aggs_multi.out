@@ -300,12 +300,12 @@ select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order 
 (1 row)
 
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
---------------------+-------------------+-----------------------+-------------------------
-                  5 |                16 |  -9223372036854775808 |             -2147483649
-                  5 |                16 |                    18 |     9223372036854775807
-                  6 |                16 |  -9223372036854775808 |             -2147483649
-                  6 |                16 |                    14 |     9223372036854775807
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+                  5 |  -9223372036854775808 |             -2147483649
+                  5 |                    18 |     9223372036854775807
+                  6 |  -9223372036854775808 |             -2147483649
+                  6 |                    14 |     9223372036854775807
 (4 rows)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -337,10 +337,10 @@ select * from cagg_2 order by 1;
 insert into continuous_agg_test values( 18, -2, 100);
 insert into continuous_agg_test values( 18, -2, 100);
 select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
- hypertable_id | modification_time | lowest_modified_value | greatest_modified_value 
----------------+-------------------+-----------------------+-------------------------
-             4 |                18 |                    18 |                      18
-             4 |                18 |                    18 |                      18
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+             4 |                    18 |                      18
+             4 |                    18 |                      18
 (2 rows)
 
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
@@ -352,13 +352,13 @@ select * from cagg_1 where timed = 18 ;
 
 --copied over for cagg_2 to process later?
 select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
- materialization_id | modification_time | lowest_modified_value | greatest_modified_value 
---------------------+-------------------+-----------------------+-------------------------
-                  5 |                16 |  -9223372036854775808 |             -2147483649
-                  5 |                16 |                    20 |     9223372036854775807
-                  6 |                16 |  -9223372036854775808 |             -2147483649
-                  6 |                16 |                    16 |     9223372036854775807
-                  6 |                18 |                    18 |                      18
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+                  5 |  -9223372036854775808 |             -2147483649
+                  5 |                    20 |     9223372036854775807
+                  6 |  -9223372036854775808 |             -2147483649
+                  6 |                    16 |     9223372036854775807
+                  6 |                    18 |                      18
 (5 rows)
 
 DROP MATERIALIZED VIEW cagg_1;

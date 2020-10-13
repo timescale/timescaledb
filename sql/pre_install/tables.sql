@@ -281,7 +281,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 -- table are performance critical
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (
   hypertable_id integer NOT NULL,
-  modification_time bigint NOT NULL, --now time for txn when the raw table was modified
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL
 );
@@ -293,7 +292,6 @@ CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx ON _timescaledb_cat
 -- per cagg copy of invalidation log
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (
   materialization_id integer REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE,
-  modification_time bigint NOT NULL, --now time for txn when the raw table was modified
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL
 );

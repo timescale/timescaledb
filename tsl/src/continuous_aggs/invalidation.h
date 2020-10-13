@@ -20,7 +20,6 @@
 typedef struct Invalidation
 {
 	int32 hyper_id;
-	int64 modification_time;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 	bool is_modified;
@@ -35,9 +34,8 @@ typedef struct InvalidationStore
 
 typedef struct Hypertable Hypertable;
 
-extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 modtime, int64 start,
-											int64 end);
-extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 modtime, int64 start, int64 end);
+extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end);
+extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end);
 extern void invalidation_add_entry(const Hypertable *ht, int64 start, int64 end);
 extern void invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 														   int32 hyper_id);
