@@ -5,6 +5,8 @@
 -- Following tests checks that API functions which modify data (including catalog)
 -- properly recognize read-only transaction state
 --
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
 -- create_hypertable()
 --
 CREATE TABLE test_table(time bigint NOT NULL, device int);
@@ -101,31 +103,31 @@ CREATE TABLE disttable(time timestamptz NOT NULL, device int);
 --
 SET default_transaction_read_only TO on;
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1');
+SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
 ERROR:  cannot execute add_data_node() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ db_read_only_1 | localhost | 55432 | db_read_only_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+SELECT * FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ db_read_only_2 | localhost | 55432 | db_read_only_2 | t            | t                | t
 (1 row)
 
 -- create_distributed_hypertable()
 --
 SET default_transaction_read_only TO on;
 \set ON_ERROR_STOP 0
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => '{data_node_1}');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => ARRAY[:'DATA_NODE_1']);
 ERROR:  cannot execute create_distributed_hypertable() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => '{data_node_1}');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => ARRAY[:'DATA_NODE_1']);
 WARNING:  only one data node was assigned to the hypertable
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -136,26 +138,26 @@ WARNING:  only one data node was assigned to the hypertable
 --
 SET default_transaction_read_only TO on;
 \set ON_ERROR_STOP 0
-SELECT * FROM attach_data_node('data_node_2', 'disttable');
+SELECT * FROM attach_data_node(:'DATA_NODE_2', 'disttable');
 ERROR:  cannot execute attach_data_node() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
-SELECT * FROM attach_data_node('data_node_2', 'disttable');
+SELECT * FROM attach_data_node(:'DATA_NODE_2', 'disttable');
 NOTICE:  the number of partitions in dimension "device" was increased to 2
- hypertable_id | node_hypertable_id |  node_name  
----------------+--------------------+-------------
-             2 |                  1 | data_node_2
+ hypertable_id | node_hypertable_id |   node_name    
+---------------+--------------------+----------------
+             2 |                  1 | db_read_only_2
 (1 row)
 
 -- detach_data_node()
 --
 SET default_transaction_read_only TO on;
 \set ON_ERROR_STOP 0
-SELECT * FROM detach_data_node('data_node_2', 'disttable');
+SELECT * FROM detach_data_node(:'DATA_NODE_2', 'disttable');
 ERROR:  cannot execute detach_data_node() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
-SELECT * FROM detach_data_node('data_node_2', 'disttable');
+SELECT * FROM detach_data_node(:'DATA_NODE_2', 'disttable');
 NOTICE:  the number of partitions in dimension "device" was decreased to 1
  detach_data_node 
 ------------------
@@ -166,11 +168,11 @@ NOTICE:  the number of partitions in dimension "device" was decreased to 1
 --
 SET default_transaction_read_only TO on;
 \set ON_ERROR_STOP 0
-SELECT * FROM delete_data_node('data_node_2');
+SELECT * FROM delete_data_node(:'DATA_NODE_2');
 ERROR:  cannot execute delete_data_node() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
-SELECT * FROM delete_data_node('data_node_2');
+SELECT * FROM delete_data_node(:'DATA_NODE_2');
  delete_data_node 
 ------------------
  t
