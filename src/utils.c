@@ -119,6 +119,16 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 {
 	Datum res, tz;
 
+	/* Handle custom time types. We currently only support binary coercible
+	 * types */
+	if (!TS_TIME_IS_VALID_TYPE(type_oid))
+	{
+		if (ts_type_is_int8_binary_compatible(type_oid))
+			return DatumGetInt64(time_val);
+
+		elog(ERROR, "unknown time type OID %d", type_oid);
+	}
+
 	if (TS_TIME_IS_INTEGER_TIME(type_oid))
 	{
 		/* Integer time types have no distinction between min, max and
@@ -161,9 +171,6 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 
 			return DatumGetInt64(res);
 		default:
-			if (ts_type_is_int8_binary_compatible(type_oid))
-				return DatumGetInt64(time_val);
-
 			elog(ERROR, "unknown time type OID %d", type_oid);
 			return -1;
 	}

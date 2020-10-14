@@ -143,26 +143,18 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype)
  * Try to coerce a type to a supported time type.
  *
  * To support custom time types in hypertables, we need to know the type's
- * boundaries in order to, e.g., construct dimensional chunk constraints. If
- * the type is IMPLICITLY coercible to one of the supported time types we can
- * just use the boundaries of the supported type. Thus, the custom time type
- * will inherit the time boundaries of the first compatible time type found.
+ * boundaries in order to, e.g., construct dimensional chunk constraints. The
+ * custom time type will inherit the valid time range of the supported time
+ * type it can be casted to.
+ *
+ * Currently, we only support custom time types that are binary compatible
+ * with bigint and then it also inherits the valid time range of a bigint.
  */
 static Oid
 coerce_to_time_type(Oid type)
 {
-	static const Oid supported_time_types[] = { DATEOID, TIMESTAMPOID, TIMESTAMPTZOID,
-												INT2OID, INT4OID,	  INT8OID };
-
-	int i;
-
-	for (i = 0; i < lengthof(supported_time_types); i++)
-	{
-		Oid targettype = supported_time_types[i];
-
-		if (can_coerce_type(1, &type, &targettype, COERCION_IMPLICIT))
-			return targettype;
-	}
+	if (ts_type_is_int8_binary_compatible(type))
+		return INT8OID;
 
 	elog(ERROR, "unsupported time type \"%s\"", format_type_be(type));
 	pg_unreachable();
@@ -281,10 +273,10 @@ ts_time_datum_get_nobegin(Oid timetype)
 Datum
 ts_time_datum_get_nobegin_or_min(Oid timetype)
 {
-	if (TS_TIME_IS_INTEGER_TIME(timetype))
-		return ts_time_datum_get_min(timetype);
+	if (IS_TIMESTAMP_TYPE(timetype))
+		return ts_time_datum_get_nobegin(timetype);
 
-	return ts_time_datum_get_nobegin(timetype);
+	return ts_time_datum_get_min(timetype);
 }
 
 Datum
@@ -400,10 +392,10 @@ ts_time_get_end(Oid timetype)
 int64
 ts_time_get_end_or_max(Oid timetype)
 {
-	if (TS_TIME_IS_INTEGER_TIME(timetype))
-		return ts_time_get_max(timetype);
+	if (IS_TIMESTAMP_TYPE(timetype))
+		return ts_time_get_end(timetype);
 
-	return ts_time_get_end(timetype);
+	return ts_time_get_max(timetype);
 }
 
 int64
@@ -451,10 +443,10 @@ ts_time_get_noend(Oid timetype)
 int64
 ts_time_get_noend_or_max(Oid timetype)
 {
-	if (TS_TIME_IS_INTEGER_TIME(timetype))
-		return ts_time_get_max(timetype);
+	if (IS_TIMESTAMP_TYPE(timetype))
+		return ts_time_get_noend(timetype);
 
-	return ts_time_get_noend(timetype);
+	return ts_time_get_max(timetype);
 }
 
 /*
@@ -468,15 +460,18 @@ ts_time_get_noend_or_max(Oid timetype)
 int64
 ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype)
 {
-	if (TS_TIME_IS_INTEGER_TIME(timetype))
+	if (IS_TIMESTAMP_TYPE(timetype))
+	{
+		if (timeval >= (ts_time_get_end(timetype) - interval))
+			return ts_time_get_noend(timetype);
+	}
+	else
 	{
 		int64 time_max = ts_time_get_max(timetype);
 
 		if (timeval > (time_max - interval))
 			return time_max;
 	}
-	else if (timeval >= (ts_time_get_end(timetype) - interval))
-		return ts_time_get_noend(timetype);
 
 	return timeval + interval;
 }
@@ -492,15 +487,18 @@ ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype)
 int64
 ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype)
 {
-	if (TS_TIME_IS_INTEGER_TIME(timetype))
+	if (IS_TIMESTAMP_TYPE(timetype))
+	{
+		if (timeval < (ts_time_get_min(timetype) + interval))
+			return ts_time_get_nobegin(timetype);
+	}
+	else
 	{
 		int64 time_min = ts_time_get_min(timetype);
 
 		if (timeval < (time_min + interval))
 			return time_min;
 	}
-	else if (timeval < (ts_time_get_min(timetype) + interval))
-		return ts_time_get_nobegin(timetype);
 
 	return timeval - interval;
 }
