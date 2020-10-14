@@ -41,14 +41,20 @@
 #define TS_TIME_NOEND (PG_INT64_MAX)
 
 #define TS_TIME_IS_INTEGER_TIME(type) (type == INT2OID || type == INT4OID || type == INT8OID)
+#define TS_TIME_IS_DATE_TIMESTAMP_TIME(type)                                                       \
+	(type == TIMESTAMPTZOID || type == TIMESTAMPOID || type == DATEOID)
+
+#define TS_TIME_IS_VALID_TYPE(type)                                                                \
+	(TS_TIME_IS_INTEGER_TIME(type) || TS_TIME_IS_DATE_TIMESTAMP_TIME(type))
+
 #define TS_TIME_DATUM_IS_MIN(timeval, type) (timeval == ts_time_datum_get_min(type))
 #define TS_TIME_DATUM_IS_MAX(timeval, type) (timeval == ts_time_datum_get_max(type))
 #define TS_TIME_DATUM_IS_END(timeval, type)                                                        \
-	(!TS_TIME_IS_INTEGER_TIME(type) && (timeval == ts_time_datum_get_end(type)))
+	(TS_TIME_IS_DATE_TIMESTAMP_TIME(type) && timeval == ts_time_datum_get_end(type)))
 #define TS_TIME_DATUM_IS_NOBEGIN(timeval, type)                                                    \
-	(!TS_TIME_IS_INTEGER_TIME(type) && (timeval == ts_time_datum_get_nobegin(type)))
+	(TS_TIME_IS_DATE_TIMESTAMP_TIME(type) && (timeval == ts_time_datum_get_nobegin(type)))
 #define TS_TIME_DATUM_IS_NOEND(timeval, type)                                                      \
-	(!TS_TIME_IS_INTEGER_TIME(type) && (timeval == ts_time_datum_get_noend(type)))
+	(TS_TIME_IS_DATE_TIMESTAMP_TIME(type) && (timeval == ts_time_datum_get_noend(type)))
 
 #define TS_TIME_DATUM_NOT_FINITE(timeval, type)                                                    \
 	(TS_TIME_IS_INTEGER_TIME(type) || TS_TIME_DATUM_IS_NOBEGIN(timeval, type) ||                   \
@@ -57,11 +63,11 @@
 #define TS_TIME_IS_MIN(timeval, type) (timeval == ts_time_get_min(type))
 #define TS_TIME_IS_MAX(timeval, type) (timeval == ts_time_get_max(type))
 #define TS_TIME_IS_END(timeval, type)                                                              \
-	(!TS_TIME_IS_INTEGER_TIME(type) && timeval == ts_time_get_end(type))
+	(TS_TIME_IS_DATE_TIMESTAMP_TIME(type) && timeval == ts_time_get_end(type))
 #define TS_TIME_IS_NOBEGIN(timeval, type)                                                          \
-	(!TS_TIME_IS_INTEGER_TIME(type) && timeval == ts_time_get_nobegin(type))
+	(TS_TIME_IS_DATE_TIMESTAMP_TIME(type) && timeval == ts_time_get_nobegin(type))
 #define TS_TIME_IS_NOEND(timeval, type)                                                            \
-	(!TS_TIME_IS_INTEGER_TIME(type) && timeval == ts_time_get_noend(type))
+	(TS_TIME_IS_DATE_TIMESTAMP_TIME(type) && timeval == ts_time_get_noend(type))
 
 #define TS_TIME_NOT_FINITE(timeval, type)                                                          \
 	(TS_TIME_IS_INTEGER_TIME(type) || TS_TIME_IS_NOBEGIN(timeval, type) ||                         \
