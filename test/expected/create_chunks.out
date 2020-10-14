@@ -210,10 +210,10 @@ select set_chunk_time_interval(NULL,NULL::interval);
 ERROR:  invalid main_table: cannot be NULL
 -- should fail since time column is an int
 SELECT set_chunk_time_interval('chunk_test', INTERVAL '1 minute');
-ERROR:  invalid interval: must be an integer type for integer dimensions
+ERROR:  invalid interval type for integer dimension
 -- should fail since its not a valid way to represent time
 SELECT set_chunk_time_interval('chunk_test', 'foo'::TEXT);
-ERROR:  invalid interval: must be an interval or integer type
+ERROR:  invalid interval type for integer dimension
 SELECT set_chunk_time_interval('chunk_test', NULL::BIGINT);
 ERROR:  invalid interval: an explicit interval must be specified
 SELECT set_chunk_time_interval('chunk_test2', NULL::BIGINT);

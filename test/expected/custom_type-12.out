@@ -59,6 +59,11 @@ CREATE OPERATOR >= (
 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE customtype_test(time_custom customtype, val int);
+\set ON_ERROR_STOP 0
+-- Using interval type for chunk time interval should fail with custom time type
+SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => INTERVAL '1 day', create_default_indexes=>false);
+ERROR:  invalid interval type for customtype dimension
+\set ON_ERROR_STOP 1
 SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);
 NOTICE:  adding not-null constraint to column "time_custom"
       create_hypertable       
