@@ -419,6 +419,15 @@ ts_time_get_nobegin(Oid timetype)
 	return ts_time_get_nobegin(coerce_to_time_type(timetype));
 }
 
+static int64
+ts_time_get_nobegin_or_min(Oid timetype)
+{
+	if (IS_TIMESTAMP_TYPE(timetype))
+		return ts_time_get_nobegin(timetype);
+
+	return ts_time_get_min(timetype);
+}
+
 int64
 ts_time_get_noend(Oid timetype)
 {
@@ -460,18 +469,11 @@ ts_time_get_noend_or_max(Oid timetype)
 int64
 ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype)
 {
-	if (IS_TIMESTAMP_TYPE(timetype))
-	{
-		if (timeval >= (ts_time_get_end(timetype) - interval))
-			return ts_time_get_noend(timetype);
-	}
-	else
-	{
-		int64 time_max = ts_time_get_max(timetype);
+	if (timeval > 0 && interval > 0 && timeval > (ts_time_get_max(timetype) - interval))
+		return ts_time_get_noend_or_max(timetype);
 
-		if (timeval > (time_max - interval))
-			return time_max;
-	}
+	if (timeval < 0 && interval < 0 && timeval < (ts_time_get_min(timetype) - interval))
+		return ts_time_get_nobegin_or_min(timetype);
 
 	return timeval + interval;
 }
@@ -487,18 +489,11 @@ ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype)
 int64
 ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype)
 {
-	if (IS_TIMESTAMP_TYPE(timetype))
-	{
-		if (timeval < (ts_time_get_min(timetype) + interval))
-			return ts_time_get_nobegin(timetype);
-	}
-	else
-	{
-		int64 time_min = ts_time_get_min(timetype);
+	if (timeval < 0 && interval > 0 && timeval < (ts_time_get_min(timetype) + interval))
+		return ts_time_get_nobegin_or_min(timetype);
 
-		if (timeval < (time_min + interval))
-			return time_min;
-	}
+	if (timeval > 0 && interval < 0 && timeval > (ts_time_get_max(timetype) + interval))
+		return ts_time_get_noend_or_max(timetype);
 
 	return timeval - interval;
 }
