@@ -15,7 +15,11 @@ TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test
 CURRENT_TEST=${PGAPPNAME##pg_regress/}
-TEST_DBNAME="db_${CURRENT_TEST}"
+
+# Since PG11 and PG12 tests do not run in parallel, we remove the
+# trailing "-11" (or "-12") suffix to get a good symbol that can be
+# used as identifier as well.
+TEST_DBNAME="db_${CURRENT_TEST%%-[0-9][0-9]}"
 
 # Read the extension version from version.config
 read -r VERSION < ${CURRENT_DIR}/../version.config
@@ -85,6 +89,9 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v VERBOSITY=terse \
      -v ECHO=all \
      -v TEST_DBNAME="${TEST_DBNAME}" \
+     -v TEST_TABLESPACE1_PREFIX=${TEST_TABLESPACE1_PREFIX} \
+     -v TEST_TABLESPACE2_PREFIX=${TEST_TABLESPACE2_PREFIX} \
+     -v TEST_TABLESPACE3_PREFIX=${TEST_TABLESPACE3_PREFIX} \
      -v TEST_TABLESPACE1_PATH=\'${TEST_TABLESPACE1_PATH}\' \
      -v TEST_TABLESPACE2_PATH=\'${TEST_TABLESPACE2_PATH}\' \
      -v TEST_TABLESPACE3_PATH=\'${TEST_TABLESPACE3_PATH}\' \
