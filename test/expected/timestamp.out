@@ -1274,5 +1274,5 @@ ERROR:  invalid interval: must be between 1 and 32767
 SELECT test.interval_to_internal('TEXT'::regtype, 32768::bigint);
 ERROR:  invalid dimension type: "testcol" must be an integer, date or timestamp
 SELECT test.interval_to_internal('INT'::regtype, INTERVAL '1 day');
-ERROR:  invalid interval: must be an integer type for integer dimensions
+ERROR:  invalid interval type for integer dimension
 \set ON_ERROR_STOP 1

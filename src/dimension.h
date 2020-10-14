@@ -14,7 +14,7 @@
 
 #include "catalog.h"
 #include "export.h"
-#include "utils.h"
+#include "time_utils.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
@@ -37,13 +37,7 @@ typedef struct Dimension
 } Dimension;
 
 #define IS_OPEN_DIMENSION(d) ((d)->type == DIMENSION_TYPE_OPEN)
-
 #define IS_CLOSED_DIMENSION(d) ((d)->type == DIMENSION_TYPE_CLOSED)
-
-#define IS_INTEGER_TYPE(type) (type == INT2OID || type == INT4OID || type == INT8OID)
-
-#define IS_TIMESTAMP_TYPE(type) (type == TIMESTAMPOID || type == TIMESTAMPTZOID || type == DATEOID)
-
 #define IS_VALID_OPEN_DIM_TYPE(type)                                                               \
 	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || ts_type_is_int8_binary_compatible(type))
 
