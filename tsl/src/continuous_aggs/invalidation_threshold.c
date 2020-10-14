@@ -281,11 +281,11 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 	bool max_refresh = false;
 	Hypertable *ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 
-	if (TS_TIME_IS_INTEGER_TIME(refresh_window->type))
-		max_refresh = TS_TIME_IS_MAX(refresh_window->end, refresh_window->type);
-	else
+	if (IS_TIMESTAMP_TYPE(refresh_window->type))
 		max_refresh = TS_TIME_IS_END(refresh_window->end, refresh_window->type) ||
 					  TS_TIME_IS_NOEND(refresh_window->end, refresh_window->type);
+	else
+		max_refresh = TS_TIME_IS_MAX(refresh_window->end, refresh_window->type);
 
 	if (max_refresh)
 	{
