@@ -13,9 +13,15 @@
 \o
 \set ECHO all
 
-\set DATA_NODE_1 dist_hypertable_1
-\set DATA_NODE_2 dist_hypertable_2
-\set DATA_NODE_3 dist_hypertable_3
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\set TABLESPACE_1 :TEST_DBNAME _1
+\set TABLESPACE_2 :TEST_DBNAME _2
+SELECT
+    test.make_tablespace_path(:'TEST_TABLESPACE1_PREFIX', :'TEST_DBNAME') AS spc1path,
+    test.make_tablespace_path(:'TEST_TABLESPACE2_PREFIX', :'TEST_DBNAME') AS spc2path
+\gset
 
 SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
@@ -728,7 +734,7 @@ SET timescaledb.max_insert_batch_size=4;
 --
 -- Execute and filter mentioned data node name in the error message.
 \set ON_ERROR_STOP 0
-SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$, 'dist_hypertable');
+SELECT test.execute_sql_and_filter_data_node_name_on_error($$ INSERT INTO twodim VALUES ('2019-02-10 17:54', 0, 10.2) $$, :'TEST_DBNAME');
 \set ON_ERROR_STOP 1
 
 -- Disable batching, reverting to FDW tuple-by-tuple inserts.
@@ -893,16 +899,16 @@ $$);
 
 -- Tests for using tablespaces with distributed hypertables
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-CREATE TABLESPACE tablespace1 OWNER :ROLE_1 LOCATION :TEST_TABLESPACE1_PATH;
-CREATE TABLESPACE tablespace2 OWNER :ROLE_1 LOCATION :TEST_TABLESPACE2_PATH;
+CREATE TABLESPACE :TABLESPACE_1 OWNER :ROLE_1 LOCATION :'spc1path';
+CREATE TABLESPACE :TABLESPACE_2 OWNER :ROLE_1 LOCATION :'spc2path';
 \set ON_ERROR_STOP 0
-SELECT attach_tablespace('tablespace1', 'disttable');
-SELECT detach_tablespace('tablespace1', 'disttable');
+SELECT attach_tablespace(:'TABLESPACE_1', 'disttable');
+SELECT detach_tablespace(:'TABLESPACE_1', 'disttable');
 \set ON_ERROR_STOP 1
 SELECT detach_tablespaces('disttable');
 
 -- Continue to use previously attached tablespace, but block attach/detach
-CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE tablespace1;
+CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE :TABLESPACE_1;
 SELECT create_distributed_hypertable('disttable2', 'time', chunk_time_interval => 1000000::bigint);
 
 -- Ensure that table is created on the data nodes without a tablespace
@@ -919,29 +925,29 @@ FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable2')) c
 WHERE cl.oid = ch.chunk::regclass;
 
 \set ON_ERROR_STOP 0
-SELECT attach_tablespace('tablespace2', 'disttable2');
-SELECT detach_tablespace('tablespace2', 'disttable2');
+SELECT attach_tablespace(:'TABLESPACE_2', 'disttable2');
+SELECT detach_tablespace(:'TABLESPACE_2', 'disttable2');
 \set ON_ERROR_STOP 1
 SELECT detach_tablespaces('disttable2');
 
 SELECT * FROM show_tablespaces('disttable2');
 
 -- Ensure tablespace API works for data nodes
-CALL distributed_exec($$
-SELECT attach_tablespace('tablespace2', 'disttable2');
-$$);
-CALL distributed_exec($$
-SELECT detach_tablespace('tablespace2', 'disttable2');
-$$);
-CALL distributed_exec($$
-SELECT attach_tablespace('tablespace2', 'disttable2');
-$$);
+CALL distributed_exec(format($$
+SELECT attach_tablespace(%L, 'disttable2');
+$$, :'TABLESPACE_2'));
+CALL distributed_exec(format($$
+SELECT detach_tablespace(%L, 'disttable2');
+$$, :'TABLESPACE_2'));
+CALL distributed_exec(format($$
+SELECT attach_tablespace(%L, 'disttable2');
+$$, :'TABLESPACE_2'));
 CALL distributed_exec($$
 SELECT detach_tablespaces('disttable2');
 $$);
 DROP TABLE disttable2;
 
-CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE tablespace1;
+CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE :TABLESPACE_1;
 SELECT create_hypertable('disttable2', 'time', chunk_time_interval => 1000000::bigint, replication_factor => 1);
 
 -- Ensure that table is created on the data nodes without a tablespace
@@ -958,15 +964,15 @@ FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable2')) c
 WHERE cl.oid = ch.chunk::regclass;
 
 \set ON_ERROR_STOP 0
-SELECT attach_tablespace('tablespace2', 'disttable2');
-SELECT detach_tablespace('tablespace2', 'disttable2');
+SELECT attach_tablespace(:'TABLESPACE_2', 'disttable2');
+SELECT detach_tablespace(:'TABLESPACE_2', 'disttable2');
 \set ON_ERROR_STOP 1
 
 SELECT * FROM show_tablespaces('disttable2');
 DROP TABLE disttable2;
 
-DROP TABLESPACE tablespace1;
-DROP TABLESPACE tablespace2;
+DROP TABLESPACE :TABLESPACE_1;
+DROP TABLESPACE :TABLESPACE_2;
 
 -- Make sure table qualified name is used in chunks_in function. Otherwise having a table name same as a column name might yield an error
 CREATE TABLE dist_device(time timestamptz, dist_device int, temp float);
@@ -1433,10 +1439,10 @@ SELECT * FROM create_distributed_hypertable('whatever', 'timestamp', 'user_id',
                                             if_not_exists => true, chunk_time_interval => INTERVAL '1 day');
 -- Check the hypertable sequence before and after call to ensure that
 -- the hypertable sequence was not increased with the second call.
-SELECT  * FROM _timescaledb_catalog.hypertable_id_seq;
+SELECT last_value FROM _timescaledb_catalog.hypertable_id_seq;
 SELECT * FROM create_distributed_hypertable('whatever', 'timestamp', 'user_id',
                                             if_not_exists => true, chunk_time_interval => INTERVAL '1 day');
-SELECT  * FROM _timescaledb_catalog.hypertable_id_seq;
+SELECT last_value FROM _timescaledb_catalog.hypertable_id_seq;
 
 -- Test that creating a distributed hypertable from a table with data
 -- fails, and that migrate_data blocked.
