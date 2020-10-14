@@ -295,11 +295,11 @@ ts_test_time_utils(PG_FUNCTION_ARGS)
 					  ts_time_get_max(INT8OID));
 	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_max(DATEOID), 1, DATEOID),
 					  ts_time_get_noend(DATEOID));
-	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_end(DATEOID) - 1, 1, DATEOID),
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_max(DATEOID), 1, DATEOID),
 					  ts_time_get_noend(DATEOID));
-	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_end(TIMESTAMPOID) - 1, 1, TIMESTAMPOID),
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_max(TIMESTAMPOID), 1, TIMESTAMPOID),
 					  ts_time_get_noend(TIMESTAMPOID));
-	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_end(TIMESTAMPTZOID) - 1, 1, TIMESTAMPOID),
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_max(TIMESTAMPTZOID), 1, TIMESTAMPOID),
 					  ts_time_get_noend(TIMESTAMPOID));
 	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_end(DATEOID) - 2, 1, DATEOID),
 					  ts_time_get_max(DATEOID));
@@ -307,6 +307,21 @@ ts_test_time_utils(PG_FUNCTION_ARGS)
 					  ts_time_get_max(TIMESTAMPOID));
 	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_end(TIMESTAMPTZOID) - 2, 1, TIMESTAMPOID),
 					  ts_time_get_max(TIMESTAMPOID));
+
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(INT2OID), -1, INT2OID),
+					  ts_time_get_min(INT2OID));
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(INT4OID), -1, INT4OID),
+					  ts_time_get_min(INT4OID));
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(INT8OID), -1, INT8OID),
+					  ts_time_get_min(INT8OID));
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(DATEOID), -1, DATEOID),
+					  ts_time_get_nobegin(DATEOID));
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(DATEOID), -1, DATEOID),
+					  ts_time_get_nobegin(DATEOID));
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(TIMESTAMPOID), -1, TIMESTAMPOID),
+					  ts_time_get_nobegin(TIMESTAMPOID));
+	TestAssertInt64Eq(ts_time_saturating_add(ts_time_get_min(TIMESTAMPTZOID), -1, TIMESTAMPOID),
+					  ts_time_get_nobegin(TIMESTAMPOID));
 
 	/* Test saturating subtraction */
 	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_min(INT2OID), 1, INT2OID),
@@ -329,6 +344,19 @@ ts_test_time_utils(PG_FUNCTION_ARGS)
 											 1,
 											 TIMESTAMPTZOID),
 					  ts_time_get_min(TIMESTAMPTZOID));
+
+	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_max(INT2OID), -1, INT2OID),
+					  ts_time_get_max(INT2OID));
+	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_max(INT4OID), -1, INT4OID),
+					  ts_time_get_max(INT4OID));
+	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_max(INT8OID), -1, INT8OID),
+					  ts_time_get_max(INT8OID));
+	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_max(DATEOID), -1, DATEOID),
+					  ts_time_get_noend(DATEOID));
+	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_max(TIMESTAMPOID), -1, TIMESTAMPOID),
+					  ts_time_get_noend(TIMESTAMPOID));
+	TestAssertInt64Eq(ts_time_saturating_sub(ts_time_get_max(TIMESTAMPTZOID), -1, TIMESTAMPTZOID),
+					  ts_time_get_noend(TIMESTAMPTZOID));
 
 	PG_RETURN_VOID();
 }
