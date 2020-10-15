@@ -106,14 +106,12 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
-
-	PreventCommandIfReadOnly("add_compression_policy()");
-
 	Hypertable *hypertable;
 	Cache *hcache;
 	Dimension *dim;
-	ts_hypertable_permissions_check(ht_oid, GetUserId());
-	Oid owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
+	Oid owner_id;
+
+	PreventCommandIfReadOnly("add_compression_policy()");
 
 	/* check if this is a table with compression enabled */
 	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
@@ -121,10 +119,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	if (hypertable_is_distributed(hypertable))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("add_compression_policy not implemented for distributed hypertable"),
-				 errdetail(
-					 "Current version doesn't implement support for add_compression_policy() on "
-					 "distributed hypertables.")));
+				 errmsg("compression policies not supported on distributed hypertables")));
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION(hypertable))
 	{
@@ -135,6 +130,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 				 errhint("Enable compression before adding a compression policy.")));
 	}
 
+	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
@@ -167,7 +163,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
 			ereport(NOTICE,
-					(errmsg("compression policy already exists on hypertable \"%s\", skipping",
+					(errmsg("compression policy already exists for hypertable \"%s\", skipping",
 							get_rel_name(ht_oid))));
 			PG_RETURN_INT32(-1);
 		}
@@ -175,9 +171,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		{
 			ts_cache_release(hcache);
 			ereport(WARNING,
-					(errmsg("compression policy already exists for hypertable \"%s\" with "
-							"different arguments",
+					(errmsg("compression policy already exists for hypertable \"%s\"",
 							get_rel_name(ht_oid)),
+					 errdetail("A policy already exists with different arguments."),
 					 errhint("Remove the existing policy before adding a new one.")));
 			PG_RETURN_INT32(-1);
 		}
@@ -257,24 +253,30 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 {
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
+	Hypertable *ht;
+	Cache *hcache;
 
 	PreventCommandIfReadOnly("remove_compression_policy()");
 
-	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
 														   INTERNAL_SCHEMA_NAME,
-														   ht_id);
+														   ht->fd.id);
+
+	ts_cache_release(hcache);
+
 	if (jobs == NIL)
 	{
 		if (!if_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("cannot remove compress chunks policy, no such policy exists")));
+					 errmsg("compression policy not found for hypertable \"%s\"",
+							get_rel_name(hypertable_oid))));
 		else
 		{
 			ereport(NOTICE,
-					(errmsg("compress chunks policy does not exist on hypertable \"%s\", skipping",
+					(errmsg("compression policy not found for hypertable \"%s\", skipping",
 							get_rel_name(hypertable_oid))));
 			PG_RETURN_BOOL(false);
 		}

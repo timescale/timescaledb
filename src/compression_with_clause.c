@@ -50,10 +50,9 @@ throw_segment_by_error(char *segment_by)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_SYNTAX_ERROR),
-			 errmsg("unable to parse timescaledb.compress_segmentby option '%s'", segment_by),
-			 errhint("timescaledb.compress_segmentby option should be a comma separated list "
-					 "of column "
-					 "names.")));
+			 errmsg("unable to parse segmenting option \"%s\"", segment_by),
+			 errhint("The option timescaledb.compress_segmentby must"
+					 " be a set of columns separated by commas.")));
 }
 
 static bool
@@ -148,10 +147,10 @@ throw_order_by_error(char *order_by)
 {
 	ereport(ERROR,
 			(errcode(ERRCODE_SYNTAX_ERROR),
-			 errmsg("unable to parse timescaledb.compress_orderby option '%s'", order_by),
-			 errhint("timescaledb.compress_orderby option should be a comma separated list of "
-					 "column "
-					 "names with sort options. It is the same format as an ORDER BY clause.")));
+			 errmsg("unable to parse ordering option \"%s\"", order_by),
+			 errhint("The timescaledb.compress_orderby option must be a set of column"
+					 " names with sort options, separated by commas."
+					 " It is the same format as an ORDER BY clause.")));
 }
 
 /* compress_orderby is parsed same as order by in select queries */

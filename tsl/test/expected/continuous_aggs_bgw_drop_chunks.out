@@ -124,5 +124,5 @@ SELECT remove_retention_policy('drop_chunks_view1');
 SELECT remove_retention_policy('unknown');
 ERROR:  relation "unknown" does not exist at character 32
 SELECT remove_retention_policy('1');
-ERROR:  OID 1 does not refer to a hypertable or continuous aggregate
+ERROR:  relation is not a hypertable or continuous aggregate
 \set ON_ERROR_STOP 1

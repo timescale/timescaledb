@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 
 --table with special column names --
 create table foo2 (a integer, "bacB toD" integer, c integer, d integer);

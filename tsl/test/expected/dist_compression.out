@@ -323,5 +323,5 @@ SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_nam
 --
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('compressed', '60d'::interval);
-ERROR:  add_compression_policy not implemented for distributed hypertable
+ERROR:  compression policies not supported on distributed hypertables
 \set ON_ERROR_STOP 1

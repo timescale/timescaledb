@@ -334,8 +334,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL"),
-				 errhint(
-					 "You can either pass start and finish as arguments or in the WHERE clause")));
+				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 
 	return gapfill_datum_get_internal(value, state->gapfill_typid);
 }
@@ -368,8 +367,7 @@ get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *exp
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: %s cannot be NULL",
 						boundary == GAPFILL_START ? "start" : "finish"),
-				 errhint(
-					 "You can either pass start and finish as arguments or in the WHERE clause")));
+				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 
 	return gapfill_datum_get_internal(arg_value, state->gapfill_typid);
 }
@@ -492,8 +490,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: ts needs to refer to a single "
 						"column if no start or finish is supplied"),
-				 errhint(
-					 "You can either pass start and finish as arguments or in the WHERE clause")));
+				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 
 	ts_var = castNode(Var, lsecond(func->args));
 
@@ -580,7 +577,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 			 errmsg("missing time_bucket_gapfill argument: could not infer %s from WHERE clause",
 					boundary == GAPFILL_START ? "start" : "finish"),
-			 errhint("You can either pass start and finish as arguments or in the WHERE clause")));
+			 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 	pg_unreachable();
 }
 
@@ -691,8 +688,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL"),
-					 errhint("You can either pass start and finish as arguments or in the WHERE "
-							 "clause")));
+					 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 
 		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
 	}

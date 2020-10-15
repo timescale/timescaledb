@@ -364,8 +364,8 @@ post_analyze_hook(ParseState *pstate, Query *query)
 						{
 							ts_bgw_message_send_and_wait(RESTART, db_oid);
 							ereport(WARNING,
-									(errmsg("You may need to manually restart any running "
-											"background workers after this command.")));
+									(errmsg("you may need to manually restart any running "
+											"background workers after this command")));
 						}
 					}
 				}
@@ -431,8 +431,8 @@ post_analyze_hook(ParseState *pstate, Query *query)
 					{
 						ts_bgw_message_send_and_wait(STOP, db_oid);
 						ereport(WARNING,
-								(errmsg("You need to manually restart any running "
-										"background workers after this command.")));
+								(errmsg("you need to manually restart any running "
+										"background workers after this command")));
 					}
 				}
 				break;

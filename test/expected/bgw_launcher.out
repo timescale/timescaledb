@@ -565,7 +565,7 @@ SELECT wait_for_bgw_scheduler('db_rename_test');
 (1 row)
 
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
-WARNING:  You need to manually restart any running background workers after this command.
+WARNING:  you need to manually restart any running background workers after this command
 DROP DATABASE db_rename_test2;
 -- test create database with timescaledb database as template
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
@@ -594,7 +594,7 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 (1 row)
 
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
-WARNING:  You may need to manually restart any running background workers after this command.
+WARNING:  you may need to manually restart any running background workers after this command
 -- clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE :TEST_DBNAME_2;

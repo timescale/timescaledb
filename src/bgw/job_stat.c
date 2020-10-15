@@ -207,7 +207,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	MemoryContext oldctx;
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
-		elog(LOG, "calculate_next_start_on_failure, got bad finish_time");
+		elog(LOG, "%s: invalid finish time", __func__);
 		last_finish = ts_timer_get_current_timestamp();
 	}
 	oldctx = CurrentMemoryContext;
@@ -242,8 +242,8 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		ErrorData *errdata = CopyErrorData();
 		ereport(LOG,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("calculate_next_start_on_failure ran into an error, resetting value"),
-				 errdetail("Error: %s", errdata->message)));
+				 errmsg("could not calculate next start on failure: resetting value"),
+				 errdetail("Error: %s.", errdata->message)));
 		FlushErrorState();
 		RollbackAndReleaseCurrentSubTransaction();
 	}

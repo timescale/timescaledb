@@ -516,7 +516,7 @@ select set_integer_now_func('test_overflow_smallint', 'overflow_now');
 select add_retention_policy('test_overflow_smallint', -2) as drop_chunks_job_id \gset
 \set ON_ERROR_STOP 0
 CALL run_job(:drop_chunks_job_id);
-ERROR:  ts_interval overflow
+ERROR:  integer time overflow
 \set ON_ERROR_STOP 1
 -- test the case when partitioning function and now function are set.
 create table part_time_now_func(time float8, temp float8);
