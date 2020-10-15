@@ -10,6 +10,7 @@ CREATE OR REPLACE FUNCTION timescaledb_integrity_test()
     RETURNS VOID LANGUAGE PLPGSQL STABLE AS
 $BODY$
 DECLARE
+    dimension_slice RECORD;
     constraint_row RECORD;
     index_row      RECORD;
     chunk_count    INTEGER;
@@ -63,6 +64,13 @@ BEGIN
         IF chunk_constraint_count != chunk_count THEN
            RAISE EXCEPTION 'Missing chunk constraints for %. Expected %, but found %', constraint_row.conname, chunk_count, chunk_constraint_count;
         END IF;
+    END LOOP;
+
+    FOR dimension_slice IN
+    SELECT chunk_id, dimension_slice_id FROM _timescaledb_catalog.chunk_constraint
+     WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice)
+    LOOP
+      RAISE EXCEPTION 'Missing dimension slice with id % for chunk %.', dimension_slice.dimension_slice_id, dimension_slice.chunk_id;
     END LOOP;
 END;
 $BODY$;
