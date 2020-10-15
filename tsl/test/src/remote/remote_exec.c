@@ -182,7 +182,8 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 		data_node_list = data_node_array_to_node_name_list(data_nodes);
 
 	if (list_length(data_node_list) == 0)
-		ereport(ERROR, (errcode(ERRCODE_TS_NO_DATA_NODES), errmsg("no data nodes defined")));
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES), errmsg("no data nodes defined")));
 
 	foreach (lc, data_node_list)
 	{

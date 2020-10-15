@@ -133,7 +133,7 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid type of time argument"),
-				 errhint("The argument type should be compatible with type \"%s\"",
+				 errhint("The argument type should be compatible with type \"%s\".",
 						 format_type_be(timetype))));
 
 	return ts_time_value_to_internal(arg, argtype);

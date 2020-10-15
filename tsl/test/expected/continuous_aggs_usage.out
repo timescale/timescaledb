@@ -186,7 +186,7 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA;
-ERROR:  only immutable functions are supported for continuous aggregate query
+ERROR:  only immutable functions supported in continuous aggregate view
 --note the error.
 -- You have two options:
 -- Option 1: be explicit in your timezone:

@@ -1361,7 +1361,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO coids VALUES (1);
 SELECT reorder_chunk('_timescaledb_internal._hyper_3_5_chunk', 'coids_time_idx', verbose => TRUE);
-ERROR:  cannot reorder a table with OIDs.
+ERROR:  cannot reorder a table with OIDs
 \set ON_ERROR_STOP 1
 SELECT indexrelid::regclass, indisclustered
 FROM pg_index

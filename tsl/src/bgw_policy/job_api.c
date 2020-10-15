@@ -181,13 +181,12 @@ job_alter(PG_FUNCTION_ARGS)
 	{
 		if (if_exists)
 		{
-			ereport(NOTICE, (errmsg("cannot alter job, job #%d not found, skipping", job_id)));
+			ereport(NOTICE, (errmsg("job #%d not found, skipping", job_id)));
 			PG_RETURN_NULL();
 		}
 		else
 			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("cannot alter job, job #%d not found", job_id)));
+					(errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job #%d not found", job_id)));
 	}
 
 	ts_bgw_job_permission_check(job);

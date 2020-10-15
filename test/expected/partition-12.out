@@ -397,7 +397,7 @@ CREATE TABLE part_time_func(time float8, temp float8, device text);
 \set ON_ERROR_STOP 0
 -- Should fail due to invalid time column
 SELECT create_hypertable('part_time_func', 'time');
-ERROR:  invalid dimension type: "time" must be an integer, date or timestamp
+ERROR:  invalid type for dimension "time"
 -- Should fail due to bad signature of time partitioning function
 SELECT create_hypertable('part_time_func', 'time', time_partitioning_func => 'time_partfunc_bad_parameters');
 ERROR:  invalid partitioning function

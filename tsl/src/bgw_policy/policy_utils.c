@@ -80,13 +80,15 @@ subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
 			res = DatumGetInt16(now) - interval;
 			if (res < PG_INT16_MIN || res > PG_INT16_MAX)
 				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
+						 errmsg("integer time overflow")));
 			return res;
 		case INT4OID:
 			res = DatumGetInt32(now) - interval;
 			if (res < PG_INT32_MIN || res > PG_INT32_MAX)
 				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
+						 errmsg("integer time overflow")));
 			return res;
 		case INT8OID:
 		{
@@ -94,7 +96,8 @@ subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
 			if (overflow)
 			{
 				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW), errmsg("ts_interval overflow")));
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
+						 errmsg("integer time overflow")));
 			}
 			return res;
 		}

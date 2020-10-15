@@ -68,16 +68,14 @@ ts_rel_get_owner(Oid relid)
 	Oid ownerid;
 
 	if (!OidIsValid(relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_TABLE),
-				 errmsg("unable to get owner for relation with OID %u: invalid OID", relid)));
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("invalid relation OID")));
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tuple))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
-				 errmsg("unable to get owner for relation with OID %u: does not exist", relid)));
+				 errmsg("relation with OID %u does not exist", relid)));
 
 	ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
 
@@ -308,7 +306,6 @@ ts_hypertable_relid_to_id(Oid relid)
 	int result = (ht == NULL) ? -1 : ht->fd.id;
 
 	ts_cache_release(hcache);
-
 	return result;
 }
 
@@ -507,9 +504,7 @@ hypertable_tuple_update(TupleInfo *ti, void *data)
 		namestrcpy(&ht->fd.chunk_sizing_func_name, NameStr(info.func_name));
 	}
 	else
-	{
-		elog(ERROR, "hypertable_tuple_update chunk_sizing_function cannot be NULL");
-	}
+		elog(ERROR, "chunk sizing function cannot be NULL");
 
 	new_tuple = hypertable_formdata_make_tuple(&ht->fd, ts_scanner_get_tupledesc(ti));
 
@@ -1431,13 +1426,11 @@ hypertable_validate_constraints(Oid relid, int replication_factor)
 
 		if (form->contype == CONSTRAINT_FOREIGN && replication_factor > 0)
 			ereport(WARNING,
-					(errmsg("FOREIGN KEY from distributed hypertable \"%s\" requires referenced "
-							"table to be consistent across all data nodes.",
+					(errmsg("distributed hypertable \"%s\" has a foreign key to"
+							" a non-distributed table",
 							get_rel_name(relid)),
-					 errdetail(
-						 "Foreign key constraints on distributed hypertables require referenced "
-						 "tables to be present on all data nodes and consistent. Updates to the "
-						 "referenced table is not automatically propagated to data nodes.")));
+					 errdetail("Non-distributed tables that are referenced by a distributed"
+							   " hypertable must exist and be identical on all data nodes.")));
 	}
 
 	systable_endscan(scan);
@@ -1700,11 +1693,13 @@ ts_hypertable_check_partitioning(Hypertable *ht, int32 id_of_updated_dimension)
 		if (first_closed_dim != NULL && dim->fd.id == first_closed_dim->fd.id &&
 			num_nodes > first_closed_dim->fd.num_slices)
 			ereport(WARNING,
-					(errmsg("the number of partitions in dimension \"%s\" is too low to "
-							"make use of all attached data nodes",
+					(errcode(ERRCODE_WARNING),
+					 errmsg("insuffient number of partitions for dimension \"%s\"",
 							NameStr(dim->fd.column_name)),
-					 errhint("Increase the number of partitions in dimension \"%s\" to match or "
-							 "exceed the number of attached data nodes.",
+					 errdetail("There are not enough partitions to make"
+							   " use of all data nodes."),
+					 errhint("Increase the number of partitions in dimension \"%s\" to match or"
+							 " exceed the number of attached data nodes.",
 							 NameStr(dim->fd.column_name))));
 	}
 }
@@ -1827,8 +1822,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid main_table: cannot be NULL")));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("relation cannot be NULL")));
 
 	if (migrate_data && is_dist_call)
 		ereport(ERROR,
@@ -1837,8 +1831,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 
 	if (NULL == time_dim_name)
 		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid time_column_name: cannot be NULL")));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("time column cannot be NULL")));
 
 	if (NULL != data_node_arr && ARR_NDIM(data_node_arr) > 1)
 		ereport(ERROR,
@@ -2074,7 +2067,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errmsg("hypertables do not support rules"),
 				 errdetail("Table \"%s\" has attached rules, which do not work on hypertables.",
 						   get_rel_name(table_relid)),
-				 errhint("Remove the rules before calling create_hypertable")));
+				 errhint("Remove the rules before creating a hypertable.")));
 
 	/*
 	 * Create the associated schema where chunks are stored, or, check
@@ -2116,7 +2109,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					(errcode(ERRCODE_WARNING),
 					 errmsg("adaptive chunking is a BETA feature and is not recommended for "
 							"production deployments")));
-
 			time_dim_info->adaptive_chunking = true;
 		}
 	}
@@ -2124,7 +2116,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid chunk_sizing function: cannot be NULL")));
+				 errmsg("chunk sizing function cannot be NULL")));
 	}
 
 	/* Validate that the dimensions are OK */
@@ -2206,9 +2198,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	else if (list_length(data_node_names) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication factor for non-empty data node list"),
-				 errhint("The replication_factor should be 1 or greater with a non-empty data node "
-						 "list")));
+				 errmsg("invalid replication factor"),
+				 errhint("The replication factor should be 1 or greater with a non-empty data node "
+						 "list.")));
 
 	ts_cache_release(hcache);
 
@@ -2309,7 +2301,7 @@ integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 
 	if (!OidIsValid(now_func_oid))
 		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("invalid integer_now function"))));
+				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("invalid custom time function"))));
 
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(now_func_oid));
 	if (!HeapTupleIsValid(tuple))
@@ -2329,7 +2321,8 @@ integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 		ReleaseSysCache(tuple);
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("integer_now_func must take no arguments and it must be STABLE")));
+				 errmsg("invalid custom time function"),
+				 errhint("A custom time function must take no arguments and be STABLE.")));
 	}
 
 	if (now_func->prorettype != open_dim_type)
@@ -2337,8 +2330,9 @@ integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 		ReleaseSysCache(tuple);
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("return type of integer_now_func must be the same as "
-						"the type of the time partitioning column of the hypertable")));
+				 errmsg("invalid custom time function"),
+				 errhint("The return type of the custom time function must be the same as"
+						 " the type of the time column of the hypertable.")));
 	}
 	ReleaseSysCache(tuple);
 }
@@ -2368,15 +2362,16 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 			*NameStr(open_dim->fd.integer_now_func) != '\0')
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("integer_now_func is already set for hypertable \"%s\"",
+					 errmsg("custom time function already set for hypertable \"%s\"",
 							get_rel_name(table_relid))));
 
 	open_dim_type = ts_dimension_get_partition_type(open_dim);
 	if (!IS_INTEGER_TYPE(open_dim_type))
 		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("integer_now_func can only be set for hypertables "
-						"that have integer time dimensions")));
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("custom time function not supported"),
+				 errhint("A custom time function can only be set for hypertables"
+						 " that have integer time dimensions.")));
 
 	integer_now_func_validate(now_func_oid, open_dim_type);
 
@@ -2552,12 +2547,13 @@ ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube)
 
 	if (list_length(chunk_data_nodes) < ht->fd.replication_factor)
 		ereport(WARNING,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("new chunks for hypertable \"%s\" will be under-replicated due to "
-						"insufficient available data nodes, lacks %d data node(s)",
-						NameStr(ht->fd.table_name),
-						ht->fd.replication_factor - list_length(chunk_data_nodes)),
-				 errhint("attach more data nodes or allow new chunks on blocked data nodes")));
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 errmsg("insufficient number of data nodes"),
+				 errdetail("There are not enough data nodes to replicate chunks according to the"
+						   " configured replication factor."),
+				 errhint("Attach %d or more data nodes to hypertable \"%s\".",
+						 ht->fd.replication_factor - list_length(chunk_data_nodes),
+						 NameStr(ht->fd.table_name))));
 
 #if defined(USE_ASSERT_CHECKING)
 	assert_chunk_data_nodes_is_a_set(chunk_data_nodes);
@@ -2618,12 +2614,9 @@ ts_hypertable_get_available_data_nodes(Hypertable *ht, bool error_if_missing)
 															get_hypertable_data_node);
 	if (available_nodes == NIL && error_if_missing)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_NO_DATA_NODES),
-				 (errmsg("no available data nodes (detached or blocked for new chunks) for "
-						 "hypertable \"%s\"",
-						 get_rel_name(ht->main_table_relid)),
-				  errhint("attach more data nodes or allow new chunks for existing data nodes for "
-						  "hypertable \"%s\"",
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 (errmsg("insufficient number of data nodes"),
+				  errhint("Increase the number of available data nodes on hypertable \"%s\"",
 						  get_rel_name(ht->main_table_relid)))));
 	return available_nodes;
 }

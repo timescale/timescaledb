@@ -193,16 +193,18 @@ policy_retention_add(PG_FUNCTION_ARGS)
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
 			ereport(NOTICE,
-					(errmsg("retention policy already exists on hypertable \"%s\", skipping",
+					(errmsg("retention policy already exists for hypertable \"%s\", skipping",
 							get_rel_name(ht_oid))));
 			PG_RETURN_INT32(-1);
 		}
 		else
 		{
 			ts_cache_release(hcache);
-			elog(WARNING,
-				 "could not add retention policy due to existing policy on hypertable with "
-				 "different arguments");
+			ereport(WARNING,
+					(errmsg("retention policy already exists for hypertable \"%s\"",
+							get_rel_name(ht_oid)),
+					 errdetail("A policy already exists with different arguments."),
+					 errhint("Remove the existing policy before adding a new one.")));
 			PG_RETURN_INT32(-1);
 		}
 	}
@@ -211,15 +213,15 @@ policy_retention_add(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid value for parameter %s", CONFIG_KEY_DROP_AFTER),
-				 errhint("integer time duration is required for hypertables with integer time "
-						 "dimension")));
+				 errhint("Integer time duration is required for hypertables"
+						 " with integer time dimension.")));
 
 	if (IS_TIMESTAMP_TYPE(partitioning_type) && window_type != INTERVALOID)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid value for parameter %s", CONFIG_KEY_DROP_AFTER),
-				 errhint("interval time duration is required for hypertable with timestamp-based "
-						 "time dimension")));
+				 errhint("Interval time duration is required for hypertable"
+						 " with timestamp-based time dimension.")));
 
 	JsonbParseState *parse_state = NULL;
 
@@ -285,20 +287,19 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 	Oid table_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 	Cache *hcache;
+	Hypertable *hypertable;
 
 	PreventCommandIfReadOnly("remove_retention_policy()");
 
-	Hypertable *hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, true, &hcache);
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (!hypertable)
 	{
-		char *view_name = get_rel_name(table_oid);
+		const char *view_name = get_rel_name(table_oid);
+
 		if (!view_name)
-		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("OID %d does not refer to a hypertable or continuous aggregate",
-							table_oid)));
-		}
+					 errmsg("relation is not a hypertable or continuous aggregate")));
 		else
 		{
 			ContinuousAgg *ca = ts_continuous_agg_find_by_relid(table_oid);
@@ -306,7 +307,7 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 			if (!ca)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
-						 errmsg("no hypertable or continuous aggregate by the name \"%s\" exists",
+						 errmsg("relation \"%s\" is not a hypertable or continuous aggregate",
 								view_name)));
 			hypertable = ts_hypertable_get_by_id(ca->data.mat_hypertable_id);
 		}
@@ -325,11 +326,12 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 		if (!if_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("cannot remove retention policy, no such policy exists")));
+					 errmsg("retention policy not found for hypertable \"%s\"",
+							get_rel_name(table_oid))));
 		else
 		{
 			ereport(NOTICE,
-					(errmsg("retention policy does not exist on hypertable \"%s\", skipping",
+					(errmsg("retention policy not found for hypertable \"%s\", skipping",
 							get_rel_name(table_oid))));
 			PG_RETURN_NULL();
 		}

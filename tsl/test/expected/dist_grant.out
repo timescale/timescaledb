@@ -679,7 +679,7 @@ CREATE TABLE conditions(
        PRIMARY KEY (time,device)
 );
 SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device', 3);
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              4 | public      | conditions | t

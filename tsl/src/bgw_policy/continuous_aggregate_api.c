@@ -306,7 +306,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 		if (!if_not_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("refresh policy already exists for continuous aggregate \"%s\"",
+					 errmsg("continuous aggregate policy already exists for \"%s\"",
 							get_rel_name(cagg_oid))));
 		BgwJob *existing = linitial(jobs);
 
@@ -323,16 +323,18 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 		{
 			/* If all arguments are the same, do nothing */
 			ereport(NOTICE,
-					(errmsg("refresh policy already exists on continuous aggregate \"%s\", "
+					(errmsg("continuous aggregate policy already exists for \"%s\", "
 							"skipping",
 							get_rel_name(cagg_oid))));
 			PG_RETURN_INT32(-1);
 		}
 		else
 		{
-			elog(WARNING,
-				 "could not add refresh policy due to existing policy on continuous aggregate with "
-				 "different arguments");
+			ereport(WARNING,
+					(errmsg("continuous aggregate policy already exists for \"%s\"",
+							get_rel_name(cagg_oid)),
+					 errdetail("A policy already exists with different arguments."),
+					 errhint("Remove the existing policy before adding a new one.")));
 			PG_RETURN_INT32(-1);
 		}
 	}
@@ -387,12 +389,11 @@ policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 	int32 mat_htid;
 
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
+
 	if (!cagg)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
-	}
 
 	ts_cagg_permissions_check(cagg_oid, GetUserId());
 	mat_htid = cagg->data.mat_hypertable_id;
@@ -404,14 +405,12 @@ policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 		if (!if_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 (errmsg("refresh policy does not exist on continuous aggregate "
-							 "\"%s\"",
+					 (errmsg("continuous aggregate policy not found for \"%s\"",
 							 get_rel_name(cagg_oid)))));
 		else
 		{
 			ereport(NOTICE,
-					(errmsg("refresh policy does not exist on continuous aggregate \"%s\", "
-							"skipping",
+					(errmsg("continuous aggregate policy not found for \"%s\", skipping",
 							get_rel_name(cagg_oid))));
 			PG_RETURN_VOID();
 		}

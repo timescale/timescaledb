@@ -228,7 +228,7 @@ AS
 SELECT time_bucket(SMALLINT '20', time) AS bucket, device, avg(temp) AS avg_temp
 FROM conditions_smallint c
 GROUP BY 1,2 WITH NO DATA;
-ERROR:  missing integer-now function on hypertable "conditions_smallint"
+ERROR:  custom time function required on hypertable "conditions_smallint"
 \set ON_ERROR_STOP 1
 SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
  set_integer_now_func 

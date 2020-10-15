@@ -624,7 +624,7 @@ select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_I
 
 \set ON_ERROR_STOP 0
 select set_integer_now_func('test_table_int', 'dummy_now');
-ERROR:  integer_now_func is already set for hypertable "test_table_int"
+ERROR:  custom time function already set for hypertable "test_table_int"
 select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
 ERROR:  permission denied for schema my_schema at character 47
 select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);

@@ -183,14 +183,16 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	Chunk *srcchunk;
 
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
+
 	if (!TS_HYPERTABLE_HAS_COMPRESSION(srcht))
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("chunks can be compressed only if compression property is set on the "
-						"hypertable"),
-				 errhint("Use ALTER TABLE with timescaledb.compress option.")));
-	}
+				 errmsg("compression not enabled on \"%s\"", NameStr(srcht->fd.table_name)),
+				 errdetail("It is not possible to compress chunks on a hypertable"
+						   " that does not have compression enabled."),
+				 errhint("Enable compression using ALTER TABLE with"
+						 " the timescaledb.compress option.")));
+
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compress hypertable")));

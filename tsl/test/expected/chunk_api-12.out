@@ -504,7 +504,7 @@ RESET ROLE;
 TRUNCATE disttable;
 TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_1"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
 NOTICE:  the number of partitions in dimension "device" was decreased to 1
  delete_data_node 
 ------------------
@@ -512,7 +512,7 @@ NOTICE:  the number of partitions in dimension "device" was decreased to 1
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_2', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_2"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
  delete_data_node 
 ------------------
  t

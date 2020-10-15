@@ -447,7 +447,7 @@ CREATE MATERIALIZED VIEW drop_chunks_view_view
 AS SELECT time_bucket('6', time_bucket), SUM(count)
     FROM drop_chunks_view
     GROUP BY 1 WITH NO DATA;
-ERROR:  invalid SELECT query for continuous aggregate
+ERROR:  invalid continuous aggregate view
 \set ON_ERROR_STOP 1
 DROP INDEX new_name_idx;
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
@@ -1054,17 +1054,17 @@ CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-ERROR:  first argument to time_bucket function should be an immutable expression for continuous aggregate query
+ERROR:  only immutable expressions allowed in time bucket function
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int4
 GROUP BY 1;
-ERROR:  first argument to time_bucket function should be an immutable expression for continuous aggregate query
+ERROR:  only immutable expressions allowed in time bucket function
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int8
 GROUP BY 1;
-ERROR:  first argument to time_bucket function should be an immutable expression for continuous aggregate query
+ERROR:  only immutable expressions allowed in time bucket function
 \set ON_ERROR_STOP 1
 -- Test various ALTER MATERIALIZED VIEW statements.
 SET ROLE :ROLE_DEFAULT_PERM_USER;
