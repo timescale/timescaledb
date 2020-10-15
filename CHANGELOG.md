@@ -4,6 +4,30 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.0.0-rc2 (2020-10-21)
+
+This release candidate contains bugfixes since the previous release candidate.
+
+**Minor Features**
+* #2520 Support non-transactional distibuted_exec
+
+**Bugfixes**
+* #2307 Overflow handling for refresh policy with integer time
+* #2503 Remove error for correct bootstrap of data node
+* #2507 Fix validation logic when adding a new data node
+* #2510 Fix outer join qual propagation
+* #2514 Lock dimension slices when creating new chunk
+* #2515 Add if_attached argument to detach_data_node()
+* #2517 Fix member access within misaligned address in chunk_update_colstats
+* #2525 Fix index creation on hypertables with dropped columns
+* #2543 Pass correct status to lock_job
+* #2544 Assume custom time type range is same as bigint
+* #2563 Fix DecompressChunk path generation
+* #2564 Improve continuous aggregate datatype handling
+* #2568 Change use of ssl_dir GUC
+* #2571 Make errors and messages conform to style guide
+* #2577 Exclude compressed chunks from ANALYZE/VACUUM
+
 ## 2.0.0-rc1 (2020-10-06)
 
 This release adds major new features and bugfixes since the 1.7.4 release.
