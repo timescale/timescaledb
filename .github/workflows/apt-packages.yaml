@@ -10,7 +10,7 @@ on:
     - release_test
 jobs:
   apt_tests:
-    name: ${{ matrix.image }} PG${{ matrix.pg }}
+    name: APT ${{ matrix.image }} PG${{ matrix.pg }}
     runs-on: ubuntu-18.04
     container:
       image: ${{ matrix.image }}
@@ -22,12 +22,7 @@ jobs:
         # Debian images:  9 (stretch), or 10 (buster)
         # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal)
         image: [ "debian:9-slim", "debian:10-slim", "ubuntu:bionic", "ubuntu:focal"]
-        pg: [ 9.6, 10, 11, 12 ]
-        exclude:
-          - image: "ubuntu:focal"
-            pg: 9.6
-          - image: "ubuntu:focal"
-            pg: 10
+        pg: [ 11, 12 ]
 
     steps:
     - name: Add repositories
@@ -48,16 +43,16 @@ jobs:
     - name: Install timescaledb
       run: |
         apt-get update
-        apt-get install -y --no-install-recommends timescaledb-postgresql-${{ matrix.pg }} timescaledb-tools
+        apt-get install -y --no-install-recommends timescaledb-2-postgresql-${{ matrix.pg }} timescaledb-tools
         timescaledb-tune --quiet --yes
 
     - name: List available versions
       run: |
-        apt-cache show timescaledb-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
+        apt-cache show timescaledb-2-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
 
     - name: Show files in package
       run: |
-        dpkg -L timescaledb-postgresql-${{ matrix.pg }}
+        dpkg -L timescaledb-2-postgresql-${{ matrix.pg }}
 
     - uses: actions/checkout@v2
 
