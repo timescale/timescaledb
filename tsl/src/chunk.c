@@ -66,7 +66,7 @@ chunk_set_foreign_server(Chunk *chunk, ForeignServer *new_server)
 	if (!new_server_found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("chunk \"%s\" does not exist on server \"%s\"",
+				 errmsg("chunk \"%s\" does not exist on data node \"%s\"",
 						get_rel_name(chunk->table_id),
 						new_server->servername)));
 

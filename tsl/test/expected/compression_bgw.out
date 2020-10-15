@@ -66,7 +66,7 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
 --cannot set another policy
 \set ON_ERROR_STOP 0
 select add_compression_policy('conditions', '60d'::interval, if_not_exists=>true);
-NOTICE:  compression policy already exists on hypertable "conditions", skipping
+NOTICE:  compression policy already exists for hypertable "conditions", skipping
  add_compression_policy 
 ------------------------
                      -1
@@ -75,7 +75,7 @@ NOTICE:  compression policy already exists on hypertable "conditions", skipping
 select add_compression_policy('conditions', '60d'::interval);
 ERROR:  compression policy already exists for hypertable "conditions"
 select add_compression_policy('conditions', '30d'::interval, if_not_exists=>true);
-WARNING:  compression policy already exists for hypertable "conditions" with different arguments
+WARNING:  compression policy already exists for hypertable "conditions"
  add_compression_policy 
 ------------------------
                      -1

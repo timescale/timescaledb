@@ -289,7 +289,7 @@ process_create_foreign_server_start(ProcessUtilityArgs *args)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("operation not supported for a TimescaleDB data node"),
 				 errhint("Use add_data_node() to add data nodes to a "
-						 "TimescaleDB distributed database.")));
+						 "distributed database.")));
 
 	return DDL_CONTINUE;
 }
@@ -309,7 +309,7 @@ process_drop_foreign_server_start(DropStmt *stmt)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("operation not supported on a TimescaleDB data node"),
 					 errhint("Use delete_data_node() to remove data nodes from a "
-							 "TimescaleDB distributed database.")));
+							 "distributed database.")));
 	}
 }
 
@@ -1708,8 +1708,8 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot drop column named in partition key"),
-					 errdetail("cannot drop column that is a hypertable partitioning (space or "
-							   "time) dimension")));
+					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
+							   "time) dimension.")));
 	}
 }
 
@@ -3341,7 +3341,7 @@ process_viewstmt(ProcessUtilityArgs *args)
 	if (cagg_options)
 		ereport(ERROR,
 				(errmsg("cannot create continuous aggregate with CREATE VIEW"),
-				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate")));
+				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate.")));
 	return DDL_CONTINUE;
 }
 

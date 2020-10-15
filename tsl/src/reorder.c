@@ -179,7 +179,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 		if (OidIsValid(index_id))
 			ereport(NOTICE,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Ignoring index parameter"),
+					 errmsg("ignoring index parameter"),
 					 errdetail("Chunk will not be reordered as it has compressed data.")));
 
 		AlterTableInternal(chunk_id, list_make1(&cmd), false);
@@ -362,7 +362,7 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 	/* If the table has gone away, we can skip processing it */
 	if (!OldHeap)
 	{
-		ereport(WARNING, (errcode(ERRCODE_WARNING), errmsg("table disappeared during reorder.")));
+		ereport(WARNING, (errcode(ERRCODE_WARNING), errmsg("table disappeared during reorder")));
 		return;
 	}
 
@@ -374,19 +374,19 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 	if (!pg_class_ownercheck(tableOid, GetUserId()))
 	{
 		relation_close(OldHeap, ExclusiveLock);
-		ereport(WARNING, (errcode(ERRCODE_WARNING), errmsg("ownership change during reorder.")));
+		ereport(WARNING, (errcode(ERRCODE_WARNING), errmsg("ownership changed during reorder")));
 		return;
 	}
 
 	if (IsSystemRelation(OldHeap))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot reorder a system relation.")));
+				 errmsg("cannot reorder a system relation")));
 
 	if (OldHeap->rd_rel->relpersistence != RELPERSISTENCE_PERMANENT)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("can only reorder a permanent table.")));
+				 errmsg("can only reorder a permanent table")));
 
 	/* We do not allow reordering on shared catalogs. */
 	if (OldHeap->rd_rel->relisshared)
@@ -396,13 +396,13 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 
 	if (OldHeap->rd_rel->relkind != RELKIND_RELATION)
 		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("can only reorder a relation.")));
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("can only reorder a relation")));
 
 #if PG12_LT
 	if (OldHeap->rd_rel->relhasoids)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot reorder a table with OIDs.")));
+				 errmsg("cannot reorder a table with OIDs")));
 #endif
 
 	/*

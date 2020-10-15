@@ -35,6 +35,8 @@ select add_reorder_policy('test_table');
 
 select add_reorder_policy('test_table', 'second_index');
 select add_reorder_policy('test_table', 'third_index');
+select add_reorder_policy(NULL, 'third_index');
+select add_reorder_policy(2, 'third_index');
 \set ON_ERROR_STOP 1
 
 select * from _timescaledb_config.bgw_job where id=:job_id;

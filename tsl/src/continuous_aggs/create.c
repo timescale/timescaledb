@@ -313,11 +313,9 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 HYPERTABLE_REGULAR,
 											 NULL);
 	if (!created)
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("continuous agg could not create hypertable for relid")));
-	}
+				 errmsg("could not create materialization hypertable")));
 }
 
 static bool
@@ -633,9 +631,10 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				continue;
 
 			if (found)
-				elog(ERROR,
-					 "multiple time_bucket functions not permitted in continuous aggregate "
-					 "query");
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("continuous aggregate view cannot contain"
+								" multiple time bucket functions")));
 			else
 				found = true;
 
@@ -643,9 +642,10 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			col_arg = lsecond(fe->args);
 
 			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
-				elog(ERROR,
-					 "time_bucket function for continuous aggregate query should be called "
-					 "on the dimension column of the hypertable ");
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg(
+							 "time bucket function must reference a hypertable dimension column")));
 
 			/*
 			 * We constify width expression here so any immutable expression will be allowed
@@ -664,14 +664,14 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("first argument to time_bucket function should be an immutable "
-								"expression for continuous aggregate query")));
+						 errmsg("only immutable expressions allowed in time bucket function"),
+						 errhint("Use an immutable expression as first argument"
+								 " to the time bucket function.")));
 		}
 	}
+
 	if (!found)
-	{
-		elog(ERROR, "no valid bucketing function found for continuous aggregate query");
-	}
+		elog(ERROR, "continuous aggregate view must include a valid time bucket function");
 }
 
 static bool
@@ -689,9 +689,7 @@ cagg_agg_validate(Node *node, void *context)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("aggregates with FILTER / DISTINCT / ORDER BY are not supported for "
-							"continuous "
-							"aggregate query")));
+					 errmsg("aggregates with FILTER / DISTINCT / ORDER BY are not supported")));
 		}
 		/* Fetch the pg_aggregate row */
 		aggtuple = SearchSysCache1(AGGFNOID, agg->aggfnoid);
@@ -703,8 +701,7 @@ cagg_agg_validate(Node *node, void *context)
 			ReleaseSysCache(aggtuple);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("ordered set/hypothetical aggregates are not supported by "
-							"continuous aggregate query")));
+					 errmsg("ordered set/hypothetical aggregates are not supported")));
 		}
 		if (aggform->aggcombinefn == InvalidOid ||
 			(aggform->aggtranstype == INTERNALOID && aggform->aggdeserialfn == InvalidOid))
@@ -712,8 +709,7 @@ cagg_agg_validate(Node *node, void *context)
 			ReleaseSysCache(aggtuple);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("aggregates which are not parallelizable are not supported by "
-							"continuous aggregate query")));
+					 errmsg("aggregates which are not parallelizable are not supported")));
 		}
 		ReleaseSysCache(aggtuple);
 
@@ -736,7 +732,8 @@ cagg_validate_query(Query *query)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only SELECT query permitted for continuous aggregate query")));
+				 errmsg("invalid continuous aggregate query"),
+				 errhint("Use a SELECT query in the continuous aggregate view.")));
 	}
 	if (query->hasWindowFuncs || query->hasSubLinks || query->hasDistinctOn ||
 		query->hasRecursive || query->hasModifyingCTE || query->hasForUpdate ||
@@ -746,7 +743,7 @@ cagg_validate_query(Query *query)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid SELECT query for continuous aggregate")));
+				 errmsg("invalid continuous aggregate view")));
 	}
 	if (!query->groupClause)
 	{
@@ -754,8 +751,9 @@ cagg_validate_query(Query *query)
 		 * for groupClause*/
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("SELECT query for continuous aggregate should have at least 1 aggregate "
-						"function and a GROUP BY clause with time_bucket")));
+				 errmsg("invalid continuous aggregate view"),
+				 errhint("Include at least one aggregate function"
+						 " and a GROUP BY clause with time bucket.")));
 	}
 	/*validate aggregates allowed */
 	cagg_agg_validate((Node *) query->targetList, NULL);
@@ -766,8 +764,7 @@ cagg_validate_query(Query *query)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg(
-					 "only 1 hypertable is permitted in SELECT query for continuous aggregate")));
+				 errmsg("only one hypertable allowed in continuous aggregate view")));
 	}
 	/* check if we have a hypertable in the FROM clause */
 	rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
@@ -777,7 +774,7 @@ cagg_validate_query(Query *query)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid SELECT query for continuous aggregate")));
+				 errmsg("invalid continuous aggregate view")));
 	}
 	if (rte->relkind == RELKIND_RELATION)
 	{
@@ -788,7 +785,7 @@ cagg_validate_query(Query *query)
 		if (hypertable_is_distributed(ht))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregates are not supported on distributed hypertables")));
+					 errmsg("continuous aggregates not supported on distributed hypertables")));
 
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
@@ -797,16 +794,13 @@ cagg_validate_query(Query *query)
 			case HypertableIsMaterializationAndRaw:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("hypertable is a continuous aggregate materialization table"),
-						 errhint(
-							 "creating continuous aggregates based on continuous aggregates is not "
-							 "yet supported")));
+						 errmsg("hypertable is a continuous aggregate materialization table")));
 			case HypertableIsRawTable:
 				break;
 			case HypertableIsNotContinuousAgg:
 				break;
 			default:
-				Assert(false && "unreachable");
+				Assert(false);
 		}
 
 		/* get primary partitioning column information */
@@ -819,7 +813,8 @@ cagg_validate_query(Query *query)
 		if (part_dimension->partitioning != NULL)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregate do not support custom partitioning functions")));
+					 errmsg("custom partitioning functions not supported"
+							" with continuous aggregates")));
 
 		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)))
 		{
@@ -829,11 +824,11 @@ cagg_validate_query(Query *query)
 			if (strlen(funcschema) == 0 || strlen(funcname) == 0)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("missing integer-now function on hypertable \"%s\"",
+						 errmsg("custom time function required on hypertable \"%s\"",
 								get_rel_name(ht->main_table_relid)),
-						 errdetail("An integer-based hypertable requires and integer-now function "
-								   "before creating continuous aggregates."),
-						 errhint("Set an integer-now function to create continuous aggregates.")));
+						 errdetail("An integer-based hypertable requires a custom time"
+								   " function to support continuous aggregates."),
+						 errhint("Set a custom time function on the hypertable.")));
 		}
 
 		caggtimebucketinfo_init(&ret,
@@ -848,12 +843,10 @@ cagg_validate_query(Query *query)
 
 	/*check row security settings for the table */
 	if (ts_has_row_security(rte->relid))
-	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg(
-					 "continuous aggregate query cannot be created on table with row security")));
-	}
+				 errmsg("cannot create continuous aggregate on hypertable with row security")));
+
 	/* we need a GROUP By clause with time_bucket on the partitioning
 	 * column of the hypertable
 	 */
@@ -1130,13 +1123,14 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	Var *var;
 	Oid coltype, colcollation;
 	int32 coltypmod;
+
 	if (contain_mutable_functions(input))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only immutable functions are supported for continuous aggregate query"),
-				 errhint("Many time-based function that are not immutable have immutable "
-						 "alternatives that require specifying the timezone explicitly")));
+				 errmsg("only immutable functions supported in continuous aggregate view"),
+				 errhint("Make sure the function includes only immutable expressions,"
+						 " e.g., time_bucket('1 hour', time AT TIME ZONE 'GMT').")));
 	}
 	switch (nodeTag(input))
 	{
@@ -1577,8 +1571,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 
 		if (alist_item != NULL)
 			ereport(ERROR,
-					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("too many column names were specified")));
+					(errcode(ERRCODE_SYNTAX_ERROR), errmsg("too many column names specified")));
 	}
 }
 
@@ -1779,9 +1772,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_TABLE),
 					 errmsg("continuous aggregate \"%s\" already exists", stmt->into->rel->relname),
-					 errhint(
-						 "Drop or rename the existing continuous aggregate first or use another "
-						 "name.")));
+					 errhint("Drop or rename the existing continuous aggregate"
+							 " first or use another name.")));
 		}
 	}
 

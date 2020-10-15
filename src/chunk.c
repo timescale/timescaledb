@@ -811,7 +811,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 
 		if (list_length(chunk->data_nodes) == 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_NO_DATA_NODES),
+					(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
 					 (errmsg("no data nodes associated with chunk \"%s\"",
 							 get_rel_name(chunk->table_id)))));
 
@@ -861,7 +861,7 @@ chunk_assign_data_nodes(Chunk *chunk, Hypertable *ht)
 
 	if (ht->data_nodes == NIL)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_NO_DATA_NODES),
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
 				 (errmsg("no data nodes associated with hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
@@ -3504,11 +3504,14 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 Datum
 ts_chunks_in(PG_FUNCTION_ARGS)
 {
+	const char *funcname = get_func_name(FC_FN_OID(fcinfo));
+
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("illegal invocation of chunks_in function"),
-			 errhint("chunks_in function must appear in the WHERE clause and can only be combined "
-					 "with AND operator")));
+			 errmsg("illegal invocation of %s function", funcname),
+			 errhint("The %s function must appear in the WHERE clause and can only"
+					 " be combined with AND operator.",
+					 funcname)));
 	pg_unreachable();
 }
 

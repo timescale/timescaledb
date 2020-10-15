@@ -39,7 +39,7 @@ SET ROLE :ROLE_1;
 -- Create distributed hypertables.
 CREATE TABLE disttable_with_relopts_1(time timestamptz NOT NULL, device int CHECK (device > 0));
 SELECT * FROM create_distributed_hypertable('disttable_with_relopts_1', 'time', 'device', 2);
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name |        table_name        | created 
 ---------------+-------------+--------------------------+---------
              1 | public      | disttable_with_relopts_1 | t

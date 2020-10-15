@@ -1245,7 +1245,7 @@ SELECT test.interval_to_internal('TIMESTAMP'::regtype, 86400000000);
 ---should give warning
 SELECT test.interval_to_internal('TIMESTAMP'::regtype, 86400);
 WARNING:  unexpected interval: smaller than one second
-HINT:  The interval is specified in microseconds
+HINT:  The interval is specified in microseconds.
  interval_to_internal 
 ----------------------
                 86400
@@ -1272,7 +1272,7 @@ ERROR:  invalid interval: must be between 1 and 2147483647
 SELECT test.interval_to_internal('SMALLINT'::regtype, 32768::bigint);
 ERROR:  invalid interval: must be between 1 and 32767
 SELECT test.interval_to_internal('TEXT'::regtype, 32768::bigint);
-ERROR:  invalid dimension type: "testcol" must be an integer, date or timestamp
+ERROR:  invalid type for dimension "testcol"
 SELECT test.interval_to_internal('INT'::regtype, INTERVAL '1 day');
 ERROR:  invalid interval type for integer dimension
 \set ON_ERROR_STOP 1

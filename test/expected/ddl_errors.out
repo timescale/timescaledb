@@ -9,9 +9,9 @@ CREATE TABLE PUBLIC."Hypertable_1" (
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "Device_id");
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable(NULL, NULL);
-ERROR:  invalid main_table: cannot be NULL
+ERROR:  relation cannot be NULL
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', NULL);
-ERROR:  invalid time_column_name: cannot be NULL
+ERROR:  time column cannot be NULL
 -- integer time dimensions require an explicit interval
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time');
 ERROR:  integer dimensions require an explicit interval
@@ -23,7 +23,7 @@ ERROR:  relation "public.Hypertable_1_mispelled" does not exist at character 33
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time_mispelled', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 ERROR:  column "time_mispelled" does not exist
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'Device_id', 'Device_id', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
-ERROR:  invalid dimension type: "Device_id" must be an integer, date or timestamp
+ERROR:  invalid type for dimension "Device_id"
 SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id_mispelled', 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
 ERROR:  column "Device_id_mispelled" does not exist
 INSERT INTO PUBLIC."Hypertable_1" VALUES(1,'dev_1', 3);
@@ -134,7 +134,7 @@ ERROR:  hypertables do not support rules
 \set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 SELECT add_dimension(NULL,NULL);
-ERROR:  invalid main_table: cannot be NULL
+ERROR:  hypertable cannot be NULL
 \set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 SELECT attach_tablespace(NULL,NULL);
@@ -142,5 +142,5 @@ ERROR:  invalid tablespace name
 \set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 select set_number_partitions(NULL,NULL);
-ERROR:  invalid hypertable name: cannot be NULL
+ERROR:  hypertable cannot be NULL
 \set ON_ERROR_STOP 1

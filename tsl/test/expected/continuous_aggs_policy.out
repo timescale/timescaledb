@@ -59,16 +59,16 @@ ERROR:  start interval should be greater than end interval
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
-ERROR:  refresh policy already exists for continuous aggregate "mat_m1"
+ERROR:  continuous aggregate policy already exists for "mat_m1"
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
-WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
+WARNING:  continuous aggregate policy already exists for "mat_m1"
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
 (1 row)
 
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
-NOTICE:  refresh policy already exists on continuous aggregate "mat_m1", skipping
+NOTICE:  continuous aggregate policy already exists for "mat_m1", skipping
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
@@ -105,9 +105,9 @@ SELECT remove_continuous_aggregate_policy('mat_m1');
 
 --this one will fail
 SELECT remove_continuous_aggregate_policy('mat_m1');
-ERROR:  refresh policy does not exist on continuous aggregate "mat_m1"
+ERROR:  continuous aggregate policy not found for "mat_m1"
 SELECT remove_continuous_aggregate_policy('mat_m1', if_not_exists=>true);
-NOTICE:  refresh policy does not exist on continuous aggregate "mat_m1", skipping
+NOTICE:  continuous aggregate policy not found for "mat_m1", skipping
  remove_continuous_aggregate_policy 
 ------------------------------------
  
@@ -375,7 +375,7 @@ ERROR:  invalid parameter value for start_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', 10, '1h'::interval, if_not_exists=>true);
 ERROR:  invalid parameter value for end_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interval, if_not_exists=>true);
-WARNING:  could not add refresh policy due to existing policy on continuous aggregate with different arguments
+WARNING:  continuous aggregate policy already exists for "mat_smallint"
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1

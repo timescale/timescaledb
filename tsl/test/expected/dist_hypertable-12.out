@@ -40,7 +40,7 @@ ERROR:  operation not supported
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 1);
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | disttable  | t
@@ -48,7 +48,7 @@ WARNING:  the number of partitions in dimension "device" is too low to make use 
 
 -- Increase the number of partitions. Expect warning since still too low
 SELECT * FROM set_number_partitions('disttable', 2);
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  set_number_partitions 
 -----------------------
  
@@ -1408,7 +1408,7 @@ ORDER BY hypertable_schema, hypertable_name;
 -- Test underreplicated chunk warning
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
-WARNING:  new chunks for hypertable "underreplicated" will be under-replicated due to insufficient available data nodes, lacks 1 data node(s)
+WARNING:  insufficient number of data nodes
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
  chunk_id | node_chunk_id |     node_name     
 ----------+---------------+-------------------
@@ -1744,7 +1744,7 @@ ORDER BY 1, 2;
 -- Attach another data node but do not auto-repartition, i.e.,
 -- increase the number of slices.
 SELECT * FROM attach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', repartition => false);
-WARNING:  the number of partitions in dimension "__region" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "__region"
  hypertable_id | node_hypertable_id |     node_name     
 ---------------+--------------------+-------------------
              4 |                  3 | dist_hypertable_2
@@ -1926,7 +1926,7 @@ AND h.table_name = 'Param_Table';
 (2 rows)
 
 SELECT * FROM detach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', force => true, repartition => false);
-WARNING:  new data for hypertable "Param_Table" will be under-replicated due to detaching data node "dist_hypertable_2"
+WARNING:  insufficient number of data nodes for distributed hypertable "Param_Table"
  detach_data_node 
 ------------------
                 1
@@ -2966,7 +2966,7 @@ id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_sc
 -- well. We're setting num_partitions lower than the number of servers
 -- and expect a warning.
 SELECT * FROM add_dimension('disttable', 'device', 1, partitioning_func => '_timescaledb_internal.get_partition_hash');
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  dimension_id | schema_name | table_name | column_name | created 
 --------------+-------------+------------+-------------+---------
            22 | public      | disttable  | device      | t
@@ -3338,7 +3338,7 @@ CREATE TABLE hyper (
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 3,
        chunk_time_interval => interval '18 hours'
 );
-WARNING:  FOREIGN KEY from distributed hypertable "hyper" requires referenced table to be consistent across all data nodes.
+WARNING:  distributed hypertable "hyper" has a foreign key to a non-distributed table
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             17 | public      | hyper      | t
@@ -3642,7 +3642,7 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
 
 \set ON_ERROR_STOP 0
 SELECT * FROM set_replication_factor('hyper', replication_factor => 4);
-ERROR:  too big replication factor for hypertable "hyper"
+ERROR:  replication factor too large for hypertable "hyper"
 \set ON_ERROR_STOP 1
 DROP TABLE hyper;
 CALL distributed_exec($$

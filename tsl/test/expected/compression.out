@@ -596,7 +596,7 @@ select create_hypertable( 'test_collation', 'time', chunk_time_interval=> '1 day
 \set ON_ERROR_STOP 0
 --forbid setting collation in compression ORDER BY clause. (parse error is fine)
 alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1 COLLATE "POSIX", val2, time');
-ERROR:  unable to parse timescaledb.compress_orderby option 'val_1 COLLATE "POSIX", val2, time'
+ERROR:  unable to parse ordering option "val_1 COLLATE "POSIX", val2, time"
 \set ON_ERROR_STOP 1
 alter table test_collation set (timescaledb.compress, timescaledb.compress_segmentby='device_id, device_id_2', timescaledb.compress_orderby = 'val_1, val_2, time');
 insert into test_collation
@@ -1137,7 +1137,7 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
 
 -- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
-ERROR:  constraint "fk_table1" requires column "col2" to be a timescaledb.compress_segmentby column for compression
+ERROR:  column "col2" must be used for segmenting
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
 SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;

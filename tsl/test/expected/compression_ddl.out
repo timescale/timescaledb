@@ -154,7 +154,7 @@ ERROR:  cannot directly move internal compression data
 \set ON_ERROR_STOP 1
 -- ensure that both compressed and uncompressed chunks moved
 SELECT move_chunk(chunk=>:'UNCOMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."_hyper_1_1_chunk_test1_Time_idx"');
-NOTICE:  Ignoring index parameter
+NOTICE:  ignoring index parameter
  move_chunk 
 ------------
  

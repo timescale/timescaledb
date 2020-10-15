@@ -16,6 +16,7 @@
 
 #include <compat.h>
 #include <dimension.h>
+#include <hypertable_cache.h>
 #include <jsonb_utils.h>
 
 #include "bgw/job.h"
@@ -91,16 +92,16 @@ check_valid_index(Hypertable *ht, Name index_name)
 								  get_namespace_oid(NameStr(ht->fd.schema_name), false));
 	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(idxtuple))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("could not add reorder policy because the provided index is not a valid "
-						"relation")));
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid reorder index")));
 
 	indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
 	if (indexForm->indrelid != ht->main_table_relid)
-		elog(ERROR,
-			 "could not add reorder policy because the provided index is not a valid index on the "
-			 "hypertable");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid reorder index"),
+				 errhint("The reorder index must by an index on hypertable \"%s\".",
+						 NameStr(ht->fd.table_name))));
+
 	ReleaseSysCache(idxtuple);
 }
 
@@ -125,35 +126,30 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	Dimension *dim;
-
-	PreventCommandIfReadOnly("add_reorder_policy()");
-
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Oid ht_oid = PG_GETARG_OID(0);
 	Name index_name = PG_GETARG_NAME(1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
-	int32 hypertable_id = ts_hypertable_relid_to_id(ht_oid);
-	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
+	Cache *hcache;
+	Hypertable *ht;
+	int32 hypertable_id;
 	Oid partitioning_type;
 	Oid owner_id;
 	List *jobs;
 
-	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
+	PreventCommandIfReadOnly("add_reorder_policy()");
+
+	ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
+	Assert(ht != NULL);
+	hypertable_id = ht->fd.id;
 
 	/* First verify that the hypertable corresponds to a valid table */
-	if (!ts_is_hypertable(ht_oid))
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("could not add reorder policy because \"%s\" is not a hypertable",
-						get_rel_name(ht_oid))));
+	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	if (hypertable_is_distributed(ht))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("could not add reorder policy because \"%s\" is a distributed hypertable",
-						get_rel_name(ht_oid)),
-				 errdetail("Current version doesn't implement support for add_reorder_policy() on "
-						   "distributed hypertables.")));
+				 errmsg("reorder policies not supported on a distributed hypertables")));
 
 	/* Now verify that the index is an actual index on that hypertable */
 	check_valid_index(ht, index_name);
@@ -165,6 +161,8 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 													 INTERNAL_SCHEMA_NAME,
 													 ht->fd.id);
+
+	ts_cache_release(hcache);
 
 	if (jobs != NIL)
 	{
@@ -183,9 +181,11 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 													  existing->fd.config)),
 												  NameGetDatum(index_name))))
 		{
-			elog(WARNING,
-				 "could not add reorder policy due to existing policy on hypertable with different "
-				 "arguments");
+			ereport(WARNING,
+					(errmsg("reorder policy already exists for hypertable \"%s\"",
+							get_rel_name(ht_oid)),
+					 errdetail("A policy already exists with different arguments."),
+					 errhint("Remove the existing policy before adding a new one.")));
 			PG_RETURN_INT32(-1);
 		}
 		/* If all arguments are the same, do nothing */
@@ -245,31 +245,30 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 {
 	Oid hypertable_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
+	Hypertable *ht;
+	Cache *hcache;
 
 	PreventCommandIfReadOnly("remove_reorder_policy()");
 
-	int ht_id = ts_hypertable_relid_to_id(hypertable_oid);
+	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 														   INTERNAL_SCHEMA_NAME,
-														   ht_id);
+														   ht->fd.id);
+	ts_cache_release(hcache);
+
 	if (jobs == NIL)
 	{
 		if (!if_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("cannot remove reorder policy, no such policy exists")));
+					 errmsg("reorder policy not found for hypertable \"%s\"",
+							get_rel_name(hypertable_oid))));
 		else
 		{
-			char *hypertable_name = get_rel_name(hypertable_oid);
-
-			if (hypertable_name != NULL)
-				ereport(NOTICE,
-						(errmsg("reorder policy does not exist on hypertable \"%s\", skipping",
-								hypertable_name)));
-			else
-				ereport(NOTICE,
-						(errmsg("reorder policy does not exist on unnamed hypertable, skipping")));
+			ereport(NOTICE,
+					(errmsg("reorder policy not found for hypertable \"%s\", skipping",
+							get_rel_name(hypertable_oid))));
 			PG_RETURN_NULL();
 		}
 	}

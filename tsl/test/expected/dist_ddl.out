@@ -761,7 +761,7 @@ CREATE TABLE some_dist_table(time timestamptz, device int REFERENCES non_htable(
 SELECT test.execute_sql_and_filter_data_node_name_on_error($$
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
 $$);
-WARNING:  FOREIGN KEY from distributed hypertable "some_dist_table" requires referenced table to be consistent across all data nodes.
+WARNING:  distributed hypertable "some_dist_table" has a foreign key to a non-distributed table
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  [data_node_x]: relation "non_htable" does not exist
 \set ON_ERROR_STOP 1
@@ -1742,7 +1742,7 @@ SELECT replication_factor FROM _timescaledb_catalog.hypertable ORDER BY id;
 
 \set ON_ERROR_STOP 0
 SELECT * FROM set_replication_factor('disttable',  4);
-ERROR:  too big replication factor for hypertable "disttable"
+ERROR:  replication factor too large for hypertable "disttable"
 SELECT * FROM set_replication_factor('disttable',  0);
 ERROR:  invalid replication factor
 SELECT * FROM set_replication_factor('disttable',  NULL);
@@ -1831,7 +1831,7 @@ CREATE MATERIALIZED VIEW disttable_cagg WITH (timescaledb.continuous)
 AS SELECT time_bucket('2 days', time), device, max(value)
     FROM disttable
     GROUP BY 1, 2 WITH NO DATA;
-ERROR:  continuous aggregates are not supported on distributed hypertables
+ERROR:  continuous aggregates not supported on distributed hypertables
 \set ON_ERROR_STOP 1
 DROP TABLE disttable;
 -- cleanup

@@ -168,7 +168,7 @@ ts_check_version_response(const char *json)
 
 		ereport(LOG,
 				(errmsg("the \"%s\" extension is not up-to-date", EXTENSION_NAME),
-				 errhint("The most up-to-date version is %s, the installed version is %s",
+				 errhint("The most up-to-date version is %s, the installed version is %s.",
 						 result.versionstr,
 						 TIMESCALEDB_VERSION_MOD)));
 	}

@@ -133,7 +133,7 @@ queue_set_reader(MessageQueue *queue)
 	if (reader_pid != MyProcPid)
 		ereport(ERROR,
 				(errmsg("only one reader allowed for TimescaleDB background worker message queue"),
-				 errhint("Current process is %d", reader_pid)));
+				 errhint("Current process is %d.", reader_pid)));
 }
 
 static void
@@ -154,8 +154,7 @@ queue_reset_reader(MessageQueue *queue)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("multiple TimescaleDB background worker launchers have been started when "
-						"only one is allowed"),
-				 errhint("This is a bug, please report it on our github page.")));
+						"only one is allowed")));
 }
 
 /* Add a message to the queue - we can do this if the queue is not full */

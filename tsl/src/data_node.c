@@ -137,7 +137,7 @@ data_node_get_foreign_server(const char *node_name, AclMode mode, bool fail_on_a
 	if (node_name == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid node_name: cannot be NULL")));
+				 errmsg("data node name cannot be NULL")));
 
 	server = GetForeignServerByName(node_name, missing_ok);
 	if (NULL == server)
@@ -398,7 +398,7 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong encoding"),
-				 errdetail("Expected database encoding to be \"%s\" (%u) but it was \"%s\" (%u)",
+				 errdetail("Expected database encoding to be \"%s\" (%u) but it was \"%s\" (%u).",
 						   pg_encoding_to_char(database->encoding),
 						   database->encoding,
 						   pg_encoding_to_char(actual_encoding),
@@ -410,7 +410,7 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong collation"),
-				 errdetail("Expected collation \"%s\" but it was \"%s\"",
+				 errdetail("Expected collation \"%s\" but it was \"%s\".",
 						   NameStr(database->collation),
 						   actual_collation)));
 
@@ -420,7 +420,7 @@ data_node_validate_database(TSConnection *conn, const DbInfo *database)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 errmsg("database exists but has wrong LC_CTYPE"),
-				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\"",
+				 errdetail("Expected LC_CTYPE \"%s\" but it was \"%s\".",
 						   NameStr(database->chartype),
 						   actual_chartype)));
 	return true;
@@ -503,7 +503,7 @@ data_node_bootstrap_extension(TSConnection *conn)
 				ereport(ERROR,
 						(errcode(ERRCODE_DUPLICATE_SCHEMA),
 						 errmsg("schema \"%s\" already exists in database, aborting", schema_name),
-						 errhint("Please make sure that the data node does not contain any "
+						 errhint("Make sure that the data node does not contain any "
 								 "existing objects prior to adding it.")));
 			}
 		}
@@ -651,13 +651,14 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 	if (NULL == node_name)
 		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), (errmsg("invalid data node name"))));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 (errmsg("data node name cannot be NULL"))));
 
 	if (port < 1 || port > PG_UINT16_MAX)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 (errmsg("invalid port number %d", port),
-				  errhint("The port number must be between 1 and %u", PG_UINT16_MAX))));
+				  errhint("The port number must be between 1 and %u.", PG_UINT16_MAX))));
 
 	result = get_database_info(MyDatabaseId, &database);
 	Assert(result);
@@ -783,8 +784,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(1))
 		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid hypertable: cannot be NULL")));
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("hypertable cannot be NULL")));
 	Assert(get_rel_name(table_id));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_id, CACHE_FLAG_NONE, &hcache);
@@ -842,7 +842,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("max number of data nodes already attached"),
-				 errdetail("The number of data nodes in a hypertable cannot exceed %d",
+				 errdetail("The number of data nodes in a hypertable cannot exceed %d.",
 						   MAX_NUM_HYPERTABLE_DATA_NODES)));
 
 	/* If there are less slices (partitions) in the space dimension than there
@@ -890,50 +890,23 @@ typedef enum OperationType
 	OP_DELETE
 } OperationType;
 
-static char *
-get_operation_type_message(OperationType op_type)
-{
-	switch (op_type)
-	{
-		case OP_BLOCK:
-			return "blocking new chunks on";
-		case OP_DETACH:
-			return "detaching";
-		case OP_DELETE:
-			return "deleting";
-		default:
-			return NULL;
-	}
-}
-
 static void
 check_replication_for_new_data(const char *node_name, Hypertable *ht, bool force,
 							   OperationType op_type)
 {
 	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, false);
-	char *operation = get_operation_type_message(op_type);
 
 	if (ht->fd.replication_factor < list_length(available_nodes))
 		return;
 
-	if (!force)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("%s data node \"%s\" risks making new data for hypertable \"%s\" "
-						"under-replicated",
-						operation,
-						node_name,
-						NameStr(ht->fd.table_name)),
-				 errhint("Call function with force => true to force this operation.")));
-
-	ereport(WARNING,
-			(errcode(ERRCODE_TS_INTERNAL_ERROR),
-			 errmsg("new data for hypertable \"%s\" will be under-replicated due to %s data "
-					"node "
-					"\"%s\"",
-					NameStr(ht->fd.table_name),
-					operation,
-					node_name)));
+	ereport(force ? WARNING : ERROR,
+			(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+			 errmsg("insufficient number of data nodes for distributed hypertable \"%s\"",
+					NameStr(ht->fd.table_name)),
+			 errdetail("Reducing the number of available data nodes on distributed"
+					   " hypertable \"%s\" prevents full replication of new chunks.",
+					   NameStr(ht->fd.table_name)),
+			 force ? 0 : errhint("Use force => true to force this operation.")));
 }
 
 static bool
@@ -955,43 +928,44 @@ data_node_contains_non_replicated_chunks(List *chunk_data_nodes)
 }
 
 static List *
-data_node_detach_validate(const char *node_name, Hypertable *ht, bool force, OperationType op_type)
+data_node_detach_or_delete_validate(const char *node_name, Hypertable *ht, bool force,
+									OperationType op_type)
 {
 	List *chunk_data_nodes =
 		ts_chunk_data_node_scan_by_node_name_and_hypertable_id(node_name,
 															   ht->fd.id,
 															   CurrentMemoryContext);
 	bool has_non_replicated_chunks = data_node_contains_non_replicated_chunks(chunk_data_nodes);
-	char *operation = get_operation_type_message(op_type);
+
+	Assert(op_type == OP_DELETE || op_type == OP_DETACH);
 
 	if (has_non_replicated_chunks)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
-				 errmsg("%s data node \"%s\" would mean a data-loss for hypertable "
-						"\"%s\" since data node has the only data replica",
-						operation,
-						node_name,
-						NameStr(ht->fd.table_name)),
-				 errhint("Ensure the data node \"%s\" has no non-replicated data before %s it.",
-						 node_name,
-						 operation)));
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 errmsg("insufficient number of data nodes"),
+				 errdetail("Distributed hypertable \"%s\" would lose data if"
+						   " data node \"%s\" is %s.",
+						   NameStr(ht->fd.table_name),
+						   node_name,
+						   (op_type == OP_DELETE) ? "deleted" : "detached"),
+				 errhint("Ensure all chunks on the data node are fully replicated before %s it.",
+						 (op_type == OP_DELETE) ? "deleting" : "detaching")));
 
 	if (list_length(chunk_data_nodes) > 0)
 	{
 		if (force)
 			ereport(WARNING,
-					(errcode(ERRCODE_WARNING),
-					 errmsg("hypertable \"%s\" has under-replicated chunks due to %s "
-							"data node \"%s\"",
-							NameStr(ht->fd.table_name),
-							operation,
-							node_name)));
+					(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+					 errmsg("distributed hypertable \"%s\" is under-replicated",
+							NameStr(ht->fd.table_name)),
+					 errdetail("Some chunks no longer meet the replication target"
+							   " after %s data node \"%s\".",
+							   (op_type == OP_DELETE) ? "deleting" : "detaching",
+							   node_name)));
 		else
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_DATA_NODE_IN_USE),
-					 errmsg("%s data node \"%s\" failed because it contains chunks "
-							"for hypertable \"%s\"",
-							operation,
+					 errmsg("data node \"%s\" still holds data for distributed hypertable \"%s\"",
 							node_name,
 							NameStr(ht->fd.table_name))));
 	}
@@ -1041,7 +1015,10 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 		{
 			/* we have permissions to detach */
 			List *chunk_data_nodes =
-				data_node_detach_validate(NameStr(node->fd.node_name), ht, force, op_type);
+				data_node_detach_or_delete_validate(NameStr(node->fd.node_name),
+													ht,
+													force,
+													op_type);
 			ListCell *cs_lc;
 
 			/* update chunk foreign table server and delete chunk mapping */
@@ -1085,13 +1062,11 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 			{
 				if (node->fd.block_chunks)
 				{
-					ereport(NOTICE,
-							(errcode(ERRCODE_TS_INTERNAL_ERROR),
-							 errmsg("new chunks already blocked on data node \"%s\" for "
-									"hypertable "
-									"\"%s\"",
-									NameStr(node->fd.node_name),
-									get_rel_name(relid))));
+					elog(NOTICE,
+						 "new chunks already blocked on data node \"%s\" for"
+						 " hypertable \"%s\"",
+						 NameStr(node->fd.node_name),
+						 get_rel_name(relid));
 					continue;
 				}
 

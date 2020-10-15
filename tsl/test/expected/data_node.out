@@ -39,7 +39,7 @@ SELECT * FROM add_data_node(NULL);
 ERROR:  function add_data_node(unknown) does not exist at character 15
 -- Add NULL data_node
 SELECT * FROM add_data_node(NULL, host => 'localhost');
-ERROR:  invalid data node name
+ERROR:  data node name cannot be NULL
 SELECT * FROM add_data_node(NULL, NULL);
 ERROR:  a host needs to be specified
 -- Test invalid port numbers
@@ -261,7 +261,7 @@ SET ROLE :ROLE_1;
 -- warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | disttable  | t
@@ -367,7 +367,7 @@ ERROR:  server "data_node_4" does not exist
 -- number_partitions lower than number of servers to raise a warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_3" }');
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | disttable  | t
@@ -481,7 +481,7 @@ SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_in
 -- Will fail because data_node_2 contains chunks
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_2');
-ERROR:  deleting data node "data_node_2" failed because it contains chunks for hypertable "disttable"
+ERROR:  data node "data_node_2" still holds data for distributed hypertable "disttable"
 -- non-existing chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_3');
 ERROR:  relation "x_chunk" does not exist at character 65
@@ -490,7 +490,7 @@ SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_in
 ERROR:  server "data_node_0000" does not exist
 -- data node exists but does not store the chunk
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_1');
-ERROR:  chunk "_dist_hyper_3_3_chunk" does not exist on server "data_node_1"
+ERROR:  chunk "_dist_hyper_3_3_chunk" does not exist on data node "data_node_1"
 -- NULL try
 SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_3');
 ERROR:  invalid chunk: cannot be NULL
@@ -502,8 +502,8 @@ ERROR:  invalid chunk: cannot be NULL
 -- chunks that have multiple data nodes so that the chunk is not removed
 -- unnecessarily. We use force => true b/c data_node_2 contains chunks.
 SELECT * FROM delete_data_node('data_node_2', force => true);
-WARNING:  hypertable "disttable" has under-replicated chunks due to deleting data node "data_node_2"
-WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_2"
+WARNING:  distributed hypertable "disttable" is under-replicated
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
  delete_data_node 
 ------------------
  t
@@ -548,13 +548,13 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 \set ON_ERROR_STOP 0
 -- can't delete b/c it's last data replica
 SELECT * FROM delete_data_node('data_node_3', force => true);
-ERROR:  deleting data node "data_node_3" would mean a data-loss for hypertable "disttable" since data node has the only data replica
+ERROR:  insufficient number of data nodes
 \set ON_ERROR_STOP 1
 -- Removing all data allows us to delete the data node by force, but
 -- with WARNING that new data will be under-replicated
 TRUNCATE disttable;
 SELECT * FROM delete_data_node('data_node_3', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_3"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
  delete_data_node 
 ------------------
  t
@@ -624,7 +624,7 @@ SELECT * FROM _timescaledb_internal.ping_data_node('data_node_123456789');
 ERROR:  server "data_node_123456789" does not exist
 -- ERROR on NULL
 SELECT * FROM _timescaledb_internal.ping_data_node(NULL);
-ERROR:  invalid node_name: cannot be NULL
+ERROR:  data node name cannot be NULL
 -- ERROR when not passing TimescaleDB data node
 SELECT * FROM _timescaledb_internal.ping_data_node('pg_data_node_1');
 ERROR:  server "pg_data_node_1" does not exist
@@ -637,9 +637,9 @@ DROP TABLE standalone;
 \set ON_ERROR_STOP 0
 -- Invalid arguments
 SELECT * FROM attach_data_node('data_node_1', NULL, true);
-ERROR:  invalid hypertable: cannot be NULL
+ERROR:  hypertable cannot be NULL
 SELECT * FROM attach_data_node(NULL, 'disttable', true);
-ERROR:  invalid node_name: cannot be NULL
+ERROR:  data node name cannot be NULL
 -- Deleted data node
 SELECT * FROM attach_data_node('data_node_2', 'disttable');
 ERROR:  server "data_node_2" does not exist
@@ -791,7 +791,7 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2,
                                             replication_factor => 2,
                                             data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              5 | public      | disttable  | t
@@ -841,7 +841,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_2', 'time', 'device', 2, replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  the number of partitions in dimension "device" is too low to make use of all attached data nodes
+WARNING:  insuffient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
              6 | public      | disttable_2 | t
@@ -912,7 +912,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 \set ON_ERROR_STOP 0
 -- Will error due to under-replication
 SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_2');
-ERROR:  blocking new chunks on data node "data_node_2" risks making new data for hypertable "disttable" under-replicated
+ERROR:  insufficient number of data nodes for distributed hypertable "disttable"
 -- can't block/allow non-existing data node
 SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_12345', 'disttable');
 ERROR:  server "data_node_12345" does not exist
@@ -920,9 +920,9 @@ SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_12345', 'disttab
 ERROR:  server "data_node_12345" does not exist
 -- NULL data node
 SELECT * FROM _timescaledb_internal.block_new_chunks(NULL, 'disttable');
-ERROR:  invalid node_name: cannot be NULL
+ERROR:  data node name cannot be NULL
 SELECT * FROM _timescaledb_internal.allow_new_chunks(NULL, 'disttable');
-ERROR:  invalid node_name: cannot be NULL
+ERROR:  data node name cannot be NULL
 -- can't block/allow on non hypertable
 SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', 'devices');
 ERROR:  table "devices" is not a hypertable
@@ -931,8 +931,8 @@ ERROR:  table "devices" is not a hypertable
 \set ON_ERROR_STOP 1
 -- Force block all data nodes
 SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_2', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on data node "data_node_2"
-WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on data node "data_node_2"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable_2"
  block_new_chunks 
 ------------------
                 2
@@ -947,8 +947,8 @@ NOTICE:  new chunks already blocked on data node "data_node_1" for hypertable "d
 (1 row)
 
 SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_3', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to blocking new chunks on data node "data_node_3"
-WARNING:  new data for hypertable "disttable_2" will be under-replicated due to blocking new chunks on data node "data_node_3"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable_2"
  block_new_chunks 
 ------------------
                 2
@@ -969,7 +969,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 \set ON_ERROR_STOP 0
 -- insert should fail b/c all data nodes are blocked
 INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
-ERROR:  no available data nodes (detached or blocked for new chunks) for hypertable "disttable"
+ERROR:  insufficient number of data nodes
 \set ON_ERROR_STOP 1
 -- unblock data nodes for all hypertables
 SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_1');
@@ -1019,10 +1019,10 @@ SELECT * FROM detach_data_node('data_node_12345', 'disttable');
 ERROR:  server "data_node_12345" does not exist
 -- NULL data node
 SELECT * FROM detach_data_node(NULL, 'disttable');
-ERROR:  invalid node_name: cannot be NULL
+ERROR:  data node name cannot be NULL
 -- Can't detach data node_1 b/c it contains data for disttable
 SELECT * FROM detach_data_node('data_node_1');
-ERROR:  detaching data node "data_node_1" failed because it contains chunks for hypertable "disttable"
+ERROR:  data node "data_node_1" still holds data for distributed hypertable "disttable"
 -- can't detach already detached data node
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
 ERROR:  data node "data_node_2" is not attached to hypertable "disttable_2"
@@ -1030,7 +1030,7 @@ SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => fals
 ERROR:  data node "data_node_2" is not attached to hypertable "disttable_2"
 -- can't detach b/c of replication factor for disttable_2
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2');
-ERROR:  detaching data node "data_node_3" risks making new data for hypertable "disttable_2" under-replicated
+ERROR:  insufficient number of data nodes for distributed hypertable "disttable_2"
 -- can't detach non hypertable
 SELECT * FROM detach_data_node('data_node_3', 'devices');
 ERROR:  table "devices" is not a hypertable
@@ -1045,7 +1045,7 @@ NOTICE:  data node "data_node_2" is not attached to hypertable "disttable_2", sk
 
 -- force detach data node to become under-replicated for new data
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
-WARNING:  new data for hypertable "disttable_2" will be under-replicated due to detaching data node "data_node_3"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable_2"
 NOTICE:  the number of partitions in dimension "device" was decreased to 1
  detach_data_node 
 ------------------
@@ -1067,7 +1067,7 @@ ORDER BY foreign_table_name;
 
 -- force detach data node with data
 SELECT * FROM detach_data_node('data_node_3', 'disttable', force => true);
-WARNING:  hypertable "disttable" has under-replicated chunks due to detaching data node "data_node_3"
+WARNING:  distributed hypertable "disttable" is under-replicated
  detach_data_node 
 ------------------
                 1
@@ -1138,7 +1138,7 @@ ORDER BY foreign_table_name;
 (0 rows)
 
 SELECT * FROM detach_data_node('data_node_2', 'disttable', force => true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to detaching data node "data_node_2"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
 NOTICE:  the number of partitions in dimension "device" was decreased to 1
  detach_data_node 
 ------------------
@@ -1199,8 +1199,8 @@ NOTICE:  skipping hypertable "disttable_3" due to missing permissions
 -- Cleanup
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1', force =>true);
-WARNING:  new data for hypertable "disttable" will be under-replicated due to deleting data node "data_node_1"
-WARNING:  new data for hypertable "disttable_2" will be under-replicated due to deleting data node "data_node_1"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable_2"
  delete_data_node 
 ------------------
  t
@@ -1237,7 +1237,7 @@ SELECT * FROM delete_data_node('data_node_4', force =>true);
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_5', force =>true);
-WARNING:  new data for hypertable "disttable_4" will be under-replicated due to deleting data node "data_node_5"
+WARNING:  insufficient number of data nodes for distributed hypertable "disttable_4"
  delete_data_node 
 ------------------
  t

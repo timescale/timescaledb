@@ -39,14 +39,14 @@ NOTICE:  reorder policy already exists on hypertable "test_table", skipping
 (1 row)
 
 select add_reorder_policy('test_table', 'second_index', true);
-WARNING:  could not add reorder policy due to existing policy on hypertable with different arguments
+WARNING:  reorder policy already exists for hypertable "test_table"
  add_reorder_policy 
 --------------------
                  -1
 (1 row)
 
 select add_reorder_policy('test_table', 'third_index', true);
-WARNING:  could not add reorder policy due to existing policy on hypertable with different arguments
+WARNING:  reorder policy already exists for hypertable "test_table"
  add_reorder_policy 
 --------------------
                  -1
@@ -55,15 +55,23 @@ WARNING:  could not add reorder policy due to existing policy on hypertable with
 \set ON_ERROR_STOP 0
 -- Error whenever incorrect arguments are applied (must have table and index)
 select add_reorder_policy('test_table', 'bad_index');
-ERROR:  could not add reorder policy because the provided index is not a valid relation
+ERROR:  invalid reorder index
 select add_reorder_policy('test_table', '');
-ERROR:  could not add reorder policy because the provided index is not a valid relation
+ERROR:  invalid reorder index
 select add_reorder_policy('test_table');
 ERROR:  function add_reorder_policy(unknown) does not exist at character 8
 select add_reorder_policy('test_table', 'second_index');
 ERROR:  reorder policy already exists for hypertable "test_table"
 select add_reorder_policy('test_table', 'third_index');
 ERROR:  reorder policy already exists for hypertable "test_table"
+select add_reorder_policy(NULL, 'third_index');
+ add_reorder_policy 
+--------------------
+                   
+(1 row)
+
+select add_reorder_policy(2, 'third_index');
+ERROR:  OID 2 does not refer to a table
 \set ON_ERROR_STOP 1
 select * from _timescaledb_config.bgw_job where id=:job_id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |   proc_name    |       owner       | scheduled | hypertable_id |                          config                           
@@ -127,28 +135,28 @@ select add_retention_policy('test_table', INTERVAL '3 month', true);
 
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table', INTERVAL '3 month', true);
-NOTICE:  retention policy already exists on hypertable "test_table", skipping
+NOTICE:  retention policy already exists for hypertable "test_table", skipping
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
 select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => true);
-WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
+WARNING:  retention policy already exists for hypertable "test_table"
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
+WARNING:  retention policy already exists for hypertable "test_table"
  add_retention_policy 
 ----------------------
                    -1
 (1 row)
 
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
-WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
+WARNING:  retention policy already exists for hypertable "test_table"
  add_retention_policy 
 ----------------------
                    -1
@@ -258,7 +266,7 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table_int', 2, true);
-WARNING:  could not add retention policy due to existing policy on hypertable with different arguments
+WARNING:  retention policy already exists for hypertable "test_table_int"
  add_retention_policy 
 ----------------------
                    -1
@@ -277,14 +285,14 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 
 -- Make sure remove works when there's nothing to remove
 select remove_retention_policy('test_table', true);
-NOTICE:  retention policy does not exist on hypertable "test_table", skipping
+NOTICE:  retention policy not found for hypertable "test_table", skipping
  remove_retention_policy 
 -------------------------
  
 (1 row)
 
 select remove_reorder_policy('test_table', true);
-NOTICE:  reorder policy does not exist on hypertable "test_table", skipping
+NOTICE:  reorder policy not found for hypertable "test_table", skipping
  remove_reorder_policy 
 -----------------------
  
@@ -303,15 +311,10 @@ ERROR:  relation "fake_table" does not exist at character 30
 \set ON_ERROR_STOP 0
 -- This should be noop
 select remove_reorder_policy(2, true);
-NOTICE:  reorder policy does not exist on unnamed hypertable, skipping
- remove_reorder_policy 
------------------------
- 
-(1 row)
-
+ERROR:  OID 2 does not refer to a table
 -- Fail with error message
 select remove_reorder_policy(2);
-ERROR:  cannot remove reorder policy, no such policy exists
+ERROR:  OID 2 does not refer to a table
 \set ON_ERROR_STOP 1
 -- Now make sure policy args have correct job deletion dependency
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
@@ -407,7 +410,7 @@ CREATE INDEX non_ht_index on non_hypertable(junk);
 select add_retention_policy('non_hypertable', INTERVAL '2 month');
 ERROR:  "non_hypertable" is not a hypertable or a continuous aggregate
 select add_reorder_policy('non_hypertable', 'non_ht_index');
-ERROR:  could not add reorder policy because "non_hypertable" is not a hypertable
+ERROR:  table "non_hypertable" is not a hypertable
 \set ON_ERROR_STOP 1
 -- Now make sure things work with multiple policies on multiple hypertables
 CREATE TABLE test_table(time timestamptz, junk int);
@@ -797,7 +800,7 @@ ERROR:  cannot set next start to -infinity
 \set ON_ERROR_STOP 1
 -- Check if_exists boolean works correctly
 select * from alter_job(1234, if_exists => TRUE);
-NOTICE:  cannot alter job, job #1234 not found, skipping
+NOTICE:  job #1234 not found, skipping
  job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled | config | next_start 
 --------+-------------------+-------------+-------------+--------------+-----------+--------+------------
         |                   |             |             |              |           |        | 
@@ -805,7 +808,7 @@ NOTICE:  cannot alter job, job #1234 not found, skipping
 
 \set ON_ERROR_STOP 0
 select * from alter_job(1234);
-ERROR:  cannot alter job, job #1234 not found
+ERROR:  job #1234 not found
 \set ON_ERROR_STOP 1
 select remove_reorder_policy('test_table');
  remove_reorder_policy 
@@ -818,7 +821,7 @@ set session timescaledb.license_key='Community';
 -- Test for failure cases
 \set ON_ERROR_STOP 0
 select alter_job(12345);
-ERROR:  cannot alter job, job #12345 not found
+ERROR:  job #12345 not found
 \set ON_ERROR_STOP 1
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
