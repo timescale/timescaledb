@@ -398,3 +398,42 @@ REFRESH MATERIALIZED VIEW mat_inttime2;
 CALL refresh_continuous_aggregate('mat_inttime',NULL,NULL);
 CALL refresh_continuous_aggregate('mat_inttime2',NULL,NULL);
 \endif
+
+-- Test that retention policies that conflict with continuous aggs are disabled --
+CREATE TABLE conflict_test (time TIMESTAMPTZ, location TEXT, temperature DOUBLE PRECISION);
+SELECT create_hypertable('conflict_test', 'time', chunk_time_interval => INTERVAL '1 week');
+
+DO LANGUAGE PLPGSQL $$
+DECLARE
+  ts_version TEXT;
+  retention_jobid INTEGER;
+BEGIN
+  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version < '2.0.0' THEN
+    CREATE VIEW mat_conflict
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
+           timescaledb.refresh_lag='1 day',
+           timescaledb.ignore_invalidation_older_than = '28 days',
+           timescaledb.refresh_interval='12 hours' )
+    AS 
+      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
+        max(temperature) as max_temp, avg(temperature) as avg_temp
+      FROM conflict_test
+      GROUP BY bucket, location;
+
+    PERFORM add_drop_chunks_policy('conflict_test', '14 days'::interval);
+  ELSE
+    CREATE MATERIALIZED VIEW mat_conflict
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+    AS 
+      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp, 
+        max(temperature) as max_temp, avg(temperature) as avg_temp
+      FROM conflict_test
+      GROUP BY bucket, location WITH NO DATA;
+
+    PERFORM add_continuous_aggregate_policy('mat_conflict', '28 days', '1 day', '12 hours');
+    SELECT add_retention_policy('conflict_test', '14 days'::interval) INTO retention_jobid;
+    PERFORM alter_job(retention_jobid, scheduled=>false);
+  END IF;
+END $$;
