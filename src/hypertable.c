@@ -1802,16 +1802,16 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 									  PG_ARGISNULL(6) ? InvalidOid :
 														get_fn_expr_argtype(fcinfo->flinfo, 6),
 									  /* partitioning func */
-									  PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13));
+									  PG_ARGISNULL(11) ? InvalidOid : PG_GETARG_OID(11));
 	DimensionInfo *space_dim_info = NULL;
-	bool replication_factor_is_null = PG_ARGISNULL(14);
-	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
+	bool replication_factor_is_null = PG_ARGISNULL(12);
+	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(12);
 	int16 replication_factor;
-	ArrayType *data_node_arr = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
+	ArrayType *data_node_arr = PG_ARGISNULL(13) ? NULL : PG_GETARG_ARRAYTYPE_P(13);
 	ChunkSizingInfo chunk_sizing_info = {
 		.table_relid = table_relid,
-		.target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11),
-		.func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12),
+		.target_size = PG_ARGISNULL(14) ? NULL : PG_GETARG_TEXT_P(14),
+		.func = PG_ARGISNULL(15) ? InvalidOid : PG_GETARG_OID(15),
 		.colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1),
 		.check_for_index = !create_default_indexes,
 	};

@@ -1,6 +1,8 @@
 
 DROP FUNCTION IF EXISTS detach_data_node(name,regclass,boolean,boolean);
 DROP FUNCTION IF EXISTS distributed_exec;
+DROP FUNCTION IF EXISTS create_hypertable;
+DROP FUNCTION IF EXISTS create_distributed_hypertable;
 
 DROP PROCEDURE IF EXISTS refresh_continuous_aggregate(regclass,"any","any");
 

@@ -34,11 +34,11 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     if_not_exists           BOOLEAN = FALSE,
     partitioning_func       REGPROC = NULL,
     migrate_data            BOOLEAN = FALSE,
-    chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = NULL,
-    data_nodes              NAME[] = NULL
+    data_nodes              NAME[] = NULL,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- Same functionality as create_hypertable, only must have a replication factor > 0 (defaults to 1)
@@ -54,11 +54,11 @@ CREATE OR REPLACE FUNCTION  create_distributed_hypertable(
     if_not_exists           BOOLEAN = FALSE,
     partitioning_func       REGPROC = NULL,
     migrate_data            BOOLEAN = FALSE,
-    chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
     time_partitioning_func  REGPROC = NULL,
     replication_factor      INTEGER = 1,
-    data_nodes              NAME[] = NULL
+    data_nodes              NAME[] = NULL,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
