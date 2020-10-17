@@ -7,11 +7,11 @@
 #include <access/tupdesc.h>
 #include <catalog/namespace.h>
 #include <executor/executor.h>
-#include <parser/parse_type.h>
-#include <utils/lsyscache.h>
-#include <utils/builtins.h>
-#include <miscadmin.h>
 #include <libpq-fe.h>
+#include <miscadmin.h>
+#include <parser/parse_type.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
 
 #include "compat.h"
 #include "dist_copy.h"
@@ -592,13 +592,13 @@ get_copy_conversion_functions(Hypertable *ht, List *copy_attnums, FmgrInfo **fun
 	*functions = palloc(tupDesc->natts * sizeof(FmgrInfo));
 	foreach (lc, copy_attnums)
 	{
-		int attnum = lfirst_int(lc);
+		int offset = AttrNumberGetAttrOffset(lfirst_int(lc));
 		Oid out_func_oid;
 		bool isvarlena;
-		Form_pg_attribute attr = TupleDescAttr(tupDesc, attnum - 1);
+		Form_pg_attribute attr = TupleDescAttr(tupDesc, offset);
 
 		getTypeBinaryOutputInfo(attr->atttypid, &out_func_oid, &isvarlena);
-		fmgr_info(out_func_oid, &((*functions)[attnum - 1]));
+		fmgr_info(out_func_oid, &((*functions)[offset]));
 	}
 	relation_close(rel, AccessShareLock);
 
@@ -680,20 +680,20 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 
 	foreach (lc, attnums)
 	{
-		int attnum = lfirst_int(lc);
+		int offset = AttrNumberGetAttrOffset(lfirst_int(lc));
 
-		if (nulls[attnum - 1])
+		if (nulls[offset])
 		{
 			buf32 = htonl((uint32) -1);
 			appendBinaryStringInfo(row_data, (char *) &buf32, sizeof(buf32));
 		}
 		else
 		{
-			Datum value = values[attnum - 1];
+			Datum value = values[offset];
 			bytea *outputbytes;
 			int output_length;
 
-			outputbytes = SendFunctionCall(&out_functions[attnum - 1], value);
+			outputbytes = SendFunctionCall(&out_functions[offset], value);
 			output_length = VARSIZE(outputbytes) - VARHDRSZ;
 			buf32 = htonl((uint32) output_length);
 			appendBinaryStringInfo(row_data, (char *) &buf32, sizeof(buf32));
