@@ -4,27 +4,27 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/catcache.h>
-#include <utils/numeric.h>
-#include <utils/timestamp.h>
-#include <utils/inet.h>
-#include <utils/cash.h>
-#include <utils/date.h>
-#include <utils/jsonb.h>
-#include <utils/acl.h>
-#include <utils/rangetypes.h>
-#include <utils/memutils.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_type.h>
 #include <access/hash.h>
 #include <access/htup_details.h>
-#include <parser/parse_coerce.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_type.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/pg_list.h>
-#include <miscadmin.h>
+#include <parser/parse_coerce.h>
+#include <utils/acl.h>
+#include <utils/builtins.h>
+#include <utils/cash.h>
+#include <utils/catcache.h>
+#include <utils/date.h>
+#include <utils/inet.h>
+#include <utils/jsonb.h>
+#include <utils/lsyscache.h>
+#include <utils/memutils.h>
+#include <utils/numeric.h>
+#include <utils/rangetypes.h>
+#include <utils/syscache.h>
+#include <utils/timestamp.h>
 
 #include "partitioning.h"
 #include "compat.h"
@@ -272,7 +272,9 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 	if (null)
 		return 0;
 
-	collation = TupleDescAttr(slot->tts_tupleDescriptor, pinfo->column_attnum - 1)->attcollation;
+	collation =
+		TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(pinfo->column_attnum))
+			->attcollation;
 
 	return ts_partitioning_func_apply(pinfo, collation, value);
 }
