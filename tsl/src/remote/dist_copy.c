@@ -10,6 +10,7 @@
 #include <libpq-fe.h>
 #include <miscadmin.h>
 #include <parser/parse_type.h>
+#include <port/pg_bswap.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
@@ -301,7 +302,7 @@ create_connection_list_for_chunk(CopyConnectionState *state, Chunk *chunk)
 static int
 send_end_binary_copy_data(PGconn *connection)
 {
-	const uint16 buf = htons((uint16) -1);
+	const uint16 buf = pg_hton16((uint16) -1);
 	return PQputCopyData(connection, (char *) &buf, sizeof(buf));
 }
 
@@ -675,7 +676,7 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 	uint32 buf32;
 	ListCell *lc;
 
-	buf16 = htons((uint16) attnums->length);
+	buf16 = pg_hton16((uint16) attnums->length);
 	appendBinaryStringInfo(row_data, (char *) &buf16, sizeof(buf16));
 
 	foreach (lc, attnums)
@@ -684,7 +685,7 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 
 		if (nulls[offset])
 		{
-			buf32 = htonl((uint32) -1);
+			buf32 = pg_hton32((uint32) -1);
 			appendBinaryStringInfo(row_data, (char *) &buf32, sizeof(buf32));
 		}
 		else
@@ -695,7 +696,7 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 
 			outputbytes = SendFunctionCall(&out_functions[offset], value);
 			output_length = VARSIZE(outputbytes) - VARHDRSZ;
-			buf32 = htonl((uint32) output_length);
+			buf32 = pg_hton32((uint32) output_length);
 			appendBinaryStringInfo(row_data, (char *) &buf32, sizeof(buf32));
 			appendBinaryStringInfo(row_data, VARDATA(outputbytes), output_length);
 		}
