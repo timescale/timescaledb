@@ -52,3 +52,56 @@ ORDER BY 1,2;
 DROP TABLE decompress_phv_ping;
 DROP TABLE decompress_phv_device;
 
+-- test assertion failure in bitmapheapscan path creation
+-- GH Issue #2211
+CREATE TABLE tickers (
+  time TIMESTAMPTZ,
+  microseconds INT,
+  fk_exchange SMALLINT,
+  fk_trade_pair SMALLINT
+);
+
+CREATE INDEX ON tickers (fk_exchange, fk_trade_pair, time DESC, microseconds DESC);
+
+SELECT
+  table_name
+FROM
+  create_hypertable('tickers', 'time');
+
+ALTER TABLE tickers SET (timescaledb.compress, timescaledb.compress_segmentby = 'fk_exchange,
+  fk_trade_pair', timescaledb.compress_orderby = 'time DESC, microseconds DESC');
+
+INSERT INTO tickers
+SELECT
+  '2000-01-01',
+  0,
+  i,
+  j
+FROM
+  generate_series(1, 20) i,
+  generate_series(1, 40) j;
+
+SELECT
+  substr(compress_chunk(tableoid::REGCLASS)::TEXT, 1, 29)
+FROM
+  tickers
+GROUP BY
+  tableoid;
+
+-- make sure we get bitmapheapscan
+SET enable_indexscan TO FALSE;
+
+SELECT
+  *
+FROM
+  tickers
+WHERE
+  time >= '2000-01-01'
+  AND time < '2020-08-02T00:00Z'
+  AND fk_exchange = 4
+  AND fk_trade_pair = 29
+ORDER BY
+  time DESC,
+  microseconds DESC;
+
+DROP TABLE tickers;
