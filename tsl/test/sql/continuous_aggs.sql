@@ -889,3 +889,44 @@ select * from conditions_grpby_view2 order by 1, 2;
 
 -- Test internal functions for continuous aggregates
 SELECT test.continuous_aggs_find_view('mat_refresh_test');
+
+-- Test pseudotype/enum handling
+CREATE TYPE status_enum AS ENUM (
+  'red',
+  'yellow',
+  'green'
+);
+
+CREATE TABLE cagg_types (
+  time TIMESTAMPTZ NOT NULL,
+  status status_enum,
+  names NAME[],
+  floats FLOAT[]
+);
+
+SELECT
+  table_name
+FROM
+  create_hypertable('cagg_types', 'time');
+
+INSERT INTO cagg_types
+SELECT
+  '2000-01-01',
+  'yellow',
+  '{foo,bar,baz}',
+  '{1,2.5,3}';
+
+CREATE MATERIALIZED VIEW mat_types WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1d', time),
+  min(status) AS status,
+  max(names) AS names,
+  min(floats) AS floats
+FROM
+  cagg_types
+GROUP BY
+  1;
+
+CALL refresh_continuous_aggregate('mat_types',NULL,NULL);
+SELECT * FROM mat_types;
+
