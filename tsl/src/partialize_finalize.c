@@ -4,16 +4,17 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <fmgr.h>
-#include <catalog/pg_aggregate.h>
-#include <catalog/pg_type.h>
-#include <utils/syscache.h>
-#include <utils/datum.h>
-#include <utils/builtins.h>
 #include <access/htup_details.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_aggregate.h>
 #include <catalog/pg_collation.h>
+#include <catalog/pg_type.h>
+#include <fmgr.h>
 #include <parser/parse_agg.h>
+#include <parser/parse_coerce.h>
+#include <utils/builtins.h>
+#include <utils/datum.h>
+#include <utils/syscache.h>
 
 #include "compat.h"
 #include "partialize_finalize.h"
@@ -337,7 +338,18 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 	{
 		/* save information for internal deserialization. caching instead
 		   of calling ReceiveFunctionCall */
-		getTypeBinaryInputInfo(tstate->combine_meta.transtype,
+
+		/* If the argument type of the aggregate function is a pseudotype the
+		 * lookup/execution of the input function will fail. In that case we
+		 * use the argument type of the finalize_agg_ffunc return_type_dummy_val
+		 * argument instead. */
+		Oid column_type;
+		if (TypeCategory(tstate->combine_meta.transtype) != TYPCATEGORY_PSEUDOTYPE)
+			column_type = tstate->combine_meta.transtype;
+		else
+			column_type = get_fn_expr_argtype(fcinfo->flinfo, 6);
+
+		getTypeBinaryInputInfo(column_type,
 							   &tstate->combine_meta.recv_fn,
 							   &tstate->combine_meta.typIOParam);
 		fmgr_info_cxt(tstate->combine_meta.recv_fn,
