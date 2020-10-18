@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include <catalog/pg_operator.h>
+#include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -16,7 +17,6 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/typcache.h>
-#include <miscadmin.h>
 
 #include "compat.h"
 #if PG12_LT
@@ -946,11 +946,13 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->cpath.flags = 0;
 	path->cpath.methods = &decompress_chunk_path_methods;
 
-	Assert(parallel_workers == 0 || compressed_path->parallel_safe);
-
-	path->cpath.path.parallel_aware = false;
-	path->cpath.path.parallel_safe = compressed_path->parallel_safe;
+	/* To prevent a non-parallel path with this node appearing
+	 * in a parallel plan we only set parallel_safe to true
+	 * when parallel_workers is greater than 0 which is only
+	 * the case when creating partial paths. */
+	path->cpath.path.parallel_safe = parallel_workers > 0;
 	path->cpath.path.parallel_workers = parallel_workers;
+	path->cpath.path.parallel_aware = false;
 
 	path->cpath.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
@@ -969,6 +971,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 							 CompressionInfo *info, SortInfo *sort_info)
 {
 	Path *compressed_path;
+
+	/* clamp total_table_pages to 10 pages since this is the
+	 * minimum estimate for number of pages */
+	root->total_table_pages = Max(compressed_rel->pages, 10);
 
 	/* create non parallel scan path */
 	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
