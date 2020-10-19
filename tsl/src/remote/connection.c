@@ -1055,20 +1055,22 @@ report_path_error(PathKind path_kind, const char *user_name)
 static StringInfo
 make_user_path(const char *user_name, PathKind path_kind)
 {
-	const char *ssl_dir = ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir;
 	char ret_path[MAXPGPATH];
 	char hexsum[33];
 	StringInfo result;
 
 	pg_md5_hash(user_name, strlen(user_name), hexsum);
 
-	if (strlcpy(ret_path, ssl_dir, MAXPGPATH) > MAXPGPATH)
+	if (strlcpy(ret_path, ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, MAXPGPATH) > MAXPGPATH)
 		report_path_error(path_kind, user_name);
-
 	canonicalize_path(ret_path);
 
-	join_path_components(ret_path, ret_path, EXTENSION_NAME);
-	join_path_components(ret_path, ret_path, "certs");
+	if (!ts_guc_ssl_dir)
+	{
+		join_path_components(ret_path, ret_path, EXTENSION_NAME);
+		join_path_components(ret_path, ret_path, "certs");
+	}
+
 	join_path_components(ret_path, ret_path, hexsum);
 
 	result = makeStringInfo();

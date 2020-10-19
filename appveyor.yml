@@ -119,7 +119,7 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "ssl_key_file='C:/projects/timescaledb/build/tsl/test/ts_data_node.key'"
 
-    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.ssl_dir='C:/projects/timescaledb/build/tsl/test'"
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.ssl_dir='C:/projects/timescaledb/build/tsl/test/timescaledb/certs'"
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.passfile='C:/projects/timescaledb/build/tsl/test/pgpass.conf'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.license = 'apache'"
