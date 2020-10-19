@@ -287,6 +287,7 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 	MemoryContext qcontext = fcinfo->flinfo->fn_mcxt;
 	MemoryContext oldcontext = MemoryContextSwitchTo(qcontext);
 	AggState *fa_aggstate = (AggState *) fcinfo->context;
+	bool aggfinalextra;
 
 	/* look up catalog entry and populate what we need */
 	inner_agg_tuple = SearchSysCache1(AGGFNOID, inner_agg_fn_oid);
@@ -304,6 +305,7 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 	tstate->combine_meta.combinefnoid = inner_agg_form->aggcombinefn;
 	tstate->combine_meta.deserialfnoid = inner_agg_form->aggdeserialfn;
 	tstate->combine_meta.transtype = inner_agg_form->aggtranstype;
+	aggfinalextra = inner_agg_form->aggfinalextra;
 	ReleaseSysCache(inner_agg_tuple);
 
 	/* initialize combine specific state, both the deserialize function and combine function */
@@ -369,7 +371,7 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 		int num_args = 1;
 		Oid *types = NULL;
 		size_t number_types = 0;
-		if (inner_agg_form->aggfinalextra)
+		if (aggfinalextra)
 		{
 			types = get_input_types(input_types, &number_types);
 			num_args += number_types;
@@ -392,7 +394,7 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 			int i;
 			build_aggregate_finalfn_expr(types,
 										 num_args,
-										 inner_agg_form->aggtranstype,
+										 tstate->combine_meta.transtype,
 										 types[number_types - 1],
 										 collation,
 										 tstate->final_meta.finalfnoid,
