@@ -66,6 +66,7 @@
 #define REQ_TS_TELEMETRY_CLOUD "cloud"
 
 #define PG_PROMETHEUS "pg_prometheus"
+#define PROMSCALE "promscale"
 #define POSTGIS "postgis"
 
 #define REQ_COMPRESSED_HEAP_SIZE "compressed_heap_size"
@@ -77,7 +78,7 @@
 
 #define TS_TELEMETRY_REPORT_OVERRIDE_ARG "always_display_report := true"
 
-static const char *related_extensions[] = { PG_PROMETHEUS, POSTGIS };
+static const char *related_extensions[] = { PG_PROMETHEUS, PROMSCALE, POSTGIS };
 
 static bool
 char_in_valid_version_digits(const char c)
