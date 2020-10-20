@@ -8,6 +8,7 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
+#include <access/xact.h>
 #include <catalog/dependency.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
@@ -240,6 +241,7 @@ preserve_uncompressed_chunk_stats(Oid chunk_relid)
 	ExecVacuum(NULL, &vs, true);
 #else
 	ExecVacuum(&vs, true);
+	CommandCounterIncrement();
 #endif
 	AlterTableInternal(chunk_relid, list_make1(&at_cmd), false);
 }
