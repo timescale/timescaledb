@@ -187,7 +187,7 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
 
 -- Execute query on a specified list of data nodes. By default node_list is NULL, which means
 -- to execute the query on every data node
-CREATE PROCEDURE distributed_exec(
+CREATE OR REPLACE PROCEDURE distributed_exec(
        query TEXT,
        node_list name[] = NULL,
        transactional BOOLEAN = TRUE)
