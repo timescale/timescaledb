@@ -600,6 +600,81 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 }
 
+/*
+ * Construct a list of VacuumRelations for all vacuumable rels in
+ * the current database.  This is similar to the PostgresQL get_all_vacuum_rels
+ * from vacuum.c, only it filters out distributed hypertables and chunks
+ * that have been compressed.
+ */
+static List *
+ts_get_all_vacuum_rels(bool is_vacuumcmd)
+{
+	List *vacrels = NIL;
+	Relation pgclass;
+	TableScanDesc scan;
+	HeapTuple tuple;
+	Cache *hcache = ts_hypertable_cache_pin();
+
+	pgclass = table_open(RelationRelationId, AccessShareLock);
+
+	scan = table_beginscan_catalog(pgclass, 0, NULL);
+
+	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		Form_pg_class classform = (Form_pg_class) GETSTRUCT(tuple);
+		Hypertable *ht;
+		Chunk *chunk;
+		Oid relid;
+
+#if PG12_GE
+		relid = classform->oid;
+
+		/* check permissions of relation */
+		if (!vacuum_is_relation_owner(relid,
+									  classform,
+									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+			continue;
+#else
+		relid = HeapTupleGetOid(tuple);
+#endif
+
+		/*
+		 * We include partitioned tables here; depending on which operation is
+		 * to be performed, caller will decide whether to process or ignore
+		 * them.
+		 */
+		if (classform->relkind != RELKIND_RELATION && classform->relkind != RELKIND_MATVIEW &&
+			classform->relkind != RELKIND_PARTITIONED_TABLE)
+			continue;
+
+		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+		if (ht)
+		{
+			if (hypertable_is_distributed(ht))
+				continue;
+		}
+		else
+		{
+			chunk = ts_chunk_get_by_relid(relid, false);
+			if (chunk && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+				continue;
+		}
+
+		/*
+		 * Build VacuumRelation(s) specifying the table OIDs to be processed.
+		 * We omit a RangeVar since it wouldn't be appropriate to complain
+		 * about failure to open one of these relations later.
+		 */
+		vacrels = lappend(vacrels, makeVacuumRelation(NULL, relid, NIL));
+	}
+
+	table_endscan(scan);
+	table_close(pgclass, AccessShareLock);
+	ts_cache_release(hcache);
+
+	return vacrels;
+}
+
 /* Vacuums a hypertable and all of it's chunks */
 static DDLResult
 process_vacuum(ProcessUtilityArgs *args)
@@ -611,54 +686,56 @@ process_vacuum(ProcessUtilityArgs *args)
 		.chunk_rels = NIL,
 	};
 	ListCell *lc;
-	Cache *hcache;
 	Hypertable *ht;
-	bool affects_hypertable = false;
 	List *vacuum_rels = NIL;
+	bool is_vacuumcmd;
+
+#if PG12_GE
+	is_vacuumcmd = stmt->is_vacuumcmd;
+#else
+	is_vacuumcmd = stmt->options & VACOPT_VACUUM;
+#endif
 
 	if (stmt->rels == NIL)
-		/* Vacuum is for all tables */
-		return DDL_CONTINUE;
-
-	hcache = ts_hypertable_cache_pin();
-	foreach (lc, stmt->rels)
+		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd);
+	else
 	{
-		VacuumRelation *vacuum_rel = lfirst_node(VacuumRelation, lc);
-		Oid table_relid = vacuum_rel->oid;
+		Cache *hcache = ts_hypertable_cache_pin();
 
-		if (!OidIsValid(table_relid) && vacuum_rel->relation != NULL)
-			table_relid = RangeVarGetRelid(vacuum_rel->relation, NoLock, true);
-
-		if (OidIsValid(table_relid))
+		foreach (lc, stmt->rels)
 		{
-			ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_MISSING_OK);
+			VacuumRelation *vacuum_rel = lfirst_node(VacuumRelation, lc);
+			Oid table_relid = vacuum_rel->oid;
 
-			if (ht)
+			if (!OidIsValid(table_relid) && vacuum_rel->relation != NULL)
+				table_relid = RangeVarGetRelid(vacuum_rel->relation, NoLock, true);
+
+			if (OidIsValid(table_relid))
 			{
-				affects_hypertable = true;
-				process_add_hypertable(args, ht);
+				ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_MISSING_OK);
 
-				/* Exclude distributed hypertables from the list of relations
-				 * to vacuum and analyze since they contain no local tuples.
-				 *
-				 * Support for VACUUM/ANALYZE operations on a distributed hypertable
-				 * is implemented as a part of distributed ddl and remote
-				 * statistics import functions.
-				 */
-				if (hypertable_is_distributed(ht))
-					continue;
+				if (ht)
+				{
+					process_add_hypertable(args, ht);
 
-				ctx.ht_vacuum_rel = vacuum_rel;
-				foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+					/* Exclude distributed hypertables from the list of relations
+					 * to vacuum and analyze since they contain no local tuples.
+					 *
+					 * Support for VACUUM/ANALYZE operations on a distributed hypertable
+					 * is implemented as a part of distributed ddl and remote
+					 * statistics import functions.
+					 */
+					if (hypertable_is_distributed(ht))
+						continue;
+
+					ctx.ht_vacuum_rel = vacuum_rel;
+					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
+				}
 			}
+			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
 		}
-		vacuum_rels = lappend(vacuum_rels, vacuum_rel);
+		ts_cache_release(hcache);
 	}
-
-	ts_cache_release(hcache);
-
-	if (!affects_hypertable)
-		return DDL_CONTINUE;
 
 	stmt->rels = list_concat(ctx.chunk_rels, vacuum_rels);
 
@@ -666,7 +743,7 @@ process_vacuum(ProcessUtilityArgs *args)
 	 * distributed hypertable. In that case, we don't want to vacuum locally. */
 	if (list_length(stmt->rels) > 0)
 	{
-		PreventCommandDuringRecovery((stmt->options && VACOPT_VACUUM) ? "VACUUM" : "ANALYZE");
+		PreventCommandDuringRecovery(is_vacuumcmd ? "VACUUM" : "ANALYZE");
 
 		/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 		ExecVacuum(
