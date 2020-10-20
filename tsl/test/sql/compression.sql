@@ -532,6 +532,7 @@ ALTER TABLE stattest SET (timescaledb.compress);
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
 SELECT approximate_row_count('stattest');
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
 -- Now verify stats are not changed when we analyze the hypertable
@@ -539,6 +540,7 @@ ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
 -- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
 -- to hide WARNINGs for skipped tables
@@ -546,6 +548,7 @@ SET client_min_messages TO ERROR;
 ANALYZE;
 SET client_min_messages TO NOTICE;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
 -- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
