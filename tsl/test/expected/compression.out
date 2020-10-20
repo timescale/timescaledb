@@ -1269,6 +1269,12 @@ SELECT approximate_row_count('stattest');
                     26
 (1 row)
 
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+ relpages | reltuples 
+----------+-----------
+        1 |        26
+(1 row)
+
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
                                                        histogram_bounds                                                        
 -------------------------------------------------------------------------------------------------------------------------------
@@ -1289,6 +1295,12 @@ SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname =
 ------------------
 (0 rows)
 
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+ relpages | reltuples 
+----------+-----------
+        1 |        26
+(1 row)
+
 -- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
 -- to hide WARNINGs for skipped tables
 SET client_min_messages TO ERROR;
@@ -1298,6 +1310,12 @@ SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname =
                                                        histogram_bounds                                                        
 -------------------------------------------------------------------------------------------------------------------------------
  {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
+(1 row)
+
+SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+ relpages | reltuples 
+----------+-----------
+        1 |        26
 (1 row)
 
 -- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
