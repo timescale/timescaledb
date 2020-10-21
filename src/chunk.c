@@ -3404,7 +3404,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	Dimension *time_dim;
 	Oid time_type;
 
-	PreventCommandIfReadOnly(DROP_CHUNKS_FUNCNAME "()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/*
 	 * When past the first call of the SRF, dropping has already been completed,

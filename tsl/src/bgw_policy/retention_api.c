@@ -36,7 +36,7 @@ policy_retention_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
-	PreventCommandIfReadOnly("policy_retention()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	policy_retention_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
@@ -157,7 +157,7 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	/* Right now, there is an infinite number of retries for drop_chunks jobs */
 	int default_max_retries = -1;
 
-	PreventCommandIfReadOnly("add_retention_policy()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/* Verify that the hypertable owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -289,7 +289,7 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	Hypertable *hypertable;
 
-	PreventCommandIfReadOnly("remove_retention_policy()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (!hypertable)

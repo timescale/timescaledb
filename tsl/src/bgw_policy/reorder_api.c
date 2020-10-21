@@ -111,7 +111,7 @@ policy_reorder_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
-	PreventCommandIfReadOnly("policy_reorder()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	policy_reorder_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
@@ -137,7 +137,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	Oid owner_id;
 	List *jobs;
 
-	PreventCommandIfReadOnly("add_reorder_policy()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 	Assert(ht != NULL);
@@ -248,7 +248,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	Hypertable *ht;
 	Cache *hcache;
 
-	PreventCommandIfReadOnly("remove_reorder_policy()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
