@@ -1145,7 +1145,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	int16 num_slices;
 	Hypertable *ht;
 
-	PreventCommandIfReadOnly("set_number_partitions()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1197,7 +1197,7 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
 
-	PreventCommandIfReadOnly("set_chunk_time_interval()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1475,7 +1475,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 	};
 	Datum retval = 0;
 
-	PreventCommandIfReadOnly("add_dimension()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,

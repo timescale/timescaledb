@@ -19,6 +19,9 @@
 
 #include "export.h"
 
+#define TS_PREVENT_FUNC_IF_READ_ONLY()                                                             \
+	(PreventCommandIfReadOnly(psprintf("%s()", get_func_name(FC_FN_OID(fcinfo)))))
+
 #define is_supported_pg_version_11(version) ((version >= 110000) && (version < 120000))
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 

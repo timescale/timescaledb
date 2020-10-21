@@ -486,7 +486,7 @@ ts_tablespace_attach(PG_FUNCTION_ARGS)
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	Relation rel;
 
-	PreventCommandIfReadOnly("attach_tablespace()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_NARGS() < 2 || PG_NARGS() > 3)
 		elog(ERROR, "invalid number of arguments");
@@ -673,7 +673,7 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 	Oid tspcoid;
 	int ret;
 
-	PreventCommandIfReadOnly("detach_tablespace()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_NARGS() < 1 || PG_NARGS() > 3)
 		elog(ERROR, "invalid number of arguments");
@@ -726,7 +726,7 @@ ts_tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 	cmd->subtype = AT_SetTableSpace;
 	cmd->name = "pg_default";
 
-	PreventCommandIfReadOnly("detach_tablespaces()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_NARGS() != 1)
 		elog(ERROR, "invalid number of arguments");

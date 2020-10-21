@@ -750,8 +750,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	Datum values[2];
 	bool nulls[2] = { false, false };
 
-	PreventCommandIfReadOnly("set_adaptive_chunking()");
-
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
