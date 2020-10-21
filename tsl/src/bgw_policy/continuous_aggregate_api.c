@@ -109,7 +109,7 @@ policy_refresh_cagg_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
-	PreventCommandIfReadOnly("policy_refresh_continuous_aggregate()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 	policy_refresh_cagg_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
 	PG_RETURN_VOID();

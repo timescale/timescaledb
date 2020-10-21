@@ -1817,8 +1817,7 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 	uint32 flags = 0;
 	List *data_nodes = NIL;
 
-	PreventCommandIfReadOnly(is_dist_call ? "create_distributed_hypertable()" :
-											"create_hypertable()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,

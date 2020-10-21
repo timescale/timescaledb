@@ -87,7 +87,7 @@ policy_compression_proc(PG_FUNCTION_ARGS)
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_VOID();
 
-	PreventCommandIfReadOnly("policy_compression()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	policy_compression_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
@@ -111,7 +111,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	Dimension *dim;
 	Oid owner_id;
 
-	PreventCommandIfReadOnly("add_compression_policy()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/* check if this is a table with compression enabled */
 	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
@@ -256,7 +256,7 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 	Hypertable *ht;
 	Cache *hcache;
 
-	PreventCommandIfReadOnly("remove_compression_policy()");
+	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
