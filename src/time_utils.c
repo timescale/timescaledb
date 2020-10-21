@@ -12,8 +12,9 @@
 #include <parser/parse_coerce.h>
 #include <fmgr.h>
 
-#include "time_utils.h"
 #include "dimension.h"
+#include "guc.h"
+#include "time_utils.h"
 #include "utils.h"
 
 static Datum
@@ -535,3 +536,22 @@ ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval, Oid timety
 		res = nowval - interval;
 	return res;
 }
+
+#ifdef TS_DEBUG
+/* return mock time for testing */
+Datum
+ts_get_mock_time_or_current_time(void)
+{
+	Datum res;
+	if (ts_current_timestamp_mock != NULL && strlen(ts_current_timestamp_mock) != 0)
+	{
+		res = DirectFunctionCall3(timestamptz_in,
+								  CStringGetDatum(ts_current_timestamp_mock),
+								  0,
+								  Int32GetDatum(-1));
+		return res;
+	}
+	res = TimestampTzGetDatum(GetCurrentTimestamp());
+	return res;
+}
+#endif
