@@ -34,6 +34,7 @@ set(TEST_FILES_DEBUG
   continuous_aggs_multi.sql
   continuous_aggs.sql
   continuous_aggs_usage.sql
+  continuous_aggs_policy_run.sql
   data_fetcher.sql
   data_node_bootstrap.sql
   data_node.sql

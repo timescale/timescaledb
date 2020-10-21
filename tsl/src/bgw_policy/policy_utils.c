@@ -7,8 +7,10 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 #include "dimension.h"
+#include "guc.h"
 #include "jsonb_utils.h"
 #include "policy_utils.h"
+#include "time_utils.h"
 
 /* Helper function to compare jsonb label value in the config
  * with passed in value.
@@ -109,7 +111,11 @@ subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
 Datum
 subtract_interval_from_now(Interval *lag, Oid time_dim_type)
 {
+#ifdef TS_DEBUG
+	Datum res = ts_get_mock_time_or_current_time();
+#else
 	Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
+#endif
 
 	switch (time_dim_type)
 	{
