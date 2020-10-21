@@ -793,11 +793,6 @@ get_returning_tuple(DataNodeDispatchState *sds)
 	}
 	else
 	{
-		/*TupleDesc res_tupdesc = RelationGetDescr(rri->ri_RelationDesc);
-
-		if (res_slot->tts_tupleDescriptor != res_tupdesc)
-		ExecSetSlotDescriptor(res_slot, res_tupdesc); */
-
 		while (NIL != sds->responses)
 		{
 			AsyncResponseResult *rsp = linitial(sds->responses);

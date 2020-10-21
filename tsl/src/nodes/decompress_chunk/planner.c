@@ -248,48 +248,8 @@ replace_compressed_vars(Node *node, CompressionInfo *info)
 		return (Node *) new_var;
 	}
 	if (IsA(node, PlaceHolderVar))
-	{
 		elog(ERROR, "ignoring placeholders");
-		//  PlaceHolderVar *phv = (PlaceHolderVar *) node;
 
-		//  /* Upper-level PlaceHolderVars should be long gone at this point */
-		//  Assert(phv->phlevelsup == 0);
-
-		//  /*
-		//   * Check whether we need to replace the PHV.  We use bms_overlap as a
-		//   * cheap/quick test to see if the PHV might be evaluated in the outer
-		//   * rels, and then grab its PlaceHolderInfo to tell for sure.
-		//   */
-		//  if (!bms_overlap(phv->phrels, root->curOuterRels) ||
-		//      !bms_is_subset(find_placeholder_info(root, phv, false)->ph_eval_at,
-		//                     root->curOuterRels))
-		//  {
-		//      /*
-		//       * We can't replace the whole PHV, but we might still need to
-		//       * replace Vars or PHVs within its expression, in case it ends up
-		//       * actually getting evaluated here.  (It might get evaluated in
-		//       * this plan node, or some child node; in the latter case we don't
-		//       * really need to process the expression here, but we haven't got
-		//       * enough info to tell if that's the case.)  Flat-copy the PHV
-		//       * node and then recurse on its expression.
-		//       *
-		//       * Note that after doing this, we might have different
-		//       * representations of the contents of the same PHV in different
-		//       * parts of the plan tree.  This is OK because equal() will just
-		//       * match on phid/phlevelsup, so setrefs.c will still recognize an
-		//       * upper-level reference to a lower-level copy of the same PHV.
-		//       */
-		//      PlaceHolderVar *newphv = makeNode(PlaceHolderVar);
-
-		//      memcpy(newphv, phv, sizeof(PlaceHolderVar));
-		//      newphv->phexpr = (Expr *)
-		//          replace_compressed_vars((Node *) phv->phexpr,
-		//                                          root);
-		//      return (Node *) newphv;
-		//  }
-		//  /* Replace the PlaceHolderVar with a nestloop Param */
-		//  return (Node *) replace_nestloop_param_placeholdervar(root, phv);
-	}
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
 }
 
