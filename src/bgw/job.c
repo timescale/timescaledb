@@ -990,6 +990,7 @@ ts_bgw_job_update_by_id(int32 job_id, BgwJob *job)
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
+		.lockflags = 0 /* don't follow updates, used in PG12 */
 	};
 	ScannerCtx scanctx = { .table = catalog_get_table_id(catalog, BGW_JOB),
 						   .index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
