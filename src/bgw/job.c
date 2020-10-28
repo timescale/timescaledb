@@ -213,6 +213,27 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 	return jobs;
 }
 
+List *
+ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
+{
+	Catalog *catalog = ts_catalog_get();
+	AccumData list_data = {
+		.list = NIL,
+		.alloc_size = sizeof(BgwJob),
+	};
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, BGW_JOB),
+		.data = &list_data,
+		.tuple_found = bgw_job_accum_tuple_found,
+		.lockmode = AccessShareLock,
+		.result_mctx = mctx,
+		.scandirection = ForwardScanDirection,
+	};
+
+	ts_scanner_scan(&scanctx);
+	return list_data.list;
+}
+
 static void
 init_scan_by_proc_name(ScanKeyData *scankey, const char *proc_name)
 {
