@@ -23,6 +23,7 @@ typedef bool (*scheduler_test_hook_type)(BgwJob *job);
 
 extern BackgroundWorkerHandle *ts_bgw_job_start(BgwJob *job, Oid user_oid);
 
+extern List *ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx);
 extern List *ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx);
 
 extern TSDLLEXPORT List *ts_bgw_job_find_by_proc(const char *proc_name, const char *proc_schema);

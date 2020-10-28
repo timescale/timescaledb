@@ -67,6 +67,13 @@ SELECT * FROM timescaledb_information.jobs ORDER BY 1;
    1004 | User-Defined Action [1004] | @ 1 hour          | @ 0             |          -1 | @ 5 mins     | public                | custom_func_definer | default_perm_user | t         | {"type": "function"}  |            |                   | 
 (6 rows)
 
+-- check for corrects counts in telemetry
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_user_defined_actions');
+ json_object_field 
+-------------------
+ 5
+(1 row)
+
 CALL run_job(1000);
 CALL run_job(1001);
 CALL run_job(1002);
