@@ -368,3 +368,7 @@ SELECT * FROM test_continuous_agg_view_user_2;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * from sorted_bgw_log;
+
+-- check for corrects counts in telemetry
+SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs_policies');
+

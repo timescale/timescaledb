@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <utils/builtins.h>
 
 #include "bgw/job.h"
 #include "policy.h"
@@ -36,18 +37,38 @@ ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, void *const data)
 	return SCAN_CONTINUE;
 }
 
-int32
-ts_bgw_policy_reorder_count()
+/* This function counts background worker jobs by type. */
+BgwJobTypeCount
+ts_bgw_job_type_counts()
 {
-	List *jobs = ts_bgw_job_find_by_proc("policy_reorder", INTERNAL_SCHEMA_NAME);
+	ListCell *lc;
+	List *jobs = ts_bgw_job_get_all(sizeof(BgwJob), CurrentMemoryContext);
+	BgwJobTypeCount counts = { 0 };
 
-	return list_length(jobs);
-}
+	foreach (lc, jobs)
+	{
+		BgwJob *job = lfirst(lc);
 
-int32
-ts_bgw_policy_retention_count()
-{
-	List *jobs = ts_bgw_job_find_by_proc("policy_retention", INTERNAL_SCHEMA_NAME);
+		if (namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0)
+		{
+			if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
+				counts.policy_cagg++;
+			else if (namestrcmp(&job->fd.proc_name, "policy_compression") == 0)
+				counts.policy_compression++;
+			else if (namestrcmp(&job->fd.proc_name, "policy_reorder") == 0)
+				counts.policy_reorder++;
+			else if (namestrcmp(&job->fd.proc_name, "policy_retention") == 0)
+				counts.policy_retention++;
+			else if (namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0)
+				counts.policy_telemetry++;
+			else
+				Assert(false);
+		}
+		else
+		{
+			counts.user_defined_action++;
+		}
+	}
 
-	return list_length(jobs);
+	return counts;
 }

@@ -54,8 +54,11 @@
 #define REQ_NUM_HYPERTABLES "num_hypertables"
 #define REQ_NUM_COMPRESSED_HYPERTABLES "num_compressed_hypertables"
 #define REQ_NUM_CONTINUOUS_AGGS "num_continuous_aggs"
-#define REQ_NUM_REORDER_POLICIES "num_reorder_policies"
-#define REQ_NUM_DROP_CHUNKS_POLICIES "num_drop_chunks_policies"
+#define REQ_NUM_POLICY_CAGG "num_continuous_aggs_policies"
+#define REQ_NUM_POLICY_COMPRESSION "num_compression_policies"
+#define REQ_NUM_POLICY_REORDER "num_reorder_policies"
+#define REQ_NUM_POLICY_RETENTION "num_retention_policies"
+#define REQ_NUM_USER_DEFINED_ACTIONS "num_user_defined_actions"
 #define REQ_RELATED_EXTENSIONS "related_extensions"
 #define REQ_METADATA "db_metadata"
 #define REQ_LICENSE_EDITION_APACHE "apache_only"
@@ -227,22 +230,16 @@ get_num_continuous_aggs()
 	return buf->data;
 }
 
-static char *
-get_num_drop_chunks_policies()
+static void
+add_job_counts(JsonbParseState *state)
 {
-	StringInfo buf = makeStringInfo();
+	BgwJobTypeCount counts = ts_bgw_job_type_counts();
 
-	appendStringInfo(buf, "%d", ts_bgw_policy_retention_count());
-	return buf->data;
-}
-
-static char *
-get_num_reorder_policies()
-{
-	StringInfo buf = makeStringInfo();
-
-	appendStringInfo(buf, "%d", ts_bgw_policy_reorder_count());
-	return buf->data;
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_CAGG, counts.policy_cagg);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_COMPRESSION, counts.policy_compression);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_REORDER, counts.policy_reorder);
+	ts_jsonb_add_int32(state, REQ_NUM_POLICY_RETENTION, counts.policy_retention);
+	ts_jsonb_add_int32(state, REQ_NUM_USER_DEFINED_ACTIONS, counts.user_defined_action);
 }
 
 static char *
@@ -355,8 +352,8 @@ build_version_body(void)
 	ts_jsonb_add_str(parse_state, REQ_NUM_HYPERTABLES, get_num_hypertables());
 	ts_jsonb_add_str(parse_state, REQ_NUM_COMPRESSED_HYPERTABLES, get_num_compressed_hypertables());
 	ts_jsonb_add_str(parse_state, REQ_NUM_CONTINUOUS_AGGS, get_num_continuous_aggs());
-	ts_jsonb_add_str(parse_state, REQ_NUM_REORDER_POLICIES, get_num_reorder_policies());
-	ts_jsonb_add_str(parse_state, REQ_NUM_DROP_CHUNKS_POLICIES, get_num_drop_chunks_policies());
+
+	add_job_counts(parse_state);
 
 	ts_jsonb_add_str(parse_state, REQ_COMPRESSED_HEAP_SIZE, get_size(sizes.compressed_heap_size));
 	ts_jsonb_add_str(parse_state, REQ_COMPRESSED_INDEX_SIZE, get_size(sizes.compressed_index_size));
