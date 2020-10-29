@@ -535,12 +535,23 @@ SELECT approximate_row_count('stattest');
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
+SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
+FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch 
+       , _timescaledb_catalog.chunk compch 
+  WHERE ht.table_name = 'stattest' AND ch.hypertable_id = ht.id
+        AND compch.id = ch.compressed_chunk_id AND ch.compressed_chunk_id > 0  \gset
+
+SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+
 -- Now verify stats are not changed when we analyze the hypertable
 ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
+
+-- verify that corresponding compressed chunk's stats is updated as well.
+SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
 
 -- Verify that even a global analyze doesn't affect the chunk stats, changing message scope here
 -- to hide WARNINGs for skipped tables
@@ -559,8 +570,79 @@ SELECT reloptions FROM pg_class WHERE relname = :statchunk;
 ALTER TABLE stattest SET (autovacuum_enabled = false);
 SELECT decompress_chunk(c) FROM show_chunks('stattest') c;
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
-
 DROP TABLE stattest;
+
+--- Test that analyze on compression internal table updates stats on original chunks
+CREATE TABLE stattest2(time TIMESTAMPTZ NOT NULL, c1 int, c2 int);
+SELECT create_hypertable('stattest2', 'time', chunk_time_interval=>'1 day'::interval);
+ALTER TABLE stattest2 SET (timescaledb.compress, timescaledb.compress_segmentby='c1');
+INSERT INTO stattest2 SELECT '2020/06/20 01:00'::TIMESTAMPTZ ,1 , generate_series(1, 200, 1);
+INSERT INTO stattest2 SELECT '2020/07/20 01:00'::TIMESTAMPTZ ,1 , generate_series(1, 200, 1);
+
+SELECT  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht 
+WHERE ch1.hypertable_id = ht.id and ht.table_name like 'stattest2'
+ ORDER BY ch1.id limit 1;
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+ WHERE relname in ( SELECT ch.table_name FROM 
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
+order by relname;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+--overwrite pg_class stats for the compressed chunk.
+UPDATE pg_class
+SET reltuples = 0, relpages = 0
+ WHERE relname in ( SELECT ch.table_name FROM 
+    _timescaledb_catalog.chunk ch, 
+    _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id 
+        AND ch.compressed_chunk_id > 0 );
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+ WHERE relname in ( SELECT ch.table_name FROM 
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
+order by relname;
+
+SELECT '_timescaledb_internal.' || compht.table_name as "STAT_COMP_TABLE",
+             compht.table_name  as "STAT_COMP_TABLE_NAME"
+FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable compht
+WHERE ht.table_name = 'stattest2' AND ht.compressed_hypertable_id = compht.id \gset
+
+--analyze the compressed table, will update stats for the raw table.
+ANALYZE :STAT_COMP_TABLE;
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+ WHERE relname in ( SELECT ch.table_name FROM 
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
+ORDER BY relname;
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+ WHERE relname in ( SELECT ch.table_name FROM 
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
+ORDER BY relname;
+
+--analyze on stattest2 should not overwrite
+ANALYZE stattest2;
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+ WHERE relname in ( SELECT ch.table_name FROM 
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
+ORDER BY relname;
+
+SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+ WHERE relname in ( SELECT ch.table_name FROM 
+                   _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+  WHERE ht.table_name = :'STAT_COMP_TABLE_NAME' AND ch.hypertable_id = ht.id )
+ORDER BY relname;
+
+-- analyze on compressed hypertable should restore stats
 
 -- Test approximate_row_count() with compressed hypertable
 --
