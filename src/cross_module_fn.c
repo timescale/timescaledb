@@ -268,6 +268,12 @@ func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
 	pg_unreachable();
 }
 
+static void
+update_compressed_chunk_relstats_default(Oid uncompressed_relid, Oid compressed_relid)
+{
+	error_no_default_fn_community();
+}
+
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -388,6 +394,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_get_relstats = error_no_default_fn_pg_community,
 	.chunk_get_colstats = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
+	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

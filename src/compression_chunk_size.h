@@ -21,5 +21,6 @@ typedef struct TotalSizes
 } TotalSizes;
 
 extern TSDLLEXPORT TotalSizes ts_compression_chunk_size_totals(void);
+extern TSDLLEXPORT int64 ts_compression_chunk_size_row_count(int32 uncompressed_chunk_id);
 
 #endif
