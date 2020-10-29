@@ -35,7 +35,7 @@ BEGIN
 
         SELECT T.spcname INTO indx_tablespace 
         FROM pg_constraint C, pg_class I, pg_tablespace T
-        WHERE C.oid = constraint_oid AND I.oid = C.conindid AND I.reltablespace = T.oid;
+        WHERE C.oid = constraint_oid AND C.contype IN ('p', 'u') AND I.oid = C.conindid AND I.reltablespace = T.oid;
 
         IF indx_tablespace IS NOT NULL THEN
             tablespace_def := format(' USING INDEX TABLESPACE %I', indx_tablespace);

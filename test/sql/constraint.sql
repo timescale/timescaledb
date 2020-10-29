@@ -597,3 +597,35 @@ ALTER TABLE test_validate
 VALIDATE CONSTRAINT c_not_null;
 
 DROP TABLE test_validate;
+
+-- test for hypetables constraints both using index tablespaces and not See #2604
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+
+CREATE TABLE fk_tbl (
+id int,
+CONSTRAINT pkfk PRIMARY KEY (id) USING INDEX TABLESPACE tablespace1);
+
+CREATE TABLE tbl (
+fk_id int,
+id int,
+time timestamp,
+CONSTRAINT pk PRIMARY KEY (time, id) USING INDEX TABLESPACE tablespace1);
+
+SELECT create_hypertable('tbl', 'time');
+
+ALTER TABLE tbl
+ADD CONSTRAINT fk_con
+FOREIGN KEY (fk_id) REFERENCES fk_tbl(id)
+ON UPDATE SET NULL
+ON DELETE SET NULL;
+
+INSERT INTO fk_tbl VALUES(1);
+
+INSERT INTO tbl VALUES (
+1, 1, now()
+);
+
+DROP TABLE tbl;
+DROP TABLE fk_tbl;
+
+DROP TABLESPACE IF EXISTS tablespace1;
