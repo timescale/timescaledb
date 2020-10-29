@@ -182,6 +182,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_get_colstats = chunk_api_get_chunk_colstats,
 	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
+	.update_compressed_chunk_relstats = update_compressed_chunk_relstats,
 };
 
 TS_FUNCTION_INFO_V1(ts_module_init);

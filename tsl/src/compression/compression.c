@@ -37,9 +37,11 @@
 #include "compat.h"
 
 #include "array.h"
+#include "chunk.h"
 #include "deltadelta.h"
 #include "dictionary.h"
 #include "gorilla.h"
+#include "compression_chunk_size.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "segment_meta.h"
@@ -1456,4 +1458,47 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
 	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	return definitions[algorithm].compressed_data_storage;
+}
+
+/* Get relstats from compressed chunk and insert into relstats for the
+ * corresponding chunk (that held the uncompressed data) from raw hypertable
+ */
+extern void
+update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
+{
+	double rowcnt;
+	int comp_pages, uncomp_pages, comp_visible, uncomp_visible;
+	float comp_tuples, uncomp_tuples, out_tuples;
+	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
+	Chunk *compressed_chunk = ts_chunk_get_by_relid(compressed_relid, true);
+
+	if (uncompressed_chunk->table_id != uncompressed_relid ||
+		uncompressed_chunk->fd.compressed_chunk_id != compressed_chunk->fd.id ||
+		compressed_chunk->table_id != compressed_relid)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("mismatched chunks for relstats update %d %d",
+						uncompressed_relid,
+						compressed_relid)));
+	}
+
+	capture_pgclass_stats(uncompressed_relid, &uncomp_pages, &uncomp_visible, &uncomp_tuples);
+
+	/* Before compressing a chunk in 2.0, we save its stats. Prior
+	 * releases do not support this. So the stats on uncompressed relid
+	 * could be invalid. In this case, do the best that we can.
+	 */
+	if (uncomp_tuples == 0)
+	{
+		/* we need page info from compressed relid */
+		capture_pgclass_stats(compressed_relid, &comp_pages, &comp_visible, &comp_tuples);
+		rowcnt = (double) ts_compression_chunk_size_row_count(uncompressed_chunk->fd.id);
+		if (rowcnt > 0)
+			out_tuples = (float4) rowcnt;
+		else
+			out_tuples = (float4) comp_tuples;
+		restore_pgclass_stats(uncompressed_relid, comp_pages, comp_visible, out_tuples);
+		CommandCounterIncrement();
+	}
 }

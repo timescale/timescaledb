@@ -90,3 +90,35 @@ ts_compression_chunk_size_totals()
 
 	return sizes;
 }
+
+/* Return the pre-compression row count for the chunk */
+int64
+ts_compression_chunk_size_row_count(int32 uncompressed_chunk_id)
+{
+	int found_cnt = 0;
+	int64 rowcnt = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessShareLock, CurrentMemoryContext);
+	init_scan_by_uncompressed_chunk_id(&iterator, uncompressed_chunk_id);
+	ts_scanner_foreach(&iterator)
+	{
+		bool nulls[Natts_compression_chunk_size];
+		Datum values[Natts_compression_chunk_size];
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+
+		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, nulls);
+		if (!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_pre_compression)])
+			rowcnt = DatumGetInt64(values[AttrNumberGetAttrOffset(
+				Anum_compression_chunk_size_numrows_pre_compression)]);
+		if (should_free)
+			heap_freetuple(tuple);
+		found_cnt++;
+	}
+	if (found_cnt != 1)
+		elog(ERROR,
+			 "missing record for chunk with id %d in %s",
+			 uncompressed_chunk_id,
+			 COMPRESSION_CHUNK_SIZE_TABLE_NAME);
+	return rowcnt;
+}
