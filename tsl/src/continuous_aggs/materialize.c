@@ -34,18 +34,20 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 
 static void spi_update_materializations(SchemaAndName partial_view,
 										SchemaAndName materialization_table, Name time_column_name,
-										TimeRange invalidation_range);
+										TimeRange invalidation_range, int32 chunk_id);
 static void spi_delete_materializations(SchemaAndName materialization_table, Name time_column_name,
-										TimeRange invalidation_range);
+										TimeRange invalidation_range, const char *chunk_condition);
 static void spi_insert_materializations(SchemaAndName partial_view,
 										SchemaAndName materialization_table, Name time_column_name,
-										TimeRange materialization_range);
+										TimeRange materialization_range,
+										const char *chunk_condition);
 
 void
 continuous_agg_update_materialization(SchemaAndName partial_view,
 									  SchemaAndName materialization_table, Name time_column_name,
 									  InternalTimeRange new_materialization_range,
-									  InternalTimeRange invalidation_range, int64 bucket_width)
+									  InternalTimeRange invalidation_range, int64 bucket_width,
+									  const int32 chunk_id)
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
@@ -90,19 +92,22 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 									materialization_table,
 									time_column_name,
 									internal_time_range_to_time_range(
-										combined_materialization_range));
+										combined_materialization_range),
+									chunk_id);
 	}
 	else
 	{
 		spi_update_materializations(partial_view,
 									materialization_table,
 									time_column_name,
-									internal_time_range_to_time_range(invalidation_range));
+									internal_time_range_to_time_range(invalidation_range),
+									chunk_id);
 
 		spi_update_materializations(partial_view,
 									materialization_table,
 									time_column_name,
-									internal_time_range_to_time_range(new_materialization_range));
+									internal_time_range_to_time_range(new_materialization_range),
+									chunk_id);
 	}
 
 	res = SPI_finish();
@@ -200,18 +205,33 @@ internal_time_range_to_time_range(InternalTimeRange internal)
 
 static void
 spi_update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-							Name time_column_name, TimeRange invalidation_range)
+							Name time_column_name, TimeRange invalidation_range,
+							const int32 chunk_id)
 {
-	spi_delete_materializations(materialization_table, time_column_name, invalidation_range);
+	StringInfo chunk_condition = makeStringInfo();
+
+	/* chunk_id is valid if the materializaion update should be done only the given chunk.
+	 * This is used currently for refresh on chunk drop only. In other cases, manual
+	 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
+	 * not provided, i.e., invlaid.
+	 */
+	if (chunk_id != INVALID_CHUNK_ID)
+		appendStringInfo(chunk_condition, "AND chunk_id = %d", chunk_id);
+
+	spi_delete_materializations(materialization_table,
+								time_column_name,
+								invalidation_range,
+								chunk_condition->data);
 	spi_insert_materializations(partial_view,
 								materialization_table,
 								time_column_name,
-								invalidation_range);
+								invalidation_range,
+								chunk_condition->data);
 }
 
 static void
 spi_delete_materializations(SchemaAndName materialization_table, Name time_column_name,
-							TimeRange invalidation_range)
+							TimeRange invalidation_range, const char *const chunk_condition)
 {
 	int res;
 	StringInfo command = makeStringInfo();
@@ -226,13 +246,14 @@ spi_delete_materializations(SchemaAndName materialization_table, Name time_colum
 
 	appendStringInfo(command,
 					 "DELETE FROM %s.%s AS D WHERE "
-					 "D.%s >= %s AND D.%s < %s;",
+					 "D.%s >= %s AND D.%s < %s %s;",
 					 quote_identifier(NameStr(*materialization_table.schema)),
 					 quote_identifier(NameStr(*materialization_table.name)),
 					 quote_identifier(NameStr(*time_column_name)),
 					 quote_literal_cstr(invalidation_start),
 					 quote_identifier(NameStr(*time_column_name)),
-					 quote_literal_cstr(invalidation_end));
+					 quote_literal_cstr(invalidation_end),
+					 chunk_condition);
 
 	res = SPI_execute_with_args(command->data,
 								0 /*=nargs*/,
@@ -247,7 +268,8 @@ spi_delete_materializations(SchemaAndName materialization_table, Name time_colum
 
 static void
 spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-							Name time_column_name, TimeRange materialization_range)
+							Name time_column_name, TimeRange materialization_range,
+							const char *const chunk_condition)
 {
 	int res;
 	StringInfo command = makeStringInfo();
@@ -262,7 +284,7 @@ spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materializ
 
 	appendStringInfo(command,
 					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
-					 "WHERE I.%s >= %s AND I.%s < %s;",
+					 "WHERE I.%s >= %s AND I.%s < %s %s;",
 					 quote_identifier(NameStr(*materialization_table.schema)),
 					 quote_identifier(NameStr(*materialization_table.name)),
 					 quote_identifier(NameStr(*partial_view.schema)),
@@ -270,7 +292,8 @@ spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materializ
 					 quote_identifier(NameStr(*time_column_name)),
 					 quote_literal_cstr(materialization_start),
 					 quote_identifier(NameStr(*time_column_name)),
-					 quote_literal_cstr(materialization_end));
+					 quote_literal_cstr(materialization_end),
+					 chunk_condition);
 
 	res = SPI_execute_with_args(command->data,
 								0 /*=nargs*/,

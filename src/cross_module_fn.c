@@ -207,7 +207,14 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 }
 
 static void
-continuous_agg_invalidate_or_refresh_all_default(const Hypertable *ht, int64 start, int64 end)
+continuous_agg_refresh_all_default(const Hypertable *ht, int64 start, int64 end, int32 chunk_id)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
+static void
+continuous_agg_invalidate_all_default(const Hypertable *ht, int64 start, int64 end)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -322,8 +329,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
-	.continuous_agg_refresh_all = continuous_agg_invalidate_or_refresh_all_default,
-	.continuous_agg_invalidate = continuous_agg_invalidate_or_refresh_all_default,
+	.continuous_agg_refresh_all = continuous_agg_refresh_all_default,
+	.continuous_agg_invalidate = continuous_agg_invalidate_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 
 	/* compression */
