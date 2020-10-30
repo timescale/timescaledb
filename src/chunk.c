@@ -3231,7 +3231,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			 * refresh. However, such merging needs to account for
 			 * multi-dimensional tables where some chunks have the same
 			 * primary dimension ranges. */
-			ts_cm_functions->continuous_agg_refresh_all(ht, start, end);
+			ts_cm_functions->continuous_agg_refresh_all(ht, start, end, chunks[i].fd.id);
 
 			/* Invalidate the dropped region to indicate that it was
 			 * modified. The invalidation will allow the refresh command on a

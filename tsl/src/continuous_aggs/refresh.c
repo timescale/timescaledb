@@ -234,7 +234,8 @@ continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg
  */
 static void
 continuous_agg_refresh_execute(const CaggRefreshState *refresh,
-							   const InternalTimeRange *bucketed_refresh_window)
+							   const InternalTimeRange *bucketed_refresh_window,
+							   const int32 chunk_id)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
@@ -257,7 +258,8 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,
 										  unused_invalidation_range,
-										  refresh->cagg.data.bucket_width);
+										  refresh->cagg.data.bucket_width,
+										  chunk_id);
 }
 
 static void
@@ -288,7 +290,7 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
-								   const InvalidationStore *invalidations)
+								   const InvalidationStore *invalidations, const int32 chunk_id)
 {
 	CaggRefreshState refresh;
 	TupleTableSlot *slot;
@@ -322,7 +324,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 			compute_circumscribed_bucketed_refresh_window(&invalidation, cagg->data.bucket_width);
 
 		log_refresh_window(DEBUG1, cagg, &bucketed_refresh_window, "invalidation refresh on");
-		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
+		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, chunk_id);
 	}
 
 	ExecDropSingleTupleTableSlot(slot);
@@ -397,7 +399,8 @@ emit_up_to_date_notice(const ContinuousAgg *cagg)
 
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
-									   const InternalTimeRange *refresh_window, bool verbose)
+									   const InternalTimeRange *refresh_window, bool verbose,
+									   int32 chunk_id)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id);
@@ -423,7 +426,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 					 errhint("Use WITH NO DATA if you do not want to refresh the continuous "
 							 "aggregate on creation.")));
 		}
-		continuous_agg_refresh_with_window(cagg, refresh_window, invalidations);
+		continuous_agg_refresh_with_window(cagg, refresh_window, invalidations, chunk_id);
 		invalidation_store_free(invalidations);
 		return true;
 	}
@@ -524,7 +527,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	StartTransactionCommand();
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 
-	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, verbose))
+	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, verbose, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg);
 }
 
@@ -539,7 +542,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
  * region would work.
  */
 void
-continuous_agg_refresh_all(const Hypertable *ht, int64 start, int64 end)
+continuous_agg_refresh_all(const Hypertable *const ht, const int64 start, const int64 end,
+						   const int32 chunk_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	List *caggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
@@ -572,6 +576,6 @@ continuous_agg_refresh_all(const Hypertable *ht, int64 start, int64 end)
 	{
 		const ContinuousAgg *cagg = lfirst(lc);
 
-		process_cagg_invalidations_and_refresh(cagg, &refresh_window, false);
+		process_cagg_invalidations_and_refresh(cagg, &refresh_window, false, chunk_id);
 	}
 }
