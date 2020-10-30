@@ -51,3 +51,48 @@ CALL refresh_continuous_aggregate('records_monthly', NULL, NULL);
 
 \set VERBOSITY default
 SELECT drop_chunks('records', '2000-03-16'::timestamptz);
+
+\set VERBOSITY terse
+DROP MATERIALIZED VIEW records_monthly;
+DROP TABLE records;
+DROP TABLE clients;
+\set VERBOSITY default
+
+-- Test how caggs are afected by drop_chunk due to refresh on drop
+-- Demonstrates issue #2592
+
+CREATE OR REPLACE FUNCTION test_int_now() returns INT LANGUAGE SQL STABLE as 
+    $$ SELECT 125 $$;
+
+CREATE TABLE conditions(time_int INT NOT NULL, device INT, value FLOAT);
+SELECT create_hypertable('conditions', 'time_int', chunk_time_interval => 10);
+
+INSERT INTO conditions
+SELECT time_val, time_val % 4, 3.14 FROM generate_series(0,100,1) AS time_val;
+
+SELECT set_integer_now_func('conditions', 'test_int_now');
+CREATE MATERIALIZED VIEW conditions_7
+    WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+    AS
+        SELECT time_bucket(7, time_int) as bucket,
+            SUM(value), COUNT(value)
+        FROM conditions GROUP BY bucket WITH DATA;
+SELECT materialization_hypertable_schema||'.'||materialization_hypertable_name AS mat_hyper
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'conditions_7' \gset
+
+CREATE VIEW see_cagg AS SELECT * FROM conditions_7 WHERE bucket < 70 ORDER BY bucket;
+--CREATE VIEW see_mat AS SELECT bucket, count(*) FROM :mat_hyper WHERE bucket < 70 
+--GROUP BY bucket ORDER BY bucket;
+
+SELECT * FROM see_cagg;
+
+SELECT drop_chunks('conditions', 20);
+SELECT * FROM see_cagg;
+
+-- Now outliers will be present after this second drop_chunks
+SELECT drop_chunks('conditions', 40);
+SELECT * FROM see_cagg;
+
+SELECT drop_chunks('conditions', 60);
+SELECT * FROM see_cagg;
