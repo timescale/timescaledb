@@ -862,6 +862,12 @@ ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
 	return par_dim;
 }
 
+typedef struct Watermark
+{
+	int32 hyper_id;
+	int64 value;
+} Watermark;
+
 TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
 
 /*
@@ -886,21 +892,36 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	Dimension *dim;
 	Datum maxdat;
 	bool max_isnull;
-	int64 watermark;
+	Watermark *watermark = (Watermark *) fcinfo->flinfo->fn_extra;
 	Oid timetype;
 	AclResult aclresult;
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid continuous aggregate hypertable")));
+				 errmsg("materialized hypertable cannot be NULL")));
+
+	if (watermark != NULL)
+	{
+		/* The flinfo is probably reset when the input argument changes, but
+		 * the documentation isn't clear on this. Check that the hypertable ID
+		 * matches across repeated calls just to be safe. */
+		if (watermark->hyper_id == hyper_id)
+			PG_RETURN_INT64(watermark->value);
+
+		pfree(watermark);
+	}
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hyper_id);
 
 	if (NULL == cagg)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("%d is not a materialized hypertable", hyper_id)));
+				 errmsg("invalid materialized hypertable ID: %d", hyper_id)));
+
+	watermark = MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(Watermark));
+	watermark->hyper_id = hyper_id;
+	fcinfo->flinfo->fn_extra = watermark;
 
 	/* Preemptive permission check to ensure the function complains about lack
 	 * of permissions on the cagg rather than the materialized hypertable */
@@ -915,15 +936,17 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 
 	if (!max_isnull)
 	{
+		int64 value;
+
 		/* Add one bucket to get to the end of the last bucket */
-		watermark = ts_time_value_to_internal(maxdat, timetype);
-		watermark = ts_time_saturating_add(watermark, cagg->data.bucket_width, timetype);
+		value = ts_time_value_to_internal(maxdat, timetype);
+		watermark->value = ts_time_saturating_add(value, cagg->data.bucket_width, timetype);
 	}
 	else
 	{
 		/* Nothing materialized, so return min */
-		watermark = ts_time_get_min(timetype);
+		watermark->value = ts_time_get_min(timetype);
 	}
 
-	PG_RETURN_INT64(watermark);
+	PG_RETURN_INT64(watermark->value);
 }
