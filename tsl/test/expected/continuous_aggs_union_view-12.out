@@ -909,7 +909,7 @@ ORDER BY 1,2;
 -------------------------------------
 -- Non-existing materialized hypertable
 SELECT _timescaledb_internal.cagg_watermark(100);
-ERROR:  100 is not a materialized hypertable
+ERROR:  invalid materialized hypertable ID: 100
 -- NULL hypertable ID. Function is STRICT, so does nothing:
 SELECT _timescaledb_internal.cagg_watermark(NULL);
  cagg_watermark 
