@@ -28,6 +28,9 @@ set(PG_IGNORE_TESTS
   rules
   opr_sanity
   sanity_check
+  # timetz fails without daylight savings. Likely to be fixed in PG
+  # 12.5
+  timetz
 )
 
 # Modify the test schedule to ignore some tests
