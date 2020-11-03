@@ -87,12 +87,24 @@ CREATE VIEW see_cagg AS SELECT * FROM conditions_7 WHERE bucket < 70 ORDER BY bu
 
 SELECT * FROM see_cagg;
 
+-- This is the simplest case, when the updated bucket is inside chunk, so it is expected
+-- always reflected.
+UPDATE conditions SET value = 4.00 WHERE time_int = 2;
+
 SELECT drop_chunks('conditions', 20);
 SELECT * FROM see_cagg;
+
+-- This case is update in a bucket, which crosses two chunks, which exist and both is going
+-- to be dropped.
+UPDATE conditions SET value = 4.00 WHERE time_int = 31;
 
 -- Now outliers will be present after this second drop_chunks
 SELECT drop_chunks('conditions', 40);
 SELECT * FROM see_cagg;
+
+-- This update is in the bucket, which crosses two chunks, where one chunk was already dropped
+-- and empty, while the other will be dropped.
+UPDATE conditions SET value = 4.00 WHERE time_int = 41;
 
 SELECT drop_chunks('conditions', 60);
 SELECT * FROM see_cagg;
