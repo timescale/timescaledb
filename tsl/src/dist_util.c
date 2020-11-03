@@ -340,6 +340,7 @@ dist_util_is_compatible_version(const char *data_node_version, const char *acces
 	unsigned int access_node_major, access_node_minor, access_node_patch;
 
 	Assert(is_old_version);
+	Assert(data_node_version);
 
 	if (sscanf(data_node_version,
 			   "%u.%u.%u",
