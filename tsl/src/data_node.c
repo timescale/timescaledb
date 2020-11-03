@@ -32,6 +32,7 @@
 #include <utils/inval.h>
 #include <utils/syscache.h>
 
+#include "config.h"
 #include "fdw/fdw.h"
 #include "remote/async.h"
 #include "remote/connection.h"
@@ -563,21 +564,26 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 }
 
 /**
- * Validate that extension is available and with the correct version.
+ * Validate that compatible extension is available on the data node.
  *
- * If the extension is not available on the data node, we will get strange
- * errors when we try to use functions, so we check that the extension is
- * available before attempting anything else.
+ * We check all available extension versions. Since we are connected to
+ * template DB when performing this check, it means we can't
+ * really tell if a compatible extension is installed in the database we
+ * are trying to add to the cluster. However we can make sure that a user
+ * will be able to manually upgrade the extension on the data node if needed.
  *
- * Will abort with error if there is an issue, otherwise do nothing.
+ * Will abort with error if there is no compatible version available, otherwise do nothing.
  */
 static void
 data_node_validate_extension_availability(TSConnection *conn)
 {
-	PGresult *res = remote_connection_execf(conn,
-											"SELECT default_version, installed_version FROM "
-											"pg_available_extensions WHERE name = %s",
-											quote_literal_cstr(EXTENSION_NAME));
+	bool compatible;
+
+	PGresult *res =
+		remote_connection_execf(conn,
+								"SELECT version FROM pg_available_extension_versions WHERE name = "
+								"%s AND version ~ '\\d+.\\d+.\\d+.*' ORDER BY version DESC",
+								quote_literal_cstr(EXTENSION_NAME));
 
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
@@ -589,8 +595,29 @@ data_node_validate_extension_availability(TSConnection *conn)
 				 errmsg("TimescaleDB extension not available on remote PostgreSQL instance"),
 				 errhint("Install the TimescaleDB extension on the remote PostgresSQL instance.")));
 
-	/* Here we validate the available version, not the installed version */
-	remote_validate_extension_version(conn, PQgetvalue(res, 0, 0));
+	Assert(PQnfields(res) == 1);
+
+	int i;
+	StringInfo concat_versions = makeStringInfo();
+	bool old_version;
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		appendStringInfo(concat_versions, "%s, ", PQgetvalue(res, i, 0));
+		compatible = dist_util_is_compatible_version(PQgetvalue(res, i, 0),
+													 TIMESCALEDB_VERSION,
+													 &old_version);
+		if (compatible)
+			break;
+	}
+
+	if (!compatible)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("remote PostgreSQL instance has an incompatible timescaledb extension "
+						"version"),
+				 errdetail_internal("Access node version: %s, available remote versions: %s.",
+									TIMESCALEDB_VERSION_MOD,
+									concat_versions->data)));
 }
 
 /**
