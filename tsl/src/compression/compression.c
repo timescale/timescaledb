@@ -1040,7 +1040,6 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
-	Assert(in_desc->natts >= out_desc->natts);
 	Assert(OidIsValid(compressed_data_type_oid));
 
 	{
@@ -1061,6 +1060,14 @@ decompress_chunk(Oid in_table, Oid out_table)
 			.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
 			.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
 		};
+		/*
+		 * We need to make sure decompressed_is_nulls is in a defined state. While this
+		 * will get written for normal columns it will not get written for dropped columns
+		 * since dropped columns don't exist in the compressed chunk so we initiallize
+		 * with true here.
+		 */
+		memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
+
 		Datum *compressed_datums = palloc(sizeof(*compressed_datums) * in_desc->natts);
 		bool *compressed_is_nulls = palloc(sizeof(*compressed_is_nulls) * in_desc->natts);
 
