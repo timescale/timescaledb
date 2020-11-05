@@ -195,9 +195,9 @@ ERROR:  invalid time range for dropping chunks
 DROP VIEW dependent_view;
 -- should error because wrong time type
 SELECT drop_chunks('drop_chunk_test1', older_than => now());
-ERROR:  invalid type of time argument
+ERROR:  invalid time argument type "timestamp with time zone"
 SELECT show_chunks('drop_chunk_test3', now());
-ERROR:  invalid type of time argument
+ERROR:  invalid time argument type "timestamp with time zone"
 -- should error because of wrong relative order of time constraints
 SELECT show_chunks('drop_chunk_test1', older_than=>3, newer_than=>4);
 ERROR:  invalid time range
@@ -987,7 +987,7 @@ ERROR:  function drop_chunks(interval) does not exist at character 8
 SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
 ERROR:  can only use an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
 SELECT drop_chunks('drop_chunk_test_ts', (now()-interval '1 minute'));
-ERROR:  invalid type of time argument
+ERROR:  invalid time argument type "timestamp with time zone"
 SELECT drop_chunks('drop_chunk_test3', verbose => true);
 ERROR:  invalid time range for dropping chunks
 \set ON_ERROR_STOP 1
