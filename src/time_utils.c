@@ -85,7 +85,7 @@ ts_time_datum_convert_arg(Datum arg, Oid *argtype, Oid timetype)
  * Get the internal time value from a pseudo-type function argument.
  *
  * API functions that take supported time types as arguments often use a
- * pseudo-type paremeter to represent these. For instance, the "any"
+ * pseudo-type parameter to represent these. For instance, the "any"
  * pseudo-type is often used to represent any of these supported types.
  *
  * The downside of "any", however, is that it lacks type information and often
@@ -133,9 +133,8 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype)
 	else if (argtype != timetype && !can_coerce_type(1, &argtype, &timetype, COERCION_IMPLICIT))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid type of time argument"),
-				 errhint("The argument type should be compatible with type \"%s\".",
-						 format_type_be(timetype))));
+				 errmsg("invalid time argument type \"%s\"", format_type_be(argtype)),
+				 errhint("Try casting the argument to \"%s\".", format_type_be(timetype))));
 
 	return ts_time_value_to_internal(arg, argtype);
 }

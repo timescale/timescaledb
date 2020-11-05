@@ -179,9 +179,9 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
 ERROR:  invalid refresh window
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
-ERROR:  invalid type of time argument
+ERROR:  invalid time argument type "text"
 CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
-ERROR:  invalid type of time argument
+ERROR:  invalid time argument type "integer"
 \set ON_ERROR_STOP 1
 -- Test different time types
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
