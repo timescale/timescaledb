@@ -90,12 +90,10 @@ fill_query_params_array(ExprContext *econtext, FmgrInfo *param_flinfo, List *par
 }
 
 /*
- * Create cursor for node's query with current parameter values.
- * Operation can be blocking or non-blocking, depending on the bool arg.
- * In non blocking case we just dispatch async request to create cursor
+ * Create data fetcher for node's query with current parameter values.
  */
 DataFetcher *
-create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate, FetchMode mode)
+create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 {
 	ExprContext *econtext = ss->ps.ps_ExprContext;
 	int num_params = fsstate->num_params;
@@ -135,8 +133,7 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate, FetchMode mode)
 										   ss,
 										   fsstate->retrieved_attrs,
 										   fsstate->query,
-										   params,
-										   mode);
+										   params);
 	fsstate->fetcher = fetcher;
 	MemoryContextSwitchTo(oldcontext);
 
@@ -318,7 +315,7 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 	DataFetcher *fetcher = fsstate->fetcher;
 
 	if (NULL == fetcher)
-		fetcher = create_data_fetcher(ss, fsstate, FETCH_NOASYNC);
+		fetcher = create_data_fetcher(ss, fsstate);
 
 	tuple = fetcher->funcs->get_next_tuple(fetcher);
 

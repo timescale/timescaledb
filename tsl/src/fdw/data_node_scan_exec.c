@@ -155,7 +155,16 @@ static void
 create_fetcher(AsyncScanState *ass)
 {
 	DataNodeScanState *dnss = (DataNodeScanState *) ass;
-	create_data_fetcher(&dnss->async_state.css.ss, &dnss->fsstate, FETCH_ASYNC);
+	create_data_fetcher(&dnss->async_state.css.ss, &dnss->fsstate);
+}
+
+static void
+send_fetch_request(AsyncScanState *ass)
+{
+	DataNodeScanState *dnss = (DataNodeScanState *) ass;
+	DataFetcher *fetcher = dnss->fsstate.fetcher;
+
+	fetcher->funcs->send_fetch_request(fetcher);
 }
 
 static void
@@ -163,7 +172,8 @@ fetch_data(AsyncScanState *ass)
 {
 	DataNodeScanState *dnss = (DataNodeScanState *) ass;
 	DataFetcher *fetcher = dnss->fsstate.fetcher;
-	fetcher->funcs->fetch_data_start(fetcher);
+
+	fetcher->funcs->fetch_data(fetcher);
 }
 
 Node *
@@ -175,6 +185,7 @@ data_node_scan_state_create(CustomScan *cscan)
 	dnss->async_state.css.methods = &data_node_scan_state_methods;
 	dnss->systemcol = linitial_int(list_nth(cscan->custom_private, 1));
 	dnss->async_state.init = create_fetcher;
-	dnss->async_state.fetch_tuples = fetch_data;
+	dnss->async_state.send_fetch_request = send_fetch_request;
+	dnss->async_state.fetch_data = fetch_data;
 	return (Node *) dnss;
 }

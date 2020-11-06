@@ -44,29 +44,37 @@
 #define DEFAULT_CHUNK_LOOKBACK_WINDOW 10
 
 /*
- * Parse options from foreign server and apply them to fpinfo.
+ * Parse options from the foreign data wrapper and foreign server and apply
+ * them to fpinfo. The server options take precedence over the data wrapper
+ * ones.
  *
  * New options might also require tweaking merge_fdw_options().
  */
 static void
-apply_server_options(TsFdwRelInfo *fpinfo)
+apply_fdw_and_server_options(TsFdwRelInfo *fpinfo)
 {
 	ListCell *lc;
+	ForeignDataWrapper *fdw = GetForeignDataWrapper(fpinfo->server->fdwid);
+	List *options[] = { fdw->options, fpinfo->server->options };
+	int i;
 
-	foreach (lc, fpinfo->server->options)
+	for (i = 0; i < lengthof(options); i++)
 	{
-		DefElem *def = (DefElem *) lfirst(lc);
+		foreach (lc, options[i])
+		{
+			DefElem *def = (DefElem *) lfirst(lc);
 
-		if (strcmp(def->defname, "fdw_startup_cost") == 0)
-			fpinfo->fdw_startup_cost = strtod(defGetString(def), NULL);
-		else if (strcmp(def->defname, "fdw_tuple_cost") == 0)
-			fpinfo->fdw_tuple_cost = strtod(defGetString(def), NULL);
-		else if (strcmp(def->defname, "extensions") == 0)
-			fpinfo->shippable_extensions =
-				list_concat(fpinfo->shippable_extensions,
-							option_extract_extension_list(defGetString(def), false));
-		else if (strcmp(def->defname, "fetch_size") == 0)
-			fpinfo->fetch_size = strtol(defGetString(def), NULL, 10);
+			if (strcmp(def->defname, "fdw_startup_cost") == 0)
+				fpinfo->fdw_startup_cost = strtod(defGetString(def), NULL);
+			else if (strcmp(def->defname, "fdw_tuple_cost") == 0)
+				fpinfo->fdw_tuple_cost = strtod(defGetString(def), NULL);
+			else if (strcmp(def->defname, "extensions") == 0)
+				fpinfo->shippable_extensions =
+					list_concat(fpinfo->shippable_extensions,
+								option_extract_extension_list(defGetString(def), false));
+			else if (strcmp(def->defname, "fetch_size") == 0)
+				fpinfo->fetch_size = strtol(defGetString(def), NULL, 10);
+		}
 	}
 }
 
@@ -414,7 +422,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fpinfo->shippable_extensions = list_make1_oid(get_extension_oid(EXTENSION_NAME, true));
 	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
-	apply_server_options(fpinfo);
+	apply_fdw_and_server_options(fpinfo);
 
 	/*
 	 * Identify which baserestrictinfo clauses can be sent to the data

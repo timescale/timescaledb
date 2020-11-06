@@ -22,6 +22,20 @@
 
 /*
  * Cursor for fetching data from a data node.
+ *
+ * The cursor fetcher splits the query result into multiple fetches, which
+ * allows multiplexing on-going sub-queries on the same connection without
+ * having to fetch the full result for each sub-query in one go (thus not
+ * over-running memory).
+ *
+ * When a query consists of multiple subqueries that fetch data from the same
+ * data nodes, and the sub-queries are joined using, e.g., a nested loop, then
+ * a CURSOR is necessary to run the two sub-queries over the same connection.
+ *
+ * The downside of using a CURSOR, however, is that the plan on the remote
+ * node cannot execute in parallel.
+ *
+ * https://www.postgresql.org/docs/current/when-can-parallel-query-be-used.html
  */
 typedef struct CursorFetcher
 {
@@ -31,8 +45,7 @@ typedef struct CursorFetcher
 	AsyncRequest *create_req; /* a request to create cursor */
 } CursorFetcher;
 
-static void cursor_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
-static void cursor_fetcher_fetch_data_start(DataFetcher *df);
+static void cursor_fetcher_send_fetch_request(DataFetcher *df);
 static int cursor_fetcher_fetch_data(DataFetcher *df);
 static void cursor_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 static void cursor_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
@@ -42,7 +55,7 @@ static void cursor_fetcher_rewind(DataFetcher *df);
 static void cursor_fetcher_close(DataFetcher *df);
 
 static DataFetcherFuncs funcs = {
-	.fetch_data_start = cursor_fetcher_fetch_data_start,
+	.send_fetch_request = cursor_fetcher_send_fetch_request,
 	.fetch_data = cursor_fetcher_fetch_data,
 	.set_fetch_size = cursor_fetcher_set_fetch_size,
 	.set_tuple_mctx = cursor_fetcher_set_tuple_memcontext,
@@ -119,12 +132,11 @@ cursor_fetcher_wait_until_open(DataFetcher *df)
 
 static CursorFetcher *
 remote_cursor_init_with_params(TSConnection *conn, Relation rel, TupleDesc tupdesc, ScanState *ss,
-							   List *retrieved_attrs, const char *stmt, StmtParams *params,
-							   FetchMode mode)
+							   List *retrieved_attrs, const char *stmt, StmtParams *params)
 {
 	CursorFetcher *cursor = palloc0(sizeof(CursorFetcher));
 
-	data_fetcher_init(&cursor->state, conn, stmt, params, rel, ss, retrieved_attrs, mode);
+	data_fetcher_init(&cursor->state, conn, stmt, params, rel, ss, retrieved_attrs);
 	cursor->state.type = CursorFetcherType;
 	/* Assign a unique ID for my cursor */
 	cursor->id = remote_connection_get_cursor_number();
@@ -151,14 +163,13 @@ cursor_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_
 											NULL,
 											retrieved_attrs,
 											stmt,
-											params,
-											false);
+											params);
 	return &cursor->state;
 }
 
 DataFetcher *
 cursor_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-							   const char *stmt, StmtParams *params, FetchMode mode)
+							   const char *stmt, StmtParams *params)
 {
 	Scan *scan = (Scan *) ss->ps.plan;
 	TupleDesc tupdesc;
@@ -182,8 +193,7 @@ cursor_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieve
 		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
 	}
 
-	cursor =
-		remote_cursor_init_with_params(conn, rel, tupdesc, ss, retrieved_attrs, stmt, params, mode);
+	cursor = remote_cursor_init_with_params(conn, rel, tupdesc, ss, retrieved_attrs, stmt, params);
 	return &cursor->state;
 }
 
@@ -212,7 +222,7 @@ cursor_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx)
  * Send async req to fetch data from cursor.
  */
 static void
-cursor_fetcher_fetch_data_start(DataFetcher *df)
+cursor_fetcher_send_fetch_request(DataFetcher *df)
 {
 	AsyncRequest *volatile req = NULL;
 	MemoryContext oldcontext;
@@ -313,7 +323,11 @@ cursor_fetcher_fetch_data_complete(CursorFetcher *cursor)
 		tuplefactory_reset_mctx(cursor->state.tf);
 		MemoryContextSwitchTo(cursor->state.batch_mctx);
 
-		/* Update fetch_ct_2 */
+		/* Update batch count to indicate we are no longer in the first
+		 * batch. When we are on the second batch or greater, a rewind of the
+		 * cursor needs to refetch the first batch. If we are still in the
+		 * first batch, however, a rewind can be done by simply resetting the
+		 * tuple index to 0 within the batch. */
 		if (cursor->state.batch_count < 2)
 			cursor->state.batch_count++;
 
@@ -343,8 +357,6 @@ cursor_fetcher_fetch_data_complete(CursorFetcher *cursor)
 
 	MemoryContextSwitchTo(oldcontext);
 
-	data_fetcher_request_data_async(&cursor->state);
-
 	return numrows;
 }
 
@@ -353,11 +365,14 @@ cursor_fetcher_fetch_data(DataFetcher *df)
 {
 	CursorFetcher *cursor = cast_fetcher(CursorFetcher, df);
 
+	if (cursor->state.eof)
+		return 0;
+
 	if (!cursor->state.open)
 		cursor_fetcher_wait_until_open(df);
 
 	if (cursor->state.data_req == NULL)
-		cursor_fetcher_fetch_data_start(df);
+		cursor_fetcher_send_fetch_request(df);
 
 	return cursor_fetcher_fetch_data_complete(cursor);
 }

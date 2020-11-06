@@ -21,6 +21,8 @@
 #else
 #include <nodes/relation.h>
 #endif
+
+#include <annotations.h>
 #include "async.h"
 #include "connection.h"
 #include "utils.h"
@@ -175,11 +177,11 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 		 * the prepared statements we use in this module are simple enough that
 		 * the data node will make the right choices.
 		 */
-		if (!PQsendPrepare(remote_connection_get_pg_conn(req->conn),
-						   req->stmt_name,
-						   req->sql,
-						   req->prep_stmt_params,
-						   NULL))
+		if (0 == PQsendPrepare(remote_connection_get_pg_conn(req->conn),
+							   req->stmt_name,
+							   req->sql,
+							   req->prep_stmt_params,
+							   NULL))
 		{
 			/*
 			 * null is fine to pass down as the res, the connection error message
@@ -561,38 +563,44 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 		AsyncRequest *req = lfirst(lc);
 		PGconn *pg_conn = remote_connection_get_pg_conn(req->conn);
 
-		if (remote_connection_is_processing(req->conn) && req->state == DEFERRED)
-			return async_response_error_create("request already in process");
-
-		if (req->state == DEFERRED)
+		switch (req->state)
 		{
-			req = async_request_send_internal(req, WARNING);
+			case DEFERRED:
+				if (remote_connection_is_processing(req->conn))
+					return async_response_error_create("request already in progress");
 
-			if (req == NULL)
-				return async_response_error_create("failed to send deferred request");
-		}
+				req = async_request_send_internal(req, WARNING);
 
-		if (req->state != EXECUTING)
-			return async_response_error_create("no request currently executing");
+				if (req == NULL)
+					return async_response_error_create("failed to send deferred request");
 
-		if (!PQisBusy(pg_conn))
-		{
-			PGresult *res = PQgetResult(pg_conn);
+				Assert(req->state == EXECUTING);
+				TS_FALLTHROUGH;
+			case EXECUTING:
+				if (0 == PQisBusy(pg_conn))
+				{
+					PGresult *res = PQgetResult(pg_conn);
 
-			if (NULL == res)
-			{
-				/*
-				 * NULL return means query is complete
-				 */
-				set->requests = list_delete_ptr(set->requests, req);
-				remote_connection_set_processing(req->conn, false);
-				async_request_set_state(req, COMPLETED);
-				/* set changed so rerun function */
-				return get_single_response_nonblocking(set);
-			}
-			return &async_response_result_create(req, res)->base;
+					if (NULL == res)
+					{
+						/*
+						 * NULL return means query is complete
+						 */
+						set->requests = list_delete_ptr(set->requests, req);
+						remote_connection_set_processing(req->conn, false);
+						async_request_set_state(req, COMPLETED);
+
+						/* set changed so rerun function */
+						return get_single_response_nonblocking(set);
+					}
+					return &async_response_result_create(req, res)->base;
+				}
+				break;
+			case COMPLETED:
+				return async_response_error_create("request already completed");
 		}
 	}
+
 	return NULL;
 }
 
