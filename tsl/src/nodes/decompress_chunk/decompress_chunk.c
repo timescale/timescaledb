@@ -973,8 +973,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, int 
 	Path *compressed_path;
 
 	/* clamp total_table_pages to 10 pages since this is the
-	 * minimum estimate for number of pages */
-	root->total_table_pages = Max(compressed_rel->pages, 10);
+	 * minimum estimate for number of pages.
+	 * Add the value to any existing estimates
+	 */
+	root->total_table_pages += Max(compressed_rel->pages, 10);
 
 	/* create non parallel scan path */
 	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
