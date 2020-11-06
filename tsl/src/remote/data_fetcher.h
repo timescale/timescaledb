@@ -16,20 +16,18 @@
 #include "guc.h"
 #include "tuplefactory.h"
 
-typedef enum FetchMode
-{
-	FETCH_ASYNC,
-	FETCH_NOASYNC
-} FetchMode;
-
 typedef struct DataFetcher DataFetcher;
 
 typedef struct DataFetcherFuncs
 {
-	void (*fetch_data_start)(DataFetcher *data_fetcher);
+	/* Send a request for new data. This doesn't read the data itself */
+	void (*send_fetch_request)(DataFetcher *data_fetcher);
+	/* Read data in response to a fetch request. If no request has been sent,
+	 * send it first. */
+	int (*fetch_data)(DataFetcher *data_fetcher);
+	/* Set the fetch (batch) size */
 	void (*set_fetch_size)(DataFetcher *data_fetcher, int fetch_size);
 	void (*set_tuple_mctx)(DataFetcher *data_fetcher, MemoryContext mctx);
-	int (*fetch_data)(DataFetcher *data_fetcher);
 	HeapTuple (*get_next_tuple)(DataFetcher *data_fetcher);
 	HeapTuple (*get_tuple)(DataFetcher *data_fetcher, int row);
 	void (*rewind)(DataFetcher *data_fetcher);
@@ -60,7 +58,6 @@ typedef struct DataFetcher
 	bool open;
 	bool eof;
 
-	FetchMode mode;
 	AsyncRequest *data_req; /* a request to fetch data */
 } DataFetcher;
 
@@ -69,19 +66,18 @@ extern DataFetcher *data_fetcher_create_for_rel(TSConnection *conn, Relation rel
 												StmtParams *params);
 extern DataFetcher *data_fetcher_create_for_scan(TSConnection *conn, ScanState *ss,
 												 List *retrieved_attrs, const char *stmt,
-												 StmtParams *params, FetchMode mode);
+												 StmtParams *params);
 void data_fetcher_free(DataFetcher *df);
 
 extern void data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt,
 							  StmtParams *params, Relation rel, ScanState *ss,
-							  List *retrieved_attrs, FetchMode mode);
+							  List *retrieved_attrs);
 
 extern HeapTuple data_fetcher_get_tuple(DataFetcher *df, int row);
 extern HeapTuple data_fetcher_get_next_tuple(DataFetcher *df);
 extern void data_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 extern void data_fetcher_set_tuple_mctx(DataFetcher *df, MemoryContext mctx);
 extern void data_fetcher_validate(DataFetcher *df);
-extern void data_fetcher_request_data_async(DataFetcher *df);
 extern void data_fetcher_reset(DataFetcher *df);
 
 #ifdef USE_ASSERT_CHECKING

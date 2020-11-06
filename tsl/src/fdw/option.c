@@ -26,6 +26,7 @@
 #include <access/reloptions.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
+#include <catalog/pg_foreign_data_wrapper.h>
 #include <commands/defrem.h>
 #include <commands/extension.h>
 #include <utils/builtins.h>
@@ -143,13 +144,16 @@ init_ts_fdw_options(void)
 	/* non-libpq FDW-specific FDW options */
 	static const TsFdwOption non_libpq_options[] = {
 		/* cost factors */
+		{ "fdw_startup_cost", ForeignDataWrapperRelationId },
 		{ "fdw_startup_cost", ForeignServerRelationId },
+		{ "fdw_tuple_cost", ForeignDataWrapperRelationId },
 		{ "fdw_tuple_cost", ForeignServerRelationId },
 		/* shippable extensions */
+		{ "extensions", ForeignDataWrapperRelationId },
 		{ "extensions", ForeignServerRelationId },
-		/* fetch_size is available on both server and table */
+		/* fetch_size is available on both foreign data wrapper and server */
+		{ "fetch_size", ForeignDataWrapperRelationId },
 		{ "fetch_size", ForeignServerRelationId },
-		{ "fetch_size", ForeignTableRelationId },
 		{ NULL, InvalidOid }
 	};
 

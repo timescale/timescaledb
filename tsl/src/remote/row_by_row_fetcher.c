@@ -15,7 +15,7 @@ typedef struct RowByRowFetcher
 	DataFetcher state;
 } RowByRowFetcher;
 
-static void row_by_row_fetcher_start(DataFetcher *df);
+static void row_by_row_fetcher_send_fetch_request(DataFetcher *df);
 static void row_by_row_fetcher_reset(RowByRowFetcher *fetcher);
 static int row_by_row_fetcher_fetch_data(DataFetcher *df);
 static void row_by_row_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
@@ -26,7 +26,7 @@ static void row_by_row_fetcher_rescan(DataFetcher *df);
 static void row_by_row_fetcher_close(DataFetcher *df);
 
 static DataFetcherFuncs funcs = {
-	.fetch_data_start = row_by_row_fetcher_start,
+	.send_fetch_request = row_by_row_fetcher_send_fetch_request,
 	.fetch_data = row_by_row_fetcher_fetch_data,
 	.set_fetch_size = row_by_row_fetcher_set_fetch_size,
 	.set_tuple_mctx = row_by_row_fetcher_set_tuple_memcontext,
@@ -38,16 +38,13 @@ static DataFetcherFuncs funcs = {
 
 static RowByRowFetcher *
 create_row_by_row_fetcher(TSConnection *conn, const char *stmt, StmtParams *params, Relation rel,
-						  ScanState *ss, List *retrieved_attrs, FetchMode mode)
+						  ScanState *ss, List *retrieved_attrs)
 {
 	RowByRowFetcher *fetcher = palloc0(sizeof(RowByRowFetcher));
 
-	data_fetcher_init(&fetcher->state, conn, stmt, params, rel, ss, retrieved_attrs, mode);
+	data_fetcher_init(&fetcher->state, conn, stmt, params, rel, ss, retrieved_attrs);
 	fetcher->state.type = RowByRowFetcherType;
 	fetcher->state.funcs = &funcs;
-
-	if (fetcher->state.mode == FETCH_ASYNC)
-		row_by_row_fetcher_start(&fetcher->state);
 
 	return fetcher;
 }
@@ -74,7 +71,7 @@ row_by_row_fetcher_reset(RowByRowFetcher *fetcher)
 }
 
 static void
-row_by_row_fetcher_start(DataFetcher *df)
+row_by_row_fetcher_send_fetch_request(DataFetcher *df)
 {
 	AsyncRequest *volatile req = NULL;
 	MemoryContext oldcontext;
@@ -103,8 +100,16 @@ row_by_row_fetcher_start(DataFetcher *df)
 																		FORMAT_BINARY :
 																		FORMAT_TEXT);
 		Assert(NULL != req);
+
 		if (!async_request_set_single_row_mode(req))
-			elog(ERROR, "failed to set single row mode for %s", fetcher->state.stmt);
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_FAILURE),
+					 errmsg("could not set single-row mode on connection to \"%s\"",
+							remote_connection_node_name(fetcher->state.conn)),
+					 errdetail("The aborted statement is: %s.", fetcher->state.stmt),
+					 errhint(
+						 "Row-by-row fetching of data is not supported together with sub-queries."
+						 " Use cursor fetcher instead.")));
 
 		fetcher->state.data_req = req;
 		fetcher->state.open = true;
@@ -137,6 +142,7 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 	data_fetcher_validate(&fetcher->state);
 
 	async_request_set_add(fetch_req_wrapper, fetcher->state.data_req);
+
 	/*
 	 * We'll store the tuples in the batch_mctx.  First, flush the previous
 	 * batch.
@@ -237,8 +243,11 @@ row_by_row_fetcher_fetch_data(DataFetcher *df)
 {
 	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
 
+	if (fetcher->state.eof)
+		return 0;
+
 	if (!fetcher->state.open)
-		row_by_row_fetcher_start(df);
+		row_by_row_fetcher_send_fetch_request(df);
 
 	return row_by_row_fetcher_complete(fetcher);
 }
@@ -266,19 +275,19 @@ row_by_row_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrie
 	RowByRowFetcher *fetcher;
 
 	Assert(rel != NULL);
-	fetcher = create_row_by_row_fetcher(conn, stmt, params, rel, NULL, retrieved_attrs, false);
+	fetcher = create_row_by_row_fetcher(conn, stmt, params, rel, NULL, retrieved_attrs);
 
 	return &fetcher->state;
 }
 
 DataFetcher *
 row_by_row_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-								   const char *stmt, StmtParams *params, FetchMode mode)
+								   const char *stmt, StmtParams *params)
 {
 	RowByRowFetcher *fetcher;
 
 	Assert(ss != NULL);
-	fetcher = create_row_by_row_fetcher(conn, stmt, params, NULL, ss, retrieved_attrs, mode);
+	fetcher = create_row_by_row_fetcher(conn, stmt, params, NULL, ss, retrieved_attrs);
 
 	return &fetcher->state;
 }

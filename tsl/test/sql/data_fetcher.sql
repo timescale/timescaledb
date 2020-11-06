@@ -19,12 +19,20 @@ SET client_min_messages TO warning;
 \set ECHO errors
 SET client_min_messages TO error;
 
+-- Set a smaller fetch size to ensure that the result is split into
+-- mutliple batches.
+ALTER FOREIGN DATA WRAPPER timescaledb_fdw OPTIONS (ADD fetch_size '100');
+
 -- run the queries using row by row fetcher
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+\set ON_ERROR_STOP 0
 \o :TEST_RESULTS_ROW_BY_ROW
 \ir :TEST_QUERY_NAME
 \o
+\set ON_ERROR_STOP 1
+
 -- run queries using cursor fetcher
-SET timescaledb.remote_data_fetcher = cursor;
+SET timescaledb.remote_data_fetcher = 'cursor';
 \o :TEST_RESULTS_CURSOR
 \ir :TEST_QUERY_NAME
 \o

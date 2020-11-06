@@ -287,3 +287,39 @@ WHERE t.device = join_test.device
 LIMIT 10;
 
 DROP TABLE join_test;
+
+-----------------------------------------------------------------
+-- Test CTE / sub-queries. Data from two sub-queries on the same data
+-- node is joined on the access node.
+-----------------------------------------------------------------
+\set TEST_DESC '\n######### CTEs/Sub-queries\n'
+
+-- CTE / subquery 
+\qecho :TEST_DESC
+:PREFIX
+WITH top_n AS (
+	 SELECT device, avg(temp)
+	 FROM :TABLE_NAME
+	 WHERE :WHERE_CLAUSE
+     GROUP BY 1
+	 ORDER BY 2 DESC
+	 LIMIT 10
+)
+SELECT time_bucket('60s', time) AS "time", device, avg(temp)
+FROM :TABLE_NAME INNER JOIN top_n USING (device)
+WHERE :WHERE_CLAUSE
+GROUP BY 1,2
+ORDER BY 1,2
+:OUTPUT_CMD
+
+-- Join between two distributed hypertables
+\qecho :TEST_DESC
+:PREFIX
+SELECT time_bucket('60s', h1.time) AS "time", h1.device, avg(h1.temp), max(h2.temp)
+FROM hyper h1 INNER JOIN hyper1d h2 ON (time_bucket('60', h1.time) = time_bucket('60', h2.time) AND h1.device = h2.device)
+WHERE h1.time BETWEEN '2019-01-01' AND '2019-01-01 15:00' AND
+	  h2.time BETWEEN '2019-01-01' AND '2019-01-01 15:00'
+GROUP BY 1,2
+ORDER BY 1,2
+:OUTPUT_CMD
+
