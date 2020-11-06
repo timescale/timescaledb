@@ -734,5 +734,59 @@ ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
 \x off
 
+--
+-- Test drop continuous aggregate cases
+--
+-- Issue: #2608
+--
+CREATE OR REPLACE FUNCTION test_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 50;
+$BODY$;
+
+CREATE TABLE conditionsnm(time_int INT NOT NULL, device INT, value FLOAT);
+SELECT create_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10);
+SELECT set_integer_now_func('conditionsnm', 'test_int_now');
+
+INSERT INTO conditionsnm
+SELECT time_val, time_val % 4, 3.14 FROM generate_series(0,100,1) AS time_val;
+
+-- Case 1: DROP
+CREATE MATERIALIZED VIEW conditionsnm_4
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+AS
+SELECT time_bucket(7, time_int) as bucket,
+SUM(value), COUNT(value)
+FROM conditionsnm GROUP BY bucket WITH DATA;
+
+DROP materialized view conditionsnm_4;
+
+-- Case 2: DROP CASCADE should have similar behaviour as DROP
+CREATE MATERIALIZED VIEW conditionsnm_4
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+AS
+SELECT time_bucket(7, time_int) as bucket,
+SUM(value), COUNT(value)
+FROM conditionsnm GROUP BY bucket WITH DATA;
+
+DROP materialized view conditionsnm_4 CASCADE;
+
+-- Case 3: require CASCADE in case of dependent object
+CREATE MATERIALIZED VIEW conditionsnm_4
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+AS
+SELECT time_bucket(7, time_int) as bucket,
+SUM(value), COUNT(value)
+FROM conditionsnm GROUP BY bucket WITH DATA;
+
+CREATE VIEW see_cagg as select * from conditionsnm_4;
+\set ON_ERROR_STOP 0
+DROP MATERIALIZED VIEW conditionsnm_4;
+\set ON_ERROR_STOP 1
+
+-- Case 4: DROP CASCADE with dependency
+DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
+
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
