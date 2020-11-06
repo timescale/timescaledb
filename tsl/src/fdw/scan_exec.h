@@ -48,7 +48,7 @@ extern void fdw_scan_end(TsFdwScanState *fsstate);
 extern void fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es,
 							 TsFdwScanState *fsstate);
 
-extern DataFetcher *create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate, FetchMode mode);
+extern DataFetcher *create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate);
 
 #ifdef TS_DEBUG
 

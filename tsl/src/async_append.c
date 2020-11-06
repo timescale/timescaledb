@@ -25,12 +25,59 @@
 #include "hypertable_cache.h"
 
 /*
- * AsyncAppend provides an asynchronous API during query execution to create cursors and
- * fetch data from data nodes more efficiently. This should make better use of our data nodes
- * and do more things in parallel. AsyncAppend is only used for plans
- * that involve distributed hypertable (a plan that involves scanning of data nodes).
- * The node is injected as a parent of Append or MergeAppend nodes.
- * Here is how the modified plan looks like.
+ * AsyncAppend provides an asynchronous API during query execution that
+ * decouples the sending of query requests from the reading of the result.
+ *
+ * Normally, an Append executes serially, i.e., it first executes the first
+ * child node, then the second, and so forth. In the case of a distributed
+ * query, that means the query on the second data node will not start
+ * executing until the first node has finished. Thus, if there are three data
+ * nodes, the remote communication will proceed as follows:
+ *
+ * 1. Send query to data node 1.
+ * 2. Get data from data node 1.
+ * 3. Send query to data node 2.
+ * 4. Get data from data node 2.
+ * 5. Send query to data node 3.
+ * 6. Get data from data node 4.
+ *
+ * Since a data node will always need some time to process a query before it
+ * is ready to send back results, this won't be very efficient.
+
+ * In contrast, AsyncAppend makes sure that all data node requests are sent
+ * before any data is read:
+ *
+ * 1. Send query to data node 1.
+ * 2. Send query to data node 2.
+ * 3. Send query to data node 3.
+ * 4. Get data from data node 1.
+ * 5. Get data from data node 2.
+ * 6. Get data from data node 4.
+ *
+ * With asynchronous approach, data node 2 and 3 will start processing their
+ * queries while the data from data node 1 is still being read.
+ *
+ * There's a caveat with this asynchronous approach, however. Since there's
+ * only one connection to each data node (to make sure that each data node is
+ * tied to a single transaction and snapshot), it is not possible to start
+ * executing a new query on the same data node until the first query is
+ * complete (to ensure the connection in idle state). This is important if a
+ * query consists of several sub-queries that are sent as separate queries to
+ * the same node. In that case, the entire result of the first sub-query must
+ * be fetched before proceeding with the next sub-query, which may cause
+ * memory blow up.
+ *
+ * The sub-query issue can be solved by using a CURSOR to break up a query in
+ * batches (multiple FETCH statements that fetch a fixed amount of rows each
+ * time). FETCH statements for multiple CURSORs (for different sub-queries)
+ * can be interleaved as long as they always read the full batch before
+ * returning. The downside of a CURSOR, however, is that it doesn't support
+ * parallel execution of the query on the data nodes.
+ *
+ * AsyncAppend is only used for plans that involve distributed hypertables (a
+ * plan that involves scanning of data nodes). The node is injected as a
+ * parent of Append or MergeAppend nodes.  Here is how the modified plan looks
+ * like.
  *
  *       .......
  *          |
@@ -50,9 +97,14 @@
  *                              .....
  *
  *
- * Since the PostgreSQL planner treats partitioned relations in a special way (throwing away
- * existing and generating new paths), we needed to adjust plan paths at a later stage,
- * thus using upper path hooks to do that.
+ * Since the PostgreSQL planner treats partitioned relations in a special way
+ * (throwing away existing and generating new paths), we needed to adjust plan
+ * paths at a later stage, thus using upper path hooks to do that.
+ *
+ * There are ways asynchronous appends can be further improved. For instance,
+ * after sending the initial queries to all nodes, the append node should pick
+ * the child to read based on which data node returns data first instead of
+ * just picking the first child.
  *
  */
 
@@ -184,9 +236,15 @@ init(AsyncScanState *ass)
 }
 
 static void
-fetch_tuples(AsyncScanState *ass)
+send_fetch_request(AsyncScanState *ass)
 {
-	ass->fetch_tuples(ass);
+	ass->send_fetch_request(ass);
+}
+
+static void
+fetch_data(AsyncScanState *ass)
+{
+	ass->fetch_data(ass);
 }
 
 static TupleTableSlot *
@@ -201,16 +259,16 @@ async_append_exec(CustomScanState *node)
 
 	if (state->first_run)
 	{
-		/* Since we can't start sending requests in the BeginCustomScan stage (it's not guaranteed
-		 * that a node will execute so we might end up sending requests that never get completed) we
-		 * do it'here */
 		state->first_run = false;
 		iterate_data_nodes_and_exec(state, init);
-		iterate_data_nodes_and_exec(state, fetch_tuples);
+		iterate_data_nodes_and_exec(state, send_fetch_request);
+		/* Fetch a new data batch into all sub-nodes. This will clear the
+		 * connection for new requests (important when there are, e.g.,
+		 * subqueries that share the connection). */
+		iterate_data_nodes_and_exec(state, fetch_data);
 	}
 
 	ResetExprContext(econtext);
-
 	slot = ExecProcNode(state->subplan_state);
 	econtext->ecxt_scantuple = slot;
 

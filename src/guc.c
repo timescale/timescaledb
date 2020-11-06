@@ -284,7 +284,7 @@ _guc_init(void)
 							 "Pick data fetcher type based on type of queries you plan to run "
 							 "(rowbyrow or cursor)",
 							 (int *) &ts_guc_remote_data_fetcher,
-							 RowByRowFetcherType,
+							 CursorFetcherType,
 							 remote_data_fetchers,
 							 PGC_USERSET,
 							 0,

@@ -15,6 +15,6 @@ extern DataFetcher *row_by_row_fetcher_create_for_rel(TSConnection *conn, Relati
 													  StmtParams *params);
 extern DataFetcher *row_by_row_fetcher_create_for_scan(TSConnection *conn, ScanState *ss,
 													   List *retrieved_attrs, const char *stmt,
-													   StmtParams *params, FetchMode mode);
+													   StmtParams *params);
 
 #endif /* TIMESCALEDB_TSL_ROW_BY_ROW_FETCHER_H */

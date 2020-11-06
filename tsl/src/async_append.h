@@ -30,8 +30,12 @@ typedef struct AsyncAppendPath
 typedef struct AsyncScanState
 {
 	CustomScanState css;
+	/* Initialize the scan state */
 	void (*init)(struct AsyncScanState *state);
-	void (*fetch_tuples)(struct AsyncScanState *state);
+	/* Send a request for new data */
+	void (*send_fetch_request)(struct AsyncScanState *state);
+	/* Fetch the actual data */
+	void (*fetch_data)(struct AsyncScanState *state);
 } AsyncScanState;
 
 extern void async_append_add_paths(PlannerInfo *root, RelOptInfo *hyper_rel);

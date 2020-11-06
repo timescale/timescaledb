@@ -23,19 +23,19 @@ data_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_at
 
 DataFetcher *
 data_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-							 const char *stmt, StmtParams *params, FetchMode mode)
+							 const char *stmt, StmtParams *params)
 {
 	if (ts_guc_remote_data_fetcher == CursorFetcherType)
-		return cursor_fetcher_create_for_scan(conn, ss, retrieved_attrs, stmt, params, mode);
+		return cursor_fetcher_create_for_scan(conn, ss, retrieved_attrs, stmt, params);
 	else
-		return row_by_row_fetcher_create_for_scan(conn, ss, retrieved_attrs, stmt, params, mode);
+		return row_by_row_fetcher_create_for_scan(conn, ss, retrieved_attrs, stmt, params);
 }
 
 #define DEFAULT_FETCH_SIZE 100
 
 void
 data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt, StmtParams *params,
-				  Relation rel, ScanState *ss, List *retrieved_attrs, FetchMode mode)
+				  Relation rel, ScanState *ss, List *retrieved_attrs)
 {
 	Assert(df != NULL);
 	Assert(stmt != NULL);
@@ -57,7 +57,6 @@ data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt, StmtPar
 	df->req_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "async req/resp", ALLOCSET_DEFAULT_SIZES);
 	df->fetch_size = DEFAULT_FETCH_SIZE;
-	df->mode = mode;
 }
 
 void
@@ -116,14 +115,6 @@ data_fetcher_set_tuple_mctx(DataFetcher *df, MemoryContext mctx)
 {
 	Assert(mctx != NULL);
 	df->tuple_mctx = mctx;
-}
-
-void
-data_fetcher_request_data_async(DataFetcher *df)
-{
-	/* for async fetcher we try requesting next batch */
-	if (df->mode == FETCH_ASYNC && !df->eof)
-		df->funcs->fetch_data_start(df);
 }
 
 void
