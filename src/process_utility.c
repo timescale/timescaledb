@@ -1278,9 +1278,6 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 	ListCell *lc;
 	int caggs_count = 0;
 
-	if (stmt->behavior == DROP_CASCADE)
-		return;
-
 	foreach (lc, stmt->objects)
 	{
 		List *const object = lfirst(lc);
@@ -1289,16 +1286,6 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 
 		if (cagg)
 		{
-			/* Add the materialization table to the arguments so that the
-			 * continuous aggregate and associated materialization table is
-			 * dropped together.
-			 *
-			 * If the table is missing, something is wrong, but we proceed
-			 * with dropping the view anyway since the user cannot get rid of
-			 * the broken view if we generate an error. */
-			Hypertable *ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-			if (ht)
-				process_add_hypertable(args, ht);
 			/* If there is at least one cagg, the drop should be treated as a
 			 * DROP VIEW. */
 			stmt->removeType = OBJECT_VIEW;
