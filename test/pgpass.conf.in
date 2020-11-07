@@ -1,1 +1,3 @@
-*:*:*:@TEST_ROLE_3@:@TEST_ROLE_3_PASS@
+# Only TEST_ROLE_2 should have password in passfile
+# TEST_ROLE_3 needs to rely on, e.g., user mappings in the DB
+*:*:*:@TEST_ROLE_2@:@TEST_ROLE_2_PASS@
