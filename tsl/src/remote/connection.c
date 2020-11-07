@@ -12,9 +12,12 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <access/reloptions.h>
 #include <catalog/pg_foreign_server.h>
+#include <catalog/pg_user_mapping.h>
 #include <commands/defrem.h>
 #include <common/md5.h>
+#include <foreign/foreign.h>
 #include <libpq-events.h>
 #include <libpq/libpq.h>
 #include <mb/pg_wchar.h>
@@ -26,6 +29,7 @@
 #include <utils/fmgrprotos.h>
 #include <utils/inval.h>
 #include <utils/guc.h>
+#include <utils/syscache.h>
 
 #include <dist_util.h>
 #include <errors.h>
@@ -1259,11 +1263,71 @@ remote_connection_open_with_options(const char *node_name, List *connection_opti
 	return conn;
 }
 
+/*
+ * Based on PG's GetUserMapping, but this version does not fail when a user
+ * mapping is not found.
+ */
+static UserMapping *
+get_user_mapping(Oid userid, Oid serverid)
+{
+	Datum datum;
+	HeapTuple tp;
+	bool isnull;
+	UserMapping *um;
+
+	tp = SearchSysCache2(USERMAPPINGUSERSERVER,
+						 ObjectIdGetDatum(userid),
+						 ObjectIdGetDatum(serverid));
+
+	if (!HeapTupleIsValid(tp))
+	{
+		/* Not found for the specific user -- try PUBLIC */
+		tp = SearchSysCache2(USERMAPPINGUSERSERVER,
+							 ObjectIdGetDatum(InvalidOid),
+							 ObjectIdGetDatum(serverid));
+	}
+
+	if (!HeapTupleIsValid(tp))
+		return NULL;
+
+	um = (UserMapping *) palloc(sizeof(UserMapping));
+#if PG12_GE
+	um->umid = ((Form_pg_user_mapping) GETSTRUCT(tp))->oid;
+#else
+	um->umid = HeapTupleGetOid(tp);
+#endif
+	um->userid = userid;
+	um->serverid = serverid;
+
+	/* Extract the umoptions */
+	datum = SysCacheGetAttr(USERMAPPINGUSERSERVER, tp, Anum_pg_user_mapping_umoptions, &isnull);
+	if (isnull)
+		um->options = NIL;
+	else
+		um->options = untransformRelOptions(datum);
+
+	ReleaseSysCache(tp);
+
+	return um;
+}
+
+/*
+ * Add user info (username and optionally password) to the connection
+ * options).
+ */
 static List *
-add_username_to_server_options(ForeignServer *server, Oid user_id)
+add_userinfo_to_server_options(ForeignServer *server, Oid user_id)
 {
 	const char *user_name = GetUserNameFromId(user_id, false);
 	List *server_options = list_copy(server->options);
+	const UserMapping *um = get_user_mapping(user_id, server->serverid);
+
+	/* If a user mapping exists, then use the "user" and "password" options
+	 * from the user mapping (we assume that these options exist, or the
+	 * connection will later fail). Otherwise, just add the "user" and rely on
+	 * other authentication mechanisms. */
+	if (NULL != um)
+		return list_concat(server_options, um->options);
 
 	return lappend(server_options,
 				   makeDefElem("user", (Node *) makeString(pstrdup(user_name)), -1));
@@ -1273,7 +1337,7 @@ TSConnection *
 remote_connection_open_by_id(TSConnectionId id)
 {
 	ForeignServer *server = GetForeignServer(id.server_id);
-	List *connection_options = add_username_to_server_options(server, id.user_id);
+	List *connection_options = add_userinfo_to_server_options(server, id.user_id);
 
 	return remote_connection_open_with_options(server->servername, connection_options, true);
 }
@@ -1306,7 +1370,7 @@ remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg)
 		return NULL;
 	}
 
-	connection_options = add_username_to_server_options(server, user_id);
+	connection_options = add_userinfo_to_server_options(server, user_id);
 	conn = remote_connection_open_with_options_nothrow(server->servername, connection_options);
 
 	if (NULL == conn)
