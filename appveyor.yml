@@ -120,20 +120,26 @@ build_script:
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "ssl_key_file='C:/projects/timescaledb/build/tsl/test/ts_data_node.key'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.ssl_dir='C:/projects/timescaledb/build/tsl/test/timescaledb/certs'"
+
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.passfile='C:/projects/timescaledb/build/tsl/test/pgpass.conf'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.license = 'apache'"
 
     # Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "log_min_messages='debug5'"
 
-
-    Set-Content "C:\Program Files\postgresql\12\data\pg_hba.conf" "host    all             all             ::1/128            trust"
-
-    Add-Content "C:\Program Files\postgresql\12\data\pg_hba.conf" "host    all             all             127.0.0.1/32            trust"
-
     # build timescale
 
      .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
+
+    # Filter ssl and local configuration from pg_hba.conf file since
+    # we have turned off SSL and local (unix domain socket)
+    # connections are not supported on Windows.
+
+    Get-Content "./build/test/pg_hba.conf" | Where-Object {$_ -notmatch "^hostssl|^local"} | Set-Content "C:\Program Files\postgresql\12\data\pg_hba.conf"
+
+    Write-Output "Showing pg_hba.conf"
+
+    Get-Content "C:\Program Files\postgresql\12\data\pg_hba.conf"
 
     cmake --build ./build --config Debug
 
@@ -181,7 +187,7 @@ test_script:
 
     Get-Service -Name "postgresql-x64-12"
 
-    docker exec -it pgregress /bin/bash -c "psql -a -e -E  -p 55432 -U postgres --host='docker.for.win.localhost' -v VERBOSITY=verbose -c'\dx;'"
+    docker exec -it pgregress /bin/bash -c "psql -a -e -E -p 55432 -U postgres --host='docker.for.win.localhost' -v VERBOSITY=verbose -c'\dx;'"
 
     #right now we only run timescale regression tests, others will be set up later
 
