@@ -20,8 +20,8 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
     database               NAME = current_database(),
     port                   INTEGER = inet_server_port(),
     if_not_exists          BOOLEAN = FALSE,
-    bootstrap		   BOOLEAN = TRUE,
-    bootstrap_database     NAME = 'postgres'
+    bootstrap              BOOLEAN = TRUE,
+    password               TEXT = NULL
 ) RETURNS TABLE(server_name NAME, host TEXT, port INTEGER, database NAME,
                 server_created BOOL, database_created BOOL, extension_created BOOL)
 AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'

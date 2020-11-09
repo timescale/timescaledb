@@ -671,9 +671,26 @@ CREATE EXTENSION timescaledb;
 RESET client_min_messages;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SET ROLE :ROLE_1;
--- Trying to add data node as non-superuser
+SET ROLE :ROLE_3;
+-- Trying to add data node as non-superuser without GRANT on the
+-- foreign data wrapper will fail.
+\set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
+\set ON_ERROR_STOP 0
+
+RESET ROLE;
+GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_3;
+SET ROLE :ROLE_3;
+
+\set ON_ERROR_STOP 0
+-- ROLE_3 doesn't have a password in the passfile and has not way to
+-- authenticate so adding a data node will still fail.
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
+\set ON_ERROR_STOP 0
+
+-- Providing the password on the command line should work
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6', password => :'ROLE_3_PASS');
+
 
 RESET ROLE;
 DROP DATABASE data_node_1;
