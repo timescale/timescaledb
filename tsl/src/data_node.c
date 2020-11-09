@@ -168,7 +168,7 @@ data_node_get_foreign_server_by_oid(Oid server_oid, AclMode mode)
  */
 static bool
 create_foreign_server(const char *const node_name, const char *const host, int32 port,
-					  const char *const dbname, bool if_not_exists, Oid *const oid)
+					  const char *const dbname, bool if_not_exists)
 {
 	ForeignServer *server = NULL;
 	ObjectAddress objaddr;
@@ -198,9 +198,6 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 			ereport(NOTICE,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("data node \"%s\" already exists, skipping", node_name)));
-
-			if (oid != NULL)
-				*oid = server->serverid;
 			return false;
 		}
 	}
@@ -212,16 +209,8 @@ create_foreign_server(const char *const node_name, const char *const host, int32
 	if (!OidIsValid(objaddr.objectId))
 	{
 		Assert(if_not_exists);
-
-		server = data_node_get_foreign_server(node_name, ACL_USAGE, true, false);
-
-		if (oid != NULL)
-			*oid = server->serverid;
 		return false;
 	}
-
-	if (oid != NULL)
-		*oid = objaddr.objectId;
 
 	return true;
 }
@@ -317,12 +306,19 @@ create_hypertable_data_node_datum(FunctionCallInfo fcinfo, HypertableDataNode *n
 }
 
 static List *
-create_data_node_options(const char *host, int32 port, const char *dbname, const char *user)
+create_data_node_options(const char *host, int32 port, const char *dbname, const char *user,
+						 const char *password)
 {
 	DefElem *host_elm = makeDefElem("host", (Node *) makeString(pstrdup(host)), -1);
 	DefElem *port_elm = makeDefElem("port", (Node *) makeInteger(port), -1);
 	DefElem *dbname_elm = makeDefElem("dbname", (Node *) makeString(pstrdup(dbname)), -1);
 	DefElem *user_elm = makeDefElem("user", (Node *) makeString(pstrdup(user)), -1);
+
+	if (NULL != password)
+	{
+		DefElem *password_elm = makeDefElem("password", (Node *) makeString(pstrdup(password)), -1);
+		return list_make5(host_elm, port_elm, dbname_elm, user_elm, password_elm);
+	}
 
 	return list_make4(host_elm, port_elm, dbname_elm, user_elm);
 }
@@ -551,15 +547,15 @@ add_distributed_id_to_data_node(TSConnection *conn)
  */
 static TSConnection *
 connect_for_bootstrapping(const char *node_name, const char *const host, int32 port,
-						  const char *username)
+						  const char *username, const char *password)
 {
-	List *node_options = create_data_node_options(host, port, "postgres", username);
+	List *node_options = create_data_node_options(host, port, "postgres", username, password);
 	TSConnection *conn = remote_connection_open_with_options_nothrow(node_name, node_options);
 
 	if (conn)
 		return conn;
 
-	node_options = create_data_node_options(host, port, "template1", username);
+	node_options = create_data_node_options(host, port, "template1", username, password);
 	return remote_connection_open_with_options_nothrow(node_name, node_options);
 }
 
@@ -655,6 +651,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	int32 port = PG_ARGISNULL(3) ? get_server_port() : PG_GETARG_INT32(3);
 	bool if_not_exists = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	bool bootstrap = PG_ARGISNULL(5) ? true : PG_GETARG_BOOL(5);
+	const char *password = PG_ARGISNULL(6) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(6));
 	bool server_created = false;
 	bool database_created = false;
 	bool extension_created = false;
@@ -698,8 +695,8 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	PreventInTransactionBlock(true, "add_data_node");
 
 	/* Try to create the foreign server, or get the existing one in case of
-	 * if_not_exists = true. */
-	if (create_foreign_server(node_name, host, port, dbname, if_not_exists, NULL))
+	 * if_not_exists true. */
+	if (create_foreign_server(node_name, host, port, dbname, if_not_exists))
 	{
 		List *node_options;
 		TSConnection *conn;
@@ -720,7 +717,8 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		 * connect to it. */
 		if (bootstrap)
 		{
-			TSConnection *conn = connect_for_bootstrapping(node_name, host, port, username);
+			TSConnection *conn =
+				connect_for_bootstrapping(node_name, host, port, username, password);
 			data_node_validate_extension_availability(conn);
 			database_created = data_node_bootstrap_database(conn, &database);
 			remote_connection_close(conn);
@@ -735,7 +733,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		 * comparably heavy and make the code more complicated than
 		 * necessary. Instead using a more straightforward approach here since
 		 * we do not need 2PC support. */
-		node_options = create_data_node_options(host, port, dbname, username);
+		node_options = create_data_node_options(host, port, dbname, username, password);
 		conn = remote_connection_open_with_options(node_name, node_options, false);
 		remote_connection_cmd_ok(conn, "BEGIN");
 
