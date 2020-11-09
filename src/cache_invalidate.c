@@ -66,7 +66,7 @@ cache_invalidate_relcache_all(void)
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
-	Catalog *catalog;
+	static bool in_recursion = false;
 
 	if (ts_extension_invalidate(relid))
 	{
@@ -77,16 +77,28 @@ cache_invalidate_callback(Datum arg, Oid relid)
 	if (!ts_extension_is_loaded())
 		return;
 
-	catalog = ts_catalog_get();
+	/* The cache invalidation can be called indirectly further down in the
+	 * call chain by calling `get_namespace_oid`, which can trigger a
+	 * recursive cache invalidation callback. To prevent infinite recursion,
+	 * we stop it here and instead consider the cache as invalidated, which
+	 * will allow the `get_namespace_oid` to retrieve the OID from the heap
+	 * table and return it properly. */
+	if (!in_recursion)
+	{
+		Catalog *catalog;
+		in_recursion = true;
+		catalog = ts_catalog_get();
+		in_recursion = false;
 
-	if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
-		ts_hypertable_cache_invalidate_callback();
+		if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
+			ts_hypertable_cache_invalidate_callback();
 
-	if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
-		ts_bgw_job_cache_invalidate_callback();
+		if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
+			ts_bgw_job_cache_invalidate_callback();
 
-	if (relid == InvalidOid)
-		cache_invalidate_relcache_all();
+		if (relid == InvalidOid)
+			cache_invalidate_relcache_all();
+	}
 }
 
 /* Registration for given cache ids happens at  */
