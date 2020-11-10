@@ -3704,7 +3704,7 @@ process_drop_trigger(EventTriggerDropObject *obj)
 	if (ht != NULL)
 	{
 		/* Recurse to each chunk and drop the corresponding trigger */
-		ts_hypertable_drop_trigger(ht, trigger_event->trigger_name);
+		ts_hypertable_drop_trigger(ht->main_table_relid, trigger_event->trigger_name);
 	}
 }
 

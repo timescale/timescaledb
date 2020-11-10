@@ -788,5 +788,101 @@ DROP MATERIALIZED VIEW conditionsnm_4;
 -- Case 4: DROP CASCADE with dependency
 DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
 
+-- Test DROP SCHEMA CASCADE with continuous aggregates
+--
+-- Issue: #2350
+--
+
+-- Case 1: DROP SCHEMA CASCADE
+CREATE SCHEMA test_schema;
+
+CREATE TABLE test_schema.telemetry_raw (
+  ts        TIMESTAMP WITH TIME ZONE NOT NULL,
+  value     DOUBLE PRECISION
+);
+
+SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
+
+CREATE MATERIALIZED VIEW test_schema.telemetry_1s
+  WITH (timescaledb.continuous)
+    AS
+SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
+       avg(value)
+  FROM test_schema.telemetry_raw
+ GROUP BY ts_1s WITH NO DATA;
+
+SELECT ca.raw_hypertable_id,
+       h.schema_name,
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'telemetry_1s';
+\gset
+
+DROP SCHEMA test_schema CASCADE;
+
+SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME';
+SELECT count(*) FROM pg_class WHERE relname = :'PART_VIEW_NAME';
+SELECT count(*) FROM pg_class WHERE relname = 'telemetry_1s';
+SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
+
+-- Case 2: DROP SCHEMA CASCADE with multiple caggs
+CREATE SCHEMA test_schema;
+
+CREATE TABLE test_schema.telemetry_raw (
+  ts        TIMESTAMP WITH TIME ZONE NOT NULL,
+  value     DOUBLE PRECISION
+);
+
+SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
+
+CREATE MATERIALIZED VIEW test_schema.cagg1
+  WITH (timescaledb.continuous)
+    AS
+SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
+       avg(value)
+  FROM test_schema.telemetry_raw
+ GROUP BY ts_1s WITH NO DATA;
+
+CREATE MATERIALIZED VIEW test_schema.cagg2
+  WITH (timescaledb.continuous)
+    AS
+SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
+       avg(value)
+  FROM test_schema.telemetry_raw
+ GROUP BY ts_1s WITH NO DATA;
+
+SELECT ca.raw_hypertable_id,
+       h.schema_name,
+       h.table_name AS "MAT_TABLE_NAME1",
+       partial_view_name as "PART_VIEW_NAME1",
+       partial_view_schema
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cagg1';
+\gset
+
+SELECT ca.raw_hypertable_id,
+       h.schema_name,
+       h.table_name AS "MAT_TABLE_NAME2",
+       partial_view_name as "PART_VIEW_NAME2",
+       partial_view_schema
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cagg2';
+\gset
+
+DROP SCHEMA test_schema CASCADE;
+
+SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME1';
+SELECT count(*) FROM pg_class WHERE relname = :'PART_VIEW_NAME1';
+SELECT count(*) FROM pg_class WHERE relname = 'cagg1';
+SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME2';
+SELECT count(*) FROM pg_class WHERE relname = :'PART_VIEW_NAME2';
+SELECT count(*) FROM pg_class WHERE relname = 'cagg2';
+SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
+
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;

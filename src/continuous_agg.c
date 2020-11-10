@@ -405,37 +405,71 @@ ts_continuous_agg_find_by_rv(const RangeVar *rv)
 	return ts_continuous_agg_find_by_relid(relid);
 }
 
+static ObjectAddress
+get_and_lock_rel_by_name(const Name schema, const Name name, LOCKMODE mode)
+{
+	ObjectAddress addr;
+	Oid relid = InvalidOid;
+	Oid nspid = get_namespace_oid(NameStr(*schema), true);
+	if (OidIsValid(nspid))
+	{
+		relid = get_relname_relid(NameStr(*name), nspid);
+		if (OidIsValid(relid))
+			LockRelationOid(relid, mode);
+	}
+	ObjectAddressSet(addr, RelationRelationId, relid);
+	return addr;
+}
+
+static ObjectAddress
+get_and_lock_rel_by_hypertable_id(int32 hypertable_id, LOCKMODE mode)
+{
+	ObjectAddress addr;
+	Oid relid = ts_hypertable_id_to_relid(hypertable_id);
+	if (OidIsValid(relid))
+		LockRelationOid(relid, mode);
+	ObjectAddressSet(addr, RelationRelationId, relid);
+	return addr;
+}
+
 /*
  * Drops continuous aggs and all related objects.
  *
- * These objects are: the user view itself, the catalog entry in
- * continuous-agg , the partial view,
- * the materialization hypertable,
- * trigger on the raw hypertable (hypertable specified in the user view )
- * copy of the user view query (aka the direct view)
- * NOTE: The order in which the objects are dropped should be EXACTLY the same as in materialize.c"
+ * This function is intended to be run by event trigger during CASCADE,
+ * which implies that most of the dependent objects potentially could be
+ * dropped including associated schema.
+ *
+ * These objects are:
+ *
+ * - user view itself
+ * - continuous agg catalog entry
+ * - partial view
+ * - materialization hypertable
+ * - trigger on the raw hypertable (hypertable specified in the user view)
+ * - copy of the user view query (AKA the direct view)
+ *
+ * NOTE: The order in which the objects are dropped should be EXACTLY the
+ * same as in materialize.c
  *
  * drop_user_view indicates whether to drop the user view.
  *                (should be false if called as part of the drop-user-view callback)
  */
 static void
-drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
+drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 {
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
-	Catalog *catalog = ts_catalog_get();
-	ObjectAddress user_view = { .objectId = InvalidOid }, partial_view = { .objectId = InvalidOid },
-				  rawht_trig = { .objectId = InvalidOid }, direct_view = { .objectId = InvalidOid };
-	Hypertable *mat_hypertable, *raw_hypertable;
-	int32 count = 0;
-	bool raw_hypertable_has_other_caggs = true;
-	bool raw_hypertable_exists;
+	Catalog *catalog;
+	ScanIterator iterator;
+	ObjectAddress user_view = { 0 };
+	ObjectAddress partial_view = { 0 };
+	ObjectAddress direct_view = { 0 };
+	ObjectAddress raw_hypertable_trig = { 0 };
+	ObjectAddress raw_hypertable = { 0 };
+	ObjectAddress mat_hypertable = { 0 };
+	bool raw_hypertable_has_other_caggs;
 
-	/* NOTE: the lock order matters, see tsl/src/materialization.c. Perform all locking upfront */
-
-	/* delete the job before taking locks as it kills long-running jobs which we would otherwise
-	 * wait on */
-	List *jobs = ts_bgw_job_find_by_hypertable_id(agg->data.mat_hypertable_id);
+	/* Delete the job before taking locks as it kills long-running jobs
+	 * which we would otherwise wait on */
+	List *jobs = ts_bgw_job_find_by_hypertable_id(cadata->mat_hypertable_id);
 	ListCell *lc;
 
 	foreach (lc, jobs)
@@ -444,80 +478,74 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 		ts_bgw_job_delete_by_id(job->fd.id);
 	}
 
-	user_view = (ObjectAddress){
-		.classId = RelationRelationId,
-		.objectId =
-			get_relname_relid(NameStr(agg->data.user_view_name),
-							  get_namespace_oid(NameStr(agg->data.user_view_schema), false)),
-	};
-	/* The partial view may already be dropped by PG's dependency system (e.g. the raw table was
-	 * dropped) */
-	if (OidIsValid(user_view.objectId))
-		LockRelationOid(user_view.objectId, AccessExclusiveLock);
+	/*
+	 * Lock objects.
+	 *
+	 * Following objects might be already dropped in case of CASCADE
+	 * drop including the associated schema object.
+	 *
+	 * NOTE: the lock order matters, see tsl/src/materialization.c.
+	 * Perform all locking upfront.
+	 *
+	 * AccessExclusiveLock is needed to drop triggers and also prevent
+	 * concurrent DML commands.
+	 */
+	if (drop_user_view)
+		user_view = get_and_lock_rel_by_name(&cadata->user_view_schema,
+											 &cadata->user_view_name,
+											 AccessExclusiveLock);
+	raw_hypertable =
+		get_and_lock_rel_by_hypertable_id(cadata->raw_hypertable_id, AccessExclusiveLock);
+	mat_hypertable =
+		get_and_lock_rel_by_hypertable_id(cadata->mat_hypertable_id, AccessExclusiveLock);
 
-	raw_hypertable = ts_hypertable_get_by_id(agg->data.raw_hypertable_id);
-	/* The raw hypertable might be already dropped if this is a cascade from that drop */
-	raw_hypertable_exists =
-		(raw_hypertable != NULL && OidIsValid(raw_hypertable->main_table_relid));
-	if (raw_hypertable_exists)
-		/* AccessExclusiveLock is needed to drop triggers.
-		 * Also prevent concurrent DML commands */
-		LockRelationOid(raw_hypertable->main_table_relid, AccessExclusiveLock);
-	mat_hypertable = ts_hypertable_get_by_id(agg->data.mat_hypertable_id);
-	/* AccessExclusiveLock is needed to drop this table. */
-	LockRelationOid(mat_hypertable->main_table_relid, AccessExclusiveLock);
-
-	/* lock catalogs */
+	/* Lock catalogs */
+	catalog = ts_catalog_get();
 	LockRelationOid(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGG), RowExclusiveLock);
+
 	raw_hypertable_has_other_caggs =
-		raw_hypertable_exists && number_of_continuous_aggs_attached(raw_hypertable->fd.id) > 1;
+		OidIsValid(raw_hypertable.objectId) &&
+		number_of_continuous_aggs_attached(cadata->raw_hypertable_id) > 1;
+
 	if (!raw_hypertable_has_other_caggs)
+	{
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG),
 						RowExclusiveLock);
-	if (!raw_hypertable_has_other_caggs)
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						RowExclusiveLock);
 
-	/* The trigger will be dropped if the hypertable still exists and no other caggs attached */
-	if (!raw_hypertable_has_other_caggs && raw_hypertable_exists)
-	{
-		Oid rawht_trigoid =
-			get_trigger_oid(raw_hypertable->main_table_relid, CAGGINVAL_TRIGGER_NAME, false);
-		rawht_trig = (ObjectAddress){ .classId = TriggerRelationId,
-									  .objectId = rawht_trigoid,
-									  .objectSubId = 0 };
-		/* raw hypertable is locked above */
-		LockRelationOid(rawht_trigoid, AccessExclusiveLock);
+		/* The trigger will be dropped if the hypertable still exists and no other
+		 * caggs attached. */
+		if (OidIsValid(raw_hypertable.objectId))
+		{
+			ObjectAddressSet(raw_hypertable_trig,
+							 TriggerRelationId,
+							 get_trigger_oid(raw_hypertable.objectId,
+											 CAGGINVAL_TRIGGER_NAME,
+											 false));
+
+			/* Raw hypertable is locked above */
+			LockRelationOid(raw_hypertable_trig.objectId, AccessExclusiveLock);
+		}
 	}
 
-	partial_view = (ObjectAddress){
-		.classId = RelationRelationId,
-		.objectId =
-			get_relname_relid(NameStr(agg->data.partial_view_name),
-							  get_namespace_oid(NameStr(agg->data.partial_view_schema), false)),
-	};
-	/* The partial view may already be dropped by PG's dependency system (e.g. the raw table was
-	 * dropped) */
-	if (OidIsValid(partial_view.objectId))
-		LockRelationOid(partial_view.objectId, AccessExclusiveLock);
+	/*
+	 * Following objects might be already dropped in case of CASCADE
+	 * drop including the associated schema object.
+	 */
+	partial_view = get_and_lock_rel_by_name(&cadata->partial_view_schema,
+											&cadata->partial_view_name,
+											AccessExclusiveLock);
 
-	direct_view = (ObjectAddress){
-		.classId = RelationRelationId,
-		.objectId =
-			get_relname_relid(NameStr(agg->data.direct_view_name),
-							  get_namespace_oid(NameStr(agg->data.direct_view_schema), false)),
-	};
-	if (OidIsValid(direct_view.objectId))
-		LockRelationOid(direct_view.objectId, AccessExclusiveLock);
+	direct_view = get_and_lock_rel_by_name(&cadata->direct_view_schema,
+										   &cadata->direct_view_name,
+										   AccessExclusiveLock);
 
-	/*  END OF LOCKING. Perform actual deletions now. */
+	/* Delete catalog entry */
+	iterator = ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	init_scan_by_mat_hypertable_id(&iterator, cadata->mat_hypertable_id);
 
-	if (OidIsValid(user_view.objectId))
-		performDeletion(&user_view, DROP_RESTRICT, 0);
-
-	/* Delete catalog entry. */
-	init_scan_by_mat_hypertable_id(&iterator, agg->data.mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -527,28 +555,35 @@ drop_continuous_agg(ContinuousAgg *agg, bool drop_user_view)
 
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
-		/* delete all related rows */
+		/* Delete all related rows */
 		if (!raw_hypertable_has_other_caggs)
+		{
 			hypertable_invalidation_log_delete(form->raw_hypertable_id);
-
-		if (!raw_hypertable_has_other_caggs)
 			invalidation_threshold_delete(form->raw_hypertable_id);
+		}
+
 		materialization_invalidation_log_delete(form->mat_hypertable_id);
-		count++;
 
 		if (should_free)
 			heap_freetuple(tuple);
 	}
-	Assert(count == 1);
 
-	if (OidIsValid(rawht_trig.objectId))
-		ts_hypertable_drop_trigger(raw_hypertable, CAGGINVAL_TRIGGER_NAME);
+	/* Perform actual deletions now */
+	if (OidIsValid(user_view.objectId))
+		performDeletion(&user_view, DROP_RESTRICT, 0);
 
-	/* delete the materialization table */
-	ts_hypertable_drop(mat_hypertable, DROP_CASCADE);
+	if (OidIsValid(raw_hypertable_trig.objectId))
+		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
+
+	if (OidIsValid(mat_hypertable.objectId))
+	{
+		performDeletion(&mat_hypertable, DROP_CASCADE, 0);
+		ts_hypertable_delete_by_id(cadata->mat_hypertable_id);
+	}
 
 	if (OidIsValid(partial_view.objectId))
 		performDeletion(&partial_view, DROP_RESTRICT, 0);
+
 	if (OidIsValid(direct_view.objectId))
 		performDeletion(&direct_view, DROP_RESTRICT, 0);
 }
@@ -567,7 +602,6 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ContinuousAgg ca;
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -576,10 +610,8 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 		FormData_continuous_agg *data = (FormData_continuous_agg *) GETSTRUCT(tuple);
 
 		if (data->raw_hypertable_id == hypertable_id)
-		{
-			continuous_agg_init(&ca, data);
-			drop_continuous_agg(&ca, true);
-		}
+			drop_continuous_agg(data, true);
+
 		if (data->mat_hypertable_id == hypertable_id)
 			ereport(ERROR,
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
@@ -622,7 +654,7 @@ ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema, cons
 	switch (vtyp)
 	{
 		case ContinuousAggUserView:
-			drop_continuous_agg(ca, false /* The user view has already been dropped */);
+			drop_continuous_agg(&ca->data, false /* The user view has already been dropped */);
 			break;
 		case ContinuousAggPartialView:
 		case ContinuousAggDirectView:
