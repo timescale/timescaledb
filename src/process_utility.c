@@ -1059,8 +1059,8 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			 * the dropped region. */
 			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
 			{
-				int64 start = chunk_primary_dimension_start(chunk);
-				int64 end = chunk_primary_dimension_end(chunk);
+				int64 start = ts_chunk_primary_dimension_start(chunk);
+				int64 end = ts_chunk_primary_dimension_end(chunk);
 
 				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 					   chunk->cube->slices[0]->fd.dimension_id);

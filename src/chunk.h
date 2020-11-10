@@ -162,14 +162,14 @@ extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertabl
 extern TSDLLEXPORT List *ts_chunk_get_data_node_name_list(const Chunk *chunk);
 extern List *ts_chunk_data_nodes_copy(const Chunk *chunk);
 
+extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
+
+extern TSDLLEXPORT int64 ts_chunk_primary_dimension_end(const Chunk *chunk);
+
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \
 											 table_name,                                           \
 											 CurrentMemoryContext,                                 \
 											 fail_if_not_found)
-
-#define chunk_primary_dimension_start(chunk) (chunk)->cube->slices[0]->fd.range_start
-
-#define chunk_primary_dimension_end(chunk) (chunk)->cube->slices[0]->fd.range_end
 
 #endif /* TIMESCALEDB_CHUNK_H */

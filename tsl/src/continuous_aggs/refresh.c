@@ -330,20 +330,10 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	ExecDropSingleTupleTableSlot(slot);
 }
 
-#define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
-/*
- * Refresh a continuous aggregate across the given window.
- */
-Datum
-continuous_agg_refresh(PG_FUNCTION_ARGS)
+static ContinuousAgg *
+get_cagg_by_relid(const Oid cagg_relid)
 {
-	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	ContinuousAgg *cagg;
-	Hypertable *cagg_ht;
-	Dimension *time_dim;
-	InternalTimeRange refresh_window = {
-		.type = InvalidOid,
-	};
 
 	if (!OidIsValid(cagg_relid))
 		ereport(ERROR,
@@ -364,12 +354,33 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
 	}
+	return cagg;
+}
 
-	cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-	Assert(cagg_ht != NULL);
-	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
-	Assert(time_dim != NULL);
-	refresh_window.type = ts_dimension_get_partition_type(time_dim);
+static Oid
+get_partition_type_by_cagg(const ContinuousAgg *const cagg)
+{
+	Hypertable *cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	Dimension *time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
+
+	return ts_dimension_get_partition_type(time_dim);
+}
+
+#define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
+/*
+ * Refresh a continuous aggregate across the given window.
+ */
+Datum
+continuous_agg_refresh(PG_FUNCTION_ARGS)
+{
+	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	ContinuousAgg *cagg;
+	InternalTimeRange refresh_window = {
+		.type = InvalidOid,
+	};
+
+	cagg = get_cagg_by_relid(cagg_relid);
+	refresh_window.type = get_partition_type_by_cagg(cagg);
 
 	if (!PG_ARGISNULL(1))
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
@@ -532,50 +543,54 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 }
 
 /*
- * Refresh all continuous aggregates on a hypertable.
+ * Refresh a continuous aggregate on the given hypertable chunk according to invalidations.
  *
  * The refreshing happens in a single transaction. For this to work correctly,
  * there must be no new invalidations written in the refreshed region during
- * the refresh. Therefore, the caller is responsible for proper locking to
- * ensure there are no invalidations (INSERTs, DELETEs, etc.). For instance,
- * exclusively locking the hypertable or the individual chunks covered by the
- * region would work.
+ * the refresh. Therefore, it locks exclusively the chunk to
+ * ensure there are no invalidations (INSERTs, DELETEs, etc.).
  */
-void
-continuous_agg_refresh_all(const Hypertable *const ht, const int64 start, const int64 end,
-						   const int32 chunk_id)
+Datum
+continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
 {
+	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	ContinuousAgg *cagg = get_cagg_by_relid(cagg_relid);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	Catalog *catalog = ts_catalog_get();
-	List *caggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
-	Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
-	InternalTimeRange refresh_window = {
-		.type = ts_dimension_get_partition_type(dim),
-		.start = start,
-		.end = end,
+	const InternalTimeRange refresh_window = {
+		.type = get_partition_type_by_cagg(cagg),
+		.start = ts_chunk_primary_dimension_start(chunk),
+		.end = ts_chunk_primary_dimension_end(chunk),
 	};
-	ListCell *lc;
 
-	/* We're not doing any specific permissions checks here. It's assumed that
-	 * whoever calls this function has done appropriate checks for the
-	 * operation. For instance, if this is called as a result of
-	 * "refresh-on-drop", it is assumed that refresh can happen if the user is
-	 * permitted to drop data. */
+	/* Like regular materialized views, require owner to refresh. */
+	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
+					   get_rel_name(cagg->relid));
 
-	Assert(list_length(caggs) > 0);
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (chunk->fd.hypertable_id != cagg->data.raw_hypertable_id)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot refresh continuous aggregate on chunk from different hypertable"),
+				 errdetail("The the continuous aggregate is defined on hypertable \"%s\", while "
+						   "chunk is from hypertable \"%s\". The continuous aggregate can be "
+						   "refreshed only on a chunk from the same hypertable.",
+						   get_rel_name(ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id)),
+						   get_rel_name(chunk->hypertable_relid))));
+
+	LockRelationOid(chunk->table_id, ExclusiveLock);
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 					AccessExclusiveLock);
-	invalidation_threshold_set_or_get(ht->fd.id, refresh_window.end);
+	invalidation_threshold_set_or_get(chunk->fd.hypertable_id, refresh_window.end);
 
-	/* It is enough to process the hypertable invalidation log once,
-	 * so do it only for the first continuous aggregate. */
-	invalidation_process_hypertable_log(linitial(caggs));
+	invalidation_process_hypertable_log(cagg);
 	/* Must make invalidation processing visible */
 	CommandCounterIncrement();
+	process_cagg_invalidations_and_refresh(cagg, &refresh_window, false, chunk->fd.id);
 
-	foreach (lc, caggs)
-	{
-		const ContinuousAgg *cagg = lfirst(lc);
-
-		process_cagg_invalidations_and_refresh(cagg, &refresh_window, false, chunk_id);
-	}
+	PG_RETURN_VOID();
 }
