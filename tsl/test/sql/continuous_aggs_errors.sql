@@ -413,7 +413,7 @@ select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
 
-\set ON_ERROR_STOP 0
+\set ON_ERROR_STOP 1
 DROP TABLE conditions cascade;
 
 CREATE TABLE conditions (
@@ -465,3 +465,20 @@ DROP MATERIALIZED VIEW normal_mat_view, mat_with_test;
 \set ON_ERROR_STOP 1
 
 DROP TABLE text_time CASCADE;
+
+CREATE TABLE measurements (time TIMESTAMPTZ NOT NULL, device INT, value FLOAT);
+SELECT create_hypertable('measurements', 'time');
+
+INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
+
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.refresh_continuous_aggregate(
+  'mat_with_test',
+  show_chunks('measurements')
+);
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+
+DROP TABLE measurements;
+DROP TABLE conditions CASCADE;
