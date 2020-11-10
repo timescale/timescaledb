@@ -541,7 +541,7 @@ WHERE hypertable_name = 'drop_chunks_table';
 --------------------+---------------------+-------------------
  _hyper_10_14_chunk |                  10 |                20
  _hyper_10_15_chunk |                  20 |                30
- _hyper_10_17_chunk |                  30 |                40
+ _hyper_10_16_chunk |                  30 |                40
 (3 rows)
 
 --the invalidation on 25 not yet seen
@@ -554,11 +554,17 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
           20 |  24
           15 |  19
           10 |  14
-           5 |   9
-           0 |   4
-(8 rows)
+(6 rows)
 
---dropping tables will cause the invalidation to be processed
+--refresh to process the invalidations and then drop
+SELECT _timescaledb_internal.refresh_continuous_aggregate('drop_chunks_view', 
+  show_chunks('drop_chunks_table', older_than => (integer_now_test2()-9)));
+ refresh_continuous_aggregate 
+------------------------------
+ 
+ 
+(2 rows)
+
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
                drop_chunks                
 ------------------------------------------
@@ -576,9 +582,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
           20 |  24
           15 |  19
           10 |  14
-           5 |   9
-           0 |   4
-(8 rows)
+(6 rows)
 
 --earliest datapoint now in table
 SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
@@ -604,9 +608,7 @@ SELECT * FROM drop_chunks_view WHERE time_bucket < (integer_now_test2()-9) ORDER
           20 |  24
           15 |  19
           10 |  14
-           5 |   9
-           0 |   4
-(6 rows)
+(4 rows)
 
 --no data but covers dropped chunks
 SELECT * FROM drop_chunks_table WHERE time < (integer_now_test2()-9) ORDER BY time DESC;
@@ -653,7 +655,7 @@ ORDER BY range_start_integer;
  _hyper_10_13_chunk |                   0 |                10
  _hyper_10_14_chunk |                  10 |                20
  _hyper_10_15_chunk |                  20 |                30
- _hyper_10_17_chunk |                  30 |                40
+ _hyper_10_16_chunk |                  30 |                40
 (4 rows)
 
 --We dropped everything up to the bucket starting at 30 and then
@@ -670,9 +672,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
           20 |  24
           15 |  19
           10 |  14
-           5 |   9
-           0 |   4
-(8 rows)
+(6 rows)
 
 SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_tablen,
         schema_name AS drop_chunks_mat_schema,
@@ -684,10 +684,10 @@ SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_tablen,
 SELECT drop_chunks('drop_chunks_view',
     newer_than => -20,
     verbose => true);
-INFO:  dropping chunk _timescaledb_internal._hyper_11_16_chunk
+INFO:  dropping chunk _timescaledb_internal._hyper_11_17_chunk
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_11_16_chunk
+ _timescaledb_internal._hyper_11_17_chunk
 (1 row)
 
 -- Test that we cannot drop chunks when specifying materialized
@@ -711,8 +711,8 @@ HINT:  Try the operation on the continuous aggregate instead.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -----------------------------------------------------------------
--- Test that drop_chunks will "refresh-on-drop", but only in the
--- regions covered by the dropped chunks.
+-- Test that refresh_continuous_aggregate on chunk will refresh, 
+-- but only in the regions covered by the show chunks.
 -----------------------------------------------------------------
 SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
@@ -723,7 +723,7 @@ ORDER BY 2,3;
  _hyper_10_13_chunk |                   0 |                10
  _hyper_10_14_chunk |                  10 |                20
  _hyper_10_15_chunk |                  20 |                30
- _hyper_10_17_chunk |                  30 |                40
+ _hyper_10_16_chunk |                  30 |                40
  _hyper_10_18_chunk |                  40 |                50
  _hyper_10_19_chunk |                  50 |                60
 (6 rows)
@@ -783,7 +783,7 @@ ORDER BY 2,3;
 --------------------+---------------------+-------------------
  _hyper_10_13_chunk |                   0 |                10
  _hyper_10_15_chunk |                  20 |                30
- _hyper_10_17_chunk |                  30 |                40
+ _hyper_10_16_chunk |                  30 |                40
  _hyper_10_18_chunk |                  40 |                50
  _hyper_10_19_chunk |                  50 |                60
 (5 rows)
@@ -809,7 +809,15 @@ ORDER BY 1;
 
 -- Insert a large value in one of the chunks that will be dropped
 INSERT INTO drop_chunks_table VALUES (:range_start_integer-1, 100);
--- Now drop the two adjecent chunks
+-- Now refresh and drop the two adjecent chunks
+SELECT _timescaledb_internal.refresh_continuous_aggregate('drop_chunks_view',
+  show_chunks('drop_chunks_table', older_than=>30));
+ refresh_continuous_aggregate 
+------------------------------
+ 
+ 
+(2 rows)
+
 SELECT drop_chunks('drop_chunks_table', older_than=>30);
                drop_chunks                
 ------------------------------------------
@@ -824,7 +832,7 @@ WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY 2,3;
      chunk_name     | range_start_integer | range_end_integer 
 --------------------+---------------------+-------------------
- _hyper_10_17_chunk |                  30 |                40
+ _hyper_10_16_chunk |                  30 |                40
  _hyper_10_18_chunk |                  40 |                50
  _hyper_10_19_chunk |                  50 |                60
 (3 rows)

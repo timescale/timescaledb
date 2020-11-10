@@ -195,6 +195,17 @@ chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	if (should_free)
 		heap_freetuple(tuple);
 }
+int64
+ts_chunk_primary_dimension_start(const Chunk *const chunk)
+{
+	return chunk->cube->slices[0]->fd.range_start;
+}
+
+int64
+ts_chunk_primary_dimension_end(const Chunk *const chunk)
+{
+	return chunk->cube->slices[0]->fd.range_end;
+}
 
 static void
 chunk_insert_relation(Relation rel, Chunk *chunk)
@@ -3207,31 +3218,20 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	{
 		int i;
 
-		/* Exclusively lock all chunks, and also refresh and invalidate the
+		/* Exclusively lock all chunks, and invalidate the
 		 * continuous aggregates in the regions covered by the chunks. Locking
 		 * prevents further modification of the dropped region during this
 		 * transaction, which allows moving the invalidation threshold without
 		 * having to worry about new invalidations while refreshing. */
 		for (i = 0; i < num_chunks; i++)
 		{
-			int64 start = chunk_primary_dimension_start(&chunks[i]);
-			int64 end = chunk_primary_dimension_end(&chunks[i]);
+			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
+			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
 			LockRelationOid(chunks[i].table_id, ExclusiveLock);
 
 			Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 				   chunks[i].cube->slices[0]->fd.dimension_id);
-
-			/* Refresh all continuous aggregates on the hypertable in the
-			 * region covered by the dropped chunk. Note that we cannot assume
-			 * that all dropped chunks exists in one single contiguous region,
-			 * so we refresh all chunk regions individually rather than the
-			 * region defined by the min and max chunk. An optimization is to
-			 * merge adjecent regions into a larger one for a larger
-			 * refresh. However, such merging needs to account for
-			 * multi-dimensional tables where some chunks have the same
-			 * primary dimension ranges. */
-			ts_cm_functions->continuous_agg_refresh_all(ht, start, end, chunks[i].fd.id);
 
 			/* Invalidate the dropped region to indicate that it was
 			 * modified. The invalidation will allow the refresh command on a

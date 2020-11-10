@@ -427,7 +427,7 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
-\set ON_ERROR_STOP 0
+\set ON_ERROR_STOP 1
 DROP TABLE conditions cascade;
 NOTICE:  drop cascades to 3 other objects
 CREATE TABLE conditions (
@@ -490,3 +490,24 @@ ERROR:  mixing continuous aggregates and other objects not allowed
 \set ON_ERROR_STOP 1
 DROP TABLE text_time CASCADE;
 NOTICE:  drop cascades to materialized view normal_mat_view
+CREATE TABLE measurements (time TIMESTAMPTZ NOT NULL, device INT, value FLOAT);
+SELECT create_hypertable('measurements', 'time');
+     create_hypertable      
+----------------------------
+ (10,public,measurements,t)
+(1 row)
+
+INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.refresh_continuous_aggregate(
+  'mat_with_test',
+  show_chunks('measurements')
+);
+ERROR:  cannot refresh continuous aggregate on chunk from different hypertable
+DETAIL:  The the continuous aggregate is defined on hypertable "conditions", while chunk is from hypertable "measurements". The continuous aggregate can be refreshed only on a chunk from the same hypertable.
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+DROP TABLE measurements;
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 3 other objects

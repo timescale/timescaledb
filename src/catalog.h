@@ -15,7 +15,6 @@
 #include "export.h"
 #include "extension_constants.h"
 #include "scanner.h"
-#include "export.h"
 
 /*
  * TimescaleDB catalog.
