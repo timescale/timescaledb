@@ -61,8 +61,6 @@ ts_bgw_job_type_counts()
 				counts.policy_retention++;
 			else if (namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0)
 				counts.policy_telemetry++;
-			else
-				Assert(false);
 		}
 		else
 		{
