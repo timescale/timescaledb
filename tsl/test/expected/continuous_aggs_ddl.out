@@ -1172,5 +1172,166 @@ ERROR:  cannot drop view conditionsnm_4 because other objects depend on it
 DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
 NOTICE:  drop cascades to view see_cagg
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_39_chunk
+-- Test DROP SCHEMA CASCADE with continuous aggregates
+--
+-- Issue: #2350
+--
+-- Case 1: DROP SCHEMA CASCADE
+CREATE SCHEMA test_schema;
+CREATE TABLE test_schema.telemetry_raw (
+  ts        TIMESTAMP WITH TIME ZONE NOT NULL,
+  value     DOUBLE PRECISION
+);
+SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
+        create_hypertable         
+----------------------------------
+ (29,test_schema,telemetry_raw,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW test_schema.telemetry_1s
+  WITH (timescaledb.continuous)
+    AS
+SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
+       avg(value)
+  FROM test_schema.telemetry_raw
+ GROUP BY ts_1s WITH NO DATA;
+SELECT ca.raw_hypertable_id,
+       h.schema_name,
+       h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name as "PART_VIEW_NAME",
+       partial_view_schema
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'telemetry_1s';
+ raw_hypertable_id |      schema_name      |       MAT_TABLE_NAME        |  PART_VIEW_NAME  |  partial_view_schema  
+-------------------+-----------------------+-----------------------------+------------------+-----------------------
+                29 | _timescaledb_internal | _materialized_hypertable_30 | _partial_view_30 | _timescaledb_internal
+(1 row)
+
+\gset
+DROP SCHEMA test_schema CASCADE;
+NOTICE:  drop cascades to 4 other objects
+SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = :'PART_VIEW_NAME';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = 'telemetry_1s';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
+ count 
+-------
+     0
+(1 row)
+
+-- Case 2: DROP SCHEMA CASCADE with multiple caggs
+CREATE SCHEMA test_schema;
+CREATE TABLE test_schema.telemetry_raw (
+  ts        TIMESTAMP WITH TIME ZONE NOT NULL,
+  value     DOUBLE PRECISION
+);
+SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
+        create_hypertable         
+----------------------------------
+ (31,test_schema,telemetry_raw,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW test_schema.cagg1
+  WITH (timescaledb.continuous)
+    AS
+SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
+       avg(value)
+  FROM test_schema.telemetry_raw
+ GROUP BY ts_1s WITH NO DATA;
+CREATE MATERIALIZED VIEW test_schema.cagg2
+  WITH (timescaledb.continuous)
+    AS
+SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
+       avg(value)
+  FROM test_schema.telemetry_raw
+ GROUP BY ts_1s WITH NO DATA;
+SELECT ca.raw_hypertable_id,
+       h.schema_name,
+       h.table_name AS "MAT_TABLE_NAME1",
+       partial_view_name as "PART_VIEW_NAME1",
+       partial_view_schema
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cagg1';
+ raw_hypertable_id |      schema_name      |       MAT_TABLE_NAME1       | PART_VIEW_NAME1  |  partial_view_schema  
+-------------------+-----------------------+-----------------------------+------------------+-----------------------
+                31 | _timescaledb_internal | _materialized_hypertable_32 | _partial_view_32 | _timescaledb_internal
+(1 row)
+
+\gset
+SELECT ca.raw_hypertable_id,
+       h.schema_name,
+       h.table_name AS "MAT_TABLE_NAME2",
+       partial_view_name as "PART_VIEW_NAME2",
+       partial_view_schema
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cagg2';
+ raw_hypertable_id |      schema_name      |       MAT_TABLE_NAME2       | PART_VIEW_NAME2  |  partial_view_schema  
+-------------------+-----------------------+-----------------------------+------------------+-----------------------
+                31 | _timescaledb_internal | _materialized_hypertable_33 | _partial_view_33 | _timescaledb_internal
+(1 row)
+
+\gset
+DROP SCHEMA test_schema CASCADE;
+NOTICE:  drop cascades to 7 other objects
+SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME1';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = :'PART_VIEW_NAME1';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = 'cagg1';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME2';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = :'PART_VIEW_NAME2';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_class WHERE relname = 'cagg2';
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
+ count 
+-------
+     0
+(1 row)
+
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
