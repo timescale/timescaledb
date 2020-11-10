@@ -117,9 +117,10 @@ extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
 extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
+extern int ts_hypertable_delete_by_id(int32 hypertable_id);
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt,
 															  const char *query);
-extern TSDLLEXPORT void ts_hypertable_drop_trigger(Hypertable *ht, const char *trigger_name);
+extern TSDLLEXPORT void ts_hypertable_drop_trigger(Oid relid, const char *trigger_name);
 extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 
 extern TSDLLEXPORT void ts_hypertable_check_partitioning(Hypertable *ht,

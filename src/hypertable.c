@@ -642,16 +642,16 @@ ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt, const char *q
 
 /* based on RemoveObjects */
 TSDLLEXPORT void
-ts_hypertable_drop_trigger(Hypertable *ht, const char *trigger_name)
+ts_hypertable_drop_trigger(Oid relid, const char *trigger_name)
 {
-	List *chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+	List *chunks = find_inheritance_children(relid, NoLock);
 	ListCell *lc;
 
-	if (OidIsValid(ht->main_table_relid))
+	if (OidIsValid(relid))
 	{
 		ObjectAddress objaddr = {
 			.classId = TriggerRelationId,
-			.objectId = get_trigger_oid(ht->main_table_relid, trigger_name, true),
+			.objectId = get_trigger_oid(relid, trigger_name, true),
 		};
 		if (OidIsValid(objaddr.objectId))
 			performDeletion(&objaddr, DROP_RESTRICT, 0);
@@ -733,6 +733,29 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  hypertable_tuple_delete,
 										  NULL,
 										  0,
+										  RowExclusiveLock,
+										  false,
+										  CurrentMemoryContext,
+										  NULL);
+}
+
+int
+ts_hypertable_delete_by_id(int32 hypertable_id)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_hypertable_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	return hypertable_scan_limit_internal(scankey,
+										  1,
+										  HYPERTABLE_ID_INDEX,
+										  hypertable_tuple_delete,
+										  NULL,
+										  1,
 										  RowExclusiveLock,
 										  false,
 										  CurrentMemoryContext,
