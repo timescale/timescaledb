@@ -1,1 +1,1 @@
-DROP FUNCTION IF EXISTS add_data_node;
+
