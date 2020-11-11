@@ -4,6 +4,38 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.0.0-rc3 (2020-11-12)
+
+This release candidate contains bugfixes since the previous release
+candidate, as well as additional minor features including support for
+"user-mapping" authentication between access/data nodes and an
+experimental API for refreshing continuous aggregates on individual
+chunks.
+
+**Minor Features**
+* #2627 Add optional user mappings support
+* #2635 Add API to refresh continuous aggregate on chunk
+
+**Bugfixes**
+* #2560 Fix SCHEMA DROP CASCADE with continuous aggregates
+* #2593 Set explicitly all lock parameters in alter_job
+* #2604 Fix chunk creation on hypertables with foreign key constraints 
+* #2610 Support analyze of internal compression table
+* #2612 Optimize internal cagg_watermark function
+* #2613 Refresh correct partial during refresh on drop
+* #2617 Fix validation of available extensions on data node
+* #2619 Fix segfault in decompress_chunk for chunks with dropped columns 
+* #2620 Fix DROP CASCADE for continuous aggregate 
+* #2625 Fix subquery errors when using AsyncAppend
+* #2626 Fix incorrect total_table_pages setting for compressed scan
+* #2628 Stop recursion in cache invalidation 
+
+**Thanks**
+* @mr-ns for reporting the issue with CTEs on distributed hypertables
+* @akamensky for reporting an issue with recursive cache invalidation
+* @ryanbooz for reporting slow queries with real-time aggregation on
+  continuous aggregates
+
 ## 2.0.0-rc2 (2020-10-21)
 
 This release candidate contains bugfixes since the previous release candidate.
