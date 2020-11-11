@@ -559,7 +559,7 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 	return remote_connection_open_with_options_nothrow(node_name, node_options);
 }
 
-/**
+/*
  * Validate that compatible extension is available on the data node.
  *
  * We check all available extension versions. Since we are connected to
@@ -573,9 +573,12 @@ connect_for_bootstrapping(const char *node_name, const char *const host, int32 p
 static void
 data_node_validate_extension_availability(TSConnection *conn)
 {
-	bool compatible;
+	StringInfo concat_versions = makeStringInfo();
+	bool compatible = false;
+	PGresult *res;
+	int i;
 
-	PGresult *res =
+	res =
 		remote_connection_execf(conn,
 								"SELECT version FROM pg_available_extension_versions WHERE name = "
 								"%s AND version ~ '\\d+.\\d+.\\d+.*' ORDER BY version DESC",
@@ -593,11 +596,10 @@ data_node_validate_extension_availability(TSConnection *conn)
 
 	Assert(PQnfields(res) == 1);
 
-	int i;
-	StringInfo concat_versions = makeStringInfo();
-	bool old_version;
 	for (i = 0; i < PQntuples(res); i++)
 	{
+		bool old_version = false;
+
 		appendStringInfo(concat_versions, "%s, ", PQgetvalue(res, i, 0));
 		compatible = dist_util_is_compatible_version(PQgetvalue(res, i, 0),
 													 TIMESCALEDB_VERSION,
