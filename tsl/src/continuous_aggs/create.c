@@ -1799,6 +1799,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		 * user. */
 		relid = get_relname_relid(stmt->into->rel->relname, nspid);
 		cagg = ts_continuous_agg_find_by_relid(relid);
+		Assert(cagg != NULL);
 		cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 		time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
 		refresh_window.type = ts_dimension_get_partition_type(time_dim);

@@ -1778,11 +1778,14 @@ append_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 		Chunk **chunks = scanctx->data;
 
 		Assert(chunk != NULL);
-
-		if (NULL == chunks && scanctx->num_complete_chunks > 0)
-			scanctx->data = chunks = palloc(sizeof(Chunk *) * scanctx->num_complete_chunks);
-
 		Assert(scanctx->num_processed < scanctx->num_complete_chunks);
+
+		if (NULL == chunks)
+		{
+			Assert(scanctx->num_complete_chunks > 0);
+			scanctx->data = chunks = palloc(sizeof(Chunk *) * scanctx->num_complete_chunks);
+		}
+
 		chunks[scanctx->num_processed] = chunk;
 	}
 
