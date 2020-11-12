@@ -65,7 +65,9 @@ get_largest_bucketed_window(Oid timetype, int64 bucket_width)
 		.start = ts_time_get_min(timetype),
 		.end = ts_time_get_end_or_max(timetype),
 	};
-	InternalTimeRange maxbuckets;
+	InternalTimeRange maxbuckets = {
+		.type = timetype,
+	};
 
 	/* For the MIN value, the corresponding bucket either falls on the exact
 	 * MIN or it will be below it. Therefore, we add (bucket_width - 1) to
