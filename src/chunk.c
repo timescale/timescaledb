@@ -196,13 +196,13 @@ chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 		heap_freetuple(tuple);
 }
 int64
-ts_chunk_primary_dimension_start(const Chunk *const chunk)
+ts_chunk_primary_dimension_start(const Chunk *chunk)
 {
 	return chunk->cube->slices[0]->fd.range_start;
 }
 
 int64
-ts_chunk_primary_dimension_end(const Chunk *const chunk)
+ts_chunk_primary_dimension_end(const Chunk *chunk)
 {
 	return chunk->cube->slices[0]->fd.range_end;
 }
