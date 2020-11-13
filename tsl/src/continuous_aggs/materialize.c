@@ -34,20 +34,21 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 
 static void spi_update_materializations(SchemaAndName partial_view,
 										SchemaAndName materialization_table, Name time_column_name,
-										TimeRange invalidation_range, int32 chunk_id);
+										TimeRange invalidation_range, const int32 chunk_id);
 static void spi_delete_materializations(SchemaAndName materialization_table, Name time_column_name,
-										TimeRange invalidation_range, const char *chunk_condition);
+										TimeRange invalidation_range,
+										const char *const chunk_condition);
 static void spi_insert_materializations(SchemaAndName partial_view,
 										SchemaAndName materialization_table, Name time_column_name,
 										TimeRange materialization_range,
-										const char *chunk_condition);
+										const char *const chunk_condition);
 
 void
 continuous_agg_update_materialization(SchemaAndName partial_view,
 									  SchemaAndName materialization_table, Name time_column_name,
 									  InternalTimeRange new_materialization_range,
 									  InternalTimeRange invalidation_range, int64 bucket_width,
-									  const int32 chunk_id)
+									  int32 chunk_id)
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
