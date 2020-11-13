@@ -165,7 +165,7 @@ build_script:
 
     docker-switch-linux
 
-    docker run -d --name pgregress --env POSTGRES_HOST_AUTH_METHOD=trust postgres:12.4-alpine
+    docker run -d --name pgregress --env POSTGRES_HOST_AUTH_METHOD=trust postgres:12.5-alpine
 
     docker exec -it pgregress /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev openssl postgresql-dev~=12.4"
 
