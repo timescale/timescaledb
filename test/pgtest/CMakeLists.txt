@@ -30,9 +30,6 @@ set(PG_IGNORE_TESTS
   sanity_check
   foreign_data
   security_label
-  # timetz fails without daylight savings. Likely to be fixed in PG
-  # 12.5
-  timetz
 )
 
 # Modify the test schedule to ignore some tests

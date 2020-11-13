@@ -13,11 +13,11 @@ jobs:
     runs-on: 'ubuntu-18.04'
     strategy:
       matrix:
-        pg: [11.9,12.4]
+        pg: [11.10,12.5]
         include:
-          - pg: 11.9
+          - pg: 11.10
             pg_major: 11
-          - pg: 12.4
+          - pg: 12.5
             pg_major: 12
       fail-fast: false
     env:
