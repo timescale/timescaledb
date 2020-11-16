@@ -206,7 +206,7 @@ static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo 
 															 bool create_addl_index,
 															 char *tablespacename,
 #if PG12_GE
-															 char *table_access_method,
+															 char *const table_access_method,
 #endif
 															 ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
