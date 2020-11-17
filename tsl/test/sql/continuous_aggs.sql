@@ -48,7 +48,8 @@ select a, count(b)
 from foo
 group by time_bucket(1, a), a WITH NO DATA;
 
-SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval) AS job_id
+\gset
 SELECT * FROM _timescaledb_config.bgw_job;
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
