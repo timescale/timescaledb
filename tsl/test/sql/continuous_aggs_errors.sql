@@ -480,5 +480,52 @@ SELECT _timescaledb_internal.refresh_continuous_aggregate(
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
 
-DROP TABLE measurements;
+-- Add a continuous aggregate on the measurements table and a policy
+-- to be able to test error cases for the add_job function.
+CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time), COUNT(time)
+  FROM measurements
+GROUP BY 1 WITH NO DATA;
+
+-- First test that add_job checks the config. It is currently possible
+-- to add non-custom jobs using the add_job function so we need to
+-- test that the function actually checks the config parameters. These
+-- should all generate errors, for different reasons...
+\set ON_ERROR_STOP 0
+-- ... this one because it is missing a field.
+SELECT add_job(
+       '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
+       '1 hour'::interval,
+       config => '{"end_offset": null, "start_offset": null}');
+-- ... this one because it has a bad value for start_offset
+SELECT add_job(
+       '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
+       '1 hour'::interval,
+       config => '{"end_offset": null, "start_offset": "1 fortnight", "mat_hypertable_id": 11}');
+-- ... this one because it has a bad value for end_offset
+SELECT add_job(
+       '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
+       '1 hour'::interval,
+       config => '{"end_offset": "chicken", "start_offset": null, "mat_hypertable_id": 11}');
+\set ON_ERROR_STOP 1
+
+SELECT add_continuous_aggregate_policy('measurements_summary', NULL, NULL, '1 h'::interval) AS job_id
+\gset
+
+\x on
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+\x off
+
+-- These are all weird values for the parameters for the continuous
+-- aggregate jobs and should generate an error. Since the config will
+-- be replaced, we will also generate error for missing arguments.
+\set ON_ERROR_STOP 0
+SELECT alter_job(:job_id, config => '{"end_offset": "1 week", "start_offset": "2 fortnights"}');
+SELECT alter_job(:job_id,
+       config => '{"mat_hypertable_id": 11, "end_offset": "chicken", "start_offset": "1 fortnights"}');
+SELECT alter_job(:job_id,
+       config => '{"mat_hypertable_id": 11, "end_offset": "chicken", "start_offset": "1 week"}');
+\set ON_ERROR_STOP 1
+
+DROP TABLE measurements CASCADE;
 DROP TABLE conditions CASCADE;

@@ -508,6 +508,69 @@ ERROR:  cannot refresh continuous aggregate on chunk from different hypertable
 DETAIL:  The the continuous aggregate is defined on hypertable "conditions", while chunk is from hypertable "measurements". The continuous aggregate can be refreshed only on a chunk from the same hypertable.
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
-DROP TABLE measurements;
+-- Add a continuous aggregate on the measurements table and a policy
+-- to be able to test error cases for the add_job function.
+CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 day', time), COUNT(time)
+  FROM measurements
+GROUP BY 1 WITH NO DATA;
+-- First test that add_job checks the config. It is currently possible
+-- to add non-custom jobs using the add_job function so we need to
+-- test that the function actually checks the config parameters. These
+-- should all generate errors, for different reasons...
+\set ON_ERROR_STOP 0
+-- ... this one because it is missing a field.
+SELECT add_job(
+       '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
+       '1 hour'::interval,
+       config => '{"end_offset": null, "start_offset": null}');
+ERROR:  could not find "mat_hypertable_id" in config for job
+-- ... this one because it has a bad value for start_offset
+SELECT add_job(
+       '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
+       '1 hour'::interval,
+       config => '{"end_offset": null, "start_offset": "1 fortnight", "mat_hypertable_id": 11}');
+ERROR:  invalid input syntax for type interval: "1 fortnight"
+-- ... this one because it has a bad value for end_offset
+SELECT add_job(
+       '_timescaledb_internal.policy_refresh_continuous_aggregate'::regproc,
+       '1 hour'::interval,
+       config => '{"end_offset": "chicken", "start_offset": null, "mat_hypertable_id": 11}');
+ERROR:  invalid input syntax for type interval: "chicken"
+\set ON_ERROR_STOP 1
+SELECT add_continuous_aggregate_policy('measurements_summary', NULL, NULL, '1 h'::interval) AS job_id
+\gset
+\x on
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+-[ RECORD 1 ]-----+--------------------------------------------------------------------
+id                | 1000
+application_name  | Refresh Continuous Aggregate Policy [1000]
+schedule_interval | @ 1 hour
+max_runtime       | @ 0
+max_retries       | -1
+retry_period      | @ 1 hour
+proc_schema       | _timescaledb_internal
+proc_name         | policy_refresh_continuous_aggregate
+owner             | default_perm_user
+scheduled         | t
+hypertable_id     | 11
+config            | {"end_offset": null, "start_offset": null, "mat_hypertable_id": 11}
+
+\x off
+-- These are all weird values for the parameters for the continuous
+-- aggregate jobs and should generate an error. Since the config will
+-- be replaced, we will also generate error for missing arguments.
+\set ON_ERROR_STOP 0
+SELECT alter_job(:job_id, config => '{"end_offset": "1 week", "start_offset": "2 fortnights"}');
+ERROR:  could not find "mat_hypertable_id" in config for job
+SELECT alter_job(:job_id,
+       config => '{"mat_hypertable_id": 11, "end_offset": "chicken", "start_offset": "1 fortnights"}');
+ERROR:  invalid input syntax for type interval: "1 fortnights"
+SELECT alter_job(:job_id,
+       config => '{"mat_hypertable_id": 11, "end_offset": "chicken", "start_offset": "1 week"}');
+ERROR:  invalid input syntax for type interval: "chicken"
+\set ON_ERROR_STOP 1
+DROP TABLE measurements CASCADE;
+NOTICE:  drop cascades to 3 other objects
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 3 other objects
