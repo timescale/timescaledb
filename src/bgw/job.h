@@ -46,8 +46,6 @@ extern TSDLLEXPORT int32 ts_bgw_job_insert_relation(Name application_name, Name 
 													Interval *retry_period, Name proc_schema,
 													Name proc_name, Name owner, bool scheduled,
 													int32 hypertable_id, Jsonb *config);
-extern TSDLLEXPORT void ts_bgw_job_update_by_id(int32 job_id, BgwJob *updated_job);
-
 extern TSDLLEXPORT void ts_bgw_job_permission_check(BgwJob *job);
 
 extern TSDLLEXPORT void ts_bgw_job_validate_job_owner(Oid owner);
