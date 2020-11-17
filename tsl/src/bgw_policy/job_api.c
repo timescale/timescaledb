@@ -169,14 +169,22 @@ job_alter(PG_FUNCTION_ARGS)
 	bool nulls[ALTER_JOB_NUM_COLS] = { false };
 	HeapTuple tuple;
 	TimestampTz next_start;
-
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
 
+	BgwJob *job;
+
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
+	/* check that caller accepts tuple and abort early if that is not the
+	 * case */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
 
+	job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
 	if (job == NULL)
 	{
 		if (if_exists)
@@ -208,13 +216,6 @@ job_alter(PG_FUNCTION_ARGS)
 
 	if (!PG_ARGISNULL(7))
 		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(7));
-
-	/* check caller does accept tuple */
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("function returning record called in context "
-						"that cannot accept type record")));
 
 	stat = ts_bgw_job_stat_find(job_id);
 	if (stat != NULL)

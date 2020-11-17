@@ -939,8 +939,6 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
 	Assert(!isnull[0]);
 
-	ts_bgw_job_permission_check(updated_job);
-
 	/* when we update the schedule interval, modify the next start time as well*/
 	if (!DatumGetBool(DirectFunctionCall2(interval_eq,
 										  old_schedule_interval,
