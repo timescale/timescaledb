@@ -17,6 +17,7 @@
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
@@ -136,24 +137,51 @@ get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 																				partitioning_type));
 }
 
+static void
+check_valid_index(Hypertable *ht, const char *index_name)
+{
+	Oid index_oid;
+	HeapTuple idxtuple;
+	Form_pg_index index_form;
+
+	index_oid =
+		get_relname_relid(index_name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
+	if (!HeapTupleIsValid(idxtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("reorder index not found"),
+				 errdetail("The index \"%s\" could not be found", index_name)));
+
+	index_form = (Form_pg_index) GETSTRUCT(idxtuple);
+	if (index_form->indrelid != ht->main_table_relid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid reorder index"),
+				 errhint("The reorder index must by an index on hypertable \"%s\".",
+						 NameStr(ht->fd.table_name))));
+
+	ReleaseSysCache(idxtuple);
+}
+
 bool
 policy_reorder_execute(int32 job_id, Jsonb *config)
 {
 	int chunk_id;
-	Hypertable *ht;
 	Chunk *chunk;
+	PolicyReorderData policy;
 
-	ht = ts_hypertable_get_by_id(policy_reorder_get_hypertable_id(config));
+	policy_reorder_read_and_validate_config(config, &policy);
 
 	/* Find a chunk to reorder in the selected hypertable */
-	chunk_id = get_chunk_id_to_reorder(job_id, ht);
+	chunk_id = get_chunk_id_to_reorder(job_id, policy.hypertable);
 
 	if (chunk_id == -1)
 	{
 		elog(NOTICE,
 			 "no chunks need reordering for hypertable %s.%s",
-			 ht->fd.schema_name.data,
-			 ht->fd.table_name.data);
+			 policy.hypertable->fd.schema_name.data,
+			 policy.hypertable->fd.table_name.data);
 		return true;
 	}
 
@@ -164,13 +192,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	 */
 	chunk = ts_chunk_get_by_id(chunk_id, false);
 	elog(DEBUG1, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
-	reorder_chunk(chunk->table_id,
-				  get_relname_relid(policy_reorder_get_index_name(config),
-									get_namespace_oid(NameStr(ht->fd.schema_name), false)),
-				  false,
-				  InvalidOid,
-				  InvalidOid,
-				  InvalidOid);
+	reorder_chunk(chunk->table_id, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
 	elog(DEBUG1,
 		 "completed reordering chunk %s.%s",
 		 chunk->fd.schema_name.data,
@@ -179,10 +201,32 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
 
-	if (get_chunk_id_to_reorder(job_id, ht) != -1)
+	if (get_chunk_id_to_reorder(job_id, policy.hypertable) != -1)
 		enable_fast_restart(job_id, "reorder");
 
 	return true;
+}
+
+void
+policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy)
+{
+	int32 htid = policy_reorder_get_hypertable_id(config);
+	Hypertable *ht = ts_hypertable_get_by_id(htid);
+	const char *index_name = policy_reorder_get_index_name(config);
+
+	if (!ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration hypertable id %d not found", htid)));
+
+	check_valid_index(ht, index_name);
+
+	if (policy)
+	{
+		policy->hypertable = ht;
+		policy->index_relid =
+			get_relname_relid(index_name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+	}
 }
 
 static Dimension *
@@ -212,7 +256,20 @@ get_open_dimension_for_hypertable(Hypertable *ht)
 bool
 policy_retention_execute(int32 job_id, Jsonb *config)
 {
-	bool started = false;
+	PolicyRetentionData policy_data;
+
+	policy_retention_read_and_validate_config(config, &policy_data);
+
+	chunk_invoke_drop_chunks(policy_data.object_relid,
+							 policy_data.boundary,
+							 policy_data.boundary_type);
+
+	return true;
+}
+
+void
+policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *policy_data)
+{
 	Oid object_relid;
 	Hypertable *hypertable;
 	Cache *hcache;
@@ -221,24 +278,19 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	Datum boundary_type;
 	ContinuousAgg *cagg;
 
-	if (!ActiveSnapshotSet())
-	{
-		started = true;
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
-
 	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config));
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
 	open_dim = get_open_dimension_for_hypertable(hypertable);
+
 	boundary = get_window_boundary(open_dim,
 								   config,
 								   policy_retention_get_drop_after_int,
 								   policy_retention_get_drop_after_interval);
 	boundary_type = ts_dimension_get_partition_type(open_dim);
 
-	/* We need to do a reverse lookup here since the given hypertable
-	   might be a materialized hypertable, and thus need to call drop_chunks
-		on the continuous aggregate instead. */
+	/* We need to do a reverse lookup here since the given hypertable might be
+	   a materialized hypertable, and thus need to call drop_chunks on the
+	   continuous aggregate instead. */
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id);
 	if (cagg)
 	{
@@ -247,80 +299,87 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 		object_relid = get_relname_relid(view_name, get_namespace_oid(schema_name, false));
 	}
 
-	chunk_invoke_drop_chunks(object_relid, boundary, boundary_type);
-
 	ts_cache_release(hcache);
 
-	if (started)
-		PopActiveSnapshot();
-
-	return true;
+	if (policy_data)
+	{
+		policy_data->object_relid = object_relid;
+		policy_data->boundary = boundary;
+		policy_data->boundary_type = boundary_type;
+	}
 }
 
 bool
 policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
+{
+	PolicyContinuousAggData policy_data;
+
+	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
+	elog(LOG,
+		 "refresh continuous aggregate range %s , %s",
+		 ts_internal_to_time_string(policy_data.refresh_window.start,
+									policy_data.refresh_window.type),
+		 ts_internal_to_time_string(policy_data.refresh_window.end,
+									policy_data.refresh_window.type));
+	continuous_agg_refresh_internal(policy_data.cagg, &policy_data.refresh_window, false);
+
+	return true;
+}
+
+void
+policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggData *policy_data)
 {
 	int32 materialization_id;
 	Hypertable *mat_ht;
 	Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
-	ContinuousAgg *cagg;
-	InternalTimeRange refresh_window;
 
-	if (!ActiveSnapshotSet())
-	{
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
 	open_dim = get_open_dimension_for_hypertable(mat_ht);
 	dim_type = ts_dimension_get_partition_type(open_dim);
 	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config);
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config);
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
-	refresh_window =
-		(InternalTimeRange){ .type = dim_type, .start = refresh_start, .end = refresh_end };
-	elog(LOG,
-		 "refresh continuous aggregate range %s , %s",
-		 ts_internal_to_time_string(refresh_start, dim_type),
-		 ts_internal_to_time_string(refresh_end, dim_type));
-	continuous_agg_refresh_internal(cagg, &refresh_window, false);
-	return true;
+
+	if (refresh_start >= refresh_end)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid refresh window"),
+				 errdetail("start_offset: %s, end_offset: %s",
+						   ts_internal_to_time_string(refresh_start, dim_type),
+						   ts_internal_to_time_string(refresh_end, dim_type)),
+				 errhint("The start of the window must be before the end.")));
+
+	if (policy_data)
+	{
+		policy_data->refresh_window.type = dim_type;
+		policy_data->refresh_window.start = refresh_start;
+		policy_data->refresh_window.end = refresh_end;
+		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
+	}
 }
 
 bool
 policy_compression_execute(int32 job_id, Jsonb *config)
 {
-	bool started = false;
-	Oid table_relid;
-	Hypertable *ht;
-	Cache *hcache;
 	int32 chunkid;
-	Chunk *chunk = NULL;
 	Dimension *dim;
+	PolicyCompressionData policy_data;
 
-	if (!ActiveSnapshotSet())
-	{
-		started = true;
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
-
-	table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
-	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
-	dim = hyperspace_get_open_dimension(ht->space, 0);
-
+	policy_compression_read_and_validate_config(config, &policy_data);
+	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
 	chunkid = get_chunk_to_compress(dim, config);
+
 	if (chunkid == INVALID_CHUNK_ID)
-	{
 		elog(NOTICE,
 			 "no chunks for hypertable %s.%s that satisfy compress chunk policy",
-			 ht->fd.schema_name.data,
-			 ht->fd.table_name.data);
-	}
-	else
+			 policy_data.hypertable->fd.schema_name.data,
+			 policy_data.hypertable->fd.table_name.data);
+
+	if (chunkid != INVALID_CHUNK_ID)
 	{
-		chunk = ts_chunk_get_by_id(chunkid, true);
+		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		tsl_compress_chunk_wrapper(chunk, false);
 
 		elog(LOG,
@@ -333,12 +392,25 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 	if (chunkid != INVALID_CHUNK_ID)
 		enable_fast_restart(job_id, "compression");
 
-	ts_cache_release(hcache);
-	if (started)
-		PopActiveSnapshot();
+	ts_cache_release(policy_data.hcache);
 
 	elog(DEBUG1, "job %d completed compressing chunk", job_id);
 	return true;
+}
+
+/* Read configuration for compression job from config object. */
+void
+policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
+{
+	Oid table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
+	Cache *hcache;
+	Hypertable *hypertable =
+		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	if (policy_data)
+	{
+		policy_data->hypertable = hypertable;
+		policy_data->hcache = hcache;
+	}
 }
 
 static void
@@ -375,7 +447,8 @@ bool
 job_execute(BgwJob *job)
 {
 	Const *arg1, *arg2;
-	bool started = false;
+	bool transaction_started = false;
+	bool pushed_snapshot = false;
 	char prokind;
 	Oid proc;
 	Oid proc_args[] = { INT4OID, JSONBOID };
@@ -385,9 +458,14 @@ job_execute(BgwJob *job)
 
 	if (!IsTransactionOrTransactionBlock())
 	{
-		started = true;
+		transaction_started = true;
 		StartTransactionCommand();
-		/* executing sql functions requires snapshot */
+	}
+
+	/* executing sql functions requires snapshot. */
+	if (!ActiveSnapshotSet())
+	{
+		pushed_snapshot = true;
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
@@ -432,13 +510,16 @@ job_execute(BgwJob *job)
 			break;
 	}
 
-	if (started)
-	{
-		/* if job does its own transaction handling it might not have set a snapshot */
-		if (ActiveSnapshotSet())
-			PopActiveSnapshot();
+	/* Both checks are needed: if the executed procedure commit the
+	 * transaction---which `continuous_agg_refresh_internal` does, for
+	 * example---it will remove the active snapshot and start a new
+	 * transaction with no active snapshots. In that case, we should not pop a
+	 * snapshot. */
+	if (pushed_snapshot && ActiveSnapshotSet())
+		PopActiveSnapshot();
+
+	if (transaction_started)
 		CommitTransactionCommand();
-	}
 
 	return true;
 }

@@ -310,6 +310,15 @@ select job_status from timescaledb_information.job_stats where job_id = :job_id;
 \set ON_ERROR_STOP 0
 -- negative infinity disallowed (used as special value)
 select * from alter_job(:job_id, next_start=>'-infinity');
+-- index should exist
+select * from alter_job(:job_id,
+       config => '{"index_name": "non-existent", "hypertable_id": 7}');
+-- index should be an index on the hypertable
+select * from alter_job(:job_id,
+       config => '{"index_name": "non_ht_index", "hypertable_id": 7}');
+-- hypertable should exist
+select * from alter_job(:job_id,
+       config => '{"index_name": "test_table_time_idx", "hypertable_id": 47}');
 \set ON_ERROR_STOP 1
 
 -- Check if_exists boolean works correctly

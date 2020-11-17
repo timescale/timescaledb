@@ -797,6 +797,18 @@ select job_status from timescaledb_information.job_stats where job_id = :job_id;
 -- negative infinity disallowed (used as special value)
 select * from alter_job(:job_id, next_start=>'-infinity');
 ERROR:  cannot set next start to -infinity
+-- index should exist
+select * from alter_job(:job_id,
+       config => '{"index_name": "non-existent", "hypertable_id": 7}');
+ERROR:  reorder index not found
+-- index should be an index on the hypertable
+select * from alter_job(:job_id,
+       config => '{"index_name": "non_ht_index", "hypertable_id": 7}');
+ERROR:  invalid reorder index
+-- hypertable should exist
+select * from alter_job(:job_id,
+       config => '{"index_name": "test_table_time_idx", "hypertable_id": 47}');
+ERROR:  configuration hypertable id 47 not found
 \set ON_ERROR_STOP 1
 -- Check if_exists boolean works correctly
 select * from alter_job(1234, if_exists => TRUE);
