@@ -76,6 +76,7 @@ view_owner                        | default_perm_user
 materialized_only                 | t
 materialization_hypertable_schema | _timescaledb_internal
 materialization_hypertable_name   | _materialized_hypertable_2
+raw_hypertable                    | device_readings
 view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, device_readings.observation_time) AS bucket,                      +
                                   |     device_readings.device_id,                                                                              +
                                   |     avg(device_readings.metric) AS metric_avg,                                                              +

@@ -113,9 +113,11 @@ SELECT cagg.user_view_schema AS view_schema,
   cagg.materialized_only,
   ht.schema_name AS materialization_hypertable_schema,
   ht.table_name AS materialization_hypertable_name,
+  format('%I.%I', raw_ht.schema_name, raw_ht.table_name)::regclass AS raw_hypertable,
   directview.viewdefinition AS view_definition
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
+  _timescaledb_catalog.hypertable raw_ht,
   LATERAL (
     SELECT C.oid,
       pg_get_userbyid(C.relowner) AS viewowner
@@ -131,7 +133,7 @@ FROM _timescaledb_catalog.continuous_agg cagg,
   WHERE C.relkind = 'v'
     AND C.relname = cagg.direct_view_name
     AND N.nspname = cagg.direct_view_schema) directview
-WHERE cagg.mat_hypertable_id = ht.id;
+WHERE cagg.mat_hypertable_id = ht.id AND raw_ht.id = raw_hypertable_id;
 
 CREATE OR REPLACE VIEW timescaledb_information.data_nodes AS
 SELECT s.node_name,
