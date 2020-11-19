@@ -594,7 +594,7 @@ add_compressed_chunk_to_vacuum(Hypertable *ht, Oid comp_chunk_relid, void *arg)
 
 	Chunk *chunk_parent;
 	/* chunk is from a compressed hypertable */
-	Assert(ht->fd.compressed);
+	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 
 	/*chunks for internal compression table have a parent */
 	chunk_parent = ts_chunk_get_compressed_chunk_parent(compressed_chunk);
@@ -774,7 +774,7 @@ process_vacuum(ProcessUtilityArgs *args)
 					if (hypertable_is_distributed(ht))
 						continue;
 
-					if (ht->fd.compressed)
+					if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					{
 						ctx.ht_vacuum_rel = vacuum_rel;
 						foreach_chunk(ht, add_compressed_chunk_to_vacuum, &ctx);
@@ -1106,7 +1106,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				if (list_length(stmt->objects) != 1)
 					elog(ERROR, "cannot drop a hypertable along with other objects");
 
-				if (ht->fd.compressed)
+				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("dropping compressed hypertables not supported"),

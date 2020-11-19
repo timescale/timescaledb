@@ -1777,11 +1777,11 @@ SELECT * FROM set_number_partitions('"Table\\Schema"."Param_Table"', 4);
 
 -- Verify hypertables on all data nodes
 SELECT * FROM _timescaledb_catalog.hypertable;
- id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compressed | compressed_hypertable_id | replication_factor 
-----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+------------+--------------------------+--------------------
-  1 | public        | disttable       | _timescaledb_internal  | _dist_hyper_1           |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                  1
-  2 | public        | underreplicated | _timescaledb_internal  | _dist_hyper_2           |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                  4
-  4 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 | f          |                          |                  2
+ id |  schema_name  |   table_name    | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
+----+---------------+-----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
+  1 | public        | disttable       | _timescaledb_internal  | _dist_hyper_1           |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                  1
+  2 | public        | underreplicated | _timescaledb_internal  | _dist_hyper_2           |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                  4
+  4 | Table\\Schema | Param_Table     | T3sTSch                | test*pre_               |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                  2
 (3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -1809,11 +1809,11 @@ $$);
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM _timescaledb_catalog.hypertable
 NOTICE:  [db_dist_hypertable_1]:
-id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|compressed|compressed_hypertable_id|replication_factor
---+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+----------+------------------------+------------------
- 1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
- 2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
- 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
+id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|compression_state|compressed_hypertable_id|replication_factor
+--+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+-----------------+------------------------+------------------
+ 1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
 (3 rows)
 
 
@@ -1843,11 +1843,11 @@ ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
 NOTICE:  [db_dist_hypertable_2]: 
 SELECT * FROM _timescaledb_catalog.hypertable
 NOTICE:  [db_dist_hypertable_2]:
-id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|compressed|compressed_hypertable_id|replication_factor
---+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+----------+------------------------+------------------
- 1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
- 2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
- 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
+id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|compression_state|compressed_hypertable_id|replication_factor
+--+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+-----------------+------------------------+------------------
+ 1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
 (3 rows)
 
 
@@ -1877,11 +1877,11 @@ ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
 NOTICE:  [db_dist_hypertable_3]: 
 SELECT * FROM _timescaledb_catalog.hypertable
 NOTICE:  [db_dist_hypertable_3]:
-id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|compressed|compressed_hypertable_id|replication_factor
---+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+----------+------------------------+------------------
- 1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
- 2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
- 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|f         |                        |                -1
+id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|num_dimensions|chunk_sizing_func_schema|chunk_sizing_func_name  |chunk_target_size|compression_state|compressed_hypertable_id|replication_factor
+--+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+-----------------+------------------------+------------------
+ 1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
 (3 rows)
 
 
