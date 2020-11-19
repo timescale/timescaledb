@@ -26,6 +26,12 @@ INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, r
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
 ALTER TABLE compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
 
+SELECT * FROM timescaledb_information.compression_settings;
+\x
+SELECT * FROM _timescaledb_catalog.hypertable
+WHERE table_name = 'compressed';
+\x
+
 SELECT test.remote_exec(NULL, $$
 SELECT table_name, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable

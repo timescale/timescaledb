@@ -26,9 +26,24 @@ typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
 
-#define TS_HYPERTABLE_HAS_COMPRESSION(ht)                                                          \
-	((ht)->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+/* For the distributed node case, we would have compression enabled
+ * but don't have a corresponding internal table on the access
+ * node
+ */
+enum
+{
+	HypertableCompressionOff = 0,
+	HypertableCompressionEnabled = 1,
+	HypertableInternalCompressionTable = 2,
+};
 
+#define TS_HYPERTABLE_HAS_COMPRESSION(ht) ts_hypertable_has_compression(ht)
+
+#define TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)                                                  \
+	((ht)->fd.compression_state == HypertableCompressionEnabled)
+
+#define TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht)                                            \
+	((ht)->fd.compression_state == HypertableInternalCompressionTable)
 typedef struct Hypertable
 {
 	FormData_hypertable fd;
@@ -158,6 +173,8 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(int32 replication_factor
 														bool is_dist_call);
 extern TSDLLEXPORT Datum ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
+
+extern TSDLLEXPORT bool ts_hypertable_has_compression(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

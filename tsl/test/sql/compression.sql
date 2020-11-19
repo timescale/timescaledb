@@ -26,7 +26,7 @@ update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_transparent_decompression to OFF;
 
-select id, schema_name, table_name, compressed, compressed_hypertable_id from
+select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from
 _timescaledb_catalog.hypertable order by id;
 select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;
 select * from timescaledb_information.compression_settings ORDER BY hypertable_name;

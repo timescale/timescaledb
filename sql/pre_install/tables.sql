@@ -37,8 +37,10 @@
 -- chunks.
 -- The unique constraint is table_name +schema_name. The ordering is
 -- important as we want index access when we filter by table_name
+CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
+
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
-  id serial PRIMARY KEY,
+  id INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'), 
   schema_name name NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
   table_name name NOT NULL,
   associated_schema_name name NOT NULL,
@@ -47,18 +49,19 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
   chunk_sizing_func_schema name NOT NULL,
   chunk_sizing_func_name name NOT NULL,
   chunk_target_size bigint NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
-  compressed boolean NOT NULL DEFAULT FALSE,
+  compression_state smallint NOT NULL DEFAULT 0,
   compressed_hypertable_id integer REFERENCES _timescaledb_catalog.hypertable (id),
   replication_factor smallint NULL CHECK (replication_factor > 0),
   UNIQUE (associated_schema_name, associated_table_prefix),
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
-  CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compressed = TRUE),
-  CONSTRAINT hypertable_compress_check CHECK (compressed = FALSE OR (compressed = TRUE AND compressed_hypertable_id IS NULL))
+----internal compressed hypertables have compression state = 2
+  CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
+  CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL))
 );
+ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
-
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.hypertable', 'id'), '');
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
   hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
