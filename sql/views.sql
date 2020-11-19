@@ -15,10 +15,10 @@ SELECT ht.schema_name AS hypertable_schema,
     FROM _timescaledb_catalog.chunk ch
     WHERE ch.hypertable_id = ht.id) AS num_chunks,
   (
-    CASE WHEN ht.compressed_hypertable_id IS NULL THEN
-      FALSE
+    CASE WHEN compression_state = 1 THEN
+      TRUE 
     ELSE
-      TRUE
+      FALSE 
     END) AS compression_enabled,
   (
     CASE WHEN ht.replication_factor > 0 THEN
@@ -43,7 +43,7 @@ FROM _timescaledb_catalog.hypertable ht
     array_agg(node_name ORDER BY node_name) AS node_list
   FROM _timescaledb_catalog.hypertable_data_node
   GROUP BY hypertable_id) dn ON ht.id = dn.hypertable_id
-WHERE ht.compressed IS FALSE --> no internal compression tables
+WHERE ht.compression_state != 2 --> no internal compression tables
   AND ca.mat_hypertable_id IS NULL;
 
 CREATE OR REPLACE VIEW timescaledb_information.job_stats AS
@@ -234,7 +234,7 @@ FROM (
     FROM _timescaledb_catalog.chunk_data_node
     GROUP BY chunk_id) chdn ON srcch.id = chdn.chunk_id
   WHERE srcch.dropped IS FALSE
-    AND ht.compressed = FALSE) finalq
+    AND ht.compression_state != 2 ) finalq
 WHERE chunk_dimension_num = 1;
 
 -- hypertable's dimension information

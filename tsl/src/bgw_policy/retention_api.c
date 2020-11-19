@@ -92,7 +92,7 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 
 	if (ht != NULL)
 	{
-		if (ht->fd.compressed)
+		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
