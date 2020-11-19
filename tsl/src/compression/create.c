@@ -805,7 +805,7 @@ check_modify_compression_options(Hypertable *ht, WithClauseResult *with_clause_o
 {
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	bool compressed_chunks_exist;
-	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
+	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 	compressed_chunks_exist =
 		compression_already_enabled && ts_chunk_exists_with_compression(ht->fd.id);
 
@@ -874,7 +874,7 @@ drop_existing_compression_table(Hypertable *ht)
 static bool
 disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 {
-	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION(ht);
+	bool compression_already_enabled = TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht);
 	if (!with_clause_options[CompressOrderBy].is_default ||
 		!with_clause_options[CompressSegmentBy].is_default)
 		ereport(ERROR,
@@ -923,7 +923,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("continuous aggregates do not support compression")));
 	}
-	if (ht->fd.compressed)
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -944,7 +944,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	{
 		return disable_compression(ht, with_clause_options);
 	}
-	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		check_modify_compression_options(ht, with_clause_options);
 
 	ownerid = ts_rel_get_owner(ht->main_table_relid);
@@ -971,11 +971,15 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		/* On a distributed hypertable, there's no data locally, so don't
 		 * create local compression tables and data but let the DDL pass on to
 		 * data nodes. */
+		ts_hypertable_set_compressed_id(ht, 0);
+		compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 		return true;
 	}
-
-	compress_htid = create_compression_table(ownerid, &compress_cols);
-	ts_hypertable_set_compressed_id(ht, compress_htid);
+	else
+	{
+		compress_htid = create_compression_table(ownerid, &compress_cols);
+		ts_hypertable_set_compressed_id(ht, compress_htid);
+	}
 
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 	/*add the constraints to the new compressed hypertable */

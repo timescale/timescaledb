@@ -154,7 +154,8 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)] =
 		Int64GetDatum(fd->chunk_target_size);
 
-	values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)] = BoolGetDatum(fd->compressed);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)] =
+		Int16GetDatum(fd->compression_state);
 	if (fd->compressed_hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
 	else
@@ -189,7 +190,7 @@ hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)]);
-	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_id)]);
 	memcpy(&fd->schema_name,
@@ -217,7 +218,8 @@ hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 
 	fd->chunk_target_size =
 		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)]);
-	fd->compressed = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_hypertable_compressed)]);
+	fd->compression_state =
+		DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)])
 		fd->compressed_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -347,7 +349,8 @@ static bool
 hypertable_is_compressed_or_materialization(Hypertable *ht)
 {
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-	return (ht->fd.compressed || status == HypertableIsMaterialization);
+	return (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht) ||
+			status == HypertableIsMaterialization);
 }
 
 static ScanFilterResult
@@ -388,7 +391,8 @@ hypertable_is_user_table(Hypertable *ht)
 {
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-	return !ht->fd.compressed && status != HypertableIsMaterialization;
+	return (!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht) &&
+			status != HypertableIsMaterialization);
 }
 
 static ScanTupleResult
@@ -416,7 +420,7 @@ hypertable_tuple_add_stat(TupleInfo *ti, void *data)
 				break;
 			default:
 				Assert(replication_factor >= 1);
-				Assert(!ht->fd.compressed);
+				Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 				stat->num_hypertables_distributed++;
 				if (replication_factor > 1)
 					stat->num_hypertables_distributed_and_replicated++;
@@ -1002,7 +1006,10 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	if (fd.chunk_target_size < 0)
 		fd.chunk_target_size = 0;
 
-	fd.compressed = compressed;
+	if (compressed)
+		fd.compression_state = HypertableInternalCompressionTable;
+	else
+		fd.compression_state = HypertableCompressionOff;
 
 	/* when creating a hypertable, there is never an associated compressed dual */
 	fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -2419,15 +2426,21 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 bool
 ts_hypertable_set_compressed_id(Hypertable *ht, int32 compressed_hypertable_id)
 {
-	Assert(!ht->fd.compressed);
-	ht->fd.compressed_hypertable_id = compressed_hypertable_id;
+	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
+	ht->fd.compression_state = HypertableCompressionEnabled;
+	/* distr. hypertables do not have a internal compression table
+	 * on the access node
+	 */
+	if (!hypertable_is_distributed(ht))
+		ht->fd.compressed_hypertable_id = compressed_hypertable_id;
 	return ts_hypertable_update(ht) > 0;
 }
 
 bool
 ts_hypertable_unset_compressed_id(Hypertable *ht)
 {
-	Assert(!ht->fd.compressed);
+	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
+	ht->fd.compression_state = HypertableCompressionOff;
 	ht->fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
 	return ts_hypertable_update(ht) > 0;
 }
@@ -2733,4 +2746,15 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	Assert(res == SPI_OK_FINISH);
 
 	return maxdat;
+}
+
+bool
+ts_hypertable_has_compression(Hypertable *ht)
+{
+	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
+	{
+		Assert(ht->fd.compression_state == HypertableCompressionEnabled);
+		return true;
+	}
+	return false;
 }

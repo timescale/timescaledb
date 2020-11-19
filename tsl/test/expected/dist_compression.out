@@ -42,6 +42,31 @@ NOTICE:  adding not-null constraint to column "time"
 INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, random()*80
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
 ALTER TABLE compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+SELECT * FROM timescaledb_information.compression_settings;
+ hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
+ public            | compressed      | device  |                      1 |                      |             | 
+ public            | compressed      | time    |                        |                    1 | f           | t
+(2 rows)
+
+\x
+SELECT * FROM _timescaledb_catalog.hypertable
+WHERE table_name = 'compressed';
+-[ RECORD 1 ]------------+-------------------------
+id                       | 1
+schema_name              | public
+table_name               | compressed
+associated_schema_name   | _timescaledb_internal
+associated_table_prefix  | _dist_hyper_1
+num_dimensions           | 2
+chunk_sizing_func_schema | _timescaledb_internal
+chunk_sizing_func_name   | calculate_chunk_interval
+chunk_target_size        | 0
+compression_state        | 1
+compressed_hypertable_id | 
+replication_factor       | 2
+
+\x
 SELECT test.remote_exec(NULL, $$
 SELECT table_name, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable
@@ -222,7 +247,7 @@ hypertable_name     | compressed
 owner               | test_role_1
 num_dimensions      | 2
 num_chunks          | 3
-compression_enabled | f
+compression_enabled | t
 is_distributed      | t
 replication_factor  | 2
 data_nodes          | {db_dist_compression_1,db_dist_compression_2,db_dist_compression_3}
