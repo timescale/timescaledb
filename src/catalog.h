@@ -109,7 +109,7 @@ enum Anum_hypertable
 	Anum_hypertable_chunk_sizing_func_schema,
 	Anum_hypertable_chunk_sizing_func_name,
 	Anum_hypertable_chunk_target_size,
-	Anum_hypertable_compressed,
+	Anum_hypertable_compression_state,
 	Anum_hypertable_compressed_hypertable_id,
 	Anum_hypertable_replication_factor,
 	_Anum_hypertable_max,
@@ -128,7 +128,7 @@ typedef struct FormData_hypertable
 	NameData chunk_sizing_func_schema;
 	NameData chunk_sizing_func_name;
 	int64 chunk_target_size;
-	bool compressed;
+	int16 compression_state;
 	int32 compressed_hypertable_id;
 	int16 replication_factor;
 } FormData_hypertable;

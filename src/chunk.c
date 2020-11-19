@@ -1931,7 +1931,7 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 				 errmsg("invalid time range"),
 				 errhint("The start of the time range must be before the end.")));
 
-	if (ht->fd.compressed)
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 		elog(ERROR, "invalid operation on compressed hypertable");
 
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
