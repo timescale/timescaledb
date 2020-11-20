@@ -273,10 +273,13 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
  loopback  | OK                | INTRANS            |                 1 | f
 (1 row)
 
-ROLLBACK;
-WARNING:  kill event: pre-abort
-WARNING:  [loopback]: terminating connection due to administrator command
-WARNING:  transaction rollback on data node "loopback" failed
+-- since the error messages/warnings from this ROLLBACK varies between
+-- platforms/environments we remove it from test output and show
+-- SQLSTATE instead. SQLSTATE should be 00000 since we are not
+-- throwing errors during rollback/abort and it should succeed in any
+-- case.
+\echo 'ROLLBACK SQLSTATE' :SQLSTATE
+ROLLBACK SQLSTATE 00000
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
  count 
 -------

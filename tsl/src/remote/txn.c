@@ -9,6 +9,7 @@
 #include <utils/builtins.h>
 #include <utils/snapmgr.h>
 #include <libpq-fe.h>
+#include <miscadmin.h>
 
 #include "compat.h"
 #if PG12_LT
@@ -209,9 +210,8 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 {
 	TimestampTz end_time;
 	AsyncRequest *req;
-	AsyncRequestSet *set = async_request_set_create();
-	AsyncResponse *response;
 	AsyncResponseResult *result;
+	AsyncResponse *response = NULL;
 	PGresult *pg_result;
 	bool success = false;
 
@@ -222,17 +222,18 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 	 * be too long.
 	 */
 	end_time = TimestampTzPlusMilliseconds(GetCurrentTimestamp(), DEFAULT_EXEC_CLEANUP_TIMEOUT_MS);
+
 	/*
-	 * Submit a query.  Since we don't use non-blocking mode, this also can
-	 * block.  But its risk is relatively small, so we ignore that for now.
+	 * Send the query. Since we don't use non-blocking mode, this also can
+	 * block. But its risk is relatively small, so we ignore that for now.
 	 */
 	req = async_request_send_with_error(conn, query, WARNING);
+
 	if (req == NULL)
 		return false;
 
-	async_request_set_add(set, req);
-
-	response = async_request_set_wait_any_response_deadline(set, end_time);
+	/* Wait until the command completes or there is a timeout or error */
+	response = async_request_cleanup_result(req, end_time);
 	Assert(response != NULL);
 
 	switch (async_response_get_type(response))
@@ -269,23 +270,11 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 			break;
 	}
 
-	if (success)
-	{
-		async_response_close(response);
-
-		/* that should have been the last response from the set */
-		response = async_request_set_wait_any_response_deadline(set, end_time);
-		Assert(response == NULL);
-	}
-	else
-	{
+	if (!success)
 		async_response_report_error(response, WARNING);
-		async_response_close(response);
 
-		/* drain the set until empty of all possibly queued errors */
-		while ((response = async_request_set_wait_any_response_deadline(set, end_time)))
-			async_response_close(response);
-	}
+	async_response_close(response);
+
 	return success;
 }
 
