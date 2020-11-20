@@ -288,10 +288,6 @@ test_timeout()
 		set, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 100));
 	TestAssertTrue(async_response_get_type(response) == RESPONSE_TIMEOUT);
 
-	/* try again, use timeout instead of deadline interface */
-	response = async_request_set_wait_any_response_timeout(set, 100);
-	TestAssertTrue(async_response_get_type(response) == RESPONSE_TIMEOUT);
-
 	/* cancel the locked query and do another query */
 	TestAssertTrue(remote_connection_cancel_query(conn));
 	/* the txn is aborted waiting for abort */
