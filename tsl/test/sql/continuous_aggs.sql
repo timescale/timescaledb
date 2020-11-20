@@ -930,3 +930,94 @@ GROUP BY
 CALL refresh_continuous_aggregate('mat_types',NULL,NULL);
 SELECT * FROM mat_types;
 
+-------------------------------------------------------------------------------------
+-- Test issue #2616 where cagg view contains an experssion with several aggregates in
+
+CREATE TABLE water_consumption
+(
+    sensor_id   integer      NOT NULL,
+    timestamp   timestamp(0) NOT NULL,
+    water_index integer
+);
+
+SELECT create_hypertable('water_consumption', 'timestamp', 'sensor_id', 2);
+
+INSERT INTO public.water_consumption (sensor_id, timestamp, water_index) VALUES 
+  (1, '2010-11-03 09:42:30', 1030),
+  (1, '2010-11-03 09:42:40', 1032),
+  (1, '2010-11-03 09:42:50', 1035),
+  (1, '2010-11-03 09:43:30', 1040),
+  (1, '2010-11-03 09:43:40', 1045),
+  (1, '2010-11-03 09:43:50', 1050),
+  (1, '2010-11-03 09:44:30', 1052),
+  (1, '2010-11-03 09:44:40', 1057),
+  (1, '2010-11-03 09:44:50', 1060),
+  (1, '2010-11-03 09:45:30', 1063),
+  (1, '2010-11-03 09:45:40', 1067),
+  (1, '2010-11-03 09:45:50', 1070);
+
+-- The test with the view originally reported in the issue.
+CREATE MATERIALIZED VIEW water_consumption_aggregation_minute
+            WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+AS
+SELECT sensor_id,
+       time_bucket(INTERVAL '1 minute', timestamp) + '1 minute' AS timestamp,
+       (max(water_index) - min(water_index))                    AS water_consumption
+FROM water_consumption
+GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('water_consumption_aggregation_minute', NULL, NULL);
+
+-- The results of the view and the query over hypertable should be the same
+SELECT * FROM water_consumption_aggregation_minute ORDER BY water_consumption;
+SELECT sensor_id,
+       time_bucket(INTERVAL '1 minute', timestamp) + '1 minute' AS timestamp,
+       (max(water_index) - min(water_index))                    AS water_consumption
+FROM water_consumption
+GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
+ORDER BY water_consumption;
+
+-- Simplified test, where the view doesn't contain all group by clauses
+CREATE MATERIALIZED VIEW water_consumption_no_select_bucket
+            WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+AS
+SELECT sensor_id,
+       (max(water_index) - min(water_index))                    AS water_consumption
+FROM water_consumption
+GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('water_consumption_no_select_bucket', NULL, NULL);
+
+-- The results of the view and the query over hypertable should be the same
+SELECT * FROM water_consumption_no_select_bucket ORDER BY water_consumption;
+SELECT sensor_id,
+       (max(water_index) - min(water_index))                    AS water_consumption
+FROM water_consumption
+GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
+ORDER BY water_consumption;
+
+-- The test with SELECT matching GROUP BY and placing aggregate expression not the last
+CREATE MATERIALIZED VIEW water_consumption_aggregation_no_addition
+            WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
+AS
+SELECT sensor_id,
+       (max(water_index) - min(water_index))                    AS water_consumption,
+       time_bucket(INTERVAL '1 minute', timestamp) AS timestamp
+FROM water_consumption
+GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('water_consumption_aggregation_no_addition', NULL, NULL);
+
+-- The results of the view and the query over hypertable should be the same
+SELECT * FROM water_consumption_aggregation_no_addition ORDER BY water_consumption;
+SELECT sensor_id,
+       (max(water_index) - min(water_index))                    AS water_consumption,
+       time_bucket(INTERVAL '1 minute', timestamp) AS timestamp
+FROM water_consumption
+GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
+ORDER BY water_consumption;
+
+DROP TABLE water_consumption CASCADE;
