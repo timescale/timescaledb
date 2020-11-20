@@ -1171,6 +1171,8 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			part_te = (TargetEntry *) copyObject(input);
 			/*need to project all the partial entries so that materialization table is filled */
 			part_te->resjunk = false;
+			part_te->resno = matcolno;
+
 			if (timebkt_chk)
 			{
 				col->is_not_null = true;
