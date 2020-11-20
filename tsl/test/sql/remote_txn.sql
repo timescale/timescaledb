@@ -151,7 +151,17 @@ BEGIN;
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
+
+-- since the error messages/warnings from this ROLLBACK varies between
+-- platforms/environments we remove it from test output and show
+-- SQLSTATE instead. SQLSTATE should be 00000 since we are not
+-- throwing errors during rollback/abort and it should succeed in any
+-- case.
+--<exclude_from_test>
 ROLLBACK;
+--</exclude_from_test>
+\echo 'ROLLBACK SQLSTATE' :SQLSTATE
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
 SELECT count(*) FROM pg_prepared_xacts;
 
