@@ -12,8 +12,6 @@
 
 #include "stmt_params.h"
 
-#define DEFAULT_TIMEOUT_MS (SECS_PER_HOUR * 1000)
-
 typedef struct AsyncRequest AsyncRequest;
 
 typedef struct TSConnection TSConnection;
@@ -106,6 +104,7 @@ extern bool async_request_set_single_row_mode(AsyncRequest *req);
 extern TSConnection *async_request_get_connection(AsyncRequest *req);
 extern AsyncResponseResult *async_request_wait_ok_result(AsyncRequest *request);
 extern AsyncResponseResult *async_request_wait_any_result(AsyncRequest *request);
+extern AsyncResponse *async_request_cleanup_result(AsyncRequest *req, TimestampTz endtime);
 
 /* Returns on successful commands, throwing errors otherwise */
 extern void async_request_wait_ok_command(AsyncRequest *set);
@@ -133,12 +132,8 @@ extern void async_request_set_add(AsyncRequestSet *set, AsyncRequest *req);
 extern AsyncResponse *async_request_set_wait_any_response_deadline(AsyncRequestSet *set,
 																   TimestampTz endtime);
 
-#define async_request_set_wait_any_response_timeout(set, timeout_ms)                               \
-	async_request_set_wait_any_response_deadline(                                                  \
-		set, TimestampTzPlusMilliseconds(GetCurrentTimestamp(), timeout_ms))
-
 #define async_request_set_wait_any_response(set)                                                   \
-	async_request_set_wait_any_response_timeout(set, DEFAULT_TIMEOUT_MS)
+	async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT)
 
 /* Return only successful results, throwing errors otherwise */
 extern AsyncResponseResult *async_request_set_wait_ok_result(AsyncRequestSet *set);

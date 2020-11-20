@@ -31,6 +31,7 @@
 #include <utils/guc.h>
 #include <utils/syscache.h>
 
+#include <annotations.h>
 #include <dist_util.h>
 #include <errors.h>
 #include <extension_constants.h>
@@ -1474,9 +1475,11 @@ remote_connection_get_prep_stmt_number()
 	return ++prep_stmt_number;
 }
 
+#define MAX_CONN_WAIT_TIMEOUT_MS 60000
+
 /*
  * Drain a connection of all data coming in and discard the results. Return
- * success if all data is drained before the deadline expires.
+ * CONN_OK if all data is drained before the deadline expires.
  *
  * This is mainly used in abort processing. This result being returned
  * might be for a query that is being interrupted by transaction abort, or it might
@@ -1491,66 +1494,105 @@ remote_connection_get_prep_stmt_number()
  * end_time is the time at which we should give up and assume the remote
  * side is dead.
  */
-
-static bool
-remote_connection_drain(PGconn *conn, TimestampTz endtime)
+TSConnectionResult
+remote_connection_drain(TSConnection *conn, TimestampTz endtime, PGresult **result)
 {
-	for (;;)
+	volatile TSConnectionResult connresult = CONN_OK;
+	PGresult *volatile last_res = NULL;
+	PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+
+	/* In what follows, do not leak any PGresults on an error. */
+	PG_TRY();
 	{
-		PGresult *res;
-
-		while (PQisBusy(conn))
+		for (;;)
 		{
-			int wc;
-			TimestampTz now = GetCurrentTimestamp();
-			long secs;
-			int microsecs;
-			long cur_timeout;
+			PGresult *res;
 
-			/* If timeout has expired, give up, else get sleep time. */
-			if (now >= endtime)
+			while (PQisBusy(pg_conn))
 			{
-				elog(WARNING, "timeout occured while trying to drain the connection");
-				return false;
+				int wc;
+				TimestampTz now = GetCurrentTimestamp();
+				long remaining_secs;
+				int remaining_usecs;
+				long cur_timeout_ms;
+
+				/* If timeout has expired, give up, else get sleep time. */
+				if (now >= endtime)
+				{
+					connresult = CONN_TIMEOUT;
+					goto exit;
+				}
+
+				TimestampDifference(now, endtime, &remaining_secs, &remaining_usecs);
+
+				/* To protect against clock skew, limit sleep to one minute. */
+				cur_timeout_ms =
+					Min(MAX_CONN_WAIT_TIMEOUT_MS, remaining_secs * USECS_PER_SEC + remaining_usecs);
+
+				/* Sleep until there's something to do */
+				wc = WaitLatchOrSocket(MyLatch,
+									   WL_LATCH_SET | WL_SOCKET_READABLE
+#if PG12_GE
+										   | WL_EXIT_ON_PM_DEATH
+#endif
+										   | WL_TIMEOUT,
+									   PQsocket(pg_conn),
+									   cur_timeout_ms,
+									   PG_WAIT_EXTENSION);
+				ResetLatch(MyLatch);
+
+				CHECK_FOR_INTERRUPTS();
+
+				/* Data available in socket? */
+				if ((wc & WL_SOCKET_READABLE) && (0 == PQconsumeInput(pg_conn)))
+				{
+					connresult = CONN_DISCONNECT;
+					goto exit;
+				}
 			}
 
-			TimestampDifference(now, endtime, &secs, &microsecs);
+			res = PQgetResult(pg_conn);
 
-			/* To protect against clock skew, limit sleep to one minute. */
-			cur_timeout = Min(60000, secs * USECS_PER_SEC + microsecs);
-
-			/* Sleep until there's something to do */
-			wc = WaitLatchOrSocket(MyLatch,
-								   WL_LATCH_SET | WL_SOCKET_READABLE | WL_TIMEOUT |
-									   WL_POSTMASTER_DEATH,
-								   PQsocket(conn),
-								   cur_timeout,
-								   PG_WAIT_EXTENSION);
-			ResetLatch(MyLatch);
-
-			CHECK_FOR_INTERRUPTS();
-
-			if (wc & WL_POSTMASTER_DEATH)
+			if (res == NULL)
 			{
-				/* Postmaster died -> exit) */
-				return false;
+				/* query is complete */
+				remote_connection_set_processing(conn, false);
+				connresult = CONN_OK;
+				break;
 			}
 
-			/* Data available in socket? */
-			if (wc & WL_SOCKET_READABLE)
-			{
-				if (!PQconsumeInput(conn))
-					/* connection trouble; treat the same as a timeout */
-					return false;
-			}
+			PQclear(last_res);
+			last_res = res;
 		}
-
-		res = PQgetResult(conn);
-		if (res == NULL)
-			return true; /* query is complete */
-		PQclear(res);
+	exit:;
 	}
-	Assert(false);
+	PG_CATCH();
+	{
+		PQclear(last_res);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	switch (connresult)
+	{
+		case CONN_OK:
+			if (last_res == NULL)
+				connresult = CONN_NO_RESPONSE;
+			else if (result != NULL)
+				*result = last_res;
+			else
+				PQclear(last_res);
+			break;
+		case CONN_TIMEOUT:
+		case CONN_DISCONNECT:
+			PQclear(last_res);
+			break;
+		case CONN_NO_RESPONSE:
+			Assert(last_res == NULL);
+			break;
+	}
+
+	return connresult;
 }
 
 /*
@@ -1594,7 +1636,16 @@ remote_connection_cancel_query(TSConnection *conn)
 		PQfreeCancel(cancel);
 	}
 
-	return remote_connection_drain(conn->pg_conn, endtime);
+	switch (remote_connection_drain(conn, endtime, NULL))
+	{
+		case CONN_OK:
+			/* Successfully, drained */
+		case CONN_NO_RESPONSE:
+			/* No response, likely beceause there was nothing to cancel */
+			return true;
+		default:
+			return false;
+	}
 }
 
 void
