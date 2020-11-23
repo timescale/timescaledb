@@ -78,7 +78,7 @@ SELECT ht.schema_name AS hypertable_schema,
   js.total_successes,
   js.total_failures
 FROM _timescaledb_config.bgw_job j
-  INNER JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
+  LEFT JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
   INNER JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
   LEFT JOIN pg_stat_activity pgs ON pgs.datname = current_database()
     AND pgs.application_name = j.application_name
