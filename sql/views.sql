@@ -107,12 +107,14 @@ FROM _timescaledb_config.bgw_job j
 
 -- views for continuous aggregate queries ---
 CREATE OR REPLACE VIEW timescaledb_information.continuous_aggregates AS
-SELECT cagg.user_view_schema AS view_schema,
+SELECT ht.schema_name AS hypertable_schema,
+  ht.table_name AS hypertable_name,
+  cagg.user_view_schema AS view_schema,
   cagg.user_view_name AS view_name,
   viewinfo.viewowner AS view_owner,
   cagg.materialized_only,
-  ht.schema_name AS materialization_hypertable_schema,
-  ht.table_name AS materialization_hypertable_name,
+  mat_ht.schema_name AS materialization_hypertable_schema,
+  mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
@@ -130,8 +132,12 @@ FROM _timescaledb_catalog.continuous_agg cagg,
     LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace)
   WHERE C.relkind = 'v'
     AND C.relname = cagg.direct_view_name
-    AND N.nspname = cagg.direct_view_schema) directview
-WHERE cagg.mat_hypertable_id = ht.id;
+    AND N.nspname = cagg.direct_view_schema) directview,
+  LATERAL (
+    SELECT schema_name, table_name
+    FROM _timescaledb_catalog.hypertable
+    WHERE cagg.mat_hypertable_id = id) mat_ht
+WHERE cagg.raw_hypertable_id = ht.id;
 
 CREATE OR REPLACE VIEW timescaledb_information.data_nodes AS
 SELECT s.node_name,
