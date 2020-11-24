@@ -130,10 +130,12 @@ SELECT insert_job('unscheduled', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '1
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 -- empty
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+SELECT * FROM timescaledb_information.job_stats;
 
 SELECT test_toggle_scheduled(1000);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50);
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
+SELECT * FROM timescaledb_information.job_stats;
 SELECT * FROM sorted_bgw_log;
 
 SELECT delete_job(1000);
