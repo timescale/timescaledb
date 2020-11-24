@@ -146,6 +146,11 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 --------+------------+-------------+------------+------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
 (0 rows)
 
+SELECT * FROM timescaledb_information.job_stats;
+ hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_start | total_runs | total_successes | total_failures 
+-------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+------------+------------+-----------------+----------------
+(0 rows)
+
 SELECT test_toggle_scheduled(1000);
  test_toggle_scheduled 
 -----------------------
@@ -162,6 +167,12 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
  job_id |           last_start            |           last_finish           |           next_start            |     last_successful_finish      | last_run_success | total_runs | total_duration | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes 
 --------+---------------------------------+---------------------------------+---------------------------------+---------------------------------+------------------+------------+----------------+-----------------+----------------+---------------+----------------------+---------------------
    1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.15 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | t                |          1 | @ 0            |               1 |              0 |             0 |                    0 |                   0
+(1 row)
+
+SELECT * FROM timescaledb_information.job_stats;
+ hypertable_schema | hypertable_name | job_id |       last_run_started_at       |     last_successful_finish      | last_run_status | job_status | last_run_duration |           next_start            | total_runs | total_successes | total_failures 
+-------------------+-----------------+--------+---------------------------------+---------------------------------+-----------------+------------+-------------------+---------------------------------+------------+-----------------+----------------
+                   |                 |   1000 | Fri Dec 31 16:00:00.05 1999 PST | Fri Dec 31 16:00:00.05 1999 PST | Success         | Scheduled  |                   | Fri Dec 31 16:00:00.15 1999 PST |          1 |               1 |              0
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
