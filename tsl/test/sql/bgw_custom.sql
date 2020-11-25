@@ -32,6 +32,16 @@ BEGIN
 END
 $$;
 
+\set ON_ERROR_STOP 0
+-- test bad input
+SELECT add_job(NULL, '1h');
+SELECT add_job(0, '1h');
+SELECT add_job(-1, '1h');
+SELECT add_job('invalid_func', '1h');
+SELECT add_job('custom_func', NULL);
+SELECT add_job('custom_func', 'invalid interval');
+\set ON_ERROR_STOP 1
+
 SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb);
 SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb);
 SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
@@ -43,6 +53,12 @@ SELECT * FROM timescaledb_information.jobs ORDER BY 1;
 -- check for corrects counts in telemetry
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_user_defined_actions');
 
+\set ON_ERROR_STOP 0
+-- test bad input
+CALL run_job(NULL);
+CALL run_job(-1);
+\set ON_ERROR_STOP 1
+
 CALL run_job(1000);
 CALL run_job(1001);
 CALL run_job(1002);
@@ -50,6 +66,13 @@ CALL run_job(1003);
 CALL run_job(1004);
 
 SELECT * FROM custom_log ORDER BY job_id, extra;
+
+
+\set ON_ERROR_STOP 0
+-- test bad input
+SELECT delete_job(NULL);
+SELECT delete_job(-1);
+\set ON_ERROR_STOP 1
 
 SELECT delete_job(1000);
 SELECT delete_job(1001);
@@ -61,6 +84,16 @@ SELECT delete_job(1004);
 SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1000;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+\set ON_ERROR_STOP 0
+-- test bad input
+SELECT alter_job(NULL, if_exists => false);
+SELECT alter_job(-1, if_exists => false);
+\set ON_ERROR_STOP 1
+-- test bad input but don't fail
+SELECT alter_job(NULL, if_exists => true);
+SELECT alter_job(-1, if_exists => true);
+
 -- test altering job with NULL config
 SELECT job_id FROM alter_job(1,scheduled:=false);
 SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
