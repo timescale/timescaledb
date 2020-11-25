@@ -800,7 +800,7 @@ ERROR:  cannot set next start to -infinity
 \set ON_ERROR_STOP 1
 -- Check if_exists boolean works correctly
 select * from alter_job(1234, if_exists => TRUE);
-NOTICE:  job #1234 not found, skipping
+NOTICE:  job 1234 not found, skipping
  job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled | config | next_start 
 --------+-------------------+-------------+-------------+--------------+-----------+--------+------------
         |                   |             |             |              |           |        | 
@@ -808,7 +808,7 @@ NOTICE:  job #1234 not found, skipping
 
 \set ON_ERROR_STOP 0
 select * from alter_job(1234);
-ERROR:  job #1234 not found
+ERROR:  job 1234 not found
 \set ON_ERROR_STOP 1
 select remove_reorder_policy('test_table');
  remove_reorder_policy 
@@ -821,7 +821,7 @@ set session timescaledb.license_key='Community';
 -- Test for failure cases
 \set ON_ERROR_STOP 0
 select alter_job(12345);
-ERROR:  job #12345 not found
+ERROR:  job 12345 not found
 \set ON_ERROR_STOP 1
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 select add_retention_policy('test_table', INTERVAL '4 months', true) as drop_chunks_job_id \gset
