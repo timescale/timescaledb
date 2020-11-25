@@ -55,11 +55,21 @@ job_add(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("function or procedure cannot be NULL")));
+
+	if (NULL == schedule_interval)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("schedule interval cannot be NULL")));
+
 	func_name = get_func_name(proc);
 	if (func_name == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("function with OID %d does not exist", proc)));
+				 errmsg("function or procedure with OID %d does not exist", proc)));
 
 	if (pg_proc_aclcheck(proc, owner, ACL_EXECUTE) != ACLCHECK_OK)
 		ereport(ERROR,
@@ -99,6 +109,26 @@ job_add(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(job_id);
 }
 
+static BgwJob *
+find_job(int32 job_id, bool null_job_id, bool missing_ok)
+{
+	BgwJob *job;
+
+	if (null_job_id && !missing_ok)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("job ID cannot be NULL")));
+
+	job = ts_bgw_job_find(job_id, CurrentMemoryContext, !missing_ok);
+
+	if (NULL == job)
+	{
+		Assert(missing_ok);
+		ereport(NOTICE,
+				(errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job %d not found, skipping", job_id)));
+	}
+
+	return job;
+}
+
 /*
  * CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER) RETURNS VOID
  */
@@ -106,11 +136,13 @@ Datum
 job_delete(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
+	BgwJob *job;
+	Oid owner;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
-	Oid owner = get_role_oid(NameStr(job->fd.owner), false);
+	job = find_job(job_id, PG_ARGISNULL(0), false);
+	owner = get_role_oid(NameStr(job->fd.owner), false);
 
 	if (!has_privs_of_role(GetUserId(), owner))
 		ereport(ERROR,
@@ -130,8 +162,7 @@ Datum
 job_run(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
-
-	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
+	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false);
 
 	job_execute(job);
 
@@ -169,25 +200,16 @@ job_alter(PG_FUNCTION_ARGS)
 	bool nulls[ALTER_JOB_NUM_COLS] = { false };
 	HeapTuple tuple;
 	TimestampTz next_start;
-
 	int job_id = PG_GETARG_INT32(0);
 	bool if_exists = PG_GETARG_BOOL(8);
+	BgwJob *job;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, false);
+	job = find_job(job_id, PG_ARGISNULL(0), if_exists);
 
 	if (job == NULL)
-	{
-		if (if_exists)
-		{
-			ereport(NOTICE, (errmsg("job #%d not found, skipping", job_id)));
-			PG_RETURN_NULL();
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job #%d not found", job_id)));
-	}
+		PG_RETURN_NULL();
 
 	ts_bgw_job_permission_check(job);
 

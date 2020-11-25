@@ -26,6 +26,21 @@ BEGIN
   COMMIT;
 END
 $$;
+\set ON_ERROR_STOP 0
+-- test bad input
+SELECT add_job(NULL, '1h');
+ERROR:  function or procedure cannot be NULL
+SELECT add_job(0, '1h');
+ERROR:  function or procedure with OID 0 does not exist
+SELECT add_job(-1, '1h');
+ERROR:  function or procedure with OID -1 does not exist
+SELECT add_job('invalid_func', '1h');
+ERROR:  function "invalid_func" does not exist at character 16
+SELECT add_job('custom_func', NULL);
+ERROR:  schedule interval cannot be NULL
+SELECT add_job('custom_func', 'invalid interval');
+ERROR:  invalid input syntax for type interval: "invalid interval" at character 31
+\set ON_ERROR_STOP 1
 SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb);
  add_job 
 ---------
@@ -74,6 +89,13 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
  5
 (1 row)
 
+\set ON_ERROR_STOP 0
+-- test bad input
+CALL run_job(NULL);
+ERROR:  job ID cannot be NULL
+CALL run_job(-1);
+ERROR:  job -1 not found
+\set ON_ERROR_STOP 1
 CALL run_job(1000);
 CALL run_job(1001);
 CALL run_job(1002);
@@ -90,6 +112,17 @@ SELECT * FROM custom_log ORDER BY job_id, extra;
    1004 | {"type": "function"}  | security definer     | default_perm_user
 (6 rows)
 
+\set ON_ERROR_STOP 0
+-- test bad input
+SELECT delete_job(NULL);
+ delete_job 
+------------
+ 
+(1 row)
+
+SELECT delete_job(-1);
+ERROR:  job -1 not found
+\set ON_ERROR_STOP 1
 SELECT delete_job(1000);
  delete_job 
 ------------
@@ -128,6 +161,28 @@ SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1000;
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+\set ON_ERROR_STOP 0
+-- test bad input
+SELECT alter_job(NULL, if_exists => false);
+ERROR:  job ID cannot be NULL
+SELECT alter_job(-1, if_exists => false);
+ERROR:  job -1 not found
+\set ON_ERROR_STOP 1
+-- test bad input but don't fail
+SELECT alter_job(NULL, if_exists => true);
+NOTICE:  job 0 not found, skipping
+ alter_job 
+-----------
+ 
+(1 row)
+
+SELECT alter_job(-1, if_exists => true);
+NOTICE:  job -1 not found, skipping
+ alter_job 
+-----------
+ 
+(1 row)
+
 -- test altering job with NULL config
 SELECT job_id FROM alter_job(1,scheduled:=false);
  job_id 
