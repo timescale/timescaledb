@@ -290,8 +290,6 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 			if (ctx->tuplock)
 			{
-				TM_FailureData tmfd;
-
 #if PG12_GE
 				TupleTableSlot *slot = ictx->tinfo.slot;
 
@@ -304,7 +302,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 														  ctx->tuplock->lockmode,
 														  ctx->tuplock->waitpolicy,
 														  ctx->tuplock->lockflags,
-														  &tmfd);
+														  &ictx->tinfo.lockfd);
 
 #else
 				HeapTuple tuple = ExecFetchSlotTuple(ictx->tinfo.slot);
@@ -317,7 +315,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 														 ctx->tuplock->waitpolicy,
 														 false,
 														 &buffer,
-														 &tmfd);
+														 &ictx->tinfo.lockfd);
 				/*
 				 * A tuple lock pins the underlying buffer, so we need to
 				 * unpin it.
