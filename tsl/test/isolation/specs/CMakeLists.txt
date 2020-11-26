@@ -14,6 +14,7 @@ list(APPEND TEST_FILES
   continuous_aggs_insert.spec
   continuous_aggs_multi.spec
   continuous_aggs_concurrent_refresh.spec
+  deadlock_drop_chunks_compress.spec
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)

@@ -99,8 +99,27 @@ ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
 	return 0;
 }
 
+static bool
+tuple_is_deleted(TupleInfo *ti)
+{
+#if PG12_GE
+#ifdef USE_ASSERT_CHECKING
+	if (ti->lockresult == TM_Deleted)
+		Assert(ItemPointerEquals(ts_scanner_get_tuple_tid(ti), &ti->lockfd.ctid));
+#endif
+	return ti->lockresult == TM_Deleted;
+#else
+	/* If the tid and ctid in the lock failure data is the same, then this is
+	 * a delete. Otherwise it is an update and ctid is the new tuple ID. This
+	 * applies mostly to PG11, since PG12 has an explicit lockresult for
+	 * deleted tuples. */
+	return ti->lockresult == TM_Updated &&
+		   ItemPointerEquals(ts_scanner_get_tuple_tid(ti), &ti->lockfd.ctid);
+#endif
+}
+
 static void
-lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
+lock_result_ok_or_abort(TupleInfo *ti)
 {
 	switch (ti->lockresult)
 	{
@@ -109,20 +128,14 @@ lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
 		case TM_SelfModified:
 		case TM_Ok:
 			break;
-
 #if PG12_GE
 		case TM_Deleted:
-			ereport(ERROR,
-					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-					 errmsg("dimension slice %d deleted by other transaction", slice->fd.id),
-					 errhint("Retry the operation again.")));
-			pg_unreachable();
-			break;
 #endif
 		case TM_Updated:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-					 errmsg("dimension slice %d locked by other transaction", slice->fd.id),
+					 errmsg("chunk %s by other transaction",
+							tuple_is_deleted(ti) ? "deleted" : "updated"),
 					 errhint("Retry the operation again.")));
 			pg_unreachable();
 			break;
@@ -130,16 +143,14 @@ lock_result_ok_or_abort(TupleInfo *ti, DimensionSlice *slice)
 		case TM_BeingModified:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-					 errmsg("dimension slice %d updated by other transaction", slice->fd.id),
+					 errmsg("chunk updated by other transaction"),
 					 errhint("Retry the operation again.")));
 			pg_unreachable();
 			break;
-
 		case TM_Invisible:
 			elog(ERROR, "attempt to lock invisible tuple");
 			pg_unreachable();
 			break;
-
 		case TM_WouldBlock:
 		default:
 			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
@@ -624,7 +635,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
 	DimensionSlice **slice = data;
 	MemoryContext old;
 
-	lock_result_ok_or_abort(ti, *slice);
+	lock_result_ok_or_abort(ti);
 
 	old = MemoryContextSwitchTo(ti->mctx);
 	*slice = dimension_slice_from_slot(ti->slot);
