@@ -42,6 +42,8 @@ typedef struct TupleInfo
 	 * in lockresult.
 	 */
 	TM_Result lockresult;
+	/* Failure data in case of failed tuple lock */
+	TM_FailureData lockfd;
 	int count;
 
 	/*
