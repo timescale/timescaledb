@@ -48,8 +48,20 @@ select a, count(b)
 from foo
 group by time_bucket(1, a), a WITH NO DATA;
 
-SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval) AS job_id
+\gset
 SELECT * FROM _timescaledb_config.bgw_job;
+
+-- These are all weird values for the parameters for the continuous
+-- aggregate jobs and should generate an error. Since the config will
+-- be replaced, we will also generate error for missing arguments.
+\set ON_ERROR_STOP 0
+SELECT alter_job(:job_id, config => '{"end_offset": "1 week", "start_offset": "2 weeks"}');
+SELECT alter_job(:job_id,
+       config => '{"mat_hypertable_id": "2", "end_offset": "chicken", "start_offset": "1 week"}');
+SELECT alter_job(:job_id,
+       config => '{"mat_hypertable_id": "2", "end_offset": "chicken", "start_offset": "1"}');
+\set ON_ERROR_STOP 1
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",

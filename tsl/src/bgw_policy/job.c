@@ -17,6 +17,7 @@
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
@@ -136,14 +137,63 @@ get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 																				partitioning_type));
 }
 
+static void
+check_valid_index(Hypertable *ht, const char *index_name)
+{
+	Oid index_oid;
+	HeapTuple idxtuple;
+	Form_pg_index indexForm;
+
+	index_oid =
+		get_relname_relid(index_name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
+	if (!HeapTupleIsValid(idxtuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("reorder index not found"),
+				 errdetail("The index \"%s\" could not be found", index_name)));
+
+	indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
+	if (indexForm->indrelid != ht->main_table_relid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid reorder index"),
+				 errhint("The reorder index must by an index on hypertable \"%s\".",
+						 NameStr(ht->fd.table_name))));
+
+	ReleaseSysCache(idxtuple);
+}
+
+void
+policy_reorder_read_config(int32 job_id, Jsonb *config, Hypertable **hypertable, Oid *index_relid)
+{
+	int32 htid = policy_reorder_get_hypertable_id(config);
+	Hypertable *ht = ts_hypertable_get_by_id(htid);
+	const char *index_name = policy_reorder_get_index_name(config);
+
+	if (!ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration hypertable id %d not found", htid)));
+
+	check_valid_index(ht, index_name);
+
+	if (hypertable)
+		*hypertable = ht;
+	if (index_relid)
+		*index_relid =
+			get_relname_relid(index_name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+}
+
 bool
 policy_reorder_execute(int32 job_id, Jsonb *config)
 {
 	int chunk_id;
 	Hypertable *ht;
 	Chunk *chunk;
+	Oid index_relid;
 
-	ht = ts_hypertable_get_by_id(policy_reorder_get_hypertable_id(config));
+	policy_reorder_read_config(job_id, config, &ht, &index_relid);
 
 	/* Find a chunk to reorder in the selected hypertable */
 	chunk_id = get_chunk_id_to_reorder(job_id, ht);
@@ -164,13 +214,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	 */
 	chunk = ts_chunk_get_by_id(chunk_id, false);
 	elog(DEBUG1, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
-	reorder_chunk(chunk->table_id,
-				  get_relname_relid(policy_reorder_get_index_name(config),
-									get_namespace_oid(NameStr(ht->fd.schema_name), false)),
-				  false,
-				  InvalidOid,
-				  InvalidOid,
-				  InvalidOid);
+	reorder_chunk(chunk->table_id, index_relid, false, InvalidOid, InvalidOid, InvalidOid);
 	elog(DEBUG1,
 		 "completed reordering chunk %s.%s",
 		 chunk->fd.schema_name.data,
@@ -209,10 +253,10 @@ get_open_dimension_for_hypertable(Hypertable *ht)
 	return open_dim;
 }
 
-bool
-policy_retention_execute(int32 job_id, Jsonb *config)
+void
+policy_retention_read_config(int32 job_id, Jsonb *config, Oid *object_relid_out,
+							 Datum *boundary_out, Datum *boundary_type_out)
 {
-	bool started = false;
 	Oid object_relid;
 	Hypertable *hypertable;
 	Cache *hcache;
@@ -221,15 +265,12 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	Datum boundary_type;
 	ContinuousAgg *cagg;
 
-	if (!ActiveSnapshotSet())
-	{
-		started = true;
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
-
 	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config));
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
 	open_dim = get_open_dimension_for_hypertable(hypertable);
+
+	/* We only care about the errors from this function, so we ignore the
+	 * return value. */
 	boundary = get_window_boundary(open_dim,
 								   config,
 								   policy_retention_get_drop_after_int,
@@ -247,9 +288,33 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 		object_relid = get_relname_relid(view_name, get_namespace_oid(schema_name, false));
 	}
 
-	chunk_invoke_drop_chunks(object_relid, boundary, boundary_type);
-
 	ts_cache_release(hcache);
+
+	if (object_relid_out)
+		*object_relid_out = object_relid;
+	if (boundary_out)
+		*boundary_out = boundary;
+	if (boundary_type_out)
+		*boundary_type_out = boundary_type;
+}
+
+bool
+policy_retention_execute(int32 job_id, Jsonb *config)
+{
+	bool started = false;
+	Oid object_relid;
+	Datum boundary;
+	Datum boundary_type;
+
+	if (!ActiveSnapshotSet())
+	{
+		started = true;
+		PushActiveSnapshot(GetTransactionSnapshot());
+	}
+
+	policy_retention_read_config(job_id, config, &object_relid, &boundary, &boundary_type);
+
+	chunk_invoke_drop_chunks(object_relid, boundary, boundary_type);
 
 	if (started)
 		PopActiveSnapshot();
@@ -257,47 +322,88 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	return true;
 }
 
-bool
-policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
+void
+policy_refresh_cagg_read_config(int32 job_id, Jsonb *config, InternalTimeRange *refresh_window,
+								ContinuousAgg **cagg)
 {
 	int32 materialization_id;
 	Hypertable *mat_ht;
 	Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
-	ContinuousAgg *cagg;
-	InternalTimeRange refresh_window;
 
-	if (!ActiveSnapshotSet())
-	{
-		PushActiveSnapshot(GetTransactionSnapshot());
-	}
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
 	open_dim = get_open_dimension_for_hypertable(mat_ht);
 	dim_type = ts_dimension_get_partition_type(open_dim);
 	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config);
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config);
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
-	refresh_window =
-		(InternalTimeRange){ .type = dim_type, .start = refresh_start, .end = refresh_end };
+
+	if (refresh_start >= refresh_end)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid refresh window"),
+				 errdetail("start_offset: %s, end_offset: %s",
+						   ts_internal_to_time_string(refresh_start, dim_type),
+						   ts_internal_to_time_string(refresh_end, dim_type)),
+				 errhint("The start of the window must be before the end.")));
+
+	if (refresh_window)
+	{
+		refresh_window->type = dim_type;
+		refresh_window->start = refresh_start;
+		refresh_window->end = refresh_end;
+	}
+	if (cagg)
+		*cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
+}
+
+bool
+policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
+{
+	ContinuousAgg *cagg;
+	InternalTimeRange refresh_window;
+
+	if (!ActiveSnapshotSet())
+		PushActiveSnapshot(GetTransactionSnapshot());
+	policy_refresh_cagg_read_config(job_id, config, &refresh_window, &cagg);
 	elog(LOG,
 		 "refresh continuous aggregate range %s , %s",
-		 ts_internal_to_time_string(refresh_start, dim_type),
-		 ts_internal_to_time_string(refresh_end, dim_type));
+		 ts_internal_to_time_string(refresh_window.start, refresh_window.type),
+		 ts_internal_to_time_string(refresh_window.end, refresh_window.type));
 	continuous_agg_refresh_internal(cagg, &refresh_window, false);
 	return true;
+}
+
+void
+policy_compression_read_config(int32 job_id, Jsonb *config, bool show_notice, Dimension **dim_out,
+							   int32 *chunk_id_out)
+{
+	Cache *hcache;
+	Oid table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
+	int32 chunkid = get_chunk_to_compress(dim, config);
+
+	if (show_notice && chunkid == INVALID_CHUNK_ID)
+		elog(NOTICE,
+			 "no chunks for hypertable %s.%s that satisfy compress chunk policy",
+			 ht->fd.schema_name.data,
+			 ht->fd.table_name.data);
+
+	ts_cache_release(hcache);
+
+	if (chunk_id_out)
+		*chunk_id_out = chunkid;
+	if (dim_out)
+		*dim_out = dim;
 }
 
 bool
 policy_compression_execute(int32 job_id, Jsonb *config)
 {
 	bool started = false;
-	Oid table_relid;
-	Hypertable *ht;
-	Cache *hcache;
 	int32 chunkid;
-	Chunk *chunk = NULL;
 	Dimension *dim;
 
 	if (!ActiveSnapshotSet())
@@ -306,21 +412,11 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
-	table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
-	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
-	dim = hyperspace_get_open_dimension(ht->space, 0);
+	policy_compression_read_config(job_id, config, true, &dim, &chunkid);
 
-	chunkid = get_chunk_to_compress(dim, config);
-	if (chunkid == INVALID_CHUNK_ID)
+	if (chunkid != INVALID_CHUNK_ID)
 	{
-		elog(NOTICE,
-			 "no chunks for hypertable %s.%s that satisfy compress chunk policy",
-			 ht->fd.schema_name.data,
-			 ht->fd.table_name.data);
-	}
-	else
-	{
-		chunk = ts_chunk_get_by_id(chunkid, true);
+		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		tsl_compress_chunk_wrapper(chunk, false);
 
 		elog(LOG,
@@ -333,7 +429,6 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 	if (chunkid != INVALID_CHUNK_ID)
 		enable_fast_restart(job_id, "compression");
 
-	ts_cache_release(hcache);
 	if (started)
 		PopActiveSnapshot();
 

@@ -106,11 +106,14 @@ Datum
 job_delete(PG_FUNCTION_ARGS)
 {
 	int32 job_id = PG_GETARG_INT32(0);
+	BgwJob *job;
+	Oid owner;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
-	Oid owner = get_role_oid(NameStr(job->fd.owner), false);
+	job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
+
+	owner = get_role_oid(NameStr(job->fd.owner), false);
 
 	if (!has_privs_of_role(GetUserId(), owner))
 		ereport(ERROR,
@@ -121,6 +124,136 @@ job_delete(PG_FUNCTION_ARGS)
 	ts_bgw_job_delete_by_id(job_id);
 
 	PG_RETURN_VOID();
+}
+
+static void
+job_config_check(BgwJob *job)
+{
+	Jsonb *config = job->fd.config;
+	if (namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0)
+	{
+		if (namestrcmp(&job->fd.proc_name, "policy_retention") == 0)
+			return policy_retention_read_config(job->fd.id, config, NULL, NULL, NULL);
+		if (namestrcmp(&job->fd.proc_name, "policy_reorder") == 0)
+			return policy_reorder_read_config(job->fd.id, config, NULL, NULL);
+		if (namestrcmp(&job->fd.proc_name, "policy_compression") == 0)
+			return policy_compression_read_config(job->fd.id, config, false, NULL, NULL);
+		if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
+			return policy_refresh_cagg_read_config(job->fd.id, config, NULL, NULL);
+	}
+}
+
+/* This function only updates the fields modifiable with alter_job. */
+static ScanTupleResult
+bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
+{
+	BgwJob *updated_job = (BgwJob *) data;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple;
+
+	Datum values[Natts_bgw_job] = { 0 };
+	bool isnull[Natts_bgw_job] = { 0 };
+	bool repl[Natts_bgw_job] = { 0 };
+
+	Datum old_schedule_interval =
+		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
+	Assert(!isnull[0]);
+
+	/* when we update the schedule interval, modify the next start time as well*/
+	if (!DatumGetBool(DirectFunctionCall2(interval_eq,
+										  old_schedule_interval,
+										  IntervalPGetDatum(&updated_job->fd.schedule_interval))))
+	{
+		BgwJobStat *stat = ts_bgw_job_stat_find(updated_job->fd.id);
+
+		if (stat != NULL)
+		{
+			TimestampTz next_start = DatumGetTimestampTz(
+				DirectFunctionCall2(timestamptz_pl_interval,
+									TimestampTzGetDatum(stat->fd.last_finish),
+									IntervalPGetDatum(&updated_job->fd.schedule_interval)));
+			/* allow DT_NOBEGIN for next_start here through allow_unset=true in the case that
+			 * last_finish is DT_NOBEGIN,
+			 * This means the value is counted as unset which is what we want */
+			ts_bgw_job_stat_update_next_start(updated_job->fd.id, next_start, true);
+		}
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] =
+			IntervalPGetDatum(&updated_job->fd.schedule_interval);
+		repl[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = true;
+	}
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] =
+		IntervalPGetDatum(&updated_job->fd.max_runtime);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] =
+		Int32GetDatum(updated_job->fd.max_retries);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] =
+		IntervalPGetDatum(&updated_job->fd.retry_period);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] =
+		BoolGetDatum(updated_job->fd.scheduled);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
+
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+	if (updated_job->fd.config)
+	{
+		job_config_check(updated_job);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] =
+			JsonbPGetDatum(updated_job->fd.config);
+	}
+	else
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+
+	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, repl);
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+
+	heap_freetuple(new_tuple);
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return SCAN_DONE;
+}
+
+/*
+ * Overwrite job with specified job_id with the given fields
+ *
+ * This function only updates the fields modifiable with alter_job.
+ */
+static void
+ts_bgw_job_update_by_id(int32 job_id, BgwJob *job)
+{
+	ScanKeyData scankey[1];
+	Catalog *catalog = ts_catalog_get();
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+		.lockflags = 0 /* don't follow updates, used in PG12 */
+	};
+	ScannerCtx scanctx = { .table = catalog_get_table_id(catalog, BGW_JOB),
+						   .index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
+						   .nkeys = 1,
+						   .scankey = scankey,
+						   .data = job,
+						   .limit = 1,
+						   .tuple_found = bgw_job_tuple_update_by_id,
+						   .lockmode = RowExclusiveLock,
+						   .scandirection = ForwardScanDirection,
+						   .result_mctx = CurrentMemoryContext,
+						   .tuplock = &scantuplock };
+
+	ScanKeyInit(&scankey[0],
+				Anum_bgw_job_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(job_id));
+
+	ts_scanner_scan(&scanctx);
 }
 
 /*

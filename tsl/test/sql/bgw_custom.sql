@@ -40,6 +40,7 @@ SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
 SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
 
 SELECT * FROM timescaledb_information.jobs ORDER BY 1;
+
 -- check for corrects counts in telemetry
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_user_defined_actions');
 
