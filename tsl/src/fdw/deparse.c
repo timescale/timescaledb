@@ -86,6 +86,7 @@
 #include "extension_constants.h"
 #include "plan_expand_hypertable.h"
 #include "partialize_finalize.h"
+#include "nodes/gapfill/planner.h"
 
 /*
  * Global context for foreign_expr_walker's search of an expression tree.
@@ -374,6 +375,12 @@ is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
 		glob_cxt.relids = baserel->relids;
 
 	if (!foreign_expr_walker((Node *) expr, &glob_cxt))
+		return false;
+
+	/*
+	 * It is not supported to execute time_bucket_gapfill on data node.
+	 */
+	if (gapfill_in_expression(expr))
 		return false;
 
 	/*

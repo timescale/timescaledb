@@ -8,7 +8,8 @@
 
 #include <postgres.h>
 
-void plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel, bool dist_ht);
+bool gapfill_in_expression(Expr *node);
+void plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel);
 void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,
 									  RelOptInfo *output_rel);
 
