@@ -441,8 +441,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	/* Close any trigger target relations */
 	ExecCleanUpTriggerState(estate);
 
-	copy_chunk_state_destroy(ccstate);
-
 	/*
 	 * If we skipped writing WAL, then we need to sync the heap (but not
 	 * indexes since those use WAL anyway)
@@ -663,10 +661,11 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	ccstate->where_clause = where_clause;
 
 	if (hypertable_is_distributed(ht))
-		ts_cm_functions->distributed_copy(stmt, processed, ccstate, attnums);
+		*processed = ts_cm_functions->distributed_copy(stmt, ccstate, attnums);
 	else
 		*processed = copyfrom(ccstate, pstate->p_rtable, ht, CopyFromErrorCallback, cstate);
 
+	copy_chunk_state_destroy(ccstate);
 	EndCopyFrom(cstate);
 	free_parsestate(pstate);
 	table_close(rel, NoLock);
@@ -732,6 +731,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	scandesc = table_beginscan(rel, snapshot, 0, NULL);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
 	copyfrom(ccstate, pstate->p_rtable, ht, copy_table_to_chunk_error_callback, scandesc);
+	copy_chunk_state_destroy(ccstate);
 	heap_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
 	table_close(rel, lockmode);
