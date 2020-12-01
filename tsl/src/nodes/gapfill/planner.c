@@ -84,6 +84,19 @@ gapfill_function_walker(Node *node, gapfill_walker_context *context)
 }
 
 /*
+ * Check if the given expression contains call to time_bucket_gapfill
+ */
+bool
+gapfill_in_expression(Expr *node)
+{
+	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
+
+	gapfill_function_walker((Node *) node, &context);
+
+	return context.count > 0;
+}
+
+/*
  * Find locf/interpolate function call
  */
 static bool
@@ -400,7 +413,7 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
  * per grouping.
  */
 void
-plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel, bool dist_ht)
+plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 {
 	ListCell *lc;
 	Query *parse = root->parse;
@@ -424,17 +437,6 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel, bool dist_ht)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("multiple time_bucket_gapfill calls not allowed")));
-
-	/* Executing time_bucket_gapfill on distributed hypertable produces incorrect result,
-	 * returns internal planning error or crashes if grouping includes a space dimension.
-	 * Thus time_bucket_gapfill is temporary disabled until it is fixed.
-	 */
-	if (dist_ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("time_bucket_gapfill not implemented for distributed hypertable"),
-				 errdetail("Current version doesn't implement support for time_bucket_gapfill on "
-						   "distributed hypertables.")));
 
 	if (context.count == 1)
 	{
