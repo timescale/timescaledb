@@ -12,7 +12,6 @@
 typedef struct Hypertable Hypertable;
 typedef struct CopyChunkState CopyChunkState;
 
-extern void remote_distributed_copy(const CopyStmt *stmt, uint64 *processed,
-									CopyChunkState *ccstate, List *attnums);
+extern uint64 remote_distributed_copy(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums);
 
 #endif /* TIMESCALEDB_TSL_REMOTE_DIST_COPY_H */
