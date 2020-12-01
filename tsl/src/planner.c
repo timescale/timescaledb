@@ -62,13 +62,24 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			break;
 	}
 
-	if (UPPERREL_GROUP_AGG == stage)
-		plan_add_gapfill(root, output_rel, dist_ht);
-	else if (UPPERREL_WINDOW == stage && IsA(linitial(input_rel->pathlist), CustomPath))
-		gapfill_adjust_window_targetlist(root, input_rel, output_rel);
-	else if (ts_guc_enable_async_append && UPPERREL_FINAL == stage &&
-			 root->parse->resultRelation == 0 && is_dist_hypertable_involved(root))
-		async_append_add_paths(root, output_rel);
+	switch (stage)
+	{
+		case UPPERREL_GROUP_AGG:
+			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
+				plan_add_gapfill(root, output_rel);
+			break;
+		case UPPERREL_WINDOW:
+			if (IsA(linitial(input_rel->pathlist), CustomPath))
+				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
+			break;
+		case UPPERREL_FINAL:
+			if (ts_guc_enable_async_append && root->parse->resultRelation == 0 &&
+				is_dist_hypertable_involved(root))
+				async_append_add_paths(root, output_rel);
+			break;
+		default:
+			break;
+	}
 }
 
 void
