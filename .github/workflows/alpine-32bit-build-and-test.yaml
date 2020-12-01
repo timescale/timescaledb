@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 11.10, 12.5 ]
+        pg: [ "11.10", "12.5" ]
         build_type: [ Debug ]
         include:
           - pg: 11.10
