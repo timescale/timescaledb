@@ -139,8 +139,7 @@ typedef struct CrossModuleFunctions
 	void (*create_chunk_on_data_nodes)(Chunk *chunk, Hypertable *ht);
 	Path *(*data_node_dispatch_path_create)(PlannerInfo *root, ModifyTablePath *mtpath,
 											Index hypertable_rti, int subpath_index);
-	void (*distributed_copy)(const CopyStmt *stmt, uint64 *processed, CopyChunkState *ccstate,
-							 List *attnums);
+	uint64 (*distributed_copy)(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);
 	void (*set_distributed_peer_id)(Datum id);
 	bool (*is_frontend_session)(void);

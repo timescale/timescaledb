@@ -66,15 +66,9 @@ ERROR:  unable to use default value for partitioning column "pH"
 -- Missing required column, these generate a WARNING with a transaction id in them (too flimsy to output)
 SET client_min_messages TO ERROR;
 COPY "+ri(k33_')" (thyme, flavor, "pH") FROM STDIN WITH DELIMITER ',';
-ERROR:  error during copy completion: ERROR:  null value in column "))_" violates not-null constraint
-DETAIL:  Failing row contains (5, null, blue, 2, null).
-CONTEXT:  COPY +ri(k33_'), line 1: "5,blue,2.0"
-
+ERROR:  null value in column "))_" violates not-null constraint
 COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
-ERROR:  error during copy completion: ERROR:  null value in column "))_" violates not-null constraint
-DETAIL:  Failing row contains (5, null, blue, 1, blah).
-CONTEXT:  COPY +ri(k33_'), line 1: "5,\N,blue,1,blah"
-
+ERROR:  null value in column "))_" violates not-null constraint
 SET client_min_messages TO INFO;
 -- Invalid data after new chunk creation, data and chunks should be rolled back
 COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';

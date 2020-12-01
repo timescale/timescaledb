@@ -236,11 +236,12 @@ data_node_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpat
 	return NULL;
 }
 
-static void
-distributed_copy_default(const CopyStmt *stmt, uint64 *processed, CopyChunkState *ccstate,
-						 List *attnums)
+static uint64
+distributed_copy_default(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums)
 {
 	error_no_default_fn_community();
+
+	return 0;
 }
 
 static bool
