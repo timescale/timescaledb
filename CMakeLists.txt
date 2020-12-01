@@ -286,7 +286,7 @@ if (NOT CLANG_FORMAT)
 else()
   message(STATUS "Using local clang-format")
   add_custom_target(format
-    COMMAND ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh
+    COMMAND ${CMAKE_COMMAND} -E env CLANG_FORMAT=${CLANG_FORMAT} ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh
   )
 endif ()
 

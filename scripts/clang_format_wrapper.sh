@@ -67,7 +67,7 @@ echo "formatting"
 
 cd ${TEMP_DIR}
 
-clang-format ${CLANG_FORMAT_FLAGS} ${FILE_NAMES}
+${CLANG_FORMAT:-clang-format} ${CLANG_FORMAT_FLAGS} ${FILE_NAMES}
 
 cd ${CURR_DIR}
 
