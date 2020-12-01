@@ -4,8 +4,6 @@ on:
     # run daily 20:00 on master branch
     - cron: '0 20 * * *'
   push:
-    branches:
-      - prerelease_test
 jobs:
   abi_breakage:
     name: ABI Breakage PG${{ matrix.pg }}

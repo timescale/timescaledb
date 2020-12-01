@@ -2,8 +2,6 @@
 name: Regression Windows
 on:
   push:
-    branches:
-      - prerelease_test
   pull_request:
 jobs:
   build:
