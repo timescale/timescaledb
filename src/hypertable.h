@@ -37,7 +37,7 @@ enum
 	HypertableInternalCompressionTable = 2,
 };
 
-#define TS_HYPERTABLE_HAS_COMPRESSION(ht) ts_hypertable_has_compression(ht)
+#define TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ts_hypertable_has_compression_table(ht)
 
 #define TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)                                                  \
 	((ht)->fd.compression_state == HypertableCompressionEnabled)
@@ -174,7 +174,7 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(int32 replication_factor
 extern TSDLLEXPORT Datum ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
-extern TSDLLEXPORT bool ts_hypertable_has_compression(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_has_compression_table(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

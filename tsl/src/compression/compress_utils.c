@@ -185,7 +185,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
 
-	if (!TS_HYPERTABLE_HAS_COMPRESSION(srcht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(srcht))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("compression not enabled on \"%s\"", NameStr(srcht->fd.table_name)),

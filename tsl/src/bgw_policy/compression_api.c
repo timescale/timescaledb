@@ -121,7 +121,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("compression policies not supported on distributed hypertables")));
 
-	if (!TS_HYPERTABLE_HAS_COMPRESSION(hypertable))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(hypertable))
 	{
 		ts_cache_release(hcache);
 		ereport(ERROR,
