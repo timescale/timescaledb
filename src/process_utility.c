@@ -3217,7 +3217,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetLogged:
 		case AT_SetStorage:
 		case AT_ColumnDefault:
-#ifdef PG_HAS_COOKEDCOLUMNDEFAULT
+#if PG_VERSION_NUM >= 120005
 		case AT_CookedColumnDefault:
 #endif
 		case AT_SetNotNull:
