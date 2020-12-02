@@ -18,7 +18,9 @@
 select version();
 
 \echo 'Build tag'
+\set ON_ERROR_STOP 0
 SELECT * FROM _timescaledb_internal.get_git_commit();
+\set ON_ERROR_STOP 1
 
 \dx
 
