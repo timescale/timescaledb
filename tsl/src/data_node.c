@@ -61,6 +61,9 @@ typedef struct DbInfo
 	NameData collation;
 } DbInfo;
 
+/* A list of databases we try to connect to when bootstrapping a data node */
+static const char *bootstrap_databases[] = { "postgres", "template1", "defaultdb" };
+
 static bool data_node_validate_database(TSConnection *conn, const DbInfo *database);
 
 /*
@@ -541,22 +544,24 @@ add_distributed_id_to_data_node(TSConnection *conn)
 /*
  * Connect to do bootstrapping.
  *
- * This behaves similar to connectMaintenanceDatabase and will first try to
- * connect to "postgres" database and if that does not exists, to the
- * "template1" database.
+ * We iterate through the list of databases and try to connect to so we can
+ * bootstrap the data node.
  */
 static TSConnection *
 connect_for_bootstrapping(const char *node_name, const char *const host, int32 port,
 						  const char *username, const char *password)
 {
-	List *node_options = create_data_node_options(host, port, "postgres", username, password);
-	TSConnection *conn = remote_connection_open_with_options_nothrow(node_name, node_options);
-
-	if (conn)
-		return conn;
-
-	node_options = create_data_node_options(host, port, "template1", username, password);
-	return remote_connection_open_with_options_nothrow(node_name, node_options);
+	TSConnection *conn = NULL;
+	int i;
+	for (i = 0; i < lengthof(bootstrap_databases); i++)
+	{
+		List *node_options =
+			create_data_node_options(host, port, bootstrap_databases[i], username, password);
+		conn = remote_connection_open_with_options_nothrow(node_name, node_options);
+		if (conn)
+			return conn;
+	}
+	return conn;
 }
 
 /*
