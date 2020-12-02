@@ -960,7 +960,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
 					RowExclusiveLock);
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		/* compression is enabled */
 		drop_existing_compression_table(ht);
