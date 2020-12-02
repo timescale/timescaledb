@@ -1,0 +1,30 @@
+name: filter commit nessage
+on:
+  pull_request:
+  push:
+
+jobs:
+  filter-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name : GITHUB CONTEXT
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: get last 3 commit messages
+        run: |
+           git log HEAD~3..
+      - name: get commit message for ${{ github.event.after }}
+        run: |
+           git log ${{ github.event.before }}..${{ github.event.after }}
+      - name: save commit message
+        run: |
+           echo ::set-env name=commitmsg::$(git log --format=%B -n 1 ${{ github.head_ref }})
+      - name: show commit message
+        run : echo $commitmsg
+
+      - name: step1
+        if: contains( env.commitmsg , 'try' )
+        run: echo hello
+        
