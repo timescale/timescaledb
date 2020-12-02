@@ -4,6 +4,37 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.0.0-rc4 (2020-12-02)
+
+This release candidate contains bugfixes since the previous release
+candidate, as well as additional minor features. It improves
+validation of configuration changes for background jobs, adds support
+for gapfill on distributed tables, contains improvements to the memory 
+handling for large COPY, and contains improvements to compression for
+distributed hypertables.
+
+**Minor Features**
+* #2689 Check configuration in alter_job and add_job
+* #2696 Support gapfill on distributed hypertable
+* #2468 Show more information in get_git_commit
+* #2678 Include user actions into job stats view
+* #2664 Fix support for complex aggregate expression
+* #2672 Add hypertable to continuous aggregates view
+* #2662 Save compression metadata settings on access node
+* #2707 Introduce additional db for data node bootstrapping
+
+**Bugfixes**
+* #2688 Fix crash for concurrent drop and compress chunk
+* #2666 Fix timeout handling in async library
+* #2683 Fix crash in add_job when given NULL interval
+* #2698 Improve memory handling for remote COPY
+* #2555 Set metadata for chunks compressed before 2.0
+
+**Thanks**
+* @francesco11112 for reporting memory issue on COPY
+* @Netskeh for reporting bug on time_bucket problem in continuous
+  aggregates
+
 ## 2.0.0-rc3 (2020-11-12)
 
 This release candidate contains bugfixes since the previous release
