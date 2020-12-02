@@ -2,11 +2,5 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- Check what get_git_commit returns
-SELECT pg_typeof(commit_tag) AS commit_tag_type,
-       pg_typeof(commit_hash) AS commit_hash_type,
-       pg_typeof(commit_time) AS commit_time_type
-  FROM _timescaledb_internal.get_git_commit();
-
 -- Test that get_os_info returns 3 x text
 select pg_typeof(sysname) AS sysname_type,pg_typeof(version) AS version_type,pg_typeof(release) AS release_type from _timescaledb_internal.get_os_info();
