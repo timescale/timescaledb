@@ -436,7 +436,7 @@ hypertable_tuple_add_stat(TupleInfo *ti, void *data)
 	}
 
 	/* Number of hypertables with compression enabled */
-	if (TS_HYPERTABLE_HAS_COMPRESSION(ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		stat->num_hypertables_compressed++;
 
 	return SCAN_CONTINUE;
@@ -2526,7 +2526,7 @@ ts_hypertable_clone_constraints_to_compressed(Hypertable *user_ht, List *constra
 	CatalogSecurityContext sec_ctx;
 
 	ListCell *lc;
-	Assert(TS_HYPERTABLE_HAS_COMPRESSION(user_ht));
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(user_ht));
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	foreach (lc, constraint_list)
 	{
@@ -2749,7 +2749,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 }
 
 bool
-ts_hypertable_has_compression(Hypertable *ht)
+ts_hypertable_has_compression_table(Hypertable *ht)
 {
 	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
 	{
