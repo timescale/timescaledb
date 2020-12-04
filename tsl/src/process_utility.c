@@ -12,6 +12,7 @@
 #include "remote/dist_commands.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_ddl.h"
+#include "compression/create.h"
 
 void
 tsl_ddl_command_start(ProcessUtilityArgs *args)
@@ -21,8 +22,23 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 		DropdbStmt *stmt = castNode(DropdbStmt, args->parsetree);
 		remote_connection_cache_dropped_db_callback(stmt->dbname);
 	}
-
 	dist_ddl_start(args);
+}
+
+/* AlterTableCmds that need tsl side processing invoke this function
+ * we only process AddColumn command right now.
+ */
+void
+tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
+{
+	if (cmd->subtype == AT_AddColumn || cmd->subtype == AT_AddColumnRecurse)
+	{
+		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		{
+			ColumnDef *orig_coldef = castNode(ColumnDef, cmd->def);
+			tsl_process_compress_table_add_column(ht, orig_coldef);
+		}
+	}
 }
 
 void

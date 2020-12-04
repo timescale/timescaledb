@@ -2753,7 +2753,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 }
 
 bool
-ts_hypertable_has_compression_table(Hypertable *ht)
+ts_hypertable_has_compression_table(const Hypertable *ht)
 {
 	if (ht->fd.compressed_hypertable_id != INVALID_HYPERTABLE_ID)
 	{

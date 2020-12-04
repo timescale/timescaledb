@@ -400,7 +400,7 @@ LIMIT 1;
 
 SELECT chunk_name, node_name, compression_status
 FROM chunk_compression_stats('compressed')
-ORDER BY 1, 2; 
+ORDER BY 1, 2;
       chunk_name       |       node_name       | compression_status 
 -----------------------+-----------------------+--------------------
  _dist_hyper_1_1_chunk | db_dist_compression_1 | Compressed
@@ -410,4 +410,48 @@ ORDER BY 1, 2;
  _dist_hyper_1_3_chunk | db_dist_compression_1 | Uncompressed
  _dist_hyper_1_3_chunk | db_dist_compression_3 | Uncompressed
 (6 rows)
+
+-- ALTER TABLE on distributed compressed hypertable
+ALTER TABLE compressed ADD COLUMN new_coli integer;
+ALTER TABLE compressed ADD COLUMN new_colv varchar(30);
+SELECT * FROM _timescaledb_catalog.hypertable_compression
+ORDER BY attname;
+ hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+---------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
+             1 | device   |                        4 |                        |                      |             | 
+             1 | new_coli |                        4 |                        |                      |             | 
+             1 | new_colv |                        2 |                        |                      |             | 
+             1 | temp     |                        3 |                        |                      |             | 
+             1 | time     |                        4 |                        |                    1 | f           | t
+(5 rows)
+
+SELECT count(*) from compressed where new_coli is not null;
+ count 
+-------
+     0
+(1 row)
+
+--insert data into new chunk  
+INSERT INTO compressed 
+SELECT '2019-08-01 00:00',  100, 100, 1, 'newcolv' ;
+SELECT COUNT(*) AS count_compressed
+FROM
+(
+SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name, true)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'compressed' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+)
+AS sub;
+NOTICE:  chunk "_dist_hyper_1_1_chunk" is already compressed
+ count_compressed 
+------------------
+                4
+(1 row)
+
+SELECT * from compressed where new_coli is not null;
+             time             | device | temp | new_coli | new_colv 
+------------------------------+--------+------+----------+----------
+ Thu Aug 01 00:00:00 2019 PDT |    100 |  100 |        1 | newcolv
+(1 row)
 

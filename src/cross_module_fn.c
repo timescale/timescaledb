@@ -291,6 +291,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.ddl_command_start = NULL,
 	.ddl_command_end = NULL,
 	.sql_drop = NULL,
+	.process_altertable_cmd = NULL,
 
 	/* gapfill */
 	.gapfill_marker = error_no_default_fn_pg_community,

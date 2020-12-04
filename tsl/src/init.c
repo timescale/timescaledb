@@ -140,6 +140,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_append = tsl_array_compressor_append,
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.process_compress_table = tsl_process_compress_table,
+	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.data_node_add = data_node_add,

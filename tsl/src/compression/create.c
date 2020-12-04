@@ -21,6 +21,7 @@
 #include <commands/tablespace.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <parser/parse_type.h>
 #include <storage/lmgr.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
@@ -55,6 +56,7 @@ typedef struct CompressColInfo
 
 static void compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols,
 								 List *orderby_cols);
+static void compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid typid);
 static void compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, int32 htid);
 
 #define PRINT_COMPRESSION_TABLE_NAME(buf, prefix, hypertable_id)                                   \
@@ -318,6 +320,26 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	compresscolinfo_add_metadata_columns(cc, rel);
 	pfree(segorder_colindex);
 	table_close(rel, AccessShareLock);
+}
+
+/* use this api for the case when you add a single column to a table that already has
+ * compression setup
+ * such as ALTER TABLE xyz ADD COLUMN .....
+ */
+static void
+compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid typid)
+{
+	int colno = 0;
+	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	ColumnDef *coldef;
+
+	cc->numcols = 1;
+	cc->col_meta = palloc0(sizeof(FormData_hypertable_compression) * cc->numcols);
+	cc->coldeflist = NIL;
+	namestrcpy(&cc->col_meta[colno].attname, colname);
+	cc->col_meta[colno].algo_id = get_default_algorithm_id(typid);
+	coldef = makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
+	cc->coldeflist = lappend(cc->coldeflist, coldef);
 }
 
 /* modify storage attributes for toast table columns attached to the
@@ -900,6 +922,38 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 	return true;
 }
 
+/* Add column to internal compression table */
+static void
+add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compress_cols)
+{
+	LOCKMODE lockmode;
+	Oid compress_relid;
+	AlterTableStmt *stmt;
+	ColumnDef *coldef;
+	AlterTableCmd *addcol_cmd;
+	coldef = (ColumnDef *) linitial(compress_cols->coldeflist);
+
+	/* create altertable stmt to add column to the compressed hypertable */
+	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
+	addcol_cmd = makeNode(AlterTableCmd);
+	addcol_cmd->subtype = AT_AddColumn;
+	addcol_cmd->def = (Node *) coldef;
+	addcol_cmd->missing_ok = false;
+	stmt = makeNode(AlterTableStmt);
+	stmt->relation =
+		makeRangeVar(NameStr(compress_ht->fd.schema_name), NameStr(compress_ht->fd.table_name), -1);
+	stmt->cmds = list_make1(addcol_cmd);
+	stmt->relkind = OBJECT_TABLE;
+	stmt->missing_ok = false;
+
+	/* alter the table and add column */
+	lockmode = AlterTableGetLockLevel(stmt->cmds);
+	compress_relid = AlterTableLookupRelation(stmt, lockmode);
+	Assert(compress_relid == compress_ht->main_table_relid);
+	AlterTable(compress_relid, AccessExclusiveLock, stmt);
+	modify_compressed_toast_table_storage(compress_cols, compress_relid);
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -995,4 +1049,32 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	/* do not release any locks, will get released by xact end */
 	return true;
+}
+
+/* Add a column to a table that has compression enabled
+ * This function specifically adds the column to the internal compression table.
+ */
+void
+tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
+{
+	struct CompressColInfo compress_cols;
+	Oid coloid;
+	int32 orig_htid = ht->fd.id;
+	char *colname = orig_def->colname;
+	TypeName *orig_typname = orig_def->typeName;
+
+	coloid = LookupTypeNameOid(NULL, orig_typname, false);
+	compresscolinfo_init_singlecolumn(&compress_cols, colname, coloid);
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
+		int32 compress_htid = ht->fd.compressed_hypertable_id;
+		Hypertable *compress_ht = ts_hypertable_get_by_id(compress_htid);
+		add_column_to_compression_table(compress_ht, &compress_cols);
+	}
+	else
+	{
+		Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+	}
+	/* add catalog entries for the new column for the hypertable */
+	compresscolinfo_add_catalog_entries(&compress_cols, orig_htid);
 }

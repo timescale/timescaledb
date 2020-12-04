@@ -4,8 +4,6 @@
 
 \ir include/rand_generator.sql
 \c :TEST_DBNAME :ROLE_SUPERUSER
-\ir include/compression_utils.sql
-
 
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
@@ -445,3 +443,8 @@ SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
 FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name like 'test1'  ORDER BY chunk.id ) as subq;
+
+DROP TABLE test1;
+
+-- compression alter table tests
+\ir include/compression_alter.sql
