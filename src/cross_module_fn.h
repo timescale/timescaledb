@@ -98,6 +98,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_out;
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
+	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	/* The compression functions below are not installed in SQL as part of create extension;

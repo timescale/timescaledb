@@ -213,6 +213,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_SetTableSpace:
 				/* this is passed down in `process_altertable_set_tablespace_end` */
 			case AT_SetStatistics: /* should this be pushed down in some way? */
+			case AT_AddColumn:	 /* this is passed down */
 				continue;
 				/*
 				 * BLOCKED:
@@ -237,6 +238,23 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 				break;
 		}
 	}
+}
+
+static void
+check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
+{
+	if (col->constraints || col->is_not_null == true || col->identitySequence != NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot add column with constraints or defaults to a hypertable that has "
+						"compression enabled")));
+	}
+	/* not possible to get non-null value here this is set when
+	 * ALTER TABLE ALTER COLUMN ... SET TYPE < > USING ...
+	 * but check anyway.
+	 */
+	Assert(col->raw_default == NULL && col->cooked_default == NULL);
 }
 
 static void
@@ -2837,7 +2855,8 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 
 				Assert(IsA(cmd->def, ColumnDef));
 				col = (ColumnDef *) cmd->def;
-
+				if (ht && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+					check_altertable_add_column_for_compressed(ht, col);
 				if (NULL == ht)
 					foreach (constraint_lc, col->constraints)
 						verify_constraint_plaintable(stmt->relation, lfirst(constraint_lc));
@@ -3264,6 +3283,8 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			break;
 		case AT_AddColumn:
 		case AT_AddColumnRecurse:
+			/* this is handled for compressed hypertables by tsl code */
+			break;
 		case AT_DropColumn:
 		case AT_DropColumnRecurse:
 #if PG13_GE
@@ -3301,6 +3322,8 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 					 errmsg("operation not supported on hypertables %d", cmd->subtype)));
 			break;
 	}
+	if (ts_cm_functions->process_altertable_cmd)
+		ts_cm_functions->process_altertable_cmd(ht, cmd);
 }
 
 static void

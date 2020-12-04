@@ -18,6 +18,7 @@
 
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
+void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 Chunk *create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk);
 
 char *compression_column_segment_min_name(const FormData_hypertable_compression *fd);

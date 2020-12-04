@@ -138,4 +138,29 @@ LIMIT 1;
 
 SELECT chunk_name, node_name, compression_status
 FROM chunk_compression_stats('compressed')
-ORDER BY 1, 2; 
+ORDER BY 1, 2;
+
+-- ALTER TABLE on distributed compressed hypertable
+ALTER TABLE compressed ADD COLUMN new_coli integer;
+ALTER TABLE compressed ADD COLUMN new_colv varchar(30);
+
+SELECT * FROM _timescaledb_catalog.hypertable_compression
+ORDER BY attname;
+
+SELECT count(*) from compressed where new_coli is not null;
+
+--insert data into new chunk  
+INSERT INTO compressed 
+SELECT '2019-08-01 00:00',  100, 100, 1, 'newcolv' ;
+
+SELECT COUNT(*) AS count_compressed
+FROM
+(
+SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name, true)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name like 'compressed' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+)
+AS sub;
+
+SELECT * from compressed where new_coli is not null;
