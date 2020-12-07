@@ -2422,9 +2422,11 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	PG_RETURN_NULL();
 }
 
-/*Assume permissions are already checked */
+/*Assume permissions are already checked
+ * set compression state as enabled
+ */
 bool
-ts_hypertable_set_compressed_id(Hypertable *ht, int32 compressed_hypertable_id)
+ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
 {
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 	ht->fd.compression_state = HypertableCompressionEnabled;
@@ -2436,8 +2438,11 @@ ts_hypertable_set_compressed_id(Hypertable *ht, int32 compressed_hypertable_id)
 	return ts_hypertable_update(ht) > 0;
 }
 
+/* set compression_state as disabled and remove any
+ * associated compressed hypertable id
+ */
 bool
-ts_hypertable_unset_compressed_id(Hypertable *ht)
+ts_hypertable_unset_compressed(Hypertable *ht)
 {
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
 	ht->fd.compression_state = HypertableCompressionOff;

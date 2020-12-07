@@ -155,9 +155,9 @@ extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_
 extern bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
 extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
-extern TSDLLEXPORT bool ts_hypertable_set_compressed_id(Hypertable *ht,
-														int32 compressed_hypertable_id);
-extern TSDLLEXPORT bool ts_hypertable_unset_compressed_id(Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
+													 int32 compressed_hypertable_id);
+extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
 																	  List *constraint_list);
 extern List *ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube);
