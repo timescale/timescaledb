@@ -868,7 +868,7 @@ drop_existing_compression_table(Hypertable *ht)
 	 * thus the column types of compressed hypertable need to change) */
 	ts_hypertable_drop(compressed, DROP_RESTRICT);
 	ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
-	ts_hypertable_unset_compressed_id(ht);
+	ts_hypertable_unset_compressed(ht);
 }
 
 static bool
@@ -888,8 +888,15 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 		return false;
 	/* compression is enabled. can we turn it off? */
 	check_modify_compression_options(ht, with_clause_options);
-	drop_existing_compression_table(ht);
-	ts_hypertable_unset_compressed_id(ht);
+
+	/* distributed hypertables do not have compression table on the access node */
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+		drop_existing_compression_table(ht);
+	else
+	{
+		ts_hypertable_compression_delete_by_hypertable_id(ht->fd.id);
+		ts_hypertable_unset_compressed(ht);
+	}
 	return true;
 }
 
@@ -971,14 +978,14 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		/* On a distributed hypertable, there's no data locally, so don't
 		 * create local compression tables and data but let the DDL pass on to
 		 * data nodes. */
-		ts_hypertable_set_compressed_id(ht, 0);
+		ts_hypertable_set_compressed(ht, 0);
 		compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 		return true;
 	}
 	else
 	{
 		compress_htid = create_compression_table(ownerid, &compress_cols);
-		ts_hypertable_set_compressed_id(ht, compress_htid);
+		ts_hypertable_set_compressed(ht, compress_htid);
 	}
 
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);

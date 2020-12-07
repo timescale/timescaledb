@@ -26,6 +26,10 @@ INSERT INTO compressed SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, r
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
 ALTER TABLE compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
 
+SELECT table_name, compression_state, compressed_hypertable_id
+FROM _timescaledb_catalog.hypertable
+ORDER BY 1;
+
 SELECT * FROM timescaledb_information.compression_settings;
 \x
 SELECT * FROM _timescaledb_catalog.hypertable
@@ -111,3 +115,27 @@ SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_nam
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('compressed', '60d'::interval);
 \set ON_ERROR_STOP 1
+
+-- Disable compression on distributed table tests
+ALTER TABLE compressed SET (timescaledb.compress = false);
+
+SELECT table_name, compression_state, compressed_hypertable_id
+FROM _timescaledb_catalog.hypertable
+ORDER BY 1;
+
+SELECT * FROM timescaledb_information.compression_settings;
+
+--Now re-enable compression
+ALTER TABLE compressed SET (timescaledb.compress);
+SELECT table_name, compression_state, compressed_hypertable_id
+FROM _timescaledb_catalog.hypertable
+ORDER BY 1;
+SELECT * FROM timescaledb_information.compression_settings;
+SELECT compress_chunk(chunk, if_not_compressed => true)
+FROM show_chunks('compressed') AS chunk
+ORDER BY chunk
+LIMIT 1;
+
+SELECT chunk_name, node_name, compression_status
+FROM chunk_compression_stats('compressed')
+ORDER BY 1, 2; 
