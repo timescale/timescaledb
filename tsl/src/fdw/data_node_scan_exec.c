@@ -71,22 +71,15 @@ data_node_scan_next(CustomScanState *node)
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 	slot = fdw_scan_iterate(&node->ss, &sss->fsstate);
 	MemoryContextSwitchTo(oldcontext);
-	/*
-	 * If any system columns are requested, we have to force the tuple into
-	 * physical-tuple form to avoid "cannot extract system attribute from
-	 * virtual tuple" errors later.  We also insert a valid value for
-	 * tableoid, which is the only actually-useful system column.
-	 */
-	if (sss->systemcol && !TupIsNull(slot))
-	{
-#if PG12_LT
-		HeapTuple tup = ExecMaterializeSlot(slot);
 
-		tup->t_tableOid = RelationGetRelid(node->ss.ss_currentRelation);
-#else
-		slot->tts_tableOid = RelationGetRelid(node->ss.ss_currentRelation);
-#endif
-	}
+	/* Raise an error when system column is requsted, eg. tableoid */
+	if (sss->systemcol && !TupIsNull(slot))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("system columns are not accessible on distributed hypertables with current "
+						"settings"),
+				 errhint("Set timescaledb.enable_per_data_node_queries=false to query system "
+						 "columns.")));
 
 	return slot;
 }
