@@ -4526,5 +4526,70 @@ INSERT INTO disttable VALUES
        ('2018-07-01 06:01', 13, 3.1),
        ('2018-07-01 09:11', 90, 10303.12),
        ('2018-07-01 08:01', 29, 64);
+\set ON_ERROR_STOP 0
 CREATE INDEX disttable_time_device_idx ON disttable (time, device) WITH (timescaledb.transaction_per_chunk);
 ERROR:  cannot use timescaledb.transaction_per_chunk with distributed hypetable
+\set ON_ERROR_STOP 1
+-- Test using system columns with distributed hypertable
+--
+CREATE TABLE dist_syscol(time timestamptz NOT NULL, color int, temp float);
+SELECT * FROM create_distributed_hypertable('dist_syscol', 'time', 'color');
+ hypertable_id | schema_name | table_name  | created 
+---------------+-------------+-------------+---------
+            26 | public      | dist_syscol | t
+(1 row)
+
+INSERT INTO dist_syscol VALUES
+	('2017-02-01 06:01', 1, 1.1),
+	('2017-02-01 08:01', 1, 1.2),
+	('2018-02-02 08:01', 2, 1.3),
+	('2019-02-01 09:11', 3, 2.1),
+	('2019-02-02 09:11', 3, 2.1),
+	('2019-02-02 10:01', 5, 1.2),
+	('2019-02-03 11:11', 6, 3.5),
+	('2019-02-04 08:21', 4, 6.6),
+	('2019-02-04 10:11', 7, 7.4),
+	('2019-02-04 12:11', 8, 2.1),
+	('2019-02-05 13:31', 8, 6.3),
+	('2019-02-06 02:11', 5, 1.8),
+	('2019-02-06 01:13', 7, 7.9),
+	('2019-02-06 19:24', 9, 5.9),
+	('2019-02-07 18:44', 5, 9.7),
+	('2019-02-07 20:24', 6, NULL),
+	('2019-02-07 09:33', 7, 9.5),
+	('2019-02-08 08:54', 1, 7.3),
+	('2019-02-08 18:14', 4, 8.2),
+	('2019-02-09 19:23', 8, 9.1);
+-- Return chunk table as a source
+SET timescaledb.enable_per_data_node_queries = false;
+SELECT tableoid::regclass, * FROM dist_syscol;
+                   tableoid                    |             time             | color | temp 
+-----------------------------------------------+------------------------------+-------+------
+ _timescaledb_internal._dist_hyper_26_72_chunk | Wed Feb 01 06:01:00 2017 PST |     1 |  1.1
+ _timescaledb_internal._dist_hyper_26_72_chunk | Wed Feb 01 08:01:00 2017 PST |     1 |  1.2
+ _timescaledb_internal._dist_hyper_26_73_chunk | Fri Feb 02 08:01:00 2018 PST |     2 |  1.3
+ _timescaledb_internal._dist_hyper_26_74_chunk | Fri Feb 01 09:11:00 2019 PST |     3 |  2.1
+ _timescaledb_internal._dist_hyper_26_74_chunk | Sat Feb 02 09:11:00 2019 PST |     3 |  2.1
+ _timescaledb_internal._dist_hyper_26_75_chunk | Sat Feb 02 10:01:00 2019 PST |     5 |  1.2
+ _timescaledb_internal._dist_hyper_26_75_chunk | Mon Feb 04 08:21:00 2019 PST |     4 |  6.6
+ _timescaledb_internal._dist_hyper_26_75_chunk | Mon Feb 04 10:11:00 2019 PST |     7 |  7.4
+ _timescaledb_internal._dist_hyper_26_75_chunk | Wed Feb 06 02:11:00 2019 PST |     5 |  1.8
+ _timescaledb_internal._dist_hyper_26_75_chunk | Wed Feb 06 01:13:00 2019 PST |     7 |  7.9
+ _timescaledb_internal._dist_hyper_26_76_chunk | Sun Feb 03 11:11:00 2019 PST |     6 |  3.5
+ _timescaledb_internal._dist_hyper_26_76_chunk | Mon Feb 04 12:11:00 2019 PST |     8 |  2.1
+ _timescaledb_internal._dist_hyper_26_76_chunk | Tue Feb 05 13:31:00 2019 PST |     8 |  6.3
+ _timescaledb_internal._dist_hyper_26_77_chunk | Wed Feb 06 19:24:00 2019 PST |     9 |  5.9
+ _timescaledb_internal._dist_hyper_26_78_chunk | Thu Feb 07 18:44:00 2019 PST |     5 |  9.7
+ _timescaledb_internal._dist_hyper_26_78_chunk | Thu Feb 07 09:33:00 2019 PST |     7 |  9.5
+ _timescaledb_internal._dist_hyper_26_78_chunk | Fri Feb 08 18:14:00 2019 PST |     4 |  8.2
+ _timescaledb_internal._dist_hyper_26_79_chunk | Thu Feb 07 20:24:00 2019 PST |     6 |     
+ _timescaledb_internal._dist_hyper_26_79_chunk | Fri Feb 08 08:54:00 2019 PST |     1 |  7.3
+ _timescaledb_internal._dist_hyper_26_79_chunk | Sat Feb 09 19:23:00 2019 PST |     8 |  9.1
+(20 rows)
+
+-- Produce an error
+SET timescaledb.enable_per_data_node_queries = true;
+\set ON_ERROR_STOP 0
+SELECT tableoid::regclass, * FROM dist_syscol;
+ERROR:  system columns are not accessible on distributed hypertables with current settings
+\set ON_ERROR_STOP 1
