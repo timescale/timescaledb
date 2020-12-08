@@ -30,6 +30,9 @@ GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
 SET ROLE :ROLE_1;
 
+-- System columns are not supported with data node queries
+SET timescaledb.enable_per_data_node_queries = FALSE;
+
 -- Create distributed hypertables.
 CREATE TABLE disttable_with_relopts_1(time timestamptz NOT NULL, device int CHECK (device > 0));
 SELECT * FROM create_distributed_hypertable('disttable_with_relopts_1', 'time', 'device', 2);
