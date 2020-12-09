@@ -95,3 +95,119 @@ ALTER TABLE metrics_dist DROP COLUMN filler_3;
 INSERT INTO metrics_dist(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 ANALYZE metrics_dist;
 
+-- Tables for gapfill and distributed gapfill tests
+
+CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
+SELECT create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
+INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), 1.0;
+
+CREATE TABLE metrics_int(
+    time int NOT NULL,
+    device_id int,
+    sensor_id int,
+    value float);
+INSERT INTO metrics_int VALUES
+    (-100,1,1,0.0),
+    (-100,1,2,-100.0),
+    (0,1,1,5.0),
+    (5,1,2,10.0),
+    (100,1,1,0.0),
+    (100,1,2,-100.0);
+
+CREATE TABLE devices(device_id INT, name TEXT);
+INSERT INTO devices VALUES (1,'Device 1'),(2,'Device 2'),(3,'Device 3');
+
+CREATE TABLE sensors(sensor_id INT, name TEXT);
+INSERT INTO sensors VALUES (1,'Sensor 1'),(2,'Sensor 2'),(3,'Sensor 3');
+
+CREATE TABLE insert_test(id INT);
+INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
+
+CREATE TABLE metrics_tstz(time timestamptz, device_id INT, v1 float, v2 int);
+SELECT create_hypertable('metrics_tstz','time');
+INSERT INTO metrics_tstz VALUES
+    (timestamptz '2018-01-01 05:00:00 PST', 1, 0.5, 10),
+    (timestamptz '2018-01-01 05:00:00 PST', 2, 0.7, 20),
+    (timestamptz '2018-01-01 05:00:00 PST', 3, 0.9, 30),
+    (timestamptz '2018-01-01 07:00:00 PST', 1, 0.0, 0),
+    (timestamptz '2018-01-01 07:00:00 PST', 2, 1.4, 40),
+    (timestamptz '2018-01-01 07:00:00 PST', 3, 0.9, 30)
+;
+
+CREATE TABLE conditions(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_hypertable('conditions', 'time');
+INSERT INTO conditions VALUES
+    ('2017-01-01 06:01', 1, 1.2),
+    ('2017-01-01 09:11', 3, 4.3),
+    ('2017-01-01 08:01', 1, 7.3),
+    ('2017-01-02 08:01', 2, 0.23),
+    ('2018-07-02 08:01', 87, 0.0),
+    ('2018-07-01 06:01', 13, 3.1),
+    ('2018-07-01 09:11', 90, 10303.12),
+    ('2018-07-01 08:01', 29, 64);
+
+CREATE TABLE conditions_dist(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_distributed_hypertable('conditions_dist', 'time', 'device', 3);
+INSERT INTO conditions_dist VALUES
+    ('2017-01-01 06:01', 1, 1.2),
+    ('2017-01-01 09:11', 3, 4.3),
+    ('2017-01-01 08:01', 1, 7.3),
+    ('2017-01-02 08:01', 2, 0.23),
+    ('2018-07-02 08:01', 87, 0.0),
+    ('2018-07-01 06:01', 13, 3.1),
+    ('2018-07-01 09:11', 90, 10303.12),
+    ('2018-07-01 08:01', 29, 64);
+
+CREATE TABLE metrics_int_dist(
+    time int NOT NULL,
+    device_id int,
+    sensor_id int,
+    value float);
+SELECT create_distributed_hypertable('metrics_int_dist','time','device_id',chunk_time_interval => 50);
+INSERT INTO metrics_int_dist VALUES
+    (-100,1,1,0.0),
+    (-100,1,2,-100.0),
+    (0,1,1,5.0),
+    (5,1,2,10.0),
+    (100,1,1,0.0),
+    (100,1,2,-100.0);
+
+CREATE TABLE conditions_dist1(
+    time timestamptz NOT NULL, 
+    device int, 
+    value float
+);
+SELECT * FROM create_distributed_hypertable('conditions_dist1', 'time', 'device', 1,
+    data_nodes => '{"data_node_1"}');
+INSERT INTO conditions_dist1 VALUES
+    ('2017-01-01 06:01', 1, 1.2),
+    ('2017-01-01 09:11', 3, 4.3),
+    ('2017-01-01 08:01', 1, 7.3),
+    ('2017-01-02 08:01', 2, 0.23),
+    ('2018-07-02 08:01', 87, 0.0),
+    ('2018-07-01 06:01', 13, 3.1),
+    ('2018-07-01 09:11', 90, 10303.12),
+    ('2018-07-01 08:01', 29, 64);
+
+CREATE TABLE metrics_int_dist1(
+    time int NOT NULL,
+    device_id int,
+    sensor_id int,
+    value float);
+SELECT create_distributed_hypertable('metrics_int_dist1', 'time', 'device_id', chunk_time_interval => 50,
+    data_nodes => '{"data_node_1"}');
+INSERT INTO metrics_int_dist1 VALUES
+    (-100,1,1,0.0),
+    (-100,1,2,-100.0),
+    (0,1,1,5.0),
+    (5,1,2,10.0),
+    (100,1,1,0.0),
+    (100,1,2,-100.0);
