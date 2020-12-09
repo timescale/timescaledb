@@ -155,6 +155,59 @@ INSERT INTO devices VALUES (1,'Device 1'),(2,'Device 2'),(3,'Device 3');
 CREATE TABLE sensors(sensor_id INT, name TEXT);
 INSERT INTO sensors VALUES (1,'Sensor 1'),(2,'Sensor 2'),(3,'Sensor 3');
 
+-- All test against table metrics_int first
+
+\set ON_ERROR_STOP 0
+-- inverse of previous test query to confirm an error is actually thrown
+SELECT
+  time_bucket_gapfill(5,time,0,11) AS time,
+  device_id,
+  sensor_id,
+  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM metrics_int m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
+FROM metrics_int m1
+WHERE time = 5
+GROUP BY 1,2,3 ORDER BY 2,3,1;
+
+-- test window functions with multiple column references
+SELECT
+  time_bucket_gapfill(1,time,1,2),
+  first(min(time),min(time)) OVER ()
+FROM metrics_int
+GROUP BY 1;
+
+-- test with unsupported operator
+SELECT
+  time_bucket_gapfill(1,time)
+FROM metrics_int
+WHERE time =0 AND time < 2
+GROUP BY 1;
+
+-- test with 2 tables and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m, metrics_int m2
+WHERE m.time >=0 AND m.time < 2
+GROUP BY 1;
+
+-- test inner join and where clause doesnt match gapfill argument
+SELECT
+  time_bucket_gapfill(1,m2.time)
+FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
+WHERE m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+
+-- test outer join with constraints in join condition
+-- not usable as start/stop
+SELECT
+  time_bucket_gapfill(1,m1.time)
+FROM metrics_int m1 LEFT OUTER JOIN metrics_int m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
+GROUP BY 1;
+\set ON_ERROR_STOP 1
+
+\ir include/gapfill_metrics_query.sql
+
+-- Tests without tables
+
 -- test locf and interpolate call without gapfill
 SELECT locf(1);
 SELECT interpolate(1);
@@ -301,13 +354,6 @@ SELECT
   time_bucket_gapfill(1,time,1,11),
   avg(min(time)) OVER () + avg(min(time)) OVER ()
 FROM (VALUES (1),(2)) v(time)
-GROUP BY 1;
-
--- test window functions with multiple column references
-SELECT
-  time_bucket_gapfill(1,time,1,2),
-  first(min(time),min(time)) OVER ()
-FROM metrics_int
 GROUP BY 1;
 
 -- test locf not toplevel
@@ -571,20 +617,6 @@ FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
 WHERE false
 GROUP BY 1,color ORDER BY 2,1;
 
--- test JOINs
-SELECT
-  time_bucket_gapfill(1,time,0,5) as time,
-  device_id,
-  d.name,
-  sensor_id,
-  s.name,
-  avg(m.value)
-FROM metrics_int m
-INNER JOIN devices d USING(device_id)
-INNER JOIN sensors s USING(sensor_id)
-WHERE time BETWEEN 0 AND 5
-GROUP BY 1,2,3,4,5;
-
 -- test insert into SELECT
 CREATE TABLE insert_test(id INT);
 INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
@@ -725,71 +757,6 @@ FROM (VALUES
 ) v(time,v1,v2,v3)
 GROUP BY 1;
 
--- test locf lookup query does not trigger when not needed
---
--- 1/(SELECT 0) will throw an error in the lookup query but in order to not
--- always trigger evaluation it needs to be correlated otherwise postgres will
--- always run it once even if the value is never used
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM metrics_int m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
-FROM metrics_int m1
-WHERE time >= 0 AND time < 5
-GROUP BY 1,2,3 ORDER BY 2,3,1;
-
-\set ON_ERROR_STOP 0
--- inverse of previous test query to confirm an error is actually thrown
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM metrics_int m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
-FROM metrics_int m1
-WHERE time = 5
-GROUP BY 1,2,3 ORDER BY 2,3,1;
-\set ON_ERROR_STOP 1
-
--- test locf with correlated subquery
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  avg(value),
-  locf(min(value)) AS locf,
-  locf(min(value)::int,23) AS locf1,
-  locf(min(value)::int,(SELECT 42)) AS locf2,
-  locf(min(value),(SELECT value FROM metrics_int m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
-FROM metrics_int m1
-WHERE time >= 0 AND time < 10
-GROUP BY 1,2,3 ORDER BY 2,3,1;
-
--- test locf with correlated subquery and "wrong order"
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  avg(value),
-  locf(min(value)) AS locf,
-  locf(min(value),23::float) AS locf1,
-  locf(min(value),(SELECT 42::float)) AS locf2,
-  locf(min(value),(SELECT value FROM metrics_int m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
-FROM metrics_int m1
-WHERE time >= 0 AND time < 10
-GROUP BY 1,2,3 ORDER BY 1,2,3;
-
--- test locf with correlated subquery and window functions
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  locf(min(value),(SELECT value FROM metrics_int m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)),
-  sum(locf(min(value),(SELECT value FROM metrics_int m2 WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1))) OVER (PARTITION BY device_id, sensor_id ROWS 1 PRECEDING)
-FROM metrics_int m1
-WHERE time >= 0 AND time < 10
-GROUP BY 1,2,3;
-
 -- test interpolate
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
@@ -833,55 +800,6 @@ SELECT
   interpolate(min(v1),(SELECT (-10,-10)),(SELECT (20,10)))
 FROM (VALUES (5,1,0),(5,2,0)) as v(time,device,v1)
 GROUP BY 1,2 ORDER BY 2,1;
-
--- test interpolate with correlated subquery
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  avg(value),
-  interpolate(min(value)) AS ip,
-  interpolate(min(value),(-5,-5.0::float),(15,20.0::float)) AS ip1,
-  interpolate(min(value),(SELECT (-10,-10.0::float)),(SELECT (15,20.0::float))) AS ip2,
-  interpolate(
-    min(value),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time DESC LIMIT 1),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time LIMIT 1)
-  ) AS ip3
-FROM metrics_int m1
-WHERE time >= 0 AND time < 10
-GROUP BY 1,2,3 ORDER BY 2,3,1;
-
--- test interpolate with correlated subquery and window function
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  interpolate(
-    min(value),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time DESC LIMIT 1),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time LIMIT 1)
-  ),
-  sum(interpolate(
-    min(value),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time DESC LIMIT 1),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time LIMIT 1)
-  )) OVER (PARTITION BY device_id, sensor_id ROWS 1 PRECEDING)
-FROM metrics_int m1
-WHERE time >= 0 AND time < 10
-GROUP BY 1,2,3 ORDER BY 2,3,1;
 
 -- test cte with gap filling in outer query
 WITH data AS (
@@ -1257,13 +1175,6 @@ FROM (VALUES (1,2),(2,2)) v(t1,t2)
 WHERE t1 > 0 AND t1 < 2
 GROUP BY 1;
 
--- test with unsupported operator
-SELECT
-  time_bucket_gapfill(1,time)
-FROM metrics_int
-WHERE time =0 AND time < 2
-GROUP BY 1;
-
 -- time_bucket_gapfill with constraints ORed
 SELECT
  time_bucket_gapfill(1::int8,t::int8)
@@ -1272,43 +1183,7 @@ WHERE
  t >= -1 OR t < 3
 GROUP BY 1;
 
--- test with 2 tables and where clause doesnt match gapfill argument
-SELECT
-  time_bucket_gapfill(1,m2.time)
-FROM metrics_int m, metrics_int m2
-WHERE m.time >=0 AND m.time < 2
-GROUP BY 1;
-
--- test inner join and where clause doesnt match gapfill argument
-SELECT
-  time_bucket_gapfill(1,m2.time)
-FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
-WHERE m1.time >=0 AND m1.time < 2
-GROUP BY 1;
-
--- test outer join with constraints in join condition
--- not usable as start/stop
-SELECT
-  time_bucket_gapfill(1,m1.time)
-FROM metrics_int m1 LEFT OUTER JOIN metrics_int m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
-GROUP BY 1;
-
 \set ON_ERROR_STOP 1
-
--- test subqueries
--- subqueries will alter the shape of the plan and top-level constraints
--- might not end up in top-level of jointree
-SELECT
-  time_bucket_gapfill(1,m1.time)
-FROM metrics_int m1
-WHERE m1.time >=0 AND m1.time < 2 AND device_id IN (SELECT device_id FROM metrics_int)
-GROUP BY 1;
-
--- test inner join with constraints in join condition
-SELECT
-  time_bucket_gapfill(1,m2.time)
-FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
-GROUP BY 1;
 
 -- int32 time_bucket_gapfill with no start/finish
 SELECT
@@ -1422,27 +1297,6 @@ WHERE
   t > -2 AND t < 3
 GROUP BY 1;
 
--- test actual table
-SELECT
-  time_bucket_gapfill(1,time)
-FROM metrics_int
-WHERE time >=0 AND time < 2
-GROUP BY 1;
-
--- test with table alias
-SELECT
-  time_bucket_gapfill(1,time)
-FROM metrics_int m
-WHERE m.time >=0 AND m.time < 2
-GROUP BY 1;
-
--- test with 2 tables
-SELECT
-  time_bucket_gapfill(1,m.time)
-FROM metrics_int m, metrics_int m2
-WHERE m.time >=0 AND m.time < 2
-GROUP BY 1;
-
 -- test DISTINCT
 SELECT DISTINCT ON (color)
   time_bucket_gapfill(1,time,0,5) as time,
@@ -1513,90 +1367,6 @@ EXECUTE prep_gapfill;
 EXECUTE prep_gapfill;
 EXECUTE prep_gapfill;
 EXECUTE prep_gapfill;
-
-DEALLOCATE prep_gapfill;
-
--- test prepared statement with locf with lookup query
-PREPARE prep_gapfill AS
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM metrics_int m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1))
-FROM metrics_int m1
-WHERE time >= 0 AND time < 5
-GROUP BY 1,2,3;
-
--- execute 10 times to make sure turning it into generic plan works
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-
-DEALLOCATE prep_gapfill;
-
--- test prepared statement with interpolate with lookup query
-PREPARE prep_gapfill AS
-SELECT
-  time_bucket_gapfill(5,time,0,11) AS time,
-  device_id,
-  sensor_id,
-  interpolate(
-    min(value),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time<0 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time DESC LIMIT 1),
-    (SELECT (time,value) FROM metrics_int m2
-     WHERE time>10 AND m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id
-     ORDER BY time LIMIT 1)
-  )
-FROM metrics_int m1
-WHERE time >= 0 AND time < 10
-GROUP BY 1,2,3 ORDER BY 2,3,1;
-
--- execute 10 times to make sure turning it into generic plan works
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-EXECUTE prep_gapfill;
-
-DEALLOCATE prep_gapfill;
-
--- test prepared statement with variable gapfill arguments
-PREPARE prep_gapfill(int,int,int) AS
-
-SELECT
-  time_bucket_gapfill($1,time,$2,$3) AS time,
-  device_id,
-  sensor_id,
-  min(value)
-FROM metrics_int m1
-WHERE time >= $2 AND time < $3 AND device_id=1 AND sensor_id=1
-GROUP BY 1,2,3 ORDER BY 2,3,1;
-
--- execute 10 times to make sure turning it into generic plan works
-EXECUTE prep_gapfill(5,0,10);
-EXECUTE prep_gapfill(4,100,110);
-EXECUTE prep_gapfill(5,0,10);
-EXECUTE prep_gapfill(4,100,110);
-EXECUTE prep_gapfill(5,0,10);
-EXECUTE prep_gapfill(4,100,110);
-EXECUTE prep_gapfill(5,0,10);
-EXECUTE prep_gapfill(4,100,110);
-EXECUTE prep_gapfill(5,0,10);
-EXECUTE prep_gapfill(4,100,110);
 
 DEALLOCATE prep_gapfill;
 
