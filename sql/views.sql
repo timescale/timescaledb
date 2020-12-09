@@ -206,10 +206,10 @@ FROM (
     ELSE
       dimsl.range_end
     END AS integer_range_end,
-    CASE WHEN srcch.compressed_chunk_id IS NOT NULL THEN
-      TRUE
-    ELSE
-      FALSE
+    CASE WHEN (ht.replication_factor > 0) THEN
+	  remote_compress_status.compression_status='Compressed'
+	ELSE
+	  srcch.compressed_chunk_id IS NOT NULL
     END AS is_compressed,
     pgtab.spcname AS chunk_table_space,
     chdn.node_list
@@ -228,11 +228,16 @@ FROM (
       WHERE pg_class.relnamespace = pg_namespace.oid) cl ON srcch.table_name = cl.relname
       AND srcch.schema_name = cl.schema_name
     LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
-  LEFT OUTER JOIN (
-    SELECT chunk_id,
-      array_agg(node_name ORDER BY node_name) AS node_list
-    FROM _timescaledb_catalog.chunk_data_node
-    GROUP BY chunk_id) chdn ON srcch.id = chdn.chunk_id
+    LEFT OUTER JOIN (
+      SELECT chunk_id,
+        array_agg(node_name ORDER BY node_name) AS node_list
+       FROM _timescaledb_catalog.chunk_data_node
+      GROUP BY chunk_id) chdn ON srcch.id = chdn.chunk_id
+	LEFT OUTER JOIN LATERAL (
+	   SELECT chunk_schema, chunk_name, compression_status
+	   FROM _timescaledb_internal.data_node_compressed_chunk_stats(chdn.node_list[1], ht.schema_name, ht.table_name)
+	) remote_compress_status ON (srcch.schema_name = remote_compress_status.chunk_schema AND
+	  						 	 srcch.table_name = remote_compress_status.chunk_name)
   WHERE srcch.dropped IS FALSE
     AND ht.compression_state != 2 ) finalq
 WHERE chunk_dimension_num = 1;
