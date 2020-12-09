@@ -175,6 +175,28 @@ GROUP BY 1;
              2 | public      | conditions | t
 (1 row)
 
+ create_distributed_hypertable 
+-------------------------------
+ (3,public,metrics_int,t)
+(1 row)
+
+:DIFF_CMD_PARTITIONWISE_OFF
+:DIFF_CMD_PARTITIONWISE_ON
+:DIFF_CMD_METRICS_PARTITIONWISE_OFF
+-- Distributed hypertables with one data nodes
+\set ECHO errors
+WARNING:  only one data node was assigned to the hypertable
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             4 | public      | conditions | t
+(1 row)
+
+WARNING:  only one data node was assigned to the hypertable
+ create_distributed_hypertable 
+-------------------------------
+ (5,public,metrics_int,t)
+(1 row)
+
  delete_data_node 
 ------------------
  t
@@ -192,3 +214,4 @@ GROUP BY 1;
 
 :DIFF_CMD_PARTITIONWISE_OFF
 :DIFF_CMD_PARTITIONWISE_ON
+:DIFF_CMD_METRICS_PARTITIONWISE_OFF
