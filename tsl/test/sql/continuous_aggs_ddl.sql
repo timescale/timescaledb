@@ -88,12 +88,15 @@ SELECT current_user;
 ALTER SCHEMA rename_schema RENAME TO new_name_schema;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
 ALTER VIEW :"PART_VIEW_NAME" SET SCHEMA new_name_schema;
+ALTER VIEW :"DIR_VIEW_NAME" SET SCHEMA new_name_schema;
 
-SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
 RESET ROLE;
@@ -127,16 +130,6 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 SELECT * FROM rename_c_aggregate;
 
 ALTER VIEW rename_schema.:"PART_VIEW_NAME" RENAME TO partial_view;
-
-SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
-      direct_view_schema, direct_view_name
-      FROM _timescaledb_catalog.continuous_agg;
-
---rename direct view
-ALTER VIEW :"DIR_VIEW_NAME" RENAME TO direct_view;
-SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
-      direct_view_schema, direct_view_name
-      FROM _timescaledb_catalog.continuous_agg;
 
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
