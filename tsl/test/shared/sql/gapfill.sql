@@ -4,11 +4,6 @@
 
 \set EXPLAIN 'EXPLAIN (COSTS OFF)'
 
-CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
-SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
-
-INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), 1.0;
-
 -- simple example
 :EXPLAIN
 SELECT
@@ -124,7 +119,7 @@ ORDER BY 1;
 
 RESET max_parallel_workers_per_gather;
 
-CREATE INDEX ON gapfill_plan_test(value, time);
+CREATE INDEX gapfill_plan_test_indx ON gapfill_plan_test(value, time);
 
 -- test sort optimization with ordering by multiple columns and time_bucket_gapfill not last,
 -- must not use index scan
@@ -138,24 +133,9 @@ ORDER BY 1,2;
 FROM gapfill_plan_test
 ORDER BY 2,1;
 
-CREATE TABLE metrics_int(time int,device_id int, sensor_id int, value float);
+\set METRICS metrics_int
 
-INSERT INTO metrics_int VALUES
-(-100,1,1,0.0),
-(-100,1,2,-100.0),
-(0,1,1,5.0),
-(5,1,2,10.0),
-(100,1,1,0.0),
-(100,1,2,-100.0)
-;
-
-CREATE TABLE devices(device_id INT, name TEXT);
-INSERT INTO devices VALUES (1,'Device 1'),(2,'Device 2'),(3,'Device 3');
-
-CREATE TABLE sensors(sensor_id INT, name TEXT);
-INSERT INTO sensors VALUES (1,'Sensor 1'),(2,'Sensor 2'),(3,'Sensor 3');
-
--- All test against table metrics_int first
+-- All test against table :METRICS first
 
 \set ON_ERROR_STOP 0
 -- inverse of previous test query to confirm an error is actually thrown
@@ -163,8 +143,8 @@ SELECT
   time_bucket_gapfill(5,time,0,11) AS time,
   device_id,
   sensor_id,
-  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM metrics_int m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
-FROM metrics_int m1
+  locf(min(value)::int,(SELECT 1/(SELECT 0) FROM :METRICS m2 WHERE m2.device_id=m1.device_id AND m2.sensor_id=m1.sensor_id ORDER BY time DESC LIMIT 1)) AS locf3
+FROM :METRICS m1
 WHERE time = 5
 GROUP BY 1,2,3 ORDER BY 2,3,1;
 
@@ -172,27 +152,27 @@ GROUP BY 1,2,3 ORDER BY 2,3,1;
 SELECT
   time_bucket_gapfill(1,time,1,2),
   first(min(time),min(time)) OVER ()
-FROM metrics_int
+FROM :METRICS
 GROUP BY 1;
 
 -- test with unsupported operator
 SELECT
   time_bucket_gapfill(1,time)
-FROM metrics_int
+FROM :METRICS
 WHERE time =0 AND time < 2
 GROUP BY 1;
 
 -- test with 2 tables and where clause doesnt match gapfill argument
 SELECT
   time_bucket_gapfill(1,m2.time)
-FROM metrics_int m, metrics_int m2
+FROM :METRICS m, :METRICS m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
 
 -- test inner join and where clause doesnt match gapfill argument
 SELECT
   time_bucket_gapfill(1,m2.time)
-FROM metrics_int m1 INNER JOIN metrics_int m2 ON m1.time=m2.time
+FROM :METRICS m1 INNER JOIN :METRICS m2 ON m1.time=m2.time
 WHERE m1.time >=0 AND m1.time < 2
 GROUP BY 1;
 
@@ -200,7 +180,7 @@ GROUP BY 1;
 -- not usable as start/stop
 SELECT
   time_bucket_gapfill(1,m1.time)
-FROM metrics_int m1 LEFT OUTER JOIN metrics_int m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
+FROM :METRICS m1 LEFT OUTER JOIN :METRICS m2 ON m1.time=m2.time AND m1.time >=0 AND m1.time < 2
 GROUP BY 1;
 \set ON_ERROR_STOP 1
 
@@ -618,8 +598,6 @@ WHERE false
 GROUP BY 1,color ORDER BY 2,1;
 
 -- test insert into SELECT
-CREATE TABLE insert_test(id INT);
-INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
 SELECT * FROM insert_test;
 
 -- test join
@@ -985,16 +963,6 @@ FROM
 GROUP BY 1 ORDER BY 2 NULLS LAST,1;
 
 -- test queries on hypertable
-CREATE TABLE metrics_tstz(time timestamptz, device_id INT, v1 float, v2 int);
-SELECT table_name FROM create_hypertable('metrics_tstz','time');
-INSERT INTO metrics_tstz VALUES
-(timestamptz '2018-01-01 05:00:00 PST', 1, 0.5, 10),
-(timestamptz '2018-01-01 05:00:00 PST', 2, 0.7, 20),
-(timestamptz '2018-01-01 05:00:00 PST', 3, 0.9, 30),
-(timestamptz '2018-01-01 07:00:00 PST', 1, 0.0, 0),
-(timestamptz '2018-01-01 07:00:00 PST', 2, 1.4, 40),
-(timestamptz '2018-01-01 07:00:00 PST', 3, 0.9, 30)
-;
 
 -- test locf and interpolate together
 SELECT

@@ -2,11 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             1 | public      | conditions | t
-(1 row)
-
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -14,7 +9,7 @@
 SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-02 18:00'),
        first(value, time),
        avg(value)
-FROM conditions
+FROM :CONDITIONS
 GROUP BY 1;
      time_bucket_gapfill      | first |   avg   
 ------------------------------+-------+---------
@@ -40,7 +35,7 @@ SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:0
        device,
        first(value, time),
        avg(value)
-FROM conditions
+FROM :CONDITIONS
 GROUP BY 1,2;
      time_bucket_gapfill      | device |  first   |   avg    
 ------------------------------+--------+----------+----------
@@ -90,7 +85,7 @@ SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:0
        device,
        first(value, time),
        avg(value)
-FROM conditions
+FROM :CONDITIONS
 GROUP BY 2,1;
      time_bucket_gapfill      | device |  first   |   avg    
 ------------------------------+--------+----------+----------
@@ -139,7 +134,7 @@ GROUP BY 2,1;
 SELECT
   time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
   lag(min(time)) OVER ()
-FROM conditions
+FROM :CONDITIONS
 GROUP BY 1;
      time_bucket_gapfill      |             lag              
 ------------------------------+------------------------------
@@ -155,63 +150,10 @@ GROUP BY 1;
 (9 rows)
 
 \set ECHO errors
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- dist_gapfill_1 | localhost | 55432 | dist_gapfill_1 | t            | t                | t
-(1 row)
-
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- dist_gapfill_2 | localhost | 55432 | dist_gapfill_2 | t            | t                | t
-(1 row)
-
-   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
-----------------+-----------+-------+----------------+--------------+------------------+-------------------
- dist_gapfill_3 | localhost | 55432 | dist_gapfill_3 | t            | t                | t
-(1 row)
-
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             2 | public      | conditions | t
-(1 row)
-
- create_distributed_hypertable 
--------------------------------
- (3,public,metrics_int,t)
-(1 row)
-
 :DIFF_CMD_PARTITIONWISE_OFF
 :DIFF_CMD_PARTITIONWISE_ON
 :DIFF_CMD_METRICS_PARTITIONWISE_OFF
--- Distributed hypertables with one data nodes
 \set ECHO errors
-WARNING:  only one data node was assigned to the hypertable
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             4 | public      | conditions | t
-(1 row)
-
-WARNING:  only one data node was assigned to the hypertable
- create_distributed_hypertable 
--------------------------------
- (5,public,metrics_int,t)
-(1 row)
-
- delete_data_node 
-------------------
- t
-(1 row)
-
- delete_data_node 
-------------------
- t
-(1 row)
-
- delete_data_node 
-------------------
- t
-(1 row)
-
 :DIFF_CMD_PARTITIONWISE_OFF
 :DIFF_CMD_PARTITIONWISE_ON
 :DIFF_CMD_METRICS_PARTITIONWISE_OFF
