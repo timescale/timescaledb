@@ -97,6 +97,9 @@ ALTER TABLE foo RESET (timescaledb.compress);
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
+--can add index , but not unique index
+CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
+CREATE INDEX foo_idx ON foo ( a, c );
 
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
