@@ -194,6 +194,10 @@ ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
 ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 ERROR:  operation not supported on hypertables that have compression enabled
+--can add index , but not unique index
+CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
+ERROR:  operation not supported on hypertables that have compression enabled
+CREATE INDEX foo_idx ON foo ( a, c );
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
