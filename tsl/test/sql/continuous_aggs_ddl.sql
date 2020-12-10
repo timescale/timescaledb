@@ -131,6 +131,17 @@ SELECT * FROM rename_c_aggregate;
 
 ALTER VIEW rename_schema.:"PART_VIEW_NAME" RENAME TO partial_view;
 
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+--rename direct view
+ALTER VIEW rename_schema.:"DIR_VIEW_NAME" RENAME TO direct_view;
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
+      direct_view_schema, direct_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+
+
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
 DROP TABLE foo CASCADE;
