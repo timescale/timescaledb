@@ -206,10 +206,12 @@ FROM (
     ELSE
       dimsl.range_end
     END AS integer_range_end,
-    CASE WHEN srcch.compressed_chunk_id IS NOT NULL THEN
-      TRUE
-    ELSE
-      FALSE
+    CASE WHEN node_list IS NULL THEN 
+      CASE WHEN srcch.compressed_chunk_id IS NOT NULL THEN
+         TRUE
+      ELSE FALSE
+      END
+    ELSE NULL   --distributed chunk case
     END AS is_compressed,
     pgtab.spcname AS chunk_table_space,
     chdn.node_list
