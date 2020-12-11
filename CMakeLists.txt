@@ -101,6 +101,16 @@ if (WARNINGS_AS_ERRORS)
   endif ()
 endif (WARNINGS_AS_ERRORS)
 
+# Function that will add a compile option if the compiler supports it.
+function(add_compile_options_if_supported)
+  foreach(_flag ${ARGN})
+    check_c_compiler_flag(${_flag} _supported)
+    if (_supported)
+      add_compile_options(${_flag})
+    endif()
+  endforeach()
+endfunction()
+
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # These two flags generate too many errors currently, but we
   # probably want these optimizations enabled.
@@ -113,12 +123,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   #
   # -Wconversions
 
-  add_compile_options(-Wempty-body -Wvla)
-  check_c_compiler_flag(-Wimplicit-fallthrough CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
+  # These flags are supported on all compilers.
+  add_compile_options(
+    -Wempty-body -Wvla -Wall -Wmissing-prototypes -Wpointer-arith
+    -Werror=vla -Wendif-labels -fno-strict-aliasing -fno-omit-frame-pointer)
 
-  if (CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
-    add_compile_options(-Wimplicit-fallthrough)
-  endif ()
+  # These flags are just supported on some of the compilers, so we
+  # check them before adding them.
+  add_compile_options_if_supported(-Wno-format-truncation -Wimplicit-fallthrough)
 
   # On UNIX, the compiler needs to support -fvisibility=hidden to hide symbols by default
   check_c_compiler_flag(-fvisibility=hidden CC_SUPPORTS_VISIBILITY_HIDDEN)
@@ -238,7 +250,6 @@ get_pg_config(PG_PKGLIBDIR --pkglibdir)
 get_pg_config(PG_SHAREDIR --sharedir)
 get_pg_config(PG_BINDIR --bindir)
 get_pg_config(PG_CPPFLAGS --cppflags)
-get_pg_config(PG_CFLAGS --cflags)
 get_pg_config(PG_LDFLAGS --ldflags)
 get_pg_config(PG_LIBS --libs)
 

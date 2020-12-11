@@ -3,17 +3,10 @@ if(NOT USE_DEFAULT_VISIBILITY)
   set(CMAKE_C_VISIBILITY_PRESET "hidden")
 endif()
 
-# postgres CFLAGS includes -Wdeclaration-after-statement which leads
-# to problems when compiling with -Werror since we aim for C99 and allow
-# that so we strip this flag from PG_CFLAGS before adding postgres flags
-# to our own
-string(REPLACE "-Wdeclaration-after-statement" "" PG_CFLAGS "${PG_CFLAGS}")
-
 if(UNIX)
   set(CMAKE_C_STANDARD 11)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L${PG_LIBDIR}")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L${PG_LIBDIR}")
-  set(CMAKE_C_FLAGS "${PG_CFLAGS} ${CMAKE_C_FLAGS}")
   set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS} ${PG_CPPFLAGS}")
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g")
 endif ()
