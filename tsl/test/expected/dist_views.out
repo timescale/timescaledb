@@ -77,9 +77,9 @@ SELECT * from timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
  hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace |        data_nodes         
 -------------------+-----------------+-----------------------+-----------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+---------------------------
- public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | f             |                  | {view_node_1,view_node_2}
- public            | dist_table      | _timescaledb_internal | _dist_hyper_1_2_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | f             |                  | {view_node_2,view_node_3}
- public            | dist_table      | _timescaledb_internal | _dist_hyper_1_3_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | f             |                  | {view_node_1,view_node_3}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   |               |                  | {view_node_1,view_node_2}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_2_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   |               |                  | {view_node_2,view_node_3}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_3_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   |               |                  | {view_node_1,view_node_3}
 (3 rows)
 
 SELECT * from timescaledb_information.dimensions 
