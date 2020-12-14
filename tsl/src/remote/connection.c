@@ -1758,7 +1758,7 @@ remote_connection_set_single_row_mode(TSConnection *conn)
 	return PQsetSingleRowMode(conn->pg_conn);
 }
 
-#if TS_DEBUG
+#ifdef TS_DEBUG
 /*
  * Reset the current connection stats.
  */

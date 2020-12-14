@@ -11,7 +11,7 @@
 #include "fdw_utils.h"
 #include "fdw/relinfo.h"
 
-#if TS_DEBUG
+#ifdef TS_DEBUG
 
 /*
  * Copy a path.

@@ -110,7 +110,7 @@ typedef struct RemoteConnectionStats
 	unsigned int results_cleared;
 } RemoteConnectionStats;
 
-#if TS_DEBUG
+#ifdef TS_DEBUG
 extern void remote_connection_stats_reset(void);
 extern RemoteConnectionStats *remote_connection_stats_get(void);
 #endif

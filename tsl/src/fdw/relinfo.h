@@ -37,7 +37,7 @@ typedef enum
 	TS_FDW_RELINFO_FOREIGN_TABLE,
 } TsFdwRelInfoType;
 
-#if TS_DEBUG
+#ifdef TS_DEBUG
 /* A path considered during planning but which may have been pruned. Used for
  * debugging purposes. */
 typedef struct ConsideredPath
@@ -130,7 +130,7 @@ typedef struct TsFdwRelInfo
 	 */
 	int relation_index;
 	DataNodeChunkAssignment *sca;
-#if TS_DEBUG
+#ifdef TS_DEBUG
 	List *considered_paths; /* List of ConsideredPath objects of all the paths
 							   that planner has considered. This is intended
 							   to be only used for printing cost debug
