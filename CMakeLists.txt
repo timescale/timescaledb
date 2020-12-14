@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.11)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
-
 include(CheckCCompilerFlag)
 
 # Function to call pg_config and extract values.
@@ -68,6 +66,8 @@ set(CMAKE_PROJECT_HOMEPAGE_URL "https://www.timescale.com"
 
 # These need to be after the 'project' command above since system
 # names and other CMake variables are not set until then.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+message(STATUS "CMAKE_MODULE_PATH: ${CMAKE_MODULE_PATH}")
 include(CMakeDetermineDistro)
 include(CPackDependencies)
 
@@ -506,5 +506,11 @@ if (IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)
 endif()
 
 # Packaging should be last since subdirectories fill in information
-# for the packaging, e.g., dependencies.
-add_subdirectory(packaging)
+# for the packaging, e.g., dependencies. We only include this if we
+# have a distribution name since we otherwise do cannot build
+# packages.
+#
+# Only support for Debian and RPM for the time being.
+if(CMAKE_DISTRO_NAME)
+  add_subdirectory(packaging)
+endif()
