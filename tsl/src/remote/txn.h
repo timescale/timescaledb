@@ -52,7 +52,7 @@ extern RemoteTxnId *remote_txn_persistent_record_write(TSConnectionId id);
 extern bool remote_txn_persistent_record_exists(const RemoteTxnId *gid);
 extern int remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid);
 
-#if DEBUG
+#ifdef DEBUG
 /* Debugging functions used in testing */
 extern void remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry);
 #endif

@@ -92,7 +92,7 @@ remote_txn_store_remove(RemoteTxnStore *store, TSConnectionId id)
 void
 remote_txn_store_destroy(RemoteTxnStore *store)
 {
-#if DEBUG
+#ifdef DEBUG
 	RemoteTxn *txn;
 	remote_txn_store_foreach(store, txn) { remote_txn_check_for_leaked_prepared_statements(txn); }
 #endif

@@ -12,7 +12,7 @@
 
 #include "relinfo.h"
 
-#if TS_DEBUG
+#ifdef TS_DEBUG
 
 extern void fdw_utils_add_path(RelOptInfo *rel, Path *new_path);
 extern void fdw_utils_free_path(ConsideredPath *path);

@@ -278,7 +278,7 @@ exec_cleanup_command(TSConnection *conn, const char *query)
 	return success;
 }
 
-#if DEBUG
+#ifdef DEBUG
 /* Prepared statements can leak if the were created during a subtxn
  * and the subtxn rolled back before the prepared stmt was deallocated.
  * This function checks for such leaks inside of tests (thus only compiled
