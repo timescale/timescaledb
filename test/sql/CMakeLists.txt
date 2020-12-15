@@ -60,6 +60,7 @@ set(SOLO_TESTS
   alternate_users
   bgw_launcher
   index
+  loader
   net
   pg_dump_unprivileged
   tablespace
