@@ -262,7 +262,9 @@ SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nod
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
-CREATE USER MAPPING FOR :ROLE_3 SERVER data2 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
+-- Create user mapping for ROLE_3, but don't specify user in
+-- options. The "current user" will instead be used when connecting.
+CREATE USER MAPPING FOR :ROLE_3 SERVER data2 OPTIONS (password :'ROLE_3_PASS');
 SET ROLE :ROLE_3;
 
 -- User should be able to connect and create the distributed
@@ -273,3 +275,5 @@ SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nod
 INSERT INTO disttable_role_3 VALUES ('2019-01-01 00:00:00', 1, 23.4);
 SELECT * FROM disttable_role_3;
 
+DROP USER MAPPING FOR :ROLE_3 SERVER data1;
+DROP USER MAPPING FOR :ROLE_3 SERVER data2;
