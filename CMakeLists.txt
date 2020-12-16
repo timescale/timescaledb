@@ -101,16 +101,6 @@ if (WARNINGS_AS_ERRORS)
   endif ()
 endif (WARNINGS_AS_ERRORS)
 
-# Function that will add a compile option if the compiler supports it.
-function(add_compile_options_if_supported)
-  foreach(_flag ${ARGN})
-    check_c_compiler_flag(${_flag} _supported)
-    if (_supported)
-      add_compile_options(${_flag})
-    endif()
-  endforeach()
-endfunction()
-
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # These two flags generate too many errors currently, but we
   # probably want these optimizations enabled.
@@ -130,7 +120,19 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
 
   # These flags are just supported on some of the compilers, so we
   # check them before adding them.
-  add_compile_options_if_supported(-Wno-format-truncation -Wimplicit-fallthrough)
+  check_c_compiler_flag(-Wno-format-truncation CC_SUPPORTS_NO_FORMAT_TRUNCATION)
+  if(CC_SUPPORTS_NO_FORMAT_TRUNCATION)
+    add_compile_options(-Wno-format-truncation)
+  else()
+    message(STATUS "Compiler does not support -Wno-format-truncation")
+  endif()
+
+  check_c_compiler_flag(-Wimplicit-fallthrough CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
+  if(CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
+    add_compile_options( -Wimplicit-fallthrough)
+  else()
+    message(STATUS "Compiler does not support -Wimplicit-fallthrough")
+  endif()
 
   # On UNIX, the compiler needs to support -fvisibility=hidden to hide symbols by default
   check_c_compiler_flag(-fvisibility=hidden CC_SUPPORTS_VISIBILITY_HIDDEN)
