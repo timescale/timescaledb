@@ -59,6 +59,7 @@ set(SOLO_TESTS
   alter
   alternate_users
   bgw_launcher
+  chunk_utils.sql
   index
   loader
   net
