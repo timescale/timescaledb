@@ -752,7 +752,9 @@ NOTICE:  adding not-null constraint to column "time"
 ERROR:  could not connect to "data2"
 \set ON_ERROR_STOP 1
 RESET ROLE;
-CREATE USER MAPPING FOR :ROLE_3 SERVER data2 OPTIONS (user :'ROLE_3', password :'ROLE_3_PASS');
+-- Create user mapping for ROLE_3, but don't specify user in
+-- options. The "current user" will instead be used when connecting.
+CREATE USER MAPPING FOR :ROLE_3 SERVER data2 OPTIONS (password :'ROLE_3_PASS');
 SET ROLE :ROLE_3;
 -- User should be able to connect and create the distributed
 -- hypertable at this point.
@@ -771,3 +773,5 @@ SELECT * FROM disttable_role_3;
  Tue Jan 01 00:00:00 2019 PST |      1 | 23.4
 (1 row)
 
+DROP USER MAPPING FOR :ROLE_3 SERVER data1;
+DROP USER MAPPING FOR :ROLE_3 SERVER data2;

@@ -455,7 +455,6 @@ extract_connection_options(List *defelems, const char **keywords, const char **v
 		}
 	}
 
-	Assert(*user != NULL);
 	return option_pos;
 }
 
@@ -992,6 +991,10 @@ remote_connection_set_peer_dist_id(TSConnection *conn)
 /* sslmode, sslrootcert, sslcert, sslkey */
 #define REMOTE_CONNECTION_SSL_OPTIONS_N 4
 
+#define REMOTE_CONNECTION_OPTIONS_TOTAL_N                                                          \
+	(REMOTE_CONNECTION_SESSION_OPTIONS_N + REMOTE_CONNECTION_PASSWORD_OPTIONS_N +                  \
+	 REMOTE_CONNECTION_SSL_OPTIONS_N)
+
 /* default password file basename */
 #define DEFAULT_PASSFILE_NAME "passfile"
 
@@ -1154,12 +1157,14 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	 * for fallback_application_name, client_encoding, end marker.
 	 * One additional slot to set passfile and 4 slots for ssl options.
 	 */
-	option_count = list_length(connection_options) + REMOTE_CONNECTION_SESSION_OPTIONS_N +
-				   REMOTE_CONNECTION_PASSWORD_OPTIONS_N + REMOTE_CONNECTION_SSL_OPTIONS_N;
+	option_count = list_length(connection_options) + REMOTE_CONNECTION_OPTIONS_TOTAL_N;
 	keywords = (const char **) palloc(option_count * sizeof(char *));
 	values = (const char **) palloc(option_count * sizeof(char *));
 
 	option_pos = extract_connection_options(connection_options, keywords, values, &user_name);
+
+	if (NULL == user_name)
+		user_name = GetUserNameFromId(GetUserId(), false);
 
 	/* Use the extension name as fallback_application_name. */
 	keywords[option_pos] = "fallback_application_name";
@@ -1392,6 +1397,22 @@ get_user_mapping(Oid userid, Oid serverid)
 	return um;
 }
 
+static bool
+options_contain(List *options, const char *key)
+{
+	ListCell *lc;
+
+	foreach (lc, options)
+	{
+		DefElem *d = (DefElem *) lfirst(lc);
+
+		if (strcmp(d->defname, key) == 0)
+			return true;
+	}
+
+	return false;
+}
+
 /*
  * Add user info (username and optionally password) to the connection
  * options).
@@ -1399,19 +1420,23 @@ get_user_mapping(Oid userid, Oid serverid)
 static List *
 add_userinfo_to_server_options(ForeignServer *server, Oid user_id)
 {
-	const char *user_name = GetUserNameFromId(user_id, false);
-	List *server_options = list_copy(server->options);
 	const UserMapping *um = get_user_mapping(user_id, server->serverid);
+	List *options = list_copy(server->options);
 
 	/* If a user mapping exists, then use the "user" and "password" options
 	 * from the user mapping (we assume that these options exist, or the
 	 * connection will later fail). Otherwise, just add the "user" and rely on
 	 * other authentication mechanisms. */
 	if (NULL != um)
-		return list_concat(server_options, um->options);
+		options = list_concat(options, um->options);
 
-	return lappend(server_options,
-				   makeDefElem("user", (Node *) makeString(pstrdup(user_name)), -1));
+	if (!options_contain(options, "user"))
+	{
+		char *user_name = GetUserNameFromId(user_id, false);
+		options = lappend(options, makeDefElem("user", (Node *) makeString(user_name), -1));
+	}
+
+	return options;
 }
 
 TSConnection *
