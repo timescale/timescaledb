@@ -1324,8 +1324,7 @@ SET ROLE :ROLE_3;
 -- ROLE_3 doesn't have a password in the passfile and has not way to
 -- authenticate so adding a data node will still fail.
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
-ERROR:  no connection to the server
-
+ERROR:  could not connect to "data_node_6"
 \set ON_ERROR_STOP 0
 -- Providing the password on the command line should work
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6', password => :'ROLE_3_PASS');

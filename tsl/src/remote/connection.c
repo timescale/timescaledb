@@ -1181,7 +1181,74 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	keywords[option_pos] = values[option_pos] = NULL;
 	Assert(option_pos <= option_count);
 
-	pg_conn = PQconnectdbParams(keywords, values, false);
+	/* Try to establish a connection to a database while handling
+	 * interrupts. The connection attempt should be aborted if the user
+	 * cancels the transaction (e.g., ctrl-c), so we need to use wait events
+	 * and poll the socket and latch. Wrap in a try-catch since
+	 * CHECK_FOR_INTERRUPTS() will throw an error and we need to clean up the
+	 * connection in that case. */
+	PG_TRY();
+	{
+		bool stop_waiting = false;
+
+		pg_conn = PQconnectStartParams(keywords, values, 0 /* do not expand DB names */);
+
+		if (PQstatus(pg_conn) == CONNECTION_BAD)
+		{
+			PQfinish(pg_conn);
+			pg_conn = NULL;
+		}
+
+		while (NULL != pg_conn)
+		{
+			int events = WL_LATCH_SET;
+
+#if PG12_GE
+			events |= WL_EXIT_ON_PM_DEATH;
+#endif
+
+			switch (PQconnectPoll(pg_conn))
+			{
+				case PGRES_POLLING_FAILED:
+					/* connection attempt failed */
+					stop_waiting = true;
+					PQfinish(pg_conn);
+					pg_conn = NULL;
+					break;
+				case PGRES_POLLING_OK:
+					/* Connection attempt succeeded */
+					stop_waiting = true;
+					break;
+				case PGRES_POLLING_READING:
+					/* Should wait for read on socket */
+					events |= WL_SOCKET_READABLE;
+					break;
+				case PGRES_POLLING_WRITING:
+					/* Should wait for write on socket */
+					events |= WL_SOCKET_WRITEABLE;
+					break;
+				default:
+					break;
+			}
+
+			if (stop_waiting)
+				break;
+
+			WaitLatchOrSocket(MyLatch, events, PQsocket(pg_conn), -1L, PG_WAIT_EXTENSION);
+
+			ResetLatch(MyLatch);
+
+			CHECK_FOR_INTERRUPTS();
+		}
+	}
+	PG_CATCH();
+	{
+		if (NULL != pg_conn)
+			PQfinish(pg_conn);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	/* Cast to (char **) to silence warning with MSVC compiler */
 	pfree((char **) keywords);
@@ -1189,6 +1256,12 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 
 	if (NULL == pg_conn)
 		return NULL;
+
+	if (PQstatus(pg_conn) != CONNECTION_OK)
+	{
+		PQfinish(pg_conn);
+		return NULL;
+	}
 
 	ts_conn = remote_connection_create(pg_conn, false, node_name);
 
