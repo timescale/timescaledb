@@ -56,7 +56,7 @@ def build_release_config(overrides):
     "name": "Release",
     "build_type": "Release",
     "pg_build_args": "",
-    "tsdb_build_args": "",
+    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=OFF",
     "coverage": False,
   })
   base_config.update(release_config)
@@ -68,7 +68,7 @@ def build_apache_config(overrides):
   apache_config = dict({
     "name": "ApacheOnly",
     "build_type": "Release",
-    "tsdb_build_args": "-DAPACHE_ONLY=1",
+    "tsdb_build_args": "-DAPACHE_ONLY=1 -DWARNINGS_AS_ERRORS=OFF",
     "pg_build_args": "",
     "coverage": False,
   })
