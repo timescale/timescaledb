@@ -726,6 +726,12 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		{
 			TSConnection *conn =
 				connect_for_bootstrapping(node_name, host, port, username, password);
+
+			if (NULL == conn)
+				ereport(ERROR,
+						(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+						 errmsg("could not connect to \"%s\"", node_name)));
+
 			data_node_validate_extension_availability(conn);
 			database_created = data_node_bootstrap_database(conn, &database);
 			remote_connection_close(conn);
@@ -742,6 +748,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		 * we do not need 2PC support. */
 		node_options = create_data_node_options(host, port, dbname, username, password);
 		conn = remote_connection_open_with_options(node_name, node_options, false);
+		Assert(NULL != conn);
 		remote_connection_cmd_ok(conn, "BEGIN");
 
 		if (bootstrap)
