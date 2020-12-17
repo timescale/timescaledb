@@ -102,6 +102,7 @@ set(MOD_FILES
   updates/2.0.0-rc1--2.0.0-rc2.sql
   updates/2.0.0-rc2--2.0.0-rc3.sql
   updates/2.0.0-rc3--2.0.0-rc4.sql
+  updates/2.0.0-rc4--2.0.0.sql
 )
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
