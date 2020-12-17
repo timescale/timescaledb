@@ -1139,7 +1139,7 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 TSConnection *
 remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options)
 {
-	PGconn *pg_conn = NULL;
+	PGconn *volatile pg_conn = NULL;
 	const char *user_name = NULL;
 	TSConnection *ts_conn;
 	const char **keywords;
@@ -1189,6 +1189,10 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	 * connection in that case. */
 	PG_TRY();
 	{
+		/* According to libpq docs, one should check if the socket is
+		 * writeable in the first iteration of the loop, before calling
+		 * PQconnectPoll(). */
+		PostgresPollingStatusType pollstatus = PGRES_POLLING_WRITING;
 		bool stop_waiting = false;
 
 		pg_conn = PQconnectStartParams(keywords, values, 0 /* do not expand DB names */);
@@ -1207,7 +1211,7 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 			events |= WL_EXIT_ON_PM_DEATH;
 #endif
 
-			switch (PQconnectPoll(pg_conn))
+			switch (pollstatus)
 			{
 				case PGRES_POLLING_FAILED:
 					/* connection attempt failed */
@@ -1227,7 +1231,8 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 					/* Should wait for write on socket */
 					events |= WL_SOCKET_WRITEABLE;
 					break;
-				default:
+				case PGRES_POLLING_ACTIVE:
+					Assert(false);
 					break;
 			}
 
@@ -1239,6 +1244,8 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 			ResetLatch(MyLatch);
 
 			CHECK_FOR_INTERRUPTS();
+
+			pollstatus = PQconnectPoll(pg_conn);
 		}
 	}
 	PG_CATCH();
