@@ -1133,6 +1133,23 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
 }
 
 /*
+ * Finish the connection and, optionally, save the connection error.
+ */
+static void
+finish_connection(PGconn *conn, char **errmsg)
+{
+	if (NULL != errmsg)
+	{
+		if (NULL == conn)
+			*errmsg = "invalid connection";
+		else
+			*errmsg = pchomp(PQerrorMessage(conn));
+	}
+
+	PQfinish(conn);
+}
+
+/*
  * This will only open a connection to a specific node, but not do anything
  * else. In particular, it will not perform any validation nor configure the
  * connection since it cannot know that it connects to a data node database or
@@ -1140,7 +1157,8 @@ set_ssl_options(const char *user_name, const char **keywords, const char **value
  * function.
  */
 TSConnection *
-remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options)
+remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options,
+											char **errmsg)
 {
 	PGconn *volatile pg_conn = NULL;
 	const char *user_name = NULL;
@@ -1149,6 +1167,9 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	const char **values;
 	int option_count;
 	int option_pos;
+
+	if (NULL != errmsg)
+		*errmsg = NULL;
 
 	/*
 	 * Construct connection params from generic options of ForeignServer
@@ -1204,7 +1225,7 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 
 		if (PQstatus(pg_conn) == CONNECTION_BAD)
 		{
-			PQfinish(pg_conn);
+			finish_connection(pg_conn, errmsg);
 			pg_conn = NULL;
 		}
 
@@ -1221,7 +1242,7 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 				case PGRES_POLLING_FAILED:
 					/* connection attempt failed */
 					stop_waiting = true;
-					PQfinish(pg_conn);
+					finish_connection(pg_conn, errmsg);
 					pg_conn = NULL;
 					break;
 				case PGRES_POLLING_OK:
@@ -1256,7 +1277,7 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	PG_CATCH();
 	{
 		if (NULL != pg_conn)
-			PQfinish(pg_conn);
+			finish_connection(pg_conn, errmsg);
 
 		PG_RE_THROW();
 	}
@@ -1271,14 +1292,14 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 
 	if (PQstatus(pg_conn) != CONNECTION_OK)
 	{
-		PQfinish(pg_conn);
+		finish_connection(pg_conn, errmsg);
 		return NULL;
 	}
 
 	ts_conn = remote_connection_create(pg_conn, false, node_name);
 
 	if (NULL == ts_conn)
-		PQfinish(pg_conn);
+		finish_connection(pg_conn, errmsg);
 
 	return ts_conn;
 }
@@ -1297,12 +1318,15 @@ TSConnection *
 remote_connection_open_with_options(const char *node_name, List *connection_options,
 									bool set_dist_id)
 {
-	TSConnection *conn = remote_connection_open_with_options_nothrow(node_name, connection_options);
+	char *err = NULL;
+	TSConnection *conn =
+		remote_connection_open_with_options_nothrow(node_name, connection_options, &err);
 
 	if (NULL == conn)
 		ereport(ERROR,
 				(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
-				 errmsg("could not connect to \"%s\"", node_name)));
+				 errmsg("could not connect to \"%s\"", node_name),
+				 err == NULL ? 0 : errdetail_internal("%s", err)));
 
 	/*
 	 * Use PG_TRY block to ensure closing connection on error.
@@ -1477,11 +1501,12 @@ remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg)
 	}
 
 	connection_options = add_userinfo_to_server_options(server, user_id);
-	conn = remote_connection_open_with_options_nothrow(server->servername, connection_options);
+	conn =
+		remote_connection_open_with_options_nothrow(server->servername, connection_options, errmsg);
 
 	if (NULL == conn)
 	{
-		if (NULL != errmsg)
+		if (NULL != errmsg && NULL == *errmsg)
 			*errmsg = "internal connection error";
 		return NULL;
 	}
