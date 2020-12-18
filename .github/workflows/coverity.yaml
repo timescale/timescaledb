@@ -55,7 +55,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         PATH="$GITHUB_WORKSPACE/coverity/bin:$PATH"
-        ./bootstrap -DCMAKE_BUILD_TYPE=Release -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR
+        ./bootstrap -DCMAKE_BUILD_TYPE=Release -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DWARNINGS_AS_ERRORS=OFF
         cov-build --dir cov-int make -C build
 
     - name: Upload report
