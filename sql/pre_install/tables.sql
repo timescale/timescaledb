@@ -51,12 +51,16 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
   chunk_target_size bigint NOT NULL CHECK (chunk_target_size >= 0), -- size in bytes
   compression_state smallint NOT NULL DEFAULT 0,
   compressed_hypertable_id integer REFERENCES _timescaledb_catalog.hypertable (id),
-  replication_factor smallint NULL CHECK (replication_factor > 0),
+  replication_factor smallint NULL,
   UNIQUE (associated_schema_name, associated_table_prefix),
   CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
-----internal compressed hypertables have compression state = 2
+  -- internal compressed hypertables have compression state = 2
   CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
-  CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL))
+  CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL)),
+  -- replication_factor NULL: regular hypertable
+  -- replication_factor > 0: distributed hypertable on access node
+  -- replication_factor -1: distributed hypertable on data node, which is part of a larger table
+  CONSTRAINT hypertable_replication_factor_check CHECK (replication_factor > 0 OR replication_factor = -1)
 );
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
