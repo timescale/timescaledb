@@ -249,7 +249,6 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
-	h->max_ignore_invalidation_older_than = -1;
 	h->data_nodes = ts_hypertable_data_node_scan(h->fd.id, ti->mctx);
 
 	return h;
