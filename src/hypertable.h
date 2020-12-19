@@ -51,8 +51,6 @@ typedef struct Hypertable
 	Oid chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
-	int64 max_ignore_invalidation_older_than; /* lazy-loaded, do not access directly, use
-											ts_hypertable_get_ignore_invalidation_older_than */
 	/*
 	 * Allows restricting the data nodes to use for the hypertable. Default is to
 	 * use all available data nodes.
