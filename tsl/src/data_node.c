@@ -33,6 +33,7 @@
 #include <utils/syscache.h>
 
 #include "config.h"
+#include "extension.h"
 #include "fdw/fdw.h"
 #include "remote/async.h"
 #include "remote/connection.h"
@@ -509,8 +510,10 @@ data_node_bootstrap_extension(TSConnection *conn)
 		}
 
 		remote_connection_cmdf_ok(conn,
-								  "CREATE EXTENSION " EXTENSION_NAME " WITH SCHEMA %s CASCADE",
-								  schema_name_quoted);
+								  "CREATE EXTENSION " EXTENSION_NAME
+								  " WITH SCHEMA %s VERSION %s CASCADE",
+								  schema_name_quoted,
+								  quote_literal_cstr(ts_extension_get_version()));
 		return true;
 	}
 	else

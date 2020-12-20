@@ -303,8 +303,17 @@ ts_extension_is_loaded(void)
 	}
 }
 
-char *
-ts_extension_get_so_name()
+const char *
+ts_extension_get_so_name(void)
 {
 	return EXTENSION_NAME "-" TIMESCALEDB_VERSION_MOD;
+}
+
+/*
+ * Get the currently installed extension version.
+ */
+const char *
+ts_extension_get_version(void)
+{
+	return extension_version();
 }
