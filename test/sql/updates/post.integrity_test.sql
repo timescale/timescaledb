@@ -17,12 +17,14 @@ DECLARE
     chunk_constraint_count INTEGER;
     chunk_index_count      INTEGER;
 BEGIN
-    -- Check integrity of chunk indexes
+    -- Check integrity of chunk indexes on non-distributed hypertables
+    -- (distributed ones do not have chunk indexes on the access node)
     FOR index_row IN
     SELECT h.schema_name, c.relname AS index_name, h.id AS hypertable_id, h.table_name AS hypertable_name
     FROM _timescaledb_catalog.hypertable h
     INNER JOIN pg_index i ON (i.indrelid = format('%I.%I', h.schema_name, h.table_name)::regclass)
     INNER JOIN pg_class c ON (i.indexrelid = c.oid)
+    WHERE h.replication_factor IS NULL
     EXCEPT
     SELECT h.schema_name, c.relname AS index_name, h.id AS hypertable_id, h.table_name AS hypertable_name
     FROM _timescaledb_catalog.hypertable h
