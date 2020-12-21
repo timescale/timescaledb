@@ -2,11 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE DATABASE single;
-
-\c single
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
 CREATE TABLE PUBLIC."two_Partitions" (
   "timeCustom" BIGINT NOT NULL,
   device_id TEXT NOT NULL,
