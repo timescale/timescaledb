@@ -80,8 +80,10 @@ docker_logs() {
 }
 
 docker_pgcmd() {
+    local database=${3:-single}
+    echo "executing pgcmd on database $database"
     set +e
-    docker_exec $1 "psql -h localhost -U postgres -d single -v VERBOSITY=verbose -c \"$2\""
+    docker_exec $1 "psql -h localhost -U postgres -d $database -v VERBOSITY=verbose -c \"$2\""
     if [ $? -ne 0 ]; then
       docker_logs $1
       exit 1
@@ -90,13 +92,15 @@ docker_pgcmd() {
 }
 
 docker_pgscript() {
-    docker_exec $1 "psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f $2"
+    local database=${3:-postgres}
+    docker_exec $1 "psql -h localhost -U postgres -d $database -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {
+    local database=${3:-single}
     set +e
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d single -f $2 > ${TEST_TMPDIR}/$1.out
+    docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database -f $2 > ${TEST_TMPDIR}/$1.out
     if [ $? -ne 0 ]; then
       docker_logs $1
       exit 1
@@ -105,17 +109,18 @@ docker_pgtest() {
 }
 
 docker_pgdiff_all() {
+    local database=${2:-single}
     diff_file1=update_test.restored.diff.${UPDATE_FROM_TAG}
     diff_file2=update_test.clean.diff.${UPDATE_FROM_TAG}
-    docker_pgtest ${CONTAINER_UPDATED} $1
-    docker_pgtest ${CONTAINER_CLEAN_RESTORE} $1
-    docker_pgtest ${CONTAINER_CLEAN_RERUN} $1
-    echo "Diffing updated container vs restored"
+    docker_pgtest ${CONTAINER_UPDATED} $1 $database
+    docker_pgtest ${CONTAINER_CLEAN_RESTORE} $1 $database
+    docker_pgtest ${CONTAINER_CLEAN_RERUN} $1 $database
+    echo "Diffing updated container vs restored. Updated: ${CONTAINER_UPDATED} restored: ${CONTAINER_CLEAN_RESTORE}" 
     diff -u ${TEST_TMPDIR}/${CONTAINER_UPDATED}.out ${TEST_TMPDIR}/${CONTAINER_CLEAN_RESTORE}.out | tee ${diff_file1}
     if [ ! -s ${diff_file1} ]; then
       rm ${diff_file1}
     fi
-    echo "Diffing updated container vs clean run"
+    echo "Diffing updated container vs clean run. Updated: ${CONTAINER_UPDATED} clean run: ${CONTAINER_CLEAN_RERUN}"
     diff -u ${TEST_TMPDIR}/${CONTAINER_UPDATED}.out ${TEST_TMPDIR}/${CONTAINER_CLEAN_RERUN}.out | tee ${diff_file2}
     if [ ! -s ${diff_file2} ]; then
       rm ${diff_file2}
@@ -123,12 +128,12 @@ docker_pgdiff_all() {
 }
 
 docker_run() {
-    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src $2 -c timezone="US/Eastern"
+    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src $2 -c timezone="US/Eastern" -c max_prepared_transactions=100
     wait_for_pg $1
 }
 
 docker_run_vol() {
-    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src -v $2 $3 -c timezone="US/Eastern"
+    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src -v $2 $3 -c timezone="US/Eastern" -c max_prepared_transactions=100
     wait_for_pg $1
 }
 
@@ -162,6 +167,7 @@ remove_containers || true
 
 IMAGE_NAME=${UPDATE_TO_IMAGE} TAG_NAME=${UPDATE_TO_TAG} PG_VERSION=${PG_VERSION} bash ${SCRIPT_DIR}/docker-build.sh
 
+echo "Launching containers"
 docker_run ${CONTAINER_ORIG} ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
 docker_run ${CONTAINER_CLEAN_RESTORE} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 docker_run ${CONTAINER_CLEAN_RERUN} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
@@ -169,7 +175,7 @@ docker_run ${CONTAINER_CLEAN_RERUN} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 CLEAN_VOLUME=$(docker inspect ${CONTAINER_CLEAN_RESTORE} --format='{{range .Mounts }}{{.Name}}{{end}}')
 UPDATE_VOLUME=$(docker inspect ${CONTAINER_ORIG} --format='{{range .Mounts }}{{.Name}}{{end}}')
 
-echo "Executing setup script on ${VERSION}"
+echo "Executing setup script on container running ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}"
 docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 docker_pgcmd ${CONTAINER_ORIG} "CHECKPOINT;"
 
@@ -180,19 +186,43 @@ echo "Running update container"
 docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
 echo "Executing ALTER EXTENSION timescaledb UPDATE"
-docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE"
+docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "single"
+docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
+# Need to update also postgres DB since add_data_node may connect to
+# it and it will be borked if we don't upgrade to an extension binary
+# which is available in the image.
+docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "postgres"
+
+# Post update script. Needed for multi-node tests when updating from a
+# version that doesn't support multi-node to a multi-node capable
+# version.
+if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
+	echo "Executing post update scritps"
+	docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.update.sql "single"
+fi
 
 echo "Executing setup script on clean"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.sql"
 docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
+docker cp ${CONTAINER_UPDATED}:/tmp/dn1.sql ${TEST_TMPDIR}/dn1.sql
 
 echo "Restoring database on clean version"
 docker cp ${TEST_TMPDIR}/single.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/single.sql
+docker cp ${TEST_TMPDIR}/dn1.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.sql
+
+# Restore single
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='on'"
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='off'"
 
-docker_pgdiff_all /src/test/sql/updates/post.${TEST_VERSION}.sql
+# Restore dn1
+docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres dn1"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='on'"
+docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.sql"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='off'"
+
+docker_pgdiff_all /src/test/sql/updates/post.${TEST_VERSION}.sql "single"
