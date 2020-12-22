@@ -39,7 +39,8 @@ SELECT PG_ENCODING_TO_CHAR(encoding) = :enc
  WHERE datname = current_database();
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
--- After delete database and extension should still be there
+-- After delete_data_node, the database and extension should still
+-- exist on the data node
 SELECT * FROM delete_data_node('bootstrap_test');
 SELECT * FROM show_data_nodes();
 
@@ -51,6 +52,13 @@ WHERE e.extnamespace = n.oid
 AND e.extname = 'timescaledb';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set ON_ERROR_STOP 0
+-- Trying to add the data node again should fail, with or without
+-- bootstrapping.
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+\set ON_ERROR_STOP 0
+
 DROP DATABASE bootstrap_test;
 
 ----------------------------------------------------------------------
@@ -61,7 +69,6 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM show_data_nodes();
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('bootstrap_test');
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;

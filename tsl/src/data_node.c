@@ -454,7 +454,7 @@ data_node_validate_as_data_node(TSConnection *conn)
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
-				 (errmsg("%s is not valid as data node", remote_connection_node_name(conn)),
+				 (errmsg("cannot add \"%s\" as a data node", remote_connection_node_name(conn)),
 				  errdetail("%s", PQresultErrorMessage(res)))));
 
 	remote_result_close(res);
@@ -762,12 +762,15 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 
 		if (bootstrap)
 			extension_created = data_node_bootstrap_extension(conn);
-		else
+
+		if (!database_created)
 		{
 			data_node_validate_database(conn, &database);
-			data_node_validate_extension(conn);
 			data_node_validate_as_data_node(conn);
 		}
+
+		if (!extension_created)
+			data_node_validate_extension(conn);
 
 		/* After the node is verified or bootstrapped, we set the `dist_uuid`
 		 * using the same connection. We skip this if clustering checks are
