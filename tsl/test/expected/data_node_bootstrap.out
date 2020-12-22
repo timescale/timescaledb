@@ -47,7 +47,8 @@ SELECT PG_ENCODING_TO_CHAR(encoding) = :enc
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
--- After delete database and extension should still be there
+-- After delete_data_node, the database and extension should still
+-- exist on the data node
 SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
 ------------------
@@ -70,6 +71,16 @@ AND e.extname = 'timescaledb';
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set ON_ERROR_STOP 0
+-- Trying to add the data node again should fail, with or without
+-- bootstrapping.
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
+ERROR:  cannot add "bootstrap_test" as a data node
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+NOTICE:  database "bootstrap_test" already exists on data node, skipping
+NOTICE:  extension "timescaledb" already exists on data node, skipping
+ERROR:  cannot add "bootstrap_test" as a data node
+\set ON_ERROR_STOP 0
 DROP DATABASE bootstrap_test;
 ----------------------------------------------------------------------
 -- Bootstrap the database and check that calling it without
@@ -88,7 +99,6 @@ SELECT * FROM show_data_nodes();
  bootstrap_test | localhost | 55432 | bootstrap_test
 (1 row)
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
 ------------------
@@ -327,7 +337,7 @@ SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
                             database => 'bootstrap_test', bootstrap => false);
-ERROR:  database does not have TimescaleDB extension loaded
+ERROR:  cannot add "bootstrap_test" as a data node
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test;
 -----------------------------------------------------------------------
