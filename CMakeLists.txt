@@ -253,6 +253,11 @@ get_pg_config(PG_CPPFLAGS --cppflags)
 get_pg_config(PG_LDFLAGS --ldflags)
 get_pg_config(PG_LIBS --libs)
 
+string(REGEX REPLACE " -I" ";" EXTRA_INCLUDES   ${PG_CPPFLAGS})
+include_directories(${PROJECT_NAME} ${EXTRA_INCLUDES})
+string(REGEX REPLACE " -L" ";" EXTRA_LIBRARIES  ${PG_LDFLAGS})
+link_directories(${PROJECT_NAME} ${EXTRA_LIBRARIES})
+
 find_path(PG_SOURCE_DIR
   src/include/pg_config.h.in
   HINTS
