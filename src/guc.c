@@ -35,7 +35,9 @@ static const struct config_enum_entry telemetry_level_options[] = {
 };
 
 static const struct config_enum_entry remote_data_fetchers[] = {
-	{ "rowbyrow", RowByRowFetcherType, false }, { "cursor", CursorFetcherType, false }
+	{ "rowbyrow", RowByRowFetcherType, false },
+	{ "cursor", CursorFetcherType, false },
+	{ NULL, 0, false }
 };
 
 bool ts_guc_enable_optimizations = true;
