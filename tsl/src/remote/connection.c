@@ -1158,7 +1158,7 @@ finish_connection(PGconn *conn, char **errmsg)
  */
 TSConnection *
 remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options,
-											char **errmsg)
+											char **error_msg)
 {
 	PGconn *volatile pg_conn = NULL;
 	const char *user_name = NULL;
@@ -1168,8 +1168,8 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	int option_count;
 	int option_pos;
 
-	if (NULL != errmsg)
-		*errmsg = NULL;
+	if (NULL != error_msg)
+		*error_msg = NULL;
 
 	/*
 	 * Construct connection params from generic options of ForeignServer
@@ -1207,7 +1207,94 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	keywords[option_pos] = values[option_pos] = NULL;
 	Assert(option_pos <= option_count);
 
-	pg_conn = PQconnectdbParams(keywords, values, 0 /* Do not expand dbname param */);
+	/* Try to establish a connection to a database while handling
+	 * interrupts. The connection attempt should be aborted if the user
+	 * cancels the transaction (e.g., ctrl-c), so we need to use wait events
+	 * and poll the socket and latch. Wrap in a try-catch since
+	 * CHECK_FOR_INTERRUPTS() will throw an error and we need to clean up the
+	 * connection in that case. */
+	PG_TRY();
+	{
+		/* According to libpq docs, one should check if the socket is
+		 * writeable in the first iteration of the loop, before calling
+		 * PQconnectPoll(). */
+		PostgresPollingStatusType pollstatus = PGRES_POLLING_WRITING;
+		bool stop_waiting = false;
+		int rc;
+
+		pg_conn = PQconnectStartParams(keywords, values, 0 /* do not expand DB names */);
+
+		if (PQstatus(pg_conn) == CONNECTION_BAD)
+		{
+			finish_connection(pg_conn, error_msg);
+			pg_conn = NULL;
+		}
+
+		while (NULL != pg_conn)
+		{
+			int events = WL_LATCH_SET | WL_POSTMASTER_DEATH;
+
+			switch (pollstatus)
+			{
+				case PGRES_POLLING_FAILED:
+					/* connection attempt failed */
+					stop_waiting = true;
+					finish_connection(pg_conn, error_msg);
+					pg_conn = NULL;
+					break;
+				case PGRES_POLLING_OK:
+					/* Connection attempt succeeded */
+					stop_waiting = true;
+					break;
+				case PGRES_POLLING_READING:
+					/* Should wait for read on socket */
+					events |= WL_SOCKET_READABLE;
+					break;
+				case PGRES_POLLING_WRITING:
+					/* Should wait for write on socket */
+					events |= WL_SOCKET_WRITEABLE;
+					break;
+				case PGRES_POLLING_ACTIVE:
+					/* Not used. Kept for backwards compatibility. */
+					Assert(false);
+					break;
+			}
+
+			if (stop_waiting)
+				break;
+
+			do
+			{
+				int sockfd = PQsocket(pg_conn);
+
+				/* Wait as long as the socket isn't readable or writable. This
+				 * is necessary, in particular on Windows, as signals that
+				 * aren't interrupts might otherwise cancel the wait without a
+				 * legitimate read or write status, leading to an unnecessary
+				 * abort of the connection attempt. */
+				rc = WaitLatchOrSocket(MyLatch, events, sockfd, -1L, PG_WAIT_EXTENSION);
+
+				if (rc & WL_POSTMASTER_DEATH)
+					ereport(FATAL,
+							(errcode(ERRCODE_ADMIN_SHUTDOWN),
+							 errmsg(
+								 "connection attempt failed due to unexpected postmaster exit")));
+
+				ResetLatch(MyLatch);
+				CHECK_FOR_INTERRUPTS();
+			} while (!((rc & WL_SOCKET_READABLE) || (rc & WL_SOCKET_WRITEABLE)));
+
+			pollstatus = PQconnectPoll(pg_conn);
+		}
+	}
+	PG_CATCH();
+	{
+		if (NULL != pg_conn)
+			finish_connection(pg_conn, error_msg);
+
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	/* Cast to (char **) to silence warning with MSVC compiler */
 	pfree((char **) keywords);
@@ -1218,14 +1305,14 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 
 	if (PQstatus(pg_conn) != CONNECTION_OK)
 	{
-		finish_connection(pg_conn, errmsg);
+		finish_connection(pg_conn, error_msg);
 		return NULL;
 	}
 
 	ts_conn = remote_connection_create(pg_conn, false, node_name);
 
 	if (NULL == ts_conn)
-		finish_connection(pg_conn, errmsg);
+		finish_connection(pg_conn, error_msg);
 
 	return ts_conn;
 }
