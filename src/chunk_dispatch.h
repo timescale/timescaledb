@@ -27,6 +27,7 @@ typedef struct ChunkDispatch
 	/* Link to the executor state for INSERTs. This is not set for COPY path. */
 	const struct ChunkDispatchState *dispatch_state;
 	Hypertable *hypertable;
+	Hypertable *compress_hypertable;
 	SubspaceStore *cache;
 	EState *estate;
 	int eflags;

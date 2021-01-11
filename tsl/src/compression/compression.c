@@ -44,7 +44,10 @@
 #include "compression_chunk_size.h"
 #include "create.h"
 #include "custom_type_cache.h"
+#include "hypertable_compression.h"
 #include "segment_meta.h"
+
+#include <nodes/print.h>
 
 #define MAX_ROWS_PER_COMPRESSION 1000
 /* gap in sequence id between rows, potential for adding rows in gap later */
@@ -1511,4 +1514,198 @@ update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
 		restore_pgclass_stats(uncompressed_relid, comp_pages, comp_visible, out_tuples);
 		CommandCounterIncrement();
 	}
+}
+
+typedef struct CompressSingleRowState
+{
+	int n_keys;
+	const ColumnCompressionInfo **keys;
+	Relation in_rel;
+	Relation out_rel;
+	// int16 *in_column_offsets;
+	// probably just the row compressor is sufficient.
+	// keeping other info for now
+	RowCompressor row_compressor;
+	TupleTableSlot *out_slot;
+} CompressSingleRowState;
+
+static TupleTableSlot *compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot);
+
+/* does this work if we have sequences : how to get next value from sequence
+ */
+CompressSingleRowState *
+compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
+{
+	ListCell *lc;
+	List *htcols_list = NIL;
+	int i = 0, cclen;
+	const ColumnCompressionInfo **ccinfo;
+	TupleDesc in_desc = RelationGetDescr(in_rel);
+	TupleDesc out_desc = RelationGetDescr(out_rel);
+	int16 *in_column_offsets;
+
+	CompressSingleRowState *cr = palloc(sizeof(CompressSingleRowState));
+
+	/* get compression properties for hypertable */
+	htcols_list = ts_hypertable_compression_get(srcht_id);
+	cclen = list_length(htcols_list);
+	ccinfo = palloc(sizeof(ColumnCompressionInfo *) * cclen);
+	foreach (lc, htcols_list)
+	{
+		FormData_hypertable_compression *fd = (FormData_hypertable_compression *) lfirst(lc);
+		ccinfo[i++] = fd;
+	}
+	in_column_offsets = compress_chunk_populate_keys(RelationGetRelid(in_rel),
+													 ccinfo,
+													 cclen,
+													 &cr->n_keys,
+													 &cr->keys);
+	row_compressor_init(&cr->row_compressor,
+						in_desc,
+						out_rel,
+						cclen,
+						ccinfo,
+						in_column_offsets,
+						out_desc->natts);
+    cr->out_slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(out_rel),
+                                                 table_slot_callbacks(out_rel));
+	cr->in_rel = in_rel;
+	cr->out_rel = out_rel;
+	return cr;
+}
+
+/*could have a buffered version of this which might help actually combine a bunch of rows ?
+ * how do you indicate that it could be combined later?
+ */
+TupleTableSlot *
+compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot)
+{
+	TupleTableSlot *compress_slot;
+//MemoryContext old_ctx;
+	slot_getallattrs(slot);
+// old_ctx = MemoryContextSwitchTo(cr->row_compressor.per_row_ctx);
+	row_compressor_update_group(&cr->row_compressor, slot);
+	row_compressor_append_row(&cr->row_compressor, slot);
+// MemoryContextSwitchTo(old_ctx);
+	compress_slot = compress_singlerow(cr, slot);
+	return compress_slot;
+}
+
+// check max/min builder
+static TupleTableSlot *
+compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
+{
+	Datum *invalues, *out_values;
+	bool *inisnull, *out_isnull;
+	TupleTableSlot *out_slot = cr->out_slot;
+	RowCompressor *row_compressor = &cr->row_compressor;
+
+	TupleDesc in_desc = RelationGetDescr(cr->in_rel);
+	TupleDesc out_desc = RelationGetDescr(cr->out_rel);
+	slot_getallattrs(in_slot);
+	ExecClearTuple(out_slot);
+
+	invalues = in_slot->tts_values;
+	inisnull = in_slot->tts_isnull;
+	out_values = out_slot->tts_values;
+	out_isnull = out_slot->tts_isnull;
+
+	/* check how to avoid datumCopy here TODO */
+	/* also, can we do a pass through compression without a full copy.
+	 * full copy needed for multiple values. But we are dealing only with a single value,
+	 * so just need the result of transformation after passing it through the compressor function
+	 * This probably needs  abit of rewrte of the compression algorithm code
+	 */
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
+	{
+		Compressor *compressor = row_compressor->per_column[col].compressor;
+		int in_attrno = col;
+
+		int16 out_attrno = row_compressor->uncompressed_col_to_compressed_col[col];
+		Form_pg_attribute in_attr = TupleDescAttr(in_desc, col);
+		Form_pg_attribute out_attr = TupleDescAttr(out_desc, out_attrno);
+		elog(NOTICE,
+			 "(%d %d) map (%d %s) to (%d %s) ",
+			 col,
+			 out_attrno,
+			 in_attr->attnum,
+			 NameStr(in_attr->attname),
+			 out_attr->attnum,
+			 NameStr(out_attr->attname));
+
+		/* if there is no compressor, this must be a segmenter */
+		if (compressor == NULL)
+		{
+			row_compressor->compressed_is_null[out_attrno] = inisnull[in_attrno];
+			if (inisnull[in_attrno] == false)
+             {
+                SegmentInfo *segment_info = row_compressor->per_column[col].segment_info;
+				out_values[out_attrno] = datumCopy(invalues[in_attrno], segment_info->typ_by_val, segment_info->typlen);
+            }
+		}
+		else
+		{
+			void *compressed_data;
+			PerColumn *column = &row_compressor->per_column[col];
+			if (inisnull[in_attrno])
+			{
+				out_isnull[out_attrno] = true;
+				out_values[out_attrno] = 0;
+				if (column->min_max_metadata_builder != NULL)
+				{
+					out_isnull[column->min_metadata_attr_offset] = true;
+					out_isnull[column->max_metadata_attr_offset] = true;
+				}
+			}
+			else
+			{
+				compressor->append_val(compressor, invalues[in_attrno]);
+				compressed_data = compressor->finish(compressor);
+				out_isnull[out_attrno] = false;
+				out_values[out_attrno] = PointerGetDatum(compressed_data);
+
+				if (row_compressor->per_column[col].min_max_metadata_builder != NULL)
+				{
+					out_isnull[column->min_metadata_attr_offset] = false;
+					out_isnull[column->max_metadata_attr_offset] = false;
+					out_values[column->min_metadata_attr_offset] = invalues[in_attrno];
+					out_values[column->max_metadata_attr_offset] = invalues[in_attrno];
+				}
+			}
+		}
+	}
+
+	/* fill in additional meta data info */
+	out_values[row_compressor->count_metadata_column_offset] =
+		Int32GetDatum(1); /*we have only 1 row*/
+	out_isnull[row_compressor->count_metadata_column_offset] = false;
+
+	/* meta_sequence_num is not valid any more. How do we deal with this?
+	 * inavlidate for chunks like this? Stop using until we recompress entire chunk???
+	 * remove meta_sequence_num column?
+	 */
+
+	/* do we need a sequence number here ? */
+	out_values[row_compressor->sequence_num_metadata_column_offset] = Int32GetDatum(0);
+	out_isnull[row_compressor->sequence_num_metadata_column_offset] = false;
+
+	row_compressor->rows_compressed_into_current_value = 1;
+
+	ExecStoreVirtualTuple(out_slot);
+
+elog(NOTICE, "debug ");
+print_slot(in_slot);
+print_slot(out_slot);
+	return out_slot;
+}
+
+void
+compress_row_end(CompressSingleRowState *cr)
+{
+	row_compressor_finish(&cr->row_compressor);
+}
+
+void compress_row_destroy( CompressSingleRowState *cr)
+{
+    ExecDropSingleTupleTableSlot(cr->out_slot);
 }

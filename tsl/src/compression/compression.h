@@ -11,6 +11,8 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 
+#include <utils/relcache.h>	// for Relation
+#include <executor/tuptable.h> //TupleTableSlot
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
  * varlen header, and followed by a version specifying which compression
@@ -150,5 +152,13 @@ extern void decompress_chunk(Oid in_table, Oid out_table);
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
 extern void update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid);
+
+struct CompressSingleRowState;
+typedef struct CompressSingleRowState CompressSingleRowState;
+
+extern CompressSingleRowState *compress_row_init(int srcht_id, Relation in_rel, Relation out_rel);
+extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
+extern void compress_row_end(CompressSingleRowState *cr);
+extern void compress_row_destroy(CompressSingleRowState *cr);
 
 #endif

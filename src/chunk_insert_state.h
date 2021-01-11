@@ -13,6 +13,7 @@
 
 #include "chunk.h"
 #include "cache.h"
+#include "cross_module_fn.h"
 
 typedef struct ChunkInsertState
 {
@@ -54,6 +55,11 @@ typedef struct ChunkInsertState
 	EState *estate;
 	List *server_id_list; /* foreign server ids of data nodes used for remote inserts */
 	Oid user_id;
+
+	/* for tracking compressed chunks */
+	Relation compress_rel;
+	CompressSingleRowState *compress_state;
+	bool is_compressed; /* corresponds to a compressed chunk */
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

@@ -149,7 +149,10 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
-
+	if (cis->compress_state != NULL)
+	{
+		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
+	}
 	return slot;
 }
 

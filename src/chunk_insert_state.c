@@ -118,6 +118,35 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	return rri;
 }
 
+static inline ResultRelInfo *
+create_compress_chunk_result_relation_info(ChunkDispatch *dispatch, Relation compress_rel)
+{
+	// see ExecInitPartitionInfo //
+	ResultRelInfo *rri;
+	/* index into the range table */
+	Index hyper_rti = dispatch->hypertable_result_rel_info->ri_RangeTableIndex;
+	rri = makeNode(ResultRelInfo);
+
+	InitResultRelInfo(rri, compress_rel, hyper_rti, NULL, dispatch->estate->es_instrument);
+
+	/* TODO can we support nay of these */
+	/*rri_orig = dispatch->hypertable_result_rel_info;
+	rri->ri_WithCheckOptions = rri_orig->ri_WithCheckOptions;
+	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
+	rri->ri_junkFilter = rri_orig->ri_junkFilter;
+	rri->ri_projectReturning = rri_orig->ri_projectReturning;
+
+	rri->ri_FdwState = NULL;
+	rri->ri_usesFdwDirectModify = dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify;
+if (RelationGetForm(rel)->relkind == RELKIND_FOREIGN_TABLE)
+		rri->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
+*/
+	// revisit this
+	// create_chunk_rri_constraint_expr(rri, compress_rel);
+
+	return rri;
+}
+
 static ProjectionInfo *
 get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_clauses,
 									   TupleConversionMap *map, Index varno, Oid rowtype,
@@ -562,19 +591,27 @@ extern ChunkInsertState *
 ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
-	Relation rel, parent_rel;
+	Relation rel, parent_rel, compress_rel;
 	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-	ResultRelInfo *resrelinfo;
+	ResultRelInfo *resrelinfo, *relinfo;
+	bool is_compressed = (chunk->fd.compressed_chunk_id != 0);
 
 	/* permissions NOT checked here; were checked at hypertable level */
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support row-level security")));
+
+	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
+		elog(ERROR, "insert is not on a table");
+
+	if (is_compressed &&
+		(onconflict_action != ONCONFLICT_NONE || ts_chunk_dispatch_has_returning(dispatch)))
+		elog(ERROR, "on conflict and RETURNING clause not supported");
 
 	/*
 	 * We must allocate the range table entry on the executor's per-query
@@ -583,12 +620,18 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
-
-	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
-		elog(ERROR, "insert is not on a table");
+	if (is_compressed)
+	{
+		Oid compress_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
+		compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+	}
 
 	MemoryContextSwitchTo(cis_context);
-	resrelinfo = create_chunk_result_relation_info(dispatch, rel);
+	relinfo = create_chunk_result_relation_info(dispatch, rel);
+	if (!is_compressed)
+		resrelinfo = relinfo;
+	else
+		resrelinfo = create_compress_chunk_result_relation_info(dispatch, compress_rel);
 	CheckValidResultRel(resrelinfo, ts_chunk_dispatch_get_cmd_type(dispatch));
 
 	state = palloc0(sizeof(ChunkInsertState));
@@ -626,6 +669,20 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
+	if (is_compressed)
+	{
+		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
+		state->is_compressed = true;
+		state->compress_rel = compress_rel;
+		Assert(ts_cm_functions->compress_row_init != NULL);
+		/* need a way to convert from chunk tuple to compressed chunk tuple */
+		state->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
+	}
+    else
+    {
+       state->compress_state = NULL;
+    }
+
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
 	 * the slot's lifetime to the entire length of the execution and we want
@@ -633,8 +690,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	 * state. Otherwise, memory might blow up when there are many chunks being
 	 * inserted into. This also means that the slot needs to be destroyed with
 	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
-												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
+	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(relinfo->ri_RelationDesc),
+												 table_slot_callbacks(relinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
@@ -705,6 +762,16 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);
 	table_close(state->rel, NoLock);
+
+
+/* TODO check if we nee to keep rel open for this case.Can we manage compress_rel
+ * alone
+ */
+    if( state->is_compressed )
+    {
+      table_close( state->compress_rel, NoLock);
+	  ts_cm_functions->compress_row_destroy(state->compress_state);
+   }
 
 	if (NULL != state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
