@@ -33,7 +33,7 @@ BEGIN
     INNER JOIN pg_constraint cc ON (c.oid = cc.conindid)
     LOOP
         SELECT count(*) FROM _timescaledb_catalog.chunk c
-        WHERE c.hypertable_id = index_row.hypertable_id
+        WHERE c.hypertable_id = index_row.hypertable_id AND NOT dropped
         INTO STRICT chunk_count;
 
         SELECT count(c.*) FROM _timescaledb_catalog.chunk_index c
