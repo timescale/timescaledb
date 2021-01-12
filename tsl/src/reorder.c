@@ -63,6 +63,7 @@
 #include <access/toast_internals.h>
 #endif
 
+#include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable_cache.h"
@@ -798,7 +799,7 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 				break;
 			case HEAPTUPLE_RECENTLY_DEAD:
 				tups_recently_dead += 1;
-				/* fall through */
+				TS_FALLTHROUGH;
 			case HEAPTUPLE_LIVE:
 				/* Live or recently dead, must copy it */
 				isdead = false;
