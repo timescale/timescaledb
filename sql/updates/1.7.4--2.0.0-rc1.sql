@@ -400,7 +400,7 @@ DECLARE
 BEGIN
   FOR chunk IN
   SELECT format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL
+    FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL AND NOT dropped
   LOOP
     EXECUTE format('ALTER TABLE %s SET (autovacuum_enabled=false);', chunk::text);
   END LOOP;

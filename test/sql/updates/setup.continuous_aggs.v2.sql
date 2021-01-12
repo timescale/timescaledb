@@ -2,7 +2,19 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SELECT extversion < '2.0.0' AS has_refresh_mat_view from pg_extension WHERE extname = 'timescaledb' \gset
+-- Collect information about different features so that we can pick
+-- the right usage. Some of these are changed in the same version, but
+-- we keep them separate anyway so that we can do additional checking
+-- if necessary.
+SELECT
+	extversion < '2.0.0' AS has_refresh_mat_view,
+	extversion < '2.0.0' AS has_drop_chunks_old_interface,
+	extversion < '2.0.0' AS has_ignore_invalidations_older_than,
+	extversion < '2.0.0' AS has_max_interval_per_job,
+	extversion >= '2.0.0' AS has_create_mat_view,
+	extversion >= '2.0.0' AS has_continuous_aggs_policy
+  FROM pg_extension
+ WHERE extname = 'timescaledb' \gset
 
 -- disable background workers to prevent deadlocks between background processes
 -- on timescaledb 1.7.x
@@ -437,3 +449,70 @@ BEGIN
     PERFORM alter_job(retention_jobid, scheduled=>false);
   END IF;
 END $$;
+
+-- Test that calling drop chunks on the hypertable does not break the
+-- update process when chunks are marked as dropped rather than
+-- removed. This happens when a continuous aggregate is defined on the
+-- hypertable, so we create a hypertable and a continuous aggregate
+-- here and then drop chunks from the hypertable and make sure that
+-- the update from 1.7 to 2.0 works as expected.
+CREATE TABLE drop_test (
+    time timestamptz,
+    location INT,
+    temperature double PRECISION
+);
+
+SELECT create_hypertable ('drop_test', 'time', chunk_time_interval => interval '1 week');
+
+INSERT INTO drop_test
+SELECT
+    time,
+    (random() * 3 + 1)::int,
+    random() * 100.0
+FROM
+    generate_series(now() - interval '28 days', now(), '1 hour') AS time;
+
+\if :has_create_mat_view
+CREATE MATERIALIZED VIEW mat_drop
+\else
+CREATE VIEW mat_drop
+\endif
+WITH (
+     timescaledb.materialized_only = TRUE,
+\if :has_ignore_invalidations_older_than
+     timescaledb.ignore_invalidation_older_than = '7 days',
+\endif
+\if :has_max_interval_per_job
+     timescaledb.refresh_lag='-30 day',
+     timescaledb.max_interval_per_job ='1000 day',
+\endif
+     timescaledb.continuous
+) AS
+SELECT
+    time_bucket ('10 minute',time) AS bucket,
+    LOCATION,
+    min(temperature) AS min_temp,
+    max(temperature) AS max_temp,
+    avg(temperature) AS avg_temp
+FROM
+    drop_test
+GROUP BY
+    bucket,
+    LOCATION;
+
+\if :has_continuous_aggs_policy
+SELECT add_continuous_aggregate_policy('mat_drop', '7 days', '-30 days'::interval, '20 min');
+\endif
+
+\if :has_refresh_mat_view
+REFRESH MATERIALIZED VIEW mat_drop;
+\else
+CALL refresh_continuous_aggregate('mat_drop',NULL,NULL);
+\endif
+
+\if :has_drop_chunks_old_interface
+SELECT drop_chunks(NOW() - INTERVAL '7 days', table_name => 'drop_test',
+		   cascade_to_materializations => FALSE);
+\else
+SELECT drop_chunks('drop_test', NOW() - INTERVAL '7 days');
+\endif
