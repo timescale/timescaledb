@@ -471,16 +471,16 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 								"constraints"),
 						 errhint("Use column names to infer indexes instead.")));
 
+			subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 			if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
 			{
 				/* Remember that this will become a data node dispatch plan. We
 				 * need to know later whether or not to plan this using the
 				 * FDW API. */
 				data_node_dispatch_plans = bms_add_member(data_node_dispatch_plans, i);
-				subpath = ts_cm_functions->data_node_dispatch_path_create(root, mtpath, rti, i);
+				subpath =
+					ts_cm_functions->data_node_dispatch_path_create(root, mtpath, subpath, rti, i);
 			}
-			else
-				subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 		}
 
 		i++;

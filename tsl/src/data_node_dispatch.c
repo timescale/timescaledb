@@ -1154,11 +1154,10 @@ static CustomPathMethods data_node_dispatch_path_methods = {
 };
 
 Path *
-data_node_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
-							   int subplan_index)
+data_node_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Path *subpath,
+							   Index hypertable_rti, int subplan_index)
 {
 	DataNodeDispatchPath *sdpath = palloc0(sizeof(DataNodeDispatchPath));
-	Path *subpath = ts_chunk_dispatch_path_create(root, mtpath, hypertable_rti, subplan_index);
 
 	/* Copy costs, etc. from the subpath */
 	memcpy(&sdpath->cpath.path, subpath, sizeof(Path));

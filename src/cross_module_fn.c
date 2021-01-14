@@ -227,7 +227,7 @@ create_chunk_on_data_nodes_default(Chunk *chunk, Hypertable *ht)
 }
 
 static Path *
-data_node_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
+data_node_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath, Path *subpath,
 									   Index hypertable_rti, int subpath_index)
 {
 	error_no_default_fn_community();

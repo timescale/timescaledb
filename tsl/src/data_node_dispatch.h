@@ -12,7 +12,7 @@
 
 #include "fdw/deparse.h"
 
-Path *data_node_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
+Path *data_node_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Path *subpath,
 									 Index hypertable_rti, int subplan_index);
 
 #endif /* TIMESCALEDB_TSL_DATA_NODE_DISPATCH_H */
