@@ -11,6 +11,7 @@
 
 #include <postgres.h>
 #include <access/htup_details.h>
+#include <access/xact.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
@@ -897,8 +898,89 @@ ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
 typedef struct Watermark
 {
 	int32 hyper_id;
+	MemoryContext mctx;
+	MemoryContextCallback cb;
+	CommandId cid;
 	int64 value;
 } Watermark;
+
+/* Globally cache the watermark for better performance (by avoiding repeated
+ * max bucket calculations). The watermark will be reset at the end of the
+ * transaction, when the watermark function's input argument (materialized
+ * hypertable ID) changes, or when a new command is executed. One could
+ * potentially create a hashtable of watermarks keyed on materialized
+ * hypertable ID, but this is left as a future optimization since it doesn't
+ * seem to be common case that multiple continuous aggregates exist in the
+ * same query. Besides, the planner can constify calls to the watermark
+ * function during planning since the function is STABLE. Therefore, this is
+ * only a fallback if the planner needs to constify it many times (e.g., if
+ * used as an index condition on many chunks).
+ */
+static Watermark *watermark = NULL;
+
+/*
+ * Callback handler to reset the watermark after the transaction ends. This is
+ * triggered by the deletion of the associated memory context.
+ */
+static void
+reset_watermark(void *arg)
+{
+	watermark = NULL;
+}
+
+/*
+ * Watermark is valid for the duration of one command execution on the same
+ * materialized hypertable.
+ */
+static bool
+watermark_valid(const Watermark *w, int32 hyper_id)
+{
+	return w != NULL && w->hyper_id == hyper_id && w->cid == GetCurrentCommandId(false);
+}
+
+static Watermark *
+watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
+{
+	Hypertable *ht;
+	Dimension *dim;
+	Datum maxdat;
+	bool max_isnull;
+	Oid timetype;
+	Watermark *w;
+	MemoryContext mctx =
+		AllocSetContextCreate(top_mctx, "Watermark function", ALLOCSET_DEFAULT_SIZES);
+
+	w = MemoryContextAllocZero(mctx, sizeof(Watermark));
+	w->mctx = mctx;
+	w->hyper_id = cagg->data.mat_hypertable_id;
+	w->cid = GetCurrentCommandId(false);
+	w->cb.func = reset_watermark;
+	MemoryContextRegisterResetCallback(mctx, &w->cb);
+
+	ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	Assert(NULL != ht);
+	dim = hyperspace_get_open_dimension(ht->space, 0);
+	timetype = ts_dimension_get_partition_type(dim);
+	maxdat = ts_hypertable_get_open_dim_max_value(ht, 0, &max_isnull);
+
+	if (!max_isnull)
+	{
+		int64 value;
+
+		/* The materialized hypertable is already bucketed, which means the
+		 * max is the start of the last bucket. Add one bucket to move to the
+		 * point where the materialized data ends. */
+		value = ts_time_value_to_internal(maxdat, timetype);
+		w->value = ts_time_saturating_add(value, cagg->data.bucket_width, timetype);
+	}
+	else
+	{
+		/* Nothing materialized, so return min */
+		w->value = ts_time_get_min(timetype);
+	}
+
+	return w;
+}
 
 TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
 
@@ -920,12 +1002,6 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 {
 	const int32 hyper_id = PG_GETARG_INT32(0);
 	ContinuousAgg *cagg;
-	Hypertable *ht;
-	Dimension *dim;
-	Datum maxdat;
-	bool max_isnull;
-	Watermark *watermark = (Watermark *) fcinfo->flinfo->fn_extra;
-	Oid timetype;
 	AclResult aclresult;
 
 	if (PG_ARGISNULL(0))
@@ -935,13 +1011,10 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 
 	if (watermark != NULL)
 	{
-		/* The flinfo is probably reset when the input argument changes, but
-		 * the documentation isn't clear on this. Check that the hypertable ID
-		 * matches across repeated calls just to be safe. */
-		if (watermark->hyper_id == hyper_id)
+		if (watermark_valid(watermark, hyper_id))
 			PG_RETURN_INT64(watermark->value);
 
-		pfree(watermark);
+		MemoryContextDelete(watermark->mctx);
 	}
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hyper_id);
@@ -951,34 +1024,11 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid materialized hypertable ID: %d", hyper_id)));
 
-	watermark = MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(Watermark));
-	watermark->hyper_id = hyper_id;
-	fcinfo->flinfo->fn_extra = watermark;
-
 	/* Preemptive permission check to ensure the function complains about lack
 	 * of permissions on the cagg rather than the materialized hypertable */
 	aclresult = pg_class_aclcheck(cagg->relid, GetUserId(), ACL_SELECT);
 	aclcheck_error(aclresult, OBJECT_MATVIEW, get_rel_name(cagg->relid));
-
-	ht = ts_hypertable_get_by_id(hyper_id);
-	Assert(NULL != ht);
-	dim = hyperspace_get_open_dimension(ht->space, 0);
-	timetype = ts_dimension_get_partition_type(dim);
-	maxdat = ts_hypertable_get_open_dim_max_value(ht, 0, &max_isnull);
-
-	if (!max_isnull)
-	{
-		int64 value;
-
-		/* Add one bucket to get to the end of the last bucket */
-		value = ts_time_value_to_internal(maxdat, timetype);
-		watermark->value = ts_time_saturating_add(value, cagg->data.bucket_width, timetype);
-	}
-	else
-	{
-		/* Nothing materialized, so return min */
-		watermark->value = ts_time_get_min(timetype);
-	}
+	watermark = watermark_create(cagg, TopTransactionContext);
 
 	PG_RETURN_INT64(watermark->value);
 }
