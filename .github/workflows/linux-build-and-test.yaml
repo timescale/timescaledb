@@ -101,21 +101,24 @@ jobs:
 
     - name: make installcheck
       id: installcheck
-      if: matrix.pg != '13.1'
       run: |
         set -o pipefail
-        make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
+        if [[ "${{ matrix.pg }}" == "13.1" ]]; then
+          make -k -C build isolationcheck isolationcheck-t ${{ matrix.installcheck_args }} | tee installcheck.log
+        else
+          make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
+        fi
 
     - name: pginstallcheck
       if: matrix.pg != '13.1'
       run: make -C build pginstallcheck
 
     - name: coverage
-      if: matrix.coverage && matrix.pg != '13.1'
+      if: matrix.coverage
       run: make -j $MAKE_JOBS -k -C build coverage
 
     - name: Upload coverage report
-      if: matrix.coverage && matrix.pg != '13.1'
+      if: matrix.coverage
       uses: codecov/codecov-action@v1
       with:
         file: ./build/codecov/timescaledb-codecov.info
