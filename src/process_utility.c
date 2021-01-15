@@ -267,7 +267,7 @@ relation_not_only(RangeVar *rv)
 }
 
 static void
-process_add_hypertable(ProcessUtilityArgs *args, Hypertable *ht)
+add_hypertable_to_process_args(ProcessUtilityArgs *args, Hypertable *ht)
 {
 	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
 }
@@ -407,7 +407,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 	{
 		ts_hypertable_set_schema(ht, alterstmt->newschema);
 
-		process_add_hypertable(args, ht);
+		add_hypertable_to_process_args(args, ht);
 	}
 
 	ts_cache_release(hcache);
@@ -519,7 +519,7 @@ process_copy(ProcessUtilityArgs *args)
 		snprintf(args->completion_tag, COMPLETION_TAG_BUFSIZE, "COPY " UINT64_FORMAT, processed);
 #endif
 
-	process_add_hypertable(args, ht);
+	add_hypertable_to_process_args(args, ht);
 
 	ts_cache_release(hcache);
 
@@ -786,7 +786,7 @@ process_vacuum(ProcessUtilityArgs *args)
 
 				if (ht)
 				{
-					process_add_hypertable(args, ht);
+					add_hypertable_to_process_args(args, ht);
 
 					/* Exclude distributed hypertables from the list of relations
 					 * to vacuum and analyze since they contain no local tuples.
@@ -862,7 +862,7 @@ relation_should_recurse(RangeVar *rv)
 static void
 handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hypertable *ht)
 {
-	process_add_hypertable(args, ht);
+	add_hypertable_to_process_args(args, ht);
 
 	/* Delete the metadata */
 	ts_chunk_delete_by_hypertable_id(ht->fd.id);
@@ -1198,7 +1198,7 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 			if (list_length(stmt->objects) != 1)
 				elog(ERROR, "cannot drop a hypertable index along with other objects");
 
-			process_add_hypertable(args, ht);
+			add_hypertable_to_process_args(args, ht);
 		}
 	}
 
@@ -1302,7 +1302,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 					if (ht)
 					{
 						/* Here we know that there is at least one hypertable */
-						process_add_hypertable(args, ht);
+						add_hypertable_to_process_args(args, ht);
 						foreach_chunk(ht, add_chunk_oid, args);
 					}
 				}
@@ -1481,7 +1481,7 @@ process_reindex(ProcessUtilityArgs *args)
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					result = DDL_DONE;
 
-				process_add_hypertable(args, ht);
+				add_hypertable_to_process_args(args, ht);
 			}
 			break;
 		case REINDEX_OBJECT_INDEX:
@@ -1491,7 +1491,7 @@ process_reindex(ProcessUtilityArgs *args)
 
 			if (NULL != ht)
 			{
-				process_add_hypertable(args, ht);
+				add_hypertable_to_process_args(args, ht);
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 				/*
@@ -1535,7 +1535,7 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	{
 		ts_hypertable_set_name(ht, stmt->newname);
 
-		process_add_hypertable(args, ht);
+		add_hypertable_to_process_args(args, ht);
 	}
 }
 
@@ -1567,7 +1567,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 						stmt->subname,
 						get_rel_name(relid))));
 
-	process_add_hypertable(args, ht);
+	add_hypertable_to_process_args(args, ht);
 
 	dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
 
@@ -1592,7 +1592,7 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	{
 		ts_chunk_index_rename_parent(ht, relid, stmt->newname);
 
-		process_add_hypertable(args, ht);
+		add_hypertable_to_process_args(args, ht);
 	}
 	else
 	{
@@ -1692,7 +1692,7 @@ process_rename_constraint(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Re
 	if (NULL != ht)
 	{
 		relation_not_only(stmt->relation);
-		process_add_hypertable(args, ht);
+		add_hypertable_to_process_args(args, ht);
 		foreach_chunk(ht, rename_hypertable_constraint, stmt);
 	}
 	else
@@ -2237,7 +2237,7 @@ process_index_start(ProcessUtilityArgs *args)
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
-	process_add_hypertable(args, ht);
+	add_hypertable_to_process_args(args, ht);
 
 	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
 
@@ -2448,7 +2448,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		 */
 		PreventInTransactionBlock(is_top_level, "CLUSTER");
 
-		process_add_hypertable(args, ht);
+		add_hypertable_to_process_args(args, ht);
 
 		if (NULL == stmt->indexname)
 		{
@@ -2829,7 +2829,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		check_continuous_agg_alter_table_allowed(ht, stmt);
 		check_alter_table_allowed_on_ht_with_compression(ht, stmt);
 		relation_not_only(stmt->relation);
-		process_add_hypertable(args, ht);
+		add_hypertable_to_process_args(args, ht);
 	}
 	num_cmds = list_length(stmt->cmds);
 	foreach (lc, stmt->cmds)
@@ -3425,7 +3425,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 		return DDL_CONTINUE;
 	}
 
-	process_add_hypertable(args, ht);
+	add_hypertable_to_process_args(args, ht);
 	address = ts_hypertable_create_trigger(ht, stmt, args->query_string);
 	Assert(OidIsValid(address.objectId));
 
