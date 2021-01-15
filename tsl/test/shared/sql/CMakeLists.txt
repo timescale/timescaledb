@@ -3,13 +3,13 @@ set(TEST_FILES_SHARED
   decompress_placeholdervar.sql
   dist_gapfill.sql
   dist_insert.sql
-  gapfill.sql
-  ordered_append_join.sql
 )
 
 set(TEST_TEMPLATES_SHARED
   constify_timestamptz_op_interval.sql.in
+  gapfill.sql.in
   ordered_append.sql.in
+  ordered_append_join.sql.in
 )
 
 # Regression tests that vary with PostgreSQL version. Generated test

@@ -16,6 +16,8 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 
 set work_mem to '64MB';
+-- disable incremental sort here to make plans comparable to PG < 13
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 13 THEN set_config('enable_incremental_sort','off',false) ELSE 'off' END;
 
 set max_parallel_workers_per_gather to 0;
 \set TEST_TABLE 'metrics'
