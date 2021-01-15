@@ -24,6 +24,8 @@ PG11_EARLIEST = "11.0"
 PG11_LATEST = "11.10"
 PG12_EARLIEST = "12.0"
 PG12_LATEST = "12.5"
+PG13_EARLIEST = "13.0"
+PG13_LATEST = "13.1"
 
 m = {"include": [],}
 
@@ -92,9 +94,10 @@ def macos_config(overrides):
   base_config.update(overrides)
   return base_config
 
-# always test debug build on latest pg11 and latest pg12
+# always test debug build on latest pg 11, 12, 13
 m["include"].append(build_debug_config({"pg":PG11_LATEST}))
 m["include"].append(build_debug_config({"pg":PG12_LATEST}))
+m["include"].append(build_debug_config({"pg":PG13_LATEST}))
 
 m["include"].append(build_release_config(macos_config({})))
 
