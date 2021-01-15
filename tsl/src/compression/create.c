@@ -8,14 +8,14 @@
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
+#include <catalog/index.h>
 #include <catalog/indexing.h>
+#include <catalog/indexing.h>
+#include <catalog/objectaccess.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_type.h>
-#include <catalog/index.h>
-#include <catalog/indexing.h>
 #include <catalog/toasting.h>
-#include <catalog/objectaccess.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
@@ -23,6 +23,7 @@
 #include <nodes/makefuncs.h>
 #include <parser/parse_type.h>
 #include <storage/lmgr.h>
+#include <tcop/utility.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
@@ -926,9 +927,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 static void
 add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compress_cols)
 {
-	LOCKMODE lockmode;
-	Oid compress_relid;
-	AlterTableStmt *stmt;
+	Oid compress_relid = compress_ht->main_table_relid;
 	ColumnDef *coldef;
 	AlterTableCmd *addcol_cmd;
 	coldef = (ColumnDef *) linitial(compress_cols->coldeflist);
@@ -939,18 +938,9 @@ add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compre
 	addcol_cmd->subtype = AT_AddColumn;
 	addcol_cmd->def = (Node *) coldef;
 	addcol_cmd->missing_ok = false;
-	stmt = makeNode(AlterTableStmt);
-	stmt->relation =
-		makeRangeVar(NameStr(compress_ht->fd.schema_name), NameStr(compress_ht->fd.table_name), -1);
-	stmt->cmds = list_make1(addcol_cmd);
-	stmt->relkind = OBJECT_TABLE;
-	stmt->missing_ok = false;
 
 	/* alter the table and add column */
-	lockmode = AlterTableGetLockLevel(stmt->cmds);
-	compress_relid = AlterTableLookupRelation(stmt, lockmode);
-	Assert(compress_relid == compress_ht->main_table_relid);
-	AlterTable(compress_relid, AccessExclusiveLock, stmt);
+	AlterTableInternal(compress_relid, list_make1(addcol_cmd), true);
 	modify_compressed_toast_table_storage(compress_cols, compress_relid);
 }
 
