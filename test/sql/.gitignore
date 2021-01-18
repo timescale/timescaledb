@@ -2,6 +2,7 @@
 /alternate_users-*.sql
 /append-*.sql
 /chunk_adaptive-*.sql
+/constraint-*.sql
 /custom_type-*.sql
 /ddl-*.sql
 /insert-*.sql
