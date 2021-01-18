@@ -42,7 +42,6 @@ set(TEST_FILES
   timestamp.sql
   triggers.sql
   truncate.sql
-  update.sql
   upsert.sql
   util.sql
   vacuum_multi.sql
@@ -118,7 +117,8 @@ set(TEST_TEMPLATES
   # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
   sort_optimization.sql.in
   sql_query.sql.in
-  )
+  update.sql.in
+)
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
