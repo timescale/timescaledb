@@ -12,6 +12,7 @@
 /parallel-*.sql
 /partition-*.sql
 /partitioning-*.sql
+/partitionwise-*.sql
 /plan_expand_hypertable-*.sql
 /plan_hashagg_optimized-*.sql
 /plan_hashagg-*.sql
