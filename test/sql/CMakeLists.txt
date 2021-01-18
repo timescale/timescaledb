@@ -12,7 +12,6 @@ set(TEST_FILES
   cursor.sql
   ddl.sql
   ddl_errors.sql
-  delete.sql
   drop_extension.sql
   drop_hypertable.sql
   drop_owned.sql
@@ -108,6 +107,7 @@ set(TEST_TEMPLATES
   insert.sql.in
   chunk_adaptive.sql.in
   constraint.sql.in
+  delete.sql.in
   parallel.sql.in
   partition.sql.in
   plan_expand_hypertable.sql.in

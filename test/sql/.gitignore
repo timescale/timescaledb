@@ -5,6 +5,7 @@
 /constraint-*.sql
 /custom_type-*.sql
 /ddl-*.sql
+/delete-*.sql
 /insert-*.sql
 /insert_many-*.sql
 /multi_transaction_index-*.sql
