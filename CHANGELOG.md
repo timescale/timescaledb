@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Latest
 
+**Bugfixes**
+* #2842 Do not mark job as started when seting next_start field
+
 **Minor features**
 * #2736 Support adding columns to hypertables with compression enabled
 
