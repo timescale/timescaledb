@@ -1,0 +1,169 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\o /dev/null
+\ir include/insert_two_partitions.sql
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+CREATE TABLE PUBLIC."two_Partitions" (
+  "timeCustom" BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  series_0 DOUBLE PRECISION NULL,
+  series_1 DOUBLE PRECISION NULL,
+  series_2 DOUBLE PRECISION NULL,
+  series_bool BOOLEAN NULL
+);
+CREATE INDEX ON PUBLIC."two_Partitions" (device_id, "timeCustom" DESC NULLS LAST) WHERE device_id IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_0) WHERE series_0 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_1)  WHERE series_1 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_2) WHERE series_2 IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, series_bool) WHERE series_bool IS NOT NULL;
+CREATE INDEX ON PUBLIC."two_Partitions" ("timeCustom" DESC NULLS LAST, device_id);
+SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCustom'::name, 'device_id'::name, associated_schema_name=>'_timescaledb_internal'::text, number_partitions => 2, chunk_time_interval=>_timescaledb_internal.interval_to_usec('1 month'));
+\set QUIET off
+BEGIN;
+\COPY public."two_Partitions" FROM 'data/ds1_dev1_1.tsv' NULL AS '';
+COMMIT;
+INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257987600000000000, 'dev1', 1.5, 1),
+(1257987600000000000, 'dev1', 1.5, 2),
+(1257894000000000000, 'dev2', 1.5, 1),
+(1257894002000000000, 'dev1', 2.5, 3);
+INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
+(1257894000000000000, 'dev2', 1.5, 2);
+\set QUIET on
+\o
+--old chunks
+COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+\copy "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+--new chunks
+COPY "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+\copy "two_Partitions"("timeCustom", device_id, series_0, series_1) FROM STDIN DELIMITER ',';
+COPY (SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1) TO STDOUT;
+1257894000000000000	dev1	1.5	1	2	t
+1257894000000000000	dev1	1.5	2	\N	\N
+1257894000000000000	dev2	1.5	1	\N	\N
+1257894000000000000	dev2	1.5	2	\N	\N
+1257894000000000000	dev3	1.5	2	\N	\N
+1257894000000000000	dev3	1.5	2	\N	\N
+1257894000000001000	dev1	2.5	3	\N	\N
+1257894001000000000	dev1	3.5	4	\N	\N
+1257894002000000000	dev1	2.5	3	\N	\N
+1257894002000000000	dev1	5.5	6	\N	t
+1257894002000000000	dev1	5.5	7	\N	f
+1257897600000000000	dev1	4.5	5	\N	f
+1257987600000000000	dev1	1.5	1	\N	\N
+1257987600000000000	dev1	1.5	2	\N	\N
+2257894000000000000	dev3	1.5	2	\N	\N
+2257894000000000000	dev3	1.5	2	\N	\N
+---test hypertable with FK
+CREATE TABLE "meta" ("id" serial PRIMARY KEY);
+CREATE TABLE "hyper" (
+    "meta_id" integer NOT NULL REFERENCES meta(id),
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('hyper', 'time', chunk_time_interval => 100);
+ create_hypertable  
+--------------------
+ (2,public,hyper,t)
+(1 row)
+
+INSERT INTO "meta" ("id") values (1);
+\copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+\set ON_ERROR_STOP 0
+\copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+COPY hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
+ERROR:  insert or update on table "_hyper_2_6_chunk" violates foreign key constraint "6_1_hyper_meta_id_fkey"
+\set ON_ERROR_STOP 1
+COPY (SELECT * FROM hyper ORDER BY time, meta_id) TO STDOUT;
+1	1	1
+1	2	1
+--test that copy works with a low setting for max_open_chunks_per_insert
+set timescaledb.max_open_chunks_per_insert = 1;
+CREATE TABLE "hyper2" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10); 
+  create_hypertable  
+---------------------
+ (3,public,hyper2,t)
+(1 row)
+
+\copy hyper2 from data/copy_data.csv with csv header ;
+-- test copy with blocking trigger
+CREATE FUNCTION gt_10() RETURNS trigger AS
+$func$
+BEGIN
+    IF NEW."time" < 11
+        THEN RETURN NULL;
+    END IF;
+    RETURN NEW;
+END
+$func$ LANGUAGE plpgsql;
+CREATE TABLE "trigger_test" (
+    "time" bigint NOT NULL,
+    "value" double precision NOT NULL
+);
+SELECT create_hypertable('trigger_test', 'time', chunk_time_interval => 10);
+     create_hypertable     
+---------------------------
+ (4,public,trigger_test,t)
+(1 row)
+
+CREATE TRIGGER check_time BEFORE INSERT ON trigger_test
+FOR EACH ROW EXECUTE FUNCTION gt_10();
+\copy trigger_test from data/copy_data.csv with csv header ;
+SELECT * FROM trigger_test ORDER BY time;
+ time |       value        
+------+--------------------
+   11 |  0.795640022493899
+   12 |  0.631451691035181
+   13 | 0.0958626130595803
+   14 |  0.929304684977978
+   15 |  0.524866581428796
+   16 |  0.919249163009226
+   17 |  0.878917074296623
+   18 |   0.68551931809634
+   19 |  0.594833800103515
+   20 |  0.819584367796779
+   21 |  0.474171321373433
+   22 |  0.938535195309669
+   23 |  0.333933369256556
+   24 |  0.274582070298493
+   25 |  0.602348630782217
+(15 rows)
+
+-- Test that if we copy from stdin to a hypertable and violate a null
+-- constraint, it does not crash and generate an appropriate error
+-- message.
+CREATE TABLE test(a INT NOT NULL, b TIMESTAMPTZ);
+SELECT create_hypertable('test', 'b');
+NOTICE:  adding not-null constraint to column "b"
+ create_hypertable 
+-------------------
+ (5,public,test,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+COPY TEST (a,b) FROM STDIN (delimiter ',', null 'N');
+ERROR:  null value in column "a" of relation "_hyper_5_13_chunk" violates not-null constraint
+\set ON_ERROR_STOP 1
+----------------------------------------------------------------
+-- Testing COPY TO.
+----------------------------------------------------------------
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages TO NOTICE;
+-- COPY TO using a hypertable will not copy any tuples, but should
+-- show a notice.
+COPY hyper TO STDOUT DELIMITER ',';
+NOTICE:  hypertable data are in the chunks, no data will be copied
+-- COPY TO using a query should display all the tuples and not show a
+-- notice.
+COPY (SELECT * FROM hyper) TO STDOUT DELIMITER ',';
+1,1,1
+1,2,1

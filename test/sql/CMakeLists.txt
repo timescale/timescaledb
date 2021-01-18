@@ -5,7 +5,6 @@ set(TEST_FILES
   chunks.sql
   chunk_utils.sql
   cluster.sql
-  copy.sql
   create_chunks.sql
   create_hypertable.sql
   create_table.sql
@@ -106,6 +105,7 @@ set(TEST_TEMPLATES
   insert.sql.in
   chunk_adaptive.sql.in
   constraint.sql.in
+  copy.sql.in
   delete.sql.in
   parallel.sql.in
   partition.sql.in

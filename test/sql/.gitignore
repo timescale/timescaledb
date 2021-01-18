@@ -3,6 +3,7 @@
 /append-*.sql
 /chunk_adaptive-*.sql
 /constraint-*.sql
+/copy-*.sql
 /custom_type-*.sql
 /ddl-*.sql
 /delete-*.sql
