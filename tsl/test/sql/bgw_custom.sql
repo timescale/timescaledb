@@ -106,3 +106,15 @@ SELECT job_id FROM alter_job(1,scheduled:=true);
 SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
 SELECT job_id FROM alter_job(1,scheduled:=false);
 SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
+
+--test for #2793
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- background workers are disabled, so the job will not run --
+SELECT add_job( proc=>'custom_func',
+     schedule_interval=>'1h', initial_start =>'2018-01-01 10:00:00-05');
+
+SELECT job_id, next_start, scheduled, schedule_interval 
+FROM timescaledb_information.jobs WHERE job_id > 1000;
+\x
+SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1000;
+\x

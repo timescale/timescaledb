@@ -4,6 +4,11 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Latest
+
+**Bugfixes**
+* #2842 Do not mark job as started when seting next_start field
+
 ## 2.0.0 (2020-12-18)
 
 With this release, we are officially moving TimescaleDB 2.0 to GA, 

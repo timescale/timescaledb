@@ -55,7 +55,15 @@ enable_fast_restart(int32 job_id, const char *job_name)
 {
 	BgwJobStat *job_stat = ts_bgw_job_stat_find(job_id);
 	if (job_stat != NULL)
-		ts_bgw_job_stat_set_next_start(job_id, job_stat->fd.last_start);
+	{
+		/* job might not have a valid last_start if it was not
+		 * run by the bgw framework.
+		 */
+		ts_bgw_job_stat_set_next_start(job_id,
+									   job_stat->fd.last_start != DT_NOBEGIN ?
+										   job_stat->fd.last_start :
+										   GetCurrentTransactionStartTimestamp());
+	}
 	else
 		ts_bgw_job_stat_upsert_next_start(job_id, GetCurrentTransactionStartTimestamp());
 

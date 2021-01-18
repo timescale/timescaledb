@@ -233,3 +233,37 @@ SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
       1 | Telemetry Reporter [1] | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry | super_user | f         | {"test": "test"} |            |                   | 
 (1 row)
 
+--test for #2793
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- background workers are disabled, so the job will not run --
+SELECT add_job( proc=>'custom_func',
+     schedule_interval=>'1h', initial_start =>'2018-01-01 10:00:00-05');
+ add_job 
+---------
+    1005
+(1 row)
+
+SELECT job_id, next_start, scheduled, schedule_interval 
+FROM timescaledb_information.jobs WHERE job_id > 1000;
+ job_id |          next_start          | scheduled | schedule_interval 
+--------+------------------------------+-----------+-------------------
+   1005 | Mon Jan 01 07:00:00 2018 PST | t         | @ 1 hour
+(1 row)
+
+\x
+SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1000;
+-[ RECORD 1 ]----------+-----------------------------
+hypertable_schema      | 
+hypertable_name        | 
+job_id                 | 1005
+last_run_started_at    | -infinity
+last_successful_finish | -infinity
+last_run_status        | 
+job_status             | Scheduled
+last_run_duration      | 
+next_start             | Mon Jan 01 07:00:00 2018 PST
+total_runs             | 0
+total_successes        | 0
+total_failures         | 0
+
+\x
