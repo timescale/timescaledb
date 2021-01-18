@@ -9,7 +9,6 @@ set(TEST_FILES
   create_hypertable.sql
   create_table.sql
   cursor.sql
-  ddl.sql
   ddl_errors.sql
   drop_extension.sql
   drop_hypertable.sql
@@ -106,6 +105,7 @@ set(TEST_TEMPLATES
   chunk_adaptive.sql.in
   constraint.sql.in
   copy.sql.in
+  ddl.sql.in
   delete.sql.in
   parallel.sql.in
   partition.sql.in
