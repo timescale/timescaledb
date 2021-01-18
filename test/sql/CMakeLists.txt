@@ -29,7 +29,6 @@ set(TEST_FILES
   join.sql
   lateral.sql
   partitioning.sql
-  partitionwise.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
@@ -110,6 +109,7 @@ set(TEST_TEMPLATES
   delete.sql.in
   parallel.sql.in
   partition.sql.in
+  partitionwise.sql.in
   plan_expand_hypertable.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg.sql.in
