@@ -172,6 +172,13 @@ docker_run ${CONTAINER_ORIG} ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
 docker_run ${CONTAINER_CLEAN_RESTORE} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 docker_run ${CONTAINER_CLEAN_RERUN} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
+# Create roles for test. Roles must be created outside of regular
+# setup scripts; they must be added separately to each instance since
+# roles are not dumped by pg_dump.
+docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.roles.sql "postgres"
+docker_pgscript ${CONTAINER_CLEAN_RESTORE} /src/test/sql/updates/setup.roles.sql "postgres"
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.roles.sql "postgres"
+
 CLEAN_VOLUME=$(docker inspect ${CONTAINER_CLEAN_RESTORE} --format='{{range .Mounts }}{{.Name}}{{end}}')
 UPDATE_VOLUME=$(docker inspect ${CONTAINER_ORIG} --format='{{range .Mounts }}{{.Name}}{{end}}')
 
@@ -185,7 +192,7 @@ docker rm -f ${CONTAINER_ORIG}
 echo "Running update container"
 docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
-echo "Executing ALTER EXTENSION timescaledb UPDATE"
+echo "Executing ALTER EXTENSION timescaledb UPDATE ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG)"
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "single"
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
 # Need to update also postgres DB since add_data_node may connect to
@@ -225,4 +232,5 @@ docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.rest
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.sql"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='off'"
 
+echo "Comparing upgraded ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG) with clean install ($UPDATE_TO_TAG)"
 docker_pgdiff_all /src/test/sql/updates/post.${TEST_VERSION}.sql "single"
