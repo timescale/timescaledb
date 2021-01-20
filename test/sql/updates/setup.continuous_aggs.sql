@@ -130,6 +130,8 @@ BEGIN
   END IF;
 END $$;
 
+GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
+
 -- have to use psql conditional here because the procedure call can't be in transaction
 SELECT extversion < '2.0.0' AS has_refresh_mat_view from pg_extension WHERE extname = 'timescaledb' \gset
 \if :has_refresh_mat_view

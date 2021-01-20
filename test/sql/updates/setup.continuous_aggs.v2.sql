@@ -49,7 +49,6 @@ DECLARE
   ts_version TEXT;
 BEGIN
   SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
   IF ts_version < '2.0.0' THEN
     CREATE VIEW mat_before
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
@@ -142,6 +141,8 @@ BEGIN
     PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
   END IF;
 END $$;
+
+GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_before;
@@ -250,6 +251,8 @@ BEGIN
     PERFORM add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h');
   END IF;
 END $$;
+
+GRANT SELECT ON cagg.realtime_mat TO cagg_user;
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW cagg.realtime_mat;
@@ -449,6 +452,10 @@ BEGIN
     PERFORM alter_job(retention_jobid, scheduled=>false);
   END IF;
 END $$;
+
+GRANT SELECT, TRIGGER, UPDATE
+ON mat_conflict TO cagg_user
+WITH GRANT OPTION;
 
 -- Test that calling drop chunks on the hypertable does not break the
 -- update process when chunks are marked as dropped rather than
