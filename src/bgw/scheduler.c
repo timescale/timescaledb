@@ -720,6 +720,8 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	TimestampTz start = ts_timer_get_current_timestamp();
 	TimestampTz quit_time = DT_NOEND;
 
+	pgstat_report_activity(STATE_RUNNING, NULL);
+
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
 	scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
@@ -749,7 +751,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		next_wakeup = least_timestamp(next_wakeup, earliest_wakeup_to_start_next_job());
 		next_wakeup = least_timestamp(next_wakeup, earliest_job_timeout());
 
+		pgstat_report_activity(STATE_IDLE, NULL);
 		ts_timer_wait(next_wakeup);
+		pgstat_report_activity(STATE_RUNNING, NULL);
 
 		CHECK_FOR_INTERRUPTS();
 

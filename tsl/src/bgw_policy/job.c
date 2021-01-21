@@ -463,6 +463,7 @@ job_execute(BgwJob *job)
 	List *name;
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
+	StringInfo query;
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -503,6 +504,19 @@ job_execute(BgwJob *job)
 							InvalidOid,
 							InvalidOid,
 							COERCE_EXPLICIT_CALL);
+
+	/* Here we create a query string from the function/procedure name that we
+	 * are calling. We do not update the status after the execution has
+	 * finished since this is wrapped inside the code that starts and stops
+	 * any job, not just custom jobs. We just provide more detailed
+	 * information here that we are actually calling a specific custom
+	 * function. */
+	query = makeStringInfo();
+	appendStringInfo(query,
+					 "CALL %s.%s()",
+					 quote_identifier(NameStr(job->fd.proc_schema)),
+					 quote_identifier(NameStr(job->fd.proc_name)));
+	pgstat_report_activity(STATE_RUNNING, query->data);
 
 	switch (prokind)
 	{

@@ -212,6 +212,26 @@ SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-
  User-Defined Action [1001]
 (1 row)
 
+\x on
+SELECT job_id, job_status FROM timescaledb_information.job_stats;
+-[ RECORD 1 ]-------
+job_id     | 1001
+job_status | Running
+
+-- Showing non-volatile information from pg_stat_activity for
+-- debugging purposes. Information schema above reads from this view.
+SELECT datname, usename, application_name, state, query, wait_event_type, wait_event
+  FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
+-[ RECORD 1 ]----+------------------------------------
+datname          | db_bgw_db_scheduler
+usename          | default_perm_user
+application_name | User-Defined Action [1001]
+state            | active
+query            | CALL public.ts_bgw_test_job_sleep()
+wait_event_type  | Timeout
+wait_event       | PgSleep
+
+\x off
 -- have to suppress notices here as delete_job will print pid of the running background worker processes
 SET client_min_messages TO WARNING;
 SELECT delete_job(:job_id);
