@@ -681,11 +681,13 @@ typedef struct EMCreationContext
 	FormData_hypertable_compression *current_col_info;
 } EMCreationContext;
 
-/* get the segmentby compression info for an EquivalenceMember (EM) expr,
+/* get the compression info for an EquivalenceMember (EM) expr,
  * or return NULL if it's not one we can create an EM for
+ * This is applicable to segment by and compressed columns
+ * of the compressed table.
  */
 static FormData_hypertable_compression *
-segmentby_compression_info_for_em(Node *node, EMCreationContext *context)
+get_compression_info_for_em(Node *node, EMCreationContext *context)
 {
 	/* based on adjust_appendrel_attrs_mutator */
 	if (node == NULL)
@@ -714,10 +716,6 @@ segmentby_compression_info_for_em(Node *node, EMCreationContext *context)
 		if (col_info == NULL)
 			return NULL;
 
-		/* we can only add EMs for segmentby columns */
-		if (col_info->segmentby_column_index <= 0)
-			return NULL;
-
 		return col_info;
 	}
 
@@ -734,7 +732,6 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 {
 	/* based on adjust_appendrel_attrs_mutator */
 	Assert(context->current_col_info != NULL);
-	Assert(context->current_col_info->segmentby_column_index > 0);
 	Assert(var->varno == context->uncompressed_relid_idx);
 	Assert(var->varattno > 0);
 
@@ -783,8 +780,7 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 		 * be set on the em */
 		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
 
-		context->current_col_info =
-			segmentby_compression_info_for_em((Node *) cur_em->em_expr, context);
+		context->current_col_info = get_compression_info_for_em((Node *) cur_em->em_expr, context);
 		if (context->current_col_info == NULL)
 			continue;
 
