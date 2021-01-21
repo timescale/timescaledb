@@ -429,6 +429,7 @@ ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 									  RowExclusiveLock))
 			bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
 		table_close(rel, ShareRowExclusiveLock);
+		pgstat_report_activity(STATE_IDLE, NULL);
 	}
 }
 
@@ -446,6 +447,7 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  &res,
 								  RowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
+	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
 bool
