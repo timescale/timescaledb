@@ -165,11 +165,11 @@ build_script:
 
     docker-switch-linux
 
-    docker run -d --name pgregress --env POSTGRES_HOST_AUTH_METHOD=trust postgres:12.5-alpine
+    docker run -d --name pgregress alpine:3.12 sh -c "while sleep 3600; do :; done"
 
-    docker exec -it pgregress /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev openssl postgresql-dev~=12.5"
+    docker exec -it pgregress /bin/sh -c "apk add --no-cache --virtual .build-deps bash coreutils findutils gcc libc-dev make util-linux-dev diffutils cmake curl git openssl-dev openssl postgresql-client postgresql-dev"
 
-    docker exec -it pgregress /bin/bash -c "ln -s /usr/lib/postgresql/pgxs/src/test/regress/pg_regress /usr/local/bin/pg_regress"
+    docker exec -it pgregress /bin/sh -c "ln -s /usr/lib/postgresql/pgxs/src/test/regress/pg_regress /usr/local/bin/pg_regress"
 
     # we clone the current commit in the docker instance to ensure the correct tests run
     # (Ideally we'd use the same folder, but that's difficult to set up)
@@ -191,7 +191,7 @@ test_script:
 
     #right now we only run timescale regression tests, others will be set up later
 
-    docker exec -e IGNORES="chunk_utils loader" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -e PG_REGRESS_OPTS="--bindir=/usr/local/bin/" -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
+    docker exec -e IGNORES="chunk_utils loader" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
 
     $TESTS1 = $?
 
@@ -203,7 +203,7 @@ test_script:
     # killer. Therefore, we need to ignore the results of the
     # remote_connection and remote_txn tests.
 
-    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw remote_connection remote_txn " -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -e PG_REGRESS_OPTS="--bindir=/usr/local/bin/" -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
+    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw remote_connection remote_txn " -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
 
     if( -not $? -or -not $TESTS1 ) { exit 1 }
 
