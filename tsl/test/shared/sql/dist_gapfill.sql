@@ -7,12 +7,12 @@
 \set TEST_BASE_NAME dist_gapfill
 \set TEST_METRICS_NAME gapfill_metrics
 SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
-    format('%s/results/%s_singlenode.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_SINGLENODE",
-    format('%s/results/%s_partitionwise_off.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_PARTITIONWISE_OFF",
-    format('%s/results/%s_partitionwise_on.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_PARTITIONWISE_ON",
+    format('%s/shared/results/%s_singlenode.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_SINGLENODE",
+    format('%s/shared/results/%s_partitionwise_off.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_PARTITIONWISE_OFF",
+    format('%s/shared/results/%s_partitionwise_on.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_PARTITIONWISE_ON",
     format('include/%s_query.sql', :'TEST_METRICS_NAME') AS "TEST_METRICS_QUERY_NAME",
-    format('%s/results/%s_nohyper.out', :'TEST_OUTPUT_DIR', :'TEST_METRICS_NAME') AS "TEST_METRICS_NOHYPER",
-    format('%s/results/%s_partitionwise_off.out', :'TEST_OUTPUT_DIR', :'TEST_METRICS_NAME') AS "TEST_METRICS_PARTITIONWISE_OFF" \gset
+    format('%s/shared/results/%s_nohyper.out', :'TEST_OUTPUT_DIR', :'TEST_METRICS_NAME') AS "TEST_METRICS_NOHYPER",
+    format('%s/shared/results/%s_partitionwise_off.out', :'TEST_OUTPUT_DIR', :'TEST_METRICS_NAME') AS "TEST_METRICS_PARTITIONWISE_OFF" \gset
 
 SELECT format('\! diff %s %s', :'TEST_SINGLENODE', :'TEST_PARTITIONWISE_OFF') AS "DIFF_CMD_PARTITIONWISE_OFF",
     format('\! diff %s %s', :'TEST_SINGLENODE', :'TEST_PARTITIONWISE_ON') AS "DIFF_CMD_PARTITIONWISE_ON",
