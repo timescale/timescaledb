@@ -113,6 +113,21 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-14'::timestamptz, '5m':
   generate_series(1,10,1) g2(device_id)
 ORDER BY time, device_id;
 ANALYZE metrics_space;
+-- test ChunkAppend projection #2661
+CREATE TABLE i2661 (
+  machine_id int4 NOT NULL,
+  "name" varchar(255) NOT NULL,
+  "timestamp" timestamptz NOT NULL,
+  "first" float4 NULL
+);
+SELECT create_hypertable('i2661', 'timestamp');
+ create_hypertable  
+--------------------
+ (7,public,i2661,t)
+(1 row)
+
+INSERT INTO i2661 SELECT 1, 'speed', generate_series('2019-12-31 00:00:00', '2020-01-10 00:00:00', '2m'::interval), 0;
+ANALYZE i2661;
 \ir :TEST_QUERY_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -2157,13 +2172,13 @@ DROP INDEX :INDEX_NAME;
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: m2_1."time", m2_1.device_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_7_32_chunk m2_1 (actual rows=2710 loops=1)
+                     ->  Seq Scan on _hyper_8_35_chunk m2_1 (actual rows=2710 loops=1)
                            Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 650
-               ->  Index Only Scan using _hyper_7_33_chunk_join_limit_time_device_id_idx on _hyper_7_33_chunk m2_2 (never executed)
+               ->  Index Only Scan using _hyper_8_36_chunk_join_limit_time_device_id_idx on _hyper_8_36_chunk m2_2 (never executed)
                      Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Heap Fetches: 0
-               ->  Index Only Scan using _hyper_7_34_chunk_join_limit_time_device_id_idx on _hyper_7_34_chunk m2_3 (never executed)
+               ->  Index Only Scan using _hyper_8_37_chunk_join_limit_time_device_id_idx on _hyper_8_37_chunk m2_3 (never executed)
                      Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Heap Fetches: 0
          ->  Materialize (actual rows=24 loops=1)
@@ -2180,6 +2195,41 @@ DROP INDEX :INDEX_NAME;
 (30 rows)
 
 DROP TABLE join_limit;
+-- test ChunkAppend projection #2661
+:PREFIX SELECT ts.timestamp, ht.timestamp
+FROM (
+  SELECT generate_series(
+    to_timestamp(FLOOR(EXTRACT (EPOCH FROM '2020-01-01T00:01:00Z'::timestamp) / 300) * 300) AT TIME ZONE 'UTC',
+    '2020-01-01T01:00:00Z',
+    '5 minutes'::interval
+  ) AS timestamp
+) ts
+LEFT JOIN i2661 ht ON
+  (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
+  AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp;
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join (actual rows=33 loops=1)
+   Merge Cond: ((date_part('epoch'::text, ts."timestamp")) = ((floor((date_part('epoch'::text, ht."timestamp") / '300'::double precision)) * '300'::double precision)))
+   ->  Sort (actual rows=13 loops=1)
+         Sort Key: (date_part('epoch'::text, ts."timestamp"))
+         Sort Method: quicksort 
+         ->  Subquery Scan on ts (actual rows=13 loops=1)
+               ->  ProjectSet (actual rows=13 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+   ->  Sort (actual rows=514 loops=1)
+         Sort Key: ((floor((date_part('epoch'::text, ht."timestamp") / '300'::double precision)) * '300'::double precision))
+         Sort Method: quicksort 
+         ->  Custom Scan (ChunkAppend) on i2661 ht (actual rows=7201 loops=1)
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_7_31_chunk ht_1 (actual rows=1200 loops=1)
+                     Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
+               ->  Seq Scan on _hyper_7_32_chunk ht_2 (actual rows=5040 loops=1)
+                     Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
+               ->  Seq Scan on _hyper_7_33_chunk ht_3 (actual rows=961 loops=1)
+                     Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
+(19 rows)
+
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized results
