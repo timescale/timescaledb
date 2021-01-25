@@ -82,3 +82,16 @@ ORDER BY time, device_id;
 
 ANALYZE metrics_space;
 
+-- test ChunkAppend projection #2661
+CREATE TABLE i2661 (
+  machine_id int4 NOT NULL,
+  "name" varchar(255) NOT NULL,
+  "timestamp" timestamptz NOT NULL,
+  "first" float4 NULL
+);
+SELECT create_hypertable('i2661', 'timestamp');
+
+INSERT INTO i2661 SELECT 1, 'speed', generate_series('2019-12-31 00:00:00', '2020-01-10 00:00:00', '2m'::interval), 0;
+ANALYZE i2661;
+
+
