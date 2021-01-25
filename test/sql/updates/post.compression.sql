@@ -18,32 +18,3 @@ WHERE
   AND chunk.compressed_chunk_id IS NULL;
 
 SELECT * FROM compress ORDER BY time DESC, small_cardinality;
-
--- check count and approximate_row_count are the same after analyze
-ANALYZE compress;
-SELECT
-  count,
-  approximate,
-  CASE WHEN count != approximate THEN
-    'counts not matching' || random()::TEXT
-  ELSE
-    'match'
-  END AS MATCH
-FROM (
-  SELECT
-    count(*)
-  FROM
-    compress) AS count,
-  approximate_row_count('compress') AS approximate;
-
-SELECT
-  hypertable_schema,
-  hypertable_name,
-  approximate_row_count(format('%I.%I', hypertable_schema, hypertable_name)::REGCLASS)
-FROM
-  timescaledb_information.hypertables
-WHERE
-  compression_enabled = true
-ORDER BY
-  1,
-  2;
