@@ -104,7 +104,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	cscan->scan.scanrelid = rel->relid;
 
 	tlist = ts_build_path_tlist(root, (Path *) path);
-	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
 	if (path->path.pathkeys == NIL)
@@ -227,6 +226,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		}
 	}
 
+	/* decouple input tlist from output tlist in case output tlist gets modified later */
+	cscan->custom_scan_tlist = list_copy(tlist);
 	cscan->custom_plans = custom_plans;
 
 	/*
