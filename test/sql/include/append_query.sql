@@ -333,3 +333,16 @@ DROP INDEX :INDEX_NAME;
 
 DROP TABLE join_limit;
 
+-- test ChunkAppend projection #2661
+:PREFIX SELECT ts.timestamp, ht.timestamp
+FROM (
+  SELECT generate_series(
+    to_timestamp(FLOOR(EXTRACT (EPOCH FROM '2020-01-01T00:01:00Z'::timestamp) / 300) * 300) AT TIME ZONE 'UTC',
+    '2020-01-01T01:00:00Z',
+    '5 minutes'::interval
+  ) AS timestamp
+) ts
+LEFT JOIN i2661 ht ON
+  (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
+  AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp;
+
