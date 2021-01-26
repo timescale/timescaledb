@@ -163,3 +163,42 @@ GROUP BY 2, 3;
 (27 rows)
 
 RESET enable_hashagg;
+-- test if volatile function quals are applied to compressed chunks
+CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL 
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    retval BOOL;
+BEGIN
+   IF intval = 228 THEN RETURN TRUE;
+   ELSE RETURN FALSE;
+   END IF;
+END;
+$BODY$;
+-- the function cannot be pushed down to compressed chunk
+-- but should be applied as a filter on decompresschunk
+SELECT * from test_chartab 
+WHERE check_equal_228(rtt) ORDER BY ts;
+ job_run_id |      mac_id      | rtt |              ts              
+------------+------------------+-----+------------------------------
+       8864 | 001407000001DD2E | 228 | Sat Dec 14 02:52:05.863 2019
+       8890 | 001407000001DD2E | 228 | Fri Dec 20 02:52:05.863 2019
+(2 rows)
+
+EXPLAIN (analyze,costs off,timing off,summary off) 
+SELECT * from test_chartab 
+WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=1 loops=1)
+   Sort Key: test_chartab.ts
+   Sort Method: quicksort 
+   ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
+         Chunks excluded during startup: 0
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+               Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
+               Rows Removed by Filter: 2
+               ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
+                     Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
+(10 rows)
+

@@ -67,3 +67,24 @@ GROUP BY 2, 3;
 
 RESET enable_hashagg;
 
+-- test if volatile function quals are applied to compressed chunks
+CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL 
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    retval BOOL;
+BEGIN
+   IF intval = 228 THEN RETURN TRUE;
+   ELSE RETURN FALSE;
+   END IF;
+END;
+$BODY$;
+
+-- the function cannot be pushed down to compressed chunk
+-- but should be applied as a filter on decompresschunk
+SELECT * from test_chartab 
+WHERE check_equal_228(rtt) ORDER BY ts;
+
+EXPLAIN (analyze,costs off,timing off,summary off) 
+SELECT * from test_chartab 
+WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
