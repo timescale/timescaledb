@@ -64,7 +64,10 @@ pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_
 
 		/* pushdown is not safe for volatile expressions */
 		if (contain_volatile_functions((Node *) ri->clause))
+		{
+			decompress_clauses = lappend(decompress_clauses, ri);
 			continue;
+		}
 
 		context.can_pushdown = true;
 		context.needs_recheck = false;
