@@ -9,6 +9,7 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #2842 Do not mark job as started when seting next_start field
 * #2845 Fix continuous aggregate privileges during upgrade
+* #2865 Apply volatile function quals at decompresschunk node
 
 ## 2.0.0 (2020-12-18)
 
