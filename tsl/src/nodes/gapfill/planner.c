@@ -184,9 +184,6 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	cscan->custom_private =
 		list_make4(gfpath->func, root->parse->groupClause, root->parse->jointree, args);
 
-	/* remove start and end argument from time_bucket call */
-	gfpath->func->args = list_make2(linitial(gfpath->func->args), lsecond(gfpath->func->args));
-
 	return &cscan->scan.plan;
 }
 
