@@ -1060,10 +1060,10 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 			output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{
-			/* existing AggPaths are modified here.
+			/* Existing AggPaths are modified here.
 			 * No new AggPaths should be added after this if there
-			 * are partials*/
-			partials_found = ts_plan_process_partialize_agg(root, input_rel, output_rel);
+			 * are partials. */
+			partials_found = ts_plan_process_partialize_agg(root, output_rel);
 		}
 	}
 

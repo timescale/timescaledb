@@ -35,6 +35,7 @@ typedef struct PartializeWalkerState
 	bool found_non_partial_agg;
 	bool looking_for_agg;
 	Oid fnoid;
+	PartializeAggFixAggref fix_aggref;
 } PartializeWalkerState;
 
 /*
@@ -70,13 +71,20 @@ check_for_partialize_function_call(Node *node, PartializeWalkerState *state)
 		if (state->looking_for_agg)
 		{
 			state->looking_for_agg = false;
-			aggref->aggsplit = AGGSPLIT_INITIAL_SERIAL;
+			if (state->fix_aggref == TS_FIX_AGGREF)
+			{
+				aggref->aggsplit = AGGSPLIT_INITIAL_SERIAL;
 
-			if (aggref->aggtranstype == INTERNALOID &&
-				DO_AGGSPLIT_SERIALIZE(AGGSPLIT_INITIAL_SERIAL))
-				aggref->aggtype = BYTEAOID;
-			else
-				aggref->aggtype = aggref->aggtranstype;
+				if (aggref->aggtranstype == INTERNALOID &&
+					DO_AGGSPLIT_SERIALIZE(AGGSPLIT_INITIAL_SERIAL))
+				{
+					aggref->aggtype = BYTEAOID;
+				}
+				else
+				{
+					aggref->aggtype = aggref->aggtranstype;
+				}
+			}
 		}
 
 		/* We currently cannot handle cases like
@@ -97,8 +105,8 @@ check_for_partialize_function_call(Node *node, PartializeWalkerState *state)
 	return expression_tree_walker(node, check_for_partialize_function_call, state);
 }
 
-static bool
-has_partialize_function(Query *parse)
+bool
+has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref)
 {
 	Oid partialfnoid = InvalidOid;
 	Oid argtyp[] = { ANYELEMENTOID };
@@ -106,6 +114,7 @@ has_partialize_function(Query *parse)
 	PartializeWalkerState state = { .found_partialize = false,
 									.found_non_partial_agg = false,
 									.looking_for_agg = false,
+									.fix_aggref = fix_aggref,
 									.fnoid = InvalidOid };
 	List *name = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(TS_PARTIALFN));
 
@@ -145,7 +154,7 @@ partialize_agg_paths(RelOptInfo *rel)
  * instance:
  *
  *  SELECT time_bucket('1 day', time), device,
- *  __timescaledb_internal.partialize_agg(avg(temp))
+ *  _timescaledb_internal.partialize_agg(avg(temp))
  *  GROUP BY 1, 2;
  *
  * Would compute the partial aggregate of avg(temp).
@@ -174,9 +183,10 @@ partialize_agg_paths(RelOptInfo *rel)
  * simple filter (e.g., HAVING device > 3). In such cases, the HAVING clause is
  * removed and replaced by a filter on the input.
  * Returns : true if partial aggs were found, false otherwise.
+ * Modifies : output_rel if partials aggs were found.
  */
 bool
-ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel)
+ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel)
 {
 	Query *parse = root->parse;
 	Assert(IS_UPPER_REL(output_rel));
@@ -184,7 +194,7 @@ ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel, RelOptI
 	if (CMD_SELECT != parse->commandType || !parse->hasAggs)
 		return false;
 
-	if (!has_partialize_function(parse))
+	if (!has_partialize_function(parse, TS_FIX_AGGREF))
 		return false;
 
 	/* We cannot check root->hasHavingqual here because sometimes the

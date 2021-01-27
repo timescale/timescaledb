@@ -33,19 +33,20 @@
 #include <optimizer/optimizer.h>
 #endif
 
-#include "import/planner.h"
-#include "plan_expand_hypertable.h"
-#include "hypertable.h"
-#include "hypertable_restrict_info.h"
-#include "planner.h"
-#include "chunk_append/chunk_append.h"
+#include "chunk.h"
+#include "cross_module_fn.h"
 #include "guc.h"
 #include "extension.h"
-#include "chunk.h"
 #include "extension_constants.h"
+#include "hypertable.h"
+#include "hypertable_restrict_info.h"
 #include "partitioning.h"
-#include "cross_module_fn.h"
+#include "plan_expand_hypertable.h"
+#include "plan_partialize.h"
+#include "planner.h"
 #include "time_utils.h"
+#include "chunk_append/chunk_append.h"
+#include "import/planner.h"
 
 typedef struct CollectQualCtx
 {
@@ -1230,8 +1231,12 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
 	 * partitionwise aggregation. */
-	if (enable_partitionwise_aggregate || hypertable_is_distributed(ht))
+	if ((enable_partitionwise_aggregate &&
+		 !has_partialize_function(root->parse, TS_DO_NOT_FIX_AGGREF)) ||
+		hypertable_is_distributed(ht))
+	{
 		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
+	}
 
 	foreach (l, inh_oids)
 	{

@@ -82,6 +82,9 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- TEST2 ---
 DROP MATERIALIZED VIEW mat_m1;
 
+SHOW enable_partitionwise_aggregate;
+SET enable_partitionwise_aggregate = on;
+
 SELECT * FROM _timescaledb_config.bgw_job;
 
 CREATE TABLE conditions (
@@ -141,6 +144,8 @@ select time_bucket('1day', timec), min(location), sum(temperature), sum(humidity
 from conditions
 group by time_bucket('1day', timec)
 order by 1;
+
+SET enable_partitionwise_aggregate = off;
 
 -- TEST3 --
 -- drop on table conditions should cascade to materialized mat_v1
