@@ -8,7 +8,13 @@
 #include <postgres.h>
 #include <optimizer/planner.h>
 
-bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *input_rel,
-									RelOptInfo *output_rel);
+typedef enum PartializeAggFixAggref
+{
+	TS_DO_NOT_FIX_AGGREF = 0,
+	TS_FIX_AGGREF = 1
+} PartializeAggFixAggref;
+
+bool has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref);
+bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
 
 #endif /* TIMESCALEDB_PLAN_PARTIALIZE_H */

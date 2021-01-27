@@ -7,10 +7,11 @@ accidentally triggering the load of a previous DB version.**
 ## Latest
 
 **Bugfixes**
-* #2842 Do not mark job as started when seting next_start field
+* #2842 Do not mark job as started when setting next_start field
 * #2845 Fix continuous aggregate privileges during upgrade
 * #2851 Fix nested loop joins that involve compressed chunks
 * #2865 Apply volatile function quals at decompresschunk node
+* #2866 Avoid partitionwise planning of partialize_agg
 * #2868 Fix corruption in gapfill plan
 
 **Minor features**

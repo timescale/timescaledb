@@ -95,6 +95,7 @@ SET enable_partitionwise_aggregate = OFF;
 \o
 \o :RESULTS_TEST2
 SET enable_partitionwise_aggregate = ON;
+CALL distributed_exec($$ SET enable_partitionwise_aggregate = ON $$);
 \ir 'include/aggregate_queries.sql'
 \o
 \set ECHO all

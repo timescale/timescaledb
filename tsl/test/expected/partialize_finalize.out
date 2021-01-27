@@ -2,6 +2,13 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- TEST1 count with integers
+SHOW enable_partitionwise_aggregate;
+ enable_partitionwise_aggregate 
+--------------------------------
+ off
+(1 row)
+
+SET enable_partitionwise_aggregate = on;
 create table foo (a integer, b integer, c integer);
 insert into foo values( 1 , 10 , 20);
 insert into foo values( 1 , 11 , 20);
@@ -76,6 +83,7 @@ select a, _timescaledb_internal.finalize_agg( 'sum(numeric)', null, null, null, 
  5 |   80 |    0
 (4 rows)
 
+SET enable_partitionwise_aggregate = off;
 --TEST3 sum with expressions
 drop table t1;
 drop view v1;

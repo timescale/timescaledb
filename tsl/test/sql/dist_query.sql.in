@@ -168,6 +168,7 @@ SET enable_partitionwise_aggregate = ON;
 \set ORDER_BY_1_2 'ORDER BY 1,2'
 \set LIMIT ''
 SET enable_partitionwise_aggregate = ON;
+CALL distributed_exec($$ SET enable_partitionwise_aggregate = ON $$);
 \ir :TEST_QUERY_NAME
 
 -----------------------------------------------------------------------

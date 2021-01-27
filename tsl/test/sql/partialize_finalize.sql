@@ -3,6 +3,9 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- TEST1 count with integers
+SHOW enable_partitionwise_aggregate;
+SET enable_partitionwise_aggregate = on;
+
 create table foo (a integer, b integer, c integer);
 insert into foo values( 1 , 10 , 20);
 insert into foo values( 1 , 11 , 20);
@@ -60,6 +63,8 @@ insert into foo values( 5, 40, 0);
 --sum aggfnoid 2114, min aggfnoid is 2136 oid  numeric is 1700
 insert into t1 select * from v1 where ( a = 3 ) or a = 5;
 select a, _timescaledb_internal.finalize_agg( 'sum(numeric)', null, null, null, partialb, cast('1' as numeric) ) sumb, _timescaledb_internal.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
+
+SET enable_partitionwise_aggregate = off;
 
 --TEST3 sum with expressions
 drop table t1;
