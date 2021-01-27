@@ -1389,3 +1389,26 @@ FROM (values (:big_int_min,(-32768)::smallint,(-2147483648)::int,:big_int_min,-2
              (:big_int_max, 32767::smallint, 2147483647::int,:big_int_max, 2147483647::bigint, 'Infinity'::double precision)) v(time,s,i,b,b2,d)
 GROUP BY 1 ORDER BY 1;
 
+-- issue #2232: This query used to trigger error "could not find
+-- pathkey item to sort" due to a corrupt query plan
+SELECT time_bucket_gapfill('1 h', time) AS time,
+       locf(sum(v1)) AS v1_sum,
+	   interpolate(sum(v2)) AS v2_sum
+FROM metrics_tstz
+WHERE time >= '2018-01-01 04:00' AND time < '2018-01-01 08:00'
+GROUP BY 1
+ORDER BY 1 DESC;
+
+-- query without gapfill:
+SELECT time_bucket('1 h', time) AS time,
+       sum(v1) AS v1_sum,
+	   sum(v2) AS v1_sum
+FROM metrics_tstz
+WHERE time >= '2018-01-01 04:00' AND time < '2018-01-01 08:00'
+GROUP BY 1
+ORDER BY 1 DESC;
+
+-- query to show original data
+SELECT * FROM metrics_tstz
+WHERE time >= '2018-01-01 04:00' AND time < '2018-01-01 08:00'
+ORDER BY 1 DESC, 2;

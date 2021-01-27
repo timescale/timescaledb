@@ -11,6 +11,14 @@ accidentally triggering the load of a previous DB version.**
 * #2845 Fix continuous aggregate privileges during upgrade
 * #2851 Fix nested loop joins that involve compressed chunks
 * #2865 Apply volatile function quals at decompresschunk node
+* #2868 Fix corruption in gapfill plan
+
+**Minor features**
+* #2736 Support adding columns to hypertables with compression enabled
+
+**Thanks**
+* @WarriorOfWire for reporting the bug with gapfill queries not being
+  able to find pathkey item to sort
 
 ## 2.0.0 (2020-12-18)
 
