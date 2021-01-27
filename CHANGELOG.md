@@ -4,20 +4,38 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Latest
+## 2.0.1 (2021-01-28)
+
+This maintenance release contains bugfixes since the 2.0.0 release.
+We deem it high priority for upgrading.
+
+In particular the fixes contained in this maintenance release address
+issues in continuous aggregates, compression, JOINs with hypertables
+and when upgrading from previous versions.
 
 **Bugfixes**
+* #2772 Always validate existing database and extension
+* #2780 Fix config enum entries for remote data fetcher
+* #2806 Add check for dropped chunk on update
+* #2828 Improve cagg watermark caching
+* #2838 Fix catalog repair in update script
 * #2842 Do not mark job as started when setting next_start field
 * #2845 Fix continuous aggregate privileges during upgrade
 * #2851 Fix nested loop joins that involve compressed chunks
+* #2860 Fix projection in ChunkAppend nodes
+* #2861 Remove compression stat update from update script
 * #2865 Apply volatile function quals at decompresschunk node
 * #2866 Avoid partitionwise planning of partialize_agg
 * #2868 Fix corruption in gapfill plan
-
-**Minor features**
-* #2736 Support adding columns to hypertables with compression enabled
+* #2874 Fix partitionwise agg crash due to uninitialized memory
 
 **Thanks**
+* @alex88 for reporting an issue with joined hypertables
+* @brian-from-quantrocket for reporting an issue with extension update and dropped chunks
+* @dhodyn for reporting an issue when joining compressed chunks
+* @markatosi for reporting a segfault with partitionwise aggregates enabled
+* @PhilippJust for reporting an issue with add_job and initial_start
+* @sgorsh for reporting an issue when using pgAdmin on windows
 * @WarriorOfWire for reporting the bug with gapfill queries not being
   able to find pathkey item to sort
 
