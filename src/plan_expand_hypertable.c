@@ -1081,6 +1081,7 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 								int nparts)
 {
 	PartitionScheme part_scheme = palloc0(sizeof(PartitionSchemeData));
+	PartitionBoundInfo boundinfo = palloc0(sizeof(PartitionBoundInfoData));
 
 	/* We only set the info needed for planning */
 	part_scheme->partnatts = ht->space->num_dimensions;
@@ -1089,7 +1090,14 @@ build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *h
 	hyper_rel->part_scheme = part_scheme;
 	hyper_rel->partexprs = get_hypertable_partexprs(ht, root->parse, hyper_rel->relid);
 	hyper_rel->nullable_partexprs = (List **) palloc0(sizeof(List *) * part_scheme->partnatts);
-	hyper_rel->boundinfo = palloc(sizeof(PartitionBoundInfoData));
+
+	/* PartitionBoundInfo is used for ordered append. We use a strategy that
+	 * will avoid triggering an ordered append. */
+	boundinfo->strategy = PARTITION_STRATEGY_MULTIDIM;
+	boundinfo->default_index = -1;
+	boundinfo->null_index = -1;
+
+	hyper_rel->boundinfo = boundinfo;
 	hyper_rel->part_rels = palloc0(sizeof(*hyper_rel->part_rels) * nparts);
 }
 
