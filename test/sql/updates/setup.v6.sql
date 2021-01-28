@@ -6,4 +6,7 @@
 \ir setup.continuous_aggs.v2.sql
 \ir setup.compression.sql
 \ir setup.policies.sql
+\if :TEST_REPAIR
+\ir setup.repair.sql
+\endif
 \ir setup.multinode.sql

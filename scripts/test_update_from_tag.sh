@@ -83,7 +83,7 @@ docker_pgcmd() {
     local database=${3:-single}
     echo "executing pgcmd on database $database"
     set +e
-    docker_exec $1 "psql -h localhost -U postgres -d $database -v VERBOSITY=verbose -c \"$2\""
+    docker_exec $1 "psql -h localhost -U postgres -d $database -v TEST_REPAIR=${TEST_REPAIR} -v VERBOSITY=verbose -c \"$2\""
     if [ $? -ne 0 ]; then
       docker_logs $1
       exit 1
@@ -93,7 +93,7 @@ docker_pgcmd() {
 
 docker_pgscript() {
     local database=${3:-postgres}
-    docker_exec $1 "psql -h localhost -U postgres -d $database -v ON_ERROR_STOP=1 -f $2"
+    docker_exec $1 "psql -h localhost -U postgres -d $database -v TEST_REPAIR=${TEST_REPAIR} -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {
@@ -204,12 +204,30 @@ docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "postgres
 # version that doesn't support multi-node to a multi-node capable
 # version.
 if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
-	echo "Executing post update scritps"
+ 	echo "Executing post update scripts"
 	docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.update.sql "single"
+	if [[ "${TEST_REPAIR}" = "true" ]]; then
+	    echo "Executing post update repair script"
+	    docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql "single"
+	fi
 fi
+
+
+# Check that there is nothing wrong before taking a backup
+echo "Checking that there are no missing dimension slices"
+docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/setup.check.sql
 
 echo "Executing setup script on clean"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
+if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
+    if [[ "${TEST_REPAIR}" = "true" ]]; then
+	# We need to run the post repair script to make sure that the
+	# constraint is on the clean rerun as well since the setup
+	# script can remove it.
+	echo "Executing post update repair script on clean"
+	docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/post.repair.sql "single"
+    fi
+fi
 
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.sql"
@@ -224,13 +242,13 @@ docker cp ${TEST_TMPDIR}/dn1.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.sql
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='on'"
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
-docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='off'"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single RESET timescaledb.restoring"
 
 # Restore dn1
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres dn1"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='on'"
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.sql"
-docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='off'"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 RESET timescaledb.restoring"
 
 echo "Comparing upgraded ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG) with clean install ($UPDATE_TO_TAG)"
 docker_pgdiff_all /src/test/sql/updates/post.${TEST_VERSION}.sql "single"

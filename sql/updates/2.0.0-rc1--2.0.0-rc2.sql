@@ -137,28 +137,28 @@ SELECT DISTINCT
        dimension_id,
        CASE
        WHEN column_type = 'timestamptz'::regtype THEN
-            EXTRACT(EPOCH FROM range_start::timestamptz) * 1000000
+            EXTRACT(EPOCH FROM range_start::timestamptz)::bigint * 1000000
        WHEN column_type = 'timestamp'::regtype THEN
-            EXTRACT(EPOCH FROM range_start::timestamp) * 1000000
+            EXTRACT(EPOCH FROM range_start::timestamp)::bigint * 1000000
        WHEN column_type = 'date'::regtype THEN
-            EXTRACT(EPOCH FROM range_start::date) * 1000000
+            EXTRACT(EPOCH FROM range_start::date)::bigint * 1000000
        ELSE
             CASE
             WHEN range_start IS NULL
-            THEN -9223372036854775808
+            THEN (-9223372036854775808)::bigint
             ELSE range_start::bigint
             END
        END AS range_start,
        CASE
        WHEN column_type = 'timestamptz'::regtype THEN
-            EXTRACT(EPOCH FROM range_end::timestamptz) * 1000000
+            EXTRACT(EPOCH FROM range_end::timestamptz)::bigint * 1000000
        WHEN column_type = 'timestamp'::regtype THEN
-            EXTRACT(EPOCH FROM range_end::timestamp) * 1000000
+            EXTRACT(EPOCH FROM range_end::timestamp)::bigint * 1000000
        WHEN column_type = 'date'::regtype THEN
-            EXTRACT(EPOCH FROM range_end::date) * 1000000
+            EXTRACT(EPOCH FROM range_end::date)::bigint * 1000000
        ELSE
             CASE WHEN range_end IS NULL
-            THEN 9223372036854775807
+            THEN 9223372036854775807::bigint
             ELSE range_end::bigint
             END
        END AS range_end
