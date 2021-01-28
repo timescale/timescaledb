@@ -9,16 +9,19 @@ on:
   pull_request:
 jobs:
   update_test:
-    name: Update test PG${{ matrix.pg }}
+    name: Update test PG${{ matrix.pg }} ${{ matrix.kind }}
     runs-on: 'ubuntu-18.04'
     strategy:
       matrix:
         pg: ["11.10","12.5"]
+        opt: ["", "-r"]
         include:
           - pg: 11.10
             pg_major: 11
           - pg: 12.5
             pg_major: 12
+          - opt: "-r"
+            kind: "with repair test"
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -27,9 +30,9 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@v2
 
-    - name: Update tests ${{ matrix.pg }}
+    - name: Update tests ${{ matrix.pg }} ${{ matrix.kind }}
       run: |
-        ./scripts/test_updates_pg${{ matrix.pg_major}}.sh
+        ./scripts/test_updates_pg${{ matrix.pg_major}}.sh ${{ matrix.opt }}
 
     - name: Update diff
       if: failure()
@@ -52,4 +55,3 @@ jobs:
         SLACK_TITLE: Update test PG${{ matrix.pg }} ${{ job.status }}
         SLACK_MESSAGE: ${{ github.event.head_commit.message }}
       uses: rtCamp/action-slack-notify@v2.0.2
-
