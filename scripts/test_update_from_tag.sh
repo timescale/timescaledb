@@ -76,11 +76,11 @@ docker_exec() {
 }
 
 docker_pgcmd() {
-    docker_exec $1 "psql -h localhost -U postgres -d single -c \"$2\""
+    docker_exec $1 "psql -h localhost -U postgres -d single -v TEST_REPAIR=${TEST_REPAIR} -c \"$2\""
 }
 
 docker_pgscript() {
-    docker_exec $1 "psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f $2"
+    docker_exec $1 "psql -h localhost -U postgres -v TEST_REPAIR=${TEST_REPAIR} -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {
@@ -150,14 +150,37 @@ docker rm -f ${CONTAINER_ORIG}
 echo "Running update container"
 docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
-echo "Executing ALTER EXTENSION timescaledb UPDATE"
+echo "Executing ALTER EXTENSION timescaledb UPDATE ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG)"
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE"
+
+# Post update script. Need to run it to restore the constraints that
+# was dropped to be able to remove dimension slices in the repair
+# test.
+if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
+       if [[ "${TEST_REPAIR}" = "true" ]]; then
+           echo "Executing post update repair script"
+           docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql
+       fi
+fi
 
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
 docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
 
+# Check that there is nothing wrong before taking a backup
+echo "Checking that there are no missing dimension slices"
+docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/setup.check.sql
+
 echo "Executing setup script on clean"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
+if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
+    if [[ "${TEST_REPAIR}" = "true" ]]; then
+	# We need to run the post repair script to make sure that the
+	# constraint is on the clean rerun as well since the setup
+	# script can remove it.
+	echo "Executing post update repair script on clean"
+	docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/post.repair.sql
+    fi
+fi
 
 echo "Testing updated vs clean"
 docker_pgdiff ${CONTAINER_UPDATED} ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/test-rerun.sql
@@ -167,7 +190,7 @@ docker cp ${TEST_TMPDIR}/single.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/single.sql
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='on'"
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
-docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='off'"
+docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single RESET timescaledb.restoring"
 
-echo "Testing restored"
+echo "Comparing upgraded ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG) with clean install ($UPDATE_TO_TAG)"
 docker_pgdiff ${CONTAINER_UPDATED} ${CONTAINER_CLEAN_RESTORE} /src/test/sql/updates/post.${TEST_VERSION}.sql
