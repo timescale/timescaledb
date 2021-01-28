@@ -5,3 +5,6 @@
 \ir setup.v2.sql
 
 \ir setup.continuous_aggs.v2.sql
+\if :TEST_REPAIR
+\ir setup.repair.sql
+\endif
