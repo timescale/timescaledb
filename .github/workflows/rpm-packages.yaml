@@ -1,5 +1,6 @@
 name: RPM packages
 on:
+  pull_request:
   schedule:
     # run daily 0:00 on master branch
     - cron: '0 0 * * *'
@@ -41,17 +42,17 @@ jobs:
       run: |
         yum update -y
         if command -v dnf; then dnf -qy module disable postgresql; fi
-        yum install -y timescaledb-2-postgresql-${{ matrix.pg }} sudo
+        yum install -y timescaledb-postgresql-${{ matrix.pg }} sudo
         sudo -u postgres /usr/pgsql-${{ matrix.pg }}/bin/initdb -D /var/lib/pgsql/${{ matrix.pg }}/data
         timescaledb-tune --quiet --yes --pg-config /usr/pgsql-${{ matrix.pg }}/bin/pg_config
 
     - name: List available versions
       run: |
-        yum --showduplicates list timescaledb-2-postgresql-${{ matrix.pg }}
+        yum --showduplicates list timescaledb-postgresql-${{ matrix.pg }}
 
     - name: Show files in package
       run: |
-        rpm -ql timescaledb-2-postgresql-${{ matrix.pg }}
+        rpm -ql timescaledb-postgresql-${{ matrix.pg }}
 
     - uses: actions/checkout@v2
 
