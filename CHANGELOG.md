@@ -10,7 +10,11 @@ accidentally triggering the load of a previous DB version.**
 * #2736 Support adding columns to hypertables with compression enabled
 
 **Bugfixes**
+* #2883 Fix join qual propagation for nested joins
 * #2908 Fix changing column type of clustered hypertables
+
+**Thanks**
+* @zeeshanshabbir93 for reporting an issue with joins
 
 ## 2.0.1 (2021-01-28)
 
