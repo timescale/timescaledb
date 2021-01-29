@@ -33,12 +33,18 @@ m = {"include": [],}
 def build_debug_config(overrides):
   # llvm version and clang versions must match otherwise
   # there will be build errors this is true even when compiling
-  # with gcc as clang is used to compile the llvm parts
+  # with gcc as clang is used to compile the llvm parts.
+  #
+  # Strictly speaking, WARNINGS_AS_ERRORS=ON is not needed here, but
+  # we add it as a precation. Intention is to have at least one
+  # release and one debug build with WARNINGS_AS_ERRORS=ON so that we
+  # capture warnings generated due to changes in the code base or the
+  # compiler.
   base_config = dict({
     "name": "Debug",
     "build_type": "Debug",
     "pg_build_args": "--enable-debug --enable-cassert",
-    "tsdb_build_args": "-DCODECOVERAGE=ON",
+    "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON",
     "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
     "llvm_config": "llvm-config-9",
@@ -50,13 +56,17 @@ def build_debug_config(overrides):
   base_config.update(overrides)
   return base_config
 
+# We build this release configuration with WARNINGS_AS_ERRORS=ON to
+# make sure that we can build with -Werrors even for release
+# builds. This will capture some cases where warnings are generated
+# for release builds but not for debug builds.
 def build_release_config(overrides):
   base_config = build_debug_config({})
   release_config = dict({
     "name": "Release",
     "build_type": "Release",
     "pg_build_args": "",
-    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=OFF",
+    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON",
     "coverage": False,
   })
   base_config.update(release_config)
@@ -68,7 +78,7 @@ def build_apache_config(overrides):
   apache_config = dict({
     "name": "ApacheOnly",
     "build_type": "Release",
-    "tsdb_build_args": "-DAPACHE_ONLY=1 -DWARNINGS_AS_ERRORS=OFF",
+    "tsdb_build_args": "-DAPACHE_ONLY=1",
     "pg_build_args": "",
     "coverage": False,
   })
