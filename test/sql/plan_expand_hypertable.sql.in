@@ -31,14 +31,26 @@ SET timescaledb.enable_optimizations TO false;
 :DIFF_CMD
 \set ECHO queries
 
+\set PREFIX 'EXPLAIN (costs off)'
 RESET timescaledb.enable_optimizations;
+
+-- test enable_qual_propagation GUC
+CREATE TABLE t(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('t','time');
+INSERT INTO t VALUES ('2000-01-01'), ('2010-01-01'), ('2020-01-01');
+
+-- time constraint should be in both scans
+:PREFIX SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
+
+SET timescaledb.enable_qual_propagation TO false;
+-- time constraint should only be in t1 scan
+:PREFIX SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
+RESET timescaledb.enable_qual_propagation;
+
 -- test hypertable classification when hypertable is not in cache
 -- https://github.com/timescale/timescaledb/issues/1832
-
-\set PREFIX 'EXPLAIN (costs off)'
-
 CREATE TABLE test (a int, time timestamptz NOT NULL);
-SELECT create_hypertable('public.test', 'time');
+SELECT table_name FROM create_hypertable('public.test', 'time');
 INSERT INTO test SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
 
 CREATE OR REPLACE FUNCTION test_f(_ts timestamptz)
