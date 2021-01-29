@@ -2739,4 +2739,51 @@ SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
 (0 rows)
 
 \set ECHO errors
+RESET timescaledb.disable_optimizations;
+test constraint exclusion for constraints in ON clause of JOINs
+should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
+EXPLAIN (costs off) SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+(15 rows)
+
+SET timescaledb.enable_qual_propagation TO false;
+EXPLAIN (costs off) SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (m1."time" = m2."time")
+   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+         Order: m1."time"
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
+               Order: m2."time"
+               ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
+               ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
+               ->  Index Only Scan Backward using _hyper_7_167_chunk_metrics_timestamptz_2_time_idx on _hyper_7_167_chunk m2_3
+               ->  Index Only Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk m2_4
+               ->  Index Only Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk m2_5
+               ->  Index Only Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk m2_6
+(17 rows)
+
+RESET timescaledb.enable_qual_propagation;
 --TEST END--

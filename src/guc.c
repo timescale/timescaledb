@@ -43,6 +43,7 @@ bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
+bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 int ts_guc_max_open_chunks_per_insert = 10;
@@ -163,6 +164,17 @@ _guc_init(void)
 							 "Enable constraint exclusion",
 							 "Enable planner constraint exclusion",
 							 &ts_guc_enable_constraint_exclusion,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_qual_propagation",
+							 "Enable qualifier propagation",
+							 "Enable propagation of qualifiers in JOINs",
+							 &ts_guc_enable_qual_propagation,
 							 true,
 							 PGC_USERSET,
 							 0,
