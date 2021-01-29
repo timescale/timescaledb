@@ -2475,6 +2475,143 @@ SELECT time FROM regular_timestamptz UNION ALL SELECT time FROM metrics_timestam
  Tue Feb 01 00:00:00 2000 PST
 (128 rows)
 
+-- test nested join qual propagation
+:PREFIX
+SELECT * FROM (
+SELECT o1_m1.time FROM metrics_timestamptz o1_m1 INNER JOIN metrics_timestamptz_2 o1_m2 ON true WHERE o1_m2.time = o1_m1.time AND o1_m1.device_id = o1_m2.device_id AND o1_m2.time < '2000-01-10' AND o1_m1.device_id = 1
+) o1 FULL OUTER JOIN (
+SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timestamptz_2 o2_m2 ON true WHERE o2_m2.time = o2_m1.time AND o2_m1.device_id = o2_m2.device_id AND o2_m2.time > '2000-01-20' AND o2_m1.device_id = 2
+) o2 ON o1.time = o2.time ORDER BY 1,2;
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: o1_m1."time", o2_m1."time"
+   ->  Merge Full Join
+         Merge Cond: (o2_m1."time" = o1_m1."time")
+         ->  Nested Loop
+               ->  Merge Append
+                     Sort Key: o2_m2."time"
+                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2
+                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (device_id = 2)
+                     ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_1
+                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (device_id = 2)
+                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_2
+                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (device_id = 2)
+               ->  Append
+                     ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk o2_m1
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk o2_m1_1
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk o2_m1_2
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk o2_m1_3
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk o2_m1_4
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+         ->  Materialize
+               ->  Nested Loop
+                     ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 o1_m2
+                           Order: o1_m2."time"
+                           ->  Index Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk o1_m2_1
+                                 Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (device_id = 1)
+                           ->  Index Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk o1_m2_2
+                                 Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (device_id = 1)
+                     ->  Append
+                           ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk o1_m1
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk o1_m1_1
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk o1_m1_2
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk o1_m1_3
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk o1_m1_4
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+(58 rows)
+
+:PREFIX
+SELECT * FROM (
+SELECT o1_m1.time FROM metrics_timestamptz o1_m1 INNER JOIN metrics_timestamptz_2 o1_m2 ON o1_m2.time = o1_m1.time AND o1_m1.device_id = o1_m2.device_id WHERE o1_m2.time < '2000-01-10' AND o1_m1.device_id = 1
+) o1 FULL OUTER JOIN (
+SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timestamptz_2 o2_m2 ON o2_m2.time = o2_m1.time AND o2_m1.device_id = o2_m2.device_id WHERE o2_m2.time > '2000-01-20' AND o2_m1.device_id = 2
+) o2 ON o1.time = o2.time ORDER BY 1,2;
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: o1_m1."time", o2_m1."time"
+   ->  Merge Full Join
+         Merge Cond: (o2_m1."time" = o1_m1."time")
+         ->  Nested Loop
+               ->  Merge Append
+                     Sort Key: o2_m2."time"
+                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2
+                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (device_id = 2)
+                     ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_1
+                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (device_id = 2)
+                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_2
+                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (device_id = 2)
+               ->  Append
+                     ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk o2_m1
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk o2_m1_1
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk o2_m1_2
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk o2_m1_3
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk o2_m1_4
+                           Index Cond: ("time" = o2_m2."time")
+                           Filter: (device_id = 2)
+         ->  Materialize
+               ->  Nested Loop
+                     ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 o1_m2
+                           Order: o1_m2."time"
+                           ->  Index Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk o1_m2_1
+                                 Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (device_id = 1)
+                           ->  Index Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk o1_m2_2
+                                 Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (device_id = 1)
+                     ->  Append
+                           ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk o1_m1
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk o1_m1_1
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk o1_m1_2
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk o1_m1_3
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+                           ->  Index Scan using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk o1_m1_4
+                                 Index Cond: ("time" = o1_m2."time")
+                                 Filter: (device_id = 1)
+(58 rows)
+
 \ir include/plan_expand_hypertable_chunks_in_query.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
