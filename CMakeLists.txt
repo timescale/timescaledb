@@ -90,8 +90,15 @@ if (NOT CMAKE_C_COMPILER_ID IN_LIST SUPPORTED_COMPILERS)
    message(FATAL_ERROR "Unsupported compiler ${CMAKE_C_COMPILER_ID}. Supported compilers are: ${SUPPORTED_COMPILERS}")
 endif ()
 
-# Option to treat warnings as errors when compiling (default on)
-option(WARNINGS_AS_ERRORS "Make compiler warnings into errors (default ON)" ON)
+# Option to treat warnings as errors when compiling (default on for
+# debug builds, off for all other build types)
+if (CMAKE_BUILD_TYPE STREQUAL Debug)
+  message(STATUS "CMAKE_BUILD_TYPE matches Debug")
+  option(WARNINGS_AS_ERRORS "Make compiler warnings into errors (default ON)" ON)
+else()
+  message(STATUS "CMAKE_BUILD_TYPE does not match Debug")
+  option(WARNINGS_AS_ERRORS "Make compiler warnings into errors (default ON)" OFF)
+endif()
 
 if (WARNINGS_AS_ERRORS)
   if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -116,7 +123,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # These flags are supported on all compilers.
   add_compile_options(
     -Wempty-body -Wvla -Wall -Wmissing-prototypes -Wpointer-arith
-    -Werror=vla -Wendif-labels -fno-strict-aliasing -fno-omit-frame-pointer)
+    -Werror=vla -Wendif-labels -Wno-stringop-truncation
+    -fno-strict-aliasing -fno-omit-frame-pointer)
 
   # These flags are just supported on some of the compilers, so we
   # check them before adding them.
