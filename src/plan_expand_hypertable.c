@@ -59,6 +59,7 @@ typedef struct CollectQualCtx
 	List *join_conditions;
 	List *propagate_conditions;
 	List *all_quals;
+	int join_level;
 } CollectQualCtx;
 
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
@@ -618,7 +619,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
  * a JOIN.
  */
 static void
-collect_join_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
+collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 {
 	ListCell *lc;
 
@@ -631,7 +632,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		/*
 		 * collect quals to propagate to join relations
 		 */
-		if (num_rels == 1 && !is_outer_join && IsA(qual, OpExpr) &&
+		if (num_rels == 1 && can_propagate && IsA(qual, OpExpr) &&
 			list_length(castNode(OpExpr, qual)->args) == 2)
 			ctx->all_quals = lappend(ctx->all_quals, qual);
 
@@ -655,7 +656,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 				{
 					ctx->join_conditions = lappend(ctx->join_conditions, op);
 
-					if (!is_outer_join)
+					if (can_propagate)
 						ctx->propagate_conditions = lappend(ctx->propagate_conditions, op);
 				}
 			}
@@ -674,13 +675,22 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	{
 		FromExpr *f = castNode(FromExpr, node);
 		f->quals = process_quals(f->quals, ctx, false);
-		collect_join_quals(f->quals, ctx, false);
+		/* if this is a nested join we don't propagate join quals */
+		collect_join_quals(f->quals, ctx, ctx->join_level == 0);
 	}
 	else if (IsA(node, JoinExpr))
 	{
 		JoinExpr *j = castNode(JoinExpr, node);
 		j->quals = process_quals(j->quals, ctx, IS_OUTER_JOIN(j->jointype));
-		collect_join_quals(j->quals, ctx, IS_OUTER_JOIN(j->jointype));
+		collect_join_quals(j->quals, ctx, ctx->join_level == 0 && !IS_OUTER_JOIN(j->jointype));
+
+		if (IS_OUTER_JOIN(j->jointype))
+		{
+			ctx->join_level++;
+			bool result = expression_tree_walker(node, collect_quals_walker, ctx);
+			ctx->join_level--;
+			return result;
+		}
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
@@ -961,13 +971,11 @@ timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 	{
 		FromExpr *f = castNode(FromExpr, node);
 		f->quals = timebucket_annotate(f->quals, ctx);
-		collect_join_quals(f->quals, ctx, true);
 	}
 	else if (IsA(node, JoinExpr))
 	{
 		JoinExpr *j = castNode(JoinExpr, node);
 		j->quals = timebucket_annotate(j->quals, ctx);
-		collect_join_quals(j->quals, ctx, !IS_OUTER_JOIN(j->jointype));
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
@@ -1021,6 +1029,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.all_quals = NIL,
 		.join_conditions = NIL,
 		.propagate_conditions = NIL,
+		.join_level = 0,
 	};
 	Size old_rel_array_len;
 	Index first_chunk_index = 0;
@@ -1045,6 +1054,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	/* Walk the tree and find restrictions or chunk exclusion functions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
+	/* check join_level bookkeeping is balanced */
+	Assert(ctx.join_level == 0);
 
 #if PG12_GE
 	rel->baserestrictinfo = remove_exclusion_fns(rel->baserestrictinfo);

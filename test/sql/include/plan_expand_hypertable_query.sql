@@ -303,3 +303,17 @@ SELECT time FROM regular_timestamptz UNION SELECT time FROM metrics_timestamptz 
 -- test UNION ALL between regular table and hypertable
 SELECT time FROM regular_timestamptz UNION ALL SELECT time FROM metrics_timestamptz ORDER BY 1;
 
+-- test nested join qual propagation
+:PREFIX
+SELECT * FROM (
+SELECT o1_m1.time FROM metrics_timestamptz o1_m1 INNER JOIN metrics_timestamptz_2 o1_m2 ON true WHERE o1_m2.time = o1_m1.time AND o1_m1.device_id = o1_m2.device_id AND o1_m2.time < '2000-01-10' AND o1_m1.device_id = 1
+) o1 FULL OUTER JOIN (
+SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timestamptz_2 o2_m2 ON true WHERE o2_m2.time = o2_m1.time AND o2_m1.device_id = o2_m2.device_id AND o2_m2.time > '2000-01-20' AND o2_m1.device_id = 2
+) o2 ON o1.time = o2.time ORDER BY 1,2;
+
+:PREFIX
+SELECT * FROM (
+SELECT o1_m1.time FROM metrics_timestamptz o1_m1 INNER JOIN metrics_timestamptz_2 o1_m2 ON o1_m2.time = o1_m1.time AND o1_m1.device_id = o1_m2.device_id WHERE o1_m2.time < '2000-01-10' AND o1_m1.device_id = 1
+) o1 FULL OUTER JOIN (
+SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timestamptz_2 o2_m2 ON o2_m2.time = o2_m1.time AND o2_m1.device_id = o2_m2.device_id WHERE o2_m2.time > '2000-01-20' AND o2_m1.device_id = 2
+) o2 ON o1.time = o2.time ORDER BY 1,2;
