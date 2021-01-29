@@ -32,4 +32,18 @@ SET timescaledb.disable_optimizations= 'on';
 
 :DIFF_CMD
 \set ECHO queries
+
+\set PREFIX 'EXPLAIN (costs off)'
+RESET timescaledb.disable_optimizations;
+
+-- test enable_qual_propagation GUC
+\qecho test constraint exclusion for constraints in ON clause of JOINs
+\qecho should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+
+SET timescaledb.enable_qual_propagation TO false;
+-- time constraint should only be in t1 scan
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
+RESET timescaledb.enable_qual_propagation;
+
 \qecho '--TEST END--'
