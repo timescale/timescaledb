@@ -16,6 +16,7 @@ extern bool ts_guc_enable_constraint_aware_append;
 extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
+extern bool ts_guc_enable_qual_propagation;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;

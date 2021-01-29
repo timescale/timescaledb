@@ -1376,6 +1376,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 {
 	ListCell *lc;
 
+	if (!ts_guc_enable_qual_propagation)
+		return;
+
 	/* propagate join constraints */
 	foreach (lc, ctx->propagate_conditions)
 	{

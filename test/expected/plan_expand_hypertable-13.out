@@ -2699,11 +2699,60 @@ SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
 
 \set ECHO errors
 RESET timescaledb.enable_optimizations;
+CREATE TABLE t(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('t','time');
+ table_name 
+------------
+ t
+(1 row)
+
+INSERT INTO t VALUES ('2000-01-01'), ('2010-01-01'), ('2020-01-01');
+EXPLAIN (costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (t1_1."time" = t2_1."time")
+   ->  Merge Append
+         Sort Key: t1_1."time"
+         ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t1_1
+               Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t1_2
+               Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Merge Append
+               Sort Key: t2_1."time"
+               ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t2_1
+                     Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
+               ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t2_2
+                     Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
+(15 rows)
+
+SET timescaledb.enable_qual_propagation TO false;
+EXPLAIN (costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
+ Merge Join
+   Merge Cond: (t1_1."time" = t2_1."time")
+   ->  Merge Append
+         Sort Key: t1_1."time"
+         ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t1_1
+               Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
+         ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t1_2
+               Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Merge Append
+               Sort Key: t2_1."time"
+               ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t2_1
+               ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t2_2
+               ->  Index Only Scan Backward using _hyper_15_184_chunk_t_time_idx on _hyper_15_184_chunk t2_3
+(14 rows)
+
+RESET timescaledb.enable_qual_propagation;
 CREATE TABLE test (a int, time timestamptz NOT NULL);
-SELECT create_hypertable('public.test', 'time');
- create_hypertable  
---------------------
- (15,public,test,t)
+SELECT table_name FROM create_hypertable('public.test', 'time');
+ table_name 
+------------
+ test
 (1 row)
 
 INSERT INTO test SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
