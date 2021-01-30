@@ -2373,6 +2373,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 		Assert(!form.dropped);
 
+		form.compressed_chunk_id = INVALID_CHUNK_ID;
 		form.dropped = true;
 		new_tuple = chunk_formdata_make_tuple(&form, ti->desc);
 		ts_catalog_update_tid(ti->scanrel, &ti->tuple->t_self, new_tuple);
@@ -2495,12 +2496,21 @@ ts_chunk_exists_with_compression(int32 hypertable_id)
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		bool isnull;
+		bool isnull_chunk_id;
+		bool isnull_dropped;
+		bool dropped;
 		heap_getattr(ts_scan_iterator_tuple_info(&iterator)->tuple,
 					 Anum_chunk_compressed_chunk_id,
 					 ts_scan_iterator_tuple_info(&iterator)->desc,
-					 &isnull);
-		if (!isnull)
+					 &isnull_chunk_id);
+		dropped = DatumGetBool(heap_getattr(ts_scan_iterator_tuple_info(&iterator)->tuple,
+											Anum_chunk_dropped,
+											ts_scan_iterator_tuple_info(&iterator)->desc,
+											&isnull_dropped));
+		/* dropped is not NULLABLE */
+		Assert(!isnull_dropped);
+
+		if (!isnull_chunk_id && !dropped)
 		{
 			found = true;
 			break;
