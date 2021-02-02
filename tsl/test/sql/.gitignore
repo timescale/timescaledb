@@ -12,4 +12,5 @@
 /dist_query-*.sql
 /move-*.sql
 /reorder-*.sql
+/remote_copy-*.sql
 /jit-*.sql

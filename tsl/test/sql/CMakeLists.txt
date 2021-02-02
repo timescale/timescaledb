@@ -51,7 +51,6 @@ set(TEST_FILES_DEBUG
   read_only.sql
   remote_connection_cache.sql
   remote_connection.sql
-  remote_copy.sql
   remote_stmt_params.sql
   remote_txn_id.sql
   remote_txn_resolve.sql
@@ -79,6 +78,7 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     continuous_aggs_query.sql.in
     dist_hypertable.sql.in
     dist_query.sql.in
+    remote_copy.sql.in
   )
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
