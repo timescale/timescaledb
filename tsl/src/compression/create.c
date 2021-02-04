@@ -16,6 +16,7 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
+#include <commands/alter.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
@@ -950,6 +951,12 @@ add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compre
  * Note: caller should check security permissions
  *
  * Return true if compression was enabled, false otherwise.
+ *
+ * Steps:
+ * 1. Check existing constraints on the table -> can we support them with compression?
+ * 2. Create internal compression table + mark hypertable as compression enabled
+ * 3. Add catalog entries to hypertable_compression to record compression settings.
+ * 4. Copy constraints to internal compression table
  */
 bool
 tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
@@ -1067,4 +1074,32 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	}
 	/* add catalog entries for the new column for the hypertable */
 	compresscolinfo_add_catalog_entries(&compress_cols, orig_htid);
+}
+
+/* Rename a column on a hypertable that has compression enabled.
+ *
+ * This function renames the existing column in the internal compression table.
+ * We assume that there is a 1-1 mapping between the original chunk and
+ * compressed chunk column names and that the names are identical.
+ * Also update any metadata associated with the column.
+ */
+void
+tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
+{
+	int32 orig_htid = ht->fd.id;
+
+	Assert(stmt->relationType == OBJECT_TABLE && stmt->renameType == OBJECT_COLUMN);
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
+		int32 compress_htid = ht->fd.compressed_hypertable_id;
+		Hypertable *compress_ht = ts_hypertable_get_by_id(compress_htid);
+		RenameStmt *compress_col_stmt = (RenameStmt *) copyObject(stmt);
+		compress_col_stmt->relation = makeRangeVar(NameStr(compress_ht->fd.schema_name),
+												   NameStr(compress_ht->fd.table_name),
+												   -1);
+		ExecRenameStmt(compress_col_stmt);
+	}
+	// update catalog entries for the renamed column for the hypertable
+	ts_hypertable_compression_rename_column(orig_htid, stmt->subname, stmt->newname);
 }

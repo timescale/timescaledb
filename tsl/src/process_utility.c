@@ -6,13 +6,15 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <commands/event_trigger.h>
+#include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 
+#include "compression/create.h"
+#include "hypertable_cache.h"
 #include "process_utility.h"
 #include "remote/dist_commands.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_ddl.h"
-#include "compression/create.h"
 
 void
 tsl_ddl_command_start(ProcessUtilityArgs *args)
@@ -37,6 +39,18 @@ tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
 		{
 			ColumnDef *orig_coldef = castNode(ColumnDef, cmd->def);
 			tsl_process_compress_table_add_column(ht, orig_coldef);
+		}
+	}
+}
+
+void
+tsl_process_rename_cmd(Hypertable *ht, const RenameStmt *stmt)
+{
+	if (stmt->renameType == OBJECT_COLUMN)
+	{
+		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		{
+			tsl_process_compress_table_rename_column(ht, stmt);
 		}
 	}
 }

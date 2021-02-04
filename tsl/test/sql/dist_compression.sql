@@ -30,7 +30,7 @@ SELECT table_name, compression_state, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable
 ORDER BY 1;
 
-SELECT * FROM timescaledb_information.compression_settings;
+SELECT * FROM timescaledb_information.compression_settings order by attname;
 \x
 SELECT * FROM _timescaledb_catalog.hypertable
 WHERE table_name = 'compressed';
@@ -123,14 +123,14 @@ SELECT table_name, compression_state, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable
 ORDER BY 1;
 
-SELECT * FROM timescaledb_information.compression_settings;
+SELECT * FROM timescaledb_information.compression_settings order by attname;
 
 --Now re-enable compression
-ALTER TABLE compressed SET (timescaledb.compress);
+ALTER TABLE compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device');
 SELECT table_name, compression_state, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable
 ORDER BY 1;
-SELECT * FROM timescaledb_information.compression_settings;
+SELECT * FROM timescaledb_information.compression_settings order by attname;
 SELECT compress_chunk(chunk, if_not_compressed => true)
 FROM show_chunks('compressed') AS chunk
 ORDER BY chunk
@@ -164,3 +164,15 @@ WHERE hypertable.table_name like 'compressed' and chunk.compressed_chunk_id IS N
 AS sub;
 
 SELECT * from compressed where new_coli is not null;
+
+-- ALTER TABLE rename column does not work on distributed hypertables
+\set ON_ERROR_STOP 0
+ALTER TABLE compressed RENAME new_coli TO new_intcol  ;
+ALTER TABLE compressed RENAME device TO device_id  ;
+\set ON_ERROR_STOP 1
+
+SELECT * FROM test.remote_exec( NULL, 
+    $$ SELECT * FROM _timescaledb_catalog.hypertable_compression
+       WHERE attname = 'device' OR attname = 'new_coli'  and 
+       hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
+                       WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
