@@ -9,6 +9,7 @@ accidentally triggering the load of a previous DB version.**
 **Minor features**
 * #2736 Support adding columns to hypertables with compression enabled
 * #2926 Optimize cagg refresh for small invalidations
+* #2909 Support renaming columns of compression enabled hypertables.
 
 **Bugfixes**
 * #2883 Fix join qual propagation for nested joins

@@ -1571,10 +1571,10 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 
 	dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
 
-	if (NULL == dim)
-		return;
-
-	ts_dimension_set_name(dim, stmt->newname);
+	if (dim)
+		ts_dimension_set_name(dim, stmt->newname);
+	if (ts_cm_functions->process_rename_cmd)
+		ts_cm_functions->process_rename_cmd(ht, stmt);
 }
 
 static void

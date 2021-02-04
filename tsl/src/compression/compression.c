@@ -1134,6 +1134,8 @@ create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_reli
 		/* find the mapping from compressed column to uncompressed column, setting
 		 * the index of columns that don't have an uncompressed version
 		 * (such as metadata) to -1
+		 * Assumption: column names are the same on compressed and
+		 *       uncompressed chunk.
 		 */
 		AttrNumber decompressed_colnum = get_attnum(out_relid, col_name);
 		if (!AttributeNumberIsValid(decompressed_colnum))

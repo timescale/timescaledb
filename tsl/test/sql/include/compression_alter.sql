@@ -8,6 +8,8 @@ SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> 
 INSERT INTO test1 
 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_minstd()::text
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-05 1:00', '1 hour') t;
+INSERT INTO test1 
+SELECT '2018-03-04 2:00', 100, 200, 'hello' ; 
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'bntcol', timescaledb.compress_orderby = '"Time" DESC');
 
@@ -67,21 +69,81 @@ SELECT count(*) from test1 where new_colv  = '101t';
 
 CREATE INDEX new_index ON test1(new_colv);
 
--- test disabling compression on hypertables with caggs and dropped chunks
--- github issue 2844
-CREATE TABLE i2844 (created_at timestamptz NOT NULL,c1 float);
-SELECT create_hypertable('i2844', 'created_at', chunk_time_interval => '6 hour'::interval);
-INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'::timestamptz,'1h'::interval);
+-- TEST 2:  ALTER TABLE rename column
+SELECT * FROM _timescaledb_catalog.hypertable_compression  
+WHERE attname = 'new_coli' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
+                       WHERE table_name = 'test1' );
 
-CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
+ALTER TABLE test1 RENAME new_coli TO coli;
+SELECT * FROM _timescaledb_catalog.hypertable_compression  
+WHERE attname = 'coli' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
+                       WHERE table_name = 'test1' );
+SELECT count(*) from test1 where coli  = 100;
 
-ALTER TABLE i2844 SET (timescaledb.compress);
+--rename segment by column name
+ALTER TABLE test1 RENAME bntcol TO  bigintcol  ;
 
-SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('i2844');
-SELECT drop_chunks('i2844', older_than => '2000-01-01 18:00'::timestamptz);
-SELECT decompress_chunk(show_chunks, if_compressed => TRUE) AS decompressed_chunks FROM show_chunks('i2844');
+SELECT * FROM _timescaledb_catalog.hypertable_compression  
+WHERE attname = 'bigintcol' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
+                       WHERE table_name = 'test1' );
 
-ALTER TABLE i2844 SET (timescaledb.compress = FALSE);
+--query by segment by column name 
+SELECT * from test1 WHERE bigintcol = 100;
+SELECT * from test1 WHERE bigintcol = 200;
 
+-- add a new chunk and compress
+INSERT INTO test1 SELECT '2019-03-04 2:00', 99, 800, 'newchunk' ; 
 
+SELECT COUNT(*) AS count_compressed
+FROM
+(
+SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
+FROM _timescaledb_catalog.chunk chunk
+INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
+WHERE hypertable.table_name = 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
+) q;
 
+--check if all chunks have new column names
+--both counts should be equal
+SELECT count(*) FROM _timescaledb_catalog.chunk 
+WHERE hypertable_id =  ( SELECT id FROM _timescaledb_catalog.hypertable
+                         WHERE table_name = 'test1' );
+
+SELECT count(*) 
+FROM ( SELECT attrelid::regclass, attname FROM pg_attribute 
+       WHERE attrelid in (SELECT inhrelid::regclass from pg_inherits 
+                          where inhparent = 'test1'::regclass) 
+       and attname = 'bigintcol' ) q;
+
+--check count on internal compression table too i.e. all the chunks have
+--the correct column name 
+SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
+FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
+WHERE ht.table_name = 'test1' and cht.id = ht.compressed_hypertable_id \gset
+
+SELECT count(*) 
+FROM ( SELECT attrelid::regclass, attname FROM pg_attribute 
+       WHERE attrelid in (SELECT inhrelid::regclass from pg_inherits 
+                          where inhparent = :'COMPRESSION_TBLNM'::regclass )
+       and attname = 'bigintcol' ) q;
+
+-- check column name truncation with renames
+-- check if the name change is reflected for settings
+ALTER TABLE test1 RENAME  bigintcol TO 
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc;
+
+SELECT * from timescaledb_information.compression_settings 
+WHERE hypertable_name = 'test1' and attname like 'ccc%';
+
+SELECT count(*) 
+FROM ( SELECT attrelid::regclass, attname FROM pg_attribute 
+       WHERE attrelid in (SELECT inhrelid::regclass from pg_inherits 
+                          where inhparent = :'COMPRESSION_TBLNM'::regclass )
+       and attname like 'ccc%a' ) q;
+
+ALTER TABLE test1 RENAME 
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc
+TO bigintcol;
+
+SELECT * from timescaledb_information.compression_settings 
+WHERE hypertable_name = 'test1' and attname = 'bigintcol' ;

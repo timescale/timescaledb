@@ -158,3 +158,49 @@ ts_hypertable_compression_delete_by_hypertable_id(int32 htid)
 	}
 	return count > 0;
 }
+
+TSDLLEXPORT void
+ts_hypertable_compression_rename_column(int32 htid, char *old_column_name, char *new_column_name)
+{
+	bool found = false;
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE_COMPRESSION, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), HYPERTABLE_COMPRESSION, HYPERTABLE_COMPRESSION_PKEY);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_compression_pkey_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(htid));
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum datum = slot_getattr(ti->slot, Anum_hypertable_compression_attname, &isnull);
+		char *attname = NameStr(*DatumGetName(datum));
+		if (strncmp(attname, old_column_name, NAMEDATALEN) == 0)
+		{
+			Datum values[Natts_hypertable_compression];
+			bool isnulls[Natts_hypertable_compression];
+			bool repl[Natts_hypertable_compression] = { false };
+			bool should_free;
+			HeapTuple tuple, new_tuple;
+			TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
+			found = true;
+			tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+			heap_deform_tuple(tuple, tupdesc, values, isnulls);
+
+			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] =
+				CStringGetDatum(new_column_name);
+			repl[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] = true;
+			new_tuple = heap_modify_tuple(tuple, tupdesc, values, isnulls, repl);
+			ts_catalog_update(ti->scanrel, new_tuple);
+
+			if (should_free)
+				heap_freetuple(new_tuple);
+		}
+	}
+	if (found == false)
+		elog(ERROR, "column %s not found in hypertable_compression catalog table", old_column_name);
+}
