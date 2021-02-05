@@ -114,12 +114,16 @@ if event_type != "pull_request":
     "llvm_config": "/usr/bin/llvm-config-8",
     "clang": "clang-8",
     "extra_packages": "llvm-8 llvm-8-dev llvm-8-tools",
-    "installcheck_args": "IGNORES='continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh'"
+    "installcheck_args": "IGNORES='cluster-11 continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh'"
   }
   m["include"].append(build_debug_config(pg11_debug_earliest))
 
   # add debug test for first supported PG12 version
-  m["include"].append(build_debug_config({"pg":PG12_EARLIEST}))
+  pg12_debug_earliest = {
+    "pg": PG11_EARLIEST,
+    "installcheck_args": "IGNORES='cluster-12'"
+  }
+  m["include"].append(build_debug_config(pg12_debug_earliest))
 
   # add debug test for MacOS
   m["include"].append(build_debug_config(macos_config({})))
