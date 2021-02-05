@@ -148,8 +148,8 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	}
 	cache_entry->previous_chunk_relid = InvalidOid;
 	cache_entry->value_is_set = false;
-	cache_entry->lowest_modified_value = PG_INT64_MAX;
-	cache_entry->greatest_modified_value = PG_INT64_MIN;
+	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
+	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
 	ts_cache_release(ht_cache);
 }
 
@@ -370,7 +370,7 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 int64
 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 {
-	int64 min_val = PG_INT64_MAX;
+	int64 min_val = INVAL_POS_INFINITY;
 	Catalog *catalog = ts_catalog_get();
 	ScanKeyData scankey[1];
 	ScannerCtx scanctx;
@@ -401,7 +401,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	 * invalidations are redundant.
 	 */
 	if (!ts_scanner_scan_one(&scanctx, false, "invalidation watermark"))
-		return PG_INT64_MIN;
+		return INVAL_NEG_INFINITY;
 
 	return min_val;
 }
