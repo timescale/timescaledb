@@ -619,3 +619,29 @@ INSERT INTO conditions VALUES(6, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_1', 10, NULL);
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
+
+---------------------------------------------------------------------
+-- Test that single timestamp invalidations are expanded to buckets,
+-- and adjacent buckets merged.
+---------------------------------------------------------------------
+
+-- First clear invalidations in a range:
+CALL refresh_continuous_aggregate('cond_10', -20, 60);
+
+-- The following three should be merged to one range 0-29
+INSERT INTO conditions VALUES (5, 1, 1.0);
+INSERT INTO conditions VALUES (15, 1, 1.0);
+INSERT INTO conditions VALUES (25, 1, 1.0);
+-- The last one should not merge with the others
+INSERT INTO conditions VALUES (40, 1, 1.0);
+
+-- Refresh to process invalidations, but outside the range of
+-- invalidations we inserted so that we don't clear them.
+CALL refresh_continuous_aggregate('cond_10', 50, 60);
+
+SELECT mat_hypertable_id AS cond_10_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'cond_10' \gset
+
+SELECT * FROM cagg_invals
+WHERE cagg_id = :cond_10_id;

@@ -358,7 +358,7 @@ select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                   5 |                    20 |     9223372036854775807
                   6 |  -9223372036854775808 |             -2147483649
                   6 |                    16 |     9223372036854775807
-                  6 |                    18 |                      18
+                  6 |                    18 |                      19
 (5 rows)
 
 DROP MATERIALIZED VIEW cagg_1;

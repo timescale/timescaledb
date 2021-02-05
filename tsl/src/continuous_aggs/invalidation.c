@@ -19,6 +19,8 @@
 #include <scanner.h>
 #include <scan_iterator.h>
 #include <utils.h>
+#include <time_utils.h>
+#include <time_bucket.h>
 
 #include "continuous_agg.h"
 #include "continuous_aggs/materialize.h"
@@ -55,8 +57,8 @@
  * merged during processing to reduce the number of entries in the logs. This
  * typically happens during a refresh of a continuous aggregate, which also
  * cuts invalidations along the refresh window. The cutting will leave some
- * parts of entries in the ivnalidation log while the entries that fall within
- * the refresh window are stored in an invalidation store and used for
+ * parts of entries in the invalidation log while the entries that fall
+ * within the refresh window are stored in an invalidation store and used for
  * refreshing:
  *
  *       |-------------|    refresh window
@@ -78,6 +80,8 @@
 typedef struct CaggInvalidationState
 {
 	ContinuousAgg cagg;
+	Oid dimtype; /* The type of the underlying hypertable's time dimension
+				  * that is bucketed */
 	MemoryContext per_tuple_mctx;
 	Relation cagg_log_rel;
 	Snapshot snapshot;
@@ -459,6 +463,70 @@ invalidation_entry_reset(Invalidation *entry)
 }
 
 /*
+ * Expand an invalidation to bucket boundaries.
+ *
+ * Since a refresh always materializes full buckets, we can safely expand an
+ * invalidation to bucket boundaries and in the process merge a lot more
+ * invalidations.
+ */
+static void
+invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 bucket_width)
+{
+	const int64 min_for_type = ts_time_get_min(timetype);
+	const int64 max_for_type = ts_time_get_max(timetype);
+	int64 min_bucket_start;
+	int64 max_bucket_end;
+
+	Assert(bucket_width > 0);
+
+	/* Compute the start of the "first" bucket for the type. The min value
+	 * must be at the start of the "first" bucket or somewhere in the
+	 * bucket. If the min value falls on the exact start of the bucket we are
+	 * good. Otherwise, we need to move to the next full bucket. */
+	min_bucket_start = ts_time_saturating_add(min_for_type, bucket_width - 1, timetype);
+	min_bucket_start = ts_time_bucket_by_type(bucket_width, min_bucket_start, timetype);
+
+	/* Compute the end of the "last" bucket for the time type. Remember that
+	 * invalidations are inclusive, so the "greatest" value should be the last
+	 * value of the last full bucket. Either the max value is already the last
+	 * value of the last bucket, or we need to return the last value of the
+	 * previous full bucket.  */
+	max_bucket_end = ts_time_bucket_by_type(bucket_width, max_for_type, timetype);
+
+	/* Check if the max value was already the last value of the last bucket */
+	if (ts_time_saturating_add(max_bucket_end, bucket_width - 1, timetype) == max_for_type)
+		max_bucket_end = max_for_type;
+	else
+		/* The last bucket was partial. To get the end of previous bucket, we
+		 * need to move one step down from the partial last bucket. */
+		max_bucket_end = ts_time_saturating_sub(max_bucket_end, 1, timetype);
+
+	if (inv->lowest_modified_value < min_bucket_start)
+		/* Below the min bucket, so treat as invalid to -infinity. */
+		inv->lowest_modified_value = INVAL_NEG_INFINITY;
+	else if (inv->lowest_modified_value > max_bucket_end)
+		/* Above the max bucket, so treat as invalid to +infinity. */
+		inv->lowest_modified_value = INVAL_POS_INFINITY;
+	else
+		inv->lowest_modified_value =
+			ts_time_bucket_by_type(bucket_width, inv->lowest_modified_value, timetype);
+
+	if (inv->greatest_modified_value < min_bucket_start)
+		/* Below the min bucket, so treat as invalid to -infinity. */
+		inv->greatest_modified_value = INVAL_NEG_INFINITY;
+	else if (inv->greatest_modified_value > max_bucket_end)
+		/* Above the max bucket, so treat as invalid to +infinity. */
+		inv->greatest_modified_value = INVAL_POS_INFINITY;
+	else
+	{
+		inv->greatest_modified_value =
+			ts_time_bucket_by_type(bucket_width, inv->greatest_modified_value, timetype);
+		inv->greatest_modified_value =
+			ts_time_saturating_add(inv->greatest_modified_value, bucket_width - 1, timetype);
+	}
+}
+
+/*
  * Macro to set an Invalidation from a tuple. The tuple can either have the
  * format of the hypertable invalidation log or the continuous aggregate
  * invalidation log (as determined by the type parameter).
@@ -480,9 +548,9 @@ invalidation_entry_reset(Invalidation *entry)
 			heap_freetuple(tuple);                                                                 \
 	} while (0);
 
-void
+static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
-											   int32 hyper_id)
+											   int32 hyper_id, Oid dimtype, int64 bucket_width)
 {
 	INVALIDATION_ENTRY_SET(entry,
 						   ti,
@@ -492,15 +560,27 @@ invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleI
 	 * invalidation log, a different hypertable ID must be set (the ID of the
 	 * materialized hypertable). */
 	entry->hyper_id = hyper_id;
+	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width);
 }
 
 static void
-invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti)
+invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
+											  int64 bucket_width)
 {
 	INVALIDATION_ENTRY_SET(entry,
 						   ti,
 						   materialization_id,
 						   Form_continuous_aggs_materialization_invalidation_log);
+
+	/* It isn't strictly necessary to expand the invalidation to bucket
+	 * boundaries here since all invalidations were already expanded when
+	 * copied from the hypertable invalidation log. However, since
+	 * invalidation expansion wasn't implemented in early 2.0.x versions of
+	 * the extension, there might be unexpanded entries in the cagg
+	 * invalidation log for some users. Therefore we try to expand
+	 * invalidation entries also here, although in most cases it would do
+	 * nothing. */
+	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width);
 }
 
 /*
@@ -617,6 +697,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	foreach (lc, cagg_ids)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc);
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(cagg_hyper_id);
 		Invalidation mergedentry;
 		ScanIterator iterator;
 
@@ -634,7 +715,11 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 			oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 			ti = ts_scan_iterator_tuple_info(&iterator);
 
-			invalidation_entry_set_from_hyper_invalidation(&logentry, ti, cagg_hyper_id);
+			invalidation_entry_set_from_hyper_invalidation(&logentry,
+														   ti,
+														   cagg_hyper_id,
+														   state->dimtype,
+														   cagg->data.bucket_width);
 
 			if (!IS_VALID_INVALIDATION(&mergedentry))
 			{
@@ -799,7 +884,10 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 		Invalidation logentry;
 
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
-		invalidation_entry_set_from_cagg_invalidation(&logentry, ti);
+		invalidation_entry_set_from_cagg_invalidation(&logentry,
+													  ti,
+													  state->dimtype,
+													  state->cagg.data.bucket_width);
 
 		if (!IS_VALID_INVALIDATION(&mergedentry))
 			mergedentry = logentry;
@@ -838,9 +926,10 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 }
 
 static void
-invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg)
+invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg, Oid dimtype)
 {
 	state->cagg = *cagg;
+	state->dimtype = dimtype;
 	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Continuous aggregate invalidations",
@@ -857,11 +946,11 @@ invalidation_state_cleanup(const CaggInvalidationState *state)
 }
 
 void
-invalidation_process_hypertable_log(const ContinuousAgg *cagg)
+invalidation_process_hypertable_log(const ContinuousAgg *cagg, Oid dimtype)
 {
 	CaggInvalidationState state;
 
-	invalidation_state_init(&state, cagg);
+	invalidation_state_init(&state, cagg, dimtype);
 	move_invalidations_from_hyper_to_cagg_log(&state);
 	invalidation_state_cleanup(&state);
 }
@@ -872,7 +961,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 	CaggInvalidationState state;
 	InvalidationStore *store = NULL;
 
-	invalidation_state_init(&state, cagg);
+	invalidation_state_init(&state, cagg, refresh_window->type);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
 	clear_cagg_invalidations_for_refresh(&state, refresh_window);
 
