@@ -151,7 +151,7 @@ test_script:
 
     #right now we only run timescale regression tests, others will be set up later
 
-    docker exec -e IGNORES="bgw_db_scheduler chunk_utils loader" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
+    docker exec -e IGNORES="bgw_db_scheduler chunk_utils loader cluster-12" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
 
     $TESTS1 = $?
 
