@@ -85,3 +85,24 @@ ORDER BY 1,2;
 \set ON_ERROR_STOP 0
 CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
 \set ON_ERROR_STOP 1
+
+-- test alter column type on hypertable with clustering
+CREATE TABLE cluster_alter(time timestamp, id text, val int);
+CREATE INDEX idstuff ON cluster_alter USING btree (id ASC NULLS LAST, time);
+
+SELECT table_name FROM create_hypertable('cluster_alter', 'time');
+
+INSERT INTO cluster_alter VALUES('2020-01-01', '123', 1);
+
+CLUSTER cluster_alter using idstuff;
+
+--attempt the alter table
+ALTER TABLE cluster_alter ALTER COLUMN id TYPE int USING id::int;
+
+-- try recluster
+-- this fails on PG11 < 11.8 and PG12 < 12.3
+\set ON_ERROR_STOP 0
+CLUSTER cluster_alter;
+\set ON_ERROR_STOP 1
+
+CLUSTER cluster_alter using idstuff;
