@@ -536,7 +536,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	/* Process invalidations in the hypertable invalidation log */
-	invalidation_process_hypertable_log(cagg);
+	invalidation_process_hypertable_log(cagg, refresh_window.type);
 
 	/* Start a new transaction. Note that this invalidates previous memory
 	 * allocations (and locks). */
@@ -594,7 +594,7 @@ continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
 					AccessExclusiveLock);
 	invalidation_threshold_set_or_get(chunk->fd.hypertable_id, refresh_window.end);
 
-	invalidation_process_hypertable_log(cagg);
+	invalidation_process_hypertable_log(cagg, refresh_window.type);
 	/* Must make invalidation processing visible */
 	CommandCounterIncrement();
 	process_cagg_invalidations_and_refresh(cagg, &refresh_window, CAGG_REFRESH_CHUNK, chunk->fd.id);
