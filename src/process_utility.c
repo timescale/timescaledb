@@ -2661,6 +2661,13 @@ process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	Oid index_relid =
 		get_relname_relid(cmd->name, get_namespace_oid(NameStr(ht->fd.schema_name), false));
+
+	/* If this is part of changing the type of a column that is used in a clustered index
+	 * the above lookup might fail. But in this case we don't need to mark the index clustered
+	 * as postgres takes care of that already (except PG11 < 11.8 and PG12 < 12.3) */
+	if (!OidIsValid(index_relid))
+		return;
+
 	List *chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
 	ListCell *lc;
 
