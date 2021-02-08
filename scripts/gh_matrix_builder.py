@@ -120,7 +120,7 @@ if event_type != "pull_request":
 
   # add debug test for first supported PG12 version
   pg12_debug_earliest = {
-    "pg": PG11_EARLIEST,
+    "pg": PG12_EARLIEST,
     "installcheck_args": "IGNORES='cluster-12'"
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
