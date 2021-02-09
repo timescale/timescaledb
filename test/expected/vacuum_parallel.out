@@ -1,0 +1,52 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- PG13 introduced parallel VACUUM functionality. It gets invoked when a table
+-- has two or more indexes on it. Read up more at
+-- https://www.postgresql.org/docs/13/sql-vacuum.html#PARALLEL
+CREATE TABLE vacuum_test(time timestamp, temp1 float, temp2 int);
+-- create hypertable with chunks
+SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000);
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable     
+--------------------------
+ (1,public,vacuum_test,t)
+(1 row)
+
+-- create additional indexes on the temp columns
+CREATE INDEX vt_temp1 on vacuum_test (temp1);
+CREATE INDEX vt_temp2 on vacuum_test (temp2);
+-- parallel vacuum needs the index size to be larger than 512KB to kick in
+INSERT INTO vacuum_test SELECT TIMESTAMP 'epoch' + (i * INTERVAL '100 second'),
+                i, i+1 FROM generate_series(1, 100000) as T(i);
+-- we should see two parallel workers for each chunk
+VACUUM (PARALLEL 3, VERBOSE) vacuum_test;
+INFO:  vacuuming "_timescaledb_internal._hyper_1_1_chunk"
+INFO:  launched 2 parallel vacuum workers for index cleanup (planned: 2)
+INFO:  index "_hyper_1_1_chunk_vacuum_test_time_idx" now contains 26279 row versions in 131 pages
+INFO:  index "_hyper_1_1_chunk_vt_temp1" now contains 26279 row versions in 74 pages
+INFO:  index "_hyper_1_1_chunk_vt_temp2" now contains 26279 row versions in 74 pages
+INFO:  "_hyper_1_1_chunk": found 0 removable, 26279 nonremovable row versions in 168 out of 168 pages
+INFO:  vacuuming "_timescaledb_internal._hyper_1_2_chunk"
+INFO:  launched 2 parallel vacuum workers for index cleanup (planned: 2)
+INFO:  index "_hyper_1_2_chunk_vacuum_test_time_idx" now contains 26280 row versions in 131 pages
+INFO:  index "_hyper_1_2_chunk_vt_temp1" now contains 26280 row versions in 74 pages
+INFO:  index "_hyper_1_2_chunk_vt_temp2" now contains 26280 row versions in 74 pages
+INFO:  "_hyper_1_2_chunk": found 0 removable, 26280 nonremovable row versions in 168 out of 168 pages
+INFO:  vacuuming "_timescaledb_internal._hyper_1_3_chunk"
+INFO:  launched 2 parallel vacuum workers for index cleanup (planned: 2)
+INFO:  index "_hyper_1_3_chunk_vacuum_test_time_idx" now contains 26280 row versions in 131 pages
+INFO:  index "_hyper_1_3_chunk_vt_temp1" now contains 26280 row versions in 74 pages
+INFO:  index "_hyper_1_3_chunk_vt_temp2" now contains 26280 row versions in 74 pages
+INFO:  "_hyper_1_3_chunk": found 0 removable, 26280 nonremovable row versions in 168 out of 168 pages
+INFO:  vacuuming "_timescaledb_internal._hyper_1_4_chunk"
+INFO:  index "_hyper_1_4_chunk_vacuum_test_time_idx" now contains 21161 row versions in 106 pages
+INFO:  index "_hyper_1_4_chunk_vt_temp1" now contains 21161 row versions in 60 pages
+INFO:  index "_hyper_1_4_chunk_vt_temp2" now contains 21161 row versions in 60 pages
+INFO:  "_hyper_1_4_chunk": found 0 removable, 21161 nonremovable row versions in 135 out of 135 pages
+INFO:  vacuuming "public.vacuum_test"
+INFO:  index "vacuum_test_time_idx" now contains 0 row versions in 1 pages
+INFO:  index "vt_temp1" now contains 0 row versions in 1 pages
+INFO:  index "vt_temp2" now contains 0 row versions in 1 pages
+INFO:  "vacuum_test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+DROP TABLE vacuum_test;
