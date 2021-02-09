@@ -122,6 +122,12 @@ if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
   )
 endif()
 
+if ((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
+  list(APPEND TEST_FILES
+    vacuum_parallel.sql
+  )
+endif()
+
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
     multi_transaction_index.sql.in
