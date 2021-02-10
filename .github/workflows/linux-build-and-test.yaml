@@ -103,14 +103,9 @@ jobs:
       id: installcheck
       run: |
         set -o pipefail
-        if [[ "${{ matrix.pg }}" == "13.1" ]]; then
-          make -k -C build isolationcheck isolationcheck-t regresscheck regresscheck-shared ${{ matrix.installcheck_args }} | tee installcheck.log
-        else
-          make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
-        fi
+        make -k -C build installcheck ${{ matrix.installcheck_args }} | tee installcheck.log
 
     - name: pginstallcheck
-      if: matrix.pg != '13.1'
       run: make -C build pginstallcheck
 
     - name: coverage
