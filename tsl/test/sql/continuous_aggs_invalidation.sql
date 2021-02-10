@@ -624,7 +624,6 @@ WHERE cagg_id = :cond_1_id;
 -- Test that single timestamp invalidations are expanded to buckets,
 -- and adjacent buckets merged.
 ---------------------------------------------------------------------
-
 -- First clear invalidations in a range:
 CALL refresh_continuous_aggregate('cond_10', -20, 60);
 
@@ -645,3 +644,47 @@ WHERE user_view_name = 'cond_10' \gset
 
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_10_id;
+
+-- should trigger two individual refreshes
+SET client_min_messages TO DEBUG1;
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+RESET client_min_messages;
+
+-- Allow at most 5 individual invalidations per refreshe
+SET timescaledb.materializations_per_refresh_window=5;
+
+-- Insert into every second bucket
+INSERT INTO conditions VALUES (20, 1, 1.0);
+INSERT INTO conditions VALUES (40, 1, 1.0);
+INSERT INTO conditions VALUES (60, 1, 1.0);
+INSERT INTO conditions VALUES (80, 1, 1.0);
+INSERT INTO conditions VALUES (100, 1, 1.0);
+INSERT INTO conditions VALUES (120, 1, 1.0);
+INSERT INTO conditions VALUES (140, 1, 1.0);
+
+SET client_min_messages TO DEBUG1;
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+RESET client_min_messages;
+
+\set VERBOSITY default
+-- Test acceptable values for materializations per refresh
+SET timescaledb.materializations_per_refresh_window=' 5 ';
+INSERT INTO conditions VALUES (140, 1, 1.0);
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+-- Large value will be treated as LONG_MAX
+SET timescaledb.materializations_per_refresh_window=342239897234023842394249234766923492347;
+INSERT INTO conditions VALUES (140, 1, 1.0);
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+
+-- Test bad values for materializations per refresh
+SET timescaledb.materializations_per_refresh_window='foo';
+INSERT INTO conditions VALUES (140, 1, 1.0);
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+SET timescaledb.materializations_per_refresh_window='2bar';
+INSERT INTO conditions VALUES (140, 1, 1.0);
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+
+SET timescaledb.materializations_per_refresh_window='-';
+INSERT INTO conditions VALUES (140, 1, 1.0);
+CALL refresh_continuous_aggregate('cond_10', 0, 200);
+\set VERBOSITY terse
