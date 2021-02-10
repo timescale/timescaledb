@@ -12,6 +12,12 @@ set(TEST_TEMPLATES_SHARED
   ordered_append_join.sql.in
 )
 
+if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
+  list(APPEND TEST_TEMPLATES_SHARED
+    generated_columns.sql.in
+  )
+endif()
+
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must
 # be in the same directory. These files are updated when the template
