@@ -24,6 +24,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 
 # Tests to ignore
 set(PG_IGNORE_TESTS
+  identity
   rolenames
   rules
   opr_sanity
