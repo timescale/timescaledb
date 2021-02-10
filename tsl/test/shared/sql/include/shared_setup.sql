@@ -140,6 +140,7 @@ CREATE TABLE conditions(
     value float
 );
 SELECT * FROM create_hypertable('conditions', 'time');
+CREATE INDEX conditions_device_idx ON conditions (device);
 INSERT INTO conditions VALUES
     ('2017-01-01 06:01', 1, 1.2),
     ('2017-01-01 09:11', 3, 4.3),

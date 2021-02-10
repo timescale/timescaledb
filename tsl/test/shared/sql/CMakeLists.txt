@@ -5,6 +5,12 @@ set(TEST_FILES_SHARED
   dist_insert.sql
 )
 
+if ((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
+  list(APPEND TEST_FILES_SHARED
+    incremental_sort.sql
+  )
+endif()
+
 set(TEST_TEMPLATES_SHARED
   constify_timestamptz_op_interval.sql.in
   gapfill.sql.in

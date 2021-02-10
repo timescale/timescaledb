@@ -1,0 +1,98 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT
+       format('include/%s.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/shared/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED",
+       format('%s/shared/results/%s_results_incremental_sort.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_INCREMENTAL_SORT",
+       format('%s/shared/results/%s_results_ordered_append.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_ORDERED_APPEND"
+\gset
+SELECT format('\! diff -u --label "Unoptimized results" --label "Incremental Sort results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_INCREMENTAL_SORT') as "DIFF_CMD"
+\gset
+-- get EXPLAIN output for all variations
+\set PREFIX 'EXPLAIN (costs off, timing off, summary off)'
+\set TEST_TABLE 'conditions'
+\set UNOPTIMIZED_OUTPUT ''
+\set INCR_SORT_OUTPUT ''
+\set ORDERED_OUTPUT ''
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Incremental sort feature is available in PG13 and beyond
+-- Disable incremental sort. The query will use sequential scans
+SET enable_incremental_sort = OFF;
+\o :UNOPTIMIZED_OUTPUT
+:PREFIX
+SELECT * FROM :TEST_TABLE ORDER BY device, time LIMIT 51;
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: _hyper_10_51_chunk.device, _hyper_10_51_chunk."time"
+         ->  Append
+               ->  Seq Scan on _hyper_10_51_chunk
+               ->  Seq Scan on _hyper_10_52_chunk
+(6 rows)
+
+-- Enable incremental sort. The query should use it now
+SET enable_incremental_sort = ON;
+\o :INCR_SORT_OUTPUT
+:PREFIX
+SELECT * FROM :TEST_TABLE ORDER BY device, time LIMIT 51;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Limit
+   ->  Incremental Sort
+         Sort Key: _hyper_10_51_chunk.device, _hyper_10_51_chunk."time"
+         Presorted Key: _hyper_10_51_chunk.device
+         ->  Merge Append
+               Sort Key: _hyper_10_51_chunk.device
+               ->  Index Scan using _hyper_10_51_chunk_conditions_device_idx on _hyper_10_51_chunk
+               ->  Index Scan using _hyper_10_52_chunk_conditions_device_idx on _hyper_10_52_chunk
+(8 rows)
+
+-- Use the first column in the query in ORDER BY and also use LIMIT
+-- This should use an "ordered append" plan along with incremental sort
+\o :ORDERED_OUTPUT
+:PREFIX
+SELECT * FROM :TEST_TABLE ORDER BY time, device LIMIT 51;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Limit
+   ->  Incremental Sort
+         Sort Key: conditions."time", conditions.device
+         Presorted Key: conditions."time"
+         ->  Custom Scan (ChunkAppend) on conditions
+               Order: conditions."time"
+               ->  Index Scan Backward using _hyper_10_51_chunk_conditions_time_idx on _hyper_10_51_chunk
+               ->  Index Scan Backward using _hyper_10_52_chunk_conditions_time_idx on _hyper_10_52_chunk
+(8 rows)
+
+\set PREFIX ''
+\set TEST_TABLE 'conditions'
+\set UNOPTIMIZED_OUTPUT :TEST_RESULTS_UNOPTIMIZED
+\set INCR_SORT_OUTPUT :TEST_RESULTS_INCREMENTAL_SORT
+\set ORDERED_OUTPUT :TEST_RESULTS_ORDERED_APPEND
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Incremental sort feature is available in PG13 and beyond
+-- Disable incremental sort. The query will use sequential scans
+SET enable_incremental_sort = OFF;
+\o :UNOPTIMIZED_OUTPUT
+:PREFIX
+SELECT * FROM :TEST_TABLE ORDER BY device, time LIMIT 51;
+-- Enable incremental sort. The query should use it now
+SET enable_incremental_sort = ON;
+\o :INCR_SORT_OUTPUT
+:PREFIX
+SELECT * FROM :TEST_TABLE ORDER BY device, time LIMIT 51;
+-- Use the first column in the query in ORDER BY and also use LIMIT
+-- This should use an "ordered append" plan along with incremental sort
+\o :ORDERED_OUTPUT
+:PREFIX
+SELECT * FROM :TEST_TABLE ORDER BY time, device LIMIT 51;
+-- diff results
+:DIFF_CMD
