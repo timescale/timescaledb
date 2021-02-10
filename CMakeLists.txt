@@ -123,7 +123,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # These flags are supported on all compilers.
   add_compile_options(
     -Wempty-body -Wvla -Wall -Wmissing-prototypes -Wpointer-arith
-    -Werror=vla -Wendif-labels -Wno-stringop-truncation
+    -Werror=vla -Wendif-labels
     -fno-strict-aliasing -fno-omit-frame-pointer)
 
   # These flags are just supported on some of the compilers, so we
@@ -133,6 +133,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     add_compile_options(-Wno-format-truncation)
   else()
     message(STATUS "Compiler does not support -Wno-format-truncation")
+  endif()
+
+  check_c_compiler_flag(-Wno-stringop-truncation CC_NO_STRINGOP_TRUNCATION)
+  if(CC_NO_STRINGOP_TRUNCATION)
+    add_compile_options(-Wno-stringop-truncation)
+  else()
+    message(STATUS "Compiler does not support -Wno-stringop-truncation")
   endif()
 
   check_c_compiler_flag(-Wimplicit-fallthrough CC_SUPPORTS_IMPLICIT_FALLTHROUGH)
