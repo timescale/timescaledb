@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Minor features**
 * #2736 Support adding columns to hypertables with compression enabled
+* #2926 Optimize cagg refresh for small invalidations
 
 **Bugfixes**
 * #2883 Fix join qual propagation for nested joins
@@ -16,6 +17,8 @@ accidentally triggering the load of a previous DB version.**
 
 **Thanks**
 * @zeeshanshabbir93 for reporting an issue with joins
+* @Antiarchitect for reporting the issue with slow refreshes of
+  continuous aggregates.
 
 ## 1.7.5 (2021-02-12)
 
