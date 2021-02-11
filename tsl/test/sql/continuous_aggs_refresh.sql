@@ -33,6 +33,32 @@ GROUP BY 1,2 WITH NO DATA;
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
+-- Refresh one bucket (1 day):
+SHOW timezone;
+-- The refresh of a single bucket must align with the start of the day
+-- in the bucket's time zone (which is UTC, since time_bucket doesn't
+-- support time zone arg)
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 17:00 PDT', '2020-05-04 17:00 PDT');
+
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- These refreshes will fail since they don't align with the bucket's
+-- time zone
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-04');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 PDT', '2020-05-04 00:00 PDT');
+
+-- Refresh window less than one bucket
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-03 23:59 UTC');
+-- Refresh window bigger than one bucket, but failing since it is not
+-- aligned with bucket boundaries so that it covers a full bucket:
+--
+-- Refresh window:    [----------)
+-- Buckets:          [------|------]
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 01:00 UTC', '2020-05-04 08:00 UTC');
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+
 -- Refresh the most recent few days:
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
 
