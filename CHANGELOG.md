@@ -16,6 +16,44 @@ accidentally triggering the load of a previous DB version.**
 **Thanks**
 * @zeeshanshabbir93 for reporting an issue with joins
 
+## 1.7.5 (2021-02-12)
+
+This maintenance release contains bugfixes since the 1.7.4 release.
+Most of these fixes were backported from the 2.0.0 and 2.0.1 releases.
+We deem it high priority for upgrading for users on TimescaleDB 1.7.4
+or previous versions.
+
+In particular the fixes contained in this maintenance release address
+issues in continuous aggregates, compression, JOINs with hypertables,
+and when upgrading from previous versions.
+
+**Bugfixes**
+* #2502 Replace check function when updating
+* #2558 Repair dimension slice table on update
+* #2619 Fix segfault in decompress_chunk for chunks with dropped 
+  columns
+* #2664 Fix support for complex aggregate expression
+* #2800 Lock dimension slices when creating new chunk
+* #2860 Fix projection in ChunkAppend nodes
+* #2865 Apply volatile function quals at decompresschunk
+* #2851 Fix nested loop joins that involve compressed chunks
+* #2868 Fix corruption in gapfill plan
+* #2883 Fix join qual propagation for nested joins
+* #2885 Fix compressed chunk check when disabling compression
+* #2920 Fix repair in update scripts
+
+**Thanks**
+* @akamensky for reporting several issues including segfaults after
+  version update
+* @alex88 for reporting an issue with joined hypertables
+* @dhodyn for reporting an issue when joining compressed chunks
+* @diego-hermida for reporting an issue with disabling compression
+* @Netskeh for reporting bug on time_bucket problem in continuous
+  aggregates
+* @WarriorOfWire for reporting the bug with gapfill queries not being
+  able to find pathkey item to sort
+* @zeeshanshabbir93 for reporting an issue with joins
+
 ## 2.0.1 (2021-01-28)
 
 This maintenance release contains bugfixes since the 2.0.0 release.
