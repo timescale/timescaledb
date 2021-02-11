@@ -475,14 +475,17 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
 
-	if (refresh_window_arg->start >= refresh_window_arg->end)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid refresh window"),
-				 errhint("The start of the window must be before the end.")));
-
 	refresh_window =
 		compute_inscribed_bucketed_refresh_window(refresh_window_arg, cagg->data.bucket_width);
+
+	if (refresh_window.start >= refresh_window.end)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("refresh window too small"),
+				 errdetail("The refresh window must cover at least one bucket of data."),
+				 errhint("Align the refresh window with the bucket"
+						 " time zone or use at least two buckets.")));
+
 	log_refresh_window(DEBUG1, cagg, &refresh_window, "refreshing continuous aggregate");
 
 	/* Perform the refresh across two transactions.
