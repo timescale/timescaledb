@@ -323,13 +323,9 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	PolicyContinuousAggData policy_data;
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
-	elog(LOG,
-		 "refresh continuous aggregate range %s , %s",
-		 ts_internal_to_time_string(policy_data.refresh_window.start,
-									policy_data.refresh_window.type),
-		 ts_internal_to_time_string(policy_data.refresh_window.end,
-									policy_data.refresh_window.type));
-	continuous_agg_refresh_internal(policy_data.cagg, &policy_data.refresh_window, false);
+	continuous_agg_refresh_internal(policy_data.cagg,
+									&policy_data.refresh_window,
+									CAGG_REFRESH_POLICY);
 
 	return true;
 }

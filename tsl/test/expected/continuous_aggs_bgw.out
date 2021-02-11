@@ -138,11 +138,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                        msg                         
---------+-----------+--------------------------------------------+----------------------------------------------------
+ msg_no | mock_time |              application_name              |                                           msg                                           
+--------+-----------+--------------------------------------------+-----------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Refresh Continuous Aggregate Policy [1000] | refresh continuous aggregate range -2147483648 , 6
+      0 |         0 | Refresh Continuous Aggregate Policy [1000] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -2147483648, 6 ]
 (3 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
@@ -356,7 +356,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
-SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer, -2::integer, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
                             1001
@@ -371,11 +371,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                         msg                         
---------+-----------+--------------------------------------------+-----------------------------------------------------
+ msg_no | mock_time |              application_name              |                                       msg                                        
+--------+-----------+--------------------------------------------+----------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range -2147483648 , 12
+      0 |         0 | Refresh Continuous Aggregate Policy [1001] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -90, 12 ]
 (3 rows)
 
 -- job ran once, successfully
@@ -416,14 +416,14 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 25);
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no |  mock_time  |              application_name              |                           msg                            
---------+-------------+--------------------------------------------+----------------------------------------------------------
+ msg_no |  mock_time  |              application_name              |                                       msg                                        
+--------+-------------+--------------------------------------------+----------------------------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |           0 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range -2147483648 , 12
+      0 |           0 | Refresh Continuous Aggregate Policy [1001] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -90, 12 ]
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
-      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refresh continuous aggregate range -2147483648 , 12
+      0 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | refreshing continuous aggregate "test_continuous_agg_view" in window [ -90, 12 ]
 (6 rows)
 
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -484,7 +484,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
     AS SELECT time_bucket('2', time), SUM(data) as value, get_constant_no_perms()
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
-SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer, -2::integer, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
                             1002
@@ -635,11 +635,11 @@ SELECT * FROM test_continuous_agg_view_user_2;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * from sorted_bgw_log;
- msg_no |  mock_time  |              application_name              |                              msg                              
---------+-------------+--------------------------------------------+---------------------------------------------------------------
+ msg_no |  mock_time  |              application_name              |                                              msg                                               
+--------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------------
       0 |           0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |           0 | DB Scheduler                               | [TESTING] Wait until 25000, started at 0
-      0 |           0 | Refresh Continuous Aggregate Policy [1003] | refresh continuous aggregate range -2147483648 , 3
+      0 |           0 | Refresh Continuous Aggregate Policy [1003] | refreshing continuous aggregate "test_continuous_agg_view_user_2" in window [ -2147483648, 2 ]
       0 | 43200000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 43200000000 | DB Scheduler                               | [TESTING] Wait until 43200025000, started at 43200000000
       0 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | job 1003 threw an error

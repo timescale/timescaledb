@@ -109,7 +109,6 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 CALL refresh_continuous_aggregate('daily_temp', 0, '2020-05-01');
-
 \set ON_ERROR_STOP 1
 
 -- Test different time types

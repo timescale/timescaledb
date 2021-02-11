@@ -368,7 +368,7 @@ BEGIN
   IF ts_version < '2.0.0' THEN
     CREATE VIEW mat_inttime
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
-           timescaledb.ignore_invalidation_older_than = 5,
+           timescaledb.ignore_invalidation_older_than = 6,
            timescaledb.refresh_lag = 2,
            timescaledb.refresh_interval='12 hours')
     AS 
@@ -400,7 +400,7 @@ BEGIN
       FROM int_time_test
       GROUP BY 1 WITH NO DATA;
 
-    PERFORM add_continuous_aggregate_policy('mat_inttime', 5, 2, '12 hours');
+    PERFORM add_continuous_aggregate_policy('mat_inttime', 6, 2, '12 hours');
     PERFORM add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
   END IF;
 END $$;
