@@ -1786,8 +1786,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	{
 		Oid relid;
 		ContinuousAgg *cagg;
-		Hypertable *cagg_ht;
-		Dimension *time_dim;
 		InternalTimeRange refresh_window = {
 			.type = InvalidOid,
 		};
@@ -1802,13 +1800,11 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		relid = get_relname_relid(stmt->into->rel->relname, nspid);
 		cagg = ts_continuous_agg_find_by_relid(relid);
 		Assert(cagg != NULL);
-		cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-		time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
-		refresh_window.type = ts_dimension_get_partition_type(time_dim);
+		refresh_window.type = cagg->partition_type;
 		refresh_window.start = ts_time_get_min(refresh_window.type);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		continuous_agg_refresh_internal(cagg, &refresh_window, true);
+		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION);
 	}
 	return DDL_DONE;
 }

@@ -3789,14 +3789,7 @@ process_drop_trigger(EventTriggerDropObject *obj)
 static void
 process_drop_view(EventTriggerDropView *dropped_view)
 {
-	ContinuousAgg *ca;
-
-	ca = ts_continuous_agg_find_by_view_name(dropped_view->schema,
-											 dropped_view->view_name,
-											 ContinuousAggAnyView);
-
-	if (ca != NULL)
-		ts_continuous_agg_drop_view_callback(ca, dropped_view->schema, dropped_view->view_name);
+	ts_continuous_agg_drop(dropped_view->schema, dropped_view->view_name);
 }
 
 static void

@@ -55,7 +55,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
     AS SELECT time_bucket('7 days', time), count(*)
         FROM continuous_agg_timestamp
         GROUP BY 1 WITH NO DATA;
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 h'::interval , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 days', '1 h'::interval , '1 h'::interval) as job_id \gset
 INSERT INTO continuous_agg_timestamp
     SELECT generate_series('2019-09-01 00:00'::timestamp, '2019-09-10 00:00'::timestamp, '1 day');
 --- to prevent NOTICES set message level to warning

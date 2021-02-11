@@ -37,7 +37,10 @@ extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const L
 typedef struct ContinuousAgg
 {
 	FormData_continuous_agg data;
+	/* Relid of the user-facing view */
 	Oid relid;
+	/* Type of the primary partitioning dimension */
+	Oid partition_type;
 } ContinuousAgg;
 
 typedef enum ContinuousAggHypertableStatus
@@ -69,9 +72,7 @@ extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_relid(Oid relid);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_rv(const RangeVar *rv);
 
-extern void ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema,
-												 const char *name);
-
+extern bool ts_continuous_agg_drop(const char *view_schema, const char *view_name);
 extern void ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id);
 
 extern TSDLLEXPORT ContinuousAggViewType ts_continuous_agg_view_type(FormData_continuous_agg *data,

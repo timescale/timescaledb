@@ -5,6 +5,8 @@
  */
 
 #include <postgres.h>
+#include <access/xact.h>
+#include <common/int128.h>
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 
@@ -49,36 +51,62 @@ policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
 }
 
 static int64
-get_interval_from_config(const Dimension *dim, const Jsonb *config, const char *json_label,
-						 bool *isnull)
+get_time_from_interval(const Dimension *dim, Datum interval, Oid type)
+{
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+
+	if (IS_INTEGER_TYPE(type))
+	{
+		Oid now_func = ts_get_integer_now_func(dim);
+		int64 value = ts_interval_value_to_internal(interval, type);
+
+		Assert(now_func);
+
+		return ts_subtract_integer_from_now_saturating(now_func, value, partitioning_type);
+	}
+	else if (type == INTERVALOID)
+	{
+		Datum res = subtract_interval_from_now(DatumGetIntervalP(interval), partitioning_type);
+		return ts_time_value_to_internal(res, partitioning_type);
+	}
+	else
+		elog(ERROR, "unsupported offset type for continuous aggregate policy");
+
+	pg_unreachable();
+
+	return 0;
+}
+
+static int64
+get_time_from_config(const Dimension *dim, const Jsonb *config, const char *json_label,
+					 bool *isnull)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 	*isnull = false;
+
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
 		bool found;
 		int64 interval_val = ts_jsonb_get_int64_field(config, json_label, &found);
+
 		if (!found)
 		{
 			*isnull = true;
 			return 0;
 		}
-		Oid now_func = ts_get_integer_now_func(dim);
-
-		Assert(now_func);
-		return ts_subtract_integer_from_now_saturating(now_func, interval_val, partitioning_type);
+		return get_time_from_interval(dim, Int64GetDatum(interval_val), INT8OID);
 	}
 	else
 	{
-		Datum res;
 		Interval *interval_val = ts_jsonb_get_interval_field(config, json_label);
+
 		if (!interval_val)
 		{
 			*isnull = true;
 			return 0;
 		}
-		res = subtract_interval_from_now(interval_val, partitioning_type);
-		return ts_time_value_to_internal(res, partitioning_type);
+
+		return get_time_from_interval(dim, IntervalPGetDatum(interval_val), INTERVALOID);
 	}
 }
 
@@ -86,7 +114,7 @@ int64
 policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config)
 {
 	bool start_isnull;
-	int64 res = get_interval_from_config(dim, config, CONFIG_KEY_START_OFFSET, &start_isnull);
+	int64 res = get_time_from_config(dim, config, CONFIG_KEY_START_OFFSET, &start_isnull);
 	/* interpret NULL as min value for that type */
 	if (start_isnull)
 		return ts_time_get_min(ts_dimension_get_partition_type(dim));
@@ -97,7 +125,7 @@ int64
 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config)
 {
 	bool end_isnull;
-	int64 res = get_interval_from_config(dim, config, CONFIG_KEY_END_OFFSET, &end_isnull);
+	int64 res = get_time_from_config(dim, config, CONFIG_KEY_END_OFFSET, &end_isnull);
 	if (end_isnull)
 		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
 	return res;
@@ -158,12 +186,13 @@ static Datum
 convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const char *str_msg)
 {
 	Oid convert_to = dim_type;
+	Datum converted;
+
+	if (IS_TIMESTAMP_TYPE(dim_type))
+		convert_to = INTERVALOID;
 
 	if (*interval_type != convert_to)
 	{
-		if (IS_TIMESTAMP_TYPE(dim_type))
-			convert_to = INTERVALOID;
-
 		if (!can_coerce_type(1, interval_type, &convert_to, COERCION_IMPLICIT))
 		{
 			if (IS_INTEGER_TYPE(dim_type))
@@ -182,48 +211,237 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 		}
 	}
 
-	return ts_time_datum_convert_arg(interval, interval_type, convert_to);
+	converted = ts_time_datum_convert_arg(interval, interval_type, convert_to);
+
+	/* For integer types, first convert all types to int64 to get on a common
+	 * type. Then check valid time ranges against the partition/dimension
+	 * type */
+	switch (*interval_type)
+	{
+		case INT2OID:
+			converted = Int64GetDatum((int64) DatumGetInt16(converted));
+			break;
+		case INT4OID:
+			converted = Int64GetDatum((int64) DatumGetInt32(converted));
+			break;
+		case INT8OID:
+			break;
+		case INTERVALOID:
+			/* For timestamp types, we only support Interval, so nothing further
+			 * to do. */
+			return converted;
+		default:
+			pg_unreachable();
+			break;
+	}
+
+	/* Cap at min and max */
+	if (DatumGetInt64(converted) < ts_time_get_min(dim_type))
+		converted = ts_time_get_min(dim_type);
+	else if (DatumGetInt64(converted) > ts_time_get_max(dim_type))
+		converted = ts_time_get_max(dim_type);
+
+	/* Convert to the desired integer type */
+	switch (dim_type)
+	{
+		case INT2OID:
+			converted = Int16GetDatum((int16) DatumGetInt64(converted));
+			break;
+		case INT4OID:
+			converted = Int32GetDatum((int32) DatumGetInt64(converted));
+			break;
+		case INT8OID:
+			/* Already int64, so nothing to do. */
+			break;
+		default:
+			pg_unreachable();
+			break;
+	}
+
+	*interval_type = dim_type;
+
+	return converted;
+}
+
+typedef struct CaggPolicyOffset
+{
+	Datum value;
+	Oid type;
+	bool isnull;
+	const char *name;
+} CaggPolicyOffset;
+
+typedef struct CaggPolicyConfig
+{
+	Oid partition_type;
+	CaggPolicyOffset offset_start;
+	CaggPolicyOffset offset_end;
+} CaggPolicyConfig;
+
+/*
+ * Convert an interval to a 128 integer value.
+ *
+ * Based on PostgreSQL's interval_cmp_value().
+ */
+static inline INT128
+interval_to_int128(const Interval *interval)
+{
+	INT128 span;
+	int64 dayfraction;
+	int64 days;
+
+	/*
+	 * Separate time field into days and dayfraction, then add the month and
+	 * day fields to the days part.  We cannot overflow int64 days here.
+	 */
+	dayfraction = interval->time % USECS_PER_DAY;
+	days = interval->time / USECS_PER_DAY;
+	days += interval->month * INT64CONST(30);
+	days += interval->day;
+
+	/* Widen dayfraction to 128 bits */
+	span = int64_to_int128(dayfraction);
+
+	/* Scale up days to microseconds, forming a 128-bit product */
+	int128_add_int64_mul_int64(&span, days, USECS_PER_DAY);
+
+	return span;
+}
+
+static int64
+interval_to_int64(Datum interval, Oid type)
+{
+	switch (type)
+	{
+		case INT2OID:
+			return DatumGetInt16(interval);
+		case INT4OID:
+			return DatumGetInt32(interval);
+		case INT8OID:
+			return DatumGetInt64(interval);
+		case INTERVALOID:
+		{
+			const int64 max = ts_time_get_max(TIMESTAMPTZOID);
+			const int64 min = ts_time_get_min(TIMESTAMPTZOID);
+			INT128 bigres = interval_to_int128(DatumGetIntervalP(interval));
+
+			if (int128_compare(bigres, int64_to_int128(max)) >= 0)
+				return max;
+			else if (int128_compare(bigres, int64_to_int128(min)) <= 0)
+				return min;
+			else
+				return int128_to_int64(bigres);
+		}
+		default:
+			break;
+	}
+
+	pg_unreachable();
+
+	return 0;
+}
+
+static const char *
+two_buckets_to_str(const ContinuousAgg *cagg)
+{
+	Oid bucket_type;
+	Oid outfuncid;
+	int64 two_buckets;
+	Datum min_range;
+	bool isvarlena;
+
+	if (IS_TIMESTAMP_TYPE(cagg->partition_type))
+		bucket_type = INTERVALOID;
+	else
+		bucket_type = cagg->partition_type;
+
+	two_buckets = ts_time_saturating_add(cagg->data.bucket_width,
+										 cagg->data.bucket_width,
+										 cagg->partition_type);
+
+	min_range = ts_internal_to_interval_value(two_buckets, bucket_type);
+
+	getTypeOutputInfo(bucket_type, &outfuncid, &isvarlena);
+	Assert(!isvarlena);
+
+	return DatumGetCString(OidFunctionCall1(outfuncid, min_range));
+}
+
+/*
+ * Enforce that a policy has a refresh window of at least two buckets to
+ * ensure we materialize at least one bucket each run.
+ *
+ * Why two buckets? Note that the policy probably won't execute at at time
+ * that exactly aligns with a bucket boundary, so a window of one bucket
+ * might not cover a full bucket that we want to materialize:
+ *
+ * Refresh window:                   [-----)
+ * Materialized buckets:   |-----|-----|-----|
+ */
+static void
+validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
+{
+	int64 start_offset;
+	int64 end_offset;
+
+	if (config->offset_start.isnull)
+		start_offset = ts_time_get_max(cagg->partition_type);
+	else
+		start_offset = interval_to_int64(config->offset_start.value, config->offset_start.type);
+
+	if (config->offset_end.isnull)
+		end_offset = ts_time_get_min(cagg->partition_type);
+	else
+		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
+
+	if (ts_time_saturating_add(end_offset, cagg->data.bucket_width * 2, INT8OID) > start_offset)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("policy refresh window too small"),
+				 errdetail("The start and end offsets must cover at least"
+						   " two buckets in the valid time range of type \"%s\".",
+						   format_type_be(cagg->partition_type)),
+				 errhint("Use a start and end offset that specifies"
+						 " a window of at least %s.",
+						 two_buckets_to_str(cagg))));
 }
 
 static void
-check_valid_interval_values(Oid interval_type, Datum start_offset, Datum end_offset)
+parse_offset_arg(const ContinuousAgg *cagg, const FunctionCallInfo fcinfo, CaggPolicyOffset *offset,
+				 int argnum)
 {
-	bool valid = true;
-	if (IS_INTEGER_TYPE(interval_type))
+	offset->isnull = PG_ARGISNULL(argnum);
+
+	if (!offset->isnull)
 	{
-		switch (interval_type)
-		{
-			case INT2OID:
-			{
-				if (DatumGetInt16(start_offset) <= DatumGetInt16(end_offset))
-					valid = false;
-				break;
-			}
-			case INT4OID:
-			{
-				if (DatumGetInt32(start_offset) <= DatumGetInt32(end_offset))
-					valid = false;
-				break;
-			}
-			case INT8OID:
-			{
-				if (DatumGetInt64(start_offset) <= DatumGetInt64(end_offset))
-					valid = false;
-				break;
-			}
-		}
+		Oid type = get_fn_expr_argtype(fcinfo->flinfo, argnum);
+		Datum arg = PG_GETARG_DATUM(argnum);
+
+		offset->value = convert_interval_arg(cagg->partition_type, arg, &type, offset->name);
+		offset->type = type;
 	}
-	else
-	{
-		Assert(interval_type == INTERVALOID);
-		valid = DatumGetBool(DirectFunctionCall2(interval_gt, start_offset, end_offset));
-	}
-	if (!valid)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("start interval should be greater than end interval")));
-	}
+}
+
+static void
+parse_cagg_policy_config(const ContinuousAgg *cagg, const FunctionCallInfo fcinfo,
+						 CaggPolicyConfig *config)
+{
+	MemSet(config, 0, sizeof(CaggPolicyConfig));
+	config->partition_type = cagg->partition_type;
+	/* This might seem backwards, but since we are dealing with offsets, start
+	 * actually translates to max and end to min for maximum window. */
+	config->offset_start.value = ts_time_datum_get_max(config->partition_type);
+	config->offset_end.value = ts_time_datum_get_min(config->partition_type);
+	config->offset_start.type = config->offset_end.type =
+		IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
+	config->offset_start.name = CONFIG_KEY_START_OFFSET;
+	config->offset_end.name = CONFIG_KEY_END_OFFSET;
+
+	parse_offset_arg(cagg, fcinfo, &config->offset_start, 1);
+	parse_offset_arg(cagg, fcinfo, &config->offset_end, 2);
+
+	Assert(config->offset_start.type == config->offset_end.type);
+	validate_window_size(cagg, config);
 }
 
 Datum
@@ -232,18 +450,14 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	NameData application_name;
 	NameData refresh_name;
 	NameData proc_name, proc_schema, owner;
-	Cache *hcache;
-	Hypertable *mat_ht;
-	Dimension *dim;
 	ContinuousAgg *cagg;
-	int32 job_id, mat_htid;
-	Datum start_offset, end_offset;
+	CaggPolicyConfig policyconf;
+	int32 job_id;
 	Interval refresh_interval;
-	Oid dim_type, start_offset_type, end_offset_type;
 	Oid cagg_oid, owner_id;
 	List *jobs;
 	JsonbParseState *parse_state = NULL;
-	bool if_not_exists, start_isnull, end_isnull;
+	bool if_not_exists;
 
 	/* Verify that the owner can create a background worker */
 	cagg_oid = PG_GETARG_OID(0);
@@ -256,49 +470,20 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
 
-	hcache = ts_hypertable_cache_pin();
-	mat_htid = cagg->data.mat_hypertable_id;
-	mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, mat_htid);
-	dim = hyperspace_get_open_dimension(mat_ht->space, 0);
-	dim_type = ts_dimension_get_partition_type(dim);
-	ts_cache_release(hcache);
-
-	/* Try to convert the argument to the time type used by the
-	 * continuous aggregate */
-	start_offset = PG_GETARG_DATUM(1);
-	end_offset = PG_GETARG_DATUM(2);
-	start_isnull = PG_ARGISNULL(1);
-	end_isnull = PG_ARGISNULL(2);
-	start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
-
-	if (!start_isnull)
-		start_offset = convert_interval_arg(dim_type,
-											start_offset,
-											&start_offset_type,
-											CONFIG_KEY_START_OFFSET);
-
-	if (!end_isnull)
-		end_offset =
-			convert_interval_arg(dim_type, end_offset, &end_offset_type, CONFIG_KEY_END_OFFSET);
-
-	if (!start_isnull && !end_isnull)
-	{
-		Assert(start_offset_type == end_offset_type);
-		check_valid_interval_values(start_offset_type, start_offset, end_offset);
-	}
+	parse_cagg_policy_config(cagg, fcinfo, &policyconf);
 
 	if (PG_ARGISNULL(3))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot use NULL schedule interval")));
+
 	refresh_interval = *PG_GETARG_INTERVAL_P(3);
 	if_not_exists = PG_GETARG_BOOL(4);
 
 	/* Make sure there is only 1 refresh policy on the cagg */
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
 													 INTERNAL_SCHEMA_NAME,
-													 mat_htid);
+													 cagg->data.mat_hypertable_id);
 
 	if (jobs != NIL)
 	{
@@ -312,14 +497,14 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
 														CONFIG_KEY_START_OFFSET,
-														dim_type,
-														start_offset_type,
-														start_offset) &&
+														cagg->partition_type,
+														policyconf.offset_start.type,
+														policyconf.offset_start.value) &&
 			policy_config_check_hypertable_lag_equality(existing->fd.config,
 														CONFIG_KEY_END_OFFSET,
-														dim_type,
-														end_offset_type,
-														end_offset))
+														cagg->partition_type,
+														policyconf.offset_end.type,
+														policyconf.offset_end.value))
 		{
 			/* If all arguments are the same, do nothing */
 			ereport(NOTICE,
@@ -347,19 +532,20 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_MAT_HYPERTABLE_ID, mat_htid);
-	if (!start_isnull)
+	ts_jsonb_add_int32(parse_state, CONFIG_KEY_MAT_HYPERTABLE_ID, cagg->data.mat_hypertable_id);
+	if (!policyconf.offset_start.isnull)
 		json_add_dim_interval_value(parse_state,
 									CONFIG_KEY_START_OFFSET,
-									start_offset_type,
-									start_offset);
+									policyconf.offset_start.type,
+									policyconf.offset_start.value);
 	else
 		ts_jsonb_add_null(parse_state, CONFIG_KEY_START_OFFSET);
-	if (!end_isnull)
+
+	if (!policyconf.offset_end.isnull)
 		json_add_dim_interval_value(parse_state,
 									CONFIG_KEY_END_OFFSET,
-									end_offset_type,
-									end_offset);
+									policyconf.offset_end.type,
+									policyconf.offset_end.value);
 	else
 		ts_jsonb_add_null(parse_state, CONFIG_KEY_END_OFFSET);
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
@@ -375,7 +561,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 										&proc_name,
 										&owner,
 										true,
-										mat_htid,
+										cagg->data.mat_hypertable_id,
 										config);
 
 	PG_RETURN_INT32(job_id);

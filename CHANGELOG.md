@@ -12,6 +12,7 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #2883 Fix join qual propagation for nested joins
 * #2908 Fix changing column type of clustered hypertables
+* #2942 Validate continuous aggregate policy
 
 **Thanks**
 * @zeeshanshabbir93 for reporting an issue with joins

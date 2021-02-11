@@ -45,23 +45,38 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 (1 row)
 
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  "int_tab" is not a continuous aggregate
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  invalid parameter value for start_offset
+HINT:  Use time interval of type integer with the continuous aggregate.
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
-ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist at character 8
+ERROR:  function add_continuous_aggregate_policy(unknown, interval, integer) does not exist
+LINE 1: SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::in...
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 SELECT add_continuous_aggregate_policy('mat_m1', 10, '1 day'::interval, '1 h'::interval);
 ERROR:  invalid parameter value for end_offset
+HINT:  Use time interval of type integer with the continuous aggregate.
 --start_interval < end_interval
-SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval) as job_id \gset
-ERROR:  start interval should be greater than end interval
+SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "integer".
+HINT:  Use a start and end offset that specifies a window of at least 2.
+--refresh window less than two buckets
+SELECT add_continuous_aggregate_policy('mat_m1', 11, 10, '1h'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "integer".
+HINT:  Use a start and end offset that specifies a window of at least 2.
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
 ERROR:  continuous aggregate policy already exists for "mat_m1"
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
 WARNING:  continuous aggregate policy already exists for "mat_m1"
+DETAIL:  A policy already exists with different arguments.
+HINT:  Remove the existing policy before adding a new one.
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
@@ -82,6 +97,8 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 (1 row)
 
 SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_id \gset
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 UPDATE _timescaledb_config.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
@@ -93,6 +110,8 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
  {"mat_hypertable_id": 2}
 (1 row)
 
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
 ERROR:  could not find start_offset in config for existing job
 SELECT remove_continuous_aggregate_policy('int_tab');
@@ -118,6 +137,8 @@ NOTICE:  continuous aggregate policy not found for "mat_m1", skipping
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id ;
 ERROR:  must be owner of continuous aggregate "mat_m1"
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP MATERIALIZED VIEW mat_m1;
 --- code coverage tests : add policy for timestamp and date based table ---
@@ -130,31 +151,75 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 CREATE MATERIALIZED VIEW max_mat_view_date
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
-    AS SELECT time_bucket('7 days', time)
-        FROM continuous_agg_max_mat_date
-        GROUP BY 1 WITH NO DATA;
+	WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+	AS SELECT time_bucket('7 days', time)
+		FROM continuous_agg_max_mat_date
+		GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', 10, '1 day'::interval);
 ERROR:  invalid parameter value for end_offset
+HINT:  Use time interval with a continuous aggregate using timestamp-based time bucket.
 --start_interval < end_interval
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '2 days'::interval , '1 day'::interval) ;
-ERROR:  start interval should be greater than end interval
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
+HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
+--interval less than two buckets
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '7 days', '1 day', '1 day'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
+HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '14 days', '1 day', '1 day'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
+HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-10 hours', '1 day'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
+HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
-SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', '1 day', '1 day'::interval) as job_id \gset
+-- Negative start offset gives two bucket window:
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-1 day', '1 day'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1001
+(1 row)
+
+SELECT remove_continuous_aggregate_policy('max_mat_view_date');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+-- Both offsets NULL:
+SELECT add_continuous_aggregate_policy('max_mat_view_date', NULL, NULL, '1 day'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1002
+(1 row)
+
+SELECT remove_continuous_aggregate_policy('max_mat_view_date');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+SELECT add_continuous_aggregate_policy('max_mat_view_date', '15 days', '1 day', '1 day'::interval) as job_id \gset
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
-                                    config                                     
--------------------------------------------------------------------------------
- {"end_offset": "@ 1 day", "start_offset": "@ 2 days", "mat_hypertable_id": 4}
+                                     config                                     
+--------------------------------------------------------------------------------
+ {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 4}
 (1 row)
 
 INSERT INTO continuous_agg_max_mat_date
-    SELECT generate_series('2019-09-01'::date, '2019-09-10'::date, '1 day');
+	SELECT generate_series('2019-09-01'::date, '2019-09-10'::date, '1 day');
 --- to prevent NOTICES set message level to warning
-SET client_min_messages TO warning; 
+SET client_min_messages TO warning;
 CALL run_job(:job_id);
-RESET client_min_messages ;
+RESET client_min_messages;
 DROP MATERIALIZED VIEW max_mat_view_date;
 CREATE TABLE continuous_agg_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_timestamp', 'time');
@@ -165,42 +230,48 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 CREATE MATERIALIZED VIEW max_mat_view_timestamp
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
-    AS SELECT time_bucket('7 days', time)
-        FROM continuous_agg_timestamp
-        GROUP BY 1 WITH NO DATA;
+	WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+	AS SELECT time_bucket('7 days', time)
+		FROM continuous_agg_timestamp
+		GROUP BY 1 WITH NO DATA;
+--the start offset overflows the smallest time value, but is capped at
+--the min value
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1004
+(1 row)
+
+SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
 \set ON_ERROR_STOP 0
---will overflow at runtime even though policy check works 
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval) as job_id \gset
-CALL run_job(:job_id);
-ERROR:  timestamp out of range
--- bad timestamps at runtime even though policy check works
-SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
- remove_continuous_aggregate_policy 
-------------------------------------
- 
-(1 row)
-
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '301 days', '10 months' , '1 h'::interval) as job_id \gset
-CALL run_job(:job_id);
-ERROR:  invalid refresh window
+\set VERBOSITY default
+--start and end offset capped at the lowest time value, which means
+--zero size window
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '900000 years' , '1 h'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "timestamp without time zone".
+HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '301 days', '10 months' , '1 h'::interval);
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "timestamp without time zone".
+HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
-SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
- remove_continuous_aggregate_policy 
-------------------------------------
- 
-(1 row)
-
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 h'::interval , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 days', '1 h'::interval , '1 h'::interval) as job_id \gset
 --- to prevent NOTICES set message level to warning
-SET client_min_messages TO warning; 
+SET client_min_messages TO warning;
 CALL run_job(:job_id);
 RESET client_min_messages ;
 SELECT config FROM _timescaledb_config.bgw_job
 WHERE id = :job_id;
                                      config                                      
 ---------------------------------------------------------------------------------
- {"end_offset": "@ 1 hour", "start_offset": "@ 10 days", "mat_hypertable_id": 6}
+ {"end_offset": "@ 1 hour", "start_offset": "@ 15 days", "mat_hypertable_id": 6}
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -215,7 +286,7 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 (1 row)
 
 \set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '10 day', '1 day', '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 day', '1 day', '1h'::interval, if_not_exists=>true);
 ERROR:  could not find start_offset in config for job
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', 'xyz', '1 day', '1h'::interval, if_not_exists=>true);
 ERROR:  invalid input syntax for type interval: "xyz"
@@ -244,12 +315,17 @@ SELECT time_bucket( SMALLINT '1', a) , count(*)
 FROM smallint_tab
 GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_smallint', 15, 0 , '1 h'::interval);
 ERROR:  invalid parameter value for start_offset
+HINT:  Use time interval of type smallint with the continuous aggregate.
 SELECT add_continuous_aggregate_policy('mat_smallint', 98898::smallint , 0::smallint, '1 h'::interval);
 ERROR:  smallint out of range
 SELECT add_continuous_aggregate_policy('mat_smallint', 5::smallint, 10::smallint , '1 h'::interval) as job_id \gset
-ERROR:  start interval should be greater than end interval
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "smallint".
+HINT:  Use a start and end offset that specifies a window of at least 2.
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 0::smallint , '1 h'::interval) as job_id \gset
 INSERT INTO smallint_tab VALUES(5);
@@ -296,7 +372,7 @@ SELECT * FROM mat_smallint ORDER BY 1;
 ---+--------
 (0 rows)
 
--- overflow start_interval. now this runs as range is capped [-32768, -32765) 
+-- overflow start_interval. now this runs as range is capped [-32768, -32765)
 INSERT INTO smallint_tab VALUES( -32760 );
 SELECT maxval, maxval - 10, maxval -5 FROM integer_now_smallint_tab() as maxval;
  maxval | ?column? | ?column? 
@@ -320,7 +396,7 @@ SELECT * FROM mat_smallint ORDER BY 1;
 (0 rows)
 
 -- Case 2: overflow by subtracting from PG_INT16_MAX
---overflow start and end . will fail as range is [32767, 32767] 
+--overflow start and end . will fail as range is [32767, 32767]
 SELECT remove_continuous_aggregate_policy('mat_smallint');
  remove_continuous_aggregate_policy 
 ------------------------------------
@@ -335,7 +411,7 @@ SELECT maxval, maxval - (-1), maxval - (-2) FROM integer_now_smallint_tab() as m
   32767 |    32768 |    32769
 (1 row)
 
-SELECT add_continuous_aggregate_policy('mat_smallint', -1::smallint, -2::smallint , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('mat_smallint', -1::smallint, -3::smallint , '1 h'::interval) as job_id \gset
 \set ON_ERROR_STOP 0
 CALL run_job(:job_id);
 ERROR:  invalid refresh window
@@ -351,14 +427,14 @@ SELECT remove_continuous_aggregate_policy('mat_smallint');
  
 (1 row)
 
---overflow end . will work range is [32765, 32767)  
+--overflow end . will work range is [32765, 32767)
 SELECT maxval, maxval - (1), maxval - (-2) FROM integer_now_smallint_tab() as maxval;
  maxval | ?column? | ?column? 
 --------+----------+----------
   32767 |    32766 |    32769
 (1 row)
 
-SELECT add_continuous_aggregate_policy('mat_smallint', 1::smallint, -2::smallint , '1 h'::interval) as job_id \gset
+SELECT add_continuous_aggregate_policy('mat_smallint', 1::smallint, -3::smallint , '1 h'::interval) as job_id \gset
 \set ON_ERROR_STOP 0
 CALL run_job(:job_id);
 SELECT * FROM mat_smallint ORDER BY 1;
@@ -409,7 +485,7 @@ FROM bigint_tab
 GROUP BY 1 WITH NO DATA;
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('mat_bigint', 5::bigint, 10::bigint , '1 h'::interval) ;
-ERROR:  start interval should be greater than end interval
+ERROR:  policy refresh window too small
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('mat_bigint', 15::bigint, 0::bigint , '1 h'::interval) as job_mid \gset
 INSERT INTO bigint_tab VALUES(5);
