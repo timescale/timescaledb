@@ -274,9 +274,6 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 	Oid outfuncid = InvalidOid;
 	bool isvarlena;
 
-	if (client_min_messages > elevel)
-		return;
-
 	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
 	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
 	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
@@ -360,15 +357,6 @@ get_cagg_by_relid(const Oid cagg_relid)
 	return cagg;
 }
 
-static Oid
-get_partition_type_by_cagg(const ContinuousAgg *const cagg)
-{
-	Hypertable *cagg_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-	Dimension *time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
-
-	return ts_dimension_get_partition_type(time_dim);
-}
-
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 /*
  * Refresh a continuous aggregate across the given window.
@@ -383,7 +371,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	};
 
 	cagg = get_cagg_by_relid(cagg_relid);
-	refresh_window.type = get_partition_type_by_cagg(cagg);
+	refresh_window.type = cagg->partition_type;
 
 	if (!PG_ARGISNULL(1))
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
@@ -399,22 +387,31 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	else
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-	continuous_agg_refresh_internal(cagg, &refresh_window, false);
+	continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_WINDOW);
 	PG_RETURN_VOID();
 }
 
 static void
-emit_up_to_date_notice(const ContinuousAgg *cagg)
+emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshCallContext callctx)
 {
-	elog(NOTICE,
-		 "continuous aggregate \"%s\" is already up-to-date",
-		 NameStr(cagg->data.user_view_name));
+	switch (callctx)
+	{
+		case CAGG_REFRESH_CHUNK:
+		case CAGG_REFRESH_WINDOW:
+		case CAGG_REFRESH_CREATION:
+			elog(NOTICE,
+				 "continuous aggregate \"%s\" is already up-to-date",
+				 NameStr(cagg->data.user_view_name));
+			break;
+		case CAGG_REFRESH_POLICY:
+			break;
+	}
 }
 
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
-									   const InternalTimeRange *refresh_window, bool verbose,
-									   int32 chunk_id)
+									   const InternalTimeRange *refresh_window,
+									   const CaggRefreshCallContext callctx, int32 chunk_id)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id);
@@ -432,7 +429,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 
 	if (invalidations != NULL)
 	{
-		if (verbose)
+		if (callctx == CAGG_REFRESH_CREATION)
 		{
 			Assert(OidIsValid(cagg->relid));
 			ereport(NOTICE,
@@ -450,7 +447,8 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 
 void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
-								const InternalTimeRange *refresh_window_arg, bool verbose)
+								const InternalTimeRange *refresh_window_arg,
+								const CaggRefreshCallContext callctx)
 {
 	Catalog *catalog = ts_catalog_get();
 	int32 mat_id = cagg->data.mat_hypertable_id;
@@ -486,7 +484,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
 
-	log_refresh_window(DEBUG1, cagg, &refresh_window, "refreshing continuous aggregate");
+	log_refresh_window(callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1,
+					   cagg,
+					   &refresh_window,
+					   "refreshing continuous aggregate");
 
 	/* Perform the refresh across two transactions.
 	 *
@@ -530,7 +531,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * nothing to refresh in that case */
 	if (refresh_window.start >= refresh_window.end)
 	{
-		emit_up_to_date_notice(cagg);
+		emit_up_to_date_notice(cagg, callctx);
 		return;
 	}
 
@@ -544,8 +545,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	StartTransactionCommand();
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 
-	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, verbose, INVALID_CHUNK_ID))
-		emit_up_to_date_notice(cagg);
+	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
+		emit_up_to_date_notice(cagg, callctx);
 }
 
 /*
@@ -565,7 +566,7 @@ continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	Catalog *catalog = ts_catalog_get();
 	const InternalTimeRange refresh_window = {
-		.type = get_partition_type_by_cagg(cagg),
+		.type = cagg->partition_type,
 		.start = ts_chunk_primary_dimension_start(chunk),
 		.end = ts_chunk_primary_dimension_end(chunk),
 	};
@@ -596,7 +597,7 @@ continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
 	invalidation_process_hypertable_log(cagg);
 	/* Must make invalidation processing visible */
 	CommandCounterIncrement();
-	process_cagg_invalidations_and_refresh(cagg, &refresh_window, false, chunk->fd.id);
+	process_cagg_invalidations_and_refresh(cagg, &refresh_window, CAGG_REFRESH_CHUNK, chunk->fd.id);
 
 	PG_RETURN_VOID();
 }
