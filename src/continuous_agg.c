@@ -199,9 +199,18 @@ static void
 continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
 	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
+	Hypertable *cagg_ht = ts_hypertable_get_by_id(fd->mat_hypertable_id);
+	Dimension *time_dim;
 
+	Assert(NULL != cagg_ht);
+	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
+	Assert(NULL != time_dim);
+	cagg->partition_type = ts_dimension_get_partition_type(time_dim);
 	cagg->relid = get_relname_relid(NameStr(fd->user_view_name), nspid);
 	memcpy(&cagg->data, fd, sizeof(cagg->data));
+
+	Assert(OidIsValid(cagg->relid));
+	Assert(OidIsValid(cagg->partition_type));
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
@@ -294,12 +303,11 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
 	return ca;
 }
 
-ContinuousAgg *
-ts_continuous_agg_find_by_view_name(const char *schema, const char *name,
-									ContinuousAggViewType type)
+static bool
+continuous_agg_fill_form_data(const char *schema, const char *name, ContinuousAggViewType type,
+							  FormData_continuous_agg *fd)
 {
 	ScanIterator iterator;
-	ContinuousAgg *ca = NULL;
 	AttrNumber view_name_attrnum = 0;
 	AttrNumber schema_name_attrnum = 0;
 	int count = 0;
@@ -353,8 +361,7 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name,
 
 		if (vtype != ContinuousAggAnyView)
 		{
-			ca = ts_scan_iterator_alloc_result(&iterator, sizeof(*ca));
-			continuous_agg_init(ca, data);
+			memcpy(fd, data, sizeof(*fd));
 			count++;
 		}
 
@@ -363,6 +370,22 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name,
 	}
 
 	Assert(count <= 1);
+
+	return count == 1;
+}
+
+ContinuousAgg *
+ts_continuous_agg_find_by_view_name(const char *schema, const char *name,
+									ContinuousAggViewType type)
+{
+	FormData_continuous_agg fd;
+	ContinuousAgg *ca;
+
+	if (!continuous_agg_fill_form_data(schema, name, type, &fd))
+		return NULL;
+
+	ca = palloc0(sizeof(ContinuousAgg));
+	continuous_agg_init(ca, &fd);
 
 	return ca;
 }
@@ -626,12 +649,12 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 
 /* Block dropping the partial and direct view if the continuous aggregate still exists */
 static void
-drop_internal_view(ContinuousAgg *agg)
+drop_internal_view(const FormData_continuous_agg *fd)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
 	int count = 0;
-	init_scan_by_mat_hypertable_id(&iterator, agg->data.mat_hypertable_id);
+	init_scan_by_mat_hypertable_id(&iterator, fd->mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -647,23 +670,35 @@ drop_internal_view(ContinuousAgg *agg)
 }
 
 /* This gets called when a view gets dropped. */
-void
-ts_continuous_agg_drop_view_callback(ContinuousAgg *ca, const char *schema, const char *name)
+static void
+continuous_agg_drop_view_callback(FormData_continuous_agg *fd, const char *schema, const char *name)
 {
 	ContinuousAggViewType vtyp;
-	vtyp = ts_continuous_agg_view_type(&ca->data, schema, name);
+	vtyp = ts_continuous_agg_view_type(fd, schema, name);
 	switch (vtyp)
 	{
 		case ContinuousAggUserView:
-			drop_continuous_agg(&ca->data, false /* The user view has already been dropped */);
+			drop_continuous_agg(fd, false /* The user view has already been dropped */);
 			break;
 		case ContinuousAggPartialView:
 		case ContinuousAggDirectView:
-			drop_internal_view(ca);
+			drop_internal_view(fd);
 			break;
 		default:
 			elog(ERROR, "unknown continuous aggregate view type");
 	}
+}
+
+bool
+ts_continuous_agg_drop(const char *view_schema, const char *view_name)
+{
+	FormData_continuous_agg fd;
+	bool found = continuous_agg_fill_form_data(view_schema, view_name, ContinuousAggAnyView, &fd);
+
+	if (found)
+		continuous_agg_drop_view_callback(&fd, view_schema, view_name);
+
+	return found;
 }
 
 static inline bool

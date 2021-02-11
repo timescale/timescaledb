@@ -227,7 +227,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
 
-SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer, -2::integer, '12 h'::interval);
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
@@ -288,7 +288,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
         FROM test_continuous_agg_table
         GROUP BY 1 WITH NO DATA;
 
-SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, -2::integer, '12 h'::interval);
+SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer, -2::integer, '12 h'::interval);
 
 SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
 
