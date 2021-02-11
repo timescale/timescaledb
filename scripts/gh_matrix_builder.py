@@ -21,9 +21,9 @@ import sys
 event_type = sys.argv[1]
 
 PG11_EARLIEST = "11.0"
-PG11_LATEST = "11.10"
+PG11_LATEST = "11.11"
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.5"
+PG12_LATEST = "12.6"
 
 m = {"include": [],}
 
