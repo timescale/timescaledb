@@ -22,6 +22,7 @@ env:
     - secure: "jy4DQH2syPR2v13igCNPTr044h3H/ilbJk6FifDMxGZVrOZR0dnkBx3O7qJMQOkEQvNxKsoq41k6HCP16qcgt4+HjxhcZonz5hKIiF8IpcB9r+TIlZunNTx7HjSNFZ3WCnham4AvMEthBHgAttRUhscy39ELCNUEobKS/youi7OHLOEXXShc84yTh3aSuGR3SnDVK1diLN5ufX6tN20pc3QvLMGZmA/jmJFcIQHGilhWGwwiJ45LSLwM9slvgGKbTM/K6btVBMOUnjM0h5WqPjRjDUL2tF+iZLEIpY8lFN/MQCnj0vP/BryDdoVPZS3TDQYwYuvASevQ4sOmULnM770jFqzClq4zkeM2GhMq67aYMmXjblu/qcLeCjZL+vfjMKpBMUydK/bCb097HvdRWDEPA0zItKWX9Kd6lVf2XbJCCh0ljp5REJEyk+plJ2V12nLpOPwY6zTtzcoTxEN6wcvUJfHAdNovpp63hWTnbAbEZamIdxwyCqpzThDobeD354TeXFUaKvrUw00iAiIhGL2QvwapaCbhlwM6NQAmdU3tMy3nZpka6bRI1kjyTh7CXfdwXV98ZJSiPdUFxyIgFNI2dKiL3BI1pvFDfq3mnmi3WqzZHCaQqDKNEtUrzxC40swIJGLcLUiqc5xX37P47jNDWrNIRDs8IdbM0tS9pFM="
 before_install:
   # We need the PostgreSQL source for running the standard PostgreSQL regression tests
+  - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
   - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build postgres:${PG_VERSION}-alpine
 install:
   - docker exec -it pgbuild /bin/sh -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake bison flex curl git openssl-dev openssl && mkdir -p /build/debug /build/debug-nossl /postgres"
@@ -59,11 +60,12 @@ jobs:
   include:
 
     # This tests the formatting of a PR.
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       name: "clang-format and license check"
       env:
         - PG_VERSION=11.1 ASAN_OPTIONS="detect_leaks=0"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/postgres-dev-clang:clang7-pg${PG_VERSION} /bin/sleep infinity
       install:
         - docker exec pgbuild /bin/bash -c "mkdir /tsdb_build && chown postgres /tsdb_build"
@@ -76,7 +78,7 @@ jobs:
         - git diff --exit-code
         - docker exec pgbuild /bin/bash -c "/tsdb_build/scripts/export_prefix_check.sh"
 
-    - if: (type = cron) OR NOT (branch = master)
+    - if: (type = cron) OR (branch = prerelease_test)
       name: "Git hook tests"
       before_install:
       install:
@@ -92,6 +94,7 @@ jobs:
         - PG_VERSION=9.6.19
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
       script:
         # First build without OpenSSL
@@ -109,6 +112,7 @@ jobs:
         - PG_VERSION=10.2
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
       script:
         # First build without OpenSSL
@@ -126,6 +130,7 @@ jobs:
         - PG_VERSION=11.0
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
       script:
         # First build without OpenSSL
@@ -143,6 +148,7 @@ jobs:
         - PG_VERSION=12.0
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run -d --name pgbuild -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
       script:
         # First build without OpenSSL
@@ -161,6 +167,7 @@ jobs:
         - PG_VERSION=9.6.6
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
         - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
@@ -184,6 +191,7 @@ jobs:
         - PG_VERSION=10.2
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
         - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
@@ -207,6 +215,7 @@ jobs:
         - PG_VERSION=11.0
         - RETRY_PREFIX=""
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
         - docker run -d --name docker_arm_emulator -v ${TRAVIS_BUILD_DIR}:/timescaledb timescaledev/timescaledb-arm32:pg${PG_VERSION} /bin/sleep infinity
         - docker exec docker_arm_emulator /bin/bash -c "chown -R postgres:postgres /timescaledb"
@@ -253,7 +262,7 @@ jobs:
       name: "Regression 9.6.6"
       env: PG_VERSION=9.6.6 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       name: "Regression 9.6.19"
       env: PG_VERSION=9.6.19
 
@@ -261,7 +270,7 @@ jobs:
       name: "Regression 10.2"
       env: PG_VERSION=10.2 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       name: "Regression 10.14"
       env: PG_VERSION=10.14
 
@@ -269,11 +278,11 @@ jobs:
       name: "Regression 11.0"
       env: PG_VERSION=11.0 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       name: "Regression 11.9"
       env: PG_VERSION=11.9
 
-    - if: (type = pull_request) OR (type = cron) OR NOT (branch = master)
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
       name: "Regression 12.4"
       env: PG_VERSION=12.4
 
@@ -282,6 +291,7 @@ jobs:
       env: PG_VERSION=9.6.6
       name: "Update tests PostgreSQL 9.6.6"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -294,6 +304,7 @@ jobs:
       env: PG_VERSION=9.6.6
       name: "Update tests PostgreSQL 9.6.6 (with repair test)"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -306,6 +317,7 @@ jobs:
       env: PG_VERSION=10.2
       name: "Update tests PostgreSQL 10.2"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -318,6 +330,7 @@ jobs:
       env: PG_VERSION=10.2
       name: "Update tests PostgreSQL 10.2 (with repair test)"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -330,6 +343,7 @@ jobs:
       env: PG_VERSION=11.0
       name: "Update tests PostgreSQL 11.0"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -341,6 +355,7 @@ jobs:
       env: PG_VERSION=11.0
       name: "Update tests PostgreSQL 11.0 (with repair test)"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -353,6 +368,7 @@ jobs:
       env: PG_VERSION=12.0
       name: "Update tests PostgreSQL 12.0"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -365,6 +381,7 @@ jobs:
       env: PG_VERSION=12.0
       name: "Update tests PostgreSQL 12.0 (with repair test)"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -375,6 +392,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "ABI breakage smoketest 9.6"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -385,6 +403,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "ABI breakage smoketest 10"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -395,6 +414,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "ABI breakage smoketest 11"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -404,6 +424,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "ABI breakage smoketest 12.0"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_script:
@@ -448,6 +469,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Memory leak on insert tests"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       after_success:
@@ -462,6 +484,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "ASAN and UBSAN tests"
       before_install:
+        - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
       install:
       after_failure:
       before_script:
