@@ -58,6 +58,46 @@ ORDER BY day DESC, device;
 -----+--------+----------
 (0 rows)
 
+-- Refresh one bucket (1 day):
+SHOW timezone;
+ TimeZone 
+----------
+ PST8PDT
+(1 row)
+
+-- The refresh of a single bucket must align with the start of the day
+-- in the bucket's time zone (which is UTC, since time_bucket doesn't
+-- support time zone arg)
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-04 00:00 UTC');
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 17:00 PDT', '2020-05-04 17:00 PDT');
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- These refreshes will fail since they don't align with the bucket's
+-- time zone
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-04');
+ERROR:  refresh window too small
+DETAIL:  The refresh window must cover at least one bucket of data.
+HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 PDT', '2020-05-04 00:00 PDT');
+ERROR:  refresh window too small
+DETAIL:  The refresh window must cover at least one bucket of data.
+HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
+-- Refresh window less than one bucket
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 00:00 UTC', '2020-05-03 23:59 UTC');
+ERROR:  refresh window too small
+DETAIL:  The refresh window must cover at least one bucket of data.
+HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
+-- Refresh window bigger than one bucket, but failing since it is not
+-- aligned with bucket boundaries so that it covers a full bucket:
+--
+-- Refresh window:    [----------)
+-- Buckets:          [------|------]
+CALL refresh_continuous_aggregate('daily_temp', '2020-05-03 01:00 UTC', '2020-05-04 08:00 UTC');
+ERROR:  refresh window too small
+DETAIL:  The refresh window must cover at least one bucket of data.
+HINT:  Align the refresh window with the bucket time zone or use at least two buckets.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
 -- Refresh the most recent few days:
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00');
 SELECT * FROM daily_temp
@@ -176,7 +216,7 @@ ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', 'xyz');
 ERROR:  invalid input syntax for type timestamp with time zone: "xyz"
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-03', '2020-05-01');
-ERROR:  invalid refresh window
+ERROR:  refresh window too small
 -- Bad time input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::text, '2020-05-03'::text);
 ERROR:  invalid time argument type "text"
