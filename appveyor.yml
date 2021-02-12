@@ -162,7 +162,7 @@ test_script:
 
     #right now we only run timescale regression tests, others will be set up later
 
-    docker exec -e IGNORES="bgw_db_scheduler chunk_utils loader cluster-12" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
+    docker exec -e IGNORES="bgw_db_scheduler chunk_utils loader cluster" -e SKIPS="cluster" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
 
     $TESTS1 = $?
 
@@ -172,7 +172,7 @@ test_script:
 
     Restart-Service postgresql-x64-12
 
-    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw remote_connection " -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
+    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw remote_connection" -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
 
     if( -not $? -or -not $TESTS1 ) { exit 1 }
 
