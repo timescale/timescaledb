@@ -8,9 +8,9 @@ build_script:
 
     # Create directories for tablespaces
 
-    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\tablespace1"
+    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\tablespace1\_default"
 
-    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\tablespace2"
+    New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\tablespace2\_default"
 
     New-Item -ItemType directory -Path "C:\Users\$env:UserName\Documents\log"
 
@@ -70,6 +70,8 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "shared_preload_libraries = 'timescaledb'"
 
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "logging_collector = on"
+
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "log_directory = 'pg_log'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "log_line_prefix = '%u [%p] %d '"
@@ -78,13 +80,22 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "autovacuum=false"
 
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "fsync=false"
+
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "random_page_cost=1.0"
+
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "extra_float_digits=0"
+
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "datestyle='postgres'"
+
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timezone='US/Pacific'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.last_tuned_version='0.0.1'"
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb_telemetry.cloud='ci'"
+
 
     # TODO removing the following line causes a stack overflow on appveyor
 
