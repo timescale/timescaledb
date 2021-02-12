@@ -1501,7 +1501,6 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	 */
 	RangeTblEntry *rte = llast_node(RangeTblEntry, inp->final_userquery->rtable);
 	FromExpr *fromexpr;
-	Var *result;
 	rte->relid = mattbladdress->objectId;
 	rte->rtekind = RTE_RELATION;
 	rte->relkind = RELKIND_RELATION;
@@ -1513,12 +1512,14 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		ColumnDef *cdef = (ColumnDef *) lfirst(lc);
 		Value *attrname = makeString(cdef->colname);
 		rte->eref->colnames = lappend(rte->eref->colnames, attrname);
+		rte->selectedCols =
+			bms_add_member(rte->selectedCols,
+						   list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber);
 	}
+	rte->requiredPerms |= ACL_SELECT;
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
-	result = makeWholeRowVar(rte, 1, 0, true);
-	result->location = 0;
-	markVarForSelectPriv(NULL, result, rte);
+
 	/* 2. Fixup targetlist with the correct rel information */
 	foreach (lc, inp->final_seltlist)
 	{
