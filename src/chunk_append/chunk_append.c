@@ -81,7 +81,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	if (root->parse->groupClause || root->parse->groupingSets || root->parse->distinctClause ||
 		root->parse->hasAggs || root->parse->hasWindowFuncs || root->hasHavingQual ||
 		has_joins(root->parse->jointree) || root->limit_tuples > PG_INT32_MAX ||
-		root->parse->hasTargetSRFs)
+		root->parse->hasTargetSRFs ||
+		!pathkeys_contained_in(root->sort_pathkeys, subpath->pathkeys))
 		path->limit_tuples = -1;
 	else
 		path->limit_tuples = (int) root->limit_tuples;
