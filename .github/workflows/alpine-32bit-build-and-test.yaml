@@ -18,13 +18,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "11.11", "12.6" ]
+        pg: [ "11.11", "12.6", "13.2" ]
         build_type: [ Debug ]
         include:
           - pg: 11.11
             ignores: append-11 chunk_adaptive-11 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-11 continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh
           - pg: 12.6
             ignores: append-12 chunk_adaptive-12 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12
+          - pg: 13.2
+            ignores: append-13 chunk_adaptive-13 remote_txn transparent_decompression-13 vacuum_parallel
 
     steps:
 

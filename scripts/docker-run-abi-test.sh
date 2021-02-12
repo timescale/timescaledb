@@ -32,7 +32,8 @@ create_base_container() {
   echo "Creating container $1 for tag $2"
   docker rm $1 2>/dev/null || true
   # Run a Postgres container
-  docker run -u postgres -d --name $1 -v ${BASE_DIR}:/src -v ${COMPILE_VOLUME}:/compile $2
+  docker run -u postgres -d -e POSTGRES_HOST_AUTH_METHOD=trust --name $1 -v ${BASE_DIR}:/src -v ${COMPILE_VOLUME}:/compile $2
+
   # Install build dependencies
   docker exec -u root $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev && mkdir -p /build/debug"
 
