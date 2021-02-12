@@ -91,12 +91,26 @@ function cleanup() {
 
 trap cleanup EXIT
 
+# Generating a prefix directory for all test tablespaces. This should
+# be used to build a full path for the tablespace. Note that we
+# terminate the prefix with the directory separator so that we can
+# easily generate paths independent of the OS.
+#
 # This mktemp line will work on both OSX and GNU systems
-TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
-TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')}
-export TEST_TABLESPACE1_PATH TEST_TABLESPACE2_PATH
+TEST_TABLESPACE1_PREFIX=${TEST_TABLESPACE1_PREFIX:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')/}
+TEST_TABLESPACE2_PREFIX=${TEST_TABLESPACE2_PREFIX:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')/}
+TEST_TABLESPACE3_PREFIX=${TEST_TABLESPACE3_PREFIX:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_regress')/}
 
-rm -f ${TEST_OUTPUT_DIR}/.pg_init
+# Creating some defaults for transitioning tests to use the prefix.
+TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-${TEST_TABLESPACE1_PREFIX}_default}
+TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-${TEST_TABLESPACE2_PREFIX}_default}
+TEST_TABLESPACE3_PATH=${TEST_TABLESPACE3_PATH:-${TEST_TABLESPACE3_PREFIX}_default}
+mkdir $TEST_TABLESPACE1_PATH $TEST_TABLESPACE2_PATH $TEST_TABLESPACE3_PATH
+
+export TEST_TABLESPACE1_PREFIX TEST_TABLESPACE2_PREFIX TEST_TABLESPACE3_PREFIX
+export TEST_TABLESPACE1_PATH TEST_TABLESPACE2_PATH TEST_TABLESPACE3_PATH
+
+rm -rf ${TEST_OUTPUT_DIR}/.pg_init
 mkdir -p ${EXE_DIR}/sql/dump
 
 export PG_REGRESS_DIFF_OPTS
