@@ -13,10 +13,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [11, 12]
+        pg: [11, 12, 13]
+        include:
+          - pg: 11
+            pg_minor_compile: 0
+          - pg: 12
+            pg_minor_compile: 0
+          - pg: 13
+            pg_minor_compile: 2
     env:
       PG_MAJOR: ${{ matrix.pg }}
-      PG_MINOR_COMPILE: 0
+      PG_MINOR_COMPILE: ${{ matrix.pg_minor_compile }}
 
     steps:
     - name: Checkout TimescaleDB
