@@ -172,8 +172,8 @@ LIMIT 1;
    ->  Incremental Sort (actual rows=1 loops=1)
          Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
          Presorted Key: _hyper_1_1_chunk.device_id
-         Full-sort Groups: 1  Sort Method: top-N heapsort  Average  Peak Memory: 25kB
-         Pre-sorted Groups: 1  Sort Method: top-N heapsort  Average  Peak Memory: 25kB
+         Full-sort Groups: 1  Sort Method: top-N heapsort 
+         Pre-sorted Groups: 1  Sort Method: top-N heapsort 
          ->  Merge Append (actual rows=13675 loops=1)
                Sort Key: _hyper_1_1_chunk.device_id
                ->  Index Only Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=3599 loops=1)
