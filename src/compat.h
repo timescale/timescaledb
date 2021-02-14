@@ -24,7 +24,7 @@
 
 #define is_supported_pg_version_11(version) ((version >= 110000) && (version < 120000))
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
-#define is_supported_pg_version_13(version) ((version >= 130000) && (version < 140000))
+#define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
 
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_11(version) || is_supported_pg_version_12(version) ||                 \
