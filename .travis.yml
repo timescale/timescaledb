@@ -89,9 +89,9 @@ jobs:
         - python3 ./scripts/githooks/commit_msg_tests.py
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Regression 9.6.19 32 bit"
+      name: "Regression 9.6.21 32 bit"
       env:
-        - PG_VERSION=9.6.19
+        - PG_VERSION=9.6.21
         - RETRY_PREFIX=""
       before_install:
         - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
@@ -263,28 +263,28 @@ jobs:
       env: PG_VERSION=9.6.6 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
-      name: "Regression 9.6.19"
-      env: PG_VERSION=9.6.19
+      name: "Regression 9.6.21"
+      env: PG_VERSION=9.6.21
 
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 10.2"
       env: PG_VERSION=10.2 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
-      name: "Regression 10.14"
-      env: PG_VERSION=10.14
+      name: "Regression 10.16"
+      env: PG_VERSION=10.16
 
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 11.0"
       env: PG_VERSION=11.0 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
-      name: "Regression 11.9"
-      env: PG_VERSION=11.9
+      name: "Regression 11.11"
+      env: PG_VERSION=11.11
 
     - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
-      name: "Regression 12.4"
-      env: PG_VERSION=12.4
+      name: "Regression 12.6"
+      env: PG_VERSION=12.6
 
     # This tests the ability to upgrade to the latest version on pg 9.6
     - if: (type = cron) OR (branch = prerelease_test)
@@ -450,20 +450,20 @@ jobs:
 
     # Release mode regression tests
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 12.4"
-      env: PG_VERSION=12.4 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 12.6"
+      env: PG_VERSION=12.6 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 11.9"
-      env: PG_VERSION=11.9 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 11.11"
+      env: PG_VERSION=11.11 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 10.14"
-      env: PG_VERSION=10.14 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 10.16"
+      env: PG_VERSION=10.16 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 9.6.19"
-      env: PG_VERSION=9.6.19 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 9.6.21"
+      env: PG_VERSION=9.6.21 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
