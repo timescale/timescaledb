@@ -758,7 +758,7 @@ FROM disttable;
 (9 rows)
 
 -- Test additional EXPLAIN flags
-EXPLAIN (ANALYZE, VERBOSE, COSTS FALSE, BUFFERS ON, TIMING OFF, SUMMARY OFF)
+EXPLAIN (ANALYZE, VERBOSE, COSTS FALSE, BUFFERS OFF, TIMING OFF, SUMMARY OFF)
 SELECT max(temp)
 FROM disttable;
                                                                                                     QUERY PLAN                                                                                                    
@@ -780,24 +780,17 @@ FROM disttable;
                              Remote EXPLAIN: 
                                Limit (actual rows=1 loops=1)
                                  Output: _dist_hyper_1_1_chunk.temp
-                                 Buffers: shared hit=2
                                  ->  Sort (actual rows=1 loops=1)
                                        Output: _dist_hyper_1_1_chunk.temp
                                        Sort Key: _dist_hyper_1_1_chunk.temp DESC
                                        Sort Method: top-N heapsort 
-                                       Buffers: shared hit=2
                                        ->  Append (actual rows=4 loops=1)
-                                             Buffers: shared hit=2
                                              ->  Seq Scan on _timescaledb_internal._dist_hyper_1_1_chunk (actual rows=3 loops=1)
                                                    Output: _dist_hyper_1_1_chunk.temp
                                                    Filter: (_dist_hyper_1_1_chunk.temp IS NOT NULL)
-                                                   Buffers: shared hit=1
                                              ->  Seq Scan on _timescaledb_internal._dist_hyper_1_4_chunk (actual rows=1 loops=1)
                                                    Output: _dist_hyper_1_4_chunk.temp
                                                    Filter: (_dist_hyper_1_4_chunk.temp IS NOT NULL)
-                                                   Buffers: shared hit=1
-                               Planning:
-                                 Buffers: shared hit=27
  
                        ->  Custom Scan (DataNodeScan) on public.disttable disttable_2 (actual rows=1 loops=1)
                              Output: disttable_2.temp
@@ -807,24 +800,17 @@ FROM disttable;
                              Remote EXPLAIN: 
                                Limit (actual rows=1 loops=1)
                                  Output: _dist_hyper_1_3_chunk.temp
-                                 Buffers: shared hit=2
                                  ->  Sort (actual rows=1 loops=1)
                                        Output: _dist_hyper_1_3_chunk.temp
                                        Sort Key: _dist_hyper_1_3_chunk.temp DESC
                                        Sort Method: quicksort 
-                                       Buffers: shared hit=2
                                        ->  Append (actual rows=2 loops=1)
-                                             Buffers: shared hit=2
                                              ->  Seq Scan on _timescaledb_internal._dist_hyper_1_3_chunk (actual rows=1 loops=1)
                                                    Output: _dist_hyper_1_3_chunk.temp
                                                    Filter: (_dist_hyper_1_3_chunk.temp IS NOT NULL)
-                                                   Buffers: shared hit=1
                                              ->  Seq Scan on _timescaledb_internal._dist_hyper_1_5_chunk (actual rows=1 loops=1)
                                                    Output: _dist_hyper_1_5_chunk.temp
                                                    Filter: (_dist_hyper_1_5_chunk.temp IS NOT NULL)
-                                                   Buffers: shared hit=1
-                               Planning:
-                                 Buffers: shared hit=27
  
                        ->  Custom Scan (DataNodeScan) on public.disttable disttable_3 (actual rows=1 loops=1)
                              Output: disttable_3.temp
@@ -834,28 +820,19 @@ FROM disttable;
                              Remote EXPLAIN: 
                                Limit (actual rows=1 loops=1)
                                  Output: _dist_hyper_1_2_chunk.temp
-                                 Buffers: shared hit=2
                                  ->  Sort (actual rows=1 loops=1)
                                        Output: _dist_hyper_1_2_chunk.temp
                                        Sort Key: _dist_hyper_1_2_chunk.temp DESC
                                        Sort Method: top-N heapsort 
-                                       Buffers: shared hit=2
                                        ->  Append (actual rows=3 loops=1)
-                                             Buffers: shared hit=2
                                              ->  Seq Scan on _timescaledb_internal._dist_hyper_1_2_chunk (actual rows=1 loops=1)
                                                    Output: _dist_hyper_1_2_chunk.temp
                                                    Filter: (_dist_hyper_1_2_chunk.temp IS NOT NULL)
-                                                   Buffers: shared hit=1
                                              ->  Seq Scan on _timescaledb_internal._dist_hyper_1_6_chunk (actual rows=2 loops=1)
                                                    Output: _dist_hyper_1_6_chunk.temp
                                                    Filter: (_dist_hyper_1_6_chunk.temp IS NOT NULL)
-                                                   Buffers: shared hit=1
-                               Planning:
-                                 Buffers: shared hit=27
  
- Planning:
-   Buffers: shared hit=424
-(92 rows)
+(69 rows)
 
 -- The constraints, indexes, and triggers on foreign chunks. Only
 -- check constraints should recurse to foreign chunks (although they
