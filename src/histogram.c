@@ -192,8 +192,8 @@ ts_hist_deserializefunc(PG_FUNCTION_ARGS)
 	serialized = PG_GETARG_BYTEA_P(0);
 
 	buf.data = VARDATA(serialized);
-	buf.len = VARSIZE(serialized);
-	buf.maxlen = VARSIZE(serialized);
+	buf.len = VARSIZE(serialized) - VARHDRSZ;
+	buf.maxlen = VARSIZE(serialized) - VARHDRSZ;
 	buf.cursor = 0; /* used by pq_getmsgint*/
 
 	nbuckets = pq_getmsgint(&buf, 4);
