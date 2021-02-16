@@ -21,11 +21,11 @@ import sys
 event_type = sys.argv[1]
 
 PG11_EARLIEST = "11.0"
-PG11_LATEST = "11.10"
+PG11_LATEST = "11.11"
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.5"
-PG13_EARLIEST = "13.0"
-PG13_LATEST = "13.1"
+PG12_LATEST = "12.6"
+PG13_EARLIEST = "13.2"
+PG13_LATEST = "13.2"
 
 m = {"include": [],}
 
@@ -141,11 +141,12 @@ if event_type != "pull_request":
   # add release test for latest pg11 and latest pg12
   m["include"].append(build_release_config({"pg":PG11_LATEST}))
   m["include"].append(build_release_config({"pg":PG12_LATEST}))
+  m["include"].append(build_release_config({"pg":PG13_LATEST}))
 
   # add apache only test for latest pg11 and latest pg 12
   m["include"].append(build_apache_config({"pg":PG11_LATEST}))
   m["include"].append(build_apache_config({"pg":PG12_LATEST}))
-
+  m["include"].append(build_apache_config({"pg":PG13_LATEST}))
 
 # generate command to set github action variable
 print(str.format("::set-output name=matrix::{0}",json.dumps(m)))

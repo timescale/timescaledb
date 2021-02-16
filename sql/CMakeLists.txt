@@ -98,7 +98,8 @@ set(MOD_FILES
   updates/1.7.1--1.7.2.sql
   updates/1.7.2--1.7.3.sql
   updates/1.7.3--1.7.4.sql
-  updates/1.7.4--2.0.0-rc1.sql
+  updates/1.7.4--1.7.5.sql
+  updates/1.7.5--2.0.0-rc1.sql
   updates/2.0.0-rc1--2.0.0-rc2.sql
   updates/2.0.0-rc2--2.0.0-rc3.sql
   updates/2.0.0-rc3--2.0.0-rc4.sql

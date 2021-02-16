@@ -105,15 +105,21 @@ if(${PG_VERSION_MAJOR} EQUAL "11")
     rowsecurity-11.sql
   )
 endif()
+
 if(${PG_VERSION_MAJOR} EQUAL "12")
   list(APPEND TEST_FILES
     rowsecurity-12.sql
   )
 endif()
 
+if(${PG_VERSION_MAJOR} EQUAL "13")
+  list(APPEND TEST_FILES
+    rowsecurity-13.sql
+  )
+endif()
+
 if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
   list(APPEND TEST_FILES
-    generated_columns.sql
     misc.sql
     tableam.sql
   )
