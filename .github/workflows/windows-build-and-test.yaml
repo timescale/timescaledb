@@ -10,10 +10,18 @@ jobs:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         pg: [ 11, 12, 13 ]
         os: [ windows-2019 ]
         build_type: [ Debug, Release ]
+        include:
+          - pg: 11
+            pkg_version: 11.11.1
+          - pg: 12
+            pkg_version: 12.6.1
+          - pg: 13
+            pkg_version: 13.2.1
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -33,10 +41,10 @@ jobs:
       id: cache-postgresql
       with:
         path: ~\PostgreSQL\${{ matrix.pg }}
-        key: ${{ runner.os }}-build-pg${{ matrix.pg }}
+        key: ${{ runner.os }}-build-pg${{ matrix.pkg_version }}
     - name: Install PostgreSQL ${{ matrix.pg }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      run: choco install postgresql${{ matrix.pg }} --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+      run: choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
     - name: Configure [${{ matrix.build_type }}]
       run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DREGRESS_CHECKS=OFF -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}"
       # Build step: could potentially speed things up with --parallel
