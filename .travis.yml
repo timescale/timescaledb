@@ -88,14 +88,15 @@ jobs:
         - python2 ./scripts/githooks/commit_msg_tests.py
         - python3 ./scripts/githooks/commit_msg_tests.py
 
-    - if: (type = cron) OR (branch = prerelease_test)
-      name: "Regression 9.6.19 32 bit"
+    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+      name: "Regression 9.6.21 32 bit"
       env:
-        - PG_VERSION=9.6.19
+        - PG_VERSION=9.6.21
         - RETRY_PREFIX=""
       before_install:
         - echo "$DOCKER_TOKEN" | docker login --username "$DOCKER_USER" --password-stdin
         - docker run -d --name pgbuild --env POSTGRES_HOST_AUTH_METHOD=trust -v ${TRAVIS_BUILD_DIR}:/build i386/postgres:${PG_VERSION}-alpine
+        - docker logs --details pgbuild
       script:
         # First build without OpenSSL
         - docker exec -it pgbuild /bin/sh -c "cd /build/debug-nossl && cmake .. -DUSE_OPENSSL=false -DPG_SOURCE_DIR=/postgres ${OTHER_CMAKE_FLAGS:-} -DCMAKE_BUILD_TYPE=Debug && make install && chown -R postgres:postgres /build/debug-nossl/"
@@ -262,15 +263,15 @@ jobs:
       name: "Regression 9.6.6"
       env: PG_VERSION=9.6.6 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
-      name: "Regression 9.6.19"
-      env: PG_VERSION=9.6.19
+    - if: (type = cron) OR (branch = prerelease_test)
+      name: "Regression 9.6.21"
+      env: PG_VERSION=9.6.21
 
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 10.2"
       env: PG_VERSION=10.2 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 10.14"
       env: PG_VERSION=10.14
 
@@ -278,11 +279,11 @@ jobs:
       name: "Regression 11.0"
       env: PG_VERSION=11.0 IGNORES="compression_ddl continuous_aggs_insert continuous_aggs_multi"
 
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 11.9"
       env: PG_VERSION=11.9
 
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       name: "Regression 12.4"
       env: PG_VERSION=12.4
 
@@ -339,7 +340,7 @@ jobs:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg10.sh -r
 
     # This tests the ability to upgrade to the latest version on pg 11
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       env: PG_VERSION=11.0
       name: "Update tests PostgreSQL 11.0"
       before_install:
@@ -351,7 +352,7 @@ jobs:
       script:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg11.sh
 
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       env: PG_VERSION=11.0
       name: "Update tests PostgreSQL 11.0 (with repair test)"
       before_install:
@@ -364,7 +365,7 @@ jobs:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg11.sh -r
 
     # This tests the ability to upgrade to the latest version on pg 12
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       env: PG_VERSION=12.0
       name: "Update tests PostgreSQL 12.0"
       before_install:
@@ -377,7 +378,7 @@ jobs:
         - ${RETRY_PREFIX} bash ./scripts/test_updates_pg12.sh
 
     # This tests the ability to upgrade to the latest version on pg 12
-    - if: (type = pull_request) OR (type = cron) OR (branch = prerelease_test)
+    - if: (type = cron) OR (branch = prerelease_test)
       env: PG_VERSION=12.0
       name: "Update tests PostgreSQL 12.0 (with repair test)"
       before_install:
@@ -462,8 +463,8 @@ jobs:
       env: PG_VERSION=10.14 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     - if: (type = cron) OR (branch = prerelease_test)
-      name: "Release regression tests 9.6.19"
-      env: PG_VERSION=9.6.19 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
+      name: "Release regression tests 9.6.21"
+      env: PG_VERSION=9.6.21 OTHER_CMAKE_FLAGS="-DCMAKE_BUILD_TYPE='Release'"
 
     # Memory spike test when running out of order random inserts into timescaledb database
     - if: (type = cron) OR (branch = prerelease_test)
