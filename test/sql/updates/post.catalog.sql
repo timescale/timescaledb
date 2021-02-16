@@ -10,10 +10,13 @@
 \d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
 
-\z _timescaledb_cache.*
-\z _timescaledb_catalog.*
-\z _timescaledb_config.*
-\z _timescaledb_internal.*
+-- List all permissions but sort them to avoid mismatches
+SELECT nspname AS "Schema",
+       relname AS "Name",
+       unnest(relacl)::text AS "Access"
+  FROM pg_class cl JOIN pg_namespace ns ON relnamespace = ns.oid
+ WHERE nspname IN ('_timescaledb_cache', '_timescaledb_catalog', '_timescaledb_config', '_timescaledb_internal')
+ORDER BY nspname, relname, "Access";
 
 \di _timescaledb_catalog.*
 \ds+ _timescaledb_catalog.*;

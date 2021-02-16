@@ -13,13 +13,9 @@ UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
 PG_VERSION=${PG_VERSION:-11.0}
 
-# This will propagate to the test_update_from_tags.sh script
-export TEST_REPAIR
-
 FAILED_TEST=
 KEEP_TEMP_DIRS=false
 TEST_UPDATE_FROM_TAGS_EXTRA_ARGS=
-TEST_REPAIR=false
 FAIL_COUNT=0
 
 # Declare a hash table to keep test names keyed by pid
@@ -37,10 +33,6 @@ do
             KEEP_TEMP_DIRS=true
             TEST_UPDATE_FROM_TAGS_EXTRA_ARGS="-d"
             ;;
-	r)
-	    echo "Breaking dimension slices to test repair part"
-	    TEST_REPAIR=true
-	    ;;
     esac
 done
 

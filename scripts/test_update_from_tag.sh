@@ -92,7 +92,7 @@ docker_pgcmd() {
 }
 
 docker_pgscript() {
-    local database=${3:-postgres}
+    local database=${3:-single}
     docker_exec $1 "psql -h localhost -U postgres -d $database -v TEST_REPAIR=${TEST_REPAIR} -v ON_ERROR_STOP=1 -f $2"
 }
 
@@ -167,6 +167,8 @@ remove_containers || true
 
 IMAGE_NAME=${UPDATE_TO_IMAGE} TAG_NAME=${UPDATE_TO_TAG} PG_VERSION=${PG_VERSION} bash ${SCRIPT_DIR}/docker-build.sh
 
+set -x
+
 echo "Launching containers"
 docker_run ${CONTAINER_ORIG} ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
 docker_run ${CONTAINER_CLEAN_RESTORE} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
@@ -183,7 +185,13 @@ CLEAN_VOLUME=$(docker inspect ${CONTAINER_CLEAN_RESTORE} --format='{{range .Moun
 UPDATE_VOLUME=$(docker inspect ${CONTAINER_ORIG} --format='{{range .Mounts }}{{.Name}}{{end}}')
 
 echo "Executing setup script on container running ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}"
+docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.databases.sql "postgres"
+docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/pre.testing.sql
 docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.${TEST_VERSION}.sql
+if [[ "${TEST_REPAIR}" = "true" ]]; then
+    echo "Executing setup repair script"
+    docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.repair.sql
+fi
 docker_pgcmd ${CONTAINER_ORIG} "CHECKPOINT;"
 
 # Remove container but keep volume
@@ -200,16 +208,9 @@ docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
 # which is available in the image.
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "postgres"
 
-# Post update script. Needed for multi-node tests when updating from a
-# version that doesn't support multi-node to a multi-node capable
-# version.
-if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
- 	echo "Executing post update scripts"
-	docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.update.sql "single"
-	if [[ "${TEST_REPAIR}" = "true" ]]; then
-	    echo "Executing post update repair script"
-	    docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql "single"
-	fi
+if [[ "${TEST_REPAIR}" = "true" ]]; then
+    echo "Executing post update repair script"
+    docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql
 fi
 
 
@@ -218,36 +219,40 @@ echo "Checking that there are no missing dimension slices"
 docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/setup.check.sql
 
 echo "Executing setup script on clean"
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.databases.sql "postgres"
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/pre.testing.sql
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
-if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
-    if [[ "${TEST_REPAIR}" = "true" ]]; then
-	# We need to run the post repair script to make sure that the
-	# constraint is on the clean rerun as well since the setup
-	# script can remove it.
-	echo "Executing post update repair script on clean"
-	docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/post.repair.sql "single"
-    fi
+if [[ "${TEST_REPAIR}" = "true" ]]; then
+    # If we are running a repair, we need to apply the repair setup on
+    # clean as well since it creates tables. The setup script contains
+    # conditions that check that a repair is really taking place and
+    # will not delete dimension slices unless a repair is actually
+    # taking place, which it doesn't in this case.
+    echo "Applying repair script on clean"
+    docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.repair.sql
+    docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/post.repair.sql
 fi
 
-docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
-docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.sql"
-docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
-docker cp ${CONTAINER_UPDATED}:/tmp/dn1.sql ${TEST_TMPDIR}/dn1.sql
+
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.dump"
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.dump"
+docker cp ${CONTAINER_UPDATED}:/tmp/single.dump ${TEST_TMPDIR}/single.dump
+docker cp ${CONTAINER_UPDATED}:/tmp/dn1.dump ${TEST_TMPDIR}/dn1.dump
 
 echo "Restoring database on clean version"
-docker cp ${TEST_TMPDIR}/single.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/single.sql
-docker cp ${TEST_TMPDIR}/dn1.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.sql
+docker cp ${TEST_TMPDIR}/single.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/single.dump
+docker cp ${TEST_TMPDIR}/dn1.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.dump
 
 # Restore single
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='on'"
-docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
+docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.dump"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single RESET timescaledb.restoring"
 
 # Restore dn1
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres dn1"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='on'"
-docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.sql"
+docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.dump"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 RESET timescaledb.restoring"
 
 echo "Comparing upgraded ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG) with clean install ($UPDATE_TO_TAG)"
