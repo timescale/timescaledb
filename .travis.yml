@@ -2,6 +2,8 @@ sudo: required
 language: c
 os:
   - linux
+dist:
+  - focal
 services:
   - docker
 notifications:
@@ -81,6 +83,7 @@ jobs:
     - if: (type = cron) OR (branch = prerelease_test)
       name: "Git hook tests"
       before_install:
+        - sudo apt-get -y install python2
       install:
       after_failure:
       after_script:
