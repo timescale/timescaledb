@@ -756,7 +756,7 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	return NULL;
 }
 
-static void
+static bool
 add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *info,
 								   EMCreationContext *context)
 {
@@ -831,9 +831,10 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			cur_ec->ec_members = lcons(em, cur_ec->ec_members);
 #endif
 
-			return;
+			return true;
 		}
 	}
+	return false;
 }
 
 static void
@@ -849,14 +850,25 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		.compressed_relid_idx = info->compressed_rel->relid,
 	};
 
-	ListCell *lc;
 	Assert(info->chunk_rte->relid != info->compressed_rel->relid);
 	Assert(info->chunk_rel->relid != info->compressed_rel->relid);
 	/* based on add_child_rel_equivalences */
+#if PG13_GE
+	int i = -1;
+	bool ec_added = false;
+	Assert(root->ec_merging_done);
+	/* use chunk rel's eclass_indexes to avoid traversing all
+	 * the root's eq_classes
+	 */
+	while ((i = bms_next_member(info->chunk_rel->eclass_indexes, i)) >= 0)
+	{
+		EquivalenceClass *cur_ec = (EquivalenceClass *) list_nth(root->eq_classes, i);
+#else
+	ListCell *lc;
 	foreach (lc, root->eq_classes)
 	{
 		EquivalenceClass *cur_ec = (EquivalenceClass *) lfirst(lc);
-
+#endif
 		/*
 		 * If this EC contains a volatile expression, then generating child
 		 * EMs would be downright dangerous, so skip it.  We rely on a
@@ -870,7 +882,17 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
 			continue;
+#if PG13_LT
 		add_segmentby_to_equivalence_class(cur_ec, info, &context);
+#else
+		ec_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
+		/* Record this EC index for the compressed rel */
+		if (ec_added)
+			info->compressed_rel->eclass_indexes =
+				bms_add_member(info->compressed_rel->eclass_indexes, i);
+		ec_added = false;
+
+#endif
 	}
 	info->compressed_rel->has_eclass_joins = info->chunk_rel->has_eclass_joins;
 }
