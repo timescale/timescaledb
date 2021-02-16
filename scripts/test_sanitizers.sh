@@ -96,5 +96,5 @@ echo "Testing"
 
 # Run tests as 'postgres' user
 docker exec -i -u postgres -w /tsdb_build/timescaledb/build timescaledb-san /bin/bash <<EOF
-make -k regresscheck regresscheck-t IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'
+make -k regresscheck regresscheck-t IGNORES='cluster bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'
 EOF
