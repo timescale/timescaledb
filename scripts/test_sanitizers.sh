@@ -46,8 +46,8 @@ cleanup() {
     else
         # docker logs timescaledb-san
         # only print respective postmaster.log when regression.diffs exists
-        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/test/regression.diffs && cat /tsdb_build/timescaledb/build/test/log/postmaster.log"
-        docker_exec timescaledb-san "cat /tsdb_build/timescaledb/build/tsl/test/regression.diffs && cat /tsdb_build/timescaledb/build/tsl/test/log/postmaster.log"
+        docker_exec timescaledb-san "if [ -f /tsdb_build/timescaledb/build/test/regression.diffs ]; then cat /tsdb_build/timescaledb/build/test/regression.diffs /tsdb_build/timescaledb/build/test/log/postmaster.log; fi"
+        docker_exec timescaledb-san "if [ -f /tsdb_build/timescaledb/build/tsl/test/regression.diffs ]; then cat /tsdb_build/timescaledb/build/tsl/test/regression.diffs /tsdb_build/timescaledb/build/tsl/test/log/postmaster.log; fi"
     fi
 
     echo "Exit status is $status"
@@ -101,5 +101,5 @@ echo "Testing"
 # postmaster.c is not atomic but read/written across signal handlers
 # and ServerLoop.
 docker exec -i -u postgres -w /tsdb_build/timescaledb/build timescaledb-san /bin/bash <<EOF
-make -k regresscheck regresscheck-t SKIPS='remote_txn' IGNORES='bgw_db_scheduler bgw_launcher continuous_aggs_ddl-11'
+make -k regresscheck regresscheck-t SKIPS='remote_txn' IGNORES='bgw_db_scheduler bgw_launcher cluster-11 continuous_aggs_ddl-11'
 EOF
