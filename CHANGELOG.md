@@ -8,11 +8,27 @@ accidentally triggering the load of a previous DB version.**
 
 **Minor features**
 * #2736 Support adding columns to hypertables with compression enabled
+
+## 2.0.2 (2021-02-19)
+
+This maintenance release contains bugfixes since the 2.0.1 release. We
+deem it high priority for upgrading.
+
+The bug fixes in this release address issues with joins, the status of
+background jobs, and disabling compression. It also includes
+enhancements to continuous aggregates, including improved validation
+of policies and optimizations for faster refreshes when there are a
+lot of invalidations.
+
+**Minor features**
 * #2926 Optimize cagg refresh for small invalidations
 * #2909 Support renaming columns of compression enabled hypertables.
 
 **Bugfixes**
+* #2850 Set status for backend in background jobs
 * #2883 Fix join qual propagation for nested joins
+* #2884 Add GUC to control join qual propagation
+* #2885 Fix compressed chunk check when disabling compression
 * #2908 Fix changing column type of clustered hypertables
 * #2942 Validate continuous aggregate policy
 
@@ -20,6 +36,9 @@ accidentally triggering the load of a previous DB version.**
 * @zeeshanshabbir93 for reporting an issue with joins
 * @Antiarchitect for reporting the issue with slow refreshes of
   continuous aggregates.
+* @diego-hermida for reporting the issue about being unable to disable
+  compression
+* @mtin for reporting the issue about wrong job status
 
 ## 1.7.5 (2021-02-12)
 
