@@ -339,6 +339,9 @@ static const char *conn_status_str[] = {
 #if PG12_GE
 	[CONNECTION_GSS_STARTUP] = "GSS STARTUP",
 #endif
+#if PG13_GE
+	[CONNECTION_CHECK_TARGET] = "CHECK TARGET",
+#endif
 };
 
 static const char *conn_txn_status_str[] = {
