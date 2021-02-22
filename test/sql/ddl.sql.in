@@ -89,3 +89,21 @@ ALTER COLUMN time TYPE TEXT;
 ALTER TABLE alter_test_bigint
 DROP COLUMN time;
 \set ON_ERROR_STOP 1
+
+
+-- test expression index creation where physical layout of chunks differs from hypertable
+CREATE TABLE i2504(time timestamp NOT NULL, a int, b int, c int, d int);
+
+select create_hypertable('i2504', 'time');
+
+INSERT INTO i2504 VALUES (now(), 1, 2, 3, 4);
+ALTER TABLE i2504 DROP COLUMN b;
+
+INSERT INTO i2504(time, a, c, d) VALUES
+(now() - interval '1 year', 1, 2, 3),
+(now() - interval '2 years', 1, 2, 3);
+
+CREATE INDEX idx2 ON i2504(a,d) WHERE c IS NOT NULL;
+DROP INDEX idx2;
+CREATE INDEX idx2 ON i2504(a,d) WITH (timescaledb.transaction_per_chunk) WHERE c IS NOT NULL;
+

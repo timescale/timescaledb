@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #2974 Fix index creation for hypertables with dropped columns
+
+**Thanks**
+* @jocrau for reporting an issue with index creation
+
 ## 2.1.0 (2021-02-22)
 
 This release adds major new features since the 2.0.2 release.
