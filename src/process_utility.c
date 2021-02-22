@@ -1986,7 +1986,6 @@ typedef struct HypertableIndexOptions
 	 * transaction for all the chunks
 	 */
 	bool multitransaction;
-	IndexInfo *indexinfo;
 	int n_ht_atts;
 	bool ht_hasoid;
 
@@ -2027,6 +2026,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	CreateIndexInfo *info = (CreateIndexInfo *) arg;
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
+	IndexInfo *indexinfo;
 	Chunk *chunk;
 
 	Assert(!hypertable_is_distributed(ht));
@@ -2035,11 +2035,12 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
+	indexinfo = BuildIndexInfo(hypertable_index_rel);
 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
 									RelationGetDescr(chunk_rel)))
-		ts_adjust_indexinfo_attnos(info->extended_options.indexinfo,
+		ts_adjust_indexinfo_attnos(indexinfo,
 								   info->main_table_relid,
 								   hypertable_index_rel,
 								   chunk_rel);
@@ -2048,7 +2049,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 												   hypertable_index_rel,
 												   chunk->fd.id,
 												   chunk_rel,
-												   info->extended_options.indexinfo);
+												   indexinfo);
 
 	index_close(hypertable_index_rel, NoLock);
 	table_close(chunk_rel, NoLock);
@@ -2062,6 +2063,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	Chunk *chunk;
 	Relation hypertable_index_rel;
 	Relation chunk_rel;
+	IndexInfo *indexinfo;
 
 	Assert(info->extended_options.multitransaction);
 
@@ -2126,10 +2128,11 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 * Validation happens when creating the hypertable's index, which goes
 	 * through the usual DefineIndex mechanism.
 	 */
+	indexinfo = BuildIndexInfo(hypertable_index_rel);
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
 									RelationGetDescr(chunk_rel)))
-		ts_adjust_indexinfo_attnos(info->extended_options.indexinfo,
+		ts_adjust_indexinfo_attnos(indexinfo,
 								   info->main_table_relid,
 								   hypertable_index_rel,
 								   chunk_rel);
@@ -2138,7 +2141,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 												   hypertable_index_rel,
 												   chunk->fd.id,
 												   chunk_rel,
-												   info->extended_options.indexinfo);
+												   indexinfo);
 
 	index_close(hypertable_index_rel, NoLock);
 	table_close(chunk_rel, NoLock);
@@ -2313,7 +2316,6 @@ process_index_start(ProcessUtilityArgs *args)
 	main_table_index_relation = index_open(info.obj.objectId, AccessShareLock);
 	main_table_index_lock_relid = main_table_index_relation->rd_lockInfo.lockRelId;
 
-	info.extended_options.indexinfo = BuildIndexInfo(main_table_index_relation);
 	info.extended_options.n_ht_atts = main_table_desc->natts;
 	info.extended_options.ht_hasoid = TUPLE_DESC_HAS_OIDS(main_table_desc);
 	info.main_table_relid = ht->main_table_relid;
