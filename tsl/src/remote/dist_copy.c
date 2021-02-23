@@ -17,7 +17,7 @@
 #include "compat.h"
 #include "dist_copy.h"
 #include "copy.h"
-#include "chunk_dispatch.h"
+#include "nodes/chunk_dispatch.h"
 #include "dimension.h"
 #include "hypertable.h"
 #include "partitioning.h"
