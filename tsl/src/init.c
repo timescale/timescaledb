@@ -28,7 +28,7 @@
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/invalidation.h"
 #include "cross_module_fn.h"
-#include "data_node_dispatch.h"
+#include "nodes/data_node_dispatch.h"
 #include "data_node.h"
 #include "dist_util.h"
 #include "export.h"

@@ -19,9 +19,9 @@
 #include <funcapi.h>
 #include <miscadmin.h>
 
-#include <chunk_dispatch_plan.h>
-#include <chunk_dispatch_state.h>
-#include <chunk_insert_state.h>
+#include <nodes/chunk_dispatch_plan.h>
+#include <nodes/chunk_dispatch_state.h>
+#include <nodes/chunk_insert_state.h>
 #include <hypertable_cache.h>
 #include <compat.h>
 #include <guc.h>
