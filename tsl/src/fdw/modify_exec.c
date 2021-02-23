@@ -20,7 +20,7 @@
 #include <remote/dist_txn.h>
 #include <remote/utils.h>
 #include <remote/tuplefactory.h>
-#include <chunk_insert_state.h>
+#include <nodes/chunk_insert_state.h>
 #include <compat.h>
 
 #include "scan_plan.h"

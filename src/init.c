@@ -20,7 +20,7 @@
 #include "compat.h"
 #include "config.h"
 #include "license_guc.h"
-#include "constraint_aware_append.h"
+#include "nodes/constraint_aware_append/constraint_aware_append.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;

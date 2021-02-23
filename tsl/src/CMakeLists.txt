@@ -3,7 +3,6 @@ set(SOURCES
   chunk_api.c
   chunk.c
   data_node.c
-  data_node_dispatch.c
   deparse.c
   dist_util.c
   dist_backup.c
