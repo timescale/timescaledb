@@ -136,7 +136,10 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 	if (plan->onConflictAction == ONCONFLICT_NOTHING)
 		do_nothing = true;
 	else if (plan->onConflictAction != ONCONFLICT_NONE)
-		elog(ERROR, "unexpected ON CONFLICT specification: %d", (int) plan->onConflictAction);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("ON CONFLICT DO UPDATE not supported"
+						" on distributed hypertables")));
 
 	/*
 	 * Core code already has some lock on each rel being planned, so we can
