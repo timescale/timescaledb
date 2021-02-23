@@ -1147,11 +1147,19 @@ Sun Sep 03 06:18:00 2017 PDT|     9| 8.7|    3
 (1 row)
 
 \set ON_ERROR_STOP 0
--- ON CONFLICT only works with DO NOTHING
+-- ON CONFLICT DO NOTHING only works when index inference is omitted
+\set VERBOSITY default
+INSERT INTO disttable
+VALUES ('2017-09-02 06:09', 6)
+ON CONFLICT(time,device) DO NOTHING;
+ERROR:  could not find arbiter index for hypertable index "disttable_pkey" on chunk "_dist_hyper_1_9_chunk"
+HINT:  Omit the index inference specification for the distributed hypertable in the ON CONFLICT clause.
+\set VERBOSITY terse
+-- ON CONFLICT only works with DO NOTHING for now
 INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-09 08:13', 7, 3, 27.5)
 ON CONFLICT (time) DO UPDATE SET temp = 3.2;
-ERROR:  unexpected ON CONFLICT specification: 2
+ERROR:  ON CONFLICT DO UPDATE not supported on distributed hypertables
 -- Test that an INSERT that would create a chunk does not work on a
 -- data node
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$

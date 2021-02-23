@@ -365,7 +365,15 @@ $$);
 
 
 \set ON_ERROR_STOP 0
--- ON CONFLICT only works with DO NOTHING
+
+-- ON CONFLICT DO NOTHING only works when index inference is omitted
+\set VERBOSITY default
+INSERT INTO disttable
+VALUES ('2017-09-02 06:09', 6)
+ON CONFLICT(time,device) DO NOTHING;
+\set VERBOSITY terse
+
+-- ON CONFLICT only works with DO NOTHING for now
 INSERT INTO disttable (time, device, "Color", temp)
 VALUES ('2017-09-09 08:13', 7, 3, 27.5)
 ON CONFLICT (time) DO UPDATE SET temp = 3.2;

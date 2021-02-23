@@ -1090,7 +1090,10 @@ plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 	if (onconflict == ONCONFLICT_NOTHING)
 		do_nothing = true;
 	else if (onconflict != ONCONFLICT_NONE)
-		elog(ERROR, "unexpected ON CONFLICT specification: %d", (int) onconflict);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("ON CONFLICT DO UPDATE not supported"
+						" on distributed hypertables")));
 
 	userid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
 
