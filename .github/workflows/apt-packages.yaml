@@ -72,7 +72,7 @@ jobs:
         fi
 
     - name: Slack Notification
-      if: failure()
+      if: failure() && github.event_name != 'pull_request'
       env:
         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         SLACK_COLOR: '#ff0000'
