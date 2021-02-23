@@ -8,14 +8,9 @@ set(SOURCES
   chunk.c
   chunk_adaptive.c
   chunk_constraint.c
-  chunk_dispatch.c
-  chunk_dispatch_plan.c
-  chunk_dispatch_state.c
   chunk_index.c
-  chunk_insert_state.c
   chunk_data_node.c
   constraint.c
-  constraint_aware_append.c
   cross_module_fn.c
   copy.c
   compression_chunk_size.c
@@ -33,7 +28,6 @@ set(SOURCES
   hypertable.c
   hypertable_cache.c
   hypertable_compression.c
-  hypertable_insert.c
   hypertable_restrict_info.c
   hypertable_data_node.c
   indexing.c
@@ -112,3 +106,4 @@ add_subdirectory(loader)
 add_subdirectory(bgw_policy)
 add_subdirectory(compat)
 add_subdirectory(import)
+add_subdirectory(nodes)
