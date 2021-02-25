@@ -194,6 +194,12 @@ CREATE OR REPLACE PROCEDURE distributed_exec(
        transactional BOOLEAN = TRUE)
 AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C;
 
+-- Execute pg_create_restore_point() on each data node
+CREATE OR REPLACE FUNCTION create_distributed_restore_point(
+    name                   TEXT
+) RETURNS TABLE(node_name NAME, node_type TEXT, restore_point pg_lsn)
+AS '@MODULE_PATHNAME@', 'ts_create_distributed_restore_point' LANGUAGE C VOLATILE STRICT;
+
 -- Sets new replication factor for distributed hypertable
 CREATE OR REPLACE FUNCTION  set_replication_factor(
     hypertable              REGCLASS,

@@ -6,6 +6,7 @@ set(SOURCES
   data_node_dispatch.c
   deparse.c
   dist_util.c
+  dist_backup.c
   hypertable.c
   init.c
   partialize_finalize.c

@@ -50,6 +50,7 @@
 #include "remote/txn_resolve.h"
 #include "reorder.h"
 #include "telemetry.h"
+#include "dist_backup.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -179,6 +180,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.dist_remote_hypertable_index_info = dist_util_remote_hypertable_index_info,
 	.validate_as_data_node = validate_data_node_settings,
 	.distributed_exec = ts_dist_cmd_exec,
+	.create_distributed_restore_point = create_distributed_restore_point,
 	.func_call_on_data_nodes = ts_dist_cmd_func_call_on_data_nodes,
 	.chunk_get_relstats = chunk_api_get_chunk_relstats,
 	.chunk_get_colstats = chunk_api_get_chunk_colstats,

@@ -8,6 +8,7 @@ set(TEST_TEMPLATES_MODULE_DEBUG
   reorder_vs_insert.spec.in
   reorder_vs_select.spec.in
   remote_create_chunk.spec.in
+  dist_restore_point.spec.in
 )
 
 list(APPEND TEST_FILES
