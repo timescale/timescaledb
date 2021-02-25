@@ -347,10 +347,11 @@ ORDER BY chunk_name, node_name;
 SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes |       node_name       
 -------------+-------------+-------------+-------------+-----------------------
-       16384 |       65536 |           0 |       81920 | db_dist_compression_1
-       16384 |       65536 |           0 |       81920 | db_dist_compression_2
-       16384 |       65536 |           0 |       81920 | db_dist_compression_3
-(3 rows)
+       16384 |       81920 |           0 |       98304 | db_dist_compression_1
+       16384 |       81920 |           0 |       98304 | db_dist_compression_2
+       16384 |       81920 |           0 |       98304 | db_dist_compression_3
+           0 |       16384 |           0 |       16384 | 
+(4 rows)
 
 -- Test compression policy with distributed hypertable
 --

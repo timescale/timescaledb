@@ -380,10 +380,11 @@ SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY nod
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes |      node_name       
 -------------+-------------+-------------+-------------+----------------------
-       81920 |       98304 |           0 |      180224 | db_dist_hypertable_1
-       81920 |       98304 |           0 |      180224 | db_dist_hypertable_2
-       81920 |       98304 |           0 |      180224 | db_dist_hypertable_3
-(3 rows)
+       81920 |      122880 |           0 |      204800 | db_dist_hypertable_1
+       81920 |      122880 |           0 |      204800 | db_dist_hypertable_2
+       81920 |      122880 |           0 |      204800 | db_dist_hypertable_3
+           0 |       24576 |           0 |       24576 | 
+(4 rows)
 
 -- Show what some queries would look like on the frontend
 EXPLAIN (VERBOSE, COSTS FALSE)

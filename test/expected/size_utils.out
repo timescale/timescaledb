@@ -45,49 +45,49 @@ INSERT 0 1
 SELECT * FROM hypertable_detailed_size('"public"."two_Partitions"');
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-       32768 |      417792 |       32768 |      483328 | 
+       32768 |      475136 |       32768 |      548864 | 
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_device_id_timeCustom_idx"');
  hypertable_index_size 
 -----------------------
-                 65536
+                 73728
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_device_id_idx"');
  hypertable_index_size 
 -----------------------
-                 65536
+                 73728
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_idx"');
  hypertable_index_size 
 -----------------------
-                 65536
+                 73728
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_0_idx"');
  hypertable_index_size 
 -----------------------
-                 65536
+                 73728
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_1_idx"');
  hypertable_index_size 
 -----------------------
-                 65536
+                 73728
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_2_idx"');
  hypertable_index_size 
 -----------------------
-                 40960
+                 49152
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_bool_idx"');
  hypertable_index_size 
 -----------------------
-                 49152
+                 57344
 (1 row)
 
 SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_name;
@@ -413,14 +413,96 @@ SELECT * FROM approximate_row_count(NULL);
 (1 row)
 
 \set ON_ERROR_STOP 1
-SELECT * FROM chunks_detailed_size(NULL);
+-- Test size functions with invalid or non-existing OID
+SELECT * FROM hypertable_size(0);
+ hypertable_size 
+-----------------
+                
+(1 row)
+
+SELECT * FROM hypertable_detailed_size(0) ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM chunks_detailed_size(0) ORDER BY node_name;
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------
 (0 rows)
 
-SELECT * FROM hypertable_detailed_size(NULL);
+SELECT * FROM hypertable_compression_stats(0) ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats(0) ORDER BY node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size(0);
+ hypertable_index_size 
+-----------------------
+                      
+(1 row)
+
+SELECT * FROM hypertable_size(1);
+ hypertable_size 
+-----------------
+                
+(1 row)
+
+SELECT * FROM hypertable_detailed_size(1) ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM chunks_detailed_size(1) ORDER BY node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats(1) ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats(1) ORDER BY node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size(1);
+ hypertable_index_size 
+-----------------------
+                      
+(1 row)
+
+-- Test size functions with NULL input
+SELECT * FROM hypertable_size(NULL);
+ hypertable_size 
+-----------------
+                
+(1 row)
+
+SELECT * FROM hypertable_detailed_size(NULL) ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM chunks_detailed_size(NULL) ORDER BY node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats(NULL) ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats(NULL) ORDER BY node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
 (0 rows)
 
 SELECT * FROM hypertable_index_size(NULL);
@@ -429,8 +511,146 @@ SELECT * FROM hypertable_index_size(NULL);
                       
 (1 row)
 
--- tests with tables that are not hypertables
-CREATE TABLE regtab( a integer, b integer);
-CREATE INDEX regtab_idx ON regtab( a);
-SELECT * FROM hypertable_index_size('regtab_idx');
-ERROR:  query returned no rows
+-- Test size functions on regular table
+CREATE TABLE hypersize(time timestamptz, device int);
+CREATE INDEX hypersize_time_idx ON hypersize (time);
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+\set SHOW_CONTEXT never
+SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_size('hypersize'), pg_total_relation_size('hypersize'), pg_relation_size('hypersize_time_idx');
+ pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
+------------------+---------------+-----------------+------------------------+------------------
+                0 |             0 |            8192 |                   8192 |             8192
+(1 row)
+
+SELECT * FROM hypertable_size('hypersize');
+ hypertable_size 
+-----------------
+                
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size('hypersize_time_idx');
+ hypertable_index_size 
+-----------------------
+                      
+(1 row)
+
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- Test size functions on empty hypertable
+SELECT * FROM create_hypertable('hypersize', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             6 | public      | hypersize  | t
+(1 row)
+
+SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_size('hypersize'), pg_total_relation_size('hypersize'), pg_relation_size('hypersize_time_idx');
+ pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
+------------------+---------------+-----------------+------------------------+------------------
+                0 |             0 |            8192 |                   8192 |             8192
+(1 row)
+
+SELECT * FROM hypertable_size('hypersize');
+ hypertable_size 
+-----------------
+            8192
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+           0 |        8192 |           0 |        8192 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size('hypersize_time_idx');
+ hypertable_index_size 
+-----------------------
+                  8192
+(1 row)
+
+-- Test size functions on non-empty hypertable
+INSERT INTO hypersize VALUES('2021-02-25', 1);
+SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_size('hypersize'), pg_total_relation_size('hypersize'), pg_relation_size('hypersize_time_idx');
+ pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
+------------------+---------------+-----------------+------------------------+------------------
+                0 |             0 |            8192 |                   8192 |             8192
+(1 row)
+
+SELECT pg_relation_size(ch), pg_table_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('hypersize') ch
+ORDER BY ch;
+ pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size 
+------------------+---------------+-----------------+------------------------
+             8192 |          8192 |           16384 |                  24576
+(1 row)
+
+SELECT * FROM hypertable_size('hypersize');
+ hypertable_size 
+-----------------
+           32768
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+        8192 |       24576 |           0 |       32768 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
+     chunk_schema      |    chunk_name     | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+-------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_6_11_chunk |        8192 |       16384 |           0 |       24576 | 
+(1 row)
+
+SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size('hypersize_time_idx');
+ hypertable_index_size 
+-----------------------
+                 24576
+(1 row)
+

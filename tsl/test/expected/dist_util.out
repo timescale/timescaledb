@@ -207,69 +207,640 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 
 -- Test space reporting functions for distributed and non-distributed tables
 \c frontend_2 :ROLE_CLUSTER_SUPERUSER
-CREATE TABLE nondisttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
-SELECT * FROM create_hypertable('nondisttable', 'time');
+CREATE TABLE nondisttable(time timestamptz, device int CHECK (device > 0), temp float);
+CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), temp float);
+SELECT * FROM create_hypertable('nondisttable', 'time', create_default_indexes => false);
+NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              1 | public      | nondisttable | t
 (1 row)
 
-SELECT * FROM create_distributed_hypertable('disttable', 'time');
+SELECT * FROM create_distributed_hypertable('disttable', 'time', create_default_indexes => false);
+NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | disttable  | t
 (1 row)
 
+SELECT node_name FROM timescaledb_information.data_nodes
+ORDER BY node_name;
+  node_name  
+-------------
+ data_node_1
+ data_node_2
+(2 rows)
+
+SELECT * FROM timescaledb_information.hypertables
+ORDER BY hypertable_schema, hypertable_name;
+ hypertable_schema | hypertable_name |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |        data_nodes         | tablespaces 
+-------------------+-----------------+--------------------+----------------+------------+---------------------+----------------+--------------------+---------------------------+-------------
+ public            | disttable       | cluster_super_user |              1 |          0 | f                   | t              |                  1 | {data_node_1,data_node_2} | 
+ public            | nondisttable    | cluster_super_user |              1 |          0 | f                   | f              |                    |                           | 
+(2 rows)
+
+-- Test size functions on empty distributed hypertable.
+--
+-- First, show the output from standard PG size functions. The
+-- functions are expected to remove 0 table bytes for the distributed
+-- hypertable since it doesn't have local storage.
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |               0 |                      0
+(1 row)
+
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('disttable') ch;
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+(0 rows)
+
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |               0 |                      0
+(1 row)
+
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('nondisttable') ch;
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+(0 rows)
+
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+               0
+(1 row)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+               0
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+           0 |           0 |           0 |           0 | data_node_1
+           0 |           0 |           0 |           0 | data_node_2
+           0 |           0 |           0 |           0 | 
+(3 rows)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+           0 |           0 |           0 |           0 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+-- Create primary key index and check how it affects the size of the
+-- empty hypertables.
+ALTER TABLE nondisttable ADD CONSTRAINT nondisttable_pkey PRIMARY KEY (time);
+ALTER TABLE disttable ADD CONSTRAINT disttable_pkey PRIMARY KEY (time);
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+-- Note that the empty disttable is three times the size of the
+-- nondisttable since it has primary key indexes on two data nodes in
+-- addition to the access node.
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+           24576
+(1 row)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+            8192
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+           0 |        8192 |           0 |        8192 | data_node_1
+           0 |        8192 |           0 |        8192 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+           0 |        8192 |           0 |        8192 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+--------------+------------+-------------+-------------+-------------+-------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size('disttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 24576
+(1 row)
+
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+ hypertable_index_size 
+-----------------------
+                  8192
+(1 row)
+
+-- Test size functions on tables with an empty chunk
+INSERT INTO nondisttable VALUES ('2017-01-01 06:01', 1, 1.1);
+INSERT INTO disttable SELECT * FROM nondisttable;
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('disttable') ch;
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |               0 |                      0
+(1 row)
+
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('nondisttable') ch;
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+          8192 |             8192 |           16384 |                  24576
+(1 row)
+
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+           49152
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+        8192 |       24576 |           0 |       32768 | data_node_1
+           0 |        8192 |           0 |        8192 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+           32768
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+        8192 |       24576 |           0 |       32768 | 
+(1 row)
+
+-- Delete all data, but keep chunks
+DELETE FROM nondisttable;
+DELETE FROM disttable;
+VACUUM FULL ANALYZE nondisttable;
+VACUUM FULL ANALYZE disttable;
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch)
+FROM show_chunks('disttable') ch;
+ pg_table_size | pg_relation_size | pg_indexes_size 
+---------------+------------------+-----------------
+             0 |                0 |               0
+(1 row)
+
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('nondisttable') ch;
+ pg_table_size | pg_relation_size | pg_indexes_size | pg_total_relation_size 
+---------------+------------------+-----------------+------------------------
+             0 |                0 |            8192 |                   8192
+(1 row)
+
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+           32768
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+           0 |       16384 |           0 |       16384 | data_node_1
+           0 |        8192 |           0 |        8192 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+           16384
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+           0 |       16384 |           0 |       16384 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
+ _timescaledb_internal | _dist_hyper_2_2_chunk |           0 |        8192 |           0 |        8192 | data_node_1
+(1 row)
+
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk |           0 |        8192 |           0 |        8192 | 
+(1 row)
+
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size('disttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 32768
+(1 row)
+
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 16384
+(1 row)
+
+-- Test size functions on non-empty hypertable
 INSERT INTO nondisttable VALUES
        ('2017-01-01 06:01', 1, 1.1),
        ('2017-01-01 08:01', 1, 1.2),
        ('2018-01-02 08:01', 2, 1.3),
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
-INSERT INTO disttable VALUES
-       ('2017-01-01 06:01', 1, 1.1),
-       ('2017-01-01 08:01', 1, 1.2),
-       ('2018-01-02 08:01', 2, 1.3),
-       ('2019-01-01 09:11', 3, 2.1),
-       ('2017-01-01 06:05', 1, 1.4);
-SELECT * FROM timescaledb_information.data_nodes ORDER BY node_name;
-  node_name  |       owner        |                    options                     
--------------+--------------------+------------------------------------------------
- data_node_1 | cluster_super_user | {host=localhost,port=55432,dbname=backend_2_1}
- data_node_2 | cluster_super_user | {host=localhost,port=55432,dbname=backend_x_2}
-(2 rows)
+INSERT INTO disttable SELECT * FROM nondisttable;
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+           98304
+(1 row)
 
-SELECT * FROM timescaledb_information.hypertables ORDER BY hypertable_schema, hypertable_name;
- hypertable_schema | hypertable_name |       owner        | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |        data_nodes         | tablespaces 
--------------------+-----------------+--------------------+----------------+------------+---------------------+----------------+--------------------+---------------------------+-------------
- public            | disttable       | cluster_super_user |              1 |          3 | f                   | t              |                  1 | {data_node_1,data_node_2} | 
- public            | nondisttable    | cluster_super_user |              1 |          3 | f                   | f              |                    |                           | 
-(2 rows)
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+           81920
+(1 row)
 
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
 -------------+-------------+-------------+-------------+-------------
-       16384 |       32768 |           0 |       49152 | data_node_1
-        8192 |       16384 |           0 |       24576 | data_node_2
-(2 rows)
+       16384 |       40960 |           0 |       57344 | data_node_1
+        8192 |       24576 |           0 |       32768 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
 
 SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-       24576 |       49152 |           0 |       73728 | 
+       24576 |       57344 |           0 |       81920 | 
 (1 row)
 
-SELECT * FROM hypertable_size('disttable') ;
- hypertable_size 
------------------
-           73728
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
+ _timescaledb_internal | _dist_hyper_2_2_chunk |        8192 |       16384 |           0 |       24576 | data_node_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk |        8192 |       16384 |           0 |       24576 | data_node_2
+ _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       16384 |           0 |       24576 | data_node_1
+(3 rows)
+
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk |        8192 |       16384 |           0 |       24576 | 
+ _timescaledb_internal | _hyper_1_3_chunk |        8192 |       16384 |           0 |       24576 | 
+ _timescaledb_internal | _hyper_1_4_chunk |        8192 |       16384 |           0 |       24576 | 
+(3 rows)
+
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+ chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+(0 rows)
+
+SELECT * FROM hypertable_index_size('disttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 73728
 (1 row)
 
-SELECT * FROM hypertable_size('nondisttable') ;
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 57344
+(1 row)
+
+-- Enable compression
+ALTER TABLE nondisttable
+SET (timescaledb.compress,
+	 timescaledb.compress_segmentby='device',
+	 timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE disttable
+SET (timescaledb.compress,
+	 timescaledb.compress_segmentby='device',
+	 timescaledb.compress_orderby = 'time DESC');
+SELECT * FROM hypertable_size('disttable');
  hypertable_size 
 -----------------
-           73728
+           98304
+(1 row)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+           81920
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+       16384 |       40960 |           0 |       57344 | data_node_1
+        8192 |       24576 |           0 |       32768 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+       24576 |       57344 |           0 |       81920 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
+ _timescaledb_internal | _dist_hyper_2_2_chunk |        8192 |       16384 |           0 |       24576 | data_node_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk |        8192 |       16384 |           0 |       24576 | data_node_2
+ _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       16384 |           0 |       24576 | data_node_1
+(3 rows)
+
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk |        8192 |       16384 |           0 |       24576 | 
+ _timescaledb_internal | _hyper_1_3_chunk |        8192 |       16384 |           0 |       24576 | 
+ _timescaledb_internal | _hyper_1_4_chunk |        8192 |       16384 |           0 |       24576 | 
+(3 rows)
+
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes |  node_name  
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------
+            2 |                        0 |                                |                                |                                |                                |                               |                               |                               |                               | data_node_1
+            1 |                        0 |                                |                                |                                |                                |                               |                               |                               |                               | data_node_2
+(2 rows)
+
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+            3 |                        0 |                                |                                |                                |                                |                               |                               |                               |                               | 
+(1 row)
+
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |      chunk_name       | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes |  node_name  
+-----------------------+-----------------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------
+ _timescaledb_internal | _dist_hyper_2_2_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | data_node_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | data_node_2
+ _timescaledb_internal | _dist_hyper_2_6_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | data_node_1
+(3 rows)
+
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |    chunk_name    | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+-----------------------+------------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | 
+ _timescaledb_internal | _hyper_1_3_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | 
+ _timescaledb_internal | _hyper_1_4_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | 
+(3 rows)
+
+SELECT * FROM hypertable_index_size('disttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 73728
+(1 row)
+
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 57344
+(1 row)
+
+-- Compress two chunks (out of three) to see effect of compression
+SELECT compress_chunk(ch)
+FROM show_chunks('disttable') ch
+LIMIT 2;
+               compress_chunk                
+---------------------------------------------
+ _timescaledb_internal._dist_hyper_2_2_chunk
+ _timescaledb_internal._dist_hyper_2_5_chunk
+(2 rows)
+
+SELECT compress_chunk(ch)
+FROM show_chunks('nondisttable') ch
+LIMIT 2;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+(2 rows)
+
+SELECT * FROM hypertable_size('disttable');
+ hypertable_size 
+-----------------
+          131072
+(1 row)
+
+SELECT * FROM hypertable_size('nondisttable');
+ hypertable_size 
+-----------------
+          114688
+(1 row)
+
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-------------+-------------+-------------+-------------+-------------
+       16384 |       49152 |        8192 |       73728 | data_node_1
+        8192 |       32768 |        8192 |       49152 | data_node_2
+           0 |        8192 |           0 |        8192 | 
+(3 rows)
+
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+ table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-------------+-------------+-------------+-------------+-----------
+       24576 |       73728 |       16384 |      114688 | 
+(1 row)
+
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
+ _timescaledb_internal | _dist_hyper_2_2_chunk |        8192 |       24576 |        8192 |       40960 | data_node_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk |        8192 |       24576 |        8192 |       40960 | data_node_2
+ _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       16384 |           0 |       24576 | data_node_1
+(3 rows)
+
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
+-----------------------+------------------+-------------+-------------+-------------+-------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk |        8192 |       24576 |        8192 |       40960 | 
+ _timescaledb_internal | _hyper_1_3_chunk |        8192 |       24576 |        8192 |       40960 | 
+ _timescaledb_internal | _hyper_1_4_chunk |        8192 |       16384 |           0 |       24576 | 
+(3 rows)
+
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes |  node_name  
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------
+            2 |                        1 |                           8192 |                          16384 |                              0 |                          24576 |                          8192 |                         16384 |                          8192 |                         32768 | data_node_1
+            1 |                        1 |                           8192 |                          16384 |                              0 |                          24576 |                          8192 |                         16384 |                          8192 |                         32768 | data_node_2
+(2 rows)
+
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+ total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+--------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+            3 |                        2 |                          16384 |                          32768 |                              0 |                          49152 |                         16384 |                         32768 |                         16384 |                         65536 | 
+(1 row)
+
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |      chunk_name       | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes |  node_name  
+-----------------------+-----------------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------
+ _timescaledb_internal | _dist_hyper_2_2_chunk | Compressed         |                           8192 |                          16384 |                              0 |                          24576 |                          8192 |                         16384 |                          8192 |                         32768 | data_node_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk | Compressed         |                           8192 |                          16384 |                              0 |                          24576 |                          8192 |                         16384 |                          8192 |                         32768 | data_node_2
+ _timescaledb_internal | _dist_hyper_2_6_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | data_node_1
+(3 rows)
+
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+     chunk_schema      |    chunk_name    | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
+-----------------------+------------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
+ _timescaledb_internal | _hyper_1_1_chunk | Compressed         |                           8192 |                          16384 |                              0 |                          24576 |                          8192 |                         16384 |                          8192 |                         32768 | 
+ _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                           8192 |                          16384 |                              0 |                          24576 |                          8192 |                         16384 |                          8192 |                         32768 | 
+ _timescaledb_internal | _hyper_1_4_chunk | Uncompressed       |                                |                                |                                |                                |                               |                               |                               |                               | 
+(3 rows)
+
+SELECT * FROM hypertable_index_size('disttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 57344
+(1 row)
+
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+ hypertable_index_size 
+-----------------------
+                 40960
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER

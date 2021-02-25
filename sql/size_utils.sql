@@ -7,8 +7,8 @@
 
 CREATE OR REPLACE VIEW _timescaledb_internal.hypertable_chunk_local_size AS 
 SELECT
-   h.schema_name,
-   h.table_name,
+   h.schema_name AS hypertable_schema,
+   h.table_name AS hypertable_name,
    h.id as hypertable_id,
    c.id as chunk_id,
    c.schema_name as chunk_schema,
@@ -67,46 +67,25 @@ RETURNS TABLE (
 AS '@MODULE_PATHNAME@', 'ts_dist_remote_chunk_info' LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_local_size(
-    schema_name_in name,
-    table_name_in name)
+	schema_name_in name,
+	table_name_in name)
 RETURNS TABLE (
-    table_bytes bigint,
-    index_bytes bigint,
-    toast_bytes bigint,
-    total_bytes bigint)
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+	table_bytes bigint,
+	index_bytes bigint,
+	toast_bytes bigint,
+	total_bytes bigint)
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-BEGIN
-   RETURN QUERY 
-   SELECT
-      (sub2.table_bytes + sub2.compressed_heap_bytes)::bigint as heap_bytes,
-      (sub2.index_bytes + sub2.compressed_index_bytes)::bigint as index_bytes,
-      (sub2.toast_bytes + sub2.compressed_toast_bytes)::bigint as toast_bytes,
-      (sub2.total_bytes + sub2.compressed_heap_bytes + sub2.compressed_index_bytes + sub2.compressed_toast_bytes)::bigint as total_bytes 
-   FROM
-      (
-         SELECT
-            *,
-            sub1.total_bytes - sub1.index_bytes - sub1.toast_bytes AS table_bytes 
-         FROM
-            (
-               SELECT
-                  sum(ch.total_bytes) as total_bytes,
-                  COALESCE( sum(ch.index_bytes) , 0 ) as index_bytes,
-                  COALESCE( sum(ch.toast_bytes), 0 ) as toast_bytes,
-                  COALESCE( sum(ch.compressed_heap_size) , 0 ) as compressed_heap_bytes,
-                  COALESCE( sum(ch.compressed_index_size) , 0) as compressed_index_bytes,
-                  COALESCE( sum(ch.compressed_toast_size) , 0 ) as compressed_toast_bytes 
-               FROM
-                  _timescaledb_internal.hypertable_chunk_local_size ch 
-               WHERE
-                  schema_name = schema_name_in 
-                  AND table_name = table_name_in 
-               GROUP BY
-                  hypertable_id 
-            ) sub1 
-      ) sub2;
-END;
+	SELECT
+		(COALESCE(sum(ch.total_bytes), 0) - COALESCE(sum(ch.index_bytes), 0) - COALESCE(sum(ch.toast_bytes), 0) + COALESCE(sum(ch.compressed_heap_size), 0))::bigint + pg_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS heap_bytes,
+		(COALESCE(sum(ch.index_bytes), 0) + COALESCE(sum(ch.compressed_index_size), 0))::bigint + pg_indexes_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS index_bytes,
+		(COALESCE(sum(ch.toast_bytes), 0) + COALESCE(sum(ch.compressed_toast_size), 0))::bigint AS toast_bytes,
+		(COALESCE(sum(ch.total_bytes), 0) + COALESCE(sum(ch.compressed_heap_size), 0) + COALESCE(sum(ch.compressed_index_size), 0) + COALESCE(sum(ch.compressed_toast_size), 0))::bigint + pg_total_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS total_bytes
+	FROM
+		_timescaledb_internal.hypertable_chunk_local_size ch
+	WHERE
+		hypertable_schema = schema_name_in
+		AND hypertable_name = table_name_in
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_remote_size(
@@ -118,10 +97,8 @@ RETURNS TABLE (
     toast_bytes bigint,
     total_bytes bigint,
     node_name   NAME)
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-BEGIN
-    RETURN QUERY
     SELECT
         sum(entry.table_bytes)::bigint AS table_bytes,
         sum(entry.index_bytes)::bigint AS index_bytes,
@@ -147,7 +124,6 @@ BEGIN
         NULL
     END, schema_name_in, table_name_in) entry ON TRUE
     GROUP BY srv.node_name;
-END;
 $BODY$;
 
 -- Get relation size of hypertable
@@ -162,50 +138,55 @@ $BODY$;
 -- total_bytes        - Total disk space used by the specified table, including all indexes and TOAST data
 
 CREATE OR REPLACE FUNCTION hypertable_detailed_size(
-    hypertable              REGCLASS
-)
+    hypertable              REGCLASS)
 RETURNS TABLE (table_bytes BIGINT,
                index_bytes BIGINT,
                toast_bytes BIGINT,
                total_bytes BIGINT,
-               node_name   NAME
-               ) 
+               node_name   NAME)
 LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 DECLARE
-        table_name       NAME;
-        schema_name      NAME;
-        is_distributed   BOOL;
+        table_name       NAME = NULL;
+        schema_name      NAME = NULL;
+        is_distributed   BOOL = FALSE;
 BEGIN
         SELECT relname, nspname, replication_factor > 0
-        INTO STRICT table_name, schema_name, is_distributed
+        INTO table_name, schema_name, is_distributed
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
         WHERE c.OID = hypertable;
 
+		IF table_name IS NULL THEN
+		    RETURN;
+		END IF;
+
         CASE WHEN is_distributed THEN
-            RETURN QUERY SELECT * FROM _timescaledb_internal.hypertable_remote_size(schema_name, table_name);
+			RETURN QUERY
+			SELECT *, NULL::name
+			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name)
+			UNION
+			SELECT *
+			FROM _timescaledb_internal.hypertable_remote_size(schema_name, table_name);
         ELSE
-            RETURN QUERY SELECT *, NULL::name FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name);
+			RETURN QUERY
+			SELECT *, NULL::name
+			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name);
         END CASE;
 END;
 $BODY$;
 
 --- returns total-bytes for a hypertable (includes table + index)
 CREATE OR REPLACE FUNCTION hypertable_size(
-    hypertable              REGCLASS
-)
+    hypertable              REGCLASS)
 RETURNS BIGINT 
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-DECLARE
-  num_bytes BIGINT;
-BEGIN
-   SELECT sum(hd.total_bytes) INTO STRICT num_bytes
-   FROM hypertable_detailed_size(hypertable) hd;
-   RETURN num_bytes;
-END;
+   -- One row per data node is returned (in case of a distributed
+   -- hypertable), so sum them up:
+   SELECT sum(total_bytes)::bigint
+   FROM hypertable_detailed_size(hypertable);
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_local_size(
@@ -219,10 +200,8 @@ RETURNS TABLE (
     index_bytes bigint,
     toast_bytes bigint,
     total_bytes bigint)
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-BEGIN
-   RETURN QUERY
    SELECT
       ch.chunk_id,
       ch.chunk_schema,
@@ -232,12 +211,10 @@ BEGIN
       (COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_toast_size, 0 ))::bigint as toast_bytes,
       (ch.total_bytes + COALESCE( ch.compressed_heap_size, 0 ) + COALESCE( ch.compressed_index_size, 0) + COALESCE( ch.compressed_toast_size, 0 ))::bigint as total_bytes 
    FROM
-   _timescaledb_internal.hypertable_chunk_local_size ch 
+	  _timescaledb_internal.hypertable_chunk_local_size ch
    WHERE
-      ch.schema_name = schema_name_in 
-      AND ch.table_name = table_name_in 
-; 
-END;
+      ch.hypertable_schema = schema_name_in
+      AND ch.hypertable_name = table_name_in;
 $BODY$;
 
 ---should return same information as chunks_local_size--
@@ -253,10 +230,8 @@ RETURNS TABLE (
     toast_bytes bigint,
     total_bytes bigint,
     node_name NAME)
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-BEGIN
-    RETURN QUERY
     SELECT
         entry.chunk_id,
         entry.chunk_schema,
@@ -283,8 +258,9 @@ BEGIN
         srv.node_name
     ELSE
         NULL
-    END , schema_name_in, table_name_in) entry ON TRUE;
-END;
+    END , schema_name_in, table_name_in) entry ON TRUE
+	WHERE
+	    entry.chunk_name IS NOT NULL;
 $BODY$;
 
 -- Get relation size of the chunks of an hypertable
@@ -318,11 +294,15 @@ DECLARE
         is_distributed   BOOL;
 BEGIN
         SELECT relname, nspname, replication_factor > 0
-        INTO STRICT table_name, schema_name, is_distributed
+        INTO table_name, schema_name, is_distributed
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
         WHERE c.OID = hypertable;
+
+		IF table_name IS NULL THEN
+		    RETURN;
+		END IF;
 
         CASE WHEN is_distributed THEN
             RETURN QUERY SELECT ch.chunk_schema, ch.chunk_name, ch.table_bytes, ch.index_bytes, 
@@ -415,8 +395,8 @@ $BODY$;
 -------- stats related to compression ------
 CREATE OR REPLACE VIEW _timescaledb_internal.compressed_chunk_stats AS
 SELECT
-    srcht.schema_name,
-    srcht.table_name,
+    srcht.schema_name AS hypertable_schema,
+    srcht.table_name AS hypertable_name,
     srcch.schema_name AS chunk_schema,
     srcch.table_name AS chunk_name,
     CASE WHEN srcch.compressed_chunk_id IS NULL THEN
@@ -470,11 +450,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_local_stats (s
         after_compression_index_bytes bigint,
         after_compression_toast_bytes bigint,
         after_compression_total_bytes bigint)
-    LANGUAGE PLPGSQL
+    LANGUAGE SQL
     STABLE STRICT
-    AS $BODY$
-BEGIN
-    RETURN QUERY
+    AS
+$BODY$
     SELECT
         ch.chunk_schema,
         ch.chunk_name,
@@ -490,9 +469,8 @@ BEGIN
     FROM
         _timescaledb_internal.compressed_chunk_stats ch
     WHERE
-        ch.schema_name = schema_name_in
-        AND ch.table_name = table_name_in;
-END;
+        ch.hypertable_schema = schema_name_in
+        AND ch.hypertable_name = table_name_in;
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_remote_stats (schema_name_in name, table_name_in name)
@@ -509,11 +487,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_remote_stats (
         after_compression_toast_bytes bigint,
         after_compression_total_bytes bigint,
         node_name name)
-    LANGUAGE PLPGSQL
+    LANGUAGE SQL
     STABLE STRICT
-    AS $BODY$
-BEGIN
-    RETURN QUERY
+    AS
+$BODY$
     SELECT
         ch.*,
         srv.node_name
@@ -533,8 +510,8 @@ BEGIN
         srv.node_name
     ELSE
         NULL
-    END, schema_name_in, table_name_in) ch ON TRUE;
-END;
+    END, schema_name_in, table_name_in) ch ON TRUE
+	WHERE ch.chunk_name IS NOT NULL;
 $BODY$;
 
 -- Get per chunk compression statistics for a hypertable that has
@@ -564,7 +541,9 @@ BEGIN
     SELECT
         relname,
         nspname,
-        replication_factor > 0 INTO STRICT table_name,
+        replication_factor > 0
+    INTO
+	    table_name,
         schema_name,
         is_distributed
     FROM
@@ -574,19 +553,24 @@ BEGIN
                 AND ht.table_name = c.relname)
     WHERE
         c.OID = hypertable;
+
+    IF table_name IS NULL THEN
+	    RETURN;
+	END IF;
+
     CASE WHEN is_distributed THEN
         RETURN QUERY
         SELECT
             *
         FROM
             _timescaledb_internal.compressed_chunk_remote_stats (schema_name, table_name);
-        ELSE
-            RETURN QUERY
-            SELECT
-                *,
-                NULL::name
-            FROM
-                _timescaledb_internal.compressed_chunk_local_stats (schema_name, table_name);
+    ELSE
+        RETURN QUERY
+        SELECT
+            *,
+            NULL::name
+        FROM
+            _timescaledb_internal.compressed_chunk_local_stats (schema_name, table_name);
     END CASE;
 END;
 $BODY$;
@@ -606,14 +590,13 @@ CREATE OR REPLACE FUNCTION hypertable_compression_stats (hypertable REGCLASS)
         after_compression_toast_bytes bigint,
         after_compression_total_bytes bigint,
         node_name name)
-    LANGUAGE PLPGSQL
+    LANGUAGE SQL
     STABLE STRICT
-    AS $BODY$
-BEGIN
-    RETURN QUERY
-    SELECT
-        count(*) AS total_chunks,
-        count(*) FILTER (WHERE ch.compression_status = 'Compressed') AS number_compressed_chunks,
+    AS	
+$BODY$
+	SELECT
+        count(*)::bigint AS total_chunks,
+        (count(*) FILTER (WHERE ch.compression_status = 'Compressed'))::bigint AS number_compressed_chunks,
         sum(ch.before_compression_table_bytes)::bigint AS before_compression_table_bytes,
         sum(ch.before_compression_index_bytes)::bigint AS before_compression_index_bytes,
         sum(ch.before_compression_toast_bytes)::bigint AS before_compression_toast_bytes,
@@ -624,43 +607,51 @@ BEGIN
         sum(ch.after_compression_total_bytes)::bigint AS after_compression_total_bytes,
         ch.node_name
     FROM
-        chunk_compression_stats (hypertable) ch
+	    chunk_compression_stats(hypertable) ch
     GROUP BY
         ch.node_name;
-END;
 $BODY$;
 
 -------------Get index size for hypertables -------
 --schema_name      - schema_name for hypertable index
 -- index_name      - index on hyper table
 ---note that the query matches against the hypertable's schema name as
--- the input is on the hypertable index nd not the chunk index.
+-- the input is on the hypertable index and not the chunk index.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_local_size(
     schema_name_in             NAME,
     index_name_in              NAME
 )
 RETURNS TABLE ( hypertable_id INTEGER,
                 total_bytes BIGINT ) 
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-BEGIN
-        RETURN QUERY
-        SELECT ci.hypertable_id, sum(pg_relation_size(c.oid))::bigint
+    WITH chunk_index_size (num_bytes) AS (
+        SELECT
+		    COALESCE(sum(pg_relation_size(c.oid)), 0)::bigint
         FROM                                      
-        pg_class c,
-        pg_namespace n,
-        _timescaledb_catalog.hypertable h,
-        _timescaledb_catalog.chunk ch,
-        _timescaledb_catalog.chunk_index ci
-        WHERE ch.schema_name = n.nspname
-            AND c.relnamespace = n.oid
-            AND c.relname = ci.index_name
-            AND ch.id = ci.chunk_id
-            AND h.id = ci.hypertable_id
-            AND h.schema_name = schema_name_in 
-            AND ci.hypertable_index_name = index_name_in
-        GROUP BY ci.hypertable_id; 
-END;
+            pg_class c,
+            pg_namespace n,
+            _timescaledb_catalog.chunk ch,
+            _timescaledb_catalog.chunk_index ci,
+			_timescaledb_catalog.hypertable h
+         WHERE ch.schema_name = n.nspname
+             AND c.relnamespace = n.oid
+             AND c.relname = ci.index_name
+             AND ch.id = ci.chunk_id
+             AND h.id = ci.hypertable_id
+             AND h.schema_name = schema_name_in 
+             AND ci.hypertable_index_name = index_name_in
+    ) SELECT
+	      h.id,
+		  -- Add size of index on all chunks + index size on root table
+		  (SELECT num_bytes FROM chunk_index_size) + pg_relation_size(format('%I.%I', schema_name_in, index_name_in)::regclass)::bigint
+	  FROM
+	      pg_class c, pg_index i, _timescaledb_catalog.hypertable h
+	  WHERE
+	     i.indexrelid = format('%I.%I', schema_name_in, index_name_in)::regclass
+		 AND c.oid = i.indrelid
+		 AND h.schema_name = schema_name_in
+		 AND h.table_name = c.relname;
 $BODY$;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_index_size (node_name name, schema_name_in name, index_name_in name)
@@ -673,14 +664,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_remote_size(
     index_name_in              NAME
 )
 RETURNS BIGINT
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-DECLARE
-    total_bytes BIGINT;
-BEGIN
     SELECT
         sum(entry.total_bytes)::bigint AS total_bytes
-    INTO total_bytes
     FROM (
         SELECT
             s.node_name,
@@ -698,9 +685,7 @@ BEGIN
         srv.node_name
     ELSE
         NULL
-    END, schema_name_in, index_name_in) entry ON TRUE ;
-    RETURN total_bytes;
-END;
+    END, schema_name_in, index_name_in) entry ON TRUE;
 $BODY$;
 
 -- Get sizes of indexes on a hypertable
@@ -724,26 +709,32 @@ DECLARE
         ht_id INTEGER;
         index_bytes BIGINT;
 BEGIN
-
-   SELECT c.relname, cl.relname, nsp.nspname       
-   INTO STRICT ht_index_name, ht_name, ht_schema_name  
-   FROM pg_class c, pg_index cind, pg_class cl, pg_namespace nsp
+   SELECT c.relname, cl.relname, nsp.nspname, ht.replication_factor > 0
+   INTO ht_index_name, ht_name, ht_schema_name, is_distributed
+   FROM pg_class c, pg_index cind, pg_class cl,
+        pg_namespace nsp, _timescaledb_catalog.hypertable ht
    WHERE c.oid = cind.indexrelid AND cind.indrelid = cl.oid
-         AND cl.relnamespace = nsp.oid AND c.oid = index_name;
-        
-   SELECT replication_factor > 0
-   INTO STRICT is_distributed
-   FROM _timescaledb_catalog.hypertable ht
-   WHERE ht.schema_name = ht_schema_name AND ht.table_name = ht_name;
+         AND cl.relnamespace = nsp.oid AND c.oid = index_name
+		 AND ht.schema_name = nsp.nspname ANd ht.table_name = cl.relname;
 
-   CASE WHEN is_distributed THEN
-         SELECT _timescaledb_internal.indexes_remote_size(ht_schema_name, ht_name, ht_index_name) 
-         INTO index_bytes ;
-   ELSE
-         SELECT il.total_bytes
-         INTO index_bytes
-         FROM _timescaledb_internal.indexes_local_size(ht_schema_name, ht_index_name) il;
-   END CASE;
+   IF ht_index_name IS NULL THEN
+       RETURN NULL;
+   END IF;
+
+   -- get the local size or size of access node indexes
+   SELECT il.total_bytes
+   INTO index_bytes
+   FROM _timescaledb_internal.indexes_local_size(ht_schema_name, ht_index_name) il;
+
+   IF index_bytes IS NULL THEN
+       index_bytes = 0;
+   END IF;
+
+   -- Add size from data nodes
+   IF is_distributed THEN
+       index_bytes = index_bytes + _timescaledb_internal.indexes_remote_size(ht_schema_name, ht_name, ht_index_name);
+   END IF;
+
    RETURN index_bytes;
 END;
 $BODY$;
