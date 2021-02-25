@@ -49,8 +49,8 @@ typedef struct ChunkInsertState
 
 	/* Slot for inserted/new tuples going into the chunk */
 	TupleTableSlot *slot;
-	TupleTableSlot *compress_slot;  //TODO do we need this, if so pass it
-                          // down for slot reuse in tsl code
+	TupleTableSlot *compress_slot; // TODO do we need this, if so pass it
+								   // down for slot reuse in tsl code
 	/* Map for converting tuple from hypertable (root table) format to chunk format */
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
@@ -60,6 +60,7 @@ typedef struct ChunkInsertState
 
 	/* for tracking compressed chunks */
 	Relation compress_rel;
+	ResultRelInfo *orig_result_relation_info;
 	CompressSingleRowState *compress_state;
 	bool is_compressed; /* corresponds to a compressed chunk */
 } ChunkInsertState;

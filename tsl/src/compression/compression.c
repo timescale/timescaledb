@@ -1567,8 +1567,8 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 						ccinfo,
 						in_column_offsets,
 						out_desc->natts);
-    cr->out_slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(out_rel),
-                                                 table_slot_callbacks(out_rel));
+	cr->out_slot =
+		MakeSingleTupleTableSlotCompat(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
 	cr->in_rel = in_rel;
 	cr->out_rel = out_rel;
 	return cr;
@@ -1581,14 +1581,14 @@ TupleTableSlot *
 compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot)
 {
 	TupleTableSlot *compress_slot;
-//MemoryContext old_ctx;
+	// MemoryContext old_ctx;
 	slot_getallattrs(slot);
-// old_ctx = MemoryContextSwitchTo(cr->row_compressor.per_row_ctx);
+	// old_ctx = MemoryContextSwitchTo(cr->row_compressor.per_row_ctx);
 
 	cr->row_compressor.rows_compressed_into_current_value = 0;
 	row_compressor_update_group(&cr->row_compressor, slot);
 	row_compressor_append_row(&cr->row_compressor, slot);
-// MemoryContextSwitchTo(old_ctx);
+	// MemoryContextSwitchTo(old_ctx);
 	compress_slot = compress_singlerow(cr, slot);
 	return compress_slot;
 }
@@ -1640,10 +1640,11 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 		{
 			row_compressor->compressed_is_null[out_attrno] = inisnull[in_attrno];
 			if (inisnull[in_attrno] == false)
-             {
-                SegmentInfo *segment_info = row_compressor->per_column[col].segment_info;
-				out_values[out_attrno] = datumCopy(invalues[in_attrno], segment_info->typ_by_val, segment_info->typlen);
-            }
+			{
+				SegmentInfo *segment_info = row_compressor->per_column[col].segment_info;
+				out_values[out_attrno] =
+					datumCopy(invalues[in_attrno], segment_info->typ_by_val, segment_info->typlen);
+			}
 		}
 		else
 		{
@@ -1695,9 +1696,9 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 
 	ExecStoreVirtualTuple(out_slot);
 
-//elog(NOTICE, "debug ");
-//print_slot(in_slot);
-//print_slot(out_slot);
+	// elog(NOTICE, "debug ");
+	// print_slot(in_slot);
+	// print_slot(out_slot);
 	return out_slot;
 }
 
@@ -1707,7 +1708,8 @@ compress_row_end(CompressSingleRowState *cr)
 	row_compressor_finish(&cr->row_compressor);
 }
 
-void compress_row_destroy( CompressSingleRowState *cr)
+void
+compress_row_destroy(CompressSingleRowState *cr)
 {
-    ExecDropSingleTupleTableSlot(cr->out_slot);
+	ExecDropSingleTupleTableSlot(cr->out_slot);
 }

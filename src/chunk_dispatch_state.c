@@ -10,6 +10,7 @@
 #include <commands/trigger.h>
 #include <nodes/nodes.h>
 #include <nodes/extensible.h>
+#include <executor/nodeModifyTable.h>
 
 #include "compat.h"
 #include "chunk_dispatch_state.h"
@@ -142,7 +143,10 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * the es_result_relation_info this has to be updated every time, not
 	 * just when the chunk changes.
 	 */
-	estate->es_result_relation_info = cis->result_relation_info;
+	if (cis->compress_state != NULL)
+		estate->es_result_relation_info = cis->orig_result_relation_info;
+	else
+		estate->es_result_relation_info = cis->result_relation_info;
 
 	MemoryContextSwitchTo(old);
 
@@ -151,6 +155,9 @@ chunk_dispatch_exec(CustomScanState *node)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 	if (cis->compress_state != NULL)
 	{
+		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
+			ExecComputeStoredGenerated(estate, slot, CMD_INSERT);
+		estate->es_result_relation_info = cis->result_relation_info;
 		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
 	}
 	return slot;

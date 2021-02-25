@@ -672,20 +672,22 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (is_compressed)
 	{
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
-        /* this is true as compressed chunks are not created on access node */
-        Assert(chunk->relkind != RELKIND_FOREIGN_TABLE );
+		/* this is true as compressed chunks are not created on access node */
+		Assert(chunk->relkind != RELKIND_FOREIGN_TABLE);
 		state->is_compressed = true;
 		state->compress_rel = compress_rel;
 		Assert(ts_cm_functions->compress_row_init != NULL);
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
 		state->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
-	    state->compress_slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
-												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
+		state->compress_slot =
+			MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
+										   table_slot_callbacks(resrelinfo->ri_RelationDesc));
+		state->orig_result_relation_info = relinfo;
 	}
-    else
-    {
-       state->compress_state = NULL;
-    }
+	else
+	{
+		state->compress_state = NULL;
+	}
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
@@ -767,16 +769,15 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	ExecCloseIndices(state->result_relation_info);
 	table_close(state->rel, NoLock);
 
-
-/* TODO check if we nee to keep rel open for this case.Can we manage compress_rel
- * alone
- */
-    if( state->is_compressed )
-    {
-      table_close( state->compress_rel, NoLock);
-	  ts_cm_functions->compress_row_destroy(state->compress_state);
-	  ExecDropSingleTupleTableSlot(state->compress_slot);
-   }
+	/* TODO check if we nee to keep rel open for this case.Can we manage compress_rel
+	 * alone
+	 */
+	if (state->is_compressed)
+	{
+		table_close(state->compress_rel, NoLock);
+		ts_cm_functions->compress_row_destroy(state->compress_state);
+		ExecDropSingleTupleTableSlot(state->compress_slot);
+	}
 
 	if (NULL != state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
