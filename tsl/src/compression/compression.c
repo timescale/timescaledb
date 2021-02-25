@@ -1695,9 +1695,9 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 
 	ExecStoreVirtualTuple(out_slot);
 
-elog(NOTICE, "debug ");
-print_slot(in_slot);
-print_slot(out_slot);
+//elog(NOTICE, "debug ");
+//print_slot(in_slot);
+//print_slot(out_slot);
 	return out_slot;
 }
 

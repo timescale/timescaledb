@@ -1,0 +1,185 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE test1 (timec timestamptz , i integer ,
+      b bigint, t text,  unique ( b, timec));
+SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
+NOTICE:  adding not-null constraint to column "timec"
+ table_name 
+------------
+ test1
+(1 row)
+
+INSERT INTO test1 select q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
+---INSERT INTO test1 SELECT '2021-01-01 10:00:00' , i, i *10, 'hello' FROM (Select generate_series(1, 100, 1) i ) q;
+ALTER TABLE test1 set (timescaledb.compress, 
+timescaledb.compress_segmentby = 'b', 
+timescaledb.compress_orderby = 'timec DESC');
+--other variants
+--ALTER TABLE test1 set (timescaledb.compress, 
+--timescaledb.compress_orderby = 'b, timec DESC');
+--ALTER TABLE test1 set (timescaledb.compress, 
+--timescaledb.compress_orderby = 'timec DESC');
+SELECT compress_chunk(c)
+FROM show_chunks('test1') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+-- single and multi row insert into the compressed chunk --
+INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, i +5, 'new' FROM (Select generate_series(11, 22, 1) i ) q;
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, i +5, 'NEW'
+FROM (Select generate_series(10, 20, 1) i ) q;
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+NOTICE:  (0 0) map (1 timec) to (1 timec) 
+NOTICE:  (1 1) map (2 i) to (2 i) 
+NOTICE:  (2 2) map (3 b) to (3 b) 
+NOTICE:  (3 3) map (4 t) to (4 t) 
+SELECT count(*) from test1;
+ count 
+-------
+    48
+(1 row)
+
+explain verbose
+SELECT * FROM test1 WHERE b = 11;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.01..1.01 rows=1000 width=26)
+   Output: _hyper_1_1_chunk.timec, _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk  (cost=0.00..1.01 rows=1 width=124)
+         Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.timec, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.t
+         Filter: (compress_hyper_2_2_chunk.b = 11)
+(5 rows)
+
+SELECT * FROM test1 WHERE b = 11 order by i, timec ;
+            timec             | i  | b  |   t   
+------------------------------+----+----+-------
+ Fri Jan 03 07:00:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:05:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:10:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:15:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:20:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:25:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:30:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:35:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:40:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:45:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:50:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 07:55:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:00:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:05:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:10:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:15:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:20:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:25:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:30:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:35:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:40:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:45:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:50:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 08:55:00 2020 PST | 10 | 11 | hello
+ Fri Jan 03 09:00:00 2020 PST | 10 | 11 | hello
+(25 rows)
+
+explain verbose
+SELECT * FROM test1 WHERE i = 11;
+                                                                                 QUERY PLAN                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.01..1.01 rows=1000 width=26)
+   Output: _hyper_1_1_chunk.timec, _hyper_1_1_chunk.i, _hyper_1_1_chunk.b, _hyper_1_1_chunk.t
+   Filter: (_hyper_1_1_chunk.i = 11)
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk  (cost=0.00..1.01 rows=1 width=124)
+         Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.timec, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.t
+(5 rows)
+
+-- TODO fix this
+--SELECT * FROM test1 WHERE i = 11;
