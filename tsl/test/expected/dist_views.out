@@ -107,10 +107,11 @@ SELECT * FROM hypertable_detailed_size('dist_table'::regclass)
 ORDER BY node_name;;
  table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
 -------------+-------------+-------------+-------------+-------------
-       16384 |       65536 |        8192 |       90112 | view_node_1
-       16384 |       65536 |        8192 |       90112 | view_node_2
-       16384 |       65536 |           0 |       81920 | view_node_3
-(3 rows)
+       16384 |       81920 |        8192 |      106496 | view_node_1
+       16384 |       81920 |        8192 |      106496 | view_node_2
+       16384 |       81920 |           0 |       98304 | view_node_3
+           0 |       16384 |           0 |       16384 | 
+(4 rows)
 
 ---tables with special characters in the name ----
 CREATE TABLE "quote'tab" ( a timestamp,  b integer);
@@ -133,8 +134,7 @@ SELECT * FROM  chunks_detailed_size( '"quote''tab"') ORDER BY chunk_name, node_n
  _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       32768 |           0 |       40960 | view_node_2
  _timescaledb_internal | _dist_hyper_2_7_chunk |        8192 |       32768 |           0 |       40960 | view_node_1
  _timescaledb_internal | _dist_hyper_2_7_chunk |        8192 |       32768 |           0 |       40960 | view_node_2
-                       |                       |             |             |             |             | view_node_3
-(9 rows)
+(8 rows)
 
 CREATE TABLE "special#tab" ( a timestamp,  b integer);
 SELECT create_hypertable( 'special#tab', 'a', 'b', replication_factor=>2, chunk_time_interval=>INTERVAL '1 day');
@@ -156,12 +156,11 @@ SELECT * FROM  chunks_detailed_size( '"special#tab"') ORDER BY chunk_name, node_
  _timescaledb_internal | _dist_hyper_3_8_chunk  |        8192 |       32768 |           0 |       40960 | view_node_2
  _timescaledb_internal | _dist_hyper_3_9_chunk  |        8192 |       32768 |           0 |       40960 | view_node_1
  _timescaledb_internal | _dist_hyper_3_9_chunk  |        8192 |       32768 |           0 |       40960 | view_node_2
-                       |                        |             |             |             |             | view_node_3
-(9 rows)
+(8 rows)
 
 SELECT * FROM  hypertable_index_size( 'dist_table_time_idx') ;
  hypertable_index_size 
 -----------------------
-                 81920
+                114688
 (1 row)
 

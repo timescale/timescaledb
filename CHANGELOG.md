@@ -8,10 +8,13 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #2974 Fix index creation for hypertables with dropped columns
+* #2989 Refactor and harden size and stats functions
 * #3042 Commit end transaction for CREATE INDEX
 
 **Thanks**
 * @jocrau for reporting an issue with index creation
+* @pedrokost and @RobAtticus for reporting an issue with size
+  functions on empty hypertables
 
 ## 2.1.0 (2021-02-22)
 

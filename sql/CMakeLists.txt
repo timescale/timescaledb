@@ -27,7 +27,8 @@ set(SOURCE_FILES
   pre_install/fdw_functions.sql
   hypertable.sql
   chunk.sql
-  ddl_internal.sql
+  data_node.sql
+  ddl_internal.sql  
   util_time.sql
   util_internal_table_ddl.sql
   chunk_constraint.sql
@@ -44,7 +45,6 @@ set(SOURCE_FILES
   cache.sql
   bgw_scheduler.sql
   metadata.sql
-  data_node.sql
   dist_internal.sql
   views.sql
   gapfill.sql

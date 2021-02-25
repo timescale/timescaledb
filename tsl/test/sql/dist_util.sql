@@ -110,29 +110,173 @@ SELECT key, value FROM _timescaledb_catalog.metadata WHERE key LIKE 'dist_uuid';
 
 -- Test space reporting functions for distributed and non-distributed tables
 \c frontend_2 :ROLE_CLUSTER_SUPERUSER
-CREATE TABLE nondisttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
-CREATE TABLE disttable(time timestamptz PRIMARY KEY, device int CHECK (device > 0), temp float);
-SELECT * FROM create_hypertable('nondisttable', 'time');
-SELECT * FROM create_distributed_hypertable('disttable', 'time');
+CREATE TABLE nondisttable(time timestamptz, device int CHECK (device > 0), temp float);
+CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), temp float);
+SELECT * FROM create_hypertable('nondisttable', 'time', create_default_indexes => false);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', create_default_indexes => false);
+
+SELECT node_name FROM timescaledb_information.data_nodes
+ORDER BY node_name;
+SELECT * FROM timescaledb_information.hypertables
+ORDER BY hypertable_schema, hypertable_name;
+
+-- Test size functions on empty distributed hypertable.
+--
+-- First, show the output from standard PG size functions. The
+-- functions are expected to remove 0 table bytes for the distributed
+-- hypertable since it doesn't have local storage.
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('disttable') ch;
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('nondisttable') ch;
+
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+
+-- Create primary key index and check how it affects the size of the
+-- empty hypertables.
+ALTER TABLE nondisttable ADD CONSTRAINT nondisttable_pkey PRIMARY KEY (time);
+ALTER TABLE disttable ADD CONSTRAINT disttable_pkey PRIMARY KEY (time);
+
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+
+-- Note that the empty disttable is three times the size of the
+-- nondisttable since it has primary key indexes on two data nodes in
+-- addition to the access node.
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY  chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_index_size('disttable_pkey');
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+
+
+-- Test size functions on tables with an empty chunk
+INSERT INTO nondisttable VALUES ('2017-01-01 06:01', 1, 1.1);
+INSERT INTO disttable SELECT * FROM nondisttable;
+
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('disttable') ch;
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('nondisttable') ch;
+
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+
+-- Delete all data, but keep chunks
+DELETE FROM nondisttable;
+DELETE FROM disttable;
+VACUUM FULL ANALYZE nondisttable;
+VACUUM FULL ANALYZE disttable;
+
+SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch)
+FROM show_chunks('disttable') ch;
+SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
+FROM show_chunks('nondisttable') ch;
+
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_index_size('disttable_pkey');
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+
+-- Test size functions on non-empty hypertable
 INSERT INTO nondisttable VALUES
        ('2017-01-01 06:01', 1, 1.1),
        ('2017-01-01 08:01', 1, 1.2),
        ('2018-01-02 08:01', 2, 1.3),
        ('2019-01-01 09:11', 3, 2.1),
        ('2017-01-01 06:05', 1, 1.4);
-INSERT INTO disttable VALUES
-       ('2017-01-01 06:01', 1, 1.1),
-       ('2017-01-01 08:01', 1, 1.2),
-       ('2018-01-02 08:01', 2, 1.3),
-       ('2019-01-01 09:11', 3, 2.1),
-       ('2017-01-01 06:05', 1, 1.4);
+INSERT INTO disttable SELECT * FROM nondisttable;
 
-SELECT * FROM timescaledb_information.data_nodes ORDER BY node_name;
-SELECT * FROM timescaledb_information.hypertables ORDER BY hypertable_schema, hypertable_name;
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_size('nondisttable');
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
-SELECT * FROM hypertable_size('disttable') ;
-SELECT * FROM hypertable_size('nondisttable') ;
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_index_size('disttable_pkey');
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+
+-- Enable compression
+ALTER TABLE nondisttable
+SET (timescaledb.compress,
+	 timescaledb.compress_segmentby='device',
+	 timescaledb.compress_orderby = 'time DESC');
+
+ALTER TABLE disttable
+SET (timescaledb.compress,
+	 timescaledb.compress_segmentby='device',
+	 timescaledb.compress_orderby = 'time DESC');
+
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_index_size('disttable_pkey');
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
+
+-- Compress two chunks (out of three) to see effect of compression
+SELECT compress_chunk(ch)
+FROM show_chunks('disttable') ch
+LIMIT 2;
+
+SELECT compress_chunk(ch)
+FROM show_chunks('nondisttable') ch
+LIMIT 2;
+
+SELECT * FROM hypertable_size('disttable');
+SELECT * FROM hypertable_size('nondisttable');
+SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
+SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_compression_stats('disttable') ORDER BY node_name;
+SELECT * FROM hypertable_compression_stats('nondisttable') ORDER BY node_name;
+SELECT * FROM chunk_compression_stats('disttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
+SELECT * FROM hypertable_index_size('disttable_pkey');
+SELECT * FROM hypertable_index_size('nondisttable_pkey');
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;

@@ -9,7 +9,7 @@ step CI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 
-65536          
+73728          
 step Sc: COMMIT;
 
 starting permutation: I1 CI Bc Ic P Sc
@@ -21,7 +21,7 @@ step CI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 
-65536          
+73728          
 step Sc: COMMIT;
 
 starting permutation: S1 CI Bc Sc P Ic
@@ -38,7 +38,7 @@ step Sc: COMMIT;
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 
-49152          
+57344          
 step Ic: COMMIT;
 
 starting permutation: F WPE CI DI Bc WPR P Ic Sc
@@ -70,6 +70,6 @@ step RI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 
-49152          
+57344          
 step Ic: COMMIT;
 step Sc: COMMIT;
