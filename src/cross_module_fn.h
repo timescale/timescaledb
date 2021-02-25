@@ -153,6 +153,7 @@ typedef struct CrossModuleFunctions
 	void (*validate_as_data_node)(void);
 	void (*func_call_on_data_nodes)(FunctionCallInfo fcinfo, List *data_node_oids);
 	PGFunction distributed_exec;
+	PGFunction create_distributed_restore_point;
 	PGFunction chunk_get_relstats;
 	PGFunction chunk_get_colstats;
 	PGFunction hypertable_distributed_set_replication_factor;

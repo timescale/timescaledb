@@ -10,6 +10,7 @@
 #include <postgres.h>
 
 #include <storage/lock.h>
+#include "export.h"
 
 /* Tag for debug waitpoints.
  *
@@ -31,8 +32,8 @@ typedef struct DebugWait
 	LOCKTAG tag;
 } DebugWait;
 
-void ts_debug_waitpoint_init(DebugWait *waitpoint, const char *tagname);
-void ts_debug_waitpoint_wait(DebugWait *waitpoint);
+extern TSDLLEXPORT void ts_debug_waitpoint_init(DebugWait *waitpoint, const char *tagname);
+extern TSDLLEXPORT void ts_debug_waitpoint_wait(DebugWait *waitpoint);
 
 #ifdef TS_DEBUG
 #define DEBUG_WAITPOINT(TAG)                                                                       \

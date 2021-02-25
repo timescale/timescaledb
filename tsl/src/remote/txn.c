@@ -754,7 +754,9 @@ remote_txn_persistent_record_write(TSConnectionId cid)
 
 	rel = table_open(catalog->tables[REMOTE_TXN].id, RowExclusiveLock);
 	persistent_record_insert_relation(rel, id);
-	table_close(rel, RowExclusiveLock);
 
+	/* Keep the table lock until transaction completes in order to
+	 * synchronize with distributed restore point creation */
+	table_close(rel, NoLock);
 	return id;
 }
