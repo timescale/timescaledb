@@ -679,6 +679,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		Assert(ts_cm_functions->compress_row_init != NULL);
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
 		state->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
+	    state->compress_slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
+												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
 	}
     else
     {
@@ -692,8 +694,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	 * state. Otherwise, memory might blow up when there are many chunks being
 	 * inserted into. This also means that the slot needs to be destroyed with
 	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
-												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
+	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(relinfo->ri_RelationDesc),
+												 table_slot_callbacks(relinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
@@ -773,6 +775,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
     {
       table_close( state->compress_rel, NoLock);
 	  ts_cm_functions->compress_row_destroy(state->compress_state);
+	  ExecDropSingleTupleTableSlot(state->compress_slot);
    }
 
 	if (NULL != state->slot)
