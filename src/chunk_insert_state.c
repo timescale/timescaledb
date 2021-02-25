@@ -611,7 +611,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 
 	if (is_compressed &&
 		(onconflict_action != ONCONFLICT_NONE || ts_chunk_dispatch_has_returning(dispatch)))
-		elog(ERROR, "on conflict and RETURNING clause not supported");
+		elog(ERROR, "on conflict and RETURNING clause not supported on compressed chunks");
 
 	/*
 	 * We must allocate the range table entry on the executor's per-query
@@ -672,6 +672,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	if (is_compressed)
 	{
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
+        /* this is true as compressed chunks are not created on access node */
+        Assert(chunk->relkind != RELKIND_FOREIGN_TABLE );
 		state->is_compressed = true;
 		state->compress_rel = compress_rel;
 		Assert(ts_cm_functions->compress_row_init != NULL);
@@ -690,8 +692,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 	 * state. Otherwise, memory might blow up when there are many chunks being
 	 * inserted into. This also means that the slot needs to be destroyed with
 	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(relinfo->ri_RelationDesc),
-												 table_slot_callbacks(relinfo->ri_RelationDesc));
+	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(resrelinfo->ri_RelationDesc),
+												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)

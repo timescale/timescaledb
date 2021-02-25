@@ -124,6 +124,7 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 	table_close(rel, RowExclusiveLock);
 }
 
+/*
 static void
 chunk_dml_blocker_trigger_add(Oid relid)
 {
@@ -132,7 +133,7 @@ chunk_dml_blocker_trigger_add(Oid relid)
 	Oid schemaid = get_rel_namespace(relid);
 	char *schema = get_namespace_name(schemaid);
 
-	/* stmt triggers are blocked on hypertable chunks */
+	// stmt triggers are blocked on hypertable chunks
 	CreateTrigStmt stmt = {
 		.type = T_CreateTrigStmt,
 		.row = true,
@@ -161,7 +162,7 @@ chunk_dml_blocker_trigger_add(Oid relid)
 
 	return;
 }
-
+*/
 static void
 chunk_dml_trigger_drop(Oid relid)
 {
@@ -335,7 +336,10 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * directly on the hypertable or chunks.
 	 */
 	ts_chunk_drop_fks(cxt.srcht_chunk);
+    /* TODO remove blocker for now. refine this to
+     * just block updates/deletes
 	chunk_dml_blocker_trigger_add(cxt.srcht_chunk->table_id);
+     */
 	after_size = compute_chunk_size(compress_ht_chunk->table_id);
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &before_size,

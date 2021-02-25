@@ -1584,6 +1584,8 @@ compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot)
 //MemoryContext old_ctx;
 	slot_getallattrs(slot);
 // old_ctx = MemoryContextSwitchTo(cr->row_compressor.per_row_ctx);
+
+	cr->row_compressor.rows_compressed_into_current_value = 0;
 	row_compressor_update_group(&cr->row_compressor, slot);
 	row_compressor_append_row(&cr->row_compressor, slot);
 // MemoryContextSwitchTo(old_ctx);

@@ -736,7 +736,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
 		/* we check primary ,unique and exclusion constraints.
-		 * move foreign key constarints over to compression table
+		 * move foreign key constraints over to compression table
 		 * ignore triggers
 		 */
 		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER)
