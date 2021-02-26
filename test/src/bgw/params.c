@@ -99,19 +99,26 @@ params_get_dsm_handle()
 }
 
 static TestParamsWrapper *
-params_open_wrapper()
+params_open_wrapper(bool *do_close)
 {
 	dsm_segment *seg;
 	dsm_handle handle = params_get_dsm_handle();
 	TestParamsWrapper *wrapper;
 
+	/*
+	 * If segment is returned via the mapping then there's no need to call
+	 * dsm_detach on it in params_close_wrapper
+	 */
 	seg = dsm_find_mapping(handle);
 	if (seg == NULL)
 	{
 		seg = dsm_attach(handle);
 		if (seg == NULL)
 			elog(ERROR, "got NULL segment in params_open_wrapper");
+		*do_close = true;
 	}
+	else
+		*do_close = false;
 
 	TestAssertTrue(seg != NULL);
 
@@ -134,7 +141,8 @@ params_close_wrapper(TestParamsWrapper *wrapper)
 TestParams *
 ts_params_get()
 {
-	TestParamsWrapper *wrapper = params_open_wrapper();
+	bool do_close;
+	TestParamsWrapper *wrapper = params_open_wrapper(&do_close);
 	TestParams *res;
 
 	TestAssertTrue(wrapper != NULL);
@@ -147,7 +155,8 @@ ts_params_get()
 
 	SpinLockRelease(&wrapper->mutex);
 
-	params_close_wrapper(wrapper);
+	if (do_close)
+		params_close_wrapper(wrapper);
 
 	return res;
 };
@@ -155,7 +164,8 @@ ts_params_get()
 void
 ts_params_set_time(int64 new_val, bool set_latch)
 {
-	TestParamsWrapper *wrapper = params_open_wrapper();
+	bool do_close;
+	TestParamsWrapper *wrapper = params_open_wrapper(&do_close);
 
 	TestAssertTrue(wrapper != NULL);
 
@@ -166,13 +176,15 @@ ts_params_set_time(int64 new_val, bool set_latch)
 	if (set_latch)
 		SetLatch(&wrapper->params.timer_latch);
 
-	params_close_wrapper(wrapper);
+	if (do_close)
+		params_close_wrapper(wrapper);
 }
 
 void
 ts_initialize_timer_latch()
 {
-	TestParamsWrapper *wrapper = params_open_wrapper();
+	bool do_close;
+	TestParamsWrapper *wrapper = params_open_wrapper(&do_close);
 
 	TestAssertTrue(wrapper != NULL);
 
@@ -182,13 +194,15 @@ ts_initialize_timer_latch()
 
 	SpinLockRelease(&wrapper->mutex);
 
-	params_close_wrapper(wrapper);
+	if (do_close)
+		params_close_wrapper(wrapper);
 }
 
 void
 ts_reset_and_wait_timer_latch()
 {
-	TestParamsWrapper *wrapper = params_open_wrapper();
+	bool do_close;
+	TestParamsWrapper *wrapper = params_open_wrapper(&do_close);
 
 	TestAssertTrue(wrapper != NULL);
 
@@ -198,13 +212,15 @@ ts_reset_and_wait_timer_latch()
 			  10000,
 			  PG_WAIT_EXTENSION);
 
-	params_close_wrapper(wrapper);
+	if (do_close)
+		params_close_wrapper(wrapper);
 }
 
 static void
 params_set_mock_wait_type(MockWaitType new_val)
 {
-	TestParamsWrapper *wrapper = params_open_wrapper();
+	bool do_close;
+	TestParamsWrapper *wrapper = params_open_wrapper(&do_close);
 
 	TestAssertTrue(wrapper != NULL);
 
@@ -214,7 +230,8 @@ params_set_mock_wait_type(MockWaitType new_val)
 
 	SpinLockRelease(&wrapper->mutex);
 
-	params_close_wrapper(wrapper);
+	if (do_close)
+		params_close_wrapper(wrapper);
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_params_reset_time);
