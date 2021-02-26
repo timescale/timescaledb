@@ -341,6 +341,13 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
+
+	if (!mat_ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration materialization hypertable id %d not found",
+						materialization_id)));
+
 	open_dim = get_open_dimension_for_hypertable(mat_ht);
 	dim_type = ts_dimension_get_partition_type(open_dim);
 	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config);
