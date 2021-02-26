@@ -153,6 +153,7 @@ extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
 extern void update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid);
 
+/* CompressSingleRowState methods */
 struct CompressSingleRowState;
 typedef struct CompressSingleRowState CompressSingleRowState;
 
@@ -160,5 +161,14 @@ extern CompressSingleRowState *compress_row_init(int srcht_id, Relation in_rel, 
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
+
+/* IndexDecompressor methods */
+struct IndexDecompressor;
+typedef struct IndexDecompressor IndexDecompressor;
+IndexDecompressor *index_decompressor_create(Relation index_rel, Relation compressed_rel);
+bool index_decompressor_get_next(IndexDecompressor *index_decompressor, Datum *values, bool *isnull,
+								 Datum **out_val, bool **out_bool);
+void index_decompressor_destroy(IndexDecompressor *index_decompressor);
+TupleDesc index_decompressor_get_out_desc(IndexDecompressor *index_decompressor);
 
 #endif

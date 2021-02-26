@@ -20,6 +20,7 @@
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
+#include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
@@ -1712,4 +1713,195 @@ void
 compress_row_destroy(CompressSingleRowState *cr)
 {
 	ExecDropSingleTupleTableSlot(cr->out_slot);
+}
+
+/* IndexDecompressor   */
+static PerCompressedColumn *create_per_compressed_column_for_index(Relation index_rel,
+																   Relation compressed_rel,
+																   Relation out_rel,
+																   Oid compressed_data_type_oid);
+
+enum IndexDecompressorState
+{
+	INDEX_DECOMPRESSOR_NONE = 1,
+	INDEX_DECOMPRESSOR_IN_PROGRESS = 2,
+	INDEX_DECOMPRESSOR_DONE = 3
+};
+
+typedef struct IndexDecompressor
+{
+	TupleDesc index_desc;
+	int16 num_index_cols;
+	Relation out_chunk_rel; /*original chunk that maps to the compressed chunk */
+	PerCompressedColumn *per_compressed_cols;
+	Datum *decompressed_datums;
+	bool *decompressed_is_nulls;
+	enum IndexDecompressorState tuple_state;
+} IndexDecompressor;
+
+/* return tuple desc for output tuple after decompressing a row
+ * i.e. <int, compressed-col> => <int, timestamp>
+ * Construct this by looking at the original chunk definition and retrieving
+ * the attribute information from its tuple desc.
+ */
+TupleDesc
+index_decompressor_get_out_desc(IndexDecompressor *index_decompressor)
+{
+	TupleDesc out_desc, out_chunk_rel_desc;
+	Assert(index_decompressor != NULL);
+	out_chunk_rel_desc = RelationGetDescr(index_decompressor->out_chunk_rel);
+	out_desc = CreateTemplateTupleDesc(index_decompressor->num_index_cols);
+	for (int i = 0; i < index_decompressor->num_index_cols; i++)
+	{
+		AttrNumber src_no = AttrOffsetGetAttrNumber(
+			index_decompressor->per_compressed_cols[i].decompressed_column_offset);
+		TupleDescCopyEntry(out_desc,
+						   i + 1, /*attr number so offsets start at 1*/
+						   out_chunk_rel_desc,
+						   src_no);
+	}
+	return out_desc;
+}
+
+IndexDecompressor *
+index_decompressor_create(Relation index_rel, Relation compressed_rel)
+{
+	Relation out_chunk_rel;
+	TupleDesc index_desc = RelationGetDescr(index_rel);
+	Oid compress_relid = RelationGetRelid(compressed_rel);
+	Chunk *compress_chunk = ts_chunk_get_by_relid(compress_relid, true /* fail_if_not_found */);
+
+	/* find corresponding chunk from orig hypertable . TODO optimize getting relation for the orig
+	 * chunk */
+	Chunk *chunk_parent = ts_chunk_get_compressed_chunk_parent(compress_chunk);
+	Assert(chunk_parent != NULL && chunk_parent->fd.compressed_chunk_id == compress_chunk->fd.id);
+	Oid out_relid = ts_chunk_get_relid(chunk_parent->fd.id, false /*missing_ok */);
+	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	LockRelationOid(out_relid, AccessShareLock); /* don't modify the rel
+					  while we do index operations */
+	out_chunk_rel = RelationIdGetRelation(out_relid);
+
+	// TODO figure out if any locks are needed on these relations.
+
+	IndexDecompressor *index_decompressor = palloc(sizeof(IndexDecompressor));
+	index_decompressor->num_index_cols = index_desc->natts;
+	index_decompressor->per_compressed_cols =
+		create_per_compressed_column_for_index(index_rel,
+											   compressed_rel,
+											   out_chunk_rel,
+											   compressed_data_type_oid);
+	index_decompressor->out_chunk_rel = out_chunk_rel;
+	index_decompressor->index_desc = index_desc;
+	index_decompressor->decompressed_datums = palloc(sizeof(Datum) * index_desc->natts),
+	index_decompressor->decompressed_is_nulls = palloc(sizeof(bool) * index_desc->natts),
+	index_decompressor->tuple_state = INDEX_DECOMPRESSOR_NONE;
+
+	return index_decompressor;
+}
+
+/* returns false when done (no output row), returns true if returning data */
+bool
+index_decompressor_get_next(IndexDecompressor *index_decompressor, Datum *values, bool *isnull,
+							Datum **out_val, bool **out_bool)
+{
+	bool is_done = false;
+	if (index_decompressor->tuple_state != INDEX_DECOMPRESSOR_IN_PROGRESS)
+	{
+		populate_per_compressed_columns_from_data(index_decompressor->per_compressed_cols,
+												  index_decompressor->num_index_cols,
+												  values,
+												  isnull);
+		index_decompressor->tuple_state = INDEX_DECOMPRESSOR_IN_PROGRESS;
+	}
+	else if (index_decompressor->tuple_state != INDEX_DECOMPRESSOR_DONE)
+	{
+		// reset state
+		index_decompressor->tuple_state = INDEX_DECOMPRESSOR_NONE;
+		return true;
+	}
+	/* we're done if all the decompressors return NULL */
+	for (int16 col = 0; col < index_decompressor->num_index_cols; col++)
+	{
+		bool col_is_done =
+			per_compressed_col_get_data(&index_decompressor->per_compressed_cols[col],
+										index_decompressor->decompressed_datums,
+										index_decompressor->decompressed_is_nulls);
+		is_done &= col_is_done;
+	}
+	out_val = &index_decompressor->decompressed_datums;
+	out_bool = &index_decompressor->decompressed_is_nulls;
+	if (is_done)
+	{
+		index_decompressor->tuple_state = INDEX_DECOMPRESSOR_DONE;
+	}
+	return true;
+}
+
+void
+index_decompressor_destroy(IndexDecompressor *index_decompressor)
+{
+	Assert(index_decompressor->out_chunk_rel != NULL);
+	LockRelId out_relid = index_decompressor->out_chunk_rel->rd_lockInfo.lockRelId;
+	RelationClose(index_decompressor->out_chunk_rel);
+	UnlockRelationId(&out_relid, AccessShareLock);
+}
+
+static PerCompressedColumn *
+create_per_compressed_column_for_index(Relation index_rel, Relation compressed_rel,
+									   Relation out_rel, Oid compressed_data_type_oid)
+{
+	TupleDesc index_desc = RelationGetDescr(index_rel);
+	TupleDesc out_desc = RelationGetDescr(out_rel);
+	Oid compress_relid = RelationGetRelid(compressed_rel);
+	Oid chunk_relid = RelationGetRelid(out_rel);
+	PerCompressedColumn *per_compressed_cols =
+		palloc(sizeof(*per_compressed_cols) * index_desc->natts);
+
+	Assert(OidIsValid(compressed_data_type_oid));
+	for (int16 col = 0; col < index_desc->natts; col++)
+	{
+		Oid decompressed_type;
+		bool is_compressed;
+		int16 decompressed_column_offset;
+		PerCompressedColumn *per_compressed_col = &per_compressed_cols[col];
+		Form_pg_attribute index_attr = TupleDescAttr(index_desc, col);
+		char *indexcol_name = NameStr(index_attr->attname);
+		/* find the mapping from compressed column to uncompressed column, setting
+		 * the index of columns that don't have an uncompressed version
+		 * (such as metadata) to -1
+		 */
+		AttrNumber decompressed_colnum = get_attnum(chunk_relid, indexcol_name);
+		if (!AttributeNumberIsValid(decompressed_colnum))
+		{
+			AttrNumber compressed_colno = get_attnum(compress_relid, indexcol_name);
+			elog(ERROR,
+				 "Invalid attribute %s (%d) in chunk %s",
+				 indexcol_name,
+				 compressed_colno,
+				 get_rel_name(chunk_relid));
+		}
+
+		decompressed_column_offset = AttrNumberGetAttrOffset(decompressed_colnum);
+
+		decompressed_type = TupleDescAttr(out_desc, decompressed_column_offset)->atttypid;
+
+		/* determine if the data is compressed or not */
+		is_compressed = index_attr->atttypid == compressed_data_type_oid;
+		if (!is_compressed && index_attr->atttypid != decompressed_type)
+			elog(ERROR,
+				 "compressed table type '%s' does not match decompressed table type '%s' for "
+				 "segment-by column \"%s\"",
+				 format_type_be(index_attr->atttypid),
+				 format_type_be(decompressed_type),
+				 indexcol_name);
+
+		*per_compressed_col = (PerCompressedColumn){
+			.decompressed_column_offset = decompressed_column_offset,
+			.is_null = true,
+			.is_compressed = is_compressed,
+			.decompressed_type = decompressed_type,
+		};
+	}
+
+	return per_compressed_cols;
 }

@@ -44,8 +44,13 @@ SELECT * FROM test1 WHERE i = 11;
 
 --- TESTS for tables with defaults ---
 --check sequences , generated etc. ....
-CREATE TABLE test2 (timec timestamptz , i integer ,
-      b bigint default 20, t text,  unique ( b, timec));
+--cannot check unique constraints yet
+CREATE TABLE test2 (timec timestamptz , 
+      i integer CHECK ( i > 10) ,
+      b bigint default 20 , 
+      t text NOT NULL,  unique ( b, timec),
+      CONSTRAINT rowconstr CHECK ( b > i )
+);
 
 SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
 
@@ -57,8 +62,23 @@ INSERT INTO test2 values('2020-01-02 11:16:00-05' , 100, 105, 'first' );
 SELECT compress_chunk(c)
 FROM show_chunks('test2') c;
 
-INSERT INTO test2(timec, i, t) values('2020-01-02 10:16:00-05' , 10, 'default' );
+-- test if default value for b is used
+INSERT INTO test2(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
 
-SELECt b from test2 ORDER BY 1;
+SELECT b from test2 ORDER BY 1;
+
+\set ON_ERROR_STOP 0
+--null value for t, should fail
+INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 100, 200, NULL);
+-- i=1, should fail
+INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 1, 10, 'null i');
+-- b < i, should fail
+INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 22, 1, 'null i');
+\set ON_ERROR_STOP 1
+--verify we are still inserting into the compressed chunk i.e did not
+--create a new chunk
+SELECT count(c)
+FROM show_chunks('test2') c;
+
 -- need tests with dropped columns on hypertable and then adding data
 -- to chunk

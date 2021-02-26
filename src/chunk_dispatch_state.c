@@ -157,6 +157,8 @@ chunk_dispatch_exec(CustomScanState *node)
 	{
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGenerated(estate, slot, CMD_INSERT);
+		if (cis->rel->rd_att->constr)
+			ExecConstraints(cis->orig_result_relation_info, slot, estate);
 		estate->es_result_relation_info = cis->result_relation_info;
 		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
 	}
