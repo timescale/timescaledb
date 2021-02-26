@@ -1776,6 +1776,13 @@ remote_connections_cleanup(SubTransactionId subtxid, bool isabort)
 static void
 remote_connection_xact_end(XactEvent event, void *unused_arg)
 {
+	/*
+	 * We are deep down in CommitTransaction code path. We do not want our
+	 * emit_log_hook_callback to interfere since it uses its own transaction
+	 */
+	emit_log_hook_type prev_emit_log_hook = emit_log_hook;
+	emit_log_hook = NULL;
+
 	switch (event)
 	{
 		case XACT_EVENT_ABORT:
@@ -1789,12 +1796,22 @@ remote_connection_xact_end(XactEvent event, void *unused_arg)
 		default:
 			break;
 	}
+
+	/* re-enable the emit_log_hook */
+	emit_log_hook = prev_emit_log_hook;
 }
 
 static void
 remote_connection_subxact_end(SubXactEvent event, SubTransactionId subtxid,
 							  SubTransactionId parent_subtxid, void *unused_arg)
 {
+	/*
+	 * We are deep down in CommitTransaction code path. We do not want our
+	 * emit_log_hook_callback to interfere since it uses its own transaction
+	 */
+	emit_log_hook_type prev_emit_log_hook = emit_log_hook;
+	emit_log_hook = NULL;
+
 	switch (event)
 	{
 		case SUBXACT_EVENT_ABORT_SUB:
@@ -1806,6 +1823,9 @@ remote_connection_subxact_end(SubXactEvent event, SubTransactionId subtxid,
 		default:
 			break;
 	}
+
+	/* re-enable the emit_log_hook */
+	emit_log_hook = prev_emit_log_hook;
 }
 
 bool
