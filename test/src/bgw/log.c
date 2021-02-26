@@ -61,6 +61,11 @@ bgw_log_insert(char *msg)
 
 static emit_log_hook_type prev_emit_log_hook = NULL;
 
+/*
+ * NOTE: using transactions in emit_log_hook functions is not recommended.
+ * However we rely on this current functionality for our test verifications,
+ * so have to live with it for now.
+ */
 static void
 emit_log_hook_callback(ErrorData *edata)
 {
@@ -70,6 +75,10 @@ emit_log_hook_callback(ErrorData *edata)
 	 * once proc_exit has started we may no longer be able to start transactions
 	 */
 	if (MyProc == NULL)
+		return;
+
+	/* We are only interested in elevel LOG and above. */
+	if (edata->elevel < LOG)
 		return;
 
 	/*
@@ -107,6 +116,10 @@ emit_log_hook_callback(ErrorData *edata)
 	}
 	PG_CATCH();
 	{
+		/* If there was an error, rollback what was done before the error */
+		if (IsTransactionState())
+			AbortCurrentTransaction();
+
 		/*
 		 * Reinstall the hook because we are out of the main body of the
 		 * function.
