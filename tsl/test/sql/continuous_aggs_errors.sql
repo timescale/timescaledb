@@ -529,3 +529,13 @@ SELECT alter_job(:job_id,
 
 DROP TABLE measurements CASCADE;
 DROP TABLE conditions CASCADE;
+
+-- test handling of invalid mat_hypertable_id
+create table i2980(time timestamptz not null);
+select create_hypertable('i2980','time');
+create materialized view i2980_cagg with (timescaledb.continuous) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
+select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \gset
+\set ON_ERROR_STOP 0
+select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
+\set ON_ERROR_STOP 1
+
