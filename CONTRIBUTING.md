@@ -42,7 +42,10 @@ our [Style Guide](docs/StyleGuide.md).
 
     * Run the [test suite](#testing) and make sure everything passes.
 
-    * When committing, be sure to write good commit messages. Stylistically,
+    * When committing, be sure to write good commit messages according to [these
+      seven rules](https://chris.beams.io/posts/git-commit/#seven-rules). Doing 
+      `git commit` prints a message if any of the rules is violated. 
+      Stylistically,
       we use commit message titles in the imperative tense, e.g., `Add
       merge-append query optimization for time aggregate`.  In the case of
       non-trivial changes, include a longer description in the commit message
@@ -50,10 +53,26 @@ our [Style Guide](docs/StyleGuide.md).
       should have a short title, followed by a empty line, and then
       followed by the longer description.
 
+    * When committing, link which GitHub issue of [this 
+      repository](https://github.com/timescale/timescaledb/issues) is fixed or 
+      closed by the commit with a [linking keyword recognised by 
+      GitHub](https://docs.github.com/en/github/managing-your-work-on-github/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword). 
+      For example, if the commit fixes bug 123, add a line at the end of the 
+      commit message with  `Fixes #123`, if the commit implements feature 
+      request 321, add a line at the end of the commit message `Closes #321`.
+      This will be recognized by GitHub. It will close the corresponding issue 
+      and place a hyperlink under the number.
+
 * Push your changes to an upstream branch:
 
     * Make sure that each commit in the pull request will represent a
       logical change to the code, will compile, and will pass tests.
+
+    * Make sure that the pull request message contains all important 
+      information from the commit messages including which issues are
+      fixed and closed. If a pull request contains one commit only, then
+      repeating the commit message is preferred, which is done automatically
+      by GitHub when it creates the pull request.
 
     * Rebase your local feature branch against master (`git fetch origin`,
       then `git rebase origin/master`) to make sure you're
