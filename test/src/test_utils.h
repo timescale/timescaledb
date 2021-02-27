@@ -8,6 +8,7 @@
 
 #include <postgres.h>
 #include <access/xact.h>
+#include <fmgr.h>
 
 #include "export.h"
 
