@@ -188,11 +188,12 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	if (!isnull[Anum_dimension_integer_now_func_schema - 1] &&
 		!isnull[Anum_dimension_integer_now_func - 1])
 	{
-		namecpy(&d->fd.integer_now_func_schema,
-				DatumGetName(
-					values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)]));
-		namecpy(&d->fd.integer_now_func,
-				DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)]));
+		namestrcpy(&d->fd.integer_now_func_schema,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)]));
+		namestrcpy(&d->fd.integer_now_func,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)]));
 	}
 
 	if (d->type == DIMENSION_TYPE_CLOSED)
@@ -1118,15 +1119,8 @@ ts_dimension_update(Hypertable *ht, Name dimname, DimensionType dimtype, Datum *
 	if (NULL != integer_now_func)
 	{
 		Oid pronamespace = get_func_namespace(*integer_now_func);
-		namecpy(&dim->fd.integer_now_func_schema,
-				DatumGetName(
-					DirectFunctionCall1(namein,
-										CStringGetDatum(get_namespace_name(pronamespace)))));
-
-		namecpy(&dim->fd.integer_now_func,
-				DatumGetName(
-					DirectFunctionCall1(namein,
-										CStringGetDatum(get_func_name(*integer_now_func)))));
+		namestrcpy(&dim->fd.integer_now_func_schema, get_namespace_name(pronamespace));
+		namestrcpy(&dim->fd.integer_now_func, get_func_name(*integer_now_func));
 	}
 
 	dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);

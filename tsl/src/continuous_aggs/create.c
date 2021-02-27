@@ -906,7 +906,7 @@ get_input_types_array_datum(Aggref *original_aggregate)
 			elog(ERROR, "cache lookup failed for type %u", type_oid);
 
 		typtup = (Form_pg_type) GETSTRUCT(tp);
-		namecpy(type_name, &typtup->typname);
+		namestrcpy(type_name, NameStr(typtup->typname));
 		schema_name = get_namespace_name(typtup->typnamespace);
 		ReleaseSysCache(tp);
 

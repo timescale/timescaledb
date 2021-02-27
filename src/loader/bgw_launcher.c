@@ -934,7 +934,7 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	process_settings(MyDatabaseId);
 	ts_installed = ts_loader_extension_exists();
 	if (ts_installed)
-		StrNCpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
+		strlcpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
 
 	ts_loader_extension_check();
 	CommitTransactionCommand();

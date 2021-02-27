@@ -547,10 +547,14 @@ ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 									   bool tuplock, MemoryContext mctx)
 {
 	ScanKeyData scankey[2];
-	NameData schema_name, table_name;
+	NameData schema_name = { 0 };
+	NameData table_name = { 0 };
 
-	namestrcpy(&schema_name, schema);
-	namestrcpy(&table_name, table);
+	if (schema)
+		namestrcpy(&schema_name, schema);
+
+	if (table)
+		namestrcpy(&table_name, table);
 
 	/* Perform an index scan on schema and table. */
 	ScanKeyInit(&scankey[0],

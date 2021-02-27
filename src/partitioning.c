@@ -184,8 +184,8 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 				 errmsg("partitioning function information cannot be null")));
 
 	pinfo = palloc0(sizeof(PartitioningInfo));
-	StrNCpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
-	StrNCpy(pinfo->column, partcol, NAMEDATALEN);
+	strlcpy(pinfo->partfunc.name, partfunc, NAMEDATALEN);
+	strlcpy(pinfo->column, partcol, NAMEDATALEN);
 	pinfo->column_attnum = get_attnum(relid, pinfo->column);
 	pinfo->dimtype = dimtype;
 
@@ -193,7 +193,7 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	if (pinfo->column_attnum == InvalidAttrNumber)
 		return NULL;
 
-	StrNCpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
+	strlcpy(pinfo->partfunc.schema, schema, NAMEDATALEN);
 
 	/* Lookup the type cache entry to access the hash function for the type */
 	columntype = get_atttype(relid, pinfo->column_attnum);
