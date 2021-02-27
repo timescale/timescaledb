@@ -429,15 +429,15 @@ SELECT * FROM weekly_temp_without_data;
 -----+--------+----------
 (0 rows)
 
-SELECT * FROM weekly_temp_with_data;
+SELECT * FROM weekly_temp_with_data ORDER BY 1,2;
              day              | device |     avg_temp     
 ------------------------------+--------+------------------
- Sun Apr 26 17:00:00 2020 PDT |      3 | 21.5631067961165
+ Sun Apr 26 17:00:00 2020 PDT |      0 | 17.8181818181818
  Sun Apr 26 17:00:00 2020 PDT |      1 | 17.2474226804124
+ Sun Apr 26 17:00:00 2020 PDT |      2 | 18.9803921568627
+ Sun Apr 26 17:00:00 2020 PDT |      3 | 21.5631067961165
  Sun May 03 17:00:00 2020 PDT |      0 | 16.7659574468085
  Sun May 03 17:00:00 2020 PDT |      1 | 22.7272727272727
- Sun Apr 26 17:00:00 2020 PDT |      0 | 17.8181818181818
- Sun Apr 26 17:00:00 2020 PDT |      2 | 18.9803921568627
  Sun May 03 17:00:00 2020 PDT |      2 |  15.811320754717
  Sun May 03 17:00:00 2020 PDT |      3 |               19
 (8 rows)
