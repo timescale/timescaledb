@@ -330,7 +330,8 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
 
-				ts_hypertable_insert_fixup_tlist(subplan);
+				if (subplan)
+					ts_hypertable_insert_fixup_tlist(subplan);
 			}
 		}
 	}
