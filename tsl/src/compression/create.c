@@ -813,7 +813,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 			if (form->contype == CONSTRAINT_FOREIGN)
 			{
 				Name conname = palloc0(NAMEDATALEN);
-				namecpy(conname, &form->conname);
+				namestrcpy(conname, NameStr(form->conname));
 				conlist = lappend(conlist, conname);
 			}
 		}

@@ -607,7 +607,7 @@ static void inline do_load()
 	char soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
 
-	StrNCpy(soversion, version, MAX_VERSION_LEN);
+	strlcpy(soversion, version, MAX_VERSION_LEN);
 
 	/*
 	 * An inval_relcache callback can be called after previous checks of
