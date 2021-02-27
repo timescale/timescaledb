@@ -260,7 +260,7 @@ FROM conditions
 GROUP BY 1,2 WITH DATA;
 
 SELECT * FROM weekly_temp_without_data;
-SELECT * FROM weekly_temp_with_data;
+SELECT * FROM weekly_temp_with_data ORDER BY 1,2;
 
 \set ON_ERROR_STOP 0
 -- REFRESH MATERIALIZED VIEW is blocked on continuous aggregates
