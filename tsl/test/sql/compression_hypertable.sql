@@ -144,7 +144,7 @@ where hypertable_name like 'test4';
 
 select location, count(*)
 from test4
-group by location;
+group by location ORDER BY location;
 
 SELECT $$ SELECT * FROM test4 ORDER BY timec $$ AS "QUERY" \gset
 

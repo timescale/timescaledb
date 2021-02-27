@@ -43,6 +43,6 @@ SELECT histogram(key, 1, 3, 2) FROM hitest1;
 SELECT histogram(key, 1, 3, 1) FROM hitest1;
 
 -- standard 2 bucket
-SELECT qualify, histogram(score, 0, 10, 2) FROM hitest2 GROUP BY qualify;
+SELECT qualify, histogram(score, 0, 10, 2) FROM hitest2 GROUP BY qualify ORDER BY qualify;
 -- standard multi-bucket
-SELECT qualify, histogram(score, 0, 10, 5) FROM hitest2 GROUP BY qualify
+SELECT qualify, histogram(score, 0, 10, 5) FROM hitest2 GROUP BY qualify ORDER BY qualify;
