@@ -1493,6 +1493,9 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 #if PG14_LT
 						 ,
 						 stmt->concurrent /* should test for deadlocks */
+#elif PG14_GE
+						 ,
+						 false /* isTopLevel */
 #endif
 			);
 			break;
