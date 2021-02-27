@@ -107,6 +107,26 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 	}
 }
 
+static ObjectType
+get_altertable_objecttype(AlterTableStmt *stmt)
+{
+#if PG14_GE
+	return stmt->objtype;
+#else
+	return stmt->relkind;
+#endif
+}
+
+static ObjectType
+get_createtableas_objecttype(CreateTableAsStmt *stmt)
+{
+#if PG14_GE
+	return stmt->objtype;
+#else
+	return stmt->relkind;
+#endif
+}
+
 static void
 check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 {
@@ -3153,7 +3173,7 @@ static DDLResult
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
-	switch (stmt->relkind)
+	switch (get_altertable_objecttype(stmt))
 	{
 		case OBJECT_TABLE:
 			return process_altertable_start_table(args);
@@ -3428,7 +3448,7 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 
-	switch (stmt->relkind)
+	switch (get_altertable_objecttype(stmt))
 	{
 		case OBJECT_TABLE:
 			process_altertable_end_table(parsetree, cmd);
@@ -3568,7 +3588,7 @@ process_create_table_as(ProcessUtilityArgs *args)
 	bool is_cagg = false;
 	List *pg_options = NIL, *cagg_options = NIL;
 
-	if (stmt->relkind == OBJECT_MATVIEW)
+	if (get_createtableas_objecttype(stmt) == OBJECT_MATVIEW)
 	{
 		/* Check for creation of continuous aggregate */
 		ts_with_clause_filter(stmt->into->options, &cagg_options, &pg_options);
