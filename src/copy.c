@@ -241,8 +241,10 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 
 	ExecOpenIndices(resultRelInfo, false);
 
+#if PG14_LT
 	estate->es_result_relations = resultRelInfo;
 	estate->es_num_result_relations = 1;
+#endif
 	estate->es_result_relation_info = resultRelInfo;
 	estate->es_range_table = range_table;
 
@@ -449,7 +451,12 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 
 	ExecCloseIndices(resultRelInfo);
 	/* Close any trigger target relations */
+#if PG14_LT
 	ExecCleanUpTriggerState(estate);
+#else
+	ExecCloseResultRelations(estate);
+	ExecCloseRangeTableRelations(estate);
+#endif
 
 	/*
 	 * If we skipped writing WAL, then we need to sync the heap (but not
