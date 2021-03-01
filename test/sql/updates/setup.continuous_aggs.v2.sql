@@ -18,7 +18,7 @@ SELECT
 
 -- disable background workers to prevent deadlocks between background processes
 -- on timescaledb 1.7.x
-SELECT _timescaledb_internal.stop_background_workers();
+CALL _timescaledb_testing.stop_workers();
 
 CREATE TYPE custom_type AS (high int, low int);
 
@@ -142,7 +142,9 @@ BEGIN
   END IF;
 END $$;
 
+\if :WITH_SUPERUSER
 GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
+\endif
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_before;
@@ -252,7 +254,9 @@ BEGIN
   END IF;
 END $$;
 
+\if :WITH_SUPERUSER
 GRANT SELECT ON cagg.realtime_mat TO cagg_user;
+\endif
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW cagg.realtime_mat;
@@ -453,9 +457,11 @@ BEGIN
   END IF;
 END $$;
 
+\if :WITH_SUPERUSER
 GRANT SELECT, TRIGGER, UPDATE
 ON mat_conflict TO cagg_user
 WITH GRANT OPTION;
+\endif
 
 -- Test that calling drop chunks on the hypertable does not break the
 -- update process when chunks are marked as dropped rather than

@@ -7,7 +7,7 @@
 -- the dimension slice table. The repair script should then repair all
 -- of them and there should be no dimension slices missing.
 
-SELECT extversion < '2.0.0' AS runs_repair_script
+SELECT extversion < '2.0.0' OR extversion = '2.0.0-rc1' AS runs_repair_script
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
