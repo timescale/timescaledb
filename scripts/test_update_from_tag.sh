@@ -5,6 +5,7 @@ set -o pipefail
 
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
+WITH_SUPERUSER=true # Update tests have superuser privileges when running tests.
 TEST_VERSION=${TEST_VERSION:-v2}
 TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test' || mkdir -p /tmp/${RANDOM})}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
@@ -16,6 +17,7 @@ UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
 DO_CLEANUP=true
+PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v TEST_REPAIR=${TEST_REPAIR} -v WITH_SUPERUSER=${WITH_SUPERUSER}"
 
 # PID of the current shell
 PID=$$
@@ -83,7 +85,7 @@ docker_pgcmd() {
     local database=${3:-single}
     echo "executing pgcmd on database $database"
     set +e
-    docker_exec $1 "psql -h localhost -U postgres -d $database -v TEST_REPAIR=${TEST_REPAIR} -v VERBOSITY=verbose -c \"$2\""
+    docker_exec $1 "psql -h localhost -U postgres -d $database $PGOPTS -v VERBOSITY=verbose -c \"$2\""
     if [ $? -ne 0 ]; then
       docker_logs $1
       exit 1
@@ -92,8 +94,8 @@ docker_pgcmd() {
 }
 
 docker_pgscript() {
-    local database=${3:-postgres}
-    docker_exec $1 "psql -h localhost -U postgres -d $database -v TEST_REPAIR=${TEST_REPAIR} -v ON_ERROR_STOP=1 -f $2"
+    local database=${3:-single}
+    docker_exec $1 "psql -h localhost -U postgres -d $database $PGOPTS -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {
@@ -167,6 +169,8 @@ remove_containers || true
 
 IMAGE_NAME=${UPDATE_TO_IMAGE} TAG_NAME=${UPDATE_TO_TAG} PG_VERSION=${PG_VERSION} bash ${SCRIPT_DIR}/docker-build.sh
 
+set -x
+
 echo "Launching containers"
 docker_run ${CONTAINER_ORIG} ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}
 docker_run ${CONTAINER_CLEAN_RESTORE} ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
@@ -183,6 +187,8 @@ CLEAN_VOLUME=$(docker inspect ${CONTAINER_CLEAN_RESTORE} --format='{{range .Moun
 UPDATE_VOLUME=$(docker inspect ${CONTAINER_ORIG} --format='{{range .Mounts }}{{.Name}}{{end}}')
 
 echo "Executing setup script on container running ${UPDATE_FROM_IMAGE}:${UPDATE_FROM_TAG}"
+docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.databases.sql "postgres"
+docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/pre.testing.sql
 docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 docker_pgcmd ${CONTAINER_ORIG} "CHECKPOINT;"
 
@@ -212,6 +218,8 @@ echo "Checking that there are no missing dimension slices"
 docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/setup.check.sql
 
 echo "Executing setup script on clean"
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.databases.sql "postgres"
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/pre.testing.sql
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
 if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
     if [[ "${TEST_REPAIR}" = "true" ]]; then

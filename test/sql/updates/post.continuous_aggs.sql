@@ -18,11 +18,6 @@ CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
 --the max of the temp for the POR should now be 165
 SELECT * FROM mat_before ORDER BY bucket, location;
 
-SET ROLE cagg_user;
---should be able to query as cagg_user
-SELECT * FROM mat_before ORDER BY bucket, location;
-RESET ROLE;
-
 -- Output the ACLs for each internal cagg object
 SELECT cl.oid::regclass::text AS reloid,
        relacl
