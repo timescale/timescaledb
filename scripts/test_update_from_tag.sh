@@ -200,18 +200,12 @@ docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
 # which is available in the image.
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "postgres"
 
-# Post update script. Needed for multi-node tests when updating from a
-# version that doesn't support multi-node to a multi-node capable
-# version.
 if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
- 	echo "Executing post update scripts"
-	docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.update.sql "single"
-	if [[ "${TEST_REPAIR}" = "true" ]]; then
-	    echo "Executing post update repair script"
-	    docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql "single"
-	fi
+    if [[ "${TEST_REPAIR}" = "true" ]]; then
+	echo "Executing post update repair script"
+	docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql "single"
+    fi
 fi
-
 
 # Check that there is nothing wrong before taking a backup
 echo "Checking that there are no missing dimension slices"

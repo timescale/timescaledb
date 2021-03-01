@@ -2,10 +2,5 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir setup.v2.sql
-\ir setup.continuous_aggs.v2.sql
-\ir setup.compression.sql
-\ir setup.policies.sql
-\if :TEST_REPAIR
-\ir setup.repair.sql
-\endif
+\ir setup.v6.sql
+\ir setup.multinode.sql
