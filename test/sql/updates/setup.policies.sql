@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE TABLE policy_test_timestamptz(time timestamptz, device_id int, value float);
+CREATE TABLE policy_test_timestamptz(time timestamptz not null, device_id int, value float);
 SELECT table_name FROM create_hypertable('policy_test_timestamptz','time');
 
 ALTER TABLE policy_test_timestamptz SET (timescaledb.compress);
