@@ -9,12 +9,11 @@ on:
   pull_request:
 jobs:
   update_test:
-    name: Update test PG${{ matrix.pg }} ${{ matrix.kind }}
+    name: Update test PG${{ matrix.pg }}
     runs-on: 'ubuntu-18.04'
     strategy:
       matrix:
         pg: ["11.11","12.6","13.2"]
-        opt: ["", "-r"]
         include:
           - pg: 11.11
             pg_major: 11
@@ -22,8 +21,6 @@ jobs:
             pg_major: 12
           - pg: 13.2
             pg_major: 13
-          - opt: "-r"
-            kind: "with repair test"
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -32,9 +29,9 @@ jobs:
     - name: Checkout TimescaleDB
       uses: actions/checkout@v2
 
-    - name: Update tests ${{ matrix.pg }} ${{ matrix.kind }}
+    - name: Update tests ${{ matrix.pg }}
       run: |
-        ./scripts/test_updates_pg${{ matrix.pg_major}}.sh ${{ matrix.opt }}
+        ./scripts/test_updates_pg${{ matrix.pg_major }}.sh
 
     - name: Update diff
       if: failure()
