@@ -6,11 +6,15 @@
 
 \d cagg.*
 
+\x on
 SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
+\x off
 
 CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
 
+\x on
 SELECT * FROM cagg.realtime_mat ORDER BY bucket, location;
+\x off
 
 SELECT view_name, materialized_only, materialization_hypertable_name 
 FROM timescaledb_information.continuous_aggregates 
