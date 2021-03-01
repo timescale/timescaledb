@@ -206,13 +206,6 @@ docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
 # which is available in the image.
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "postgres"
 
-if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
-    if [[ "${TEST_REPAIR}" = "true" ]]; then
-	echo "Executing post update repair script"
-	docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql "single"
-    fi
-fi
-
 # Check that there is nothing wrong before taking a backup
 echo "Checking that there are no missing dimension slices"
 docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/setup.check.sql
@@ -221,15 +214,6 @@ echo "Executing setup script on clean"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.databases.sql "postgres"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/pre.testing.sql
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
-if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
-    if [[ "${TEST_REPAIR}" = "true" ]]; then
-	# We need to run the post repair script to make sure that the
-	# constraint is on the clean rerun as well since the setup
-	# script can remove it.
-	echo "Executing post update repair script on clean"
-	docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/post.repair.sql "single"
-    fi
-fi
 
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.dump"
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.dump"
