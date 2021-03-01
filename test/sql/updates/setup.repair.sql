@@ -7,10 +7,6 @@
 -- the dimension slice table. The repair script should then repair all
 -- of them and there should be no dimension slices missing.
 
-SELECT extversion < '2.0.0' OR extversion = '2.0.0-rc1' AS runs_repair_script
-  FROM pg_extension
- WHERE extname = 'timescaledb' \gset
-
 CREATE TABLE repair_test_int(time integer not null, temp float8, tag integer, color integer);
 CREATE TABLE repair_test_timestamptz(time timestamptz not null, temp float8, tag integer, color integer);
 CREATE TABLE repair_test_extra(time timestamptz not null, temp float8, tag integer, color integer);
@@ -84,7 +80,6 @@ CREATE VIEW slices AS (
            ON di.hypertable_id = ch.hypertable_id AND attname = di.column_name
    );
 
-\if :runs_repair_script
 -- Break the first time dimension on each table. These are different
 -- depending on the time type for the table and we need to check all
 -- versions.
@@ -180,6 +175,5 @@ SELECT DISTINCT
        END AS range_end
   FROM unparsed_slices
   WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
-\endif
 
 DROP VIEW slices;
