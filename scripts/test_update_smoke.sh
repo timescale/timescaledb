@@ -30,20 +30,6 @@
 #   (optional). If not set, password from .pgpass will be used (if
 #   available).
 
-while getopts "d" opt;
-do
-    case $opt in
-        d)
-            cleanup=1
-            ;;
-	r)
-	    TEST_REPAIR=true
-	    ;;
-    esac
-done
-
-shift $((OPTIND-1))
-
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 SCRATCHDIR=`mktemp -d -t 'smoketest-XXXX'`
@@ -51,16 +37,27 @@ DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
 CLEAN_OUT="$SCRATCHDIR/clean.out"
 RESTORE_OUT="$SCRATCHDIR/restore.out"
-UPDATE_FROM_TAG=${1:-${UPDATE_FROM_TAG:-1.7.4}}
-UPDATE_TO_TAG=${2:-${UPDATE_TO_TAG:-2.0.1}}
-TEST_REPAIR=false
 TEST_VERSION=${TEST_VERSION:-v6}
 
-# We do not have superuser privileges when running tests.
+while getopts "d" opt;
+do
+    case $opt in
+        d)
+            cleanup=1
+            ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+UPDATE_FROM_TAG=${1:-${UPDATE_FROM_TAG:-1.7.4}}
+UPDATE_TO_TAG=${2:-${UPDATE_TO_TAG:-2.0.1}}
+
+# We do not have superuser privileges when running smoke tests.
 WITH_SUPERUSER=false
 
 # Extra options to pass to psql
-PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v TEST_REPAIR=${TEST_REPAIR} -v WITH_SUPERUSER=${WITH_SUPERUSER}"
+PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER}"
 PSQL="psql -qX $PGOPTS"
 
 cleanup() {
@@ -114,11 +111,6 @@ $PSQL -f setup.${TEST_VERSION}.sql
 
 # Run update on Upgrade. You now have a 2.0.2 version in Upgrade.
 $PSQL -c "ALTER EXTENSION timescaledb UPDATE TO '${UPDATE_TO_TAG}'"
-
-# Apply post-update actions
-if [[ "x$TEST_REPAIR" = "xtrue" ]]; then
-    $PSQL -f post.repair.sql
-fi
 
 # Dump the contents of Upgrade
 pg_dump -Fc -f $DUMPFILE

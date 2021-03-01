@@ -25,7 +25,7 @@ FAIL_COUNT=0
 # Declare a hash table to keep test names keyed by pid
 declare -A tests
 
-while getopts "cdr" opt;
+while getopts "cd" opt;
 do
     case $opt in
         c)
@@ -37,10 +37,6 @@ do
             KEEP_TEMP_DIRS=true
             TEST_UPDATE_FROM_TAGS_EXTRA_ARGS="-d"
             ;;
-	r)
-	    echo "Breaking dimension slices to test repair part"
-	    TEST_REPAIR=true
-	    ;;
     esac
 done
 
