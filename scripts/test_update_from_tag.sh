@@ -229,25 +229,25 @@ if [[ "${TEST_VERSION}" > "v6" ]] || [[ "${TEST_VERSION}" = "v6" ]]; then
     fi
 fi
 
-docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.sql"
-docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.sql"
-docker cp ${CONTAINER_UPDATED}:/tmp/single.sql ${TEST_TMPDIR}/single.sql
-docker cp ${CONTAINER_UPDATED}:/tmp/dn1.sql ${TEST_TMPDIR}/dn1.sql
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.dump"
+docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.dump"
+docker cp ${CONTAINER_UPDATED}:/tmp/single.dump ${TEST_TMPDIR}/single.dump
+docker cp ${CONTAINER_UPDATED}:/tmp/dn1.dump ${TEST_TMPDIR}/dn1.dump
 
 echo "Restoring database on clean version"
-docker cp ${TEST_TMPDIR}/single.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/single.sql
-docker cp ${TEST_TMPDIR}/dn1.sql ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.sql
+docker cp ${TEST_TMPDIR}/single.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/single.dump
+docker cp ${TEST_TMPDIR}/dn1.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.dump
 
 # Restore single
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.restoring='on'"
-docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.sql"
+docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.dump"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single RESET timescaledb.restoring"
 
 # Restore dn1
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres dn1"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='on'"
-docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.sql"
+docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.dump"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 RESET timescaledb.restoring"
 
 echo "Comparing upgraded ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG) with clean install ($UPDATE_TO_TAG)"

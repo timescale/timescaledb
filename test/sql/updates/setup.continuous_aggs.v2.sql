@@ -298,7 +298,7 @@ CALL refresh_continuous_aggregate('mat_ignoreinval',NULL,NULL);
 \endif
 
 -- test new data beyond the invalidation threshold is properly handled --
-CREATE TABLE inval_test (time TIMESTAMPTZ, location TEXT, temperature DOUBLE PRECISION);
+CREATE TABLE inval_test (time TIMESTAMPTZ NOT NULL, location TEXT, temperature DOUBLE PRECISION);
 SELECT create_hypertable('inval_test', 'time', chunk_time_interval => INTERVAL '1 week');
  
 INSERT INTO inval_test
@@ -349,7 +349,7 @@ INSERT INTO inval_test
 SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'NYC', generate_series(131.0, 150.0, 1.0);
 
 -- Add an integer base table to ensure we handle it correctly
-CREATE TABLE int_time_test(timeval integer, col1 integer, col2 integer);
+CREATE TABLE int_time_test(timeval integer not null, col1 integer, col2 integer);
 select create_hypertable('int_time_test', 'timeval', chunk_time_interval=> 2);
 
 CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timeval), 0) FROM int_time_test $$;
@@ -415,7 +415,7 @@ CALL refresh_continuous_aggregate('mat_inttime2',NULL,NULL);
 \endif
 
 -- Test that retention policies that conflict with continuous aggs are disabled --
-CREATE TABLE conflict_test (time TIMESTAMPTZ, location TEXT, temperature DOUBLE PRECISION);
+CREATE TABLE conflict_test (time TIMESTAMPTZ NOT NULL, location TEXT, temperature DOUBLE PRECISION);
 SELECT create_hypertable('conflict_test', 'time', chunk_time_interval => INTERVAL '1 week');
 
 DO LANGUAGE PLPGSQL $$
@@ -464,7 +464,7 @@ WITH GRANT OPTION;
 -- here and then drop chunks from the hypertable and make sure that
 -- the update from 1.7 to 2.0 works as expected.
 CREATE TABLE drop_test (
-    time timestamptz,
+    time timestamptz not null,
     location INT,
     temperature double PRECISION
 );
