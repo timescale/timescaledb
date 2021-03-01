@@ -13,4 +13,4 @@ SELECT * FROM create_hypertable('hyper_timestamp'::regclass, 'time'::name, 'devi
     chunk_time_interval=> _timescaledb_internal.interval_to_usec('1 minute'));
 
 --some old versions use more slice_ids than newer ones. Make this uniform
-ALTER SEQUENCE _timescaledb_catalog.dimension_slice_id_seq RESTART WITH 100;
+CALL _timescaledb_testing.restart_dimension_slice_id();
