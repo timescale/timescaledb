@@ -2,7 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+\x on
 SELECT * FROM mat_before ORDER BY bucket, location;
+\x off
 
 INSERT INTO conditions_before
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 165, 75, 40, 70, NULL, (1,2)::custom_type, 2, true;
@@ -11,12 +13,16 @@ SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 INSERT INTO conditions_before
 SELECT generate_series('2017-12-01 00:00'::timestamp, '2017-12-31 00:00'::timestamp, '1 day'), 'POR', 1065, 75, 40, 70, NULL, (1,2)::custom_type, 2, true;
 
+\x on
 SELECT * FROM mat_before ORDER BY bucket, location;
+\x off
 
 CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
 
 --the max of the temp for the POR should now be 165
+\x on
 SELECT * FROM mat_before ORDER BY bucket, location;
+\x off
 
 -- Output the ACLs for each internal cagg object
 SELECT cl.oid::regclass::text AS reloid,
