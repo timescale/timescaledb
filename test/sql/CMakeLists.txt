@@ -98,6 +98,9 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     timestamp_limits.sql
     with_clause_parser.sql
   )
+  list(APPEND TEST_TEMPLATES
+    multi_transaction_index.sql.in
+  )
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 if(${PG_VERSION_MAJOR} EQUAL "11")
@@ -130,13 +133,8 @@ endif()
 
 if ((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
   list(APPEND TEST_FILES
+    trusted_extension.sql
     vacuum_parallel.sql
-  )
-endif()
-
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES
-    multi_transaction_index.sql.in
   )
 endif()
 
