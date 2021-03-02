@@ -294,6 +294,9 @@ if (PG_SOURCE_DIR)
 endif (PG_SOURCE_DIR)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
+if (${PG_VERSION_MAJOR} GREATER "12")
+  set(TRUSTED trusted=true)
+endif()
 configure_file(${EXT_CONTROL_FILE}.in ${EXT_CONTROL_FILE})
 
 install(
