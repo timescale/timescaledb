@@ -1,0 +1,51 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE trusted_test;
+GRANT CREATE ON DATABASE trusted_test TO test_role_1;
+\c trusted_test test_role_1
+-- user shouldnt have superuser privilege
+SELECT rolsuper FROM pg_roles WHERE rolname=user;
+ rolsuper 
+----------
+ f
+(1 row)
+
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+CREATE TABLE t(time timestamptz);
+SELECT create_hypertable('t','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable 
+-------------------
+ (1,public,t,t)
+(1 row)
+
+INSERT INTO t VALUES ('2000-01-01'), ('2001-01-01');
+SELECT * FROM t ORDER BY 1;
+             time             
+------------------------------
+ Sat Jan 01 00:00:00 2000 PST
+ Mon Jan 01 00:00:00 2001 PST
+(2 rows)
+
+SELECT * FROM timescaledb_information.hypertables;
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor | data_nodes | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+------------+-------------
+ public            | t               | test_role_1 |              1 |          2 | f                   | f              |                    |            | 
+(1 row)
+
+\dt+ _timescaledb_internal._hyper_*
+                                            List of relations
+        Schema         |       Name       | Type  |    Owner    | Persistence |    Size    | Description 
+-----------------------+------------------+-------+-------------+-------------+------------+-------------
+ _timescaledb_internal | _hyper_1_1_chunk | table | test_role_1 | permanent   | 8192 bytes | 
+ _timescaledb_internal | _hyper_1_2_chunk | table | test_role_1 | permanent   | 8192 bytes | 
+(2 rows)
+
+DROP EXTENSION timescaledb CASCADE;
+NOTICE:  drop cascades to 3 other objects
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE trusted_test;
