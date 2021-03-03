@@ -71,6 +71,7 @@
 #define PG_PROMETHEUS "pg_prometheus"
 #define PROMSCALE "promscale"
 #define POSTGIS "postgis"
+#define TIMESCALE_ANALYTICS "timescale_analytics"
 
 #define REQ_COMPRESSED_HEAP_SIZE "compressed_heap_size"
 #define REQ_COMPRESSED_INDEX_SIZE "compressed_index_size"
@@ -81,7 +82,12 @@
 
 #define TS_TELEMETRY_REPORT_OVERRIDE_ARG "always_display_report := true"
 
-static const char *related_extensions[] = { PG_PROMETHEUS, PROMSCALE, POSTGIS };
+static const char *related_extensions[] = {
+	PG_PROMETHEUS,
+	PROMSCALE,
+	POSTGIS,
+	TIMESCALE_ANALYTICS,
+};
 
 static bool
 char_in_valid_version_digits(const char c)
