@@ -203,13 +203,13 @@ test_script:
     # killer. Therefore, we need to ignore the results of the
     # remote_connection and remote_txn tests.
 
-    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw remote_connection remote_txn " -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal-t"
+    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw ordered_append_join-12 remote_connection remote_txn " -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make -k regresschecklocal-t regresschecklocal-shared"
 
     if( -not $? -or -not $TESTS1 ) { exit 1 }
 
 on_failure:
   - ps: >-
-      docker exec -it pgregress cat /timescaledb/build/test/regression.diffs /timescaledb/build/tsl/test/regression.diffs /timescaledb/build/test/pgtest/regressions.diffs
+      docker exec -it pgregress sh -c 'find /timescaledb/build -name regression.diffs -exec cat {} +'
 
       Get-Content -Path "C:\Program Files\postgresql\12\data\pg_log\*"
 
