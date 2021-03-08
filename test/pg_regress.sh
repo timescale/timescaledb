@@ -18,6 +18,8 @@ SCHEDULE=
 TESTS=${TESTS:-}
 IGNORES=${IGNORES:-}
 SKIPS=${SKIPS:-}
+PSQL=${PSQL:-psql}
+PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
 
 contains() {
     # a list contains a value foo if the regex ".* foo .*" holds true
@@ -106,6 +108,11 @@ function cleanup() {
   rm -rf ${TEST_TABLESPACE2_PREFIX}
   rm -rf ${TEST_TABLESPACE3_PREFIX}
   rm -f ${TEMP_SCHEDULE}
+  cat <<EOF | ${PSQL} -U ${USER} -h ${TEST_PGHOST} -p ${TEST_PGPORT} -d template1 >/dev/null 2>&1
+    DROP TABLESPACE IF EXISTS tablespace1;
+    DROP TABLESPACE IF EXISTS tablespace2;
+    DROP TABLESPACE IF EXISTS tablespace3;
+EOF
   rm -rf ${TEST_OUTPUT_DIR}/.pg_init
 }
 
