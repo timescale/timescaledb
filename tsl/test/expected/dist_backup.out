@@ -6,22 +6,22 @@
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-\set MY_DB1 :TEST_DBNAME _1
-\set MY_DB2 :TEST_DBNAME _2
-\set MY_DB3 :TEST_DBNAME _3
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'MY_DB1');
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
   node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
 -------------+-----------+-------+------------------+--------------+------------------+-------------------
  data_node_1 | localhost | 55432 | db_dist_backup_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'MY_DB2');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
   node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
 -------------+-----------+-------+------------------+--------------+------------------+-------------------
  data_node_2 | localhost | 55432 | db_dist_backup_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'MY_DB3');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
   node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
 -------------+-----------+-------+------------------+--------------+------------------+-------------------
  data_node_3 | localhost | 55432 | db_dist_backup_3 | t            | t                | t
@@ -87,7 +87,7 @@ ERROR:  distributed restore point must be created on the access node
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE dist_rp_test;
 -- test on data node
-\c :MY_DB1 :ROLE_CLUSTER_SUPERUSER;
+\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('test');
 ERROR:  distributed restore point must be created on the access node
@@ -137,3 +137,6 @@ SELECT pg_lsn(:'lsn_3') > pg_lsn(:'lsn_2') as valid_lsn;
  t
 (1 row)
 
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;

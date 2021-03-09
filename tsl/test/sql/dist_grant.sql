@@ -10,11 +10,14 @@
 \o
 \set ECHO all
 
-DROP TABLE IF EXISTS conditions;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DN_DBNAME_4 :TEST_DBNAME _4
 
-SELECT * FROM add_data_node('data1', host => 'localhost', database => 'data1');
-SELECT * FROM add_data_node('data2', host => 'localhost', database => 'data2');
-SELECT * FROM add_data_node('data3', host => 'localhost', database => 'data3');
+SELECT * FROM add_data_node('data1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('data2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT * FROM add_data_node('data3', host => 'localhost', database => :'DN_DBNAME_3');
 
 CREATE TABLE conditions(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);
 GRANT SELECT ON conditions TO :ROLE_1;
@@ -73,7 +76,7 @@ $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
 
 -- Add another data node and check that grants are propagated when the
 -- data node is attached to an existing table.
-SELECT * FROM add_data_node('data4', host => 'localhost', database => 'data4');
+SELECT * FROM add_data_node('data4', host => 'localhost', database => :'DN_DBNAME_4');
 
 \set ON_ERROR_STOP 0
 SELECT * FROM test.remote_exec(NULL, format($$
@@ -277,3 +280,9 @@ SELECT * FROM disttable_role_3;
 
 DROP USER MAPPING FOR :ROLE_3 SERVER data1;
 DROP USER MAPPING FOR :ROLE_3 SERVER data2;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DN_DBNAME_4;

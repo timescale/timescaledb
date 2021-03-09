@@ -2,18 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Cleanup from other potential tests that created these databases
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS backend_1_1;
-DROP DATABASE IF EXISTS backend_x_2;
-DROP DATABASE IF EXISTS backend_2_1;
-DROP DATABASE IF EXISTS frontend_1;
-DROP DATABASE IF EXISTS frontend_2;
-SET client_min_messages TO NOTICE;
-
 ----------------------------------------------------------------
 -- Test version compability function
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 
 CREATE OR REPLACE FUNCTION compatible_version(version CSTRING, reference CSTRING)
 RETURNS TABLE(is_compatible BOOLEAN, is_old_version BOOLEAN)
@@ -142,3 +133,11 @@ SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
 SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
 SELECT * FROM hypertable_size('disttable') ;
 SELECT * FROM hypertable_size('nondisttable') ;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+SET client_min_messages TO ERROR;
+DROP DATABASE backend_1_1;
+DROP DATABASE backend_x_2;
+DROP DATABASE backend_2_1;
+DROP DATABASE frontend_1;
+DROP DATABASE frontend_2;

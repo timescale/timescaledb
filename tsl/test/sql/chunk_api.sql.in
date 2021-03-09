@@ -3,6 +3,9 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+
 \ir include/remote_exec.sql
 GRANT CREATE ON DATABASE :"TEST_DBNAME" TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -112,15 +115,10 @@ ORDER BY tablename, attname;
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-SET client_min_messages TO NOTICE;
-
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
+                            database => :'DN_DBNAME_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
+                            database => :'DN_DBNAME_2');
 
 GRANT USAGE
    ON FOREIGN SERVER data_node_1, data_node_2
@@ -222,7 +220,6 @@ FROM pg_statistic st, show_chunks('disttable') ch
 WHERE st.starelid = ch
 ORDER BY ch, staattnum;
 $$);
-SET ROLE :ROLE_1;
 
 -- Clean up
 RESET ROLE;
@@ -230,5 +227,5 @@ TRUNCATE disttable;
 TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
 SELECT * FROM delete_data_node('data_node_2', force => true);
-DROP DATABASE data_node_1;
-DROP DATABASE data_node_2;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;

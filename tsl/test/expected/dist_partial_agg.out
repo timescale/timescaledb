@@ -14,12 +14,6 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
 SET ROLE :ROLE_1;
 \set TEST_TABLE 'conditions'
 \ir 'include/aggregate_table_create.sql'
@@ -43,26 +37,26 @@ CREATE TABLE :TEST_TABLE (
       good_life   boolean
     );
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |       database        | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_dist_partial_agg_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |       database        | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_dist_partial_agg_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+  node_name  |   host    | port  |       database        | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 55432 | db_dist_partial_agg_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
@@ -488,3 +482,7 @@ SELECT format('\! diff %s %s', :'RESULTS_CONTROL2', :'RESULTS_TEST2') as "DIFF_C
 -- multiple values for "col" that has the same timestamp, so the
 -- output depends on the order of arriving tuples.
 :DIFF_CMD2
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;

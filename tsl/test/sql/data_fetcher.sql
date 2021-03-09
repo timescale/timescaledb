@@ -4,6 +4,10 @@
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+
 \set TEST_BASE_NAME data_fetcher
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
        format('include/%s_run.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
@@ -39,3 +43,7 @@ SET timescaledb.remote_data_fetcher = 'cursor';
 -- compare results
 :DIFF_CMD
 
+RESET ROLE;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;

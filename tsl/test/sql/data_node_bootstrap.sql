@@ -16,11 +16,6 @@ SELECT QUOTE_LITERAL(PG_ENCODING_TO_CHAR(encoding)) AS enc
  WHERE datname = current_database()
  \gset
 
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS bootstrap_test;
-SET client_min_messages TO NOTICE;
-
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
