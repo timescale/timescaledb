@@ -9,25 +9,19 @@
 \o
 \set ECHO all
 
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DN_DBNAME_4 :TEST_DBNAME _4
+\set DN_DBNAME_5 :TEST_DBNAME _5
+\set DN_DBNAME_6 :TEST_DBNAME _6
 
--- Add data nodes using TimescaleDB data_node management API. NOTE that the
--- extension won't be created since it is installed in the template1
--- database
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-
-SELECT * FROM add_data_node('data_node_2', 'localhost',
-                            database => 'data_node_2');
+-- Add data nodes using TimescaleDB data_node management API.
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('data_node_2', 'localhost', database => :'DN_DBNAME_2');
 \set ON_ERROR_STOP 0
 -- Add again
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
 -- No host provided
 SELECT * FROM add_data_node('data_node_99');
 SELECT * FROM add_data_node(NULL);
@@ -38,28 +32,28 @@ SELECT * FROM add_data_node(NULL, NULL);
 -- Test invalid port numbers
 SELECT * FROM add_data_node('data_node_3', 'localhost',
                             port => 65536,
-                            database => 'data_node_3');
+                            database => :'DN_DBNAME_3');
 SELECT * FROM add_data_node('data_node_3', 'localhost',
                             port => 0,
-                            database => 'data_node_3');
+                            database => :'DN_DBNAME_3');
 SELECT * FROM add_data_node('data_node_3', 'localhost',
                             port => -1,
-                            database => 'data_node_3');
+                            database => :'DN_DBNAME_3');
 
 SELECT inet_server_port() as PGPORT \gset
 
 -- Adding a data node via ADD SERVER is blocked
 CREATE SERVER data_node_4 FOREIGN DATA WRAPPER timescaledb_fdw
-OPTIONS (host 'localhost', port ':PGPORT', dbname 'data_node_4');
+OPTIONS (host 'localhost', port ':PGPORT', dbname :'DN_DBNAME_4');
 -- Dropping a data node via DROP SERVER is also blocked
 DROP SERVER data_node_1, data_node_2;
 \set ON_ERROR_STOP 1
 
 -- Should not generate error with if_not_exists option
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2',
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2',
                             if_not_exists => true);
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
 
 -- Test altering server command is blocked
@@ -98,17 +92,14 @@ SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY nod
 -- Cleanup databases
 RESET ROLE;
 SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
 SET client_min_messages TO INFO;
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
 -- Allow ROLE_1 to create distributed tables on these data nodes.
 -- We'll test that data_node_3 is properly filtered when ROLE_1
@@ -337,7 +328,7 @@ SELECT * FROM attach_data_node('data_node_2', 'disttable');
 SELECT * FROM attach_data_node('data_node_1', 'disttable', false);
 
 -- Attaching a data node to another data node
-\c data_node_1
+\c :DN_DBNAME_1
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SET ROLE :ROLE_1;
@@ -355,7 +346,7 @@ WHERE num_slices IS NOT NULL
 AND column_name = 'device';
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'data_node_4',
+SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4',
                             if_not_exists => true);
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
 
@@ -393,21 +384,21 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time');
 \set ON_ERROR_STOP 1
 
 -- These data nodes have been deleted, so safe to remove their databases.
-DROP DATABASE data_node_1;
-DROP DATABASE data_node_2;
-DROP DATABASE data_node_3;
-DROP DATABASE data_node_4;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DN_DBNAME_4;
 
 -- there should be no data nodes
 SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 -- let's add some
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
+                            database => :'DN_DBNAME_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
+                            database => :'DN_DBNAME_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
+                            database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
 SET ROLE :ROLE_1;
@@ -555,8 +546,8 @@ SELECT * FROM detach_data_node('data_node_2', 'disttable', force => true);
 
 -- Let's add more data nodes
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'data_node_4');
-SELECT * FROM add_data_node('data_node_5', host => 'localhost', database => 'data_node_5');
+SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4');
+SELECT * FROM add_data_node('data_node_5', host => 'localhost', database => :'DN_DBNAME_5');
 GRANT ALL ON FOREIGN SERVER data_node_4, data_node_5 TO PUBLIC;
 -- Create table as super user
 SET ROLE :ROLE_SUPERUSER;
@@ -610,10 +601,10 @@ SELECT * FROM add_data_node('data_node_6');
 -- establish connection to a data node.
 --
 RESET ROLE;
-DROP DATABASE data_node_1;
-CREATE DATABASE data_node_1 OWNER :ROLE_1;
+DROP DATABASE :DN_DBNAME_1;
+CREATE DATABASE :DN_DBNAME_1 OWNER :ROLE_1;
 
-\c data_node_1
+\c :DN_DBNAME_1
 CREATE SCHEMA _timescaledb_internal;
 GRANT ALL ON SCHEMA _timescaledb_internal TO :ROLE_1;
 
@@ -646,7 +637,7 @@ CREATE EXTENSION timescaledb VERSION '0.0.0';
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('data_node_1', 'localhost', database => 'data_node_1',
+SELECT * FROM add_data_node('data_node_1', 'localhost', database => :'DN_DBNAME_1',
                             bootstrap => false);
 
 -- Testing that it is not possible to use oneself as a data node. This
@@ -663,8 +654,8 @@ SELECT * FROM add_data_node('data_node_99', host => 'localhost');
 
 -- Test adding bootstrapped data node where extension owner is different from user adding a data node
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-CREATE DATABASE data_node_6;
-\c data_node_6
+CREATE DATABASE :DN_DBNAME_6;
+\c :DN_DBNAME_6
 SET client_min_messages = ERROR;
 -- Creating an extension as superuser
 CREATE EXTENSION timescaledb;
@@ -675,7 +666,7 @@ SET ROLE :ROLE_3;
 -- Trying to add data node as non-superuser without GRANT on the
 -- foreign data wrapper will fail.
 \set ON_ERROR_STOP 0
-SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6');
 \set ON_ERROR_STOP 0
 
 RESET ROLE;
@@ -685,17 +676,16 @@ SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
 -- ROLE_3 doesn't have a password in the passfile and has not way to
 -- authenticate so adding a data node will still fail.
-SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6');
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6');
 \set ON_ERROR_STOP 0
 
 -- Providing the password on the command line should work
-SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => 'data_node_6', password => :'ROLE_3_PASS');
-
+SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6', password => :'ROLE_3_PASS');
 
 RESET ROLE;
-DROP DATABASE data_node_1;
-DROP DATABASE data_node_2;
-DROP DATABASE data_node_3;
-DROP DATABASE data_node_4;
-DROP DATABASE data_node_5;
-DROP DATABASE data_node_6;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DN_DBNAME_4;
+DROP DATABASE :DN_DBNAME_5;
+DROP DATABASE :DN_DBNAME_6;

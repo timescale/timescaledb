@@ -5,24 +5,26 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
-DROP TABLE IF EXISTS conditions;
-NOTICE:  table "conditions" does not exist, skipping
-SELECT * FROM add_data_node('data1', host => 'localhost', database => 'data1');
- node_name |   host    | port  | database | node_created | database_created | extension_created 
------------+-----------+-------+----------+--------------+------------------+-------------------
- data1     | localhost | 55432 | data1    | t            | t                | t
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+\set DN_DBNAME_4 :TEST_DBNAME _4
+SELECT * FROM add_data_node('data1', host => 'localhost', database => :'DN_DBNAME_1');
+ node_name |   host    | port  |    database     | node_created | database_created | extension_created 
+-----------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data1     | localhost | 55432 | db_dist_grant_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data2', host => 'localhost', database => 'data2');
- node_name |   host    | port  | database | node_created | database_created | extension_created 
------------+-----------+-------+----------+--------------+------------------+-------------------
- data2     | localhost | 55432 | data2    | t            | t                | t
+SELECT * FROM add_data_node('data2', host => 'localhost', database => :'DN_DBNAME_2');
+ node_name |   host    | port  |    database     | node_created | database_created | extension_created 
+-----------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data2     | localhost | 55432 | db_dist_grant_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data3', host => 'localhost', database => 'data3');
- node_name |   host    | port  | database | node_created | database_created | extension_created 
------------+-----------+-------+----------+--------------+------------------+-------------------
- data3     | localhost | 55432 | data3    | t            | t                | t
+SELECT * FROM add_data_node('data3', host => 'localhost', database => :'DN_DBNAME_3');
+ node_name |   host    | port  |    database     | node_created | database_created | extension_created 
+-----------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data3     | localhost | 55432 | db_dist_grant_3 | t            | t                | t
 (1 row)
 
 CREATE TABLE conditions(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);
@@ -222,10 +224,10 @@ f     |t     |t     |t     |f
 
 -- Add another data node and check that grants are propagated when the
 -- data node is attached to an existing table.
-SELECT * FROM add_data_node('data4', host => 'localhost', database => 'data4');
- node_name |   host    | port  | database | node_created | database_created | extension_created 
------------+-----------+-------+----------+--------------+------------------+-------------------
- data4     | localhost | 55432 | data4    | t            | t                | t
+SELECT * FROM add_data_node('data4', host => 'localhost', database => :'DN_DBNAME_4');
+ node_name |   host    | port  |    database     | node_created | database_created | extension_created 
+-----------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data4     | localhost | 55432 | db_dist_grant_4 | t            | t                | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -775,3 +777,8 @@ SELECT * FROM disttable_role_3;
 
 DROP USER MAPPING FOR :ROLE_3 SERVER data1;
 DROP USER MAPPING FOR :ROLE_3 SERVER data2;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DN_DBNAME_4;

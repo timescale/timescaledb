@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
 \ir include/remote_exec.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -220,22 +222,18 @@ ORDER BY tablename, attname;
 
 -- Test getting chunk stats on a distribute hypertable
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-SET client_min_messages TO NOTICE;
 SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+                            database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |    database    | node_created | database_created | extension_created 
+-------------+-----------+-------+----------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_chunk_api_1 | t            | t                | t
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+                            database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |    database    | node_created | database_created | extension_created 
+-------------+-----------+-------+----------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_chunk_api_2 | t            | t                | t
 (1 row)
 
 GRANT USAGE
@@ -498,7 +496,6 @@ _timescaledb_internal._dist_hyper_2_5_chunk|        4|f         |          0|   
  
 (1 row)
 
-SET ROLE :ROLE_1;
 -- Clean up
 RESET ROLE;
 TRUNCATE disttable;
@@ -518,5 +515,5 @@ WARNING:  insufficient number of data nodes for distributed hypertable "disttabl
  t
 (1 row)
 
-DROP DATABASE data_node_1;
-DROP DATABASE data_node_2;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;

@@ -6,44 +6,38 @@
 \unset ECHO
 psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |      database      | node_created | database_created | extension_created 
+-------------+-----------+-------+--------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_dist_commands_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |      database      | node_created | database_created | extension_created 
+-------------+-----------+-------+--------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_dist_commands_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+  node_name  |   host    | port  |      database      | node_created | database_created | extension_created 
+-------------+-----------+-------+--------------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 55432 | db_dist_commands_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 \des+
-                                                                                  List of foreign servers
-    Name     |       Owner        | Foreign-data wrapper |            Access privileges            | Type | Version |                      FDW options                       | Description 
--------------+--------------------+----------------------+-----------------------------------------+------+---------+--------------------------------------------------------+-------------
- data_node_1 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'data_node_1') | 
-             |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
- data_node_2 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'data_node_2') | 
-             |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
- data_node_3 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'data_node_3') | 
-             |                    |                      | =U/cluster_super_user                   |      |         |                                                        | 
+                                                                                     List of foreign servers
+    Name     |       Owner        | Foreign-data wrapper |            Access privileges            | Type | Version |                          FDW options                          | Description 
+-------------+--------------------+----------------------+-----------------------------------------+------+---------+---------------------------------------------------------------+-------------
+ data_node_1 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'db_dist_commands_1') | 
+             |                    |                      | =U/cluster_super_user                   |      |         |                                                               | 
+ data_node_2 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'db_dist_commands_2') | 
+             |                    |                      | =U/cluster_super_user                   |      |         |                                                               | 
+ data_node_3 | cluster_super_user | timescaledb_fdw      | cluster_super_user=U/cluster_super_user+|      |         | (host 'localhost', port '55432', dbname 'db_dist_commands_3') | 
+             |                    |                      | =U/cluster_super_user                   |      |         |                                                               | 
 (3 rows)
 
 RESET ROLE;
@@ -69,7 +63,7 @@ INFO:  data_node_2 result: PGRES_COMMAND_OK
  
 (1 row)
 
-\c data_node_1
+\c :DN_DBNAME_1
 \dt
              List of relations
  Schema |    Name    | Type  |    Owner    
@@ -84,7 +78,7 @@ SELECT * FROM disttable1;
  Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
 (1 row)
 
-\c data_node_2
+\c :DN_DBNAME_2
 \dt
              List of relations
  Schema |    Name    | Type  |    Owner    
@@ -99,7 +93,7 @@ SELECT * FROM disttable1;
  Sat Sep 18 00:00:00 1976 PDT |     47 | 103.4
 (1 row)
 
-\c data_node_3
+\c :DN_DBNAME_3
 \dt
              List of relations
  Schema |    Name    | Type  |    Owner    
@@ -119,13 +113,13 @@ SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
 ERROR:  [data_node_3]: relation "public.disttable2" does not exist
 \set ON_ERROR_STOP 1
-\c data_node_1
+\c :DN_DBNAME_1
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
 (0 rows)
 
-\c data_node_2
+\c :DN_DBNAME_2
 SELECT * from disttable2;
  time | device | temp 
 ------+--------+------
@@ -141,7 +135,7 @@ psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
-\c data_node_1
+\c :DN_DBNAME_1
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
@@ -151,7 +145,7 @@ SELECT is_frontend_session();
  f
 (1 row)
 
-\c data_node_2
+\c :DN_DBNAME_2
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
@@ -161,7 +155,7 @@ SELECT is_frontend_session();
  f
 (1 row)
 
-\c data_node_3
+\c :DN_DBNAME_3
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
@@ -305,7 +299,7 @@ $$);
 ERROR:  [data_node_x]: role "dist_test_role" does not exist
 \set ON_ERROR_STOP 1
 -- Do not allow to run distributed_exec() on a data nodes
-\c data_node_1
+\c :DN_DBNAME_1
 \set ON_ERROR_STOP 0
 CALL distributed_exec('SELECT 1');
 ERROR:  function must be run on the access node only
@@ -329,9 +323,9 @@ SELECT * FROM delete_data_node('data_node_3');
  t
 (1 row)
 
-DROP DATABASE data_node_1;
-DROP DATABASE data_node_2;
-DROP DATABASE data_node_3;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
 -- Test TS execution on non-TSDB server
 CREATE EXTENSION postgres_fdw;
 CREATE SERVER myserver FOREIGN DATA WRAPPER postgres_fdw
@@ -353,18 +347,16 @@ DROP EXTENSION postgres_fdw;
 -- parallelize the test. Not possible right now because there are
 -- other databases above that prevents this.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_data_node('dist_commands_1', host => 'localhost',
-                            database => 'dist_commands_1');
-    node_name    |   host    | port  |    database     | node_created | database_created | extension_created 
------------------+-----------+-------+-----------------+--------------+------------------+-------------------
- dist_commands_1 | localhost | 55432 | dist_commands_1 | t            | t                | t
+SELECT * FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DN_DBNAME_1');
+    node_name    |   host    | port  |      database      | node_created | database_created | extension_created 
+-----------------+-----------+-------+--------------------+--------------+------------------+-------------------
+ dist_commands_1 | localhost | 55432 | db_dist_commands_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('dist_commands_2', host => 'localhost',
-                            database => 'dist_commands_2');
-    node_name    |   host    | port  |    database     | node_created | database_created | extension_created 
------------------+-----------+-------+-----------------+--------------+------------------+-------------------
- dist_commands_2 | localhost | 55432 | dist_commands_2 | t            | t                | t
+SELECT * FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DN_DBNAME_2');
+    node_name    |   host    | port  |      database      | node_created | database_created | extension_created 
+-----------------+-----------+-------+--------------------+--------------+------------------+-------------------
+ dist_commands_2 | localhost | 55432 | db_dist_commands_2 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
@@ -387,7 +379,7 @@ DROP DATABASE dist_commands_magic;
 CALL distributed_exec($$
   CREATE TABLE my_table (key INT, value TEXT, PRIMARY KEY (key));
 $$);
-\c dist_commands_1
+\c :DN_DBNAME_1
 INSERT INTO my_table VALUES (1, 'foo');
 \c :TEST_DBNAME :ROLE_1
 \set ON_ERROR_STOP 0
@@ -482,3 +474,6 @@ key|value
  
 (1 row)
 
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;

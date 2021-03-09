@@ -12,19 +12,13 @@
 \o
 \set ECHO all
 
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
 
 \des+
@@ -43,13 +37,13 @@ SET ROLE :ROLE_1;
 
 SELECT _timescaledb_internal.invoke_distributed_commands();
 
-\c data_node_1
+\c :DN_DBNAME_1
 \dt
 SELECT * FROM disttable1;
-\c data_node_2
+\c :DN_DBNAME_2
 \dt
 SELECT * FROM disttable1;
-\c data_node_3
+\c :DN_DBNAME_3
 \dt
 SELECT * FROM disttable1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -60,9 +54,9 @@ SET ROLE :ROLE_1;
 SELECT _timescaledb_internal.invoke_faulty_distributed_command();
 \set ON_ERROR_STOP 1
 
-\c data_node_1
+\c :DN_DBNAME_1
 SELECT * from disttable2;
-\c data_node_2
+\c :DN_DBNAME_2
 SELECT * from disttable2;
 
 -- Test connection session identity
@@ -80,19 +74,19 @@ CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 
-\c data_node_1
+\c :DN_DBNAME_1
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
-\c data_node_2
+\c :DN_DBNAME_2
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
 SELECT is_frontend_session();
 
-\c data_node_3
+\c :DN_DBNAME_3
 CREATE OR REPLACE FUNCTION is_frontend_session()
 RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
@@ -142,7 +136,7 @@ $$);
 \set ON_ERROR_STOP 1
 
 -- Do not allow to run distributed_exec() on a data nodes
-\c data_node_1
+\c :DN_DBNAME_1
 \set ON_ERROR_STOP 0
 CALL distributed_exec('SELECT 1');
 \set ON_ERROR_STOP 1
@@ -151,9 +145,9 @@ CALL distributed_exec('SELECT 1');
 SELECT * FROM delete_data_node('data_node_1');
 SELECT * FROM delete_data_node('data_node_2');
 SELECT * FROM delete_data_node('data_node_3');
-DROP DATABASE data_node_1;
-DROP DATABASE data_node_2;
-DROP DATABASE data_node_3;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
 
 -- Test TS execution on non-TSDB server
 CREATE EXTENSION postgres_fdw;
@@ -176,10 +170,8 @@ DROP EXTENSION postgres_fdw;
 -- parallelize the test. Not possible right now because there are
 -- other databases above that prevents this.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT * FROM add_data_node('dist_commands_1', host => 'localhost',
-                            database => 'dist_commands_1');
-SELECT * FROM add_data_node('dist_commands_2', host => 'localhost',
-                            database => 'dist_commands_2');
+SELECT * FROM add_data_node('dist_commands_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('dist_commands_2', host => 'localhost', database => :'DN_DBNAME_2');
 GRANT USAGE ON FOREIGN SERVER dist_commands_1, dist_commands_2 TO PUBLIC;
 
 \set ON_ERROR_STOP 0
@@ -203,7 +195,7 @@ CALL distributed_exec($$
   CREATE TABLE my_table (key INT, value TEXT, PRIMARY KEY (key));
 $$);
 
-\c dist_commands_1
+\c :DN_DBNAME_1
 INSERT INTO my_table VALUES (1, 'foo');
 
 \c :TEST_DBNAME :ROLE_1
@@ -238,3 +230,7 @@ COMMIT;
 
 -- We should see no changes
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM my_table; $$);
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;

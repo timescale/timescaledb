@@ -34,31 +34,27 @@ SET client_min_messages TO notice;
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE OR REPLACE FUNCTION test.tsl_override_current_timestamptz(new_value TIMESTAMPTZ)
 RETURNS VOID AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz' LANGUAGE C VOLATILE STRICT;
--- Cleanup from other tests that might have created these databases
-SET client_min_messages TO ERROR;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+-- Add data nodes
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |    database     | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_dist_query_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |    database     | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_dist_query_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+  node_name  |   host    | port  |    database     | node_created | database_created | extension_created 
+-------------+-----------+-------+-----------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 55432 | db_dist_query_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
@@ -66,7 +62,7 @@ SET ROLE :ROLE_1;
 -- Create a "normal" PG table as reference, one two-dimensional
 -- distributed hypertable, and a one-dimensional distributed
 -- hypertable
-CREATE TABLE reference (time timestamptz, device int, location int, temp float);
+CREATE TABLE reference (time timestamptz NOT NULL, device int, location int, temp float);
 CREATE TABLE hyper (LIKE reference);
 CREATE TABLE hyper1d (LIKE reference);
 SELECT create_distributed_hypertable('hyper', 'time', 'device', 3,
@@ -98,6 +94,7 @@ INSERT INTO hyper
 SELECT * FROM reference
 WHERE time < '2019-01-02 05:10'::timestamptz;
 SELECT * FROM set_number_partitions('hyper', 2);
+psql:include/dist_query_load.sql:43: WARNING:  insuffient number of partitions for dimension "device"
  set_number_partitions 
 -----------------------
  
@@ -5943,3 +5940,7 @@ ORDER BY 1,2
 :DIFF_CMD_OPT
 :DIFF_CMD_REPART
 :DIFF_CMD_1DIM
+RESET ROLE;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;

@@ -4,19 +4,15 @@
 
 \ir debugsupport.sql
 
--- Cleanup from other tests that might have created these databases
-SET client_min_messages TO ERROR;
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
 
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
+-- Add data nodes
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
 
 SET ROLE :ROLE_1;
@@ -24,7 +20,7 @@ SET ROLE :ROLE_1;
 -- Create a "normal" PG table as reference, one two-dimensional
 -- distributed hypertable, and a one-dimensional distributed
 -- hypertable
-CREATE TABLE reference (time timestamptz, device int, location int, temp float);
+CREATE TABLE reference (time timestamptz NOT NULL, device int, location int, temp float);
 CREATE TABLE hyper (LIKE reference);
 CREATE TABLE hyper1d (LIKE reference);
 SELECT create_distributed_hypertable('hyper', 'time', 'device', 3,

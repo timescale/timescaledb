@@ -6,25 +6,19 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \ir include/remote_exec.sql
 
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
-
 SET ROLE :ROLE_1;
 \set TEST_TABLE 'conditions'
 \ir 'include/aggregate_table_create.sql'
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-SELECT * FROM add_data_node('data_node_2', host => 'localhost',
-                            database => 'data_node_2');
-SELECT * FROM add_data_node('data_node_3', host => 'localhost',
-                            database => 'data_node_3');
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO :ROLE_1;
 
 SELECT * FROM test.remote_exec('{ data_node_1, data_node_2, data_node_3 }',
@@ -105,3 +99,8 @@ CALL distributed_exec($$ SET enable_partitionwise_aggregate = ON $$);
 -- multiple values for "col" that has the same timestamp, so the
 -- output depends on the order of arriving tuples.
 :DIFF_CMD2
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;

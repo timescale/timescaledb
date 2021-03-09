@@ -115,21 +115,11 @@ endif()
 set(SOLO_TESTS
   bgw_db_scheduler
   bgw_reorder_drop_chunks
-  chunk_api
   compress_bgw_reorder_drop_chunks
   compression_ddl
   continuous_aggs_bgw
   continuous_aggs_ddl
   continuous_aggs_dump
-  data_fetcher
-  data_node
-  debug_notice
-  dist_api_calls
-  dist_commands
-  dist_hypertable_am
-  dist_hypertable_with_oids
-  dist_partial_agg
-  dist_backup
   move-11
   move-12
   move-13

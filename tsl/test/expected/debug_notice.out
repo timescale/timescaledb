@@ -9,29 +9,26 @@
 -- and `get_foreign_upper_paths` respectively, but if that changes,
 -- they might need to be changed.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
--- Cleanup from other potential tests that created these databases
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-DROP DATABASE IF EXISTS data_node_3;
-SET client_min_messages TO NOTICE;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
 -- Add data nodes using the TimescaleDB node management API
-SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_debug_notice_1 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_debug_notice_2 | t            | t                | t
 (1 row)
 
-SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_3 | localhost | 55432 | data_node_3 | t            | t                | t
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+  node_name  |   host    | port  |     database      | node_created | database_created | extension_created 
+-------------+-----------+-------+-------------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 55432 | db_debug_notice_3 | t            | t                | t
 (1 row)
 
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
@@ -250,3 +247,7 @@ ORDER BY 1, 2;
  Wed May 30 13:02:00 2018 PDT |      3 |    9
 (5 rows)
 
+SET client_min_messages TO ERROR;
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
