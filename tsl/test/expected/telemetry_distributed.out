@@ -2,10 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SET client_min_messages TO ERROR;
-DROP DATABASE IF EXISTS data_node_1;
-DROP DATABASE IF EXISTS data_node_2;
-SET client_min_messages TO NOTICE;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json, 'distributed_db');
        json_object_field        
 --------------------------------
@@ -13,11 +11,10 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 -- Become an access node
-SELECT * FROM add_data_node('data_node_1', host => 'localhost',
-                            database => 'data_node_1');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | data_node_1 | t            | t                | t
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |          database          | node_created | database_created | extension_created 
+-------------+-----------+-------+----------------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_telemetry_distributed_1 | t            | t                | t
 (1 row)
 
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json, 'distributed_db');
@@ -27,7 +24,7 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 -- See telemetry report from a data node
-\c data_node_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json, 'distributed_db');
                                                                                      json_object_field                                                                                     
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -35,11 +32,10 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-SELECT * FROM add_data_node('data_node_2', 'localhost',
-                            database => 'data_node_2');
-  node_name  |   host    | port  |  database   | node_created | database_created | extension_created 
--------------+-----------+-------+-------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | data_node_2 | t            | t                | t
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |          database          | node_created | database_created | extension_created 
+-------------+-----------+-------+----------------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_telemetry_distributed_2 | t            | t                | t
 (1 row)
 
 -- Add hypertables 
@@ -65,7 +61,7 @@ SELECT * FROM create_distributed_hypertable('disttable2', 'time', 'device', 2, r
 (1 row)
 
 -- See telemetry report update from the data node
-\c data_node_1 :ROLE_CLUSTER_SUPERUSER;
+\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
 SELECT json_object_field(get_telemetry_report(always_display_report := true)::json, 'distributed_db');
                                                                                      json_object_field                                                                                     
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -80,3 +76,5 @@ SELECT json_object_field(get_telemetry_report(always_display_report := true)::js
  {"num_data_nodes": "2", "distributed_member": "access node", "num_distributed_hypertables": "2", "num_distributed_hypertables_members": "0", "num_replicated_distributed_hypertables": "1"}
 (1 row)
 
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
