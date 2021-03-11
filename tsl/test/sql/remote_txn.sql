@@ -20,6 +20,28 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_persistent_record'
 LANGUAGE C;
 
+-- To ensure predictability, we want to kill the remote backend when it's in
+-- the midst of processing the transaction. To ensure that the access node
+-- sets the event handler and then takes an exclusive session lock on the
+-- "remote_conn_xact_end" advisory lock via "debug_waitpoint_enable" function
+--
+-- The "RegisterXactCallback" callback on the remote backend tries to take
+-- this same advisory lock in shared mode and waits. This allows the event
+-- handler enough time to kill this remote backend at the right time
+--
+-- Don't forget to release lock via debug_waitpoint_release on the access node
+-- since it's a session level advisory lock
+--
+CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_debug_waitpoint_enable'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_debug_waitpoint_release'
+LANGUAGE C VOLATILE STRICT;
+
 CREATE OR REPLACE FUNCTION add_loopback_server(
     server_name            NAME,
     host                   TEXT = 'localhost',
@@ -116,8 +138,10 @@ FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 --and be rolled back with no unresolved state
 BEGIN;
     SELECT remote_node_killer_set_event('pre-commit', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 COMMIT;
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 -- Failed connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -128,11 +152,13 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 BEGIN;
     SELECT remote_node_killer_set_event('waiting-commit', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
     FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 COMMIT;
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --connection failed during commit, so should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -147,6 +173,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 --fail the connection before the abort
 BEGIN;
     SELECT remote_node_killer_set_event('pre-abort', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
     --connection in transaction
     SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -161,6 +188,7 @@ BEGIN;
 ROLLBACK;
 --</exclude_from_test>
 \echo 'ROLLBACK SQLSTATE' :SQLSTATE
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
 SELECT count(*) FROM pg_prepared_xacts;
@@ -226,6 +254,7 @@ FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 --and be rolled back with no unresolved state
 BEGIN;
     SELECT remote_node_killer_set_event('pre-prepare-transaction', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 -- since the error messages/warnings from this COMMIT varies between
 -- platforms/environments we remove it from test output and show SQLSTATE instead.
@@ -234,6 +263,7 @@ BEGIN;
 COMMIT;
 --</exclude_from_test>
 \echo 'COMMIT SQLSTATE' :SQLSTATE
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --the connection was killed, so should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -244,6 +274,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 
 BEGIN;
     SELECT remote_node_killer_set_event('waiting-prepare-transaction', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 -- since the error messages/warnings from this COMMIT varies between
 -- platforms/environments we remove it from test output and show SQLSTATE instead.
@@ -252,6 +283,7 @@ BEGIN;
 COMMIT;
 --</exclude_from_test>
 \echo 'COMMIT SQLSTATE' :SQLSTATE
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --the connection should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -270,6 +302,7 @@ SELECT count(*) from _timescaledb_catalog.remote_txn;
 --but leave transaction in an unresolved state.
 BEGIN;
     SELECT remote_node_killer_set_event('post-prepare-transaction', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 -- since the error messages/warnings from this COMMIT varies between
 -- platforms/environments we remove it from test output and show SQLSTATE instead.
@@ -278,6 +311,7 @@ BEGIN;
 COMMIT;
 --</exclude_from_test>
 \echo 'COMMIT SQLSTATE' :SQLSTATE
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
@@ -306,6 +340,7 @@ select count(*) from _timescaledb_catalog.remote_txn;
 
 BEGIN;
     SELECT remote_node_killer_set_event('pre-commit-prepared', 'loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 -- since the error messages/warnings from this COMMIT varies between
 -- platforms/environments we remove it from test output and show SQLSTATE instead.
@@ -314,6 +349,7 @@ BEGIN;
 COMMIT;
 --</exclude_from_test>
 \echo 'COMMIT SQLSTATE' :SQLSTATE
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -332,6 +368,7 @@ FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
 
 BEGIN;
     SELECT remote_node_killer_set_event('waiting-commit-prepared','loopback');
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 -- since the error messages/warnings from this COMMIT varies between
 -- platforms/environments we remove it from test output and show SQLSTATE instead.
@@ -340,6 +377,7 @@ BEGIN;
 COMMIT;
 --</exclude_from_test>
 \echo 'COMMIT SQLSTATE' :SQLSTATE
+SELECT debug_waitpoint_release('remote_conn_xact_end');
 
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
