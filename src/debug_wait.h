@@ -33,7 +33,7 @@ typedef struct DebugWait
 } DebugWait;
 
 extern TSDLLEXPORT void ts_debug_waitpoint_init(DebugWait *waitpoint, const char *tagname);
-extern TSDLLEXPORT void ts_debug_waitpoint_wait(DebugWait *waitpoint);
+extern TSDLLEXPORT void ts_debug_waitpoint_wait(DebugWait *waitpoint, bool blocking);
 
 #ifdef TS_DEBUG
 #define DEBUG_WAITPOINT(TAG)                                                                       \
@@ -41,10 +41,21 @@ extern TSDLLEXPORT void ts_debug_waitpoint_wait(DebugWait *waitpoint);
 	{                                                                                              \
 		DebugWait waitpoint;                                                                       \
 		ts_debug_waitpoint_init(&waitpoint, (TAG));                                                \
-		ts_debug_waitpoint_wait(&waitpoint);                                                       \
+		ts_debug_waitpoint_wait(&waitpoint, true);                                                 \
+	} while (0)
+#define DEBUG_RETRY_WAITPOINT(TAG)                                                                 \
+	do                                                                                             \
+	{                                                                                              \
+		DebugWait waitpoint;                                                                       \
+		ts_debug_waitpoint_init(&waitpoint, (TAG));                                                \
+		ts_debug_waitpoint_wait(&waitpoint, false);                                                \
 	} while (0)
 #else
 #define DEBUG_WAITPOINT(TAG)                                                                       \
+	do                                                                                             \
+	{                                                                                              \
+	} while (0)
+#define DEBUG_RETRY_WAITPOINT(TAG)                                                                 \
 	do                                                                                             \
 	{                                                                                              \
 	} while (0)

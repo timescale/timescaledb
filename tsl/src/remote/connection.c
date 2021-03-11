@@ -38,6 +38,7 @@
 #include <guc.h>
 #include <telemetry/telemetry_metadata.h>
 #include "connection.h"
+#include "debug_wait.h"
 #include "utils.h"
 
 /*
@@ -1787,13 +1788,30 @@ remote_connection_xact_end(XactEvent event, void *unused_arg)
 	{
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
+			/*
+			 * We expect that the waitpoint will be retried and then we
+			 * will return due to the process receiving a SIGTERM if
+			 * the advisory lock is exclusively held by a user call
+			 */
+			DEBUG_RETRY_WAITPOINT("remote_conn_xact_end");
 			remote_connections_cleanup(InvalidSubTransactionId, true);
 			break;
 		case XACT_EVENT_COMMIT:
 		case XACT_EVENT_PARALLEL_COMMIT:
+			/* Same retry behavior as above */
+			DEBUG_RETRY_WAITPOINT("remote_conn_xact_end");
 			remote_connections_cleanup(InvalidSubTransactionId, false);
 			break;
+		case XACT_EVENT_PREPARE:
+			/*
+			 * We expect that the waitpoint will be retried and then we
+			 * will return with a warning on crossing the retry count if
+			 * the advisory lock is exclusively held by a user call
+			 */
+			DEBUG_RETRY_WAITPOINT("remote_conn_xact_end");
+			break;
 		default:
+			/* other events are too early to use DEBUG_WAITPOINT.. */
 			break;
 	}
 
