@@ -11,6 +11,7 @@
 #include <fmgr.h>
 
 #include <access/hash.h>
+#include <storage/ipc.h>
 #include <storage/lock.h>
 #include <miscadmin.h>
 #include <utils/builtins.h>
@@ -31,7 +32,7 @@ ts_debug_waitpoint_init(DebugWait *waitpoint, const char *tagname)
 
 	SET_LOCKTAG_ADVISORY(waitpoint->tag, MyDatabaseId, (uint32)(hash >> 32), (uint32) hash, 1);
 	waitpoint->tagname = pstrdup(tagname);
-	ereport(DEBUG1,
+	ereport(DEBUG3,
 			(errmsg("initializing waitpoint '%s' to use " UINT64_FORMAT,
 					waitpoint->tagname,
 					hash)));
@@ -44,23 +45,67 @@ ts_debug_waitpoint_init(DebugWait *waitpoint, const char *tagname)
  * other sessions that try to grab the same lock but will block if an
  * exclusive lock is already taken, and then release the lock immediately
  * after.
+ *
+ * This function can decide to block while taking the shared lock or it can
+ * have a retry loop to take the share lock. This retry loop option is useful
+ * in cases where this function gets called from deep down inside a transaction
+ * where interrupts are not being served currently.
  */
 void
-ts_debug_waitpoint_wait(DebugWait *waitpoint)
+ts_debug_waitpoint_wait(DebugWait *waitpoint, bool blocking)
 {
 	LockAcquireResult lock_acquire_result pg_attribute_unused();
 	bool lock_release_result pg_attribute_unused();
 
-	ereport(DEBUG1, (errmsg("waiting on waitpoint '%s'", waitpoint->tagname)));
+	ereport(DEBUG3, (errmsg("waiting on waitpoint '%s'", waitpoint->tagname)));
 
-	/* Take the lock. This should always succeed, anything else is a bug. */
-	lock_acquire_result = LockAcquire(&waitpoint->tag, ShareLock, true, false);
+	if (blocking)
+		lock_acquire_result = LockAcquire(&waitpoint->tag, ShareLock, true, false);
+	else
+	{
+		/*
+		 * Trying to wait indefinitely here could lead to hangs. The current
+		 * behavior is to retry for retry_count and return with a warning
+		 * if that's crossed.
+		 *
+		 * If required, in future, we could take an additional option to decide
+		 * if the caller wants to retry indefinitely or return with a warning.
+		 * But the current behavior based on the "blocking" argument is ok for
+		 * now.
+		 */
+		unsigned int retry_count = 1000;
+
+		/* try to acquire the lock without waiting. */
+		do
+		{
+			/* try to acquire the lock without waiting. */
+			lock_acquire_result = LockAcquire(&waitpoint->tag, ShareLock, true, true);
+
+			if (lock_acquire_result == LOCKACQUIRE_OK)
+				break;
+
+			/* don't dare to take a lock when the proc is exiting! */
+			if (proc_exit_inprogress || ProcDiePending)
+				return;
+
+			if (retry_count == 0)
+			{
+				elog(WARNING, "timeout while acquiring waitpoint lock");
+				return;
+			}
+			retry_count--;
+
+			/* retry after some time */
+			pg_usleep(100L);
+
+		} while (lock_acquire_result == LOCKACQUIRE_NOT_AVAIL);
+	}
 	Assert(lock_acquire_result == LOCKACQUIRE_OK);
 
 	lock_release_result = LockRelease(&waitpoint->tag, ShareLock, true);
 	Assert(lock_release_result);
 
-	ereport(DEBUG1, (errmsg("proceeding after waitpoint '%s'", waitpoint->tagname)));
+	ereport(DEBUG3, (errmsg("proceeding after waitpoint '%s'", waitpoint->tagname)));
 }
 
 static void

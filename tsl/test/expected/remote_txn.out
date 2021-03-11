@@ -24,6 +24,26 @@ CREATE OR REPLACE FUNCTION test_remote_txn_persistent_record(srv_name name)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_persistent_record'
 LANGUAGE C;
+-- To ensure predictability, we want to kill the remote backend when it's in
+-- the midst of processing the transaction. To ensure that the access node
+-- sets the event handler and then takes an exclusive session lock on the
+-- "remote_conn_xact_end" advisory lock via "debug_waitpoint_enable" function
+--
+-- The "RegisterXactCallback" callback on the remote backend tries to take
+-- this same advisory lock in shared mode and waits. This allows the event
+-- handler enough time to kill this remote backend at the right time
+--
+-- Don't forget to release lock via debug_waitpoint_release on the access node
+-- since it's a session level advisory lock
+--
+CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_debug_waitpoint_enable'
+LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_debug_waitpoint_release'
+LANGUAGE C VOLATILE STRICT;
 CREATE OR REPLACE FUNCTION add_loopback_server(
     server_name            NAME,
     host                   TEXT = 'localhost',
@@ -177,6 +197,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -188,6 +214,12 @@ COMMIT;
 WARNING:  kill event: pre-commit
 WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: terminating connection due to administrator command
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 -- Failed connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -214,6 +246,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -233,6 +271,12 @@ COMMIT;
 WARNING:  kill event: waiting-commit
 WARNING:  transaction rollback on data node "loopback" failed
 ERROR:  [loopback]: terminating connection due to administrator command
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 --connection failed during commit, so should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -258,6 +302,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -280,6 +330,12 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-0
 -- case.
 \echo 'ROLLBACK SQLSTATE' :SQLSTATE
 ROLLBACK SQLSTATE 00000
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20005;
  count 
 -------
@@ -422,6 +478,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -434,6 +496,12 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-0
 -- SQLSTATE should be 08006 connection_failure
 \echo 'COMMIT SQLSTATE' :SQLSTATE
 COMMIT SQLSTATE 08006
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 --the connection was killed, so should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -460,6 +528,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -472,6 +546,12 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-0
 -- SQLSTATE should be 08006 connection_failure
 \echo 'COMMIT SQLSTATE' :SQLSTATE
 COMMIT SQLSTATE 08006
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 --the connection should be cleared from the cache
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -514,6 +594,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -526,6 +612,12 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-0
 -- SQLSTATE should be 00000 successful_completion
 \echo 'COMMIT SQLSTATE' :SQLSTATE
 COMMIT SQLSTATE 00000
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 --connection should be cleared
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
@@ -596,6 +688,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -608,6 +706,12 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-0
 -- SQLSTATE should be 00000 successful_completion
 \echo 'COMMIT SQLSTATE' :SQLSTATE
 COMMIT SQLSTATE 00000
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 SELECT node_name, connection_status, transaction_status, transaction_depth, processing
 FROM _timescaledb_internal.show_connection_cache() ORDER BY 1,4;
  node_name | connection_status | transaction_status | transaction_depth | processing 
@@ -665,6 +769,12 @@ BEGIN;
  
 (1 row)
 
+    SELECT debug_waitpoint_enable('remote_conn_xact_end');
+ debug_waitpoint_enable 
+------------------------
+ 
+(1 row)
+
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
@@ -677,6 +787,12 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-0
 -- SQLSTATE should be 00000 successful_completion
 \echo 'COMMIT SQLSTATE' :SQLSTATE
 COMMIT SQLSTATE 00000
+SELECT debug_waitpoint_release('remote_conn_xact_end');
+ debug_waitpoint_release 
+-------------------------
+ 
+(1 row)
+
 --at this point the commit prepared might or might not have been executed before
 --the data node process was killed.
 --but in any case, healing the server will bring it into a known state
