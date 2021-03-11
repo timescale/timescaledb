@@ -18,7 +18,7 @@ teardown {
 }
 
 session "CREATE INDEX"
-step "F" { SET client_min_messages TO 'error'; }
+#step "F" { SET client_min_messages TO 'error'; }
 step "CI"	{ CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); }
 
 session "RELEASE BARRIER"
@@ -35,8 +35,8 @@ setup		{ BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '
 step "I1"	{ INSERT INTO ts_index_test VALUES (31, 6.4, 1); }
 step "Ic"	{ COMMIT; }
 
-session "DROP INDEX"
-step "DI"	{ DROP INDEX test_index; }
+#session "DROP INDEX"
+#step "DI"	{ DROP INDEX test_index; }
 
 session "RENAME COLUMN"
 step "RI"	{ ALTER TABLE test_index RENAME COLUMN location TO height; }
@@ -55,7 +55,11 @@ permutation "I1" "CI" "Bc" "Ic" "P" "Sc"
 permutation "S1" "CI" "Bc" "Sc" "P" "Ic"
 
 # drop works (the error message outputs an OID, remove the "F" to see the error)
-permutation "F" "CI" "DI" "Bc" "P" "Ic" "Sc"
+#
+# TODO(3021): Disabled since a race condition between CREATE INDEX
+# and DROP INDEX cause a flake. Enable when race condition is fixed.
+#
+#permutation "F" "CI" "DI" "Bc" "P" "Ic" "Sc"
 
 # rename should block
 permutation "CI" "RI" "Bc" "P" "Ic" "Sc"
