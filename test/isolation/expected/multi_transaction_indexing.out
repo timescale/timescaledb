@@ -1,4 +1,4 @@
-Parsed test spec with 7 sessions
+Parsed test spec with 6 sessions
 
 starting permutation: CI I1 Ic Bc P Sc
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
@@ -40,18 +40,6 @@ hypertable_index_size
 
 49152          
 step Ic: COMMIT;
-
-starting permutation: F CI DI Bc P Ic Sc
-step F: SET client_min_messages TO 'error';
-step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
-step DI: DROP INDEX test_index; <waiting ...>
-step Bc: ROLLBACK;
-step CI: <... completed>
-step DI: <... completed>
-step P: SELECT * FROM hypertable_index_size('test_index');
-ERROR:  relation "test_index" does not exist
-step Ic: COMMIT;
-step Sc: COMMIT;
 
 starting permutation: CI RI Bc P Ic Sc
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
