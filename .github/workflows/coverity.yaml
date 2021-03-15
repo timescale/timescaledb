@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         pg: ["12.6", "13.2"]
-        os: [ubuntu-18.04]
+        os: [ubuntu-20.04]
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql

@@ -11,7 +11,7 @@ on:
 jobs:
   apt_tests:
     name: APT ${{ matrix.image }} PG${{ matrix.pg }}
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: ${{ matrix.image }}
       env:
