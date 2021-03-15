@@ -10,7 +10,7 @@ on:
 jobs:
   update_test:
     name: Update test PG${{ matrix.pg }}
-    runs-on: 'ubuntu-18.04'
+    runs-on: 'ubuntu-latest'
     strategy:
       matrix:
         pg: ["11.11","12.6","13.2"]
