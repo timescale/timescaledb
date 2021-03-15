@@ -9,7 +9,7 @@ on:
 jobs:
   abi_breakage:
     name: ABI Breakage PG${{ matrix.pg }}
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -35,7 +35,7 @@ jobs:
 
   sanitizer:
     name: ASAN and UBSAN
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
 
@@ -49,7 +49,7 @@ jobs:
 
   memory_leak:
     name: Memory leak on insert
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
     env:
@@ -65,21 +65,13 @@ jobs:
 
   backup_and_restore:
     name: Backup and restore
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         pg: [11, 12, 13]
-        include:
-          - pg: 11
-            pg_minor_compile: 0
-          - pg: 12
-            pg_minor_compile: 0
-          - pg: 13
-            pg_minor_compile: 2
     env:
       PG_MAJOR: ${{ matrix.pg }}
-      PG_MINOR_COMPILE: ${{ matrix.pg_minor_compile }}
       PG_VERSION: ${{ matrix.pg }}
 
     steps:
