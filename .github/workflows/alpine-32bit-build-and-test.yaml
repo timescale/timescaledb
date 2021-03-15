@@ -10,7 +10,7 @@ on:
 jobs:
   regress_linux_32bit:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: i386/postgres:${{ matrix.pg }}-alpine
       env:

@@ -51,7 +51,7 @@ def build_debug_config(overrides):
     "coverage": True,
     "llvm_config": "llvm-config-9",
     "clang": "clang-9",
-    "os": "ubuntu-18.04",
+    "os": "ubuntu-20.04",
     "cc": "gcc",
     "cxx": "g++",
   })
