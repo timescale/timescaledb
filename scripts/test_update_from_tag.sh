@@ -130,12 +130,12 @@ docker_pgdiff_all() {
 }
 
 docker_run() {
-    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src $2 -c timezone="US/Eastern" -c max_prepared_transactions=100
+    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src $2 -c timezone="GMT" -c max_prepared_transactions=100
     wait_for_pg $1
 }
 
 docker_run_vol() {
-    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src -v $2 $3 -c timezone="US/Eastern" -c max_prepared_transactions=100
+    docker run --env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust -d --name $1 -v ${BASE_DIR}:/src -v $2 $3 -c timezone="GMT" -c max_prepared_transactions=100
     wait_for_pg $1
 }
 
