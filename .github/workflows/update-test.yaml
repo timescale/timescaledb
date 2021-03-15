@@ -13,13 +13,15 @@ jobs:
     runs-on: 'ubuntu-18.04'
     strategy:
       matrix:
-        pg: ["11.11","12.6"]
+        pg: ["11.11","12.6","13.2"]
         opt: ["", "-r"]
         include:
           - pg: 11.11
             pg_major: 11
           - pg: 12.6
             pg_major: 12
+          - pg: 13.2
+            pg_major: 13
           - opt: "-r"
             kind: "with repair test"
       fail-fast: false
