@@ -37,6 +37,21 @@ elaborates on the situation. Instead, we've tried our best to develop
 a consistent style that roughly follows the style of the PostgreSQL
 source code.
 
+### Declarations before code
+
+C99 supports having code before a declaration, similar to C++, and we
+also support this in the code. For instance, the following code
+follows the guidelines:
+
+```C
+void some_function()
+{
+    prepare();
+	int result = fetch();
+	...
+}
+```
+
 ### Function and variable names
 
 For clarity and consistency, we've chosen to go with lowercase
