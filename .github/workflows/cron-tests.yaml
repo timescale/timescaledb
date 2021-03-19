@@ -62,3 +62,30 @@ jobs:
     - name: Memory test
       run: |
         ./scripts/docker-run-memory-test.sh
+
+  backup_and_restore:
+    name: Backup and restore
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [11, 12, 13]
+        include:
+          - pg: 11
+            pg_minor_compile: 0
+          - pg: 12
+            pg_minor_compile: 0
+          - pg: 13
+            pg_minor_compile: 2
+    env:
+      PG_MAJOR: ${{ matrix.pg }}
+      PG_MINOR_COMPILE: ${{ matrix.pg_minor_compile }}
+      PG_VERSION: ${{ matrix.pg }}
+
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Test recovery using restore points
+      run: |
+        ./scripts/docker-run-restore-points-test.sh
