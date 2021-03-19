@@ -66,6 +66,7 @@
 #include "continuous_agg.h"
 #include "compression_with_clause.h"
 #include "partitioning.h"
+#include "debug_wait.h"
 
 #include "cross_module_fn.h"
 
@@ -2391,6 +2392,8 @@ process_index_start(ProcessUtilityArgs *args)
 	}
 
 	UnlockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
+
+	DEBUG_WAITPOINT("indexing_done");
 
 	return DDL_DONE;
 }
