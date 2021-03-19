@@ -16,6 +16,7 @@ set(TEST_TEMPLATES
 
 set(TEST_TEMPLATES_DEBUG
   dropchunks_race.spec.in
+  multi_transaction_indexing.spec.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
@@ -28,11 +29,6 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   configure_file(${TEMPLATE_FILE} ${TEST_FILE})
   list(APPEND TEST_FILES "${TEST_FILE}")
 endforeach(TEMPLATE_FILE)
-
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES
-    multi_transaction_indexing.spec)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
 foreach(TEST_FILE ${TEST_FILES})
     string(REGEX REPLACE "(.+)\.spec" "\\1" TESTS_TO_RUN ${TEST_FILE})
