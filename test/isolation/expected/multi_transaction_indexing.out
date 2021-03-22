@@ -50,17 +50,14 @@ debug_waitpoint_enable
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
 step DI: DROP INDEX test_index; <waiting ...>
 step Bc: ROLLBACK;
+step DI: <... completed>
 step WPR: SELECT debug_waitpoint_release('indexing_done');
 debug_waitpoint_release
 
                
 step CI: <... completed>
-step DI: <... completed>
-error in steps WPR CI DI: ERROR:  tuple concurrently updated
 step P: SELECT * FROM hypertable_index_size('test_index');
-hypertable_index_size
-
-49152          
+ERROR:  relation "test_index" does not exist
 step Ic: COMMIT;
 step Sc: COMMIT;
 
