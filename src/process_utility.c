@@ -2391,6 +2391,9 @@ process_index_start(ProcessUtilityArgs *args)
 		CacheInvalidateRelcacheByRelid(info.obj.objectId);
 	}
 
+	CommitTransactionCommand();
+	StartTransactionCommand();
+
 	UnlockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
 
 	DEBUG_WAITPOINT("indexing_done");

@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #2974 Fix index creation for hypertables with dropped columns
+* #3042 Commit end transaction for CREATE INDEX
 
 **Thanks**
 * @jocrau for reporting an issue with index creation
