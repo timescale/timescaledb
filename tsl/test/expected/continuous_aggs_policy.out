@@ -73,6 +73,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
 ERROR:  continuous aggregate policy already exists for "mat_m1"
+DETAIL:  Only one continuous aggregate policy can be created per continuous aggregate and a policy with job id 1000 already exists for "mat_m1".
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
 WARNING:  continuous aggregate policy already exists for "mat_m1"
 DETAIL:  A policy already exists with different arguments.
