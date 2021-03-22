@@ -2396,7 +2396,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	UnlockRelationIdForSession(&main_table_index_lock_relid, AccessShareLock);
 
-	DEBUG_WAITPOINT("indexing_done");
+	DEBUG_WAITPOINT("process_index_start_indexing_done");
 
 	return DDL_DONE;
 }
