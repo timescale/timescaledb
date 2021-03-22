@@ -52,10 +52,10 @@ _decompress_chunk_init(void)
 	/*
 	 * Because we reinitialize the tsl stuff when the license
 	 * changes the init function may be called multiple times
-	 * per session so we check if ChunkDecompress node has been
+	 * per session so we check if DecompressChunk node has been
 	 * registered already here to prevent registering it twice.
 	 */
-	if (GetCustomScanMethods("DecompressChunk", true) == NULL)
+	if (GetCustomScanMethods(decompress_chunk_plan_methods.CustomName, true) == NULL)
 	{
 		RegisterCustomScanMethods(&decompress_chunk_plan_methods);
 	}
