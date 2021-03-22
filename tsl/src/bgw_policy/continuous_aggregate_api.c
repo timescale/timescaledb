@@ -493,7 +493,11 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("continuous aggregate policy already exists for \"%s\"",
-							get_rel_name(cagg_oid))));
+							get_rel_name(cagg_oid)),
+					 errdetail("Only one continuous aggregate policy can be created per continuous "
+							   "aggregate and a policy with job id %d already exists for \"%s\".",
+							   ((BgwJob *) linitial(jobs))->fd.id,
+							   get_rel_name(cagg_oid))));
 		BgwJob *existing = linitial(jobs);
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
