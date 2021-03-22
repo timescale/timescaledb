@@ -24,8 +24,8 @@ teardown {
 }
 
 session "Waitpoints"
-step "WPE"      { SELECT debug_waitpoint_enable('indexing_done'); }
-step "WPR"      { SELECT debug_waitpoint_release('indexing_done'); }
+step "WPE"      { SELECT debug_waitpoint_enable('process_index_start_indexing_done'); }
+step "WPR"      { SELECT debug_waitpoint_release('process_index_start_indexing_done'); }
 
 session "CREATE INDEX"
 step "F" { SET client_min_messages TO 'error'; }
