@@ -120,6 +120,7 @@ set(SOLO_TESTS
   continuous_aggs_bgw
   continuous_aggs_ddl
   continuous_aggs_dump
+  data_fetcher
   move-11
   move-12
   move-13
