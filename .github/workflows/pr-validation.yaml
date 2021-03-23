@@ -1,0 +1,60 @@
+name: Pull Request Validation
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [master]
+jobs:
+  # Count the number of commits in a pull request. This can be
+  # disabled by adding a trailer line of the following form to the
+  # pull request message:
+  #
+  #    Disable-Check: commit-count
+  #
+  # The check is case-insensitive and ignores other contents on the
+  # line as well, so it is possible to add several different checks if
+  # that is necessary.
+  #
+  # It is assumed that the trailer is following RFC2822 conventions,
+  # but this is currently not enforced.
+  count_commits:
+    name: Enforce single commit pull request
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+    - name: Dump GitHub context (for debugging)
+      env:
+        GITHUB_CONTEXT: ${{ toJSON(github) }}
+      run: |
+        echo "GITHUB_CONTEXT: $GITHUB_CONTEXT"
+    - name: Check number of commits
+      shell: bash --norc --noprofile {0}
+      # If this becomes more advanced, we might be better of using,
+      # e.g., Perl.
+      run: |
+        cat <<EOF | egrep -qsi '^disable-check:.*\<commit-count\>'
+        ${{ github.event.pull_request.body }}
+        EOF
+        if [[ $? -ne 0 ]]; then
+          base=${{ github.event.pull_request.base.sha }}
+          head=${{ github.event.pull_request.head.sha }}
+          count=`git rev-list --count $base..$head`
+          if [[ "$count" -ne 1 ]]; then
+            echo "Found $count commits in pull request (there should be only one):"
+            git log --format=format:'- %h %s' $base..$head
+            echo
+            echo "To disable commit count, add this trailer to pull request message:"
+            echo
+            echo "Disable-check: commit-count"
+            echo
+            echo "Trailers follow RFC2822 conventions, so no whitespace"
+            echo "before field name and the check is case-insensitive for"
+            echo "both the field name and the field body."
+            exit 1
+          fi
+        fi
+
+
