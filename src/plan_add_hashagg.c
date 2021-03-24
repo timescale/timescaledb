@@ -4,14 +4,15 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/namespace.h>
+#include <miscadmin.h>
+#include <nodes/extensible.h>
 #include <nodes/plannodes.h>
-#include <parser/parsetree.h>
 #include <optimizer/clauses.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
-#include <catalog/namespace.h>
-#include <miscadmin.h>
+#include <parser/parsetree.h>
 
 #include "compat-msvc-enter.h"
 #include <optimizer/cost.h>
@@ -23,6 +24,19 @@
 #include "utils.h"
 #include "guc.h"
 #include "estimate.h"
+
+#define GAPFILL_PATH_NAME "GapFill"
+static bool
+is_gapfill_path(Path *path)
+{
+	if (IsA(path, CustomPath))
+	{
+		CustomPath *cpath = castNode(CustomPath, path);
+		if (strcmp(cpath->methods->CustomName, GAPFILL_PATH_NAME) == 0)
+			return true;
+	}
+	return false;
+}
 
 /* Add a parallel HashAggregate plan.
  * This code is similar to parts of create_grouping_paths */
@@ -128,6 +142,10 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 	bool try_parallel_aggregation;
 
 	if (parse->groupingSets || !parse->hasAggs || parse->groupClause == NIL)
+		return;
+
+	/* Don't add HashAgg path if this is a gapfill query */
+	if (is_gapfill_path(linitial(output_rel->pathlist)))
 		return;
 
 	MemSet(&agg_costs, 0, sizeof(AggClauseCosts));
