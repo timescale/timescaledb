@@ -33,7 +33,7 @@ extern Hypercube *ts_hypercube_from_constraints(ChunkConstraints *constraints, M
 extern int ts_hypercube_find_existing_slices(Hypercube *cube, ScanTupLock *tuplock);
 extern Hypercube *ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock);
 extern bool ts_hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
-extern TSDLLEXPORT DimensionSlice *ts_hypercube_get_slice_by_dimension_id(Hypercube *hc,
+extern TSDLLEXPORT DimensionSlice *ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc,
 																		  int32 dimension_id);
 extern Hypercube *ts_hypercube_copy(Hypercube *hc);
 extern bool ts_hypercube_equal(Hypercube *hc1, Hypercube *hc2);

@@ -46,7 +46,7 @@ ts_hypercube_free(Hypercube *hc)
 
 #if defined(USE_ASSERT_CHECKING)
 static inline bool
-hypercube_is_sorted(Hypercube *hc)
+hypercube_is_sorted(const Hypercube *hc)
 {
 	int i;
 
@@ -131,7 +131,7 @@ ts_hypercube_slice_sort(Hypercube *hc)
 }
 
 DimensionSlice *
-ts_hypercube_get_slice_by_dimension_id(Hypercube *hc, int32 dimension_id)
+ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
 {
 	DimensionSlice slice = {
 		.fd.dimension_id = dimension_id,

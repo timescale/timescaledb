@@ -1244,7 +1244,7 @@ catalog_get_index(Catalog *catalog, CatalogTable tableid, int indexid)
 	return (indexid == INVALID_INDEXID) ? InvalidOid : catalog->tables[tableid].index_ids[indexid];
 }
 
-extern TSDLLEXPORT int64 ts_catalog_table_next_seq_id(Catalog *catalog, CatalogTable table);
+extern TSDLLEXPORT int64 ts_catalog_table_next_seq_id(const Catalog *catalog, CatalogTable table);
 extern Oid ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type);
 
 /* Functions that modify the actual catalog table on disk */

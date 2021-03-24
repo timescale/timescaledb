@@ -1194,7 +1194,7 @@ ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 }
 
 static int
-hypertable_get_chunk_slice_ordinal(Hypertable *ht, Hypercube *hc)
+hypertable_get_chunk_slice_ordinal(const Hypertable *ht, const Hypercube *hc)
 {
 	Dimension *dim;
 	DimensionSlice *slice;
@@ -2568,7 +2568,7 @@ assert_chunk_data_nodes_is_a_set(List *chunk_data_nodes)
  * happens similar to tablespaces, i.e., based on dimension type.
  */
 List *
-ts_hypertable_assign_chunk_data_nodes(Hypertable *ht, Hypercube *cube)
+ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube)
 {
 	List *chunk_data_nodes = NIL;
 	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, true);
@@ -2624,7 +2624,8 @@ get_hypertable_data_node(HypertableDataNode *node)
 }
 
 static List *
-get_hypertable_data_node_values(Hypertable *ht, hypertable_data_node_filter filter, get_value value)
+get_hypertable_data_node_values(const Hypertable *ht, hypertable_data_node_filter filter,
+								get_value value)
 {
 	List *list = NULL;
 	ListCell *cell;
@@ -2646,7 +2647,7 @@ ts_hypertable_get_data_node_name_list(Hypertable *ht)
 }
 
 List *
-ts_hypertable_get_available_data_nodes(Hypertable *ht, bool error_if_missing)
+ts_hypertable_get_available_data_nodes(const Hypertable *ht, bool error_if_missing)
 {
 	List *available_nodes = get_hypertable_data_node_values(ht,
 															filter_non_blocked_data_nodes,
