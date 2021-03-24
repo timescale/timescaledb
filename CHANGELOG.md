@@ -9,11 +9,15 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #2974 Fix index creation for hypertables with dropped columns
 * #3042 Commit end transaction for CREATE INDEX
+* #3053 Fix gapfill/hashagg planner interaction
 * #3059 Fix UPSERT on hypertables with columns with defaults
 
 **Thanks**
 * @eloyekunle and @kitwestneat for reporting an issue with UPSERT
 * @jocrau for reporting an issue with index creation
+* @majozv and @pehlert for reporting an issue with time_bucket_gapfill
+* @pedrokost and @RobAtticus for reporting an issue with size
+  functions on empty hypertables
 
 ## 2.1.0 (2021-02-22)
 
