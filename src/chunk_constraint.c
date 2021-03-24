@@ -80,31 +80,29 @@ chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 }
 
 static void
-chunk_constraint_choose_name(Name dst, bool is_dimension, int32 dimension_slice_id,
-							 const char *hypertable_constraint_name, int32 chunk_id)
+chunk_constraint_dimension_choose_name(Name dst, int32 dimension_slice_id)
 {
-	if (is_dimension)
-	{
-		snprintf(NameStr(*dst), NAMEDATALEN, "constraint_%d", dimension_slice_id);
-	}
-	else
-	{
-		char constrname[100];
-		CatalogSecurityContext sec_ctx;
+	snprintf(NameStr(*dst), NAMEDATALEN, "constraint_%d", dimension_slice_id);
+}
 
-		Assert(hypertable_constraint_name != NULL);
+static void
+chunk_constraint_choose_name(Name dst, const char *hypertable_constraint_name, int32 chunk_id)
+{
+	char constrname[100];
+	CatalogSecurityContext sec_ctx;
 
-		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-		snprintf(constrname,
-				 100,
-				 "%d_" INT64_FORMAT "_%s",
-				 chunk_id,
-				 ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_CONSTRAINT),
-				 hypertable_constraint_name);
-		ts_catalog_restore_user(&sec_ctx);
+	Assert(hypertable_constraint_name != NULL);
 
-		namestrcpy(dst, constrname);
-	}
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	snprintf(constrname,
+			 100,
+			 "%d_" INT64_FORMAT "_%s",
+			 chunk_id,
+			 ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_CONSTRAINT),
+			 hypertable_constraint_name);
+	ts_catalog_restore_user(&sec_ctx);
+
+	namestrcpy(dst, constrname);
 }
 
 static ChunkConstraint *
@@ -120,14 +118,16 @@ chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_sli
 
 	if (NULL == constraint_name)
 	{
-		chunk_constraint_choose_name(&cc->fd.constraint_name,
-									 is_dimension_constraint(cc),
-									 cc->fd.dimension_slice_id,
-									 hypertable_constraint_name,
-									 cc->fd.chunk_id);
-
 		if (is_dimension_constraint(cc))
+		{
+			chunk_constraint_dimension_choose_name(&cc->fd.constraint_name,
+												   cc->fd.dimension_slice_id);
 			namestrcpy(&cc->fd.hypertable_constraint_name, "");
+		}
+		else
+			chunk_constraint_choose_name(&cc->fd.constraint_name,
+										 hypertable_constraint_name,
+										 cc->fd.chunk_id);
 	}
 	else
 		namestrcpy(&cc->fd.constraint_name, constraint_name);
@@ -837,7 +837,7 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 
 	chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_constraint_chunk_id)]);
 	namestrcpy(&new_hypertable_constraint_name, newname);
-	chunk_constraint_choose_name(&new_chunk_constraint_name, false, 0, newname, chunk_id);
+	chunk_constraint_choose_name(&new_chunk_constraint_name, newname, chunk_id);
 
 	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 		NameGetDatum(&new_hypertable_constraint_name);

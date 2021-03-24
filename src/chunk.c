@@ -209,7 +209,7 @@ ts_chunk_primary_dimension_end(const Chunk *chunk)
 }
 
 static void
-chunk_insert_relation(Relation rel, Chunk *chunk)
+chunk_insert_relation(Relation rel, const Chunk *chunk)
 {
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
@@ -224,7 +224,7 @@ chunk_insert_relation(Relation rel, Chunk *chunk)
 }
 
 void
-ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
+ts_chunk_insert_lock(const Chunk *chunk, LOCKMODE lock)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -930,8 +930,8 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
  * the chunk.
  */
 static Chunk *
-chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *schema_name,
-								 const char *table_name, const char *prefix)
+chunk_create_object(Hypertable *ht, Hypercube *cube, const char *schema_name,
+					const char *table_name, const char *prefix)
 {
 	Hyperspace *hs = ht->space;
 	Catalog *catalog = ts_catalog_get();
@@ -970,21 +970,21 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 	else
 		namestrcpy(&chunk->fd.table_name, table_name);
 
-	/* Insert chunk */
-	ts_chunk_insert_lock(chunk, RowExclusiveLock);
-
-	/* Insert any new dimension slices */
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
-
-	/* Add metadata for dimensional and inheritable constraints */
-	chunk_add_constraints(chunk);
-	ts_chunk_constraints_insert_metadata(chunk->constraints);
-
 	/* If this is a remote chunk we assign data nodes */
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 		chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
 
 	return chunk;
+}
+
+static void
+chunk_insert_into_metadata_after_lock(const Chunk *chunk)
+{
+	/* Insert chunk */
+	ts_chunk_insert_lock(chunk, RowExclusiveLock);
+
+	/* Add metadata for dimensional and inheritable constraints */
+	ts_chunk_constraints_insert_metadata(chunk->constraints);
 }
 
 static Oid
@@ -1032,10 +1032,15 @@ static Chunk *
 chunk_create_from_hypercube_after_lock(Hypertable *ht, Hypercube *cube, const char *schema_name,
 									   const char *table_name, const char *prefix)
 {
-	Chunk *chunk;
+	Chunk *chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix);
 
-	chunk = chunk_create_metadata_after_lock(ht, cube, schema_name, table_name, prefix);
 	Assert(chunk != NULL);
+
+	/* Insert any new dimension slices into metadata */
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
+
+	chunk_add_constraints(chunk);
+	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_create_table_after_lock(chunk, ht);
 
 	return chunk;

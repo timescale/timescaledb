@@ -119,7 +119,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_name_with_memory_context(const char *s
 																   const char *table_name,
 																   MemoryContext mctx,
 																   bool fail_if_not_found);
-extern TSDLLEXPORT void ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock);
+extern TSDLLEXPORT void ts_chunk_insert_lock(const Chunk *chunk, LOCKMODE lock);
 
 extern TSDLLEXPORT Oid ts_chunk_create_table(Chunk *chunk, Hypertable *ht,
 											 const char *tablespacename);
