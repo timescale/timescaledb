@@ -514,7 +514,7 @@ catalog_get_table(Catalog *catalog, Oid relid)
  * Get the next serial ID for a catalog table, if one exists for the given table.
  */
 TSDLLEXPORT int64
-ts_catalog_table_next_seq_id(Catalog *catalog, CatalogTable table)
+ts_catalog_table_next_seq_id(const Catalog *catalog, CatalogTable table)
 {
 	Oid relid = catalog->tables[table].serial_relid;
 

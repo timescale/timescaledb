@@ -209,7 +209,7 @@ ts_chunk_primary_dimension_end(const Chunk *chunk)
 }
 
 static void
-chunk_insert_relation(Relation rel, Chunk *chunk)
+chunk_insert_relation(Relation rel, const Chunk *chunk)
 {
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
@@ -224,7 +224,7 @@ chunk_insert_relation(Relation rel, Chunk *chunk)
 }
 
 void
-ts_chunk_insert_lock(Chunk *chunk, LOCKMODE lock)
+ts_chunk_insert_lock(const Chunk *chunk, LOCKMODE lock)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -862,7 +862,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 }
 
 static List *
-chunk_assign_data_nodes(Chunk *chunk, Hypertable *ht)
+chunk_assign_data_nodes(Chunk *chunk, const Hypertable *ht)
 {
 	List *htnodes;
 	List *chunk_data_nodes = NIL;
@@ -921,7 +921,10 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
 }
 
 /*
- * Create a chunk from the dimensional constraints in the given hypercube.
+ * Create a chunk object from the dimensional constraints in the given hypercube.
+ *
+ * The chunk object is then used to create the actual chunk table and update the
+ * metadata separately.
  *
  * The table name for the chunk can be given explicitly, or generated if
  * table_name is NULL. If the table name is generated, it will use the given
@@ -930,11 +933,11 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
  * the chunk.
  */
 static Chunk *
-chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *schema_name,
-								 const char *table_name, const char *prefix)
+chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_name,
+					const char *table_name, const char *prefix)
 {
-	Hyperspace *hs = ht->space;
-	Catalog *catalog = ts_catalog_get();
+	const Hyperspace *hs = ht->space;
+	const Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	const char relkind = hypertable_chunk_relkind(ht);
@@ -970,34 +973,25 @@ chunk_create_metadata_after_lock(Hypertable *ht, Hypercube *cube, const char *sc
 	else
 		namestrcpy(&chunk->fd.table_name, table_name);
 
-	/* Insert chunk */
-	ts_chunk_insert_lock(chunk, RowExclusiveLock);
-
-	/* Insert any new dimension slices */
-	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
-
-	/* Add metadata for dimensional and inheritable constraints */
-	chunk_add_constraints(chunk);
-	ts_chunk_constraints_insert_metadata(chunk->constraints);
-
-	/* If this is a remote chunk we assign data nodes */
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 		chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
 
 	return chunk;
 }
 
-static Oid
-chunk_create_table_after_lock(Chunk *chunk, Hypertable *ht)
+static void
+chunk_insert_into_metadata_after_lock(const Chunk *chunk)
 {
-	/* Create the actual table relation for the chunk */
-	const char *tablespace = ts_hypertable_select_tablespace_name(ht, chunk);
+	/* Insert chunk */
+	ts_chunk_insert_lock(chunk, RowExclusiveLock);
 
-	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace);
+	/* Add metadata for dimensional and inheritable constraints */
+	ts_chunk_constraints_insert_metadata(chunk->constraints);
+}
 
-	if (!OidIsValid(chunk->table_id))
-		elog(ERROR, "could not create chunk table");
-
+static void
+chunk_create_table_constraints(Chunk *chunk)
+{
 	/* Create the chunk's constraints, triggers, and indexes */
 	ts_chunk_constraints_create(chunk->constraints,
 								chunk->table_id,
@@ -1013,6 +1007,17 @@ chunk_create_table_after_lock(Chunk *chunk, Hypertable *ht)
 								  chunk->fd.id,
 								  chunk->table_id);
 	}
+}
+
+static Oid
+chunk_create_table(Chunk *chunk, Hypertable *ht)
+{
+	/* Create the actual table relation for the chunk */
+	const char *tablespace = ts_hypertable_select_tablespace_name(ht, chunk);
+
+	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace);
+
+	Assert(OidIsValid(chunk->table_id));
 
 	return chunk->table_id;
 }
@@ -1034,9 +1039,18 @@ chunk_create_from_hypercube_after_lock(Hypertable *ht, Hypercube *cube, const ch
 {
 	Chunk *chunk;
 
-	chunk = chunk_create_metadata_after_lock(ht, cube, schema_name, table_name, prefix);
+	/* Insert any new dimension slices into metadata */
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
+
+	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix);
 	Assert(chunk != NULL);
-	chunk_create_table_after_lock(chunk, ht);
+
+	chunk_create_table(chunk, ht);
+
+	chunk_add_constraints(chunk);
+	chunk_insert_into_metadata_after_lock(chunk);
+
+	chunk_create_table_constraints(chunk);
 
 	return chunk;
 }
@@ -1614,7 +1628,8 @@ chunk_resurrect(Hypertable *ht, ChunkStub *stub)
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
 		chunk->relkind = hypertable_chunk_relkind(ht);
-		chunk->table_id = chunk_create_table_after_lock(chunk, ht);
+		chunk->table_id = chunk_create_table(chunk, ht);
+		chunk_create_table_constraints(chunk);
 
 		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 			chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);

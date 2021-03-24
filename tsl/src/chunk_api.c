@@ -407,6 +407,16 @@ get_result_datums(Datum *values, bool *nulls, unsigned int numvals, AttInMetadat
 	}
 }
 
+static const char *
+chunk_api_dimension_slices_json(const Chunk *chunk, const Hypertable *ht)
+{
+	JsonbParseState *ps = NULL;
+	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &ps);
+	Jsonb *hcjson = JsonbValueToJsonb(jv);
+
+	return JsonbToCString(NULL, &hcjson->root, ESTIMATE_JSON_STR_SIZE(ht->space->num_dimensions));
+}
+
 /*
  * Create a replica of a chunk on all its assigned data nodes.
  */
@@ -414,12 +424,9 @@ void
 chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 {
 	AsyncRequestSet *reqset = async_request_set_create();
-	JsonbParseState *ps = NULL;
-	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &ps);
-	Jsonb *hcjson = JsonbValueToJsonb(jv);
 	const char *params[4] = {
 		quote_qualified_identifier(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name)),
-		JsonbToCString(NULL, &hcjson->root, ESTIMATE_JSON_STR_SIZE(ht->space->num_dimensions)),
+		chunk_api_dimension_slices_json(chunk, ht),
 		NameStr(chunk->fd.schema_name),
 		NameStr(chunk->fd.table_name),
 	};
