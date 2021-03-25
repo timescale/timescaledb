@@ -9,8 +9,10 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #2974 Fix index creation for hypertables with dropped columns
 * #3042 Commit end transaction for CREATE INDEX
+* #3059 Fix UPSERT on hypertables with columns with defaults
 
 **Thanks**
+* @eloyekunle and @kitwestneat for reporting an issue with UPSERT
 * @jocrau for reporting an issue with index creation
 
 ## 2.1.0 (2021-02-22)

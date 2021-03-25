@@ -152,6 +152,10 @@ translate_clause(List *inclause, TupleConversionMap *chunk_map, Index varno, Rel
 	List *clause = copyObject(inclause);
 	bool found_whole_row;
 
+	/* nothing to do here if the chunk_map is NULL */
+	if (!chunk_map)
+		return list_copy(clause);
+
 	/* map hypertable attnos -> chunk attnos for the "excluded" table */
 	clause = castNode(List,
 					  map_variable_attnos_compat((Node *) clause,
@@ -364,7 +368,6 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 	ResultRelInfo *hyper_rri = get_hyper_rri(dispatch);
 	Relation chunk_rel = state->result_relation_info->ri_RelationDesc;
 	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
-	Relation first_rel = hyper_rel;
 
 	Assert(ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
 	init_basic_on_conflict_state(hyper_rri, chunk_rri);
@@ -385,7 +388,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 
 		if (NULL == chunk_map)
 			chunk_map = convert_tuples_by_name(RelationGetDescr(chunk_rel),
-											   RelationGetDescr(first_rel)
+											   RelationGetDescr(hyper_rel)
 #if PG13_LT
 												   ,
 											   gettext_noop("could not convert row type")
