@@ -659,3 +659,15 @@ ERROR:  duplicate key value violates unique constraint "27_1_sample_table_sequen
 INSERT INTO sample_table (sequence,time,value) VALUES
        (7,generate_series(TIMESTAMP '2019-01-01', TIMESTAMP '2019-07-01', '10 minutes'), ROUND(RANDOM()*10)::int);
 DROP TABLE sample_table;
+-- test on conflict clause on columns with default value
+-- issue #3037
+CREATE TABLE i3037(time timestamptz PRIMARY KEY);
+SELECT create_hypertable('i3037','time');
+  create_hypertable  
+---------------------
+ (13,public,i3037,t)
+(1 row)
+
+ALTER TABLE i3037 ADD COLUMN value float DEFAULT 0;
+INSERT INTO i3037 VALUES ('2000-01-01');
+INSERT INTO i3037 VALUES ('2000-01-01') ON CONFLICT(time) DO UPDATE SET value = EXCLUDED.value;
