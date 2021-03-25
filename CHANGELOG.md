@@ -10,8 +10,10 @@ accidentally triggering the load of a previous DB version.**
 * #2974 Fix index creation for hypertables with dropped columns
 * #2989 Refactor and harden size and stats functions
 * #3042 Commit end transaction for CREATE INDEX
+* #3059 Fix UPSERT on hypertables with columns with defaults
 
 **Thanks**
+* @eloyekunle and @kitwestneat for reporting an issue with UPSERT
 * @jocrau for reporting an issue with index creation
 * @pedrokost and @RobAtticus for reporting an issue with size
   functions on empty hypertables
