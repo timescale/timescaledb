@@ -8,10 +8,13 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #2989 Refactor and harden size and stats functions
+* #3058 Reduce memory usage for distributed inserts
 
 **Thanks**
 * @pedrokost and @RobAtticus for reporting an issue with size
   functions on empty hypertables
+* @stephane-moreau for reporting an issue with high memory usage during
+  single-transaction inserts on a distributed hypertable.
 
 ## 2.1.1 (2021-03-29)
 
