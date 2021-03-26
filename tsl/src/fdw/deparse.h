@@ -14,6 +14,9 @@ typedef struct DeparsedInsertStmt
 	const char *target; /* INSERT INTO (...) */
 	unsigned int num_target_attrs;
 	const char *target_attrs;
+	const char *unnest_attrs;
+	const char *select_tlist;
+	const char *output_attrs;
 	bool do_nothing;
 	const char *returning;
 	List *retrieved_attrs;

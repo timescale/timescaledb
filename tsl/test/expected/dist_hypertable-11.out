@@ -172,8 +172,8 @@ INSERT INTO disttable VALUES
 EXPLAIN (VERBOSE, COSTS FALSE)
 INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                     QUERY PLAN                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
@@ -181,7 +181,7 @@ INSERT INTO disttable VALUES
          ->  Custom Scan (DataNodeDispatch)
                Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
                Batch size: 1000
-               Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3), ..., ($2998, $2999, $3000)
+               Remote SQL: INSERT INTO public.disttable("time", device, temp) SELECT "time", device, temp FROM unnest($1::timestamp with time zone[], $2::integer[], $3::double precision[]) a("time", device, temp)
                ->  Custom Scan (ChunkDispatch)
                      Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
                      ->  Result
@@ -2516,8 +2516,8 @@ WITH result AS (
 SET timescaledb.max_insert_batch_size=1;
 EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 INSERT INTO twodim DEFAULT VALUES;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+                                                                                                     QUERY PLAN                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.twodim
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
@@ -2525,7 +2525,7 @@ INSERT INTO twodim DEFAULT VALUES;
          ->  Custom Scan (DataNodeDispatch)
                Output: 'Sun Feb 10 10:11:00 2019 PST'::timestamp with time zone, 11, '22.1'::double precision
                Batch size: 1
-               Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3)
+               Remote SQL: INSERT INTO public.twodim("time", "Color", temp) SELECT "time", "Color", temp FROM unnest($1::timestamp with time zone[], $2::integer[], $3::double precision[]) a("time", "Color", temp)
                ->  Custom Scan (ChunkDispatch)
                      Output: 'Sun Feb 10 10:11:00 2019 PST'::timestamp with time zone, 11, '22.1'::double precision
                      ->  Result
@@ -2548,8 +2548,8 @@ EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 INSERT INTO twodim VALUES
        ('2019-02-10 16:23', 5, 7.1),
        ('2019-02-10 17:11', 7, 3.2);
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                                                                     QUERY PLAN                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableInsert)
  Insert on distributed hypertable public.twodim
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
@@ -2557,7 +2557,7 @@ INSERT INTO twodim VALUES
          ->  Custom Scan (DataNodeDispatch)
                Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
                Batch size: 4
-               Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3), ..., ($10, $11, $12)
+               Remote SQL: INSERT INTO public.twodim("time", "Color", temp) SELECT "time", "Color", temp FROM unnest($1::timestamp with time zone[], $2::integer[], $3::double precision[]) a("time", "Color", temp)
                ->  Custom Scan (ChunkDispatch)
                      Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
                      ->  Values Scan on "*VALUES*"

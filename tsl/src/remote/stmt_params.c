@@ -63,7 +63,22 @@ stmt_params_validate_num_tuples(int num_params, int num_tuples)
 	return num_tuples;
 }
 
+static bool
+is_array_with_row_type_element(Oid typid)
+{
+	Oid elmtype = get_element_type(typid);
+
+	if (!OidIsValid(elmtype))
+		elmtype = typid;
+
+	Assert(OidIsValid(elmtype));
+
+	return type_is_rowtype(elmtype);
+}
+
 /*
+ * FIXME: test dropped columns.
+ *
  * ctid should be set to true if we're going to send it
  * num_tuples is used for batching
  * mctx memory context where we'll allocate StmtParams with all the values
@@ -118,14 +133,23 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 	{
 		int attr_num = lfirst_int(lc);
 		Form_pg_attribute attr = TupleDescAttr(tuple_desc, AttrNumberGetAttrOffset(attr_num));
-		Assert(!attr->attisdropped);
+		bool force_text = !ts_guc_enable_connection_binary_data;
 
-		typefnoid = data_format_get_type_output_func(attr->atttypid,
-													 &isbinary,
-													 !ts_guc_enable_connection_binary_data);
-		params->formats[idx] = isbinary ? FORMAT_BINARY : FORMAT_TEXT;
+		if (!attr->attisdropped)
+		{
+			/* We cannot binary serialize an array of a custom type because the
+			 * array type's send and recv functions include the OID of the element
+			 * type in the serialization. This OID might differ between nodes when
+			 * you have custom types, leading to deserialization error. Therefore,
+			 * revert to text for custom/row element types. */
+			if (is_array_with_row_type_element(attr->atttypid))
+				force_text = true;
 
-		fmgr_info(typefnoid, &params->conv_funcs[idx++]);
+			typefnoid = data_format_get_type_output_func(attr->atttypid, &isbinary, force_text);
+			params->formats[idx] = isbinary ? FORMAT_BINARY : FORMAT_TEXT;
+
+			fmgr_info(typefnoid, &params->conv_funcs[idx++]);
+		}
 	}
 
 	Assert(params->num_params == idx);
@@ -174,6 +198,83 @@ all_values_in_binary_format(int *formats, int num_params)
 		if (formats[i] != FORMAT_BINARY)
 			return false;
 	return true;
+}
+
+/*
+ * tupleid is ctid. If ctid was set to true tupleid has to be provided
+ */
+void
+stmt_params_convert_datums(StmtParams *params, Datum *values, bool *isnull, ItemPointer tupleid)
+{
+	MemoryContext old;
+	int idx;
+	int nest_level;
+	bool all_binary;
+	int param_idx = 0;
+
+	Assert(params->num_params > 0);
+	Assert(params->formats != NULL);
+	idx = params->converted_tuples * params->num_params;
+
+	Assert(params->converted_tuples < params->num_tuples);
+
+	old = MemoryContextSwitchTo(params->tmp_ctx);
+
+	if (tupleid != NULL)
+	{
+		bytea *output_bytes;
+		Assert(params->ctid);
+		if (params->formats[idx] == FORMAT_BINARY)
+		{
+			output_bytes =
+				SendFunctionCall(&params->conv_funcs[param_idx], PointerGetDatum(tupleid));
+			params->values[idx] = VARDATA(output_bytes);
+			params->lengths[idx] = (int) VARSIZE(output_bytes) - VARHDRSZ;
+		}
+		else
+			params->values[idx] =
+				OutputFunctionCall(&params->conv_funcs[param_idx], PointerGetDatum(tupleid));
+
+		idx++;
+		param_idx++;
+	}
+	else if (params->ctid)
+		elog(ERROR, "was configured to use ctid, but tupleid is NULL");
+
+	all_binary = all_values_in_binary_format(params->formats, params->num_params);
+	if (!all_binary)
+		nest_level = set_transmission_modes();
+
+	int i = 0;
+
+	for (i = 0; i < list_length(params->target_attr_nums); i++)
+	{
+		Datum value;
+
+		value = values[i];
+
+		if (isnull[i])
+			params->values[idx] = NULL;
+		else if (params->formats[idx] == FORMAT_TEXT)
+			params->values[idx] = OutputFunctionCall(&params->conv_funcs[param_idx], value);
+		else if (params->formats[idx] == FORMAT_BINARY)
+		{
+			bytea *output_bytes = SendFunctionCall(&params->conv_funcs[param_idx], value);
+			params->values[idx] = VARDATA(output_bytes);
+			params->lengths[idx] = VARSIZE(output_bytes) - VARHDRSZ;
+		}
+		else
+			elog(ERROR, "unexpected parameter format: %d", params->formats[idx]);
+		idx++;
+		param_idx++;
+	}
+
+	params->converted_tuples++;
+
+	if (!all_binary)
+		reset_transmission_modes(nest_level);
+
+	MemoryContextSwitchTo(old);
 }
 
 /*

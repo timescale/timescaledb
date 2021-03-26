@@ -87,7 +87,7 @@ SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'lo
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- This files assumes the existence of some table with definition as seen in the aggregate_table.sql file.
+-- This file assumes the existence of the same table with definition as seen in the aggregate_table.sql file.
 INSERT INTO :TEST_TABLE
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-04 08:00'::timestamp, '5 minute'), 'POR', 'west', generate_series(25, 85, 0.0625), 75, 40, 70, NULL, (1,2)::custom_type, 2, true;
 INSERT INTO :TEST_TABLE

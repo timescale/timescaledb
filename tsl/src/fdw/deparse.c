@@ -77,6 +77,7 @@
 
 #include <func_cache.h>
 #include <remote/utils.h>
+#include <guc.h>
 
 #include "relinfo.h"
 #include "deparse.h"
@@ -159,16 +160,14 @@ static char *deparse_type_name(Oid type_oid, int32 typemod);
 /*
  * Functions to construct string representation of a node tree.
  */
-static void deparseTargetList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,
-							  bool is_returning, Bitmapset *attrs_used, bool qualify_col,
-							  List **retrieved_attrs);
+static void deparseTargetList(StringInfo buf, Index rtindex, Relation rel, bool is_returning,
+							  Bitmapset *attrs_used, bool qualify_col, List **retrieved_attrs);
 static void deparseExplicitTargetList(List *tlist, bool is_returning, List **retrieved_attrs,
 									  deparse_expr_cxt *context);
 static void deparseSubqueryTargetList(deparse_expr_cxt *context);
 static void deparseReturningList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,
 								 bool trig_after_row, List *returningList, List **retrieved_attrs);
-static void deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte,
-							 bool qualify_col);
+static void deparseColumnRef(StringInfo buf, int varno, int varattno, Oid relid, bool qualify_col);
 static void deparseRelation(StringInfo buf, Relation rel);
 static void deparseExpr(Expr *expr, deparse_expr_cxt *context);
 static void deparseVar(Var *node, deparse_expr_cxt *context);
@@ -892,7 +891,6 @@ deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_
 		Relation rel = table_open(rte->relid, NoLock);
 
 		deparseTargetList(buf,
-						  rte,
 						  foreignrel->relid,
 						  rel,
 						  false,
@@ -953,9 +951,8 @@ deparseFromExpr(List *quals, deparse_expr_cxt *context)
  * If qualify_col is true, add relation alias before the column name.
  */
 static void
-deparseTargetList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel,
-				  bool is_returning, Bitmapset *attrs_used, bool qualify_col,
-				  List **retrieved_attrs)
+deparseTargetList(StringInfo buf, Index rtindex, Relation rel, bool is_returning,
+				  Bitmapset *attrs_used, bool qualify_col, List **retrieved_attrs)
 {
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	bool have_wholerow;
@@ -984,7 +981,7 @@ deparseTargetList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation re
 				appendStringInfoString(buf, " RETURNING ");
 			first = false;
 
-			deparseColumnRef(buf, rtindex, i, rte, qualify_col);
+			deparseColumnRef(buf, rtindex, i, rel->rd_id, qualify_col);
 
 			*retrieved_attrs = lappend_int(*retrieved_attrs, i);
 		}
@@ -1341,23 +1338,67 @@ deparse_insert_stmt(DeparsedInsertStmt *stmt, RangeTblEntry *rte, Index rtindex,
 
 	if (target_attrs != NIL)
 	{
-		appendStringInfoChar(&buf, '(');
+		StringInfoData unnest_params;
+		StringInfoData select_tlist;
+		StringInfoData output_params;
+		AttrNumber i = 1;
+
+		initStringInfo(&unnest_params);
+		initStringInfo(&select_tlist);
+		initStringInfo(&output_params);
 
 		first = true;
 		foreach (lc, target_attrs)
 		{
-			int attnum = lfirst_int(lc);
+			AttrNumber attnum = lfirst_int(lc);
+			Oid atttype;
+			int32 typmod;
+			Oid collid;
 
 			if (!first)
+			{
 				appendStringInfoString(&buf, ", ");
-			first = false;
+				appendStringInfoString(&unnest_params, ", ");
+				appendStringInfoString(&select_tlist, ", ");
+				appendStringInfoString(&output_params, ", ");
+			}
 
-			deparseColumnRef(&buf, rtindex, attnum, rte, false);
+			first = false;
+			deparseColumnRef(&buf, rtindex, attnum, rte->relid, false);
+			get_atttypetypmodcoll(rte->relid, attnum, &atttype, &typmod, &collid);
+
+			if (type_is_rowtype(atttype))
+			{
+				Oid typrelid = get_typ_typrelid(atttype);
+				Relation typrel;
+				Bitmapset *attrs_used;
+				List *used_attrs = NIL;
+
+				Assert(OidIsValid(typrelid));
+
+				typrel = relation_open(typrelid, AccessShareLock);
+				attrs_used = bms_add_member(NULL, 0 - FirstLowInvalidHeapAttributeNumber);
+				appendStringInfoChar(&select_tlist, '(');
+				deparseTargetList(&select_tlist, 0, typrel, false, attrs_used, false, &used_attrs);
+				deparseTargetList(&output_params, 0, typrel, false, attrs_used, false, &used_attrs);
+				appendStringInfo(&select_tlist, ")::%s", format_type_be_qualified(atttype));
+				relation_close(typrel, AccessShareLock);
+				bms_free(attrs_used);
+			}
+			else
+			{
+				deparseColumnRef(&select_tlist, rtindex, attnum, rte->relid, false);
+				deparseColumnRef(&output_params, rtindex, attnum, rte->relid, false);
+			}
+
+			appendStringInfo(&unnest_params, "$%d::%s[]", i, format_type_be_qualified(atttype));
+			i++;
 		}
 
-		appendStringInfoString(&buf, ") VALUES ");
-
 		stmt->target_attrs = buf.data;
+		stmt->unnest_attrs = unnest_params.data;
+		stmt->select_tlist = select_tlist.data;
+		stmt->output_attrs = output_params.data;
 
 		initStringInfo(&buf);
 	}
@@ -1402,7 +1443,7 @@ append_values_params(DeparsedInsertStmt *stmt, StringInfo buf, int pindex)
 	return pindex;
 }
 
-static const char *
+static void
 deparsed_insert_stmt_get_sql_internal(DeparsedInsertStmt *stmt, StringInfo buf, int64 num_rows,
 									  bool abbrev)
 {
@@ -1410,7 +1451,8 @@ deparsed_insert_stmt_get_sql_internal(DeparsedInsertStmt *stmt, StringInfo buf, 
 
 	if (stmt->num_target_attrs > 0)
 	{
-		appendStringInfoString(buf, stmt->target_attrs);
+		appendStringInfo(buf, "(%s)", stmt->target_attrs);
+		appendStringInfoString(buf, " VALUES ");
 
 		if (abbrev)
 		{
@@ -1447,8 +1489,29 @@ deparsed_insert_stmt_get_sql_internal(DeparsedInsertStmt *stmt, StringInfo buf, 
 
 	if (NULL != stmt->returning)
 		appendStringInfoString(buf, stmt->returning);
+}
 
-	return buf->data;
+static void
+deparsed_insert_stmt_get_sql_internal_array(DeparsedInsertStmt *stmt, StringInfo buf,
+											int64 num_rows, bool abbrev)
+{
+	appendStringInfoString(buf, stmt->target);
+
+	if (stmt->num_target_attrs > 0)
+		appendStringInfo(buf,
+						 "(%s) SELECT %s FROM unnest(%s) a(%s)",
+						 stmt->target_attrs,
+						 stmt->select_tlist,
+						 stmt->unnest_attrs,
+						 stmt->output_attrs);
+	else
+		appendStringInfoString(buf, " DEFAULT VALUES");
+
+	if (stmt->do_nothing)
+		appendStringInfoString(buf, " ON CONFLICT DO NOTHING");
+
+	if (NULL != stmt->returning)
+		appendStringInfoString(buf, stmt->returning);
 }
 
 const char *
@@ -1458,9 +1521,12 @@ deparsed_insert_stmt_get_sql(DeparsedInsertStmt *stmt, int64 num_rows)
 
 	initStringInfo(&buf);
 
-	return deparsed_insert_stmt_get_sql_internal(stmt, &buf, num_rows, false);
+	deparsed_insert_stmt_get_sql_internal_array(stmt, &buf, num_rows, false);
+
+	return buf.data;
 }
 
+// FIXME: cleanup explain
 const char *
 deparsed_insert_stmt_get_sql_explain(DeparsedInsertStmt *stmt, int64 num_rows)
 {
@@ -1468,7 +1534,9 @@ deparsed_insert_stmt_get_sql_explain(DeparsedInsertStmt *stmt, int64 num_rows)
 
 	initStringInfo(&buf);
 
-	return deparsed_insert_stmt_get_sql_internal(stmt, &buf, num_rows, true);
+	deparsed_insert_stmt_get_sql_internal_array(stmt, &buf, num_rows, true);
+
+	return buf.data;
 }
 
 enum DeparsedInsertStmtIndex
@@ -1476,6 +1544,9 @@ enum DeparsedInsertStmtIndex
 	DeparsedInsertStmtTarget,
 	DeparsedInsertStmtNumTargetAttrs,
 	DeparsedInsertStmtTargetAttrs,
+	DeparsedInsertStmtUnnestAttrs,
+	DeparsedInsertStmtSelectTlist,
+	DeparsedInsertStmtOutputAttrs,
 	DeparsedInsertStmtDoNothing,
 	DeparsedInsertStmtRetrievedAttrs,
 	DeparsedInsertStmtReturning,
@@ -1484,12 +1555,21 @@ enum DeparsedInsertStmtIndex
 List *
 deparsed_insert_stmt_to_list(DeparsedInsertStmt *stmt)
 {
-	List *stmt_list =
-		list_make5(makeString(pstrdup(stmt->target)),
-				   makeInteger(stmt->num_target_attrs),
-				   makeString(stmt->target_attrs != NULL ? pstrdup(stmt->target_attrs) : ""),
-				   makeInteger(stmt->do_nothing ? 1 : 0),
-				   stmt->retrieved_attrs);
+	List *stmt_list = NIL;
+
+	stmt_list = lappend(stmt_list, makeString(pstrdup(stmt->target)));
+
+	stmt_list = lappend(stmt_list, makeInteger(stmt->num_target_attrs));
+	stmt_list = lappend(stmt_list,
+						makeString(stmt->target_attrs != NULL ? pstrdup(stmt->target_attrs) : ""));
+	stmt_list = lappend(stmt_list,
+						makeString(stmt->unnest_attrs != NULL ? pstrdup(stmt->unnest_attrs) : ""));
+	stmt_list = lappend(stmt_list,
+						makeString(stmt->select_tlist != NULL ? pstrdup(stmt->select_tlist) : ""));
+	stmt_list = lappend(stmt_list,
+						makeString(stmt->output_attrs != NULL ? pstrdup(stmt->output_attrs) : ""));
+	stmt_list = lappend(stmt_list, makeInteger(stmt->do_nothing ? 1 : 0));
+	stmt_list = lappend(stmt_list, stmt->retrieved_attrs);
 
 	if (NULL != stmt->returning)
 		stmt_list = lappend(stmt_list, makeString(pstrdup(stmt->returning)));
@@ -1497,6 +1577,8 @@ deparsed_insert_stmt_to_list(DeparsedInsertStmt *stmt)
 	return stmt_list;
 }
 
+// PREPARE arr_insert (timestamptz[], custom_type[], float[]) AS INSERT INTO custom(time, value,
+// temp) SELECT time, (v1, v2)::custom_type, temp FROM unnest($1, $2, $3) a(time, v1, v2, temp;)
 void
 deparsed_insert_stmt_from_list(DeparsedInsertStmt *stmt, List *list_stmt)
 {
@@ -1504,6 +1586,15 @@ deparsed_insert_stmt_from_list(DeparsedInsertStmt *stmt, List *list_stmt)
 	stmt->num_target_attrs = intVal(list_nth(list_stmt, DeparsedInsertStmtNumTargetAttrs));
 	stmt->target_attrs = (stmt->num_target_attrs > 0) ?
 							 strVal(list_nth(list_stmt, DeparsedInsertStmtTargetAttrs)) :
+							 NULL;
+	stmt->unnest_attrs = (stmt->num_target_attrs > 0) ?
+							 strVal(list_nth(list_stmt, DeparsedInsertStmtUnnestAttrs)) :
+							 NULL;
+	stmt->select_tlist = (stmt->num_target_attrs > 0) ?
+							 strVal(list_nth(list_stmt, DeparsedInsertStmtSelectTlist)) :
+							 NULL;
+	stmt->output_attrs = (stmt->num_target_attrs > 0) ?
+							 strVal(list_nth(list_stmt, DeparsedInsertStmtOutputAttrs)) :
 							 NULL;
 	stmt->do_nothing = intVal(list_nth(list_stmt, DeparsedInsertStmtDoNothing));
 	stmt->retrieved_attrs = list_nth(list_stmt, DeparsedInsertStmtRetrievedAttrs);
@@ -1560,7 +1651,7 @@ deparseUpdateSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel
 			appendStringInfoString(buf, ", ");
 		first = false;
 
-		deparseColumnRef(buf, rtindex, attnum, rte, false);
+		deparseColumnRef(buf, rtindex, attnum, rte->relid, false);
 		appendStringInfo(buf, " = $%d", pindex);
 		pindex++;
 	}
@@ -1629,7 +1720,7 @@ deparseReturningList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation
 	}
 
 	if (attrs_used != NULL)
-		deparseTargetList(buf, rte, rtindex, rel, true, attrs_used, false, retrieved_attrs);
+		deparseTargetList(buf, rtindex, rel, true, attrs_used, false, retrieved_attrs);
 	else
 		*retrieved_attrs = NIL;
 }
@@ -1724,7 +1815,7 @@ deparseAnalyzeSql(StringInfo buf, Relation rel, List **retrieved_attrs)
  * If qualify_col is true, qualify column name with the alias of relation.
  */
 static void
-deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bool qualify_col)
+deparseColumnRef(StringInfo buf, int varno, int varattno, Oid relid, bool qualify_col)
 {
 	/* We support fetching the remote side's CTID and OID. */
 	if (varattno == SelfItemPointerAttributeNumber)
@@ -1753,7 +1844,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 		Oid fetchval = 0;
 
 		if (varattno == TableOidAttributeNumber)
-			fetchval = rte->relid;
+			fetchval = relid;
 
 		if (qualify_col)
 		{
@@ -1777,7 +1868,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 		 * The lock on the relation will be held by upper callers, so it's
 		 * fine to open it with no lock here.
 		 */
-		rel = table_open(rte->relid, NoLock);
+		rel = table_open(relid, NoLock);
 
 		/*
 		 * The local name of the foreign table can not be recognized by the
@@ -1803,7 +1894,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 		}
 
 		appendStringInfoString(buf, "ROW(");
-		deparseTargetList(buf, rte, varno, rel, false, attrs_used, qualify_col, &retrieved_attrs);
+		deparseTargetList(buf, varno, rel, false, attrs_used, qualify_col, &retrieved_attrs);
 		appendStringInfoChar(buf, ')');
 
 		/* Complete the CASE WHEN statement started above. */
@@ -1826,7 +1917,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 		 * If it's a column of a foreign table, and it has the column_name FDW
 		 * option, use that value.
 		 */
-		options = GetForeignColumnOptions(rte->relid, varattno);
+		options = GetForeignColumnOptions(relid, varattno);
 		foreach (lc, options)
 		{
 			DefElem *def = (DefElem *) lfirst(lc);
@@ -1843,7 +1934,7 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 		 * FDW option, use attribute name.
 		 */
 		if (colname == NULL)
-			colname = get_attname(rte->relid, varattno, false);
+			colname = get_attname(relid, varattno, false);
 
 		if (qualify_col)
 			ADD_REL_QUALIFIER(buf, varno);
@@ -2002,7 +2093,7 @@ deparseVar(Var *node, deparse_expr_cxt *context)
 		deparseColumnRef(context->buf,
 						 node->varno,
 						 node->varattno,
-						 planner_rt_fetch(node->varno, context->root),
+						 planner_rt_fetch(node->varno, context->root)->relid,
 						 qualify_col);
 	else
 	{

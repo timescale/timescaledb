@@ -21,6 +21,8 @@ extern StmtParams *stmt_params_create(List *target_attr_nums, bool ctid, TupleDe
 extern StmtParams *stmt_params_create_from_values(const char **param_values, int n_params);
 extern void stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot,
 									   ItemPointer tupleid);
+extern void stmt_params_convert_datums(StmtParams *params, Datum *values, bool *isnull,
+									   ItemPointer tupleid);
 extern const int *stmt_params_formats(StmtParams *stmt_params);
 extern const int *stmt_params_lengths(StmtParams *stmt_params);
 extern const char *const *stmt_params_values(StmtParams *stmt_params);
