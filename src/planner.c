@@ -719,7 +719,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 															   ordered,
 															   nested_oids);
 					else if (should_constraint_aware_append(ht, *pathptr))
-						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
+						*pathptr = ts_constraint_aware_append_path_create(root, *pathptr);
 					break;
 				default:
 					break;
@@ -738,7 +738,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 						*pathptr =
 							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
 					else if (should_constraint_aware_append(ht, *pathptr))
-						*pathptr = ts_constraint_aware_append_path_create(root, ht, *pathptr);
+						*pathptr = ts_constraint_aware_append_path_create(root, *pathptr);
 					break;
 				default:
 					break;

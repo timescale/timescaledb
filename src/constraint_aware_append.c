@@ -34,9 +34,9 @@
 #endif
 
 #include "constraint_aware_append.h"
-#include "hypertable.h"
 #include "chunk_append/transform.h"
 #include "guc.h"
+#include "utils.h"
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
@@ -482,7 +482,7 @@ static CustomPathMethods constraint_aware_append_path_methods = {
 };
 
 Path *
-ts_constraint_aware_append_path_create(PlannerInfo *root, Hypertable *ht, Path *subpath)
+ts_constraint_aware_append_path_create(PlannerInfo *root, Path *subpath)
 {
 	ConstraintAwareAppendPath *path;
 
