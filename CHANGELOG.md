@@ -4,10 +4,25 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.1.1 (2021-03-29)
+
+This maintenance release contains bugfixes since the 2.1.0 release. We
+deem it high priority for upgrading.
+
+The bug fixes in this release address issues with CREATE INDEX and 
+UPSERT for hypertables, custom jobs, and gapfill queries.
+
+This release marks TimescaleDB as a trusted extension in PG13, so that 
+superuser privileges are not required anymore to install the extension.
+
+**Minor features**
+* #2998 Mark timescaledb as trusted extension
 
 **Bugfixes**
+* #2948 Fix off by 4 error in histogram deserialize
 * #2974 Fix index creation for hypertables with dropped columns
+* #2990 Fix segfault in job_config_check for cagg
+* #2987 Fix crash due to txns in emit_log_hook_callback
 * #3042 Commit end transaction for CREATE INDEX
 * #3053 Fix gapfill/hashagg planner interaction
 * #3059 Fix UPSERT on hypertables with columns with defaults
@@ -15,9 +30,8 @@ accidentally triggering the load of a previous DB version.**
 **Thanks**
 * @eloyekunle and @kitwestneat for reporting an issue with UPSERT
 * @jocrau for reporting an issue with index creation
+* @kev009 for fixing a compilation issue
 * @majozv and @pehlert for reporting an issue with time_bucket_gapfill
-* @pedrokost and @RobAtticus for reporting an issue with size
-  functions on empty hypertables
 
 ## 2.1.0 (2021-02-22)
 
