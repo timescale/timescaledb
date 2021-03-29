@@ -902,16 +902,26 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
 }
 
-/*  get chunk oids specified by explicit chunk exclusion function */
+/*
+ *  get chunk oids specified by explicit chunk exclusion function
+ *
+ *  Similar to the regular get_chunk_oids, we also populate the fdw_private
+ *  structure appropriately if ordering info is present.
+ */
 static List *
-get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
+get_explicit_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
 {
 	List *chunk_oids = NIL;
 	Const *chunks_arg;
 	ArrayIterator chunk_id_iterator;
+	ArrayType *chunk_id_arr;
 	Datum elem = (Datum) NULL;
 	bool isnull;
 	Expr *expr;
+	bool reverse;
+	int order_attno;
+	Chunk **chunks = NULL;
+	unsigned int num_chunks = 0;
 
 	Assert(ctx->chunk_exclusion_func->args->length == 2);
 	expr = lsecond(ctx->chunk_exclusion_func->args);
@@ -925,8 +935,16 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 	/* function marked as STRICT so argument can't be NULL */
 	Assert(!chunks_arg->constisnull);
 
-	chunk_id_iterator = array_create_iterator(DatumGetArrayTypeP(chunks_arg->constvalue), 0, NULL);
+	chunk_id_arr = DatumGetArrayTypeP(chunks_arg->constvalue);
+	if (ARR_NDIM(chunk_id_arr) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid number of array dimensions for chunks_in")));
+	/* allocate an array of "Chunk *" and set it up below */
+	chunks = (Chunk **) palloc0(sizeof(Chunk *) *
+								ArrayGetNItems(ARR_NDIM(chunk_id_arr), ARR_DIMS(chunk_id_arr)));
 
+	chunk_id_iterator = array_create_iterator(chunk_id_arr, 0, NULL);
 	while (array_iterate(chunk_id_iterator, &elem, &isnull))
 	{
 		if (!isnull)
@@ -945,11 +963,46 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, Hypertable *ht)
 								NameStr(ht->fd.table_name))));
 
 			chunk_oids = lappend_int(chunk_oids, chunk->table_id);
+
+			chunks[num_chunks++] = chunk;
 		}
 		else
 			elog(ERROR, "chunk id can't be NULL");
 	}
 	array_free_iterator(chunk_id_iterator);
+
+	/*
+	 * If fdw_private has not been setup by caller there is no point checking
+	 * for ordered append as we can't pass the required metadata in fdw_private
+	 * to signal that this is safe to transform in ordered append plan in
+	 * set_rel_pathlist.
+	 */
+	if (rel->fdw_private != NULL &&
+		should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
+	{
+		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
+		List **nested_oids = NULL;
+
+		priv->appends_ordered = true;
+		priv->order_attno = order_attno;
+
+		/*
+		 * for space partitioning we need extra information about the
+		 * time slices of the chunks
+		 */
+		if (ht->space->num_dimensions > 1)
+			nested_oids = &priv->nested_oids;
+
+		/* we don't need "hri" here since we already have the chunks */
+		return ts_hypertable_restrict_info_get_chunk_oids_ordered(NULL,
+																  ht,
+																  chunks,
+																  num_chunks,
+																  AccessShareLock,
+																  nested_oids,
+																  reverse);
+	}
+
 	return chunk_oids;
 }
 
@@ -1004,6 +1057,8 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 
 			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri,
 																	  ht,
+																	  NULL,
+																	  0,
 																	  AccessShareLock,
 																	  nested_oids,
 																	  reverse);
@@ -1011,7 +1066,7 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 		return find_children_oids(hri, ht, AccessShareLock);
 	}
 	else
-		return get_explicit_chunk_oids(ctx, ht);
+		return get_explicit_chunk_oids(ctx, root, rel, ht);
 }
 
 /*

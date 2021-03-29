@@ -263,7 +263,19 @@ ORDER BY device, temp;
 
 -- Test remote explain
 
+-- Make sure that chunks_in function only expects one-dimensional integer arrays
+\set ON_ERROR_STOP 0
+SELECT "time" FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[[2], [1]])
+ORDER BY "time" DESC NULLS FIRST LIMIT 1;
+\set ON_ERROR_STOP 1
+
 SET timescaledb.enable_remote_explain = ON;
+
+-- Check that datanodes use ChunkAppend plans with chunks_in function in the
+-- "Remote SQL" when using max(time).
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(time)
+FROM disttable;
 
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT max(temp)
@@ -765,6 +777,14 @@ INSERT INTO twodim VALUES
        ('2019-02-10 16:23', 5, 7.1),
        ('2019-02-10 17:11', 7, 3.2);
 
+-- Check that datanodes use ChunkAppend plans with chunks_in function in the
+-- "Remote SQL" when multiple dimensions are involved.
+SET timescaledb.enable_remote_explain = ON;
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT * FROM twodim
+ORDER BY time;
+SET timescaledb.enable_remote_explain = OFF;
+
 -- Check results
 SELECT * FROM twodim
 ORDER BY time;
@@ -994,7 +1014,14 @@ INSERT INTO dist_device VALUES
 EXPLAIN (VERBOSE, COSTS OFF)
 SELECT * FROM dist_device;
 
+-- Check that datanodes use ChunkAppend plans with chunks_in function in the
+-- "Remote SQL" when only time partitioning is being used.
+SET timescaledb.enable_remote_explain = ON;
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT "time", dist_device, temp FROM public.dist_device ORDER BY "time" ASC NULLS LAST;
+
 SELECT * FROM dist_device;
+
 -- Test estimating relation size without stats
 CREATE TABLE hyper_estimate(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper_estimate', 'time', 'device', number_partitions => 3, replication_factor => 1, chunk_time_interval => INTERVAL '7 days');
