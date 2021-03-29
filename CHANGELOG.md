@@ -9,12 +9,15 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #2989 Refactor and harden size and stats functions
 * #3058 Reduce memory usage for distributed inserts
+* #3067 Fix extremely slow multi-node order by queries
 
 **Thanks**
 * @pedrokost and @RobAtticus for reporting an issue with size
   functions on empty hypertables
 * @stephane-moreau for reporting an issue with high memory usage during
   single-transaction inserts on a distributed hypertable.
+* @phemmer and @ryanbooz for reporting issues with slow
+  multi-node order by queries
 
 ## 2.1.1 (2021-03-29)
 

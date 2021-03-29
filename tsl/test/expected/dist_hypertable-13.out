@@ -667,7 +667,91 @@ ORDER BY device, temp;
 (9 rows)
 
 -- Test remote explain
+-- Make sure that chunks_in function only expects one-dimensional integer arrays
+\set ON_ERROR_STOP 0
+SELECT "time" FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[[2], [1]])
+ORDER BY "time" DESC NULLS FIRST LIMIT 1;
+ERROR:  invalid number of array dimensions for chunks_in
+\set ON_ERROR_STOP 1
 SET timescaledb.enable_remote_explain = ON;
+-- Check that datanodes use ChunkAppend plans with chunks_in function in the
+-- "Remote SQL" when using max(time).
+EXPLAIN (VERBOSE, COSTS FALSE)
+SELECT max(time)
+FROM disttable;
+                                                                                                       QUERY PLAN                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Result
+   Output: $0
+   InitPlan 1 (returns $0)
+     ->  Limit
+           Output: disttable."time"
+           ->  Custom Scan (AsyncAppend)
+                 Output: disttable."time"
+                 ->  Merge Append
+                       Sort Key: disttable_1."time" DESC
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_1
+                             Output: disttable_1."time"
+                             Data node: db_dist_hypertable_1
+                             Chunks: _dist_hyper_1_4_chunk, _dist_hyper_1_1_chunk
+                             Remote SQL: SELECT "time" FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 1]) AND (("time" IS NOT NULL)) ORDER BY "time" DESC NULLS FIRST LIMIT 1
+                             Remote EXPLAIN: 
+                               Limit
+                                 Output: disttable."time"
+                                 ->  Custom Scan (ChunkAppend) on public.disttable
+                                       Output: disttable."time"
+                                       Order: disttable."time" DESC
+                                       Startup Exclusion: false
+                                       Runtime Exclusion: false
+                                       ->  Index Only Scan using _dist_hyper_1_4_chunk_disttable_time_idx on _timescaledb_internal._dist_hyper_1_4_chunk
+                                             Output: _dist_hyper_1_4_chunk."time"
+                                             Index Cond: (_dist_hyper_1_4_chunk."time" IS NOT NULL)
+                                       ->  Index Only Scan using _dist_hyper_1_1_chunk_disttable_time_idx on _timescaledb_internal._dist_hyper_1_1_chunk
+                                             Output: _dist_hyper_1_1_chunk."time"
+                                             Index Cond: (_dist_hyper_1_1_chunk."time" IS NOT NULL)
+ 
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_2
+                             Output: disttable_2."time"
+                             Data node: db_dist_hypertable_2
+                             Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_3_chunk
+                             Remote SQL: SELECT "time" FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 1]) AND (("time" IS NOT NULL)) ORDER BY "time" DESC NULLS FIRST LIMIT 1
+                             Remote EXPLAIN: 
+                               Limit
+                                 Output: disttable."time"
+                                 ->  Custom Scan (ChunkAppend) on public.disttable
+                                       Output: disttable."time"
+                                       Order: disttable."time" DESC
+                                       Startup Exclusion: false
+                                       Runtime Exclusion: false
+                                       ->  Index Only Scan using _dist_hyper_1_5_chunk_disttable_time_idx on _timescaledb_internal._dist_hyper_1_5_chunk
+                                             Output: _dist_hyper_1_5_chunk."time"
+                                             Index Cond: (_dist_hyper_1_5_chunk."time" IS NOT NULL)
+                                       ->  Index Only Scan using _dist_hyper_1_3_chunk_disttable_time_idx on _timescaledb_internal._dist_hyper_1_3_chunk
+                                             Output: _dist_hyper_1_3_chunk."time"
+                                             Index Cond: (_dist_hyper_1_3_chunk."time" IS NOT NULL)
+ 
+                       ->  Custom Scan (DataNodeScan) on public.disttable disttable_3
+                             Output: disttable_3."time"
+                             Data node: db_dist_hypertable_3
+                             Chunks: _dist_hyper_1_6_chunk, _dist_hyper_1_2_chunk
+                             Remote SQL: SELECT "time" FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[2, 1]) AND (("time" IS NOT NULL)) ORDER BY "time" DESC NULLS FIRST LIMIT 1
+                             Remote EXPLAIN: 
+                               Limit
+                                 Output: disttable."time"
+                                 ->  Custom Scan (ChunkAppend) on public.disttable
+                                       Output: disttable."time"
+                                       Order: disttable."time" DESC
+                                       Startup Exclusion: false
+                                       Runtime Exclusion: false
+                                       ->  Index Only Scan using _dist_hyper_1_6_chunk_disttable_time_idx on _timescaledb_internal._dist_hyper_1_6_chunk
+                                             Output: _dist_hyper_1_6_chunk."time"
+                                             Index Cond: (_dist_hyper_1_6_chunk."time" IS NOT NULL)
+                                       ->  Index Only Scan using _dist_hyper_1_2_chunk_disttable_time_idx on _timescaledb_internal._dist_hyper_1_2_chunk
+                                             Output: _dist_hyper_1_2_chunk."time"
+                                             Index Cond: (_dist_hyper_1_2_chunk."time" IS NOT NULL)
+ 
+(69 rows)
+
 EXPLAIN (VERBOSE, COSTS FALSE)
 SELECT max(temp)
 FROM disttable;
@@ -2483,6 +2567,73 @@ INSERT INTO twodim VALUES
 INSERT INTO twodim VALUES
        ('2019-02-10 16:23', 5, 7.1),
        ('2019-02-10 17:11', 7, 3.2);
+-- Check that datanodes use ChunkAppend plans with chunks_in function in the
+-- "Remote SQL" when multiple dimensions are involved.
+SET timescaledb.enable_remote_explain = ON;
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT * FROM twodim
+ORDER BY time;
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: twodim."time", twodim."Color", twodim.temp
+   ->  Merge Append
+         Sort Key: twodim_1."time"
+         ->  Custom Scan (DataNodeScan) on public.twodim twodim_1
+               Output: twodim_1."time", twodim_1."Color", twodim_1.temp
+               Data node: db_dist_hypertable_1
+               Chunks: _dist_hyper_7_18_chunk, _dist_hyper_7_22_chunk, _dist_hyper_7_25_chunk
+               Remote SQL: SELECT "time", "Color", temp FROM public.twodim WHERE _timescaledb_internal.chunks_in(public.twodim.*, ARRAY[10, 12, 14]) ORDER BY "time" ASC NULLS LAST
+               Remote EXPLAIN: 
+                 Custom Scan (ChunkAppend) on public.twodim
+                   Output: twodim."time", twodim."Color", twodim.temp
+                   Order: twodim."time"
+                   Startup Exclusion: false
+                   Runtime Exclusion: false
+                   ->  Index Scan Backward using _dist_hyper_7_18_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_18_chunk
+                         Output: _dist_hyper_7_18_chunk."time", _dist_hyper_7_18_chunk."Color", _dist_hyper_7_18_chunk.temp
+                   ->  Index Scan Backward using _dist_hyper_7_22_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_22_chunk
+                         Output: _dist_hyper_7_22_chunk."time", _dist_hyper_7_22_chunk."Color", _dist_hyper_7_22_chunk.temp
+                   ->  Index Scan Backward using _dist_hyper_7_25_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_25_chunk
+                         Output: _dist_hyper_7_25_chunk."time", _dist_hyper_7_25_chunk."Color", _dist_hyper_7_25_chunk.temp
+ 
+         ->  Custom Scan (DataNodeScan) on public.twodim twodim_2
+               Output: twodim_2."time", twodim_2."Color", twodim_2.temp
+               Data node: db_dist_hypertable_2
+               Chunks: _dist_hyper_7_19_chunk, _dist_hyper_7_21_chunk, _dist_hyper_7_24_chunk
+               Remote SQL: SELECT "time", "Color", temp FROM public.twodim WHERE _timescaledb_internal.chunks_in(public.twodim.*, ARRAY[10, 11, 13]) ORDER BY "time" ASC NULLS LAST
+               Remote EXPLAIN: 
+                 Custom Scan (ChunkAppend) on public.twodim
+                   Output: twodim."time", twodim."Color", twodim.temp
+                   Order: twodim."time"
+                   Startup Exclusion: false
+                   Runtime Exclusion: false
+                   ->  Index Scan Backward using _dist_hyper_7_19_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_19_chunk
+                         Output: _dist_hyper_7_19_chunk."time", _dist_hyper_7_19_chunk."Color", _dist_hyper_7_19_chunk.temp
+                   ->  Index Scan Backward using _dist_hyper_7_21_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_21_chunk
+                         Output: _dist_hyper_7_21_chunk."time", _dist_hyper_7_21_chunk."Color", _dist_hyper_7_21_chunk.temp
+                   ->  Index Scan Backward using _dist_hyper_7_24_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_24_chunk
+                         Output: _dist_hyper_7_24_chunk."time", _dist_hyper_7_24_chunk."Color", _dist_hyper_7_24_chunk.temp
+ 
+         ->  Custom Scan (DataNodeScan) on public.twodim twodim_3
+               Output: twodim_3."time", twodim_3."Color", twodim_3.temp
+               Data node: db_dist_hypertable_3
+               Chunks: _dist_hyper_7_20_chunk, _dist_hyper_7_23_chunk
+               Remote SQL: SELECT "time", "Color", temp FROM public.twodim WHERE _timescaledb_internal.chunks_in(public.twodim.*, ARRAY[10, 12]) ORDER BY "time" ASC NULLS LAST
+               Remote EXPLAIN: 
+                 Custom Scan (ChunkAppend) on public.twodim
+                   Output: twodim."time", twodim."Color", twodim.temp
+                   Order: twodim."time"
+                   Startup Exclusion: false
+                   Runtime Exclusion: false
+                   ->  Index Scan Backward using _dist_hyper_7_20_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_20_chunk
+                         Output: _dist_hyper_7_20_chunk."time", _dist_hyper_7_20_chunk."Color", _dist_hyper_7_20_chunk.temp
+                   ->  Index Scan Backward using _dist_hyper_7_23_chunk_twodim_time_idx on _timescaledb_internal._dist_hyper_7_23_chunk
+                         Output: _dist_hyper_7_23_chunk."time", _dist_hyper_7_23_chunk."Color", _dist_hyper_7_23_chunk.temp
+ 
+(56 rows)
+
+SET timescaledb.enable_remote_explain = OFF;
 -- Check results
 SELECT * FROM twodim
 ORDER BY time;
@@ -3221,6 +3372,29 @@ SELECT * FROM dist_device;
    Chunks: _dist_hyper_15_37_chunk
    Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[24])
 (5 rows)
+
+-- Check that datanodes use ChunkAppend plans with chunks_in function in the
+-- "Remote SQL" when only time partitioning is being used.
+SET timescaledb.enable_remote_explain = ON;
+EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT "time", dist_device, temp FROM public.dist_device ORDER BY "time" ASC NULLS LAST;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DataNodeScan) on public.dist_device
+   Output: dist_device."time", dist_device.dist_device, dist_device.temp
+   Data node: db_dist_hypertable_1
+   Chunks: _dist_hyper_15_37_chunk
+   Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[24]) ORDER BY "time" ASC NULLS LAST
+   Remote EXPLAIN: 
+     Custom Scan (ChunkAppend) on public.dist_device
+       Output: dist_device."time", dist_device.dist_device, dist_device.temp
+       Order: dist_device."time"
+       Startup Exclusion: false
+       Runtime Exclusion: false
+       ->  Index Scan Backward using _dist_hyper_15_37_chunk_dist_device_time_idx on _timescaledb_internal._dist_hyper_15_37_chunk
+             Output: _dist_hyper_15_37_chunk."time", _dist_hyper_15_37_chunk.dist_device, _dist_hyper_15_37_chunk.temp
+ 
+(14 rows)
 
 SELECT * FROM dist_device;
              time             | dist_device | temp 

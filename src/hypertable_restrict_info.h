@@ -26,7 +26,9 @@ extern List *ts_hypertable_restrict_info_get_chunk_oids(HypertableRestrictInfo *
 														LOCKMODE lockmode);
 
 extern List *ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri,
-																Hypertable *ht, LOCKMODE lockmode,
+																Hypertable *ht, Chunk **chunks,
+																unsigned int num_chunks,
+																LOCKMODE lockmode,
 																List **nested_oids, bool reverse);
 
 #endif /* TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H */

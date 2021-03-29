@@ -607,6 +607,9 @@ chunk_cmp_reverse(const void *c1, const void *c2)
 /*
  * get chunk oids ordered by time dimension
  *
+ * if "chunks" is NULL, we get all the chunks from the catalog. Otherwise we
+ * restrict ourselves to the passed in chunks list.
+ *
  * nested_oids is a list of lists, chunks that occupy the same time slice will be
  * in the same list. In the list [[1,2,3],[4,5,6]] chunks 1, 2 and 3 are space partitions of
  * the same time slice and 4, 5 and 6 are space partitions of the next time slice.
@@ -614,15 +617,17 @@ chunk_cmp_reverse(const void *c1, const void *c2)
  */
 List *
 ts_hypertable_restrict_info_get_chunk_oids_ordered(HypertableRestrictInfo *hri, Hypertable *ht,
+												   Chunk **chunks, unsigned int num_chunks,
 												   LOCKMODE lockmode, List **nested_oids,
 												   bool reverse)
 {
-	unsigned num_chunks;
-	Chunk **chunks = hypertable_restrict_info_get_chunks(hri, ht, lockmode, &num_chunks);
 	List *chunk_oids = NIL;
 	List *slot_chunk_oids = NIL;
 	DimensionSlice *slice = NULL;
 	unsigned int i;
+
+	if (chunks == NULL)
+		chunks = hypertable_restrict_info_get_chunks(hri, ht, lockmode, &num_chunks);
 
 	if (num_chunks == 0)
 		return NIL;
