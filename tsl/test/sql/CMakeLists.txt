@@ -11,6 +11,7 @@ set(TEST_FILES
   continuous_aggs_watermark.sql
   dist_views.sql
   partialize_finalize.sql
+  skip_scan.sql
 )
 
 set(TEST_FILES_DEBUG
@@ -67,6 +68,7 @@ set(TEST_TEMPLATES
   compression_qualpushdown.sql.in
   continuous_aggs_union_view.sql.in
   move.sql.in
+  plan_skip_scan.sql.in
   reorder.sql.in
   transparent_decompression.sql.in
   transparent_decompression_ordered_index.sql.in

@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Major Features**
+* #3000 SkipScan to speed up SELECT DISTINCT
+
 **Bugfixes**
 * #2989 Refactor and harden size and stats functions
 * #3058 Reduce memory usage for distributed inserts

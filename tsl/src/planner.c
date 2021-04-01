@@ -9,6 +9,7 @@
 #include <foreign/fdwapi.h>
 
 #include "async_append.h"
+#include "nodes/skip_scan/skip_scan.h"
 #include "chunk.h"
 #include "compat.h"
 #include "debug_guc.h"
@@ -71,6 +72,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
 				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
+			break;
+		case UPPERREL_DISTINCT:
+			tsl_skip_scan_paths_add(root, input_rel, output_rel);
 			break;
 		case UPPERREL_FINAL:
 			if (ts_guc_enable_async_append && root->parse->resultRelation == 0 &&

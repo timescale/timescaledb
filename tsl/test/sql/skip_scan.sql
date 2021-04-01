@@ -1,0 +1,49 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- need superuser to adjust statistics in load script
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+
+\set TEST_BASE_NAME skip_scan
+SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
+    format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNOPTIMIZED",
+    format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED" \gset
+
+SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') AS "DIFF_CMD" \gset
+
+\ir :TEST_LOAD_NAME
+
+-- run tests on normal table and diff results
+\set TABLE skip_scan
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_skipscan;
+
+-- compare SkipScan results on normal table
+:DIFF_CMD
+
+-- run tests on hypertable and diff results
+\set TABLE skip_scan_ht
+\set PREFIX ''
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_skipscan;
+
+-- compare SkipScan results on hypertable
+:DIFF_CMD
+

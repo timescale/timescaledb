@@ -11,6 +11,7 @@
 /dist_hypertable-*.sql
 /dist_query-*.sql
 /move-*.sql
+/plan_skip_scan-*.sql
 /reorder-*.sql
 /remote_copy-*.sql
 /jit-*.sql
