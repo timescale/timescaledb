@@ -33,6 +33,7 @@ jobs:
     - name: Check code formatting
       if: always()
       run: |
+        sudo apt install clang-format-8
         sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-8 100
         sudo update-alternatives --set clang-format /usr/bin/clang-format-8
         ./scripts/clang_format_all.sh
