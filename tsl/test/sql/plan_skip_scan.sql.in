@@ -1,0 +1,20 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- need superuser to modify statistics
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\ir include/skip_scan_load.sql
+
+-- we want to run with analyze here so we can see counts in the nodes
+\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set TABLE skip_scan
+\ir include/skip_scan_query.sql
+
+\set TABLE skip_scan_ht
+\ir include/skip_scan_query.sql
+\ir include/skip_scan_query_ht.sql
+
+-- try one query with EXPLAIN only for coverage
+EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan;
+EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan_ht;

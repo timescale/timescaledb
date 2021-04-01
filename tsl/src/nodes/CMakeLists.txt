@@ -1,3 +1,4 @@
 add_subdirectory(compress_dml)
 add_subdirectory(decompress_chunk)
 add_subdirectory(gapfill)
+add_subdirectory(skip_scan)

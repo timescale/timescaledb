@@ -371,6 +371,7 @@ get_vacuum_options(const VacuumStmt *stmt)
 #define list_delete_cell_compat(l, lc, prev) list_delete_cell((l), (lc))
 #define list_make5(x1, x2, x3, x4, x5) lappend(list_make4(x1, x2, x3, x4), x5)
 #define list_make5_oid(x1, x2, x3, x4, x5) lappend_oid(list_make4_oid(x1, x2, x3, x4), x5)
+#define list_make5_int(x1, x2, x3, x4, x5) lappend_int(list_make4_int(x1, x2, x3, x4), x5)
 #define for_each_cell_compat(cell, list, initcell) for_each_cell (cell, list, initcell)
 #endif
 
