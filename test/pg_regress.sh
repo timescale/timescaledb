@@ -7,6 +7,12 @@
 # TESTS     only run tests from this list
 # IGNORES   failure of tests in this list will not lead to test failure
 # SKIPS     tests from this list are not run
+#
+# In TESTS you may use wildcards to match multiple test names
+# TESTS="compression*" will match all tests whose name starts with compression
+# TESTS="*compression*" will match all tests that have compression anywhere in the name
+# Wildcard matching also applies to version specific tests so compression-13
+# would also be matched by those patterns.
 
 CURRENT_DIR=$(dirname $0)
 EXE_DIR=${EXE_DIR:-${CURRENT_DIR}}
@@ -73,9 +79,11 @@ else
   current_tests=""
   for t in ${TESTS}; do
     if ! contains "${SKIPS}" "${t}"; then
-      if contains "${ALL_TESTS}" "${t}"; then
-        current_tests="${current_tests} ${t}"
-      fi
+      for t2 in ${ALL_TESTS}; do
+        if [[ $t2 == $t ]]; then
+          current_tests="${current_tests} ${t2}"
+        fi
+      done
     fi
   done
 
