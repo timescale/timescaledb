@@ -10,9 +10,11 @@ accidentally triggering the load of a previous DB version.**
 * #2989 Refactor and harden size and stats functions
 * #3058 Reduce memory usage for distributed inserts
 * #3067 Fix extremely slow multi-node order by queries
+* #3082 Fix chunk index column name mapping
 * #3083 Keep Append pathkeys in ChunkAppend
 
 **Thanks**
+* @BowenGG for reporting an issue with indexes with INCLUDE
 * @fvannee for reporting an issue with ChunkAppend pathkeys
 * @pedrokost and @RobAtticus for reporting an issue with size
   functions on empty hypertables

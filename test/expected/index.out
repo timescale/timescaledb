@@ -710,3 +710,15 @@ ORDER BY
  _timescaledb_internal._hyper_13_19_chunk | _timescaledb_internal._hyper_13_19_chunk_ht_dropped_c0_c1_c2_idx1 | {c0,c1,c2} |      | f      | f       | f         | 
 (9 rows)
 
+-- #3056 check chunk index column name mapping
+CREATE TABLE i3056(c int, order_number int NOT NULL, date_created timestamptz NOT NULL);
+CREATE INDEX ON i3056(order_number) INCLUDE(order_number);
+CREATE INDEX ON i3056(date_created, (order_number % 5)) INCLUDE(order_number);
+SELECT table_name FROM create_hypertable('i3056', 'date_created');
+ table_name 
+------------
+ i3056
+(1 row)
+
+ALTER TABLE i3056 DROP COLUMN c;
+INSERT INTO i3056(order_number,date_created) VALUES (1, '2000-01-01');
