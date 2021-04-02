@@ -2041,10 +2041,7 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
 									RelationGetDescr(chunk_rel)))
-		ts_adjust_indexinfo_attnos(indexinfo,
-								   info->main_table_relid,
-								   hypertable_index_rel,
-								   chunk_rel);
+		ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
 
 	ts_chunk_index_create_from_adjusted_index_info(ht->fd.id,
 												   hypertable_index_rel,
@@ -2133,10 +2130,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 									info->extended_options.ht_hasoid,
 									RelationGetDescr(chunk_rel)))
-		ts_adjust_indexinfo_attnos(indexinfo,
-								   info->main_table_relid,
-								   hypertable_index_rel,
-								   chunk_rel);
+		ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
 
 	ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
 												   hypertable_index_rel,

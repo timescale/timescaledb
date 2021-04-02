@@ -123,24 +123,30 @@ adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
  * Adjust column reference attribute numbers for regular indexes.
  */
 static void
-chunk_adjust_colref_attnos(IndexInfo *ii, Relation idxrel, Relation chunkrel)
+chunk_adjust_colref_attnos(IndexInfo *ii, Oid ht_relid, Relation chunkrel)
 {
 	int i;
 
-	for (i = 0; i < idxrel->rd_att->natts; i++)
+	for (i = 0; i < ii->ii_NumIndexAttrs; i++)
 	{
-		FormData_pg_attribute *idxattr = TupleDescAttr(idxrel->rd_att, i);
-		AttrNumber attno = get_attnum(chunkrel->rd_id, NameStr(idxattr->attname));
+		/* zeroes indicate expressions */
+		if (ii->ii_IndexAttrNumbers[i] == 0)
+			continue;
+		/* we must not use get_attname on the index here as the index column names
+		 * are independent of parent relation column names. Instead we need to look
+		 * up the attno of the referenced hypertable column and do the matching
+		 * with the hypertable column name */
+		char *colname = get_attname(ht_relid, ii->ii_IndexAttrNumbers[i], false);
+		AttrNumber attno = get_attnum(chunkrel->rd_id, colname);
 
 		if (attno == InvalidAttrNumber)
-			elog(ERROR, "index attribute %s not found in chunk", NameStr(idxattr->attname));
+			elog(ERROR, "index attribute %s not found in chunk", colname);
 		ii->ii_IndexAttrNumbers[i] = attno;
 	}
 }
 
 void
-ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation template_indexrel,
-						   Relation chunkrel)
+ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation chunkrel)
 {
 	/*
 	 * Adjust a hypertable's index attribute numbers to match a chunk.
@@ -151,15 +157,15 @@ ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation template
 	 * IndexInfo from a hypertable's index to create a corresponding index on a
 	 * chunk, we need to adjust the attribute numbers to match the chunk.
 	 *
-	 * We need to handle two cases: (1) regular indexes that reference columns
-	 * directly, and (2) expression indexes that reference columns in expressions.
-	 *
-	 * Additionally we need to adjust column references in predicates.
+	 * We need to handle 3 places:
+	 * - direct column references in ii_IndexAttrNumbers
+	 * - references in expressions in ii_Expressions
+	 * - references in expressions in ii_Predicate
 	 */
-	if (list_length(indexinfo->ii_Expressions) == 0)
-		chunk_adjust_colref_attnos(indexinfo, template_indexrel, chunkrel);
+	chunk_adjust_colref_attnos(indexinfo, ht_relid, chunkrel);
 
-	adjust_expr_attnos(ht_relid, indexinfo, chunkrel);
+	if (indexinfo->ii_Expressions || indexinfo->ii_Predicate)
+		adjust_expr_attnos(ht_relid, indexinfo, chunkrel);
 }
 
 #define CHUNK_INDEX_TABLESPACE_OFFSET 1
@@ -213,7 +219,7 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 	 * hypertable
 	 */
 	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
-		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, template_indexrel, chunkrel);
+		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, chunkrel);
 
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
 
