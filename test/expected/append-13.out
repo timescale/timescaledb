@@ -2226,6 +2226,32 @@ LEFT JOIN i2661 ht ON
                      Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
 (19 rows)
 
+-- #3030 test chunkappend keeps pathkeys when subpath is append
+-- on PG11 this will not use ChunkAppend but MergeAppend
+SET enable_seqscan TO FALSE;
+CREATE TABLE i3030(time timestamptz NOT NULL, a int, b int);
+SELECT table_name FROM create_hypertable('i3030', 'time', create_default_indexes=>false);
+ table_name 
+------------
+ i3030
+(1 row)
+
+CREATE INDEX ON i3030(a,time);
+INSERT INTO i3030 (time,a) SELECT time, a FROM generate_series('2000-01-01'::timestamptz,'2000-01-01 3:00:00'::timestamptz,'1min'::interval) time, generate_series(1,30) a;
+ANALYZE i3030;
+:PREFIX SELECT * FROM i3030 where time BETWEEN '2000-01-01'::text::timestamptz AND '2000-01-03'::text::timestamptz ORDER BY a,time LIMIT 1;
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=1 loops=1)
+   ->  Custom Scan (ChunkAppend) on i3030 (actual rows=1 loops=1)
+         Order: i3030.a, i3030."time"
+         Chunks excluded during startup: 0
+         ->  Index Scan using _hyper_9_38_chunk_i3030_a_time_idx on _hyper_9_38_chunk (actual rows=1 loops=1)
+               Index Cond: (("time" >= ('2000-01-01'::cstring)::timestamp with time zone) AND ("time" <= ('2000-01-03'::cstring)::timestamp with time zone))
+(6 rows)
+
+DROP TABLE i3030;
+RESET enable_seqscan;
 --generate the results into two different files
 \set ECHO errors
 --- Unoptimized results

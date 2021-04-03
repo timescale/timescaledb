@@ -410,10 +410,10 @@ SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=4 loops=1)
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  GroupAggregate (actual rows=2 loops=1)
          Group Key: _materialized_hypertable_6.time_bucket
-         Batches: 1 
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_6 (actual rows=2 loops=1)
+               Order: _materialized_hypertable_6.time_bucket
                Chunks excluded during startup: 0
                ->  Index Scan Backward using _hyper_6_9_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_9_chunk (actual rows=2 loops=1)
                      Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark(6))::integer, '-2147483648'::integer))
@@ -605,13 +605,11 @@ ORDER by 1;
          ->  GroupAggregate (actual rows=1 loops=1)
                Group Key: _materialized_hypertable_9.time_bucket
                Filter: ((_timescaledb_internal.finalize_agg('sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_9.agg_0_3, NULL::bigint) > 50) AND ((_timescaledb_internal.finalize_agg('avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_9.agg_0_4, NULL::numeric))::integer > 12))
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: _materialized_hypertable_9.time_bucket
-                     Sort Method: quicksort 
-                     ->  Custom Scan (ChunkAppend) on _materialized_hypertable_9 (actual rows=1 loops=1)
-                           Chunks excluded during startup: 0
-                           ->  Index Scan Backward using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
-                                 Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
+               ->  Custom Scan (ChunkAppend) on _materialized_hypertable_9 (actual rows=1 loops=1)
+                     Order: _materialized_hypertable_9.time_bucket
+                     Chunks excluded during startup: 0
+                     ->  Index Scan Backward using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
+                           Index Cond: (time_bucket < COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
          ->  HashAggregate (actual rows=2 loops=1)
                Group Key: time_bucket(5, ht_intdata.a)
                Filter: ((sum(ht_intdata.c) > 50) AND ((avg(ht_intdata.b))::integer > 12))
@@ -629,7 +627,7 @@ ORDER by 1;
                            Index Cond: (a >= COALESCE((_timescaledb_internal.cagg_watermark(9))::integer, '-2147483648'::integer))
                            Filter: ((b < 16) AND (c > 20))
                            Rows Removed by Filter: 2
-(31 rows)
+(29 rows)
 
 -- Test caggs with different time types
 CREATE TABLE smallint_table (time smallint, value int);

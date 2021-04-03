@@ -206,18 +206,17 @@ WHERE time < to_timestamp(900)
 GROUP BY t
 ORDER BY t DESC
 LIMIT 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Limit
-   ->  Sort
-         Sort Key: (date_trunc('minute'::text, hyper_1."time")) DESC
-         ->  HashAggregate
-               Group Key: date_trunc('minute'::text, hyper_1."time")
-               ->  Custom Scan (ChunkAppend) on hyper_1
-                     Chunks excluded during startup: 0
-                     ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
-                           Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
-(9 rows)
+   ->  GroupAggregate
+         Group Key: (date_trunc('minute'::text, hyper_1."time"))
+         ->  Custom Scan (ChunkAppend) on hyper_1
+               Order: date_trunc('minute'::text, hyper_1."time") DESC
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_1_1_chunk_time_plain on _hyper_1_1_chunk
+                     Index Cond: ("time" < 'Wed Dec 31 16:15:00 1969 PST'::timestamp with time zone)
+(8 rows)
 
 --test on table with time partitioning function. Currently not
 --optimized to use index for ordering since the index is an expression
