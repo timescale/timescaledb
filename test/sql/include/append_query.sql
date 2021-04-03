@@ -346,3 +346,16 @@ LEFT JOIN i2661 ht ON
   (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
   AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp;
 
+-- #3030 test chunkappend keeps pathkeys when subpath is append
+-- on PG11 this will not use ChunkAppend but MergeAppend
+SET enable_seqscan TO FALSE;
+CREATE TABLE i3030(time timestamptz NOT NULL, a int, b int);
+SELECT table_name FROM create_hypertable('i3030', 'time', create_default_indexes=>false);
+CREATE INDEX ON i3030(a,time);
+INSERT INTO i3030 (time,a) SELECT time, a FROM generate_series('2000-01-01'::timestamptz,'2000-01-01 3:00:00'::timestamptz,'1min'::interval) time, generate_series(1,30) a;
+ANALYZE i3030;
+
+:PREFIX SELECT * FROM i3030 where time BETWEEN '2000-01-01'::text::timestamptz AND '2000-01-03'::text::timestamptz ORDER BY a,time LIMIT 1;
+DROP TABLE i3030;
+RESET enable_seqscan;
+

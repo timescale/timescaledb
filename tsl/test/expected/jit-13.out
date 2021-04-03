@@ -195,11 +195,13 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                      Output: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id, _timescaledb_internal.finalize_agg('avg(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_4.agg_3_3, NULL::double precision), (_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_4.agg_4_4, NULL::double precision) - _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_4.agg_4_5, NULL::double precision))
                      Group Key: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id
                      Filter: ((_timescaledb_internal.finalize_agg('max(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_4.agg_4_4, NULL::double precision) - _timescaledb_internal.finalize_agg('min(double precision)'::text, NULL::name, NULL::name, '{{pg_catalog,float8}}'::name[], _materialized_hypertable_4.agg_4_5, NULL::double precision)) = '1800'::double precision)
-                     ->  Sort
+                     ->  Incremental Sort
                            Output: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id, _materialized_hypertable_4.agg_3_3, _materialized_hypertable_4.agg_4_4, _materialized_hypertable_4.agg_4_5
                            Sort Key: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id
+                           Presorted Key: _materialized_hypertable_4.bucket
                            ->  Custom Scan (ChunkAppend) on _timescaledb_internal._materialized_hypertable_4
                                  Output: _materialized_hypertable_4.bucket, _materialized_hypertable_4.device_id, _materialized_hypertable_4.agg_3_3, _materialized_hypertable_4.agg_4_4, _materialized_hypertable_4.agg_4_5
+                                 Order: _materialized_hypertable_4.bucket
                                  Startup Exclusion: true
                                  Runtime Exclusion: false
                                  Chunks excluded during startup: 0
@@ -218,7 +220,7 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                            ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
                                  Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
                                  Index Cond: (_hyper_3_5_chunk.observation_time >= COALESCE(_timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(4)), '-infinity'::timestamp with time zone))
-(33 rows)
+(35 rows)
 
 -- generate the results into two different files
 \set ECHO errors

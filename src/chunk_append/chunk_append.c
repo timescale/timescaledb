@@ -57,6 +57,21 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	path->cpath.path.pathtarget = rel->reltarget;
 	path->cpath.path.param_info = subpath->param_info;
 
+	/*
+	 * We keep the pathkeys from the original path here because
+	 * the original path was either a MergeAppendPath and this
+	 * will become an ordered append or the original path is an
+	 * AppendPath and since we do not reorder children the order
+	 * will be kept intact. For the AppendPath case with pathkeys
+	 * it was most likely an Append with only a single child.
+	 * We could skip the ChunkAppend path creation if there is
+	 * only a single child but we decided earlier that ChunkAppend
+	 * would be beneficial for this query so we treat it the same
+	 * as if it had multiple children.
+	 */
+	Assert(IsA(subpath, AppendPath) || IsA(subpath, MergeAppendPath));
+	path->cpath.path.pathkeys = subpath->pathkeys;
+
 	path->cpath.path.parallel_aware = ts_guc_enable_parallel_chunk_append ? parallel_aware : false;
 	path->cpath.path.parallel_safe = subpath->parallel_safe;
 	path->cpath.path.parallel_workers = subpath->parallel_workers;
@@ -151,7 +166,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			path->pushdown_limit = true;
 
 			children = castNode(MergeAppendPath, subpath)->subpaths;
-			path->cpath.path.pathkeys = subpath->pathkeys;
 			break;
 		default:
 			elog(ERROR, "invalid child of chunk append: %u", nodeTag(subpath));
