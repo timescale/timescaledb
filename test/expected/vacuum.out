@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 CREATE TABLE vacuum_test(time timestamp, temp float);
 -- create hypertable with three chunks
-SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000);
+SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
@@ -33,22 +33,18 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 
 VACUUM (VERBOSE, ANALYZE) vacuum_test;
 INFO:  vacuuming "_timescaledb_internal._hyper_1_1_chunk"
-INFO:  index "_hyper_1_1_chunk_vacuum_test_time_idx" now contains 2 row versions in 2 pages
 INFO:  "_hyper_1_1_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
 INFO:  analyzing "_timescaledb_internal._hyper_1_1_chunk"
 INFO:  "_hyper_1_1_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
 INFO:  vacuuming "_timescaledb_internal._hyper_1_2_chunk"
-INFO:  index "_hyper_1_2_chunk_vacuum_test_time_idx" now contains 2 row versions in 2 pages
 INFO:  "_hyper_1_2_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
 INFO:  analyzing "_timescaledb_internal._hyper_1_2_chunk"
 INFO:  "_hyper_1_2_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
 INFO:  vacuuming "_timescaledb_internal._hyper_1_3_chunk"
-INFO:  index "_hyper_1_3_chunk_vacuum_test_time_idx" now contains 2 row versions in 2 pages
 INFO:  "_hyper_1_3_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
 INFO:  analyzing "_timescaledb_internal._hyper_1_3_chunk"
 INFO:  "_hyper_1_3_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
 INFO:  vacuuming "public.vacuum_test"
-INFO:  index "vacuum_test_time_idx" now contains 0 row versions in 1 pages
 INFO:  "vacuum_test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
 INFO:  analyzing "public.vacuum_test"
 INFO:  "vacuum_test": scanned 0 of 0 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 0 estimated total rows
@@ -83,7 +79,7 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 DROP TABLE vacuum_test;
 --test plain analyze (no_vacuum)
 CREATE TABLE analyze_test(time timestamp, temp float);
-SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000);
+SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------

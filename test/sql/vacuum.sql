@@ -5,7 +5,7 @@
 CREATE TABLE vacuum_test(time timestamp, temp float);
 
 -- create hypertable with three chunks
-SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000);
+SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 
 INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -40,7 +40,7 @@ DROP TABLE vacuum_test;
 --test plain analyze (no_vacuum)
 CREATE TABLE analyze_test(time timestamp, temp float);
 
-SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000);
+SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 
 INSERT INTO analyze_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),

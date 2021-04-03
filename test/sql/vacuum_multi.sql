@@ -6,7 +6,7 @@
 CREATE TABLE vacuum_test(time timestamp, temp float);
 
 -- create hypertable with three chunks
-SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000);
+SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 
 INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -16,7 +16,7 @@ INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-06-21T16:00:01', 11.0);
 CREATE TABLE analyze_test(time timestamp, temp float);
 
-SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000);
+SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 
 INSERT INTO analyze_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -53,6 +53,4 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
-
-
 
