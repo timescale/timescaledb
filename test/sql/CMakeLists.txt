@@ -39,7 +39,6 @@ set(TEST_FILES
   truncate.sql
   upsert.sql
   util.sql
-  vacuum_multi.sql
   vacuum.sql
   version.sql
   views.sql
