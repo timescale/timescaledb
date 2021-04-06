@@ -162,7 +162,7 @@ jobs:
         path: coredumps
 
     - name: Slack Notification
-      if: failure() && github.event_name != 'pull_request'
+      if: failure() && github.event_name != 'pull_request' && runner.os != 'macOS'
       env:
         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
         SLACK_COLOR: '#ff0000'
