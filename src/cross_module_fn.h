@@ -157,6 +157,7 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_get_relstats;
 	PGFunction chunk_get_colstats;
 	PGFunction hypertable_distributed_set_replication_factor;
+	PGFunction chunk_create_empty_table;
 	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
 } CrossModuleFunctions;
 
