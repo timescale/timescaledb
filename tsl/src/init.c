@@ -185,6 +185,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.func_call_on_data_nodes = ts_dist_cmd_func_call_on_data_nodes,
 	.chunk_get_relstats = chunk_api_get_chunk_relstats,
 	.chunk_get_colstats = chunk_api_get_chunk_colstats,
+	.chunk_create_empty_table = chunk_create_empty_table,
 	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats,

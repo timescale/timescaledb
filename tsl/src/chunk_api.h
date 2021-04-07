@@ -14,5 +14,6 @@ extern void chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht);
 extern Datum chunk_api_get_chunk_relstats(PG_FUNCTION_ARGS);
 extern Datum chunk_api_get_chunk_colstats(PG_FUNCTION_ARGS);
 extern void chunk_api_update_distributed_hypertable_stats(Oid relid);
+extern Datum chunk_create_empty_table(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TSL_CHUNK_API_H */
