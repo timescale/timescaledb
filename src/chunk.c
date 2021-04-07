@@ -949,6 +949,20 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
 	return datanodes;
 }
 
+static int32
+get_next_chunk_id()
+{
+	int32 chunk_id;
+	CatalogSecurityContext sec_ctx;
+	const Catalog *catalog = ts_catalog_get();
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	chunk_id = ts_catalog_table_next_seq_id(catalog, CHUNK);
+	ts_catalog_restore_user(&sec_ctx);
+
+	return chunk_id;
+}
+
 /*
  * Create a chunk object from the dimensional constraints in the given hypercube.
  *
@@ -963,11 +977,9 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
  */
 static Chunk *
 chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_name,
-					const char *table_name, const char *prefix)
+					const char *table_name, const char *prefix, int32 chunk_id)
 {
 	const Hyperspace *hs = ht->space;
-	const Catalog *catalog = ts_catalog_get();
-	CatalogSecurityContext sec_ctx;
 	Chunk *chunk;
 	const char relkind = hypertable_chunk_relkind(ht);
 
@@ -975,12 +987,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 		schema_name = NameStr(ht->fd.associated_schema_name);
 
 	/* Create a new chunk based on the hypercube */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
-								 hs->num_dimensions,
-								 relkind);
-
-	ts_catalog_restore_user(&sec_ctx);
+	chunk = ts_chunk_create_base(chunk_id, hs->num_dimensions, relkind);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
@@ -1062,20 +1069,81 @@ init_scan_by_chunk_id(ScanIterator *iterator, int32 chunk_id)
 								   Int32GetDatum(chunk_id));
 }
 
+/*
+ * Creates only a table for a chunk.
+ * Either table name or chunk id needs to be provided.
+ */
+static Chunk *
+chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const char *schema_name,
+								   const char *table_name, const char *prefix, int32 chunk_id)
+{
+	Chunk *chunk;
+
+	Assert(table_name != NULL || chunk_id != INVALID_CHUNK_ID);
+
+	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
+	Assert(chunk != NULL);
+
+	chunk_create_table(chunk, ht);
+
+	return chunk;
+}
+
+/*
+ * Checks that given hypercube does not collide with existing chunks and
+ * creates an empty table for a chunk without any metadata modifications.
+ */
+Chunk *
+ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_name,
+						   const char *table_name)
+{
+	ChunkStub *stub;
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleKeyShare,
+		.waitpolicy = LockWaitBlock,
+	};
+
+	/*
+	 * Chunk table can be created if no chunk collides with the dimension slices.
+	 */
+	stub = chunk_collides(ht, cube);
+	if (stub != NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_CHUNK_COLLISION),
+				 errmsg("chunk table creation failed due to dimension slice collision")));
+
+	/*
+	 * Serialize chunk creation around a lock on the "main table" to avoid
+	 * multiple processes trying to create the same chunk. We use a
+	 * ShareUpdateExclusiveLock, which is the weakest lock possible that
+	 * conflicts with itself. The lock needs to be held until transaction end.
+	 */
+	LockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
+
+	ts_hypercube_find_existing_slices(cube, &tuplock);
+
+	return chunk_create_only_table_after_lock(ht,
+											  cube,
+											  schema_name,
+											  table_name,
+											  NULL,
+											  INVALID_CHUNK_ID);
+}
+
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
-	Chunk *chunk;
-
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
-	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix);
-	Assert(chunk != NULL);
-
-	chunk_create_table(chunk, ht);
+	Chunk *chunk = chunk_create_only_table_after_lock(ht,
+													  cube,
+													  schema_name,
+													  table_name,
+													  prefix,
+													  get_next_chunk_id());
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
