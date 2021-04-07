@@ -160,6 +160,7 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_get_relstats;
 	PGFunction chunk_get_colstats;
 	PGFunction hypertable_distributed_set_replication_factor;
+	PGFunction chunk_create_empty_table;
 	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
 	CompressSingleRowState *(*compress_row_init)(int srcht_id, Relation in_rel, Relation out_rel);
 	TupleTableSlot *(*compress_row_exec)(CompressSingleRowState *cr, TupleTableSlot *slot);

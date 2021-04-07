@@ -1618,3 +1618,45 @@ chunk_api_get_chunk_relstats(PG_FUNCTION_ARGS)
 {
 	return chunk_api_get_chunk_stats(fcinfo, false);
 }
+
+Datum
+chunk_create_empty_table(PG_FUNCTION_ARGS)
+{
+	const Oid hypertable_relid = PG_GETARG_OID(0);
+	Jsonb *const slices = PG_GETARG_JSONB_P(1);
+	const char *const schema_name = PG_GETARG_CSTRING(2);
+	const char *const table_name = PG_GETARG_CSTRING(3);
+	Cache *const hcache = ts_hypertable_cache_pin();
+	Hypertable *const ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
+	Hypercube *hc;
+	const char *parse_err;
+	AclResult acl_result;
+
+	Assert(!PG_ARGISNULL(0));
+	Assert(!PG_ARGISNULL(1));
+	Assert(!PG_ARGISNULL(2));
+	Assert(!PG_ARGISNULL(3));
+	Assert(ht != NULL);
+
+	acl_result = pg_class_aclcheck(hypertable_relid, GetUserId(), ACL_INSERT);
+	if (acl_result != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("permission denied for table \"%s\"", get_rel_name(hypertable_relid)),
+				 errdetail("Insert privileges required on \"%s\" to create chunks.",
+						   get_rel_name(hypertable_relid))));
+
+	hc = hypercube_from_jsonb(slices, ht->space, &parse_err);
+
+	if (hc == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypercube for hypertable \"%s\"", get_rel_name(hypertable_relid)),
+				 errdetail("%s", parse_err)));
+
+	ts_chunk_create_only_table(ht, hc, schema_name, table_name);
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_BOOL(true);
+}
