@@ -83,6 +83,7 @@ CROSSMODULE_WRAPPER(data_node_detach);
 CROSSMODULE_WRAPPER(chunk_set_default_data_node);
 CROSSMODULE_WRAPPER(chunk_get_relstats);
 CROSSMODULE_WRAPPER(chunk_get_colstats);
+CROSSMODULE_WRAPPER(chunk_create_empty_table);
 
 CROSSMODULE_WRAPPER(timescaledb_fdw_handler);
 CROSSMODULE_WRAPPER(timescaledb_fdw_validator);
@@ -399,6 +400,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.func_call_on_data_nodes = func_call_on_data_nodes_default,
 	.chunk_get_relstats = error_no_default_fn_pg_community,
 	.chunk_get_colstats = error_no_default_fn_pg_community,
+	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats_default,
 };
