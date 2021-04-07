@@ -48,6 +48,32 @@ SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
 \set ON_ERROR_STOP 1
 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Test create_chunk_table is STRICT
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
+-- Test create_chunk_table for errors
+\set ON_ERROR_STOP 0
+-- Modified time constraint should fail with collision
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Missing dimension
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Extra dimension
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Bad dimension name
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Same dimension twice
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Bad bounds format
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Bad slices format
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Bad slices json
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+-- Valid chunk, but no permissions
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+\set ON_ERROR_STOP 1
+
 -- Test that granting insert on tables allow create_chunk to be
 -- called. This will also create a chunk that does not collide and has
 -- a custom schema and name.
@@ -230,3 +256,149 @@ SELECT * FROM delete_data_node('data_node_1', force => true);
 SELECT * FROM delete_data_node('data_node_2', force => true);
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;
+
+-- Test create_chunk_table to recreate the chunk table and show dimension slices
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+SELECT * FROM chunkapi ORDER BY time;
+
+SELECT chunk_schema AS "CHUNK_SCHEMA", chunk_name AS "CHUNK_NAME"
+FROM timescaledb_information.chunks c
+ORDER BY chunk_name DESC
+LIMIT 1 \gset
+
+SELECT slices AS "SLICES"
+FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
+
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
+
+SELECT drop_chunks('chunkapi','2018-01-10'::timestamp,'2017-12-23'::timestamp);
+
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
+
+SELECT count(*) FROM 
+   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
+
+-- Test that creat_chunk fails since chunk table already exists
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+\set ON_ERROR_STOP 1
+
+-- Test create_chunk_table on a hypertable where the chunk didn't exist before
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
+
+SELECT count(*) FROM 
+   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+-- Demonstrate that current settings for dimensions don't affect create_chunk_table
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2, '3d');
+
+SELECT count(*) FROM 
+   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
+
+SELECT count(*) FROM 
+   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+-- Test create_chunk_table if a colliding chunk exists
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
+
+INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+\set ON_ERROR_STOP 1
+
+-- Test create_chunk_table when a chunk exists in different space partition and thus doesn't collide
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
+
+INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 2, 23.4);
+
+SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+-- Test create_chunk_table when a chunk exists in different time partition and thus doesn't collide
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
+
+INSERT INTO chunkapi VALUES ('2018-02-01 05:00:00-8', 1, 23.4);
+
+SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+-- Test create_chunk_table with tablespaces
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+DROP TABLESPACE IF EXISTS tablespace1;
+DROP TABLESPACE IF EXISTS tablespace2;
+SET client_min_messages = NOTICE;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- Use the space partition to calculate the tablespace id to use
+
+DROP TABLE chunkapi;
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
+
+SELECT attach_tablespace('tablespace1', 'chunkapi');
+SELECT attach_tablespace('tablespace2', 'chunkapi');
+
+SELECT count(*) FROM 
+   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
+
+DROP TABLE chunkapi;
+
+-- Use the time partition to calculate the tablespace id to use
+
+CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
+SELECT * FROM create_hypertable('chunkapi', 'time');
+INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
+
+SELECT chunk_schema AS "CHUNK_SCHEMA", chunk_name AS "CHUNK_NAME"
+FROM timescaledb_information.chunks c
+ORDER BY chunk_name DESC
+LIMIT 1 \gset
+
+SELECT slices AS "SLICES"
+FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
+
+SELECT drop_chunks('chunkapi','2018-01-10'::timestamp,'2017-12-23'::timestamp);
+
+SELECT attach_tablespace('tablespace1', 'chunkapi');
+SELECT attach_tablespace('tablespace2', 'chunkapi');
+
+SELECT count(*) FROM 
+   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+
+SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
+
+DROP TABLE chunkapi;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+DROP TABLESPACE tablespace1;
+DROP TABLESPACE tablespace2;
+SET client_min_messages = NOTICE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
