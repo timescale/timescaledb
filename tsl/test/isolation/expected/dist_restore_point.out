@@ -323,8 +323,6 @@ debug_waitpoint_enable
 
                
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
-s2: NOTICE:  the number of partitions in dimension "device" was decreased to 3
-DETAIL:  To make efficient use of all attached data nodes, the number of space partitions was set to match the number of data nodes.
 step s2_del_dn: SELECT * FROM delete_data_node('data_node_4'); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
