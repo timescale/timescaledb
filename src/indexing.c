@@ -266,6 +266,39 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 	table_close(tblrel, AccessShareLock);
 }
 
+bool
+ts_relation_has_primary_or_unique_index(Relation htrel)
+{
+	List *indexoidlist = RelationGetIndexList(htrel);
+	ListCell *lc;
+	bool result = false;
+
+	if (htrel->rd_pkindex != InvalidOid)
+		return true;
+
+	foreach (lc, indexoidlist)
+	{
+		Oid indexoid = lfirst_oid(lc);
+		HeapTuple indexTuple;
+		Form_pg_index index;
+
+		indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
+		if (!HeapTupleIsValid(indexTuple)) /* should not happen */
+			elog(ERROR,
+				 "cache lookup failed for index %u in %s",
+				 indexoid,
+				 RelationGetRelationName(htrel));
+		index = (Form_pg_index) GETSTRUCT(indexTuple);
+		result = index->indisunique;
+		ReleaseSysCache(indexTuple);
+		if (result)
+			break;
+	}
+
+	list_free(indexoidlist);
+	return result;
+}
+
 /* create the index on the root table of a hypertable.
  * based on postgres CREATE INDEX
  * https://github.com/postgres/postgres/blob/ebfe20dc706bd3238a9bdf3b44cd8f82337e86a8/src/backend/tcop/utility.c#L1291-L1374
