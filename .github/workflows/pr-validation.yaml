@@ -35,7 +35,7 @@ jobs:
       # If this becomes more advanced, we might be better of using,
       # e.g., Perl.
       run: |
-        cat <<EOF | egrep -qsi '^disable-check:.*\<commit-count\>'
+        cat << "EOF" | egrep -qsi '^disable-check:.*\<commit-count\>'
         ${{ github.event.pull_request.body }}
         EOF
         if [[ $? -ne 0 ]]; then
