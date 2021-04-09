@@ -165,7 +165,7 @@ select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 ERROR:  chunk "_hyper_1_2_chunk" is already compressed
 --TEST2a try DML on a compressed chunk
 insert into foo values( 11 , 10 , 20, 120);
-ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
+ERROR:  insert into a compressed chunk that has primary or unique constraint is not supported
 update foo set b =20 where a = 10;
 ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
 delete from foo where a = 10;
@@ -208,7 +208,7 @@ ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compres
 insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b;
-ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
+ERROR:  insert with ON CONFLICT and RETURNING clause is not supported on compressed chunks
 --TEST2c Do DML directly on the chunk.
 insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
 ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
