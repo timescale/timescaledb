@@ -34,6 +34,13 @@ static CustomPathMethods chunk_append_path_methods = {
 	.PlanCustomPath = ts_chunk_append_plan_create,
 };
 
+bool
+ts_is_chunk_append_path(Path *path)
+{
+	return IsA(path, CustomPath) &&
+		   castNode(CustomPath, path)->methods == &chunk_append_path_methods;
+}
+
 static bool
 has_joins(FromExpr *jointree)
 {

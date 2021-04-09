@@ -570,6 +570,14 @@ ts_constraint_aware_append_possible(Path *path)
 	}
 	return false;
 }
+
+bool
+ts_is_constraint_aware_append_path(Path *path)
+{
+	return IsA(path, CustomPath) &&
+		   castNode(CustomPath, path)->methods == &constraint_aware_append_path_methods;
+}
+
 void
 _constraint_aware_append_init(void)
 {
