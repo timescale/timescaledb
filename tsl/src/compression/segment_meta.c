@@ -144,3 +144,11 @@ segment_meta_min_max_builder_empty(SegmentMetaMinMaxBuilder *builder)
 {
 	return builder->empty;
 }
+
+void
+segment_meta_min_max_builder_gettype_info(SegmentMetaMinMaxBuilder *builder, int16 *typ_len,
+										  bool *typ_val)
+{
+	*typ_len = builder->type_len;
+	*typ_val = builder->type_by_val;
+}
