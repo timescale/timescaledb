@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Bugfixes**
+* #3101 Use commit date in get_git_commit()
+
 ## 2.2.0 (2021-04-13)
 
 This release adds major new features since the 2.1.1 release.
