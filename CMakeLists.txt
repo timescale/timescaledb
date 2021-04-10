@@ -226,7 +226,7 @@ if(GIT_FOUND)
 
   # Fetch the date of the head commit
   execute_process(
-    COMMAND ${GIT_EXECUTABLE} log -1 --format=%aI
+    COMMAND ${GIT_EXECUTABLE} log -1 --format=%cI
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE EXT_GIT_COMMIT_TIME
     RESULT_VARIABLE _log_RESULT
