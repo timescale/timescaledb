@@ -922,14 +922,15 @@ WHERE CLAUSES
                One-Time Filter: false
 (6 rows)
 
--- no tuples matching does not use skipscan due to cost
+-- no tuples matching
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
-   ->  Index Scan using skip_scan_dev_idx on skip_scan (actual rows=0 loops=1)
-         Index Cond: (dev > 20)
-(3 rows)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=0 loops=1)
+         ->  Index Scan using skip_scan_dev_idx on skip_scan (actual rows=0 loops=1)
+               Index Cond: (dev > 20)
+(4 rows)
 
 -- multiple constraints in WHERE clause
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;
@@ -2978,22 +2979,26 @@ WHERE CLAUSES
                One-Time Filter: false
 (6 rows)
 
--- no tuples matching does not use skipscan due to cost
+-- no tuples matching
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Merge Append (actual rows=0 loops=1)
          Sort Key: _hyper_1_1_chunk.dev
-         ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=0 loops=1)
-               Index Cond: (dev > 20)
-         ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=0 loops=1)
-               Index Cond: (dev > 20)
-         ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=0 loops=1)
-               Index Cond: (dev > 20)
-         ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=0 loops=1)
-               Index Cond: (dev > 20)
-(11 rows)
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=0 loops=1)
+                     Index Cond: (dev > 20)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=0 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=0 loops=1)
+                     Index Cond: (dev > 20)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=0 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=0 loops=1)
+                     Index Cond: (dev > 20)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=0 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=0 loops=1)
+                     Index Cond: (dev > 20)
+(15 rows)
 
 -- multiple constraints in WHERE clause
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;

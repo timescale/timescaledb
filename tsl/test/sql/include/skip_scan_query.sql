@@ -146,7 +146,7 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
 -- always false expr similar to our initial skip qual
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > NULL;
--- no tuples matching does not use skipscan due to cost
+-- no tuples matching
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 20;
 -- multiple constraints in WHERE clause
 :PREFIX SELECT DISTINCT ON (dev) dev,time FROM :TABLE WHERE dev > 5 AND time = 100;

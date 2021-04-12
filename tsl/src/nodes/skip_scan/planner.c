@@ -358,9 +358,17 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 	 * ndistinct * startup_cost is to account for the rescans we have to do and since startup
 	 * cost for indexes does not include page access cost we add a fraction of the total cost
 	 * accounting for the number of rows we expect to fetch.
+	 * If the row estimate for the scan is 1 we assume that the estimate got clamped to 1
+	 * and no rows would be returned by this scan and this chunk will most likely be excluded
+	 * by runtime exclusion. Otherwise the cost for this path would be highly inflated due
+	 * to (ndistinct / rows) * total leading to SkipScan not being chosen for queries on
+	 * hypertables with a lot of excluded chunks.
 	 */
-	skip_scan_path->cpath.path.startup_cost = index_path->path.startup_cost;
-	skip_scan_path->cpath.path.total_cost = ndistinct * startup + (ndistinct / rows) * total;
+	skip_scan_path->cpath.path.startup_cost = startup;
+	if (rows > 1)
+		skip_scan_path->cpath.path.total_cost = ndistinct * startup + (ndistinct / rows) * total;
+	else
+		skip_scan_path->cpath.path.total_cost = startup;
 
 	/* While add_path may pfree paths with higher costs
 	 * it will never free IndexPaths and only ever do a shallow
