@@ -1404,13 +1404,13 @@ typedef struct ColStatContext
 } ColStatContext;
 
 static void *
-chunk_api_generate_colstats_context(List *oids, Hypertable *ht)
+chunk_api_generate_colstats_context(List *oids, Oid ht_relid)
 {
 	ColStatContext *ctx = palloc0(sizeof(ColStatContext));
 
 	ctx->chunk_oids = list_copy(oids);
 	ctx->col_id = 1;
-	ctx->nattrs = get_relnatts(ht->main_table_relid);
+	ctx->nattrs = get_relnatts(ht_relid);
 
 	return ctx;
 }
@@ -1543,12 +1543,12 @@ chunk_api_get_chunk_stats(FunctionCallInfo fcinfo, bool col_stats)
 		Cache *hcache;
 		Hypertable *ht;
 		List *chunk_oids = NIL;
+		Oid ht_relid = InvalidOid;
 
 		if (!OidIsValid(relid))
 			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid table")));
 
-		hcache = ts_hypertable_cache_pin();
-		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+		ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
 		if (NULL == ht)
 		{
@@ -1579,6 +1579,8 @@ chunk_api_get_chunk_stats(FunctionCallInfo fcinfo, bool col_stats)
 			chunk_oids = find_inheritance_children(relid, NoLock);
 		}
 
+		if (ht)
+			ht_relid = ht->main_table_relid;
 		ts_cache_release(hcache);
 
 		funcctx = SRF_FIRSTCALL_INIT();
@@ -1593,7 +1595,7 @@ chunk_api_get_chunk_stats(FunctionCallInfo fcinfo, bool col_stats)
 		/* Save the chunk oid list on the multi-call memory context so that it
 		 * survives across multiple calls to this function (until SRF is
 		 * done). */
-		funcctx->user_fctx = col_stats ? chunk_api_generate_colstats_context(chunk_oids, ht) :
+		funcctx->user_fctx = col_stats ? chunk_api_generate_colstats_context(chunk_oids, ht_relid) :
 										 chunk_api_generate_relstats_context(chunk_oids);
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 		MemoryContextSwitchTo(oldcontext);
