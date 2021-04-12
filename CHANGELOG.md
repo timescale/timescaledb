@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #3101 Use commit date in get_git_commit()
+* #3104 Fix use after free in add_reorder_policy
 
 ## 2.2.0 (2021-04-13)
 
