@@ -510,3 +510,12 @@ hypertable_id|attname |compression_algorithm_id|segmentby_column_index|orderby_c
  
 (1 row)
 
+-- insert data into compressed chunk
+INSERT INTO compressed 
+SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
+SELECT * from compressed where new_coli = 3;
+             time             | device | temp | new_coli | new_colv 
+------------------------------+--------+------+----------+----------
+ Thu Aug 01 01:00:00 2019 PDT |    300 |  300 |        3 | newcolv
+(1 row)
+

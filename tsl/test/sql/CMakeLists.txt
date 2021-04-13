@@ -2,7 +2,6 @@ set(TEST_FILES
   bgw_custom.sql
   bgw_policy.sql
   compression_bgw.sql
-  compression_insert.sql
   compression_permissions.sql
   continuous_aggs_errors.sql
   continuous_aggs_invalidation.sql
@@ -67,6 +66,7 @@ set(TEST_FILES_DEBUG
 
 set(TEST_TEMPLATES
   compression_qualpushdown.sql.in
+  compression_insert.sql.in
   continuous_aggs_union_view.sql.in
   move.sql.in
   plan_skip_scan.sql.in

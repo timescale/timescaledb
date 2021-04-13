@@ -589,7 +589,7 @@ extern ChunkInsertState *
 ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
-	Relation rel, parent_rel, compress_rel;
+	Relation rel, parent_rel, compress_rel = NULL;
 	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
@@ -686,6 +686,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
 		/* this is true as compressed chunks are not created on access node */
 		Assert(chunk->relkind != RELKIND_FOREIGN_TABLE);
+		Assert(compress_rel != NULL);
 		state->compress_rel = compress_rel;
 		Assert(ts_cm_functions->compress_row_init != NULL);
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
