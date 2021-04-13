@@ -8,8 +8,9 @@
 #include <catalog/pg_type.h>
 #include <common/base64.h>
 #include <funcapi.h>
-#include <lib/stringinfo.h>
 #include <libpq/pqformat.h>
+#include <lib/stringinfo.h>
+#include <utils/builtins.h>
 #include <utils/memutils.h>
 
 #include "compat.h"
@@ -325,7 +326,9 @@ gorilla_compressor_for_type(Oid element_type)
 			*compressor = (ExtendedCompressor){ .base = gorilla_uint64_compressor };
 			return &compressor->base;
 		default:
-			elog(ERROR, "invalid type for Gorilla compression %d", element_type);
+			elog(ERROR,
+				 "invalid type for Gorilla compression \"%s\"",
+				 format_type_be(element_type));
 	}
 	pg_unreachable();
 }

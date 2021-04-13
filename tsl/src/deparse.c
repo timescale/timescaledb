@@ -331,7 +331,7 @@ deparse_create_table_info(Oid relid)
 	Relation rel = table_open(relid, AccessShareLock);
 
 	if (rel == NULL)
-		ereport(ERROR, (errmsg("relation with id %d not found", relid)));
+		ereport(ERROR, (errmsg("relation with id %u not found", relid)));
 
 	validate_relation(rel);
 

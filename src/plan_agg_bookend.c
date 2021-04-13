@@ -52,7 +52,9 @@
 #include <parser/parse_clause.h>
 #include <parser/parse_func.h>
 #include <rewrite/rewriteManip.h>
+#include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/regproc.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
@@ -484,9 +486,9 @@ find_first_last_aggs_walker(Node *node, List **context)
 			get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy->strategy);
 		if (aggsortop == InvalidOid)
 			elog(ERROR,
-				 "Can't resolve sort operator oid for function oid: %d and type: %d",
-				 aggref->aggfnoid,
-				 sort_oid);
+				 "Cannot resolve sort operator for function \"%s\" and type \"%s\"",
+				 format_procedure(aggref->aggfnoid),
+				 format_type_be(sort_oid));
 
 		/* Used in projection */
 		value = (TargetEntry *) linitial(aggref->args);

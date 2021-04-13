@@ -120,8 +120,8 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	deserialize_test_parameters(MyBgworkerEntry->bgw_extra, &ttl, &user_oid);
 
-	elog(WARNING, "scheduler user id %d", user_oid);
-	elog(WARNING, "running a test in the background: db=%d ttl=%d", db_oid, ttl);
+	elog(WARNING, "scheduler user id %u", user_oid);
+	elog(WARNING, "running a test in the background: db=%u ttl=%d", db_oid, ttl);
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, user_oid, 0);
 

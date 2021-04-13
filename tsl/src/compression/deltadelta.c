@@ -235,7 +235,9 @@ delta_delta_compressor_for_type(Oid element_type)
 			*compressor = (ExtendedCompressor){ .base = deltadelta_timestamptz_compressor };
 			return &compressor->base;
 		default:
-			elog(ERROR, "invalid type for delta-delta compressor %d", element_type);
+			elog(ERROR,
+				 "invalid type for delta-delta compressor \"%s\"",
+				 format_type_be(element_type));
 	}
 
 	pg_unreachable();
@@ -506,7 +508,9 @@ convert_from_internal(DecompressResultInternal res_internal, Oid element_type)
 				.val = TimestampGetDatum(res_internal.val),
 			};
 		default:
-			elog(ERROR, "invalid type requested from deltadelta decompression %d", element_type);
+			elog(ERROR,
+				 "invalid type requested from deltadelta decompression \"%s\"",
+				 format_type_be(element_type));
 	}
 
 	pg_unreachable();

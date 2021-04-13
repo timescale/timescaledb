@@ -93,7 +93,7 @@ job_add(PG_FUNCTION_ARGS)
 	if (func_name == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("function or procedure with OID %d does not exist", proc)));
+				 errmsg("function or procedure with OID %u does not exist", proc)));
 
 	if (pg_proc_aclcheck(proc, owner, ACL_EXECUTE) != ACLCHECK_OK)
 		ereport(ERROR,
