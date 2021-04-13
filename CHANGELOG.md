@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #3113 Pushdown "SELECT DISTINCT" in multi-node to allow use of Skip Scan
+
 **Bugfixes**
 * #3101 Use commit date in get_git_commit()
 * #3104 Fix use after free in add_reorder_policy
