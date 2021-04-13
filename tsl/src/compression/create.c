@@ -451,7 +451,7 @@ create_compressed_table_indexes(Oid compresstable_relid, CompressColInfo *compre
 		index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
 
 		if (!HeapTupleIsValid(index_tuple))
-			elog(ERROR, "cache lookup failed for index relid %d", index_addr.objectId);
+			elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
 		index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
 		elog(DEBUG1,
 			 "adding index %s ON %s.%s USING BTREE(%s, %s)",

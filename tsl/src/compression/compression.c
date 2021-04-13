@@ -453,7 +453,10 @@ compress_chunk_populate_sort_info_for_column(Oid table, const ColumnCompressionI
 
 	tp = SearchSysCacheAttName(table, NameStr(column->attname));
 	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "table %d does not have column \"%s\"", table, NameStr(column->attname));
+		elog(ERROR,
+			 "table \"%s\" does not have column \"%s\"",
+			 get_rel_name(table),
+			 NameStr(column->attname));
 
 	att_tup = (Form_pg_attribute) GETSTRUCT(tp);
 	/* Other valdation checks beyond just existence of a valid comparison operator could be useful
@@ -1488,9 +1491,8 @@ update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("mismatched chunks for relstats update %d %d",
-						uncompressed_relid,
-						compressed_relid)));
+				 errmsg("mismatched chunks for relstats update on compressed chunk \"%s\"",
+						get_rel_name(uncompressed_relid))));
 	}
 
 	capture_pgclass_stats(uncompressed_relid, &uncomp_pages, &uncomp_visible, &uncomp_tuples);
