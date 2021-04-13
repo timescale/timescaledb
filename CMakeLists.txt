@@ -61,7 +61,7 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel" FORCE)
 endif ()
 
-set(SUPPORTED_BUILD_TYPES Debug Release RelWithDebugInfo MinSizeRel)
+set(SUPPORTED_BUILD_TYPES Debug Release RelWithDebInfo MinSizeRel)
 if (NOT CMAKE_BUILD_TYPE IN_LIST SUPPORTED_BUILD_TYPES)
   message(FATAL_ERROR "Bad CMAKE_BUILD_TYPE. Expected one of ${SUPPORTED_BUILD_TYPES}")
 endif()
