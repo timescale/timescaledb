@@ -1,0 +1,43 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\set TEST_BASE_NAME dist_distinct
+-- Run
+SELECT format('include/%s_run.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+       format('%s/shared/results/%s_results_reference.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_REFERENCE",
+       format('%s/shared/results/%s_results_distributed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_DIST"
+\gset
+SELECT format('\! diff -u --label "Distributed results" --label "Local results" %s %s', :'TEST_RESULTS_DIST', :'TEST_RESULTS_REFERENCE') AS "DIFF_CMD_DIST"
+\gset
+
+\set PREFIX 'EXPLAIN (verbose, costs off)'
+\set ORDER_BY_1 'ORDER BY 1'
+\set ORDER_BY_1_2 'ORDER BY 1,2'
+
+\set ECHO queries 
+-- Get EXPLAIN output for the multi-node environment
+\set TABLE_NAME 'metrics_dist'                                                       
+\ir :TEST_QUERY_NAME 
+
+-- get results for all the queries                                              
+-- run queries on single node hypertable and store result                      
+-- then run queries on multinode hypertable and store result
+\set PREFIX ''                                                                  
+\set ECHO none                                                                  
+SET client_min_messages TO error; 
+
+-- run queries on single node hypertable and store reference result
+\set TABLE_NAME 'metrics'
+\o :TEST_RESULTS_REFERENCE
+\ir :TEST_QUERY_NAME
+
+-- run queries on multinode hypertable and store result
+\set TABLE_NAME 'metrics_dist'
+\o :TEST_RESULTS_DIST
+\ir :TEST_QUERY_NAME
+\o
+\set ECHO all                                                                  
+
+-- diff distributed and reference results (should be exactly same)
+:DIFF_CMD_DIST

@@ -70,7 +70,7 @@ extern int64 ts_date_trunc_interval_period_approx(text *units);
  */
 extern TSDLLEXPORT int64 ts_get_interval_period_approx(Interval *interval);
 
-extern Oid ts_inheritance_parent_relid(Oid relid);
+extern TSDLLEXPORT Oid ts_inheritance_parent_relid(Oid relid);
 
 extern Oid ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype,
 								   proc_filter filter, void *filter_arg);
