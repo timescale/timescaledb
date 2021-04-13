@@ -835,6 +835,123 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 }
 
 /*
+ * Construct "SELECT DISTINCT target_list" or "SELECT DISTINCT ON (col1, col..)
+ * target_list" statement to push down the DISTINCT clause to the remote side.
+ *
+ * We only allow references to basic "Vars" or constants in the DISTINCT exprs
+ *
+ * So, "SELECT DISTINCT col1" is fine but "SELECT DISTINCT 2*col1" is not.
+ *
+ * "SELECT DISTINCT col1, 'const1', NULL, col2" which is a mix of column
+ * references and constants is also supported. Everything else is not supported.
+ *
+ * It should be noted that "SELECT DISTINCT col1, col2" will return the same
+ * set of values as "SELECT DISTINCT col2, col1". So nothing additional needs
+ * to be done here as the upper projection will take care of any ordering
+ * between the attributes.
+ *
+ * We also explicitly deparse the distinctClause entries only for the
+ * "DISTINCT ON (col..)" case. For regular DISTINCT the targetlist
+ * deparsing which happens later is good enough
+ */
+static void
+deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
+{
+	PlannerInfo *root = context->root;
+	Query *query = root->parse;
+	ListCell *l, *dc_l;
+	bool first = true;
+	Index varno;
+	RangeTblEntry *dc_rte;
+	RangeTblEntry *rte;
+
+	if (query->distinctClause == NIL)
+		return;
+
+	foreach (l, query->distinctClause)
+	{
+		SortGroupClause *sgc = lfirst_node(SortGroupClause, l);
+		TargetEntry *tle = get_sortgroupclause_tle(sgc, query->targetList);
+
+		/*
+		 * We only send basic attributes to the remote side. So we can
+		 * pushdown DISTINCT only if the tle is a simple one
+		 * referring to the "Var" directly. Also all varno entries
+		 * need to point to the same relid.
+		 *
+		 * Also handle "DISTINCT col1, CONST1, NULL" types cases
+		 */
+		if (IsA(tle->expr, Var))
+		{
+			Var *var = castNode(Var, tle->expr);
+
+			if (first)
+			{
+				varno = var->varno;
+				first = false;
+			}
+
+			if (varno != var->varno)
+				return;
+		}
+		/* We only allow constants apart from vars, but we ignore them */
+		else if (!IsA(tle->expr, Const))
+			return;
+	}
+
+	/*
+	 * If all distinctClause entries point to our rte->relid then it's
+	 * safe to push down to the datanode
+	 *
+	 * The only other case we allow is if the dc_rte->relid has the
+	 * rte->relid as a child
+	 */
+	dc_rte = planner_rt_fetch(varno, root);
+	rte = planner_rt_fetch(context->foreignrel->relid, root);
+
+	if (dc_rte->relid != rte->relid && ts_inheritance_parent_relid(rte->relid) != dc_rte->relid)
+		return;
+
+	/*
+	 * Ok to pushdown!
+	 *
+	 * The distinctClause entries will be referring to the
+	 * varno pulled above, so adjust the scanrel temporarily
+	 * for the deparsing of the distint clauses
+	 *
+	 * Note that we deparse the targetlist below only for the
+	 * "DISTINCT ON" case. For DISTINCT, the regular targetlist
+	 * deparsing later works
+	 */
+	if (query->hasDistinctOn)
+	{
+		char *sep = "";
+		RelOptInfo *scanrel = context->scanrel;
+
+		Assert(varno > 0 && varno < root->simple_rel_array_size);
+		context->scanrel = root->simple_rel_array[varno];
+
+		appendStringInfoString(buf, "DISTINCT ON (");
+
+		foreach (dc_l, query->distinctClause)
+		{
+			SortGroupClause *srt = lfirst_node(SortGroupClause, dc_l);
+
+			appendStringInfoString(buf, sep);
+			deparseSortGroupClause(srt->tleSortGroupRef, query->targetList, false, context);
+			sep = ", ";
+		}
+
+		appendStringInfoString(buf, ") ");
+
+		/* reset scanrel to the earlier value now */
+		context->scanrel = scanrel;
+	}
+	else
+		appendStringInfoString(buf, "DISTINCT ");
+}
+
+/*
  * Construct a simple SELECT statement that retrieves desired columns
  * of the specified foreign table, and append it to "buf".  The output
  * contains just "SELECT ... ".
@@ -890,6 +1007,9 @@ deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_
 		 * can use NoLock here.
 		 */
 		Relation rel = table_open(rte->relid, NoLock);
+
+		if (root->parse->distinctClause != NIL)
+			deparseDistinctClause(buf, context);
 
 		deparseTargetList(buf,
 						  rte,

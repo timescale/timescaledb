@@ -930,8 +930,8 @@ SELECT DISTINCT device, time
 FROM hyper
 
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                           QUERY PLAN                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -944,17 +944,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -965,8 +965,8 @@ SELECT DISTINCT ON (device) device, time
 FROM hyper
 
 LIMIT 10
-                                                                                              QUERY PLAN                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                     QUERY PLAN                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -979,17 +979,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
 (23 rows)
 
 
@@ -1924,8 +1924,8 @@ SELECT DISTINCT device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                           QUERY PLAN                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -1938,17 +1938,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -1959,8 +1959,8 @@ SELECT DISTINCT ON (device) device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -1973,17 +1973,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -2670,8 +2670,8 @@ SELECT DISTINCT device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                           QUERY PLAN                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -2684,17 +2684,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -2705,8 +2705,8 @@ SELECT DISTINCT ON (device) device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -2719,17 +2719,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -3641,8 +3641,8 @@ SELECT DISTINCT device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                           QUERY PLAN                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -3655,17 +3655,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -3676,8 +3676,8 @@ SELECT DISTINCT ON (device) device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -3690,17 +3690,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -4657,8 +4657,8 @@ SELECT DISTINCT device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                           QUERY PLAN                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -4671,17 +4671,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -4692,8 +4692,8 @@ SELECT DISTINCT ON (device) device, time
 FROM hyper
 ORDER BY 1,2
 LIMIT 10
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper.device, hyper."time"
    ->  Unique
@@ -4706,17 +4706,17 @@ LIMIT 10
                            Output: hyper_1.device, hyper_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                            Output: hyper_2.device, hyper_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                            Output: hyper_3.device, hyper_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -5664,8 +5664,8 @@ SELECT DISTINCT device, time
 FROM hyper1d
 
 LIMIT 10
-                                                                                               QUERY PLAN                                                                                                
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper1d.device, hyper1d."time"
    ->  Unique
@@ -5678,17 +5678,17 @@ LIMIT 10
                            Output: hyper1d_1.device, hyper1d_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_2_19_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper1d hyper1d_2
                            Output: hyper1d_2.device, hyper1d_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_2_20_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper1d hyper1d_3
                            Output: hyper1d_3.device, hyper1d_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_2_21_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5]) ORDER BY device ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 
@@ -5699,8 +5699,8 @@ SELECT DISTINCT ON (device) device, time
 FROM hyper1d
 
 LIMIT 10
-                                                                                    QUERY PLAN                                                                                    
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                              QUERY PLAN                                                                                               
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: hyper1d.device, hyper1d."time"
    ->  Unique
@@ -5713,17 +5713,17 @@ LIMIT 10
                            Output: hyper1d_1.device, hyper1d_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_2_19_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper1d hyper1d_2
                            Output: hyper1d_2.device, hyper1d_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_2_20_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper1d hyper1d_3
                            Output: hyper1d_3.device, hyper1d_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_2_21_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5]) ORDER BY device ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device) "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5]) ORDER BY device ASC NULLS LAST
 (23 rows)
 
 

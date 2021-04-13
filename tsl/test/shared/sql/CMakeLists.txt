@@ -3,6 +3,7 @@ set(TEST_FILES_SHARED
   decompress_placeholdervar.sql
   dist_gapfill.sql
   dist_insert.sql
+  dist_distinct.sql
 )
 
 set(TEST_TEMPLATES_SHARED

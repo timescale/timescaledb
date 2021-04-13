@@ -2353,8 +2353,8 @@ WITH devices AS (
      SELECT DISTINCT device FROM disttable_replicated ORDER BY device
 )
 UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM devices LIMIT 1);
-                                                                                                  QUERY PLAN                                                                                                   
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                       QUERY PLAN                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Update on public.disttable_replicated (actual rows=0 loops=1)
    Update on public.disttable_replicated
    Foreign Update on _timescaledb_internal._dist_hyper_6_12_chunk
@@ -2382,17 +2382,17 @@ UPDATE disttable_replicated SET device = 2 WHERE device = (SELECT device FROM de
                                    Output: disttable_replicated_2.device
                                    Data node: db_dist_hypertable_1
                                    Chunks: _dist_hyper_6_12_chunk, _dist_hyper_6_15_chunk
-                                   Remote SQL: SELECT device FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) ORDER BY device ASC NULLS LAST
+                                   Remote SQL: SELECT DISTINCT device FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) ORDER BY device ASC NULLS LAST
                              ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_3 (actual rows=1 loops=1)
                                    Output: disttable_replicated_3.device
                                    Data node: db_dist_hypertable_2
                                    Chunks: _dist_hyper_6_13_chunk, _dist_hyper_6_16_chunk
-                                   Remote SQL: SELECT device FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) ORDER BY device ASC NULLS LAST
+                                   Remote SQL: SELECT DISTINCT device FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) ORDER BY device ASC NULLS LAST
                              ->  Custom Scan (DataNodeScan) on public.disttable_replicated disttable_replicated_4 (actual rows=1 loops=1)
                                    Output: disttable_replicated_4.device
                                    Data node: db_dist_hypertable_3
                                    Chunks: _dist_hyper_6_14_chunk, _dist_hyper_6_17_chunk
-                                   Remote SQL: SELECT device FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) ORDER BY device ASC NULLS LAST
+                                   Remote SQL: SELECT DISTINCT device FROM public.disttable_replicated WHERE _timescaledb_internal.chunks_in(public.disttable_replicated.*, ARRAY[6, 8]) ORDER BY device ASC NULLS LAST
    ->  Seq Scan on public.disttable_replicated (actual rows=0 loops=1)
          Output: disttable_replicated."time", 2, disttable_replicated.temp, disttable_replicated."Color", disttable_replicated.ctid
          Filter: (disttable_replicated.device = $0)
