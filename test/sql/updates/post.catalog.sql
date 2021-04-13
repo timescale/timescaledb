@@ -10,10 +10,21 @@
 \d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
 
-\z _timescaledb_cache.*
-\z _timescaledb_catalog.*
-\z _timescaledb_config.*
-\z _timescaledb_internal.*
+SELECT nspname AS Schema,
+       relname AS Name,
+       unnest(relacl)::text as ACL
+FROM pg_class JOIN pg_namespace ns ON relnamespace = ns.oid
+WHERE nspname IN ('_timescaledb_catalog', '_timescaledb_config')
+ORDER BY Schema, Name, ACL;
+
+SELECT nspname AS schema,
+       relname AS name,
+       unnest(initprivs)::text AS initpriv
+FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
+            LEFT JOIN pg_init_privs ON objoid = cl.oid
+WHERE classoid = 'pg_class'::regclass
+  AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
+ORDER BY schema, name, initpriv;
 
 \di _timescaledb_catalog.*
 \ds+ _timescaledb_catalog.*;

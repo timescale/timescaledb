@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+\ir setup.catalog.sql
 \ir setup.bigint.sql
 \ir setup.constraints.sql
 \ir setup.insert_bigint.v2.sql
