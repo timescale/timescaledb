@@ -176,3 +176,8 @@ SELECT * FROM test.remote_exec( NULL,
        WHERE attname = 'device' OR attname = 'new_coli'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
+
+-- insert data into compressed chunk
+INSERT INTO compressed 
+SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
+SELECT * from compressed where new_coli = 3;
