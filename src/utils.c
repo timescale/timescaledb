@@ -4,24 +4,25 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <fmgr.h>
-#include <funcapi.h>
 #include <access/genam.h>
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/htup.h>
-#include <access/xact.h>
 #include <access/reloptions.h>
+#include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
 #include <catalog/pg_type.h>
+#include <fmgr.h>
+#include <funcapi.h>
 #include <nodes/makefuncs.h>
-#include <parser/parse_func.h>
 #include <parser/parse_coerce.h>
+#include <parser/parse_func.h>
 #include <parser/scansup.h>
+#include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
@@ -126,7 +127,7 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		if (ts_type_is_int8_binary_compatible(type_oid))
 			return DatumGetInt64(time_val);
 
-		elog(ERROR, "unknown time type OID %d", type_oid);
+		elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 	}
 
 	if (IS_INTEGER_TYPE(type_oid))
@@ -171,7 +172,7 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 
 			return DatumGetInt64(res);
 		default:
-			elog(ERROR, "unknown time type OID %d", type_oid);
+			elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 			return -1;
 	}
 }
@@ -197,7 +198,7 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 			return interval->time + (interval->day * USECS_PER_DAY);
 		}
 		default:
-			elog(ERROR, "unknown interval type OID %d", type_oid);
+			elog(ERROR, "unknown interval type \"%s\"", format_type_be(type_oid));
 			return -1;
 	}
 }
@@ -214,7 +215,7 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 		case INT2OID:
 			return (int64) DatumGetInt16(time_val);
 		default:
-			elog(ERROR, "unknown interval type OID %d", type_oid);
+			elog(ERROR, "unknown interval type \"%s\"", format_type_be(type_oid));
 			return -1;
 	}
 }
@@ -335,7 +336,9 @@ ts_internal_to_time_value(int64 value, Oid type)
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
-			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+			elog(ERROR,
+				 "unknown time type \"%s\" in ts_internal_to_time_value",
+				 format_type_be(type));
 			pg_unreachable();
 	}
 }
@@ -377,7 +380,9 @@ ts_internal_to_interval_value(int64 value, Oid type)
 		case INTERVALOID:
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_interval, Int64GetDatum(value));
 		default:
-			elog(ERROR, "unknown time type OID %d in ts_internal_to_interval_value", type);
+			elog(ERROR,
+				 "unknown time type \"%s\" in ts_internal_to_interval_value",
+				 format_type_be(type));
 			pg_unreachable();
 	}
 }
@@ -394,7 +399,9 @@ ts_integer_to_internal_value(int64 value, Oid type)
 		case INT8OID:
 			return Int64GetDatum(value);
 		default:
-			elog(ERROR, "unknown time type OID %d in ts_internal_to_time_value", type);
+			elog(ERROR,
+				 "unknown time type \"%s\" in ts_internal_to_time_value",
+				 format_type_be(type));
 			pg_unreachable();
 	}
 }
@@ -749,7 +756,7 @@ ts_has_row_security(Oid relid)
 	/* Fetch relation's relrowsecurity and relforcerowsecurity flags */
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relid %d", relid);
+		elog(ERROR, "cache lookup failed for relid %u", relid);
 	classform = (Form_pg_class) GETSTRUCT(tuple);
 	relrowsecurity = classform->relrowsecurity;
 	relforcerowsecurity = classform->relforcerowsecurity;

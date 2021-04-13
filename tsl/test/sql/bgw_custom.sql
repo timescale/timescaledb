@@ -36,6 +36,8 @@ $$;
 -- test bad input
 SELECT add_job(NULL, '1h');
 SELECT add_job(0, '1h');
+-- this will return an error about Oid 4294967295
+-- while regproc is unsigned int postgres has an implicit cast from int to regproc
 SELECT add_job(-1, '1h');
 SELECT add_job('invalid_func', '1h');
 SELECT add_job('custom_func', NULL);
