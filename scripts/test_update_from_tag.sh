@@ -16,7 +16,7 @@ UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
-DO_CLEANUP=true
+DO_CLEANUP=${DO_CLEANUP:-true}
 PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v TEST_REPAIR=${TEST_REPAIR} -v WITH_SUPERUSER=${WITH_SUPERUSER}"
 
 # PID of the current shell
@@ -30,18 +30,11 @@ CONTAINER_CLEAN_RERUN=timescaledb-clean-rerun-${PID}
 
 export PG_VERSION
 
-while getopts "d" opt;
-do
-    case $opt in
-        d)
-            DO_CLEANUP=false
-            echo "!!Debug mode: Containers and temporary directory will be left on disk"
-            echo
-            ;;
-    esac
-done
-
-shift $((OPTIND-1))
+if [[ "$DO_CLEANUP" = "false" ]]; then
+    echo "!!Debug mode: Containers and temporary directory will be left on disk"
+else
+    echo "!!Containers and temporary directory will be cleaned up"
+fi
 
 trap cleanup EXIT
 

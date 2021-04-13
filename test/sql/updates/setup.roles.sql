@@ -3,3 +3,4 @@
 -- LICENSE-APACHE for a copy of the license.
 
 CREATE ROLE cagg_user;
+CREATE USER tsdbadmin;
