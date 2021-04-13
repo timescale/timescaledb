@@ -13,6 +13,7 @@
 
 #include "chunk.h"
 #include "cache.h"
+#include "cross_module_fn.h"
 
 typedef struct ChunkInsertState
 {
@@ -48,12 +49,18 @@ typedef struct ChunkInsertState
 
 	/* Slot for inserted/new tuples going into the chunk */
 	TupleTableSlot *slot;
+	TupleTableSlot *compress_slot;
 	/* Map for converting tuple from hypertable (root table) format to chunk format */
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
 	EState *estate;
 	List *server_id_list; /* foreign server ids of data nodes used for remote inserts */
 	Oid user_id;
+
+	/* for tracking compressed chunks */
+	Relation compress_rel;
+	ResultRelInfo *orig_result_relation_info;
+	CompressSingleRowState *compress_state;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

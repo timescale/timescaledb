@@ -21,4 +21,6 @@ Datum segment_meta_min_max_builder_max(SegmentMetaMinMaxBuilder *builder);
 bool segment_meta_min_max_builder_empty(SegmentMetaMinMaxBuilder *builder);
 
 void segment_meta_min_max_builder_reset(SegmentMetaMinMaxBuilder *builder);
+void segment_meta_min_max_builder_gettype_info(SegmentMetaMinMaxBuilder *builder, int16 *typ_len,
+											   bool *typ_val);
 #endif

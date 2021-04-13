@@ -1608,44 +1608,51 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
 		Compressor *compressor = row_compressor->per_column[col].compressor;
-		int in_attrno = col;
+		int in_colno = col;
 
-		int16 out_attrno = row_compressor->uncompressed_col_to_compressed_col[col];
+		int16 out_colno = row_compressor->uncompressed_col_to_compressed_col[col];
 		/* if there is no compressor, this must be a segmenter */
 		if (compressor != NULL)
 		{
 			void *compressed_data;
 			compressed_data = compressor->finish(compressor);
-			out_isnull[out_attrno] = (compressed_data == NULL);
+			out_isnull[out_colno] = (compressed_data == NULL);
 			if (compressed_data)
-				out_values[out_attrno] = PointerGetDatum(compressed_data);
+				out_values[out_colno] = PointerGetDatum(compressed_data);
 			if (column->min_max_metadata_builder != NULL)
 			{
-				// should this be copied directly from inslot???
-				out_isnull[column->min_metadata_attr_offset] = false;
-				out_isnull[column->max_metadata_attr_offset] = false;
-				out_values[column->min_metadata_attr_offset] = invalues[in_attrno];
-				out_values[column->max_metadata_attr_offset] = invalues[in_attrno];
-			}
-			else
-			{
-				out_isnull[column->min_metadata_attr_offset] = true;
-				out_isnull[column->max_metadata_attr_offset] = true;
+				if (compressed_data)
+				{
+					/* we can copy directly since we have only 1 row. */
+					out_isnull[column->min_metadata_attr_offset] = false;
+					out_isnull[column->max_metadata_attr_offset] = false;
+					out_values[column->min_metadata_attr_offset] = invalues[in_colno];
+					out_values[column->max_metadata_attr_offset] = invalues[in_colno];
+				}
+				else
+				{
+					out_isnull[column->min_metadata_attr_offset] = true;
+					out_isnull[column->max_metadata_attr_offset] = true;
+				}
 			}
 		}
 		/* if there is no compressor, this must be a segmenter */
 		else if (column->segment_info != NULL)
 		{
-			out_isnull[out_attrno] = column->segment_info->is_null;
+			out_isnull[out_colno] = column->segment_info->is_null;
 			if (column->segment_info->is_null)
-				out_values[out_attrno] = 0;
+				out_values[out_colno] = 0;
 			else
-				out_values[out_attrno] = datumCopy(invalues[in_attrno],
-												   column->segment_info->typ_by_val,
-												   column->segment_info->typlen);
+				out_values[out_colno] = invalues[in_colno];
 		}
 		else
-			elog(ERRCODE_INTERNAL_ERROR, "unexpected state for column compressor");
+		{
+			/* we have a 1-1 column mapping from uncompressed -> compressed chunk.
+			 * However, some columns could have been dropped from the uncompressed
+			 *chunk before the compressed one is created.
+			 */
+			Assert(out_colno == 0);
+		}
 	}
 
 	/* fill in additional meta data info */
