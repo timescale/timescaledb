@@ -8,6 +8,7 @@
 #include <utils/lsyscache.h>
 #include <parser/parsetree.h>
 #include <utils/array.h>
+#include <utils/builtins.h>
 
 #include "compat.h"
 #if PG12_LT
@@ -442,7 +443,9 @@ dimension_values_create_from_array(Const *c, bool user_or)
 	/* it's an array type, lets get the base element type */
 	base_el_type = get_element_type(c->consttype);
 	if (base_el_type == InvalidOid)
-		elog(ERROR, "Couldn't get base element type from array type: %d", c->consttype);
+		elog(ERROR,
+			 "invalid base element type for array type: \"%s\"",
+			 format_type_be(c->consttype));
 
 	return dimension_values_create(values, base_el_type, user_or);
 }

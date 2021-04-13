@@ -5,11 +5,12 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
-#include <utils/timestamp.h>
-#include <utils/datetime.h>
-#include <utils/date.h>
-#include <utils/fmgrprotos.h>
 #include <fmgr.h>
+#include <utils/builtins.h>
+#include <utils/date.h>
+#include <utils/datetime.h>
+#include <utils/fmgrprotos.h>
+#include <utils/timestamp.h>
 
 #include "utils.h"
 #include "time_bucket.h"
@@ -283,7 +284,7 @@ ts_time_bucket_by_type(int64 interval, int64 timestamp, Oid timestamp_type)
 			bucket_function = ts_date_bucket;
 			break;
 		default:
-			elog(ERROR, "invalid time_bucket Oid %d", timestamp_type);
+			elog(ERROR, "invalid time_bucket type \"%s\"", format_type_be(timestamp_type));
 	}
 
 	time_bucketed =

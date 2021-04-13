@@ -428,7 +428,7 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
 		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
 
 		if (!HeapTupleIsValid(indxtuple))
-			elog(ERROR, "cache lookup failed for index relid %d", indxaddr.objectId);
+			elog(ERROR, "cache lookup failed for index relid %u", indxaddr.objectId);
 		indxname = ((Form_pg_class) GETSTRUCT(indxtuple))->relname;
 		elog(DEBUG1,
 			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
