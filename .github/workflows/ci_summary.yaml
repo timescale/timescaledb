@@ -1,0 +1,23 @@
+name: CI Summary
+on:
+  schedule:
+    # run daily 8:00 CET on master branch
+    - cron: '0 7 * * *'
+jobs:
+  ci_summary:
+    if: github.repository == 'timescale/timescaledb'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: "Build message"
+      env:
+        SLACK_CHANNEL: "CEKV5LMK3"
+      run: python scripts/gh_ci_summary.py > message.json
+
+    - name: "Notify Slack"
+      uses: krider2010/slack-bot-action@1.0.1
+      env:
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        MESSAGE_FILE: message.json
+
