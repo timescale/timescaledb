@@ -81,13 +81,3 @@ jobs:
       with:
         name: PostgreSQL log ${{ matrix.pg }}
         path: postgres.log
-
-    - name: Slack Notification
-      if: failure() && github.event_name != 'pull_request'
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-        SLACK_COLOR: '#ff0000'
-        SLACK_USERNAME: GitHub Action
-        SLACK_TITLE: Regression 32-bit PG${{ matrix.pg }} ${{ job.status }}
-        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
-      uses: rtCamp/action-slack-notify@v2.0.2

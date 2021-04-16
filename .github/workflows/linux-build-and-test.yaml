@@ -160,13 +160,3 @@ jobs:
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
-
-    - name: Slack Notification
-      if: failure() && github.event_name != 'pull_request' && runner.os != 'macOS'
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-        SLACK_COLOR: '#ff0000'
-        SLACK_USERNAME: GitHub Action
-        SLACK_TITLE: Regression ${{ matrix.os }} PG${{ matrix.pg }} ${{ matrix.name }} ${{ job.status }}
-        SLACK_MESSAGE: ${{ github.event.head_commit.message }}
-      uses: rtCamp/action-slack-notify@v2.0.2
