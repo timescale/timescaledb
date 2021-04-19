@@ -280,6 +280,10 @@ SELECT * FROM test.show_subtables('reindex_test');
 REINDEX (VERBOSE) TABLE reindex_test;
 
 \set ON_ERROR_STOP 0
+
+-- REINDEX TABLE CONCURRENTLY is not supported on PG11 (but blocked on PG12+)
+REINDEX TABLE CONCURRENTLY reindex_test;
+
 -- this one currently doesn't recurse to chunks and instead gives an
 -- error
 REINDEX (VERBOSE) INDEX reindex_test_time_unique_idx;

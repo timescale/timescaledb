@@ -1478,13 +1478,18 @@ process_reindex(ProcessUtilityArgs *args)
 			{
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
-
+#if PG12_GE
+				if (stmt->concurrent)
+					ereport(ERROR,
+							(errmsg("concurrent index creation on hypertables is not supported")));
+#endif
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					result = DDL_DONE;
 
 				add_hypertable_to_process_args(args, ht);
 			}
 			break;
+
 		case REINDEX_OBJECT_INDEX:
 			ht = ts_hypertable_cache_get_entry(hcache,
 											   IndexGetRelation(relid, true),

@@ -20,7 +20,6 @@ set(TEST_FILES
   grant_hypertable.sql
   hash.sql
   histogram_test.sql
-  index.sql
   insert_many.sql
   insert_single.sql
   join.sql
@@ -66,6 +65,7 @@ set(TEST_TEMPLATES
   sort_optimization.sql.in
   sql_query.sql.in
   update.sql.in
+  index.sql.in
 )
 
 # tests that fail or are unreliable when run in parallel
@@ -74,8 +74,11 @@ set(SOLO_TESTS
   alter
   alternate_users
   bgw_launcher
-  chunk_utils.sql
-  index
+  chunk_utils
+  index-11
+  index-12
+  index-13
+  loader
   loader
   net
   pg_dump_unprivileged
