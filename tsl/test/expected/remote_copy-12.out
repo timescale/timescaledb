@@ -99,7 +99,8 @@ SELECT * FROM "+ri(k33_')";
     3420 |                 4324 | "empties"              |    40 | \N
 (18 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name ,table_name, compressed_chunk_id, dropped 
+FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |       table_name       | compressed_chunk_id | dropped 
 ----+---------------+-----------------------+------------------------+---------------------+---------
   1 |             1 | _timescaledb_internal | _dist_hyper_1_1_chunk  |                     | f

@@ -114,7 +114,8 @@ COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FOR
 \.
 
 SELECT * FROM "+ri(k33_')";
-SELECT * FROM _timescaledb_catalog.chunk;
+SELECT id, hypertable_id, schema_name ,table_name, compressed_chunk_id, dropped 
+FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 select * from show_chunks('"+ri(k33_'')"');

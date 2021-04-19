@@ -37,10 +37,10 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |  schema_name  |    table_name    | compressed_chunk_id | dropped 
-----+---------------+---------------+------------------+---------------------+---------
-  1 |             1 | chunk_schema1 | _hyper_1_1_chunk |                     | f
-  2 |             2 | chunk_schema2 | _hyper_2_2_chunk |                     | f
+ id | hypertable_id | compressed_chunk_id | chunk_status | dropped |  schema_name  |    table_name    
+----+---------------+---------------------+--------------+---------+---------------+------------------
+  1 |             1 |                     |            0 | f       | chunk_schema1 | _hyper_1_1_chunk
+  2 |             2 |                     |            0 | f       | chunk_schema2 | _hyper_2_2_chunk
 (2 rows)
 
 RESET ROLE;
@@ -60,18 +60,18 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |  schema_name  |    table_name    | compressed_chunk_id | dropped 
-----+---------------+---------------+------------------+---------------------+---------
-  2 |             2 | chunk_schema2 | _hyper_2_2_chunk |                     | f
+ id | hypertable_id | compressed_chunk_id | chunk_status | dropped |  schema_name  |    table_name    
+----+---------------+---------------------+--------------+---------+---------------+------------------
+  2 |             2 |                     |            0 | f       | chunk_schema2 | _hyper_2_2_chunk
 (1 row)
 
 --new chunk should be created in the internal associated schema
 INSERT INTO hypertable_schema.test1 VALUES ('2001-01-01 01:01:01', 23.3, 1);
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped 
-----+---------------+-----------------------+------------------+---------------------+---------
-  2 |             2 | chunk_schema2         | _hyper_2_2_chunk |                     | f
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                     | f
+ id | hypertable_id | compressed_chunk_id | chunk_status | dropped |      schema_name      |    table_name    
+----+---------------+---------------------+--------------+---------+-----------------------+------------------
+  2 |             2 |                     |            0 | f       | chunk_schema2         | _hyper_2_2_chunk
+  3 |             1 |                     |            0 | f       | _timescaledb_internal | _hyper_1_3_chunk
 (2 rows)
 
 RESET ROLE;
@@ -91,8 +91,8 @@ SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped 
-----+---------------+-------------+------------+---------------------+---------
+ id | hypertable_id | compressed_chunk_id | chunk_status | dropped | schema_name | table_name 
+----+---------------+---------------------+--------------+---------+-------------+------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
