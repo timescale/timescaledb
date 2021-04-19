@@ -118,7 +118,6 @@ TRUNCATE disttable, non_disttable1;
 TRUNCATE disttable, non_disttable2;
 
 CLUSTER disttable USING disttable_description_idx;
-REINDEX TABLE disttable;
 
 ALTER TABLE disttable ALTER COLUMN description TYPE INT;
 ALTER TABLE disttable RENAME TO disttable2;
@@ -133,6 +132,40 @@ DROP TABLE disttable, non_disttable2;
 DROP TABLE disttable, disttable;
 
 \set ON_ERROR_STOP 1
+
+-- Test REINDEX command with distributed hypertable
+
+SELECT * FROM test.show_columns('disttable');
+SELECT * FROM test.show_indexes('disttable');
+
+INSERT INTO disttable VALUES
+	('2017-01-01 06:01', 1, 1.2, 'test'),
+	('2017-01-01 09:11', 3, 4.3, 'test'),
+	('2017-01-01 08:01', 1, 7.3, 'test'),
+	('2017-01-02 08:01', 2, 0.23, 'test'),
+	('2018-07-02 08:01', 87, 0.0, 'test'),
+	('2018-07-01 06:01', 13, 3.1, 'test'),
+	('2018-07-01 09:11', 90, 10303.12, 'test'),
+	('2018-07-01 08:01', 29, 64, 'test');
+
+SELECT * FROM show_chunks('disttable');
+
+\c :MY_DB1
+SELECT * FROM test.show_indexes('_timescaledb_internal._dist_hyper_1_1_chunk');
+SELECT pg_relation_filepath('_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk'::regclass::oid) AS oid_before_reindex \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_1;
+
+REINDEX TABLE disttable;
+REINDEX (VERBOSE) TABLE disttable;
+
+\c :MY_DB1
+SELECT pg_relation_filepath('_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk'::regclass::oid) AS oid_after_reindex \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_1;
+
+-- expect chunk index oid to change after the reindex operation
+SELECT :'oid_before_reindex' <> :'oid_after_reindex';
 
 -- CREATE/DROP TRIGGER
 CREATE OR REPLACE FUNCTION test_trigger()

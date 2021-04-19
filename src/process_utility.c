@@ -1483,8 +1483,16 @@ process_reindex(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errmsg("concurrent index creation on hypertables is not supported")));
 #endif
-				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
+				/* Do not process remote chunks in case of distributed hypertable */
+				if (hypertable_is_distributed(ht))
+				{
 					result = DDL_DONE;
+				}
+				else
+				{
+					if (foreach_chunk(ht, reindex_chunk, args) >= 0)
+						result = DDL_DONE;
+				}
 
 				add_hypertable_to_process_args(args, ht);
 			}
