@@ -133,23 +133,26 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- the chunk's hypercube. Tuples that fall within the chunk's
 -- hypercube are stored in the chunk's data table, as given by
 -- 'schema_name' and 'table_name'.
+CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_id_seq MINVALUE 1;
+
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
-  id serial NOT NULL PRIMARY KEY,
+  id integer PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
   hypertable_id int NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
   schema_name name NOT NULL,
   table_name name NOT NULL,
   compressed_chunk_id integer REFERENCES _timescaledb_catalog.chunk (id),
   dropped boolean NOT NULL DEFAULT FALSE,
+  status integer NOT NULL DEFAULT 0,
   UNIQUE (schema_name, table_name)
 );
+ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
 CREATE INDEX IF NOT EXISTS chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
 
 CREATE INDEX IF NOT EXISTS chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
-
-SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.chunk', 'id'), '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
 
 -- A chunk constraint maps a dimension slice to a chunk. Each
 -- constraint associated with a chunk will also be a table constraint

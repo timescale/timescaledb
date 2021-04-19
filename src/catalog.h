@@ -357,6 +357,7 @@ enum Anum_chunk
 	Anum_chunk_table_name,
 	Anum_chunk_compressed_chunk_id,
 	Anum_chunk_dropped,
+	Anum_chunk_status,
 	_Anum_chunk_max,
 };
 
@@ -370,6 +371,7 @@ typedef struct FormData_chunk
 	NameData table_name;
 	int32 compressed_chunk_id;
 	bool dropped;
+	int32 status;
 } FormData_chunk;
 
 typedef FormData_chunk *Form_chunk;
