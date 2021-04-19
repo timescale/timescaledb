@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #3101 Use commit date in get_git_commit()
 * #3104 Fix use after free in add_reorder_policy
 * #3106 Fix use after free in chunk_api_get_chunk_stats
+* #3123 Fix crash while using REINDEX TABLE CONCURRENTLY
 
 ## 2.2.0 (2021-04-13)
 
