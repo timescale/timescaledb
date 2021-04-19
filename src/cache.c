@@ -209,16 +209,19 @@ bool
 ts_cache_remove(Cache *cache, void *key)
 {
 	bool found;
-	void *entry;
 
-	entry = hash_search(cache->htab, key, HASH_REMOVE, &found);
-
-	if (found)
+	if (cache->remove_entry != NULL)
 	{
-		if (cache->remove_entry != NULL)
+		/* In case we want to free the removing entry we must do it beforehand
+		 * because HASH_REMOVE call returns dangling pointer, which cannot be used */
+		void *entry = hash_search(cache->htab, key, HASH_FIND, &found);
+		if (found)
 			cache->remove_entry(entry);
-		cache->stats.numelements--;
 	}
+
+	hash_search(cache->htab, key, HASH_REMOVE, &found);
+	if (found)
+		cache->stats.numelements--;
 
 	return found;
 }
