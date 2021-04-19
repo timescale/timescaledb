@@ -353,10 +353,11 @@ enum Anum_chunk
 {
 	Anum_chunk_id = 1,
 	Anum_chunk_hypertable_id,
+	Anum_chunk_compressed_chunk_id,
+	Anum_chunk_chunk_status,
+	Anum_chunk_dropped,
 	Anum_chunk_schema_name,
 	Anum_chunk_table_name,
-	Anum_chunk_compressed_chunk_id,
-	Anum_chunk_dropped,
 	_Anum_chunk_max,
 };
 
@@ -366,10 +367,11 @@ typedef struct FormData_chunk
 {
 	int32 id;
 	int32 hypertable_id;
+	int32 compressed_chunk_id;
+	int16 chunk_status;
+	bool dropped;
 	NameData schema_name;
 	NameData table_name;
-	int32 compressed_chunk_id;
-	bool dropped;
 } FormData_chunk;
 
 typedef FormData_chunk *Form_chunk;

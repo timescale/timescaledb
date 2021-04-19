@@ -134,6 +134,8 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 
 #define ASSERT_IS_NULL_OR_VALID_CHUNK(chunk) Assert(chunk == NULL || IS_VALID_CHUNK(chunk))
 
+#define CHUNK_STATUS_DEFAULT (int16) 0
+
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 {
@@ -155,6 +157,7 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 			Int32GetDatum(fd->compressed_chunk_id);
 	}
 	values[AttrNumberGetAttrOffset(Anum_chunk_dropped)] = BoolGetDatum(fd->dropped);
+	values[AttrNumberGetAttrOffset(Anum_chunk_chunk_status)] = Int16GetDatum(CHUNK_STATUS_DEFAULT);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -175,6 +178,7 @@ chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_table_name)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_chunk_chunk_status)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
@@ -192,6 +196,7 @@ chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)]);
 
 	fd->dropped = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_dropped)]);
+	fd->chunk_status = DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_chunk_chunk_status)]);
 
 	if (should_free)
 		heap_freetuple(tuple);
