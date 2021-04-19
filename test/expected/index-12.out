@@ -595,6 +595,9 @@ INFO:  index "_hyper_12_15_chunk_reindex_test_time_unique_idx" was reindexed
 INFO:  index "16_7_reindex_test_pkey" was reindexed
 INFO:  index "_hyper_12_16_chunk_reindex_test_time_unique_idx" was reindexed
 \set ON_ERROR_STOP 0
+-- REINDEX TABLE CONCURRENTLY is not supported on PG11 (but blocked on PG12+)
+REINDEX TABLE CONCURRENTLY reindex_test;
+ERROR:  concurrent index creation on hypertables is not supported
 -- this one currently doesn't recurse to chunks and instead gives an
 -- error
 REINDEX (VERBOSE) INDEX reindex_test_time_unique_idx;
