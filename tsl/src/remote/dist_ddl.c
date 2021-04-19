@@ -415,9 +415,13 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 				dist_ddl_error_raise_unsupported();
 			break;
 		}
+
+		case T_ReindexStmt:
+			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
+			break;
+
 		/* Currently unsupported */
 		case T_RenameStmt:
-		case T_ReindexStmt:
 		case T_ClusterStmt:
 			/* Those commands are also targets for execute_on_start in since they
 			 * are not supported by event triggers. */
