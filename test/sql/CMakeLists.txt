@@ -79,7 +79,6 @@ set(SOLO_TESTS
   index-12
   index-13
   loader
-  loader
   net
   pg_dump_unprivileged
   tablespace
