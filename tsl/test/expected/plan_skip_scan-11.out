@@ -355,6 +355,39 @@ stable expression in targetlist on skip_scan
                      Heap Fetches: 12
 (6 rows)
 
+-- distinct on expressions not supported
+:PREFIX SELECT DISTINCT time_bucket(10,time), 'q1_12' FROM :TABLE;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ HashAggregate (actual rows=102 loops=1)
+   Group Key: time_bucket(10, "time"), 'q1_12'::text
+   ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
+(3 rows)
+
+:PREFIX SELECT DISTINCT length(dev_name), 'q1_13' FROM :TABLE;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ HashAggregate (actual rows=4 loops=1)
+   Group Key: length(dev_name), 'q1_13'::text
+   ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
+(3 rows)
+
+:PREFIX SELECT DISTINCT 3*time, 'q1_14' FROM :TABLE;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ HashAggregate (actual rows=1002 loops=1)
+   Group Key: (3 * "time"), 'q1_14'::text
+   ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
+(3 rows)
+
+:PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ HashAggregate (actual rows=12 loops=1)
+   Group Key: ('Device '::text || dev_name)
+   ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
+(3 rows)
+
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
                                            QUERY PLAN                                           
@@ -1815,6 +1848,59 @@ stable expression in targetlist on skip_scan_ht
                            Index Cond: (dev > NULL::integer)
                            Heap Fetches: 11
 (20 rows)
+
+-- distinct on expressions not supported
+:PREFIX SELECT DISTINCT time_bucket(10,time), 'q1_12' FROM :TABLE;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ HashAggregate (actual rows=100 loops=1)
+   Group Key: time_bucket(10, _hyper_1_1_chunk."time"), 'q1_12'::text
+   ->  Result (actual rows=10020 loops=1)
+         ->  Append (actual rows=10020 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(8 rows)
+
+:PREFIX SELECT DISTINCT length(dev_name), 'q1_13' FROM :TABLE;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ HashAggregate (actual rows=3 loops=1)
+   Group Key: length(_hyper_1_1_chunk.dev_name), 'q1_13'::text
+   ->  Result (actual rows=10020 loops=1)
+         ->  Append (actual rows=10020 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(8 rows)
+
+:PREFIX SELECT DISTINCT 3*time, 'q1_14' FROM :TABLE;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ HashAggregate (actual rows=1000 loops=1)
+   Group Key: (3 * _hyper_1_1_chunk."time"), 'q1_14'::text
+   ->  Result (actual rows=10020 loops=1)
+         ->  Append (actual rows=10020 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(8 rows)
+
+:PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ HashAggregate (actual rows=11 loops=1)
+   Group Key: ('Device '::text || _hyper_1_1_chunk.dev_name)
+   ->  Result (actual rows=10020 loops=1)
+         ->  Append (actual rows=10020 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(8 rows)
 
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
