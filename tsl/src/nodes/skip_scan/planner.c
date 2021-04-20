@@ -47,7 +47,7 @@ typedef struct SkipScanPath
 	int sk_attno;
 } SkipScanPath;
 
-static TargetEntry *get_tle_for_pathkey(List *tlist, PathKey *pathkey);
+static TargetEntry *get_tle_for_pathkey(List *tlist, PathKey *pathkey, bool missing_ok);
 static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle,
 												 Relids relids);
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
@@ -118,7 +118,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	skip_plan->custom_plans = custom_plans;
 	/* get position of skipped column in tuples produced by child scan */
 	PathKey *pk = linitial_node(PathKey, best_path->path.pathkeys);
-	TargetEntry *tle = get_tle_for_pathkey(plan->targetlist, pk);
+	TargetEntry *tle = get_tle_for_pathkey(plan->targetlist, pk, false);
 
 	skip_plan->custom_private = list_make5_int(tle->resno,
 											   path->distinct_by_val,
@@ -381,10 +381,10 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 	 * has to be the distinct column
 	 */
 	PathKey *first_pathkey = linitial(index_path->path.pathkeys);
-	TargetEntry *tle = get_tle_for_pathkey(index_path->indexinfo->indextlist, first_pathkey);
+	TargetEntry *tle = get_tle_for_pathkey(index_path->indexinfo->indextlist, first_pathkey, true);
 
 	/* SkipScan on expressions not supported */
-	if (!IsA(tle->expr, Var))
+	if (!tle || !IsA(tle->expr, Var))
 		return NULL;
 
 	/* build skip qual this may fail if we cannot look up the operator */
@@ -483,7 +483,7 @@ build_skip_qual(SkipScanPath *skip_scan_path, IndexPath *index_path, Var *var)
 }
 
 static TargetEntry *
-get_tle_for_pathkey(List *tlist, PathKey *pathkey)
+get_tle_for_pathkey(List *tlist, PathKey *pathkey, bool missing_ok)
 {
 	EquivalenceClass *ec = pathkey->pk_eclass;
 	TargetEntry *tle;
@@ -499,6 +499,10 @@ get_tle_for_pathkey(List *tlist, PathKey *pathkey)
 		if (find_ec_member_for_tle(ec, tle, NULL))
 			return tle;
 	}
+
+	/* If PathKey is an expression it might not yet be in the targetlist */
+	if (missing_ok)
+		return NULL;
 
 	elog(ERROR, "skip column not found in targetlist");
 	pg_unreachable();

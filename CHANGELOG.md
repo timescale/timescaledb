@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #3104 Fix use after free in add_reorder_policy
 * #3106 Fix use after free in chunk_api_get_chunk_stats
 * #3123 Fix crash while using REINDEX TABLE CONCURRENTLY
+* #3135 Fix SkipScan path generation in DISTINCT queries with expressions
 
 ## 2.2.0 (2021-04-13)
 
