@@ -3,12 +3,10 @@ on:
   schedule:
     # run daily 20:00 on master branch
     - cron: '0 20 * * *'
-  pull_request:
-    branches:
-      - master
   push:
     branches:
       - prerelease_test
+  pull_request:
 jobs:
   misc_checks:
     name: Check formatting, license and git hooks
