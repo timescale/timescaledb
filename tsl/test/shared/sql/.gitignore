@@ -1,4 +1,5 @@
 /constify_timestamptz_op_interval-*.sql
 /gapfill-*.sql
+/generated_columns-*.sql
 /ordered_append-*.sql
 /ordered_append_join-*.sql
