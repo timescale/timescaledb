@@ -277,6 +277,8 @@ SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
 --create a exported uuid before restoring (mocks telemetry running before restore)
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'new_db_uuid', true);
+-- disable background jobs
+UPDATE _timescaledb_config.bgw_job SET scheduled = false;
 RESET client_min_messages;
 SELECT timescaledb_pre_restore();
  timescaledb_pre_restore 
@@ -578,16 +580,8 @@ SELECT get_sqlstate('SELECT timescaledb_post_restore()');
 (1 row)
 
 drop function get_sqlstate(TEXT);
---use a standard dbname because :TEST_DBNAME is different on 9.6 vs 10 & 11
---and dbname is displayed in error
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c postgres :ROLE_SUPERUSER
 --need to shutdown workers to use db as template
-SELECT _timescaledb_internal.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
 CREATE DATABASE db_dump_error WITH TEMPLATE :TEST_DBNAME;
 --now test functions for permission errors
 \c  db_dump_error :ROLE_DEFAULT_PERM_USER_2
