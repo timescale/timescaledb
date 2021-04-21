@@ -3823,6 +3823,14 @@ DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_idx;
                ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx1 on _hyper_1_4_chunk (actual rows=11 loops=1)
 (11 rows)
 
+-- IndexPath without pathkeys doesnt use SkipScan
+EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT 1 FROM pg_rewrite;
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Unique
+   ->  Index Only Scan using pg_rewrite_rel_rulename_index on pg_rewrite
+(2 rows)
+
 -- try one query with EXPLAIN only for coverage
 EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan;
                               QUERY PLAN                               
