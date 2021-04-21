@@ -336,8 +336,9 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 	double total = index_path->path.total_cost;
 	double rows = index_path->path.rows;
 
-	if (index_path->indexinfo->sortopfamily == NULL)
-		return NULL; /* non-orderable index, skip these for now */
+	/* cannot use SkipScan with non-orderable index or IndexPath without pathkeys */
+	if (!index_path->path.pathkeys || !index_path->indexinfo->sortopfamily)
+		return NULL;
 
 	/* orderbyops are not compatible with skipscan */
 	if (index_path->indexorderbys != NIL)
@@ -424,7 +425,7 @@ build_subpath(PlannerInfo *root, List *subpaths, double ndistinct)
 		new_paths = lappend(new_paths, child);
 	}
 
-	if (!has_skip_path)
+	if (!has_skip_path && new_paths)
 	{
 		pfree(new_paths);
 		return NIL;
