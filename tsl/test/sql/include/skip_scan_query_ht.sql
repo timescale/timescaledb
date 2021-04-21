@@ -23,3 +23,5 @@ SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_idx;
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE;
 
+-- IndexPath without pathkeys doesnt use SkipScan
+EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT 1 FROM pg_rewrite;

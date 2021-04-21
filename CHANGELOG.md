@@ -15,6 +15,10 @@ accidentally triggering the load of a previous DB version.**
 * #3106 Fix use after free in chunk_api_get_chunk_stats
 * #3123 Fix crash while using REINDEX TABLE CONCURRENTLY
 * #3135 Fix SkipScan path generation in DISTINCT queries with expressions
+* #3146 Fix SkipScan for IndexPaths without pathkeys
+
+**Thanks**
+* @hperez75 for reporting an issue with Skip Scan
 
 ## 2.2.0 (2021-04-13)
 
