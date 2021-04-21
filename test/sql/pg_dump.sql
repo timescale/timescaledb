@@ -77,7 +77,6 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
 
 \c postgres :ROLE_SUPERUSER
-
 -- We shell out to a script in order to grab the correct hostname from the
 -- environmental variables that originally called this psql command. Sadly
 -- vars passed to psql do not work in \! commands so we can't do it that way.
@@ -88,6 +87,8 @@ SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
 --create a exported uuid before restoring (mocks telemetry running before restore)
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'new_db_uuid', true);
+-- disable background jobs
+UPDATE _timescaledb_config.bgw_job SET scheduled = false;
 RESET client_min_messages;
 SELECT timescaledb_pre_restore();
 SHOW timescaledb.restoring;
@@ -177,11 +178,8 @@ SELECT get_sqlstate('SELECT timescaledb_post_restore()');
 
 drop function get_sqlstate(TEXT);
 
---use a standard dbname because :TEST_DBNAME is different on 9.6 vs 10 & 11
---and dbname is displayed in error
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c postgres :ROLE_SUPERUSER
 --need to shutdown workers to use db as template
-SELECT _timescaledb_internal.stop_background_workers();
 CREATE DATABASE db_dump_error WITH TEMPLATE :TEST_DBNAME;
 
 --now test functions for permission errors
