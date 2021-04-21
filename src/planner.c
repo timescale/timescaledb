@@ -483,7 +483,12 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 			 * Params this Path might benefit from startup or runtime exclusion
 			 */
 			{
+				AppendPath *append = castNode(AppendPath, path);
 				ListCell *lc;
+
+				/* Don't create ChunkAppend with no children */
+				if (list_length(append->subpaths) == 0)
+					return false;
 
 				foreach (lc, rel->baserestrictinfo)
 				{
@@ -501,10 +506,11 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 			 * Can we do ordered append
 			 */
 			{
+				MergeAppendPath *merge = castNode(MergeAppendPath, path);
 				PathKey *pk;
 				ListCell *lc;
 
-				if (!ordered || path->pathkeys == NIL)
+				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
 					return false;
 
 				pk = linitial_node(PathKey, path->pathkeys);

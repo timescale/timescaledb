@@ -328,15 +328,15 @@ WHERE time < '2016-03-22'
 AND date_part('dow', time) between 1 and 5
 GROUP BY t
 ORDER BY t DESC;
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                        QUERY PLAN                         
+-----------------------------------------------------------
  GroupAggregate (actual rows=0 loops=1)
    Group Key: (date_trunc('year'::text, "time"))
    ->  Sort (actual rows=0 loops=1)
          Sort Key: (date_trunc('year'::text, "time")) DESC
          Sort Method: quicksort 
-         ->  Custom Scan (ChunkAppend) on append_test (actual rows=0 loops=1)
-               Chunks excluded during startup: 0
+         ->  Result (actual rows=0 loops=1)
+               One-Time Filter: false
 (7 rows)
 
 -- a parameterized query can safely constify params, so won't be

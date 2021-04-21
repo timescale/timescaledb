@@ -366,10 +366,10 @@ SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
 ----------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=4 loops=1)
    ->  HashAggregate (actual rows=0 loops=1)
-         Group Key: _materialized_hypertable_6.time_bucket
+         Group Key: time_bucket
          Batches: 1 
-         ->  Custom Scan (ChunkAppend) on _materialized_hypertable_6 (actual rows=0 loops=1)
-               Chunks excluded during startup: 0
+         ->  Result (actual rows=0 loops=1)
+               One-Time Filter: false
    ->  HashAggregate (actual rows=4 loops=1)
          Group Key: time_bucket(10, boundary_test."time")
          Batches: 1 
