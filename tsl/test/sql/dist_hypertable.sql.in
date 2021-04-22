@@ -433,6 +433,8 @@ UPDATE disttable SET tableoid = 4 WHERE device = 2;
 DELETE FROM disttable WHERE device = 3
 RETURNING *;
 
+DELETE FROM disttable WHERE time IS NULL;
+
 -- Test deletes (rows deleted)
 DELETE FROM disttable WHERE device = 4
 RETURNING *;
