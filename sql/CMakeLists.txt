@@ -238,3 +238,5 @@ install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
   ${UPDATE_SCRIPTS}
   DESTINATION "${PG_SHAREDIR}/extension")
+
+add_subdirectory(extras)
