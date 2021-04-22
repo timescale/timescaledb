@@ -860,7 +860,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
 	PlannerInfo *root = context->root;
 	Query *query = root->parse;
 	ListCell *l, *dc_l;
-	bool first = true;
+	bool first = true, varno_assigned = false;
 	Index varno;
 	RangeTblEntry *dc_rte;
 	RangeTblEntry *rte;
@@ -889,6 +889,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
 			{
 				varno = var->varno;
 				first = false;
+				varno_assigned = true;
 			}
 
 			if (varno != var->varno)
@@ -898,6 +899,10 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
 		else if (!IsA(tle->expr, Const))
 			return;
 	}
+
+	/* If there are no varno entries in the distinctClause, we are done */
+	if (!varno_assigned)
+		return;
 
 	/*
 	 * If all distinctClause entries point to our rte->relid then it's

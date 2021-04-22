@@ -133,3 +133,9 @@ SELECT DISTINCT time_bucket('1h',time) col1
 FROM :TABLE_NAME
 ORDER BY col1
 LIMIT 10;
+
+-- SELECT DISTINCT without any var references is handled correctly
+\qecho SELECT DISTINCT without any var references is handled correctly
+:PREFIX
+SELECT DISTINCT 1, 'constx'
+FROM :TABLE_NAME;
