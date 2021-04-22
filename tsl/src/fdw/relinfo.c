@@ -81,10 +81,15 @@ apply_fdw_and_server_options(TsFdwRelInfo *fpinfo)
 TsFdwRelInfo *
 fdw_relinfo_get(RelOptInfo *rel)
 {
-	TimescaleDBPrivate *rel_private = rel->fdw_private;
+	TimescaleDBPrivate *rel_private;
 
-	Assert(rel_private != NULL);
-	Assert(rel_private->fdw_relation_info != NULL);
+	if (!rel->fdw_private)
+		ts_create_private_reloptinfo(rel);
+
+	rel_private = rel->fdw_private;
+
+	if (!rel_private->fdw_relation_info)
+		rel_private->fdw_relation_info = palloc0(sizeof(TsFdwRelInfo));
 
 	return (TsFdwRelInfo *) rel_private->fdw_relation_info;
 }
@@ -96,7 +101,7 @@ fdw_relinfo_alloc(RelOptInfo *rel, TsFdwRelInfoType reltype)
 	TsFdwRelInfo *fpinfo;
 
 	if (NULL == rel->fdw_private)
-		rel->fdw_private = palloc0(sizeof(*rel_private));
+		ts_create_private_reloptinfo(rel);
 
 	rel_private = rel->fdw_private;
 
