@@ -888,6 +888,34 @@ LIMIT 10;
                            Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
 (23 rows)
 
+SELECT DISTINCT without any var references is handled correctly
+EXPLAIN (verbose, costs off)
+SELECT DISTINCT 1, 'constx'
+FROM metrics_dist;
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: 1, 'constx'::text
+   ->  Custom Scan (AsyncAppend)
+         Output: 1, 'constx'::text
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
+                     Output: 1, 'constx'::text
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
+               ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
+                     Output: 1, 'constx'::text
+                     Data node: data_node_2
+                     Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
+               ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
+                     Output: 1, 'constx'::text
+                     Data node: data_node_3
+                     Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
+(20 rows)
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% RUNNING TESTS on table: metrics
 %%% PREFIX: 
