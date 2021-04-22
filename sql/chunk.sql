@@ -73,4 +73,4 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_table(
        slices JSONB,
        schema_name NAME,
        table_name NAME)
-RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_create_empty_table' LANGUAGE C VOLATILE STRICT;
+RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_create_empty_table' LANGUAGE C VOLATILE;
