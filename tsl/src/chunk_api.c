@@ -30,6 +30,7 @@
 #include <chunk.h>
 #include <chunk_data_node.h>
 #include <errors.h>
+#include <error_utils.h>
 #include <hypercube.h>
 #include <hypertable.h>
 #include <hypertable_cache.h>
@@ -1631,20 +1632,22 @@ chunk_api_get_chunk_relstats(PG_FUNCTION_ARGS)
 Datum
 chunk_create_empty_table(PG_FUNCTION_ARGS)
 {
-	const Oid hypertable_relid = PG_GETARG_OID(0);
-	Jsonb *const slices = PG_GETARG_JSONB_P(1);
-	const char *const schema_name = PG_GETARG_CSTRING(2);
-	const char *const table_name = PG_GETARG_CSTRING(3);
+	Oid hypertable_relid;
+	Jsonb *slices;
+	const char *schema_name;
+	const char *table_name;
 	Cache *const hcache = ts_hypertable_cache_pin();
-	Hypertable *const ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
+	Hypertable *ht;
 	Hypercube *hc;
 	const char *parse_err;
 	AclResult acl_result;
 
-	Assert(!PG_ARGISNULL(0));
-	Assert(!PG_ARGISNULL(1));
-	Assert(!PG_ARGISNULL(2));
-	Assert(!PG_ARGISNULL(3));
+	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
+	GETARG_NOTNULL_NULLABLE(slices, 1, "slices", JSONB_P);
+	GETARG_NOTNULL_NULLABLE(schema_name, 2, "chunk schema name", CSTRING);
+	GETARG_NOTNULL_NULLABLE(table_name, 3, "chunk table name", CSTRING);
+
+	ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Assert(ht != NULL);
 
 	acl_result = pg_class_aclcheck(hypertable_relid, GetUserId(), ACL_INSERT);
