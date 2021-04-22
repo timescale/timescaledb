@@ -86,15 +86,17 @@ ERROR:  permission denied for table "chunkapi"
 DETAIL:  Insert privileges required on "chunkapi" to create chunks.
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_DEFAULT_PERM_USER;
--- Test create_chunk_table is STRICT
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
- create_chunk_table 
---------------------
- 
-(1 row)
-
 -- Test create_chunk_table for errors
 \set ON_ERROR_STOP 0
+-- Test create_chunk_table for NULL input
+SELECT * FROM _timescaledb_internal.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+ERROR:  hypertable cannot be NULL
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
+ERROR:  slices cannot be NULL
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', NULL,'_hyper_1_1_chunk');
+ERROR:  chunk schema name cannot be NULL
+SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal',NULL);
+ERROR:  chunk table name cannot be NULL
 -- Modified time constraint should fail with collision
 SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  chunk table creation failed due to dimension slice collision
