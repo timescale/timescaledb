@@ -1390,6 +1390,7 @@ RETURNING *;
  Sun Jan 01 08:11:00 2017 PST |      3 |  2.3 |      
 (3 rows)
 
+DELETE FROM disttable WHERE time IS NULL;
 -- Test deletes (rows deleted)
 DELETE FROM disttable WHERE device = 4
 RETURNING *;
