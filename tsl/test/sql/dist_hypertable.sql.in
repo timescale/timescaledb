@@ -46,6 +46,8 @@ SET client_min_messages TO NOTICE;
 \set ECHO all
 
 SET ROLE :ROLE_1;
+--Ensure INSERTs use DataNodeDispatch. DataNodeCopy is tested later
+SET timescaledb.enable_distributed_insert_with_copy=false;
 
 -- Verify lack of tables
 SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
@@ -567,6 +569,8 @@ GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
 SET ROLE :ROLE_1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+--Ensure INSERTs use DataNodeDispatch.
+SET timescaledb.enable_distributed_insert_with_copy=false;
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 CREATE SCHEMA "single'schema";
@@ -959,6 +963,9 @@ $$);
 
 -- Tests for using tablespaces with distributed hypertables
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+--Ensure INSERTs use DataNodeDispatch.
+SET timescaledb.enable_distributed_insert_with_copy=false;
+
 CREATE TABLESPACE :TABLESPACE_1 OWNER :ROLE_1 LOCATION :'spc1path';
 CREATE TABLESPACE :TABLESPACE_2 OWNER :ROLE_1 LOCATION :'spc2path';
 \set ON_ERROR_STOP 0
@@ -1593,4 +1600,81 @@ SELECT tableoid::regclass, * FROM dist_syscol;
 SET timescaledb.enable_per_data_node_queries = true;
 \set ON_ERROR_STOP 0
 SELECT tableoid::regclass, * FROM dist_syscol;
+\set ON_ERROR_STOP 1
+
+-----------------------
+-- Test DataNodeCopy --
+-----------------------
+SET timescaledb.enable_distributed_insert_with_copy=true;
+DROP TABLE disttable;
+
+-- Add serial (autoincrement) and DEFAULT value columns to test that
+-- these work with DataNodeCopy
+CREATE TABLE disttable(
+    id serial,
+    time timestamptz NOT NULL,
+    device int DEFAULT 100,
+    temp_c float
+);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+
+-- Create a datatable to source data from. Add array of composite data
+-- type to test switching to text mode below. Arrays include the type
+-- Oid when serialized in binary format. Since the Oid of a
+-- user-created type can differ across data nodes, such serialization
+-- is not safe.
+CREATE TABLE datatable (LIKE disttable);
+CREATE TYPE highlow AS (high int, low int);
+CALL distributed_exec($$ CREATE TYPE highlow AS (high int, low int) $$);
+ALTER TABLE datatable ADD COLUMN minmaxes highlow[];
+INSERT INTO datatable (id, time, device, temp_c, minmaxes) VALUES
+       (1, '2017-01-01 06:01', 1, 1.2, ARRAY[(1,2)::highlow]),
+       (2, '2017-01-01 09:11', 3, 4.3, ARRAY[(2,3)::highlow]),
+       (3, '2017-01-01 08:01', 1, 7.3, ARRAY[(4,5)::highlow]),
+       (4, '2017-01-02 08:01', 2, 0.23, ARRAY[(6,7)::highlow]),
+       (5, '2018-07-02 08:01', 87, 0.0, ARRAY[(8,9)::highlow]),
+       (6, '2018-07-01 06:01', 13, 3.1, ARRAY[(10,11)::highlow]),
+       (7, '2018-07-01 09:11', 90, 10303.12, ARRAY[(12,13)::highlow]),
+       (8, '2018-07-01 08:01', 29, 64, ARRAY[(14,15)::highlow]);
+
+-- Show that DataNodeCopy is used instead of DataNodeDispatch. Should
+-- default to FORMAT binary in the remote SQL. Add RETURNING to show
+-- that it works.
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable
+RETURNING *;
+
+-- Perform the actual insert
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable
+RETURNING *;
+
+-- Show that the data was added:
+SELECT * FROM disttable ORDER BY 1;
+SELECT count(*) FROM disttable;
+
+-- Add an array of a composite type to check that DataNodeCopy
+-- switches to text format if we use a table with an array of a custom
+-- type. There should be no "FORMAT binary" in the remote explain.
+ALTER TABLE disttable ADD COLUMN minmaxes highlow[];
+
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c, minmaxes)
+SELECT time, device, temp_c, minmaxes FROM datatable;
+INSERT INTO disttable (time, device, temp_c, minmaxes)
+SELECT time, device, temp_c, minmaxes FROM datatable;
+
+-- Should have double amount of rows compared to before and half of
+-- them values in the new column.  Note, must use TEXT format on the
+-- connection to make query work with custom type array.
+SET timescaledb.enable_connection_binary_data=false;
+SELECT * FROM disttable ORDER BY 1;
+SELECT count(*) FROM disttable;
+
+-- REMOVE a column on data nodes to check how errors are handled:
+CALL distributed_exec($$ ALTER TABLE disttable DROP COLUMN minmaxes $$);
+
+\set ON_ERROR_STOP 0
+INSERT INTO disttable SELECT * FROM datatable;
 \set ON_ERROR_STOP 1

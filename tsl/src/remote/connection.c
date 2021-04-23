@@ -148,10 +148,10 @@ typedef struct ResultEntry
 
 typedef struct TSConnection
 {
-	ListNode ln;			  /* Must be first entry */
-	PGconn *pg_conn;		  /* PostgreSQL connection */
-	bool closing_guard;		  /* Guard against calling PQfinish() directly on PGconn */
-	bool processing;		  /* TRUE if there is ongoing async request processing */
+	ListNode ln;		/* Must be first entry */
+	PGconn *pg_conn;	/* PostgreSQL connection */
+	bool closing_guard; /* Guard against calling PQfinish() directly on PGconn */
+	TSConnectionStatus status;
 	NameData node_name;		  /* Associated data node name */
 	char *tz_name;			  /* Timezone name last sent over connection */
 	bool autoclose;			  /* Set if this connection should automatically
@@ -162,6 +162,7 @@ typedef struct TSConnection
 	bool xact_transitioning;  /* TRUE if connection is transitioning to
 							   * another transaction state */
 	ListNode results;		  /* Head of PGresult list */
+	bool binary_copy;
 } TSConnection;
 
 /*
@@ -169,6 +170,147 @@ typedef struct TSConnection
  * PGresults at transaction end.
  */
 static ListNode connections = { &connections, &connections };
+
+static bool
+fill_simple_error(TSConnectionError *err, int errcode, const char *errmsg, const TSConnection *conn)
+{
+	if (NULL == err)
+		return false;
+
+	MemSet(err, 0, sizeof(*err));
+
+	err->errcode = errcode;
+	err->msg = errmsg;
+	err->host = pstrdup(PQhost(conn->pg_conn));
+	err->nodename = pstrdup(NameStr(conn->node_name));
+
+	return false;
+}
+
+static bool
+fill_connection_error(TSConnectionError *err, int errcode, const char *errmsg,
+					  const TSConnection *conn)
+{
+	if (NULL == err)
+		return false;
+
+	fill_simple_error(err, errcode, errmsg, conn);
+	err->connmsg = pstrdup(PQerrorMessage(conn->pg_conn));
+
+	return false;
+}
+
+static char *
+get_error_field_copy(const PGresult *res, int fieldcode)
+{
+	const char *msg = PQresultErrorField(res, fieldcode);
+
+	if (NULL == msg)
+		return NULL;
+	return pchomp(msg);
+}
+
+/*
+ * Convert libpq error severity to local error level.
+ */
+static int
+severity_to_elevel(const char *severity)
+{
+	/* According to https://www.postgresql.org/docs/current/libpq-exec.html,
+	 * libpq only returns the severity levels listed below. */
+	static const struct
+	{
+		const char *severity;
+		int elevel;
+	} severity_levels[] = { {
+								.severity = "ERROR",
+								.elevel = ERROR,
+							},
+							{
+								.severity = "FATAL",
+								.elevel = FATAL,
+							},
+							{
+								.severity = "PANIC",
+								.elevel = PANIC,
+							},
+							{
+								.severity = "WARNING",
+								.elevel = WARNING,
+							},
+							{
+								.severity = "NOTICE",
+								.elevel = NOTICE,
+							},
+							{
+								.severity = "DEBUG",
+								.elevel = DEBUG1,
+							},
+							{
+								.severity = "INFO",
+								.elevel = INFO,
+							},
+							{
+								.severity = "LOG",
+								.elevel = LOG,
+							},
+							/* End marker */
+							{
+								.severity = NULL,
+								.elevel = 0,
+							} };
+	int i;
+
+	if (NULL == severity)
+		return 0;
+
+	i = 0;
+
+	while (NULL != severity_levels[i].severity)
+	{
+		if (strcmp(severity_levels[i].severity, severity) == 0)
+			return severity_levels[i].elevel;
+		i++;
+	}
+
+	pg_unreachable();
+
+	return ERROR;
+}
+
+/*
+ * Fill a connection error based on the result of a remote query.
+ */
+static bool
+fill_result_error(TSConnectionError *err, int errcode, const char *errmsg, const PGresult *res)
+{
+	const ResultEntry *entry = PQresultInstanceData(res, eventproc);
+	const char *sqlstate;
+
+	if (NULL == err || NULL == res)
+		return false;
+
+	Assert(entry->conn);
+
+	fill_simple_error(err, errcode, errmsg, entry->conn);
+	err->remote.elevel = severity_to_elevel(PQresultErrorField(res, PG_DIAG_SEVERITY_NONLOCALIZED));
+	err->remote.sqlstate = get_error_field_copy(res, PG_DIAG_SQLSTATE);
+	err->remote.msg = get_error_field_copy(res, PG_DIAG_MESSAGE_PRIMARY);
+	err->remote.detail = get_error_field_copy(res, PG_DIAG_MESSAGE_DETAIL);
+	err->remote.hint = get_error_field_copy(res, PG_DIAG_MESSAGE_HINT);
+	err->remote.context = get_error_field_copy(res, PG_DIAG_CONTEXT);
+	err->remote.stmtpos = get_error_field_copy(res, PG_DIAG_STATEMENT_POSITION);
+
+	sqlstate = err->remote.sqlstate;
+
+	if (sqlstate && strlen(sqlstate) == 5)
+		err->remote.errcode =
+			MAKE_SQLSTATE(sqlstate[0], sqlstate[1], sqlstate[2], sqlstate[3], sqlstate[4]);
+	else
+		err->remote.errcode = ERRCODE_INTERNAL_ERROR;
+
+	return false;
+}
 
 /*
  * The following event handlers make sure all PGresult are freed with
@@ -187,6 +329,7 @@ remote_connection_free(TSConnection *conn)
 {
 	if (NULL != conn->tz_name)
 		free(conn->tz_name);
+
 	free(conn);
 }
 
@@ -587,7 +730,7 @@ remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name
 	conn->ln.next = conn->ln.prev = NULL;
 	conn->pg_conn = pg_conn;
 	conn->closing_guard = false;
-	conn->processing = processing;
+	conn->status = processing ? CONN_PROCESSING : CONN_IDLE;
 	namestrcpy(&conn->node_name, node_name);
 	conn->tz_name = NULL;
 	conn->autoclose = true;
@@ -597,10 +740,10 @@ remote_connection_create(PGconn *pg_conn, bool processing, const char *node_name
 	/* Initialize results head */
 	conn->results.next = &conn->results;
 	conn->results.prev = &conn->results;
+	conn->binary_copy = false;
 	list_insert_after(&conn->ln, &connections);
 
 	elog(DEBUG3, "created connection %p", conn);
-
 	connstats.connections_created++;
 
 	return conn;
@@ -677,28 +820,20 @@ bool
 remote_connection_is_processing(const TSConnection *conn)
 {
 	Assert(conn != NULL);
-	return conn->processing;
+	return conn->status != CONN_IDLE;
 }
 
 void
-remote_connection_set_processing(TSConnection *conn, bool processing)
+remote_connection_set_status(TSConnection *conn, TSConnectionStatus status)
 {
 	Assert(conn != NULL);
-	conn->processing = processing;
+	conn->status = status;
 }
 
-static void
-remote_elog(int elevel, int errorcode, const char *node_name, const char *primary,
-			const char *detail, const char *hint, const char *context, const char *sql)
+TSConnectionStatus
+remote_connection_get_status(const TSConnection *conn)
 {
-	ereport(elevel,
-			(errcode(errorcode),
-			 primary ? errmsg_internal("[%s]: %s", node_name, primary) :
-					   errmsg("could not obtain message string for remote error"),
-			 detail ? errdetail_internal("%s", detail) : 0,
-			 hint ? errhint("%s", hint) : 0,
-			 context ? errcontext("%s", context) : 0,
-			 sql ? errcontext("Remote SQL command: %s", sql) : 0));
+	return conn->status;
 }
 
 const char *
@@ -708,72 +843,15 @@ remote_connection_node_name(const TSConnection *conn)
 }
 
 void
-remote_connection_elog(TSConnection *conn, int elevel)
+remote_connection_get_error(const TSConnection *conn, TSConnectionError *err)
 {
-	const char *msg = pchomp(PQerrorMessage(conn->pg_conn));
-
-	remote_elog(elevel,
-				ERRCODE_CONNECTION_FAILURE,
-				NameStr(conn->node_name),
-				msg,
-				NULL,
-				NULL,
-				NULL,
-				NULL);
+	fill_connection_error(err, ERRCODE_CONNECTION_FAILURE, "", conn);
 }
 
-/*
- * Report an error we got from the remote host.
- *
- * elevel: error level to use (typically ERROR, but might be less)
- * res: PGresult containing the error
- *
- * Note: callers that choose not to throw ERROR for a remote error are
- * responsible for making sure that the associated ConnCacheEntry gets
- * marked with have_error = true.
- */
 void
-remote_result_elog(PGresult *res, int elevel)
+remote_connection_get_result_error(const PGresult *res, TSConnectionError *err)
 {
-	ResultEntry *entry = PQresultInstanceData(res, eventproc);
-	const char *sqlstate = PQresultErrorField(res, PG_DIAG_SQLSTATE);
-	const char *primary = PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY);
-	const char *detail = PQresultErrorField(res, PG_DIAG_MESSAGE_DETAIL);
-	const char *hint = PQresultErrorField(res, PG_DIAG_MESSAGE_HINT);
-	const char *context = PQresultErrorField(res, PG_DIAG_CONTEXT);
-	const char *stmt = PQresultErrorField(res, PG_DIAG_STATEMENT_POSITION);
-	TSConnection *conn;
-	int code;
-
-	PG_TRY();
-	{
-		if (NULL == entry)
-			elog(ERROR, "unexpected result object in error handler");
-
-		conn = entry->conn;
-		Assert(NULL != conn);
-
-		if (sqlstate && strlen(sqlstate) == 5)
-			code = MAKE_SQLSTATE(sqlstate[0], sqlstate[1], sqlstate[2], sqlstate[3], sqlstate[4]);
-		else
-			code = ERRCODE_CONNECTION_FAILURE;
-
-		/*
-		 * If we don't get a message from the PGresult, try the PGconn.  This
-		 * is needed because for connection-level failures, PQexec may just
-		 * return NULL, not a PGresult at all.
-		 */
-		if (primary == NULL)
-			primary = pchomp(PQerrorMessage(conn->pg_conn));
-
-		remote_elog(elevel, code, NameStr(conn->node_name), primary, detail, hint, context, stmt);
-	}
-	PG_CATCH();
-	{
-		PQclear(res);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
+	fill_result_error(err, ERRCODE_CONNECTION_EXCEPTION, "", res);
 }
 
 /*
@@ -1490,6 +1568,7 @@ remote_connection_close(TSConnection *conn)
 	/* Assert that PQfinish detached this connection from the global list of
 	 * connections */
 	Assert(IS_DETACHED_ENTRY(&conn->ln));
+
 	remote_connection_free(conn);
 }
 
@@ -1613,7 +1692,7 @@ remote_connection_drain(TSConnection *conn, TimestampTz endtime, PGresult **resu
 			if (res == NULL)
 			{
 				/* query is complete */
-				remote_connection_set_processing(conn, false);
+				conn->status = CONN_IDLE;
 				connresult = CONN_OK;
 				break;
 			}
@@ -1662,47 +1741,70 @@ remote_connection_cancel_query(TSConnection *conn)
 	PGcancel *cancel;
 	char errbuf[256];
 	TimestampTz endtime;
+	TSConnectionError err;
+	bool success;
 
 	if (!conn)
 		return true;
 
 	/*
-	 * If it takes too long to cancel the query and discard the result, assume
-	 * the connection is dead.
+	 * Catch exceptions so that we can ensure the status is IDLE after the
+	 * cancel operation even in case of errors being thrown. Note that we
+	 * cannot set the status before we drain, since the drain function needs
+	 * to know the status (e.g., if the connection is in COPY_IN mode).
 	 */
-	endtime = TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 30000);
-
-	/* We assume that processing is over no matter if cancel completes
-	 * successfully or not. */
-	remote_connection_set_processing(conn, false);
-
-	/*
-	 * Issue cancel request.  Unfortunately, there's no good way to limit the
-	 * amount of time that we might block inside PQcancel().
-	 */
-	if ((cancel = PQgetCancel(conn->pg_conn)))
+	PG_TRY();
 	{
-		if (!PQcancel(cancel, errbuf, sizeof(errbuf)))
+		if (conn->status == CONN_COPY_IN && !remote_connection_end_copy(conn, &err))
+			remote_connection_error_elog(&err, WARNING);
+
+		/*
+		 * If it takes too long to cancel the query and discard the result, assume
+		 * the connection is dead.
+		 */
+		endtime = TimestampTzPlusMilliseconds(GetCurrentTimestamp(), 30000);
+
+		/*
+		 * Issue cancel request.  Unfortunately, there's no good way to limit the
+		 * amount of time that we might block inside PQcancel().
+		 */
+		if ((cancel = PQgetCancel(conn->pg_conn)))
 		{
-			ereport(WARNING,
-					(errcode(ERRCODE_CONNECTION_FAILURE),
-					 errmsg("could not send cancel request: %s", errbuf)));
+			if (!PQcancel(cancel, errbuf, sizeof(errbuf)))
+			{
+				ereport(WARNING,
+						(errcode(ERRCODE_CONNECTION_FAILURE),
+						 errmsg("could not send cancel request: %s", errbuf)));
+				PQfreeCancel(cancel);
+				conn->status = CONN_IDLE;
+				return false;
+			}
 			PQfreeCancel(cancel);
-			return false;
 		}
-		PQfreeCancel(cancel);
-	}
 
-	switch (remote_connection_drain(conn, endtime, NULL))
-	{
-		case CONN_OK:
-			/* Successfully, drained */
-		case CONN_NO_RESPONSE:
-			/* No response, likely beceause there was nothing to cancel */
-			return true;
-		default:
-			return false;
+		switch (remote_connection_drain(conn, endtime, NULL))
+		{
+			case CONN_OK:
+				/* Successfully, drained */
+			case CONN_NO_RESPONSE:
+				/* No response, likely beceause there was nothing to cancel */
+				success = true;
+				break;
+			default:
+				success = false;
+				break;
+		}
 	}
+	PG_CATCH();
+	{
+		conn->status = CONN_IDLE;
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	conn->status = CONN_IDLE;
+
+	return success;
 }
 
 void
@@ -1850,6 +1952,137 @@ bool
 remote_connection_set_single_row_mode(TSConnection *conn)
 {
 	return PQsetSingleRowMode(conn->pg_conn);
+}
+
+static bool
+send_binary_copy_header(const TSConnection *conn, TSConnectionError *err)
+{
+	/* File header for binary format */
+	static const char file_header[] = {
+		'P', 'G', 'C', 'O', 'P', 'Y', '\n', '\377', '\r', '\n', '\0', /* Signature */
+		0,   0,   0,   0,											  /* 4 bytes flags */
+		0,   0,   0,   0 /* 4 bytes header extension length (unused) */
+	};
+
+	int res = PQputCopyData(conn->pg_conn, file_header, sizeof(file_header));
+
+	if (res != 1)
+		return fill_connection_error(err,
+									 ERRCODE_CONNECTION_FAILURE,
+									 "could not set binary COPY mode",
+									 conn);
+	return true;
+}
+
+bool
+remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binary,
+							 TSConnectionError *err)
+{
+	PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+	PGresult *volatile res = NULL;
+
+	if (PQisnonblocking(pg_conn))
+		return fill_simple_error(err,
+								 ERRCODE_FEATURE_NOT_SUPPORTED,
+								 "distributed copy doesn't support non-blocking connections",
+								 conn);
+
+	if (conn->status != CONN_IDLE)
+		return fill_simple_error(err,
+								 ERRCODE_INTERNAL_ERROR,
+								 "connection not IDLE when beginning COPY",
+								 conn);
+
+	res = PQexec(pg_conn, copycmd);
+
+	if (PQresultStatus(res) != PGRES_COPY_IN)
+	{
+		fill_result_error(err,
+						  ERRCODE_CONNECTION_FAILURE,
+						  "unable to start remote COPY on data node",
+						  res);
+		PQclear(res);
+		return false;
+	}
+
+	PQclear(res);
+
+	if (binary && !send_binary_copy_header(conn, err))
+		goto err_end_copy;
+
+	conn->binary_copy = binary;
+	conn->status = CONN_COPY_IN;
+
+	return true;
+err_end_copy:
+	PQputCopyEnd(pg_conn, err->msg);
+
+	return false;
+}
+
+bool
+remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
+								TSConnectionError *err)
+{
+	int res;
+
+	res = PQputCopyData(remote_connection_get_pg_conn(conn), buffer, len);
+
+	if (res != 1)
+		return fill_connection_error(err,
+									 ERRCODE_CONNECTION_EXCEPTION,
+									 "could not send COPY data",
+									 conn);
+
+	return true;
+}
+
+static bool
+send_end_binary_copy_data(const TSConnection *conn, TSConnectionError *err)
+{
+	const uint16 buf = pg_hton16((uint16) -1);
+
+	if (PQputCopyData(conn->pg_conn, (char *) &buf, sizeof(buf)) != 1)
+		return fill_simple_error(err, ERRCODE_INTERNAL_ERROR, "could not end binary COPY", conn);
+
+	return true;
+}
+
+bool
+remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
+{
+	PGresult *res;
+	bool success;
+
+	if (conn->status != CONN_COPY_IN)
+		return fill_simple_error(err,
+								 ERRCODE_INTERNAL_ERROR,
+								 "connection not in COPY_IN state when ending COPY",
+								 conn);
+
+	if (conn->binary_copy && !send_end_binary_copy_data(conn, err))
+		return false;
+
+	if (PQputCopyEnd(conn->pg_conn, NULL) != 1)
+		return fill_simple_error(err,
+								 ERRCODE_CONNECTION_EXCEPTION,
+								 "could not end remote COPY",
+								 conn);
+
+	success = true;
+	conn->status = CONN_PROCESSING;
+
+	while ((res = PQgetResult(conn->pg_conn)))
+		if (PQresultStatus(res) != PGRES_COMMAND_OK)
+			success = fill_result_error(err,
+										ERRCODE_CONNECTION_EXCEPTION,
+										"invalid result when ending remote COPY",
+										res);
+
+	Assert(res == NULL);
+	conn->status = CONN_IDLE;
+
+	return success;
 }
 
 #ifdef TS_DEBUG

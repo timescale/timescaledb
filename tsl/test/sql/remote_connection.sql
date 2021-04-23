@@ -2,11 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-
--- ===================================================================
--- create fake fdw to create data node
--- ===================================================================
-
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 CREATE FUNCTION test.remote_connection_tests()

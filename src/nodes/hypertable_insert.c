@@ -281,7 +281,7 @@ plan_remote_modify(PlannerInfo *root, HypertableInsertPath *hipath, ModifyTable 
 		Index rti = lfirst_int(lc);
 		RangeTblEntry *rte = planner_rt_fetch(rti, root);
 		List *fdwprivate = NIL;
-		bool is_data_node_dispatch = bms_is_member(i, hipath->data_node_dispatch_plans);
+		bool is_distributed_insert = bms_is_member(i, hipath->distributed_insert_plans);
 
 		/* If data node batching is supported, we won't actually use the FDW
 		 * direct modify API (everything is done in DataNodeDispatch), but we
@@ -290,10 +290,10 @@ plan_remote_modify(PlannerInfo *root, HypertableInsertPath *hipath, ModifyTable 
 		 * it should handle only returning projections as if it was a direct
 		 * modify. We do this by adding the result relation's plan to
 		 * fdwDirectModifyPlans. See ExecModifyTable for more details. */
-		if (is_data_node_dispatch)
+		if (is_distributed_insert)
 			direct_modify_plans = bms_add_member(direct_modify_plans, i);
 
-		if (!is_data_node_dispatch && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
+		if (!is_distributed_insert && NULL != fdwroutine && fdwroutine->PlanForeignModify != NULL &&
 			ts_is_hypertable(rte->relid))
 			fdwprivate = fdwroutine->PlanForeignModify(root, mt, rti, i);
 		else
@@ -446,7 +446,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *lc_path, *lc_rel;
 	List *subpaths = NIL;
-	Bitmapset *data_node_dispatch_plans = NULL;
+	Bitmapset *distributed_insert_plans = NULL;
 	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
 	int i = 0;
@@ -473,11 +473,11 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 
 			if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
 			{
-				/* Remember that this will become a data node dispatch plan. We
-				 * need to know later whether or not to plan this using the
-				 * FDW API. */
-				data_node_dispatch_plans = bms_add_member(data_node_dispatch_plans, i);
-				subpath = ts_cm_functions->data_node_dispatch_path_create(root, mtpath, rti, i);
+				/* Remember that this will become a data node dispatch/copy
+				 * plan. We need to know later whether or not to plan this
+				 * using the FDW API. */
+				distributed_insert_plans = bms_add_member(distributed_insert_plans, i);
+				subpath = ts_cm_functions->distributed_insert_path_create(root, mtpath, rti, i);
 			}
 			else
 				subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
@@ -498,7 +498,7 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	hipath->cpath.path.pathtype = T_CustomScan;
 	hipath->cpath.custom_paths = list_make1(mtpath);
 	hipath->cpath.methods = &hypertable_insert_path_methods;
-	hipath->data_node_dispatch_plans = data_node_dispatch_plans;
+	hipath->distributed_insert_plans = distributed_insert_plans;
 	hipath->serveroids = ts_hypertable_get_available_data_node_server_oids(ht);
 	path = &hipath->cpath.path;
 	mtpath->subpaths = subpaths;

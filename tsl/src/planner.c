@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_trigger.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 #include <foreign/fdwapi.h>
@@ -23,6 +24,8 @@
 #include "hypertable.h"
 #include "nodes/compress_dml/compress_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/data_node_dispatch.h"
+#include "nodes/data_node_copy.h"
 #include "nodes/gapfill/planner.h"
 #include "planner.h"
 
@@ -145,4 +148,83 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 	}
 
 	ts_cache_release(hcache);
+}
+
+/*
+ * Check session variable to disable distributed insert with COPY.
+ *
+ * Allows testing and comparing different insert plans. Not a full GUC, since
+ * in most cases this is not something that users are expected to disable.
+ */
+static bool
+copy_mode_enabled(void)
+{
+	const char *enable_copy =
+		GetConfigOption("timescaledb.enable_distributed_insert_with_copy", true, false);
+
+	/* Default to enabled */
+	if (NULL == enable_copy)
+		return true;
+
+	return strcmp(enable_copy, "true") == 0;
+}
+
+/*
+ * Decide on a plan to use for distributed inserts.
+ */
+Path *
+tsl_create_distributed_insert_path(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
+								   int subplan_index)
+{
+	bool copy_possible = copy_mode_enabled();
+
+	/* Check if it is possible to use COPY in the backend.
+	 *
+	 * There are two cases where we cannot use COPY:
+	 *
+	 * 1. ON CONFLICT clause exists
+	 *
+	 * 2. RETURNING clause exists and tuples are expected to be modified on
+	 *    INSERT by a trigger.
+	 *
+	 * For case (2), we assume that we can return the original tuples if there
+	 * are no triggers on the root hypertable (we also assume that chunks on
+	 * data nodes aren't modified with their own triggers). Conversely, if
+	 * there are any non-known triggers, we cannot use COPY in the backend
+	 * when there is a RETURNING clause.
+	 */
+	if (copy_possible)
+	{
+		if (NULL != mtpath->onconflict)
+			copy_possible = false;
+		else if (NIL != mtpath->returningLists)
+		{
+			const RangeTblEntry *rte = planner_rt_fetch(hypertable_rti, root);
+			const Relation rel = table_open(rte->relid, AccessShareLock);
+			int i;
+
+			for (i = 0; i < rel->trigdesc->numtriggers; i++)
+			{
+				const Trigger *trig = &rel->trigdesc->triggers[i];
+
+				/*
+				 * Check for BEFORE INSERT triggers as those are the ones that can
+				 * modify a tuple.
+				 */
+				if (strcmp(trig->tgname, INSERT_BLOCKER_NAME) != 0 &&
+					TRIGGER_FOR_INSERT(trig->tgtype) && TRIGGER_FOR_BEFORE(trig->tgtype))
+				{
+					copy_possible = false;
+					break;
+				}
+			}
+
+			table_close(rel, AccessShareLock);
+		}
+	}
+
+	if (copy_possible)
+		return data_node_copy_path_create(root, mtpath, hypertable_rti, subplan_index);
+
+	return data_node_dispatch_path_create(root, mtpath, hypertable_rti, subplan_index);
 }

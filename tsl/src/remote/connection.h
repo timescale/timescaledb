@@ -11,7 +11,6 @@
 #include <libpq-fe.h>
 
 #include "async.h"
-#include "stmt_params.h"
 
 typedef struct TSConnection TSConnection;
 
@@ -28,6 +27,29 @@ typedef enum ConnOptionType
 	CONN_OPTION_TYPE_USER,
 	CONN_OPTION_TYPE_NODE,
 } ConnOptionType;
+
+typedef struct TSConnectionError
+{
+	/* Local error information */
+	int errcode;
+	const char *msg;
+	const char *host;
+	const char *nodename;
+	const char *connmsg;
+	/* Remote error information, if available */
+	struct
+	{
+		int elevel;
+		int errcode;
+		const char *sqlstate;
+		const char *msg;
+		const char *hint;
+		const char *detail;
+		const char *context;
+		const char *stmtpos;
+		const char *sqlcmd;
+	} remote;
+} TSConnectionError;
 
 /* Open a connection with a remote endpoint. Note that this is a raw
  * connection that does not obey txn semantics and is allocated using
@@ -80,14 +102,21 @@ typedef enum TSConnectionResult
 	CONN_NO_RESPONSE,
 } TSConnectionResult;
 
+typedef enum TSConnectionStatus
+{
+	CONN_IDLE,		 /* No command being processed */
+	CONN_PROCESSING, /* Command/query is being processed */
+	CONN_COPY_IN,	/* Connection is in COPY_IN mode */
+} TSConnectionStatus;
+
 TSConnectionResult remote_connection_drain(TSConnection *conn, TimestampTz endtime,
 										   PGresult **result);
 extern bool remote_connection_cancel_query(TSConnection *conn);
 extern PGconn *remote_connection_get_pg_conn(const TSConnection *conn);
 extern bool remote_connection_is_processing(const TSConnection *conn);
-extern void remote_connection_set_processing(TSConnection *conn, bool processing);
+extern void remote_connection_set_status(TSConnection *conn, TSConnectionStatus status);
+extern TSConnectionStatus remote_connection_get_status(const TSConnection *conn);
 extern bool remote_connection_configure_if_changed(TSConnection *conn);
-extern void remote_connection_elog(TSConnection *conn, int elevel);
 extern const char *remote_connection_node_name(const TSConnection *conn);
 extern bool remote_connection_set_single_row_mode(TSConnection *conn);
 
@@ -95,7 +124,6 @@ extern bool remote_connection_set_single_row_mode(TSConnection *conn);
 extern void remote_result_cmd_ok(PGresult *res);
 extern PGresult *remote_result_query_ok(PGresult *res);
 extern void remote_result_close(PGresult *res);
-extern void remote_result_elog(PGresult *res, int elevel);
 
 /* wrappers around async stuff to emulate sync communication */
 
@@ -115,6 +143,68 @@ typedef struct RemoteConnectionStats
 extern void remote_connection_stats_reset(void);
 extern RemoteConnectionStats *remote_connection_stats_get(void);
 #endif
+
+/*
+ * Connection functions for COPY mode.
+ */
+extern bool remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binary,
+										 TSConnectionError *err);
+extern bool remote_connection_end_copy(TSConnection *conn, TSConnectionError *err);
+extern bool remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t len,
+											TSConnectionError *err);
+
+/* Error handling functions for connections */
+extern void remote_connection_get_error(const TSConnection *conn, TSConnectionError *err);
+extern void remote_connection_get_result_error(const PGresult *res, TSConnectionError *err);
+
+/*
+ * The following are macros for emitting errors related to connections or
+ * remote command execution. They need to be macros to preserve the error
+ * context of where they are called (line number, statement, etc.).
+ */
+#define remote_connection_error_elog(err, elevel)                                                  \
+	ereport(elevel,                                                                                \
+			((err)->remote.errcode != 0 ? errcode((err)->remote.errcode) :                         \
+										  errcode((err)->errcode),                                 \
+			 (err)->remote.msg ?                                                                   \
+				 errmsg_internal("[%s]: %s", (err)->nodename, (err)->remote.msg) :                 \
+				 ((err)->connmsg ? errmsg_internal("[%s]: %s", (err)->nodename, (err)->connmsg) :  \
+								   errmsg_internal("[%s]: %s", (err)->nodename, (err)->msg)),      \
+			 (err)->remote.detail ? errdetail_internal("%s", (err)->remote.detail) : 0,            \
+			 (err)->remote.hint ? errhint("%s", (err)->remote.hint) : 0,                           \
+			 (err)->remote.sqlcmd ? errcontext("Remote SQL command: %s", (err)->remote.sqlcmd) :   \
+									0))
+
+/*
+ * Report an error we got from the remote host.
+ *
+ * elevel: error level to use (typically ERROR, but might be less)
+ * res: PGresult containing the error
+ */
+#define remote_result_elog(pgres, elevel)                                                          \
+	do                                                                                             \
+	{                                                                                              \
+		PG_TRY();                                                                                  \
+		{                                                                                          \
+			TSConnectionError err;                                                                 \
+			remote_connection_get_result_error(pgres, &err);                                       \
+			remote_connection_error_elog(&err, elevel);                                            \
+		}                                                                                          \
+		PG_CATCH();                                                                                \
+		{                                                                                          \
+			PQclear(pgres);                                                                        \
+			PG_RE_THROW();                                                                         \
+		}                                                                                          \
+		PG_END_TRY();                                                                              \
+	} while (0)
+
+#define remote_connection_elog(conn, elevel)                                                       \
+	do                                                                                             \
+	{                                                                                              \
+		TSConnectionError err;                                                                     \
+		remote_connection_get_error(conn, &err);                                                   \
+		remote_connection_error_elog(&err, elevel);                                                \
+	} while (0)
 
 extern void _remote_connection_init(void);
 extern void _remote_connection_fini(void);

@@ -107,7 +107,7 @@ connection_should_be_remade(const ConnectionCacheEntry *entry)
 	 * an async call was aborted. The connection could also have been
 	 * invalidated, but we only care if we aren't still processing a
 	 * transaction. */
-	if (remote_connection_is_processing(entry->conn) ||
+	if (remote_connection_get_status(entry->conn) == CONN_PROCESSING ||
 		(entry->invalidated && remote_connection_xact_depth_get(entry->conn) == 0))
 		return true;
 
@@ -157,6 +157,7 @@ static void *
 connection_cache_update_entry(Cache *cache, CacheQuery *query)
 {
 	ConnectionCacheEntry *entry = query->result;
+	TSConnectionStatus status;
 
 	if (connection_should_be_remade(entry))
 	{
@@ -164,7 +165,11 @@ connection_cache_update_entry(Cache *cache, CacheQuery *query)
 		return connection_cache_create_entry(cache, query);
 	}
 
-	remote_connection_configure_if_changed(entry->conn);
+	status = remote_connection_get_status(entry->conn);
+	Assert(status == CONN_IDLE || status == CONN_COPY_IN);
+
+	if (status == CONN_IDLE)
+		remote_connection_configure_if_changed(entry->conn);
 
 	return entry;
 }

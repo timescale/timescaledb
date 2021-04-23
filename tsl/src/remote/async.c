@@ -208,7 +208,7 @@ async_request_send_internal(AsyncRequest *req, int elevel)
 		}
 	}
 	async_request_set_state(req, EXECUTING);
-	remote_connection_set_processing(req->conn, true);
+	remote_connection_set_status(req->conn, CONN_PROCESSING);
 	return req;
 }
 
@@ -645,7 +645,7 @@ get_single_response_nonblocking(AsyncRequestSet *set)
 						 * NULL return means query is complete
 						 */
 						set->requests = list_delete_ptr(set->requests, req);
-						remote_connection_set_processing(req->conn, false);
+						remote_connection_set_status(req->conn, CONN_IDLE);
 						async_request_set_state(req, COMPLETED);
 
 						/* set changed so rerun function */
