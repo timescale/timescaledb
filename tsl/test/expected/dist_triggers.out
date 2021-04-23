@@ -413,6 +413,9 @@ show_triggers
 (1 row)
 
 TRUNCATE disttable;
+-- Show EXPLAINs for INSERT first with DataNodeCopy disabled. Should
+-- always use DataNodeDispatch
+SET timescaledb.enable_distributed_insert_with_copy=false;
 -- Without RETURNING
 EXPLAIN VERBOSE
 INSERT INTO disttable (time, device, temp_c)
@@ -432,6 +435,51 @@ SELECT time, device, temp_c FROM datatable;
                      ->  Seq Scan on public.datatable  (cost=0.00..33.55 rows=1570 width=24)
                            Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c
 (12 rows)
+
+-- With RETURNING
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable RETURNING *;
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+   Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
+   ->  Insert on public.disttable  (cost=0.00..33.55 rows=1570 width=24)
+         Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+               Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+               Batch size: 1000
+               Remote SQL: INSERT INTO public.disttable(id, "time", device, temp_c) VALUES ($1, $2, $3, $4), ..., ($3997, $3998, $3999, $4000) RETURNING id, "time", device, temp_c
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+                     Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+                     ->  Seq Scan on public.datatable  (cost=0.00..33.55 rows=1570 width=24)
+                           Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c
+(14 rows)
+
+-- With DataNodeCopy enabled, should use DataNodeCopy when there's no
+-- RETURNING clause, but with RETURNING it should use DataNodeDispatch
+-- due to the modifying trigger.
+SET timescaledb.enable_distributed_insert_with_copy=true;
+-- Without RETURNING
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable;
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
+   ->  Insert on public.disttable  (cost=0.00..33.55 rows=1570 width=24)
+         ->  Custom Scan (DataNodeCopy)  (cost=0.00..33.55 rows=1570 width=24)
+               Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+               Remote SQL: COPY public.disttable (id, "time", device, temp_c) FROM STDIN WITH (FORMAT binary)
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+                     Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+                     ->  Seq Scan on public.datatable  (cost=0.00..33.55 rows=1570 width=24)
+                           Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c
+(11 rows)
 
 -- With RETURNING
 EXPLAIN VERBOSE

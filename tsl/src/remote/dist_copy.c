@@ -18,6 +18,7 @@
 #include "dist_copy.h"
 #include "copy.h"
 #include "nodes/chunk_dispatch.h"
+#include "nodes/chunk_insert_state.h"
 #include "dimension.h"
 #include "hypertable.h"
 #include "partitioning.h"
@@ -30,8 +31,6 @@
 
 #define DEFAULT_PG_DELIMITER '\t'
 #define DEFAULT_PG_NULL_VALUE "\\N"
-#define POSTGRES_BINARY_COPY_SIGNATURE "PGCOPY\n\377\r\n\0"
-#define POSTGRES_SIGNATURE_LENGTH 11
 
 /* This will maintain a list of connections associated with a given chunk so we don't have to keep
  * looking them up every time.
@@ -47,7 +46,7 @@ typedef struct ChunkConnectionList
  */
 typedef struct CopyDimensionInfo
 {
-	Dimension *dim;
+	const Dimension *dim;
 	int corresponding_copy_field;
 	Datum default_value;
 	FmgrInfo io_func;
@@ -72,6 +71,7 @@ typedef struct TextCopyContext
 {
 	int ndimensions;
 	CopyDimensionInfo *dimensions;
+	FmgrInfo *out_functions;
 	char delimiter;
 	char *null_string;
 	char **fields;
@@ -94,7 +94,8 @@ typedef struct RemoteCopyContext
 {
 	/* Operation data */
 	CopyConnectionState connection_state;
-	CopyChunkState *ccstate;
+	Hypertable *ht;
+	List *attnums;
 	void *data_context; /* TextCopyContext or BinaryCopyContext */
 	bool binary_operation;
 	MemoryContext mctx; /* MemoryContext that holds the RemoteCopyContext */
@@ -108,14 +109,15 @@ typedef struct RemoteCopyContext
  * dimensions and values.
  */
 static CopyDimensionInfo *
-generate_copy_dimensions(Dimension *dims, int ndimensions, List *attnums, Hypertable *ht)
+generate_copy_dimensions(const Dimension *dims, int ndimensions, const List *attnums,
+						 const Hypertable *ht)
 {
 	CopyDimensionInfo *result = palloc0(ndimensions * sizeof(CopyDimensionInfo));
 	int idx;
 
 	for (idx = 0; idx < ndimensions; ++idx)
 	{
-		Dimension *d = &dims[idx];
+		const Dimension *d = &dims[idx];
 		CopyDimensionInfo *target = &result[idx];
 		int i = 0;
 		ListCell *lc;
@@ -185,7 +187,7 @@ get_copy_dimension_datum(char **fields, CopyDimensionInfo *info)
 }
 
 static int64
-convert_datum_to_dim_idx(Datum datum, Dimension *d)
+convert_datum_to_dim_idx(Datum datum, const Dimension *d)
 {
 	Oid dimtype;
 
@@ -229,82 +231,36 @@ calculate_hyperspace_point_from_fields(char **data, CopyDimensionInfo *dimension
 }
 
 static void
-send_binary_copy_header(PGconn *connection)
-{
-	StringInfo header = makeStringInfo();
-	uint32 buf = 0;
-	int result;
-
-	appendBinaryStringInfo(header,
-						   POSTGRES_BINARY_COPY_SIGNATURE,
-						   POSTGRES_SIGNATURE_LENGTH);			/* signature */
-	appendBinaryStringInfo(header, (char *) &buf, sizeof(buf)); /* flags */
-	appendBinaryStringInfo(header, (char *) &buf, sizeof(buf)); /* header extension length */
-
-	result = PQputCopyData(connection, header->data, 19);
-	if (result != 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_CONNECTION_FAILURE),
-				 errmsg("failed to send data to data data node %s", PQhost(connection))));
-}
-
-static void
 start_remote_copy_on_new_connection(CopyConnectionState *state, TSConnection *connection)
 {
-	PGconn *pg_conn = remote_connection_get_pg_conn(connection);
+	TSConnectionError err;
 
-	if (PQisnonblocking(pg_conn))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("distributed copy doesn't support non-blocking connections")));
+	state->connections_in_use = list_append_unique_ptr(state->connections_in_use, connection);
 
-	if (!list_member_ptr(state->connections_in_use, connection))
-	{
-		PGresult *volatile res = NULL;
-
-		PG_TRY();
-		{
-			res = PQexec(pg_conn, state->outgoing_copy_cmd);
-
-			if (PQresultStatus(res) != PGRES_COPY_IN)
-				ereport(ERROR,
-						(errcode(ERRCODE_CONNECTION_FAILURE),
-						 errmsg("unable to start remote COPY on data node"),
-						 errdetail("Remote command error: %s", PQresultErrorMessage(res))));
-
-			PQclear(res);
-		}
-		PG_CATCH();
-		{
-			if (NULL != res)
-				PQclear(res);
-
-			PG_RE_THROW();
-		}
-		PG_END_TRY();
-
-		if (state->using_binary)
-			send_binary_copy_header(pg_conn);
-
-		state->connections_in_use = lappend(state->connections_in_use, connection);
-	}
+	if (remote_connection_get_status(connection) == CONN_IDLE &&
+		!remote_connection_begin_copy(connection,
+									  state->outgoing_copy_cmd,
+									  state->using_binary,
+									  &err))
+		remote_connection_error_elog(&err, ERROR);
 }
 
-static ChunkConnectionList *
-create_connection_list_for_chunk(CopyConnectionState *state, const Chunk *chunk)
+static const ChunkConnectionList *
+create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
+								 const List *chunk_data_nodes, Oid userid)
 {
 	ChunkConnectionList *chunk_connections;
 	ListCell *lc;
 
 	chunk_connections = palloc0(sizeof(ChunkConnectionList));
-	chunk_connections->chunk_id = chunk->fd.id;
+	chunk_connections->chunk_id = chunk_id;
 	chunk_connections->connections = NIL;
 
-	foreach (lc, chunk->data_nodes)
+	foreach (lc, chunk_data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
-		TSConnection *connection =
-			data_node_get_connection(NameStr(cdn->fd.node_name), REMOTE_TXN_NO_PREP_STMT, true);
+		TSConnectionId id = remote_connection_id(cdn->foreign_server_oid, userid);
+		TSConnection *connection = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
 
 		start_remote_copy_on_new_connection(state, connection);
 		chunk_connections->connections = lappend(chunk_connections->connections, connection);
@@ -314,110 +270,29 @@ create_connection_list_for_chunk(CopyConnectionState *state, const Chunk *chunk)
 	return chunk_connections;
 }
 
-static int
-send_end_binary_copy_data(PGconn *connection)
-{
-	const uint16 buf = pg_hton16((uint16) -1);
-	return PQputCopyData(connection, (char *) &buf, sizeof(buf));
-}
-
-static char *
-get_error_field_copy(PGresult *res, int fieldcode)
-{
-	const char *msg = PQresultErrorField(res, fieldcode);
-
-	if (NULL == msg)
-		return NULL;
-	return pchomp(msg);
-}
-
 static void
-clear_results(const List *results, bool report_error)
+finish_outstanding_copies(const CopyConnectionState *state)
 {
 	ListCell *lc;
-	const char *primary = NULL;
-	const char *detail = NULL;
-	const char *hint = NULL;
+	TSConnectionError err;
+	bool failure = false;
 
-	if (NIL == results)
-		return;
-
-	foreach (lc, results)
+	foreach (lc, state->connections_in_use)
 	{
-		PGresult *res = lfirst(lc);
+		TSConnection *conn = lfirst(lc);
 
-		if (PQresultStatus(res) != PGRES_COMMAND_OK && NULL == primary && report_error)
-		{
-			primary = get_error_field_copy(res, PG_DIAG_MESSAGE_PRIMARY);
-			detail = get_error_field_copy(res, PG_DIAG_MESSAGE_DETAIL);
-			hint = get_error_field_copy(res, PG_DIAG_MESSAGE_HINT);
-		}
-
-		PQclear(res);
+		if (remote_connection_get_status(conn) == CONN_COPY_IN &&
+			!remote_connection_end_copy(conn, &err))
+			failure = true;
 	}
 
-	if (NULL != primary)
-		ereport(ERROR,
-				(errcode(ERRCODE_CONNECTION_EXCEPTION),
-				 errmsg("%s", primary),
-				 detail == NULL ? 0 : errdetail("%s", detail),
-				 hint == NULL ? 0 : errhint("%s", hint)));
+	if (failure)
+		remote_connection_error_elog(&err, ERROR);
 }
 
-static void
-finish_outstanding_copies(CopyConnectionState *state)
-{
-	ListCell *lc;
-	List *volatile results = NIL;
-	PGresult *volatile res = NULL;
-
-	PG_TRY();
-	{
-		foreach (lc, state->connections_in_use)
-		{
-			TSConnection *conn = lfirst(lc);
-			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
-
-			if (state->using_binary)
-				if (send_end_binary_copy_data(pg_conn) != 1)
-					ereport(ERROR,
-							(errcode(ERRCODE_CONNECTION_EXCEPTION),
-							 errmsg("%s", PQerrorMessage(pg_conn))));
-
-			if (PQputCopyEnd(pg_conn, NULL) == -1)
-				ereport(ERROR,
-						(errcode(ERRCODE_CONNECTION_EXCEPTION),
-						 errmsg("%s", PQerrorMessage(pg_conn))));
-
-			res = PQgetResult(pg_conn);
-			Assert(res != NULL);
-			results = lappend(results, res);
-
-			/* Need to get result a second time to move the connection out of copy mode */
-			res = PQgetResult(pg_conn);
-
-			if (res != NULL)
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
-						 errmsg("COPY command resulted in unexpected state")));
-		}
-	}
-	PG_CATCH();
-	{
-		if (res != NULL)
-			PQclear(res);
-
-		clear_results(results, false);
-		PG_RE_THROW();
-	}
-	PG_END_TRY();
-
-	Assert(res == NULL);
-	clear_results(results, true);
-}
-
-static List *
-get_connections_for_chunk(RemoteCopyContext *context, const Chunk *chunk)
+static const List *
+get_connections_for_chunk(RemoteCopyContext *context, int32 chunk_id, const List *chunk_data_nodes,
+						  Oid userid)
 {
 	CopyConnectionState *state = &context->connection_state;
 	MemoryContext oldmctx;
@@ -428,12 +303,26 @@ get_connections_for_chunk(RemoteCopyContext *context, const Chunk *chunk)
 	{
 		ChunkConnectionList *chunkconns = lfirst(lc);
 
-		if (chunkconns->chunk_id == chunk->fd.id)
+		if (chunkconns->chunk_id == chunk_id)
+		{
+#ifdef USE_ASSERT_CHECKING
+			ListCell *lc2;
+
+			/* Check that connections are in COPY_IN mode */
+			foreach (lc2, chunkconns->connections)
+			{
+				TSConnection *conn = lfirst(lc2);
+
+				Assert(remote_connection_get_status(conn) == CONN_COPY_IN);
+			}
+#endif /* USE_ASSERT_CHECKING */
 			return chunkconns->connections;
+		}
 	}
 
 	oldmctx = MemoryContextSwitchTo(context->mctx);
-	conns = create_connection_list_for_chunk(state, chunk)->connections;
+	conns =
+		create_connection_list_for_chunk(state, chunk_id, chunk_data_nodes, userid)->connections;
 	MemoryContextSwitchTo(oldmctx);
 
 	return conns;
@@ -449,7 +338,7 @@ copy_should_send_binary()
  * Extract a quoted list of identifiers from a DefElem with arg type T_list.
  */
 static char *
-name_list_to_string(DefElem *def)
+name_list_to_string(const DefElem *def)
 {
 	StringInfoData string;
 	ListCell *lc;
@@ -480,7 +369,7 @@ name_list_to_string(DefElem *def)
  * Extract a string value (otherwise uninterpreted) from a DefElem.
  */
 static char *
-def_get_string(DefElem *def)
+def_get_string(const DefElem *def)
 {
 	if (def->arg == NULL)
 		ereport(ERROR,
@@ -522,7 +411,7 @@ is_supported_binary_option(const char *option)
  * node.
  */
 static const char *
-deparse_copy_cmd(const CopyStmt *stmt, Hypertable *ht, bool binary)
+deparse_copy_cmd(const CopyStmt *stmt, const Hypertable *ht, bool binary)
 {
 	ListCell *lc;
 	StringInfo command = makeStringInfo();
@@ -550,7 +439,7 @@ deparse_copy_cmd(const CopyStmt *stmt, Hypertable *ht, bool binary)
 
 	appendStringInfo(command, "FROM STDIN");
 
-	if (stmt->options != NULL || binary)
+	if (stmt->options != NIL || binary)
 	{
 		bool first = true;
 		appendStringInfo(command, " WITH (");
@@ -585,8 +474,9 @@ deparse_copy_cmd(const CopyStmt *stmt, Hypertable *ht, bool binary)
 			else
 				appendStringInfo(command, "%s %s", option, def_get_string(defel));
 		}
+
 		if (binary)
-			appendStringInfo(command, "%sformat binary", first ? "" : ", ");
+			appendStringInfo(command, "%sFORMAT binary", first ? "" : ", ");
 		appendStringInfo(command, ")");
 	}
 
@@ -594,7 +484,7 @@ deparse_copy_cmd(const CopyStmt *stmt, Hypertable *ht, bool binary)
 }
 
 /*
- * This function checks the options specified for the copy c ommand and makes
+ * This function checks the options specified for the copy command and makes
  * sure they're supported.  It also determines what delimiter and null
  * encoding are being specified and will use these values when sending data to
  * the backend as they presumably won't conflict with the values being passed.
@@ -615,11 +505,11 @@ validate_options(List *copy_options, char *delimiter, char **null_string)
 
 	foreach (lc, copy_options)
 	{
-		DefElem *defel = lfirst_node(DefElem, lc);
+		const DefElem *defel = lfirst_node(DefElem, lc);
 
 		if (strcmp(defel->defname, "format") == 0)
 		{
-			char *fmt;
+			const char *fmt;
 
 			Assert(nodeTag(defel->arg) == T_String);
 			fmt = strVal(defel->arg);
@@ -633,29 +523,15 @@ validate_options(List *copy_options, char *delimiter, char **null_string)
 		}
 		else if (strcmp(defel->defname, "delimiter") == 0)
 		{
-			char *delim_string = def_get_string(defel);
+			const char *delim_string = def_get_string(defel);
 
 			Assert(strlen(delim_string) == 1);
 			*delimiter = delim_string[0];
 			delimiter_found = true;
 		}
 		else if (strcmp(defel->defname, "null") == 0)
-		{
 			*null_string = def_get_string(defel);
-		}
 	}
-}
-
-static TextCopyContext *
-generate_text_copy_context(const CopyStmt *stmt, Hypertable *ht, List *attnums)
-{
-	TextCopyContext *ctx = palloc0(sizeof(TextCopyContext));
-
-	ctx->ndimensions = ht->space->num_dimensions;
-	validate_options(stmt->options, &ctx->delimiter, &ctx->null_string);
-	ctx->dimensions =
-		generate_copy_dimensions(ht->space->dimensions, ctx->ndimensions, attnums, ht);
-	return ctx;
 }
 
 /* Populates the passed in pointer with an array of output functions and returns the array size.
@@ -663,10 +539,11 @@ generate_text_copy_context(const CopyStmt *stmt, Hypertable *ht, List *attnums)
  * populate the functions for columns used in the copy command.
  */
 static int
-get_copy_conversion_functions(Hypertable *ht, List *copy_attnums, FmgrInfo **functions)
+get_copy_conversion_functions(Oid relid, const List *copy_attnums, FmgrInfo **functions,
+							  bool binary)
 {
 	ListCell *lc;
-	Relation rel = relation_open(ht->main_table_relid, AccessShareLock);
+	Relation rel = relation_open(relid, AccessShareLock);
 	TupleDesc tupDesc = RelationGetDescr(rel);
 
 	*functions = palloc0(tupDesc->natts * sizeof(FmgrInfo));
@@ -677,7 +554,11 @@ get_copy_conversion_functions(Hypertable *ht, List *copy_attnums, FmgrInfo **fun
 		bool isvarlena;
 		Form_pg_attribute attr = TupleDescAttr(tupDesc, offset);
 
-		getTypeBinaryOutputInfo(attr->atttypid, &out_func_oid, &isvarlena);
+		if (binary)
+			getTypeBinaryOutputInfo(attr->atttypid, &out_func_oid, &isvarlena);
+		else
+			getTypeOutputInfo(attr->atttypid, &out_func_oid, &isvarlena);
+
 		fmgr_info(out_func_oid, &((*functions)[offset]));
 	}
 	relation_close(rel, AccessShareLock);
@@ -685,12 +566,26 @@ get_copy_conversion_functions(Hypertable *ht, List *copy_attnums, FmgrInfo **fun
 	return tupDesc->natts;
 }
 
+static TextCopyContext *
+generate_text_copy_context(const CopyStmt *stmt, const Hypertable *ht, const List *attnums)
+{
+	TextCopyContext *ctx = palloc0(sizeof(TextCopyContext));
+
+	get_copy_conversion_functions(ht->main_table_relid, attnums, &ctx->out_functions, false);
+
+	ctx->ndimensions = ht->space->num_dimensions;
+	validate_options(stmt->options, &ctx->delimiter, &ctx->null_string);
+	ctx->dimensions =
+		generate_copy_dimensions(ht->space->dimensions, ctx->ndimensions, attnums, ht);
+	return ctx;
+}
+
 static BinaryCopyContext *
-generate_binary_copy_context(const CopyStmt *stmt, ExprContext *econtext, Hypertable *ht,
-							 List *attnums)
+generate_binary_copy_context(ExprContext *econtext, const Hypertable *ht, const List *attnums)
 {
 	BinaryCopyContext *ctx = palloc0(sizeof(BinaryCopyContext));
-	int columns = get_copy_conversion_functions(ht, attnums, &ctx->out_functions);
+	int columns =
+		get_copy_conversion_functions(ht->main_table_relid, attnums, &ctx->out_functions, true);
 
 	ctx->econtext = econtext;
 	ctx->values = palloc0(columns * sizeof(Datum));
@@ -699,20 +594,19 @@ generate_binary_copy_context(const CopyStmt *stmt, ExprContext *econtext, Hypert
 	return ctx;
 }
 
-static RemoteCopyContext *
-begin_remote_copy_operation(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums)
+RemoteCopyContext *
+remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_ctx, List *attnums,
+				  bool binary_copy)
 {
-	bool binary_copy = copy_should_send_binary();
 	MemoryContext mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "Remote COPY", ALLOCSET_DEFAULT_SIZES);
-	Hypertable *ht = ccstate->dispatch->hypertable;
-	ExprContext *econtext = GetPerTupleExprContext(ccstate->estate);
 	RemoteCopyContext *context;
 	MemoryContext oldmctx;
 
 	oldmctx = MemoryContextSwitchTo(mctx);
 	context = palloc0(sizeof(RemoteCopyContext));
-	context->ccstate = ccstate;
+	context->ht = ht;
+	context->attnums = attnums;
 	context->mctx = mctx;
 	context->binary_operation = binary_copy;
 	context->connection_state.connections_in_use = NIL;
@@ -721,7 +615,7 @@ begin_remote_copy_operation(const CopyStmt *stmt, CopyChunkState *ccstate, List 
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
 
 	if (binary_copy)
-		context->data_context = generate_binary_copy_context(stmt, econtext, ht, attnums);
+		context->data_context = generate_binary_copy_context(per_tuple_ctx, ht, attnums);
 	else
 		context->data_context = generate_text_copy_context(stmt, ht, attnums);
 
@@ -730,17 +624,22 @@ begin_remote_copy_operation(const CopyStmt *stmt, CopyChunkState *ccstate, List 
 	return context;
 }
 
+const char *
+remote_copy_get_copycmd(RemoteCopyContext *context)
+{
+	return context->connection_state.outgoing_copy_cmd;
+}
+
 static StringInfo
 parse_next_text_row(CopyState cstate, List *attnums, TextCopyContext *ctx)
 {
-	StringInfo row_data;
+	StringInfo row_data = makeStringInfo();
 	int i;
 
 	if (!NextCopyFromRawFields(cstate, &ctx->fields, &ctx->nfields))
 		return NULL;
 
 	Assert(ctx->nfields == list_length(attnums));
-	row_data = makeStringInfo();
 
 	for (i = 0; i < ctx->nfields - 1; ++i)
 		appendStringInfo(row_data,
@@ -808,24 +707,24 @@ parse_next_binary_row(CopyState cstate, List *attnums, BinaryCopyContext *ctx)
 }
 
 static bool
-read_next_copy_row(RemoteCopyContext *context, CopyState cstate, List *attnums)
+read_next_copy_row(RemoteCopyContext *context, CopyState cstate)
 {
 	if (context->binary_operation)
-		context->row_data = parse_next_binary_row(cstate, attnums, context->data_context);
+		context->row_data = parse_next_binary_row(cstate, context->attnums, context->data_context);
 	else
-		context->row_data = parse_next_text_row(cstate, attnums, context->data_context);
+		context->row_data = parse_next_text_row(cstate, context->attnums, context->data_context);
 
 	return context->row_data != NULL;
 }
 
 static Point *
-get_current_point_for_text_copy(Hypertable *ht, TextCopyContext *ctx)
+get_current_point_for_text_copy(TextCopyContext *ctx)
 {
 	return calculate_hyperspace_point_from_fields(ctx->fields, ctx->dimensions, ctx->ndimensions);
 }
 
 static Point *
-calculate_hyperspace_point_from_binary(Datum *values, bool *nulls, Hyperspace *space)
+calculate_hyperspace_point_from_binary(Datum *values, bool *nulls, const Hyperspace *space)
 {
 	Point *p;
 	int i;
@@ -836,7 +735,7 @@ calculate_hyperspace_point_from_binary(Datum *values, bool *nulls, Hyperspace *s
 
 	for (i = 0; i < space->num_dimensions; ++i)
 	{
-		Dimension *dim = &space->dimensions[i];
+		const Dimension *dim = &space->dimensions[i];
 		Datum datum = values[dim->column_attno - 1];
 
 		if (nulls[dim->column_attno - 1])
@@ -851,9 +750,9 @@ calculate_hyperspace_point_from_binary(Datum *values, bool *nulls, Hyperspace *s
 }
 
 static Point *
-get_current_point_for_binary_copy(Hypertable *ht, BinaryCopyContext *ctx)
+get_current_point_for_binary_copy(BinaryCopyContext *ctx, const Hyperspace *hs)
 {
-	return calculate_hyperspace_point_from_binary(ctx->values, ctx->nulls, ht->space);
+	return calculate_hyperspace_point_from_binary(ctx->values, ctx->nulls, hs);
 }
 
 static void
@@ -884,45 +783,44 @@ get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 	return chunk;
 }
 
-static void
-send_copy_data(StringInfo row_data, List *connections)
+static bool
+send_copy_data(StringInfo row_data, const List *connections)
 {
 	ListCell *lc;
 
 	foreach (lc, connections)
 	{
-		PGconn *pg_conn = remote_connection_get_pg_conn(lfirst(lc));
-		int result = PQputCopyData(pg_conn, row_data->data, row_data->len);
+		TSConnection *conn = lfirst(lc);
+		TSConnectionError err;
 
-		if (result != 1)
-			ereport(ERROR,
-					(errcode(ERRCODE_CONNECTION_EXCEPTION),
-					 errmsg("%s",
-							result == -1 ? PQerrorMessage(pg_conn) :
-										   "unexpected response while sending copy data")));
+		if (!remote_connection_put_copy_data(conn, row_data->data, row_data->len, &err))
+			remote_connection_error_elog(&err, ERROR);
 	}
+
+	return true;
 }
 
-static void
-process_and_send_copy_data(RemoteCopyContext *context)
+static bool
+remote_copy_process_and_send_data(RemoteCopyContext *context)
 {
-	Hypertable *ht = context->ccstate->dispatch->hypertable;
+	Hypertable *ht = context->ht;
 	const Chunk *chunk;
 	Point *point;
-	List *connections;
+	const List *connections;
 
 	if (context->binary_operation)
-		point = get_current_point_for_binary_copy(ht, context->data_context);
+		point = get_current_point_for_binary_copy(context->data_context, ht->space);
 	else
-		point = get_current_point_for_text_copy(ht, context->data_context);
+		point = get_current_point_for_text_copy(context->data_context);
 
 	chunk = get_target_chunk(ht, point, &context->connection_state);
-	connections = get_connections_for_chunk(context, chunk);
-	send_copy_data(context->row_data, connections);
+	connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
+
+	return send_copy_data(context->row_data, connections);
 }
 
-static void
-end_copy_operation(RemoteCopyContext *context)
+void
+remote_copy_end(RemoteCopyContext *context)
 {
 	finish_outstanding_copies(&context->connection_state);
 	MemoryContextDelete(context->mctx);
@@ -932,7 +830,13 @@ uint64
 remote_distributed_copy(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums)
 {
 	MemoryContext oldmctx = CurrentMemoryContext;
-	RemoteCopyContext *context = begin_remote_copy_operation(stmt, ccstate, attnums);
+	EState *estate = ccstate->estate;
+	Hypertable *ht = ccstate->dispatch->hypertable;
+	RemoteCopyContext *context = remote_copy_begin(stmt,
+												   ht,
+												   GetPerTupleExprContext(estate),
+												   attnums,
+												   copy_should_send_binary());
 	uint64 processed = 0;
 
 	PG_TRY();
@@ -944,24 +848,108 @@ remote_distributed_copy(const CopyStmt *stmt, CopyChunkState *ccstate, List *att
 
 			CHECK_FOR_INTERRUPTS();
 
-			if (!read_next_copy_row(context, ccstate->cstate, attnums))
+			if (!read_next_copy_row(context, ccstate->cstate))
 				break;
 
-			process_and_send_copy_data(context);
+			remote_copy_process_and_send_data(context);
 			++processed;
 		}
 	}
 	PG_CATCH();
 	{
 		/* If we hit an error, make sure we end our in-progress COPYs */
-		end_copy_operation(context);
-
+		remote_copy_end(context);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
-	end_copy_operation(context);
+	remote_copy_end(context);
 	MemoryContextSwitchTo(oldmctx);
 
 	return processed;
+}
+
+/*
+ * Send a tuple/row to data nodes.
+ *
+ * The slot is serialized in text or binary format, depending on setting. The
+ * data is already "routed" to the "right" chunk as indicated by the chunk
+ * insert state.
+ */
+bool
+remote_copy_send_slot(RemoteCopyContext *context, TupleTableSlot *slot, const ChunkInsertState *cis)
+{
+	ListCell *lc;
+	bool result;
+
+	/* Pre-materialize all attributes since we will access all of them */
+	slot_getallattrs(slot);
+
+	if (context->binary_operation)
+	{
+		BinaryCopyContext *binctx = context->data_context;
+
+		MemSet(binctx->nulls, 0, list_length(context->attnums) * sizeof(bool));
+
+		foreach (lc, context->attnums)
+		{
+			AttrNumber attnum = lfirst_int(lc);
+			int i = AttrNumberGetAttrOffset(attnum);
+
+			binctx->values[i] = slot_getattr(slot, attnum, &binctx->nulls[i]);
+		}
+
+		context->row_data = generate_binary_copy_data(binctx->values,
+													  binctx->nulls,
+													  context->attnums,
+													  binctx->out_functions);
+	}
+	else
+	{
+		TextCopyContext *textctx = context->data_context;
+		char delim = textctx->delimiter;
+
+		context->row_data = makeStringInfo();
+
+		foreach (lc, context->attnums)
+		{
+			AttrNumber attnum = lfirst_int(lc);
+			bool isnull;
+			Datum value;
+
+			if (lc == list_tail(context->attnums))
+				delim = '\n';
+
+			value = slot_getattr(slot, attnum, &isnull);
+
+			if (isnull)
+				appendStringInfo(context->row_data, "%s%c", textctx->null_string, delim);
+			else
+			{
+				int off = AttrNumberGetAttrOffset(attnum);
+				const char *output = OutputFunctionCall(&textctx->out_functions[off], value);
+				appendStringInfo(context->row_data, "%s%c", output, delim);
+			}
+		}
+	}
+
+	PG_TRY();
+	{
+		const List *connections;
+
+		connections =
+			get_connections_for_chunk(context, cis->chunk_id, cis->chunk_data_nodes, cis->user_id);
+		Assert(list_length(connections) == list_length(cis->chunk_data_nodes));
+		Assert(list_length(connections) > 0);
+		result = send_copy_data(context->row_data, connections);
+	}
+	PG_CATCH();
+	{
+		/* If we hit an error, make sure we end our in-progress COPYs */
+		remote_copy_end(context);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	return result;
 }

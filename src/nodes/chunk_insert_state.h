@@ -52,13 +52,14 @@ typedef struct ChunkInsertState
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
 	EState *estate;
-	List *server_id_list; /* foreign server ids of data nodes used for remote inserts */
+	List *chunk_data_nodes; /* List of data nodes for the chunk (ChunkDataNode objects) */
+	int32 chunk_id;
 	Oid user_id;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
 
-extern ChunkInsertState *ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch);
+extern ChunkInsertState *ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 
 #endif /* TIMESCALEDB_CHUNK_INSERT_STATE_H */

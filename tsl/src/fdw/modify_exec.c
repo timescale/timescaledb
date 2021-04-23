@@ -20,6 +20,7 @@
 #include <remote/dist_txn.h>
 #include <remote/utils.h>
 #include <remote/tuplefactory.h>
+#include <chunk_data_node.h>
 #include <nodes/chunk_insert_state.h>
 #include <compat.h>
 
@@ -222,6 +223,22 @@ convert_attrs(TupleConversionMap *map, List *attrs)
 	return new_attrs;
 }
 
+static List *
+get_chunk_server_id_list(const List *chunk_data_nodes)
+{
+	List *list = NIL;
+	ListCell *lc;
+
+	foreach (lc, chunk_data_nodes)
+	{
+		ChunkDataNode *cdn = lfirst(lc);
+
+		list = lappend_oid(list, cdn->foreign_server_oid);
+	}
+
+	return list;
+}
+
 void
 fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operation,
 						 List *fdw_private, Plan *subplan)
@@ -284,7 +301,7 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 		 * If there's a chunk insert state, then it has the authoritative
 		 * data node list.
 		 */
-		server_id_list = cis->server_id_list;
+		server_id_list = get_chunk_server_id_list(cis->chunk_data_nodes);
 	}
 
 	/* Construct an execution state. */

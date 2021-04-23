@@ -28,6 +28,8 @@ GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 SET ROLE :ROLE_1;
+--Ensure INSERTs use DataNodeDispatch. DataNodeCopy is tested later
+SET timescaledb.enable_distributed_insert_with_copy=false;
 -- Verify lack of tables
 SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
       node_name       |                         options                         
@@ -1869,6 +1871,8 @@ GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
 GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
 SET ROLE :ROLE_1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
+--Ensure INSERTs use DataNodeDispatch.
+SET timescaledb.enable_distributed_insert_with_copy=false;
 CREATE SCHEMA "T3sTSch";
 CREATE SCHEMA "Table\\Schema";
 CREATE SCHEMA "single'schema";
@@ -3371,6 +3375,8 @@ id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_sc
 
 -- Tests for using tablespaces with distributed hypertables
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+--Ensure INSERTs use DataNodeDispatch.
+SET timescaledb.enable_distributed_insert_with_copy=false;
 CREATE TABLESPACE :TABLESPACE_1 OWNER :ROLE_1 LOCATION :'spc1path';
 CREATE TABLESPACE :TABLESPACE_2 OWNER :ROLE_1 LOCATION :'spc2path';
 \set ON_ERROR_STOP 0
@@ -4880,4 +4886,162 @@ SET timescaledb.enable_per_data_node_queries = true;
 \set ON_ERROR_STOP 0
 SELECT tableoid::regclass, * FROM dist_syscol;
 ERROR:  system columns are not accessible on distributed hypertables with current settings
+\set ON_ERROR_STOP 1
+-----------------------
+-- Test DataNodeCopy --
+-----------------------
+SET timescaledb.enable_distributed_insert_with_copy=true;
+DROP TABLE disttable;
+-- Add serial (autoincrement) and DEFAULT value columns to test that
+-- these work with DataNodeCopy
+CREATE TABLE disttable(
+    id serial,
+    time timestamptz NOT NULL,
+    device int DEFAULT 100,
+    temp_c float
+);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            27 | public      | disttable  | t
+(1 row)
+
+-- Create a datatable to source data from. Add array of composite data
+-- type to test switching to text mode below. Arrays include the type
+-- Oid when serialized in binary format. Since the Oid of a
+-- user-created type can differ across data nodes, such serialization
+-- is not safe.
+CREATE TABLE datatable (LIKE disttable);
+CREATE TYPE highlow AS (high int, low int);
+CALL distributed_exec($$ CREATE TYPE highlow AS (high int, low int) $$);
+ALTER TABLE datatable ADD COLUMN minmaxes highlow[];
+INSERT INTO datatable (id, time, device, temp_c, minmaxes) VALUES
+       (1, '2017-01-01 06:01', 1, 1.2, ARRAY[(1,2)::highlow]),
+       (2, '2017-01-01 09:11', 3, 4.3, ARRAY[(2,3)::highlow]),
+       (3, '2017-01-01 08:01', 1, 7.3, ARRAY[(4,5)::highlow]),
+       (4, '2017-01-02 08:01', 2, 0.23, ARRAY[(6,7)::highlow]),
+       (5, '2018-07-02 08:01', 87, 0.0, ARRAY[(8,9)::highlow]),
+       (6, '2018-07-01 06:01', 13, 3.1, ARRAY[(10,11)::highlow]),
+       (7, '2018-07-01 09:11', 90, 10303.12, ARRAY[(12,13)::highlow]),
+       (8, '2018-07-01 08:01', 29, 64, ARRAY[(14,15)::highlow]);
+-- Show that DataNodeCopy is used instead of DataNodeDispatch. Should
+-- default to FORMAT binary in the remote SQL. Add RETURNING to show
+-- that it works.
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable
+RETURNING *;
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..24.55 rows=970 width=24)
+   Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
+   ->  Insert on public.disttable  (cost=0.00..24.55 rows=970 width=24)
+         Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
+         ->  Custom Scan (DataNodeCopy)  (cost=0.00..24.55 rows=970 width=24)
+               Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+               Remote SQL: COPY public.disttable (id, "time", device, temp_c) FROM STDIN WITH (FORMAT binary)
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..24.55 rows=970 width=24)
+                     Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+                     ->  Seq Scan on public.datatable  (cost=0.00..24.55 rows=970 width=24)
+                           Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c
+(13 rows)
+
+-- Perform the actual insert
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable
+RETURNING *;
+ id |             time             | device |  temp_c  
+----+------------------------------+--------+----------
+  1 | Sun Jan 01 06:01:00 2017 PST |      1 |      1.2
+  2 | Sun Jan 01 09:11:00 2017 PST |      3 |      4.3
+  3 | Sun Jan 01 08:01:00 2017 PST |      1 |      7.3
+  4 | Mon Jan 02 08:01:00 2017 PST |      2 |     0.23
+  5 | Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+  6 | Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+  7 | Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+  8 | Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+(8 rows)
+
+-- Show that the data was added:
+SELECT * FROM disttable ORDER BY 1;
+ id |             time             | device |  temp_c  
+----+------------------------------+--------+----------
+  1 | Sun Jan 01 06:01:00 2017 PST |      1 |      1.2
+  2 | Sun Jan 01 09:11:00 2017 PST |      3 |      4.3
+  3 | Sun Jan 01 08:01:00 2017 PST |      1 |      7.3
+  4 | Mon Jan 02 08:01:00 2017 PST |      2 |     0.23
+  5 | Mon Jul 02 08:01:00 2018 PDT |     87 |        0
+  6 | Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1
+  7 | Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12
+  8 | Sun Jul 01 08:01:00 2018 PDT |     29 |       64
+(8 rows)
+
+SELECT count(*) FROM disttable;
+ count 
+-------
+     8
+(1 row)
+
+-- Add an array of a composite type to check that DataNodeCopy
+-- switches to text format if we use a table with an array of a custom
+-- type. There should be no "FORMAT binary" in the remote explain.
+ALTER TABLE disttable ADD COLUMN minmaxes highlow[];
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c, minmaxes)
+SELECT time, device, temp_c, minmaxes FROM datatable;
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..24.55 rows=970 width=56)
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
+   ->  Insert on public.disttable  (cost=0.00..24.55 rows=970 width=56)
+         ->  Custom Scan (DataNodeCopy)  (cost=0.00..24.55 rows=970 width=56)
+               Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c, datatable.minmaxes
+               Remote SQL: COPY public.disttable (id, "time", device, temp_c, minmaxes) FROM STDIN
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..24.55 rows=970 width=56)
+                     Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c, datatable.minmaxes
+                     ->  Seq Scan on public.datatable  (cost=0.00..24.55 rows=970 width=56)
+                           Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c, datatable.minmaxes
+(11 rows)
+
+INSERT INTO disttable (time, device, temp_c, minmaxes)
+SELECT time, device, temp_c, minmaxes FROM datatable;
+-- Should have double amount of rows compared to before and half of
+-- them values in the new column.  Note, must use TEXT format on the
+-- connection to make query work with custom type array.
+SET timescaledb.enable_connection_binary_data=false;
+SELECT * FROM disttable ORDER BY 1;
+ id |             time             | device |  temp_c  |  minmaxes   
+----+------------------------------+--------+----------+-------------
+  1 | Sun Jan 01 06:01:00 2017 PST |      1 |      1.2 | 
+  2 | Sun Jan 01 09:11:00 2017 PST |      3 |      4.3 | 
+  3 | Sun Jan 01 08:01:00 2017 PST |      1 |      7.3 | 
+  4 | Mon Jan 02 08:01:00 2017 PST |      2 |     0.23 | 
+  5 | Mon Jul 02 08:01:00 2018 PDT |     87 |        0 | 
+  6 | Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1 | 
+  7 | Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12 | 
+  8 | Sun Jul 01 08:01:00 2018 PDT |     29 |       64 | 
+  9 | Sun Jan 01 06:01:00 2017 PST |      1 |      1.2 | {"(1,2)"}
+ 10 | Sun Jan 01 09:11:00 2017 PST |      3 |      4.3 | {"(2,3)"}
+ 11 | Sun Jan 01 08:01:00 2017 PST |      1 |      7.3 | {"(4,5)"}
+ 12 | Mon Jan 02 08:01:00 2017 PST |      2 |     0.23 | {"(6,7)"}
+ 13 | Mon Jul 02 08:01:00 2018 PDT |     87 |        0 | {"(8,9)"}
+ 14 | Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1 | {"(10,11)"}
+ 15 | Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12 | {"(12,13)"}
+ 16 | Sun Jul 01 08:01:00 2018 PDT |     29 |       64 | {"(14,15)"}
+(16 rows)
+
+SELECT count(*) FROM disttable;
+ count 
+-------
+    16
+(1 row)
+
+-- REMOVE a column on data nodes to check how errors are handled:
+CALL distributed_exec($$ ALTER TABLE disttable DROP COLUMN minmaxes $$);
+\set ON_ERROR_STOP 0
+INSERT INTO disttable SELECT * FROM datatable;
+ERROR:  [db_dist_hypertable_1]: column "minmaxes" of relation "disttable" does not exist
 \set ON_ERROR_STOP 1

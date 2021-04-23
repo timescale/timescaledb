@@ -536,22 +536,6 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	}
 }
 
-static List *
-get_chunk_server_id_list(Chunk *chunk)
-{
-	List *list = NIL;
-	ListCell *lc;
-
-	foreach (lc, chunk->data_nodes)
-	{
-		ChunkDataNode *cdn = lfirst(lc);
-
-		list = lappend_oid(list, cdn->foreign_server_oid);
-	}
-
-	return list;
-}
-
 /*
  * Create new insert chunk state.
  *
@@ -559,7 +543,7 @@ get_chunk_server_id_list(Chunk *chunk)
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
+ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
 	Relation rel, parent_rel;
@@ -637,6 +621,8 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 												 table_slot_callbacks(resrelinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
+	state->chunk_id = chunk->fd.id;
+
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 		RangeTblEntry *rte =
@@ -645,7 +631,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		Assert(NULL != rte);
 
 		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
-		state->server_id_list = get_chunk_server_id_list(chunk);
+		state->chunk_data_nodes = ts_chunk_data_nodes_copy(chunk);
 	}
 
 	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)

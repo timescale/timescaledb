@@ -290,6 +290,23 @@ CREATE TRIGGER _0_temp_increment
 SELECT test.remote_exec(ARRAY[:'DATA_NODE_3'], $$ SELECT test.show_triggers('disttable') $$);
 TRUNCATE disttable;
 
+-- Show EXPLAINs for INSERT first with DataNodeCopy disabled. Should
+-- always use DataNodeDispatch
+SET timescaledb.enable_distributed_insert_with_copy=false;
+-- Without RETURNING
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable;
+
+-- With RETURNING
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable RETURNING *;
+
+-- With DataNodeCopy enabled, should use DataNodeCopy when there's no
+-- RETURNING clause, but with RETURNING it should use DataNodeDispatch
+-- due to the modifying trigger.
+SET timescaledb.enable_distributed_insert_with_copy=true;
 -- Without RETURNING
 EXPLAIN VERBOSE
 INSERT INTO disttable (time, device, temp_c)

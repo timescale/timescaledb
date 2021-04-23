@@ -20,6 +20,7 @@
 #include <funcapi.h>
 #include <miscadmin.h>
 
+#include <chunk_data_node.h>
 #include <nodes/chunk_dispatch_plan.h>
 #include <nodes/chunk_dispatch_state.h>
 #include <nodes/chunk_insert_state.h>
@@ -27,12 +28,12 @@
 #include <compat.h>
 #include <guc.h>
 
+#include "data_node_dispatch.h"
 #include "fdw/scan_exec.h"
 #include "fdw/deparse.h"
 #include "remote/utils.h"
 #include "remote/dist_txn.h"
 #include "remote/async.h"
-#include "data_node_dispatch.h"
 #include "remote/data_format.h"
 #include "remote/tuplefactory.h"
 
@@ -152,7 +153,6 @@ typedef struct DataNodeDispatchState
 	DispatchState prevstate; /* Previous state in state machine */
 	DispatchState state;	 /* Current state in state machine */
 	Relation rel;			 /* The (local) relation we're inserting into */
-	Oid userid;				 /* User performing INSERT */
 	bool set_processed;		 /* Indicates whether to set the number or processed tuples */
 	DeparsedInsertStmt stmt; /* Partially deparsed insert statement */
 	const char *sql_stmt;	/* Fully deparsed insert statement */
@@ -185,7 +185,6 @@ enum CustomScanPrivateIndex
 	CustomScanPrivateTargetAttrs,
 	CustomScanPrivateDeparsedInsertStmt,
 	CustomScanPrivateSetProcessed,
-	CustomScanPrivateUserId,
 	CustomScanPrivateFlushThreshold
 };
 
@@ -328,7 +327,6 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	sds->replication_factor = ht->fd.replication_factor;
 	sds->sql_stmt = strVal(list_nth(cscan->custom_private, CustomScanPrivateSql));
 	sds->target_attrs = list_nth(cscan->custom_private, CustomScanPrivateTargetAttrs);
-	sds->userid = intVal(list_nth(cscan->custom_private, CustomScanPrivateUserId));
 	sds->set_processed = intVal(list_nth(cscan->custom_private, CustomScanPrivateSetProcessed));
 	sds->flush_threshold = intVal(list_nth(cscan->custom_private, CustomScanPrivateFlushThreshold));
 
@@ -735,10 +733,10 @@ handle_read(DataNodeDispatchState *sds)
 			/* Total count */
 			num_tuples_read++;
 
-			foreach (lc, cis->server_id_list)
+			foreach (lc, cis->chunk_data_nodes)
 			{
-				Oid server_id = lfirst_oid(lc);
-				TSConnectionId id = remote_connection_id(server_id, cis->user_id);
+				ChunkDataNode *cdn = lfirst(lc);
+				TSConnectionId id = remote_connection_id(cdn->foreign_server_oid, cis->user_id);
 				DataNodeState *ss = data_node_state_get_or_create(sds, id);
 
 				/* This will store one copy of the tuple per data node, which is
@@ -1113,7 +1111,6 @@ plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 	List *target_attrs = NIL;
 	List *returning_list = NIL;
 	bool do_nothing = false;
-	Oid userid;
 	int flush_threshold;
 
 	/*
@@ -1142,8 +1139,6 @@ plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 				 errmsg("ON CONFLICT DO UPDATE not supported"
 						" on distributed hypertables")));
 
-	userid = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
-
 	/*
 	 * Construct the SQL command string matching the fixed batch size. We also
 	 * save the partially deparsed SQL command so that we can easily create
@@ -1169,12 +1164,11 @@ plan_remote_insert(PlannerInfo *root, DataNodeDispatchPath *sdpath)
 
 	table_close(rel, NoLock);
 
-	return lcons(makeString((char *) sql),
-				 list_make5(target_attrs,
-							deparsed_insert_stmt_to_list(&stmt),
-							makeInteger(sdpath->mtpath->canSetTag),
-							makeInteger(userid),
-							makeInteger(flush_threshold)));
+	return list_make5(makeString((char *) sql),
+					  target_attrs,
+					  deparsed_insert_stmt_to_list(&stmt),
+					  makeInteger(sdpath->mtpath->canSetTag),
+					  makeInteger(flush_threshold));
 }
 
 static Plan *

@@ -90,6 +90,7 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	{
 		const char *sql;
 
+		Assert(remote_connection_get_status(entry->conn) == CONN_IDLE);
 		elog(DEBUG3, "starting remote transaction on connection %p", entry->conn);
 
 		if (IsolationIsSerializable())
@@ -101,6 +102,14 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 		remote_connection_cmd_ok(entry->conn, sql);
 		remote_connection_xact_transition_end(entry->conn);
 		xact_depth = remote_connection_xact_depth_inc(entry->conn);
+	}
+	/* If the connection is in COPY mode, then exit out of it */
+	else if (remote_connection_get_status(entry->conn) == CONN_COPY_IN)
+	{
+		TSConnectionError err;
+
+		if (!remote_connection_end_copy(entry->conn, &err))
+			remote_connection_error_elog(&err, ERROR);
 	}
 
 	/*
@@ -379,7 +388,7 @@ remote_txn_abort(RemoteTxn *entry)
 	if (success)
 	{
 		/* At this point any on going queries should have completed */
-		remote_connection_set_processing(entry->conn, false);
+		remote_connection_set_status(entry->conn, CONN_IDLE);
 		success = exec_cleanup_command(entry->conn, abort_sql);
 	}
 

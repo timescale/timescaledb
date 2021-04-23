@@ -57,6 +57,7 @@ INSERT INTO disttable VALUES
 SELECT * FROM disttable ORDER BY time;
 
 -- Show that GENERATED columns work for INSERT with RETURNING clause
+-- (should use DataNodeCopy)
 TRUNCATE disttable;
 EXPLAIN VERBOSE
 INSERT INTO disttable VALUES ('2017-08-01 06:01', 1, 35.0) RETURNING *;
@@ -73,6 +74,18 @@ INSERT INTO disttable VALUES ('2017-09-01 06:01', 2, 30.0);
 SELECT * FROM disttable ORDER BY 1;
 -- Delete a value based on the generated column
 DELETE FROM disttable WHERE temp_f=104;
+
+SELECT * FROM disttable ORDER BY 1;
+
+-- Test also with DataNodeDispatch
+TRUNCATE disttable;
+SET timescaledb.enable_distributed_insert_with_copy=false;
+
+EXPLAIN VERBOSE
+INSERT INTO disttable VALUES ('2017-09-01 06:01', 5, 40.0) RETURNING *;
+INSERT INTO disttable VALUES ('2017-09-01 06:01', 5, 40.0) RETURNING *;
+
+-- Generated columns with SELECT
 SELECT * FROM disttable ORDER BY 1;
 
 DROP DATABASE :DN_DBNAME_1;

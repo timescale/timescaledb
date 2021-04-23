@@ -228,7 +228,7 @@ create_chunk_on_data_nodes_default(Chunk *chunk, Hypertable *ht)
 }
 
 static Path *
-data_node_dispatch_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
+distributed_insert_path_create_default(PlannerInfo *root, ModifyTablePath *mtpath,
 									   Index hypertable_rti, int subpath_index)
 {
 	error_no_default_fn_community();
@@ -378,7 +378,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_txn_id_out = error_no_default_fn_pg_community,
 	.remote_txn_heal_data_node = error_no_default_fn_pg_community,
 	.remote_connection_cache_show = error_no_default_fn_pg_community,
-	.data_node_dispatch_path_create = data_node_dispatch_path_create_default,
+	.distributed_insert_path_create = distributed_insert_path_create_default,
 	.distributed_copy = distributed_copy_default,
 	.set_distributed_id = set_distributed_id_default,
 	.set_distributed_peer_id = set_distributed_peer_id_default,
