@@ -341,7 +341,7 @@ static void
 catalog_database_info_init(CatalogDatabaseInfo *info)
 {
 	info->database_id = MyDatabaseId;
-	StrNCpy(info->database_name, get_database_name(MyDatabaseId), NAMEDATALEN);
+	strlcpy(info->database_name, get_database_name(MyDatabaseId), NAMEDATALEN);
 	info->schema_id = get_namespace_oid(CATALOG_SCHEMA_NAME, false);
 	info->owner_uid = catalog_owner();
 

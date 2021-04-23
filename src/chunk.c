@@ -2933,8 +2933,8 @@ chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
 
 	chunk_formdata_fill(&form, ti);
 
-	namecpy(&form.schema_name, &update->schema_name);
-	namecpy(&form.table_name, &update->table_name);
+	strlcpy(NameStr(form.schema_name), NameStr(update->schema_name), NAMEDATALEN);
+	strlcpy(NameStr(form.table_name), NameStr(update->table_name), NAMEDATALEN);
 
 	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
