@@ -12,35 +12,41 @@ jobs:
     name: PG${{ matrix.pg }} ${{ matrix.build_type }} linux-i386
     runs-on: ubuntu-latest
     container:
-      image: i386/postgres:${{ matrix.pg }}-alpine
+      image: i386/debian:buster-slim
+      options: --privileged --ulimit core=-1
       env:
-        POSTGRES_HOST_AUTH_METHOD: trust
+        DEBIAN_FRONTEND: noninteractive
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "11.11", "12.6", "13.2" ]
+        pg: [ "11", "12", "13" ]
         build_type: [ Debug ]
         include:
-          - pg: 11.11
+          - pg: 11
             ignores: append-11 chunk_adaptive-11 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-11 continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh plan_skip_scan-11
-          - pg: 12.6
+          - pg: 12
             ignores: append-12 chunk_adaptive-12 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12 plan_skip_scan-12
-          - pg: 13.2
+          - pg: 13
             ignores: append-13 chunk_adaptive-13 remote_txn transparent_decompression-13 vacuum_parallel plan_skip_scan-13
 
     steps:
 
     - name: Install build dependencies
       run: |
-        apk add --no-cache --virtual .build-deps coreutils dpkg-dev findutils gcc libc-dev make util-linux-dev diffutils cmake openssl-dev sudo flex bison git
+        echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
+        apt-get update
+        apt-get install -y gnupg postgresql-common
+        yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        apt-get install -y gcc make cmake libssl-dev libkrb5-dev sudo gdb git wget
+        apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
     - name: Build pg_isolation_regress
       run: |
-        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
         mkdir -p ~/postgresql
         tar --extract --file postgresql.tar.bz2 --directory ~/postgresql --strip-components 1
         cd ~/postgresql
-        ./configure --prefix=/usr/local --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib
+        ./configure --prefix=/usr/lib/postgresql/${{ matrix.pg }} --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib
         make -C src/test/isolation
         chown -R postgres:postgres ~/postgresql
 
@@ -55,29 +61,55 @@ jobs:
 
     - name: make installcheck
       id: installcheck
+      shell: bash
       run: |
         set -o pipefail
+        export LANG=C.UTF-8
         sudo -u postgres make -k -C build installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
       id: collectlogs
+      shell: bash
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
         cat regression.log
 
-    - name: Save regression diffs
+    - name: Coredumps
       if: always()
+      id: coredumps
+      shell: bash
+      run: |
+        if compgen -G "/tmp/core*" > /dev/null; then
+          apt-get install postgresql-${{ matrix.pg }}-dbgsym >/dev/null
+          for file in /tmp/core*
+          do
+            gdb /usr/lib/postgresql/${{ matrix.pg }}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
+          done
+          echo "::set-output name=coredumps::true"
+          exit 1
+        fi
+
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@v1
       with:
-        name: Regression diff ${{ matrix.pg }}
+        name: Regression diff linux-i386 PG${{ matrix.pg }}
         path: regression.log
+
+    - name: Save stacktraces
+      if: always() && steps.coredumps.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v1
+      with:
+        name: Stacktraces linux-i386 PG${{ matrix.pg }}
+        path: stacktraces.log
 
     - name: Save postmaster.log
       if: always()
       uses: actions/upload-artifact@v1
       with:
-        name: PostgreSQL log ${{ matrix.pg }}
+        name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postgres.log
