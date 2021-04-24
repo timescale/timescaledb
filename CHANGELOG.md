@@ -17,9 +17,10 @@ accidentally triggering the load of a previous DB version.**
 * #3135 Fix SkipScan path generation in DISTINCT queries with expressions
 * #3146 Fix SkipScan for IndexPaths without pathkeys
 * #3151 Fix fdw_relinfo_get assertion failure on DELETE
+* #3155 Inherit CFLAGS from PostgreSQL
 
 **Thanks**
-* @Dead2, @dv8472 and @einsibjarni for reporting an with multinode queries and views
+* @Dead2, @dv8472 and @einsibjarni for reporting an issue with multinode queries and views
 * @hperez75 for reporting an issue with Skip Scan
 
 ## 2.2.0 (2021-04-13)
