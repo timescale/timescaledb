@@ -274,9 +274,19 @@ get_pg_config(PG_LIBDIR --libdir)
 get_pg_config(PG_PKGLIBDIR --pkglibdir)
 get_pg_config(PG_SHAREDIR --sharedir)
 get_pg_config(PG_BINDIR --bindir)
+get_pg_config(PG_CFLAGS --cflags)
+get_pg_config(PG_CFLAGS_SL --cflags_sl)
 get_pg_config(PG_CPPFLAGS --cppflags)
 get_pg_config(PG_LDFLAGS --ldflags)
 get_pg_config(PG_LIBS --libs)
+
+separate_arguments(PG_CFLAGS)
+foreach(option ${PG_CFLAGS})
+  if(NOT ${option} MATCHES ^-W)
+    set(filtered "${filtered} ${option}")
+  endif()
+endforeach()
+set(PG_CFLAGS "${filtered} ${PG_CFLAGS_SL}")
 
 find_path(PG_SOURCE_DIR
   src/include/pg_config.h.in
