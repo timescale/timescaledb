@@ -945,6 +945,30 @@ ts_chunk_get_data_node_name_list(const Chunk *chunk)
 	return datanodes;
 }
 
+bool
+ts_chunk_has_data_node(const Chunk *chunk, const char *node_name)
+{
+	ListCell *lc;
+	ChunkDataNode *cdn;
+	bool found = false;
+
+	if (chunk == NULL || node_name == NULL)
+		return false;
+
+	/* check that the chunk is indeed present on the specified data node */
+	foreach (lc, chunk->data_nodes)
+	{
+		cdn = lfirst(lc);
+		if (namestrcmp(&cdn->fd.node_name, node_name) == 0)
+		{
+			found = true;
+			break;
+		}
+	}
+
+	return found;
+}
+
 static int32
 get_next_chunk_id()
 {

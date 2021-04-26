@@ -157,6 +157,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.show_chunk = chunk_show,
 	.create_chunk = chunk_create,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
+	.chunk_drop_replica = chunk_drop_replica,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.get_and_validate_data_node_list = hypertable_get_and_validate_data_nodes,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,
