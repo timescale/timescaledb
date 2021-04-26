@@ -40,7 +40,6 @@
 #include "remote/connection_cache.h"
 #include "data_node.h"
 #include "remote/utils.h"
-#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "errors.h"
 #include "dist_util.h"
@@ -1158,16 +1157,18 @@ data_node_detach_hypertable_data_nodes(const char *node_name, List *hypertable_d
 												  repartition);
 }
 
-static HypertableDataNode *
-get_hypertable_data_node(Oid table_id, const char *node_name, bool owner_check, bool attach_check)
+HypertableDataNode *
+data_node_hypertable_get_by_node_name(const Hypertable *ht, const char *node_name,
+									  bool attach_check)
 {
 	HypertableDataNode *hdn = NULL;
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, table_id, CACHE_FLAG_NONE);
 	ListCell *lc;
 
-	if (owner_check)
-		ts_hypertable_permissions_check(table_id, GetUserId());
+	if (!hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_DISTRIBUTED),
+				 errmsg("hypertable \"%s\" is not distributed",
+						get_rel_name(ht->main_table_relid))));
 
 	foreach (lc, ht->data_nodes)
 	{
@@ -1185,15 +1186,30 @@ get_hypertable_data_node(Oid table_id, const char *node_name, bool owner_check, 
 					(errcode(ERRCODE_TS_DATA_NODE_NOT_ATTACHED),
 					 errmsg("data node \"%s\" is not attached to hypertable \"%s\"",
 							node_name,
-							get_rel_name(table_id))));
+							get_rel_name(ht->main_table_relid))));
 		else
 			ereport(NOTICE,
 					(errcode(ERRCODE_TS_DATA_NODE_NOT_ATTACHED),
 					 errmsg("data node \"%s\" is not attached to hypertable \"%s\", "
 							"skipping",
 							node_name,
-							get_rel_name(table_id))));
+							get_rel_name(ht->main_table_relid))));
 	}
+
+	return hdn;
+}
+
+static HypertableDataNode *
+get_hypertable_data_node(Oid table_id, const char *node_name, bool owner_check, bool attach_check)
+{
+	HypertableDataNode *hdn = NULL;
+	Cache *hcache = ts_hypertable_cache_pin();
+	const Hypertable *ht = ts_hypertable_cache_get_entry(hcache, table_id, CACHE_FLAG_NONE);
+
+	if (owner_check)
+		ts_hypertable_permissions_check(table_id, GetUserId());
+
+	hdn = data_node_hypertable_get_by_node_name(ht, node_name, attach_check);
 
 	ts_cache_release(hcache);
 

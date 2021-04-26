@@ -15,7 +15,6 @@
 #include "dist_commands.h"
 #include "dist_txn.h"
 #include "connection_cache.h"
-#include "async.h"
 #include "data_node.h"
 #include "dist_util.h"
 #include "miscadmin.h"
@@ -81,7 +80,8 @@ ts_dist_cmd_collect_responses(List *requests)
  * server OIDs.
  */
 DistCmdResult *
-ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transactional)
+ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, List *data_nodes,
+										bool transactional)
 {
 	ListCell *lc;
 	List *requests = NIL;
@@ -113,7 +113,11 @@ ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transac
 
 		ereport(DEBUG2, (errmsg_internal("sending \"%s\" to data node \"%s\"", sql, node_name)));
 
-		req = async_request_send(connection, sql);
+		if (params == NULL)
+			req = async_request_send(connection, sql);
+		else
+			req = async_request_send_with_params(connection, sql, params, FORMAT_TEXT);
+
 		async_request_attach_user_data(req, (char *) node_name);
 		requests = lappend(requests, req);
 	}
@@ -123,6 +127,12 @@ ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transac
 	Assert(ts_dist_cmd_response_count(results) == list_length(data_nodes));
 
 	return results;
+}
+
+DistCmdResult *
+ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *data_nodes, bool transactional)
+{
+	return ts_dist_cmd_params_invoke_on_data_nodes(sql, NULL, data_nodes, transactional);
 }
 
 DistCmdResult *

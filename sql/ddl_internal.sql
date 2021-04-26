@@ -25,3 +25,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.refresh_continuous_aggregate(
     continuous_aggregate     REGCLASS,
     hypertable_chunk         REGCLASS
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh_chunk' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_replica_table(
+    chunk REGCLASS,
+    data_node_name NAME
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_chunk_create_replica_table' LANGUAGE C VOLATILE;
