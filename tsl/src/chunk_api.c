@@ -27,12 +27,10 @@
 
 #include <catalog.h>
 #include <compat.h>
-#include <chunk.h>
 #include <chunk_data_node.h>
 #include <errors.h>
 #include <error_utils.h>
 #include <hypercube.h>
-#include <hypertable.h>
 #include <hypertable_cache.h>
 
 #include "remote/async.h"
@@ -1662,4 +1660,25 @@ chunk_create_empty_table(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 
 	PG_RETURN_BOOL(true);
+}
+
+#define CREATE_CHUNK_TABLE_NAME "create_chunk_table"
+
+void
+chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk,
+										const char *node_name)
+{
+	const char *create_cmd =
+		psprintf("SELECT %s.%s($1, $2, $3, $4)", INTERNAL_SCHEMA_NAME, CREATE_CHUNK_TABLE_NAME);
+	const char *params[4] = { quote_qualified_identifier(NameStr(ht->fd.schema_name),
+														 NameStr(ht->fd.table_name)),
+							  chunk_api_dimension_slices_json(chunk, ht),
+							  NameStr(chunk->fd.schema_name),
+							  NameStr(chunk->fd.table_name) };
+
+	ts_dist_cmd_close_response(
+		ts_dist_cmd_params_invoke_on_data_nodes(create_cmd,
+												stmt_params_create_from_values(params, 4),
+												list_make1((void *) node_name),
+												true));
 }

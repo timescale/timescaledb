@@ -213,3 +213,15 @@ INSERT INTO metrics_int_dist1 VALUES
     (5,1,2,10.0),
     (100,1,1,0.0),
     (100,1,2,-100.0);
+
+CREATE TABLE dist_chunk_copy (
+        time timestamptz NOT NULL, 
+        value integer);
+
+SELECT create_distributed_hypertable('dist_chunk_copy', 'time', replication_factor => 2);
+ALTER TABLE dist_chunk_copy SET (timescaledb.compress);
+
+SELECT setseed(0);
+INSERT INTO dist_chunk_copy 
+SELECT t, random() * 20
+FROM generate_series('2020-01-01'::timestamp, '2020-01-25'::timestamp, '1d') t;
