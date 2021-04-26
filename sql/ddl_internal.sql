@@ -30,3 +30,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_replica_table(
     chunk REGCLASS,
     data_node_name NAME
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_chunk_create_replica_table' LANGUAGE C VOLATILE;
+
+-- Drop the specified chunk replica on the specified data node
+CREATE OR REPLACE FUNCTION  _timescaledb_internal.chunk_drop_replica(
+    chunk                   REGCLASS,
+    node_name               NAME
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunk_drop_replica' LANGUAGE C VOLATILE;
