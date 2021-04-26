@@ -7,13 +7,16 @@
 #define TIMESCALEDB_TSL_REMOTE_DIST_COMMANDS_H
 
 #include <catalog.h>
-#include <libpq-fe.h>
+
+#include "async.h"
 
 typedef struct DistCmdResult DistCmdResult;
 typedef struct List PreparedDistCmd;
 
 extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *node_names,
 													   bool transactional);
+extern DistCmdResult *ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params,
+															  List *data_nodes, bool transactional);
 extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes_using_search_path(const char *sql,
 																		 const char *search_path,
 																		 List *node_names,
