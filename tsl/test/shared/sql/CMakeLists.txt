@@ -1,6 +1,10 @@
 set(TEST_FILES_SHARED
-    constify_timestamptz_op_interval.sql constraint_exclusion_prepared.sql
-    decompress_placeholdervar.sql dist_gapfill.sql dist_insert.sql
+    constify_timestamptz_op_interval.sql
+    constraint_exclusion_prepared.sql
+    decompress_placeholdervar.sql
+    dist_chunk.sql
+    dist_gapfill.sql
+    dist_insert.sql
     dist_distinct.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
