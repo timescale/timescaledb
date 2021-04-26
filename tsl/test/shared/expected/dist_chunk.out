@@ -1,0 +1,114 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test function _timescaledb_internal.create_chunk_replica_table
+-- A table for the first chunk will be created on the data node, where it is not present.
+SELECT chunk_name, data_nodes 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'dist_chunk_copy';
+       chunk_name        |        data_nodes         
+-------------------------+---------------------------
+ _dist_hyper_15_67_chunk | {data_node_1,data_node_2}
+ _dist_hyper_15_68_chunk | {data_node_2,data_node_3}
+ _dist_hyper_15_69_chunk | {data_node_1,data_node_3}
+ _dist_hyper_15_70_chunk | {data_node_1,data_node_2}
+ _dist_hyper_15_71_chunk | {data_node_2,data_node_3}
+(5 rows)
+
+SELECT compress_chunk('_timescaledb_internal._dist_hyper_15_68_chunk');
+                compress_chunk                 
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_15_68_chunk
+(1 row)
+
+SELECT compress_chunk('_timescaledb_internal._dist_hyper_15_70_chunk');
+                compress_chunk                 
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_15_70_chunk
+(1 row)
+
+-- Non-distributed chunk will be used to test an error
+SELECT chunk_name 
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'conditions';
+     chunk_name     
+--------------------
+ _hyper_10_51_chunk
+ _hyper_10_52_chunk
+(2 rows)
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.create_chunk_replica_table(NULL, 'data_node_1');
+ERROR:  chunk cannot be NULL
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_67_chunk', NULL);
+ERROR:  data node name cannot be NULL
+SELECT _timescaledb_internal.create_chunk_replica_table(1234, 'data_node_1');
+ERROR:  oid "1234" is not a chunk
+SELECT _timescaledb_internal.create_chunk_replica_table('metrics_int', 'data_node_1');
+ERROR:  relation "metrics_int" is not a chunk
+SELECT _timescaledb_internal.create_chunk_replica_table('conditions', 'data_node_1');
+ERROR:  relation "conditions" is not a chunk
+SELECT _timescaledb_internal. create_chunk_replica_table('_timescaledb_internal._hyper_10_51_chunk', 'data_node_1');
+ERROR:  chunk "_hyper_10_51_chunk" doesn't belong to a distributed hypertable
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_67_chunk', 'data_node_1');
+ERROR:  chunk "_dist_hyper_15_67_chunk" already exists on data node "data_node_1"
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_27_chunk', 'data_node_1');
+ERROR:  relation "_timescaledb_internal._dist_hyper_15_27_chunk" does not exist at character 57
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_67_chunk', 'data_node_4');
+ERROR:  server "data_node_4" does not exist
+BEGIN READ ONLY;
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_67_chunk', 'data_node_3');
+ERROR:  cannot execute create_chunk_replica_table() in a read-only transaction
+COMMIT;
+\set ON_ERROR_STOP 1
+\c data_node_3
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = '_timescaledb_internal' AND 
+    (table_name LIKE '_dist_hyper_15_%' OR table_name LIKE 'compress_hyper_5_%');
+        table_name        
+--------------------------
+ _dist_hyper_15_68_chunk
+ _dist_hyper_15_69_chunk
+ _dist_hyper_15_71_chunk
+ compress_hyper_5_9_chunk
+(4 rows)
+
+\c :TEST_DBNAME 
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_67_chunk', 'data_node_3');
+ create_chunk_replica_table 
+----------------------------
+ 
+(1 row)
+
+-- Test that the table cannot be created since it was already created on the data node
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_67_chunk', 'data_node_3');
+ERROR:  [data_node_3]: relation "_dist_hyper_15_67_chunk" already exists
+\set ON_ERROR_STOP 1
+-- Creating chunk replica table ignores compression now:
+SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_15_70_chunk', 'data_node_3');
+ create_chunk_replica_table 
+----------------------------
+ 
+(1 row)
+
+\c data_node_3
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = '_timescaledb_internal' AND 
+    (table_name LIKE '_dist_hyper_15_%' OR table_name LIKE 'compress_hyper_5_%');
+        table_name        
+--------------------------
+ _dist_hyper_15_67_chunk
+ _dist_hyper_15_68_chunk
+ _dist_hyper_15_69_chunk
+ _dist_hyper_15_70_chunk
+ _dist_hyper_15_71_chunk
+ compress_hyper_5_9_chunk
+(6 rows)
+
+\c :TEST_DBNAME 
+DROP TABLE dist_chunk_copy;
+CALL distributed_exec($$ DROP TABLE _timescaledb_internal._dist_hyper_15_67_chunk $$, '{"data_node_3"}');
+CALL distributed_exec($$ DROP TABLE _timescaledb_internal._dist_hyper_15_70_chunk $$, '{"data_node_3"}');
