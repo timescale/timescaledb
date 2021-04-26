@@ -129,6 +129,7 @@ typedef struct CrossModuleFunctions
 	Datum (*chunk_set_default_data_node)(PG_FUNCTION_ARGS);
 	Datum (*create_chunk)(PG_FUNCTION_ARGS);
 	Datum (*show_chunk)(PG_FUNCTION_ARGS);
+
 	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);
 	void (*hypertable_make_distributed)(Hypertable *ht, List *data_node_names);
 	Datum (*timescaledb_fdw_handler)(PG_FUNCTION_ARGS);
@@ -159,6 +160,7 @@ typedef struct CrossModuleFunctions
 	PGFunction hypertable_distributed_set_replication_factor;
 	PGFunction chunk_create_empty_table;
 	PGFunction chunk_create_replica_table;
+	PGFunction chunk_drop_replica;
 	void (*update_compressed_chunk_relstats)(Oid uncompressed_relid, Oid compressed_relid);
 } CrossModuleFunctions;
 
