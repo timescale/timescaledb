@@ -1,6 +1,7 @@
 set(TEST_FILES_SHARED
     constify_timestamptz_op_interval.sql
     constraint_exclusion_prepared.sql
+    chunk_move_copy.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
     dist_gapfill.sql
