@@ -3,6 +3,7 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.block_new_chunks;
 DROP FUNCTION IF EXISTS _timescaledb_internal.allow_new_chunks;
 DROP FUNCTION IF EXISTS _timescaledb_internal.refresh_continuous_aggregate;
 DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_table;
+DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_replica_table;
 
 -- We need to rewrite all continuous aggregates to make sure that the
 -- queries do not contain qualification. They will be re-written in

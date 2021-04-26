@@ -8,7 +8,10 @@
 
 #include <foreign/foreign.h>
 
+#include <hypertable_data_node.h>
+
 #include "catalog.h"
+#include "hypertable.h"
 #include "remote/dist_txn.h"
 
 /* Used to skip ACL checks */
@@ -38,6 +41,10 @@ extern List *data_node_array_to_node_name_list(ArrayType *nodearr);
 extern List *data_node_oids_to_node_name_list(List *data_node_oids, AclMode mode);
 extern void data_node_name_list_check_acl(List *data_node_names, AclMode mode);
 extern Datum data_node_ping(PG_FUNCTION_ARGS);
+
+extern HypertableDataNode *data_node_hypertable_get_by_node_name(const Hypertable *ht,
+																 const char *node_name,
+																 bool attach_check);
 
 /* This should only be used for testing */
 extern Datum data_node_add_without_dist_id(PG_FUNCTION_ARGS);

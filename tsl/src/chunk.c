@@ -32,11 +32,34 @@
 #include <chunk_data_node.h>
 #include <extension.h>
 #include <errors.h>
+#include <error_utils.h>
+#include <hypertable_cache.h>
 
 #include "chunk.h"
+#include "chunk_api.h"
 #include "data_node.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"
+
+static bool
+chunk_match_data_node_by_server(const Chunk *chunk, const ForeignServer *server)
+{
+	bool server_found = false;
+	ListCell *lc;
+
+	foreach (lc, chunk->data_nodes)
+	{
+		ChunkDataNode *cdn = lfirst(lc);
+
+		if (cdn->foreign_server_oid == server->serverid)
+		{
+			server_found = true;
+			break;
+		}
+	}
+
+	return server_found;
+}
 
 static bool
 chunk_set_foreign_server(Chunk *chunk, ForeignServer *new_server)
@@ -49,21 +72,8 @@ chunk_set_foreign_server(Chunk *chunk, ForeignServer *new_server)
 	CatalogSecurityContext sec_ctx;
 	Oid old_server_id;
 	long updated;
-	ListCell *lc;
-	bool new_server_found = false;
 
-	foreach (lc, chunk->data_nodes)
-	{
-		ChunkDataNode *cdn = lfirst(lc);
-
-		if (cdn->foreign_server_oid == new_server->serverid)
-		{
-			new_server_found = true;
-			break;
-		}
-	}
-
-	if (!new_server_found)
+	if (!chunk_match_data_node_by_server(chunk, new_server))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("chunk \"%s\" does not exist on data node \"%s\"",
@@ -258,4 +268,66 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 	FreeExecutorState(estate);
 
 	return num_results;
+}
+
+static bool
+chunk_is_distributed(const Chunk *chunk)
+{
+	return chunk->relkind == RELKIND_FOREIGN_TABLE;
+}
+
+Datum
+chunk_create_replica_table(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid;
+	const char *data_node_name;
+	const Chunk *chunk;
+	const Hypertable *ht;
+	const ForeignServer *server;
+	Cache *hcache = ts_hypertable_cache_pin();
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	GETARG_NOTNULL_OID(chunk_relid, 0, "chunk");
+	GETARG_NOTNULL_NULLABLE(data_node_name, 1, "data node name", CSTRING);
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, false);
+	if (chunk == NULL)
+	{
+		const char *rel_name = get_rel_name(chunk_relid);
+		if (rel_name == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("oid \"%u\" is not a chunk", chunk_relid)));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("relation \"%s\" is not a chunk", rel_name)));
+	}
+	if (!chunk_is_distributed(chunk))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("chunk \"%s\" doesn't belong to a distributed hypertable",
+						get_rel_name(chunk_relid))));
+
+	ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+
+	/* Check the given data node exists */
+	server = data_node_get_foreign_server(data_node_name, ACL_USAGE, true, false);
+	/* Find if hypertable is attached to the data node and return an error otherwise */
+	data_node_hypertable_get_by_node_name(ht, data_node_name, true);
+
+	if (chunk_match_data_node_by_server(chunk, server))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("chunk \"%s\" already exists on data node \"%s\"",
+						get_rel_name(chunk_relid),
+						data_node_name)));
+
+	chunk_api_call_create_empty_chunk_table(ht, chunk, data_node_name);
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_VOID();
 }
