@@ -589,7 +589,7 @@ extern ChunkInsertState *
 ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
-	Relation rel, parent_rel, compress_rel;
+	Relation rel, parent_rel, compress_rel = NULL;
 	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
