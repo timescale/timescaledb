@@ -686,6 +686,7 @@ ts_chunk_insert_state_create(Chunk *chunk, ChunkDispatch *dispatch)
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
 		/* this is true as compressed chunks are not created on access node */
 		Assert(chunk->relkind != RELKIND_FOREIGN_TABLE);
+		Assert(compress_rel != NULL);
 		state->compress_rel = compress_rel;
 		Assert(ts_cm_functions->compress_row_init != NULL);
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
