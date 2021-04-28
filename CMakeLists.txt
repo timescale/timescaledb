@@ -133,6 +133,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
 
   # These flags are just supported on some of the compilers, so we
   # check them before adding them.
+  check_c_compiler_flag(-Wno-unused-command-line-argument CC_SUPPORTS_NO_UNUSED_CLI_ARG)
+  if(CC_SUPPORTS_NO_UNUSED_CLI_ARG)
+    add_compile_options(-Wno-unused-command-line-argument)
+  endif()
+
   check_c_compiler_flag(-Wno-format-truncation CC_SUPPORTS_NO_FORMAT_TRUNCATION)
   if(CC_SUPPORTS_NO_FORMAT_TRUNCATION)
     add_compile_options(-Wno-format-truncation)
