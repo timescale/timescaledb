@@ -138,6 +138,8 @@ extern TSDLLEXPORT void ts_chunk_drop_fks(Chunk *const chunk);
 extern TSDLLEXPORT void ts_chunk_create_fks(Chunk *const chunk);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
+extern TSDLLEXPORT bool ts_chunk_add_status(Chunk *chunk, int32 status);
+extern TSDLLEXPORT bool ts_chunk_set_status(Chunk *chunk, int32 status);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
