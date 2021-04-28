@@ -157,7 +157,7 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 			Int32GetDatum(fd->compressed_chunk_id);
 	}
 	values[AttrNumberGetAttrOffset(Anum_chunk_dropped)] = BoolGetDatum(fd->dropped);
-	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(CHUNK_STATUS_DEFAULT);
+	values[AttrNumberGetAttrOffset(Anum_chunk_status)] = Int32GetDatum(fd->status);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -2950,6 +2950,25 @@ chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+static ScanTupleResult
+chunk_tuple_update_status(TupleInfo *ti, void *data)
+{
+	FormData_chunk form;
+	FormData_chunk *update = data;
+	CatalogSecurityContext sec_ctx;
+	HeapTuple new_tuple;
+
+	chunk_formdata_fill(&form, ti);
+	form.status = update->status;
+	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
+	return SCAN_DONE;
+}
+
 static bool
 chunk_update_form(FormData_chunk *form)
 {
@@ -2962,6 +2981,25 @@ chunk_update_form(FormData_chunk *form)
 							   1,
 							   NULL,
 							   chunk_tuple_update_schema_and_table,
+							   form,
+							   0,
+							   ForwardScanDirection,
+							   AccessShareLock,
+							   CurrentMemoryContext) > 0;
+}
+
+static bool
+chunk_update_status(FormData_chunk *form)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, form->id);
+
+	return chunk_scan_internal(CHUNK_ID_INDEX,
+							   scankey,
+							   1,
+							   NULL,
+							   chunk_tuple_update_status,
 							   form,
 							   0,
 							   ForwardScanDirection,
@@ -2983,6 +3021,20 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 	namestrcpy(&chunk->fd.schema_name, newschema);
 
 	return chunk_update_form(&chunk->fd);
+}
+
+bool
+ts_chunk_add_status(Chunk *chunk, int32 status)
+{
+	return ts_chunk_set_status(chunk, ((uint32) chunk->fd.status) | (uint32) status);
+}
+
+bool
+ts_chunk_set_status(Chunk *chunk, int32 status)
+{
+	chunk->fd.status = status;
+
+	return chunk_update_status(&chunk->fd);
 }
 
 static ScanTupleResult
