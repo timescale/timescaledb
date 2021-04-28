@@ -6,24 +6,43 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+## 2.2.1 (2021-05-05)
+
+This maintenance release contains bugfixes since the 2.2.0 release. We
+deem it high priority for upgrading.
+
+This release extends Skip Scan to multinode by enabling the pushdown
+of `DISTINCT` to data nodes. It also fixes a number of bugs in the
+implementation of Skip Scan, in distributed hypertables, in creation
+of indexes, in compression, and in policies.
+
 **Features**
-* #3113 Pushdown "SELECT DISTINCT" in multi-node to allow use of Skip Scan
+* #3113 Pushdown "SELECT DISTINCT" in multi-node to allow use of Skip
+  Scan
 
 **Bugfixes**
-* #3101 Use commit date in get_git_commit()
-* #3104 Fix use after free in add_reorder_policy
-* #3106 Fix use after free in chunk_api_get_chunk_stats
-* #3123 Fix crash while using REINDEX TABLE CONCURRENTLY
-* #3135 Fix SkipScan path generation in DISTINCT queries with expressions
+* #3101 Use commit date in `get_git_commit()`
+* #3102 Fix `REINDEX TABLE` for distributed hypertables
+* #3104 Fix use after free in `add_reorder_policy`
+* #3106 Fix use after free in `chunk_api_get_chunk_stats`
+* #3109 Copy recreated object permissions on update
+* #3111 Fix `CMAKE_BUILD_TYPE` check
+* #3112 Use `%u` to format Oid instead of `%d`
+* #3118 Fix use after free in cache
+* #3123 Fix crash while using `REINDEX TABLE CONCURRENTLY`
+* #3135 Fix SkipScan path generation in `DISTINCT` queries with expressions
 * #3146 Fix SkipScan for IndexPaths without pathkeys
-* #3151 Fix fdw_relinfo_get assertion failure on DELETE
-* #3155 Inherit CFLAGS from PostgreSQL
+* #3147 Skip ChunkAppend if AppendPath has no children
+* #3148 Make `SELECT DISTINCT` handle non-var targetlists
+* #3151 Fix `fdw_relinfo_get` assertion failure on `DELETE`
+* #3155 Inherit `CFLAGS` from PostgreSQL
 * #3169 Fix incorrect type cast in compression policy
+* #3183 Fix segfault in calculate_chunk_interval 
 * #3185 Fix wrong datatype for integer based retention policy
 
 **Thanks**
-* @aelg for reporting an issue with policies on integer-based hypertables
 * @Dead2, @dv8472 and @einsibjarni for reporting an issue with multinode queries and views
+* @aelg for reporting an issue with policies on integer-based hypertables
 * @hperez75 for reporting an issue with Skip Scan
 * @nathanloisel for reporting an issue with compression on hypertables with integer-based timestamps
 * @xin-hedera for fixing an issue with compression on hypertables with integer-based timestamps
