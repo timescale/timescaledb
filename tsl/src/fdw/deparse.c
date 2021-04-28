@@ -861,7 +861,7 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
 	Query *query = root->parse;
 	ListCell *l, *dc_l;
 	bool first = true, varno_assigned = false;
-	Index varno;
+	Index varno = 0; /* mostly to quell compiler warning, handled via varno_assigned */
 	RangeTblEntry *dc_rte;
 	RangeTblEntry *rte;
 
