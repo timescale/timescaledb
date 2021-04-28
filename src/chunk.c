@@ -2230,6 +2230,15 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 	NameData schema, table;
 	ScanKeyData scankey[2];
 
+	/* Early check for rogue input */
+	if (schema_name == NULL || table_name == NULL)
+	{
+		if (fail_if_not_found)
+			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+		else
+			return NULL;
+	}
+
 	namestrcpy(&schema, schema_name);
 	namestrcpy(&table, table_name);
 
