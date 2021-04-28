@@ -58,14 +58,14 @@ int64
 policy_compression_get_compress_after_int(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int64_field(config, CONFIG_KEY_COMPRESS_AFTER, &found);
+	int64 compress_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_COMPRESS_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
 
-	return hypertable_id;
+	return compress_after;
 }
 
 Interval *
