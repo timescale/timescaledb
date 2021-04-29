@@ -742,8 +742,9 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 	row_compressor->rows_compressed_into_current_value += 1;
 }
 
-static void
-row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
+/* fetch compressed tuple from RowCompressor */
+static HeapTuple
+row_compressor_get_compressed_tuple(RowCompressor *row_compressor)
 {
 	int16 col;
 	HeapTuple compressed_tuple;
@@ -828,7 +829,13 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 				mycid,
 				0 /*=options*/,
 				row_compressor->bistate);
+	return compressed_tuple;
+}
 
+static void
+row_compressor_cleanup_after_flush(RowCompressor *row_compressor, bool changed_groups)
+{
+	int16 col;
 	/* free the compressed values now that we're done with them (the old compressor is freed in
 	 * finish()) */
 	for (col = 0; col < row_compressor->n_input_columns; col++)
@@ -873,6 +880,20 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
 	MemoryContextReset(row_compressor->per_row_ctx);
+}
+
+static void
+row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
+{
+	HeapTuple compressed_tuple = row_compressor_get_compressed_tuple(row_compressor);
+
+	Assert(row_compressor->bistate);
+	heap_insert(row_compressor->compressed_table,
+				compressed_tuple,
+				mycid,
+				0 /*=options*/,
+				row_compressor->bistate);
+	row_compressor_cleanup_after_flush(row_compressor, changed_groups);
 }
 
 static void
@@ -1509,8 +1530,9 @@ typedef struct CompressSingleRowState
 
 static TupleTableSlot *compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot);
 
-CompressSingleRowState *
-compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
+static void
+row_compressor_init_wrapper(RowCompressor *row_compressor, int srcht_id, Relation in_rel,
+							Relation out_rel, int *n_keys, const ColumnCompressionInfo ***keys)
 {
 	ListCell *lc;
 	List *htcols_list = NIL;
@@ -1519,15 +1541,6 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 	int16 *in_column_offsets;
-	int n_keys;
-	const ColumnCompressionInfo **keys;
-
-	CompressSingleRowState *cr = palloc(sizeof(CompressSingleRowState));
-	cr->out_slot =
-		MakeSingleTupleTableSlot(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
-	cr->in_rel = in_rel;
-	cr->out_rel = out_rel;
-
 	/* get compression properties for hypertable */
 	htcols_list = ts_hypertable_compression_get(srcht_id);
 	cclen = list_length(htcols_list);
@@ -1538,8 +1551,8 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 		ccinfo[i++] = fd;
 	}
 	in_column_offsets =
-		compress_chunk_populate_keys(RelationGetRelid(in_rel), ccinfo, cclen, &n_keys, &keys);
-	row_compressor_init(&cr->row_compressor,
+		compress_chunk_populate_keys(RelationGetRelid(in_rel), ccinfo, cclen, n_keys, keys);
+	row_compressor_init(row_compressor,
 						in_desc,
 						out_rel,
 						cclen,
@@ -1547,6 +1560,21 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 						in_column_offsets,
 						out_desc->natts,
 						false /*need_bistate*/);
+
+}
+
+CompressSingleRowState *
+compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
+{
+	int n_keys;
+	const ColumnCompressionInfo **keys;
+	CompressSingleRowState *cr = palloc(sizeof(CompressSingleRowState));
+	cr->out_slot =
+		MakeSingleTupleTableSlotCompat(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
+	cr->in_rel = in_rel;
+	cr->out_rel = out_rel;
+	row_compressor_init_wrapper(&cr->row_compressor, srcht_id, in_rel, out_rel, &n_keys, &keys);
+
 	return cr;
 }
 
