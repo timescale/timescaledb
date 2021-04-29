@@ -18,10 +18,13 @@ accidentally triggering the load of a previous DB version.**
 * #3146 Fix SkipScan for IndexPaths without pathkeys
 * #3151 Fix fdw_relinfo_get assertion failure on DELETE
 * #3155 Inherit CFLAGS from PostgreSQL
+* #3169 Fix incorrect type cast in compression policy
 
 **Thanks**
 * @Dead2, @dv8472 and @einsibjarni for reporting an issue with multinode queries and views
 * @hperez75 for reporting an issue with Skip Scan
+* @nathanloisel for reporting an issue with compression on hypertables with integer-based timestamps
+* @xin-hedera for fixing an issue with compression on hypertables with integer-based timestamps
 
 ## 2.2.0 (2021-04-13)
 
