@@ -272,9 +272,13 @@ LIMIT 1 \gset
 SELECT slices AS "SLICES"
 FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 
+SELECT relname
+FROM pg_catalog.pg_inherits, pg_class 
+WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
+
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
-SELECT drop_chunks('chunkapi','2018-01-10'::timestamp,'2017-12-23'::timestamp);
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 
@@ -282,6 +286,11 @@ SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
+
+
+SELECT relname
+FROM pg_catalog.pg_inherits, pg_class 
+WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
 
 -- Test that creat_chunk fails since chunk table already exists
 \set ON_ERROR_STOP 0
@@ -291,6 +300,7 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_
 -- Test create_chunk_table on a hypertable where the chunk didn't exist before
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 
@@ -300,6 +310,7 @@ SELECT count(*) FROM
 -- Demonstrate that current settings for dimensions don't affect create_chunk_table
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2, '3d');
 
@@ -307,6 +318,7 @@ SELECT count(*) FROM
    _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 
@@ -316,6 +328,7 @@ SELECT count(*) FROM
 -- Test create_chunk_table if a colliding chunk exists
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 
@@ -338,6 +351,7 @@ SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_S
 -- Test create_chunk_table when a chunk exists in different time partition and thus doesn't collide
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 
@@ -359,6 +373,7 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 -- Use the space partition to calculate the tablespace id to use
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 
@@ -370,9 +385,10 @@ SELECT count(*) FROM
 
 SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
 
-DROP TABLE chunkapi;
-
 -- Use the time partition to calculate the tablespace id to use
+
+DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 
 CREATE TABLE chunkapi (time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time');
@@ -386,7 +402,7 @@ LIMIT 1 \gset
 SELECT slices AS "SLICES"
 FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 
-SELECT drop_chunks('chunkapi','2018-01-10'::timestamp,'2017-12-23'::timestamp);
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 
 SELECT attach_tablespace('tablespace1', 'chunkapi');
 SELECT attach_tablespace('tablespace2', 'chunkapi');
@@ -397,6 +413,7 @@ SELECT count(*) FROM
 SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
 
 DROP TABLE chunkapi;
+DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
