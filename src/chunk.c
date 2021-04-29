@@ -592,7 +592,7 @@ chunk_collision_resolve(Hypertable *ht, Hypercube *cube, Point *p)
 }
 
 static int
-chunk_add_constraints(Chunk *chunk)
+chunk_add_constraints(const Chunk *chunk)
 {
 	int num_added;
 
@@ -1185,8 +1185,107 @@ chunk_create_from_hypercube_after_lock(Hypertable *ht, Hypercube *cube, const ch
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
-
 	chunk_create_table_constraints(chunk);
+
+	return chunk;
+}
+
+/*
+ * Make a chunk table inherit a hypertable.
+ *
+ * Execution happens via high-level ALTER TABLE statement. This includes
+ * numerous checks to ensure that the chunk table has all the prerequisites to
+ * properly inherit the hypertable.
+ */
+static void
+chunk_add_inheritance(Chunk *chunk, Hypertable *ht)
+{
+	AlterTableCmd altercmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_AddInherit,
+		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+		.missing_ok = false,
+	};
+	AlterTableStmt alterstmt = {
+		.type = T_AlterTableStmt,
+		.cmds = list_make1(&altercmd),
+		.missing_ok = false,
+		.relkind = OBJECT_TABLE,
+		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
+	};
+	LOCKMODE lockmode = AlterTableGetLockLevel(alterstmt.cmds);
+#if PG13_GE
+	AlterTableUtilityContext atcontext = {
+		.relid = AlterTableLookupRelation(&alterstmt, lockmode),
+	};
+
+	AlterTable(&alterstmt, lockmode, &atcontext);
+#else
+	AlterTable(AlterTableLookupRelation(&alterstmt, lockmode), lockmode, &alterstmt);
+#endif
+}
+
+static Chunk *
+chunk_create_from_hypercube_and_table_after_lock(Hypertable *ht, Hypercube *cube,
+												 Oid chunk_table_relid, const char *schema_name,
+												 const char *table_name, const char *prefix)
+{
+	Oid current_chunk_schemaid = get_rel_namespace(chunk_table_relid);
+	Oid new_chunk_schemaid = InvalidOid;
+	Chunk *chunk;
+
+	Assert(OidIsValid(chunk_table_relid));
+	Assert(OidIsValid(current_chunk_schemaid));
+
+	/* Insert any new dimension slices into metadata */
+	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
+	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, get_next_chunk_id());
+	chunk->table_id = chunk_table_relid;
+	chunk->hypertable_relid = ht->main_table_relid;
+	Assert(OidIsValid(ht->main_table_relid));
+
+	new_chunk_schemaid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
+
+	if (current_chunk_schemaid != new_chunk_schemaid)
+	{
+		Relation chunk_rel = table_open(chunk_table_relid, AccessExclusiveLock);
+		ObjectAddresses *objects;
+
+		CheckSetNamespace(current_chunk_schemaid, new_chunk_schemaid);
+		objects = new_object_addresses();
+		AlterTableNamespaceInternal(chunk_rel, current_chunk_schemaid, new_chunk_schemaid, objects);
+		free_object_addresses(objects);
+		table_close(chunk_rel, NoLock);
+		/* Make changes visible */
+		CommandCounterIncrement();
+	}
+
+	if (namestrcmp(&chunk->fd.table_name, get_rel_name(chunk_table_relid)) != 0)
+	{
+		/* Renaming will acquire and keep an AccessExclusivelock on the chunk
+		 * table */
+#if PG12_GE
+		RenameRelationInternal(chunk_table_relid, NameStr(chunk->fd.table_name), true, false);
+#else
+		RenameRelationInternal(chunk_table_relid, NameStr(chunk->fd.table_name), true);
+#endif
+		/* Make changes visible */
+		CommandCounterIncrement();
+	}
+
+	/* Note that we do not automatically add constrains and triggers to the
+	 * chunk table when the chunk is created from an existing table. However,
+	 * PostgreSQL currently validates that CHECK constraints exists, but no
+	 * validation is done for other objects, including triggers, UNIQUE,
+	 * PRIMARY KEY, and FOREIGN KEY constraints. We might want to either
+	 * enforce that these constraints exist prior to creating the chunk from a
+	 * table, or we ensure that they are automatically added when the chunk is
+	 * created. However, for the latter case, we risk duplicating constraints
+	 * and triggers if some of them already exist on the chunk table prior to
+	 * creating the chunk from it. */
+	chunk_add_constraints(chunk);
+	chunk_insert_into_metadata_after_lock(chunk);
+	chunk_add_inheritance(chunk, ht);
 
 	return chunk;
 }
@@ -1226,7 +1325,7 @@ chunk_create_from_point_after_lock(Hypertable *ht, Point *p, const char *schema_
 
 Chunk *
 ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema_name,
-									 const char *table_name, bool *created)
+									 const char *table_name, Oid chunk_table_relid, bool *created)
 {
 	ChunkStub *stub;
 	Chunk *chunk = NULL;
@@ -1254,7 +1353,16 @@ ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *
 			 * commit since we won't create those slices ourselves. */
 			ts_hypercube_find_existing_slices(hc, &tuplock);
 
-			chunk = chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
+			if (OidIsValid(chunk_table_relid))
+				chunk = chunk_create_from_hypercube_and_table_after_lock(ht,
+																		 hc,
+																		 chunk_table_relid,
+																		 schema_name,
+																		 table_name,
+																		 NULL);
+			else
+				chunk =
+					chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
 
 			if (NULL != created)
 				*created = true;
@@ -1466,7 +1574,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	 * the data table and related objects. */
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
 										get_namespace_oid(chunk->fd.schema_name.data, true));
-	chunk->hypertable_relid = ts_inheritance_parent_relid(chunk->table_id);
+	chunk->hypertable_relid = ts_hypertable_id_to_relid(chunk->fd.hypertable_id);
 	chunk->relkind = get_rel_relkind(chunk->table_id);
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
