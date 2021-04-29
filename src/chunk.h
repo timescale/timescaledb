@@ -154,10 +154,9 @@ extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, List **affected_data_nodes);
-extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc,
-															   const char *schema_name,
-															   const char *table_name,
-															   bool *created);
+extern TSDLLEXPORT Chunk *
+ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema_name,
+									 const char *table_name, Oid chunk_table_relid, bool *created);
 extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);

@@ -300,6 +300,37 @@ chunk_show(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
+static void
+check_privileges_for_creating_chunk(Oid hyper_relid)
+{
+	AclResult acl_result;
+
+	acl_result = pg_class_aclcheck(hyper_relid, GetUserId(), ACL_INSERT);
+	if (acl_result != ACLCHECK_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("permission denied for table \"%s\"", get_rel_name(hyper_relid)),
+				 errdetail("Insert privileges required on \"%s\" to create chunks.",
+						   get_rel_name(hyper_relid))));
+}
+
+static Hypercube *
+get_hypercube_from_slices(Jsonb *slices, const Hypertable *ht)
+{
+	Hypercube *hc;
+	const char *parse_err;
+
+	hc = hypercube_from_jsonb(slices, ht->space, &parse_err);
+
+	if (hc == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypercube for hypertable \"%s\"",
+						get_rel_name(ht->main_table_relid)),
+				 errdetail("%s", parse_err)));
+
+	return hc;
+}
 Datum
 chunk_create(PG_FUNCTION_ARGS)
 {
@@ -307,6 +338,7 @@ chunk_create(PG_FUNCTION_ARGS)
 	Jsonb *slices = PG_ARGISNULL(1) ? NULL : PG_GETARG_JSONB_P(1);
 	const char *schema_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
 	const char *table_name = PG_ARGISNULL(3) ? NULL : PG_GETARG_CSTRING(3);
+	Oid chunk_table_relid = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Hypercube *hc;
@@ -314,18 +346,10 @@ chunk_create(PG_FUNCTION_ARGS)
 	TupleDesc tupdesc;
 	HeapTuple tuple;
 	bool created;
-	const char *parse_err;
-	AclResult acl_result;
 
 	Assert(NULL != ht);
-
-	acl_result = pg_class_aclcheck(hypertable_relid, GetUserId(), ACL_INSERT);
-	if (acl_result != ACLCHECK_OK)
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for table \"%s\"", get_rel_name(hypertable_relid)),
-				 errdetail("Insert privileges required on \"%s\" to create chunks.",
-						   get_rel_name(hypertable_relid))));
+	Assert(OidIsValid(ht->main_table_relid));
+	check_privileges_for_creating_chunk(hypertable_relid);
 
 	if (NULL == slices)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
@@ -336,16 +360,14 @@ chunk_create(PG_FUNCTION_ARGS)
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
 
-	hc = hypercube_from_jsonb(slices, ht->space, &parse_err);
-
-	if (NULL == hc)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid hypercube for hypertable \"%s\"", get_rel_name(hypertable_relid)),
-				 errdetail("%s", parse_err)));
-
-	chunk = ts_chunk_find_or_create_without_cuts(ht, hc, schema_name, table_name, &created);
-
+	hc = get_hypercube_from_slices(slices, ht);
+	Assert(NULL != hc);
+	chunk = ts_chunk_find_or_create_without_cuts(ht,
+												 hc,
+												 schema_name,
+												 table_name,
+												 chunk_table_relid,
+												 &created);
 	Assert(NULL != chunk);
 
 	tuple = chunk_form_tuple(chunk, ht, tupdesc, created);
@@ -360,12 +382,15 @@ chunk_create(PG_FUNCTION_ARGS)
 }
 
 #define CREATE_CHUNK_FUNCTION_NAME "create_chunk"
+#define CREATE_CHUNK_NUM_ARGS 5
 #define CHUNK_CREATE_STMT                                                                          \
-	"SELECT * FROM " INTERNAL_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4)"
+	"SELECT * FROM " INTERNAL_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4, $5)"
 
 #define ESTIMATE_JSON_STR_SIZE(num_dims) (60 * (num_dims))
 
-static Oid create_chunk_argtypes[4] = { REGCLASSOID, JSONBOID, NAMEOID, NAMEOID };
+static Oid create_chunk_argtypes[CREATE_CHUNK_NUM_ARGS] = {
+	REGCLASSOID, JSONBOID, NAMEOID, NAMEOID, REGCLASSOID
+};
 
 /*
  * Fill in / get the TupleDesc for the result type of the create_chunk()
@@ -376,7 +401,7 @@ get_create_chunk_result_type(TupleDesc *tupdesc)
 {
 	Oid funcoid = ts_get_function_oid(CREATE_CHUNK_FUNCTION_NAME,
 									  INTERNAL_SCHEMA_NAME,
-									  4,
+									  CREATE_CHUNK_NUM_ARGS,
 									  create_chunk_argtypes);
 
 	if (get_func_result_type(funcoid, NULL, tupdesc) != TYPEFUNC_COMPOSITE)
@@ -423,11 +448,12 @@ void
 chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 {
 	AsyncRequestSet *reqset = async_request_set_create();
-	const char *params[4] = {
+	const char *params[CREATE_CHUNK_NUM_ARGS] = {
 		quote_qualified_identifier(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name)),
 		chunk_api_dimension_slices_json(chunk, ht),
 		NameStr(chunk->fd.schema_name),
 		NameStr(chunk->fd.table_name),
+		NULL,
 	};
 	AsyncResponseResult *res;
 	ListCell *lc;
@@ -446,7 +472,8 @@ chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 
 		req = async_request_send_with_params(conn,
 											 CHUNK_CREATE_STMT,
-											 stmt_params_create_from_values(params, 4),
+											 stmt_params_create_from_values(params,
+																			CREATE_CHUNK_NUM_ARGS),
 											 FORMAT_TEXT);
 
 		async_request_attach_user_data(req, cdn);
@@ -1637,8 +1664,6 @@ chunk_create_empty_table(PG_FUNCTION_ARGS)
 	Cache *const hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
 	Hypercube *hc;
-	const char *parse_err;
-	AclResult acl_result;
 
 	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
 	GETARG_NOTNULL_NULLABLE(slices, 1, "slices", JSONB_P);
@@ -1647,23 +1672,9 @@ chunk_create_empty_table(PG_FUNCTION_ARGS)
 
 	ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
 	Assert(ht != NULL);
-
-	acl_result = pg_class_aclcheck(hypertable_relid, GetUserId(), ACL_INSERT);
-	if (acl_result != ACLCHECK_OK)
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for table \"%s\"", get_rel_name(hypertable_relid)),
-				 errdetail("Insert privileges required on \"%s\" to create chunks.",
-						   get_rel_name(hypertable_relid))));
-
-	hc = hypercube_from_jsonb(slices, ht->space, &parse_err);
-
-	if (hc == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid hypercube for hypertable \"%s\"", get_rel_name(hypertable_relid)),
-				 errdetail("%s", parse_err)));
-
+	check_privileges_for_creating_chunk(hypertable_relid);
+	hc = get_hypercube_from_slices(slices, ht);
+	Assert(NULL != hc);
 	ts_chunk_create_only_table(ht, hc, schema_name, table_name);
 
 	ts_cache_release(hcache);
