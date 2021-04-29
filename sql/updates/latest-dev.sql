@@ -89,3 +89,5 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.chunk table --
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk;
