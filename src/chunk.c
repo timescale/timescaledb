@@ -1065,6 +1065,19 @@ chunk_create_only_table_after_lock(Hypertable *ht, Hypercube *cube, const char *
 	return chunk;
 }
 
+static void
+chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
+{
+	AlterTableCmd drop_inh_cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_DropInherit,
+		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1),
+		.missing_ok = false
+	};
+
+	AlterTableInternal(chunk->table_id, list_make1(&drop_inh_cmd), false);
+}
+
 /*
  * Checks that given hypercube does not collide with existing chunks and
  * creates an empty table for a chunk without any metadata modifications.
@@ -1074,6 +1087,7 @@ ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_n
 						   const char *table_name)
 {
 	ChunkStub *stub;
+	Chunk *chunk;
 	ScanTupLock tuplock = {
 		.lockmode = LockTupleKeyShare,
 		.waitpolicy = LockWaitBlock,
@@ -1098,12 +1112,15 @@ ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube, const char *schema_n
 
 	ts_hypercube_find_existing_slices(cube, &tuplock);
 
-	return chunk_create_only_table_after_lock(ht,
-											  cube,
-											  schema_name,
-											  table_name,
-											  NULL,
-											  INVALID_CHUNK_ID);
+	chunk = chunk_create_only_table_after_lock(ht,
+											   cube,
+											   schema_name,
+											   table_name,
+											   NULL,
+											   INVALID_CHUNK_ID);
+	chunk_table_drop_inherit(chunk, ht);
+
+	return chunk;
 }
 
 static Chunk *
