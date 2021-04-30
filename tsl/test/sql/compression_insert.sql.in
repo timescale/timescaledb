@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -187,3 +188,28 @@ FROM show_chunks('test_gen') c;
 INSERT INTO test_gen (payload) values(17);
 SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
 
+-- test interaction between newly inserted batches and pathkeys/ordered append
+CREATE TABLE test_ordering(time int);
+SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
+ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
+INSERT INTO test_ordering VALUES (5),(4),(3);
+
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+INSERT INTO test_ordering SELECT 1;
+
+-- should not be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+
+INSERT INTO test_ordering VALUES (105),(104),(103);
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;
+
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+
+-- should be ordered append
+:PREFIX SELECT * FROM test_ordering ORDER BY 1;

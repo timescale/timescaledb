@@ -64,7 +64,8 @@ static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, Comp
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
 											 RelOptInfo *chunk_rel, bool needs_sequence_num);
 
-static SortInfo build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys);
+static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
+							   List *pathkeys);
 
 /*
  * Like ts_make_pathkey_from_sortop but passes down the compressed relid so that existing
@@ -347,7 +348,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 */
 	int parallel_workers = 1;
 	AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-	SortInfo sort_info = build_sortinfo(chunk_rel, info, root->query_pathkeys);
+	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, info, root->query_pathkeys);
 
 	Assert(chunk_info != NULL);
 	Assert(chunk_info->parent_reloid == ht->main_table_relid);
@@ -1209,7 +1210,7 @@ find_restrictinfo_equality(RelOptInfo *chunk_rel, CompressionInfo *info)
  * If query pathkeys is shorter than segmentby + compress_orderby pushdown can still be done
  */
 static SortInfo
-build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
+build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 {
 	int pk_index;
 	PathKey *pk;
@@ -1220,7 +1221,7 @@ build_sortinfo(RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 	ListCell *lc = list_head(pathkeys);
 	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
 
-	if (pathkeys == NIL)
+	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
 		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
