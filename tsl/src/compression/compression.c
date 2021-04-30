@@ -1676,5 +1676,9 @@ compress_row_end(CompressSingleRowState *cr)
 void
 compress_row_destroy(CompressSingleRowState *cr)
 {
+	Chunk *chunk = ts_chunk_get_by_relid(cr->in_rel->rd_id, true);
+	if (!chunk_is_unordered(chunk))
+		ts_chunk_add_status(chunk, CHUNK_STATUS_UNORDERED);
+
 	ExecDropSingleTupleTableSlot(cr->out_slot);
 }
