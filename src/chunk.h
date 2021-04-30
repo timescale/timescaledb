@@ -26,6 +26,8 @@
 #define COMPRESS_CHUNK_FUNCNAME "compress_chunk"
 #define COMPRESS_CHUNK_NARGS 2
 
+#define CHUNK_STATUS_UNORDERED 1U
+
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct Hyperspace Hyperspace;
@@ -98,6 +100,12 @@ static inline bool
 chunk_stub_is_complete(ChunkStub *stub, Hyperspace *space)
 {
 	return space->num_dimensions == stub->constraints->num_dimension_constraints;
+}
+
+static inline bool
+chunk_is_unordered(Chunk *chunk)
+{
+	return ((uint32) chunk->fd.status) & CHUNK_STATUS_UNORDERED;
 }
 
 /* The hash table entry for the ChunkScanCtx */
