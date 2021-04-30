@@ -21,7 +21,7 @@
 		if (period <= 0)                                                                           \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
-					 errmsg("period must be greater then 0")));                                    \
+					 errmsg("period must be greater than 0")));                                    \
 		if (offset != 0)                                                                           \
 		{                                                                                          \
 			/* We need to ensure that the timestamp is in range _after_ the */                     \
@@ -105,7 +105,7 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 		if (period <= 0)                                                                           \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
-					 errmsg("period must be greater then 0")));                                    \
+					 errmsg("period must be greater than 0")));                                    \
 		/* shift = shift % period, but use TMODULO */                                              \
 		TMODULO(shift, result, period);                                                            \
                                                                                                    \
