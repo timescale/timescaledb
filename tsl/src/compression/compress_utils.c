@@ -508,6 +508,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
+		/* chunks of distributed hypertables are foreign tables */
 		if (!compress_remote_chunk(fcinfo, chunk, if_not_compressed))
 			PG_RETURN_NULL();
 
@@ -518,10 +519,11 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		 * the metadata are eventually consistent.
 		 */
 		ts_chunk_set_compressed_chunk(chunk, INVALID_CHUNK_ID);
-
-		PG_RETURN_OID(uncompressed_chunk_id);
 	}
-	tsl_compress_chunk_wrapper(chunk, if_not_compressed);
+	else
+	{
+		tsl_compress_chunk_wrapper(chunk, if_not_compressed);
+	}
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
