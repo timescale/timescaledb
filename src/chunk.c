@@ -155,6 +155,13 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
  * make progress.
  */
 #define CHUNK_STATUS_COMPRESSED 1
+/*
+ * When inserting into a compressed chunk the configured compress_orderby is not retained.
+ * Any such chunks need an explicit Sort step to produce ordered output until the chunk
+ * ordering has been restored by recompress_chunk. This flag can only exist on compressed
+ * chunks.
+ */
+#define CHUNK_STATUS_UNORDERED 2
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -3071,6 +3078,12 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 }
 
 bool
+ts_chunk_set_unordered(Chunk *chunk)
+{
+	return ts_chunk_add_status(chunk, CHUNK_STATUS_UNORDERED);
+}
+
+bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
 {
 	return ts_chunk_set_status(chunk, ts_set_flags_32(chunk->fd.status, status));
@@ -3107,7 +3120,8 @@ chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id
 	else
 	{
 		form.compressed_chunk_id = INVALID_CHUNK_ID;
-		form.status = ts_clear_flags_32(form.status, CHUNK_STATUS_COMPRESSED);
+		form.status =
+			ts_clear_flags_32(form.status, CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_UNORDERED);
 	}
 	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
@@ -3747,6 +3761,15 @@ ts_chunk_can_be_compressed(int32 chunk_id)
 	}
 	ts_scan_iterator_close(&iterator);
 	return can_be_compressed;
+}
+
+bool
+ts_chunk_is_unordered(const Chunk *chunk)
+{
+	/* only compressed Chunks can be unordered so we should never be
+	 * called for uncompressed chunks */
+	Assert(ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED));
+	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_UNORDERED);
 }
 
 Datum
