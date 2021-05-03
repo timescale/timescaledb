@@ -21,6 +21,7 @@
 #include "compression/deltadelta.h"
 #include "compression/dictionary.h"
 #include "compression/gorilla.h"
+#include "compression/recompress.h"
 #include "compression/segment_meta.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
@@ -148,6 +149,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.recompress_chunk = tsl_recompress_chunk,
+	.recompress_chunk_sfunc = tsl_recompress_chunk_sfunc,
+	.recompress_chunk_ffunc = tsl_recompress_chunk_ffunc,
 	.compress_row_init = compress_row_init,
 	.compress_row_exec = compress_row_exec,
 	.compress_row_end = compress_row_end,
