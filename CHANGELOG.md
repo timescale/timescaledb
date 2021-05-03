@@ -19,8 +19,10 @@ accidentally triggering the load of a previous DB version.**
 * #3151 Fix fdw_relinfo_get assertion failure on DELETE
 * #3155 Inherit CFLAGS from PostgreSQL
 * #3169 Fix incorrect type cast in compression policy
+* #3185 Fix wrong datatype for integer based retention policy
 
 **Thanks**
+* @aelg for reporting an issue with policies on integer-based hypertables
 * @Dead2, @dv8472 and @einsibjarni for reporting an issue with multinode queries and views
 * @hperez75 for reporting an issue with Skip Scan
 * @nathanloisel for reporting an issue with compression on hypertables with integer-based timestamps
