@@ -61,14 +61,14 @@ int64
 policy_retention_get_drop_after_int(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int64_field(config, CONFIG_KEY_DROP_AFTER, &found);
+	int64 drop_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_DROP_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not find %s in config for job", CONFIG_KEY_DROP_AFTER)));
 
-	return hypertable_id;
+	return drop_after;
 }
 
 Interval *
