@@ -140,7 +140,7 @@ extern TSDLLEXPORT Oid ts_chunk_create_table(const Chunk *chunk, const Hypertabl
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
-extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
+extern TSDLLEXPORT Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
 							bool missing_ok);

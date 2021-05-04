@@ -66,6 +66,8 @@ CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(recompress_chunk);
+CROSSMODULE_WRAPPER(recompress_chunk_sfunc);
+CROSSMODULE_WRAPPER(recompress_chunk_ffunc);
 
 /* continous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
