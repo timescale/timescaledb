@@ -223,3 +223,7 @@ SELECT setseed(0);
 INSERT INTO dist_chunk_copy 
 SELECT t, random() * 20
 FROM generate_series('2020-01-01'::timestamp, '2020-01-25'::timestamp, '1d') t;
+
+-- Compress a few chunks of this dist_chunk_copy hypertable
+SELECT compress_chunk('_timescaledb_internal._dist_hyper_15_68_chunk');
+SELECT compress_chunk('_timescaledb_internal._dist_hyper_15_70_chunk');
