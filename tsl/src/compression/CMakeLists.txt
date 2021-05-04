@@ -9,5 +9,6 @@ set(SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/dictionary.c
   ${CMAKE_CURRENT_SOURCE_DIR}/gorilla.c
   ${CMAKE_CURRENT_SOURCE_DIR}/segment_meta.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/debug_tup.c
 )
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
