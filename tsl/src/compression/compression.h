@@ -168,8 +168,7 @@ extern RecompressTuple *recompress_tuple_init(int srcht_id, Relation chunk_rel,
 // extern void recompress_tuple_append_row(RecompressTuple *rcstate, HeapTuple compressed_tuple);
 extern void recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
 										bool *compressed_is_nulls);
-
-extern HeapTuple recompress_tuple_get_next(RecompressTuple *rcstate);
+extern HeapTuple recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done);
 extern void recompress_tuple_reset(RecompressTuple *rcstate);
 extern void recompress_tuple_destroy(RecompressTuple *rcstate);
 #endif

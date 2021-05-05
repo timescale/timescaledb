@@ -1784,12 +1784,6 @@ recompress_tuple_init(int srcht_id, Relation chunk_rel, Relation compress_rel)
 
 	rcstate->compress_tupdesc = RelationGetDescr(compress_rel);
 	rcstate->chunk_tupdesc = RelationGetDescr(chunk_rel);
-  elog(NOTICE,
-         "TupleDesc compress tupdesc: TupleDesc %p (%u,%d) ",
-         rcstate->compress_tupdesc, rcstate->compress_tupdesc->tdtypeid, rcstate->compress_tupdesc->tdtypmod);
-  elog(NOTICE,
-         "TupleDesc chunk tupdesc: TupleDesc %p (%u,%d) ",
-         rcstate->chunk_tupdesc, rcstate->chunk_tupdesc->tdtypeid, rcstate->compress_tupdesc->tdtypmod);
 
 	// rcstate->compressed_datums = palloc(sizeof(Datum) * rcstate->compress_tupdesc->natts);
 	// rcstate->compressed_is_nulls = palloc(sizeof(bool) * rcstate->compress_tupdesc->natts);
@@ -1875,24 +1869,24 @@ recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
 
 /* Compresses the added tuples (by recompress_tuple_append_row )
  * and returns 1 or more compressed tuples
+ * returns true if the current group is done
  */
 HeapTuple
-recompress_tuple_get_next(RecompressTuple *rcstate)
+recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done)
 {
 	MemoryContext old_ctx = NULL, fn_ctx = CurrentMemoryContext;
 	bool flush_tuple = false, got_tuple;
 	HeapTuple compressed_tuple = NULL;
 	RowCompressor *row_compressor = rcstate->compressor;
+	*group_done = false;
 	/* sort the data */
 	if (rcstate->state == RecompressTupleNoSort)
 	{
-        /* first iteration */
+		/* first iteration */
 		tuplesort_performsort(rcstate->tupsortstate);
 	}
-    else if ( rcstate->state == RecompressTupleDone )
-    {
-        return NULL;
-    }
+	Assert((rcstate->state == RecompressTupleNoSort) ||
+		   (rcstate->state == RecompressTupleInProgress));
 	/* compress the tuples
 	 * The logic is similar to row_compressor_append_sorted_rows
 	 */
@@ -1944,19 +1938,22 @@ recompress_tuple_get_next(RecompressTuple *rcstate)
 	{
 		compressed_tuple = row_compressor_get_compressed_tuple(row_compressor, fn_ctx);
 		row_compressor_cleanup_after_flush(row_compressor, rcstate->changed_groups);
-	   if ( got_tuple )
-	   {
-		if (rcstate->changed_groups)
-			row_compressor_update_group(row_compressor, slot);
-		row_compressor_append_row(row_compressor, slot);
-	   }
+		if (got_tuple)
+		{
+			if (rcstate->changed_groups)
+			{
+				*group_done = true;
+				row_compressor_update_group(row_compressor, slot);
+			}
+			row_compressor_append_row(row_compressor, slot);
+		}
 	}
 	if (got_tuple == false)
-    {
-        /* no more tuples */
-        tuplesort_end(rcstate->tupsortstate);
-        rcstate->state = RecompressTupleDone;
-    }
+	{
+		/* no more tuples */
+		rcstate->state = RecompressTupleDone;
+		*group_done = true;
+	}
 	MemoryContextSwitchTo(old_ctx); // to do is it correct?
 	return compressed_tuple;
 }
@@ -1971,5 +1968,8 @@ recompress_tuple_reset(RecompressTuple *rcstate)
 void
 recompress_tuple_destroy(RecompressTuple *rcstate)
 {
-
+	if (rcstate->tupsortstate)
+		tuplesort_end(rcstate->tupsortstate);
+	rcstate->tupsortstate = NULL;
+	ExecDropSingleTupleTableSlot(rcstate->chunk_rel_tuple_slot);
 }
