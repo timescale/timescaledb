@@ -885,8 +885,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 
 	/* Get the first closed (space) dimension, which is the one along which we
 	 * partition across data nodes. */
-	dim = hyperspace_get_closed_dimension(ht->space, 0);
-
+	dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 	num_nodes = list_length(ht->data_nodes) + 1;
 
 	if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
@@ -1088,7 +1087,8 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 
 			if (repartition)
 			{
-				Dimension *dim = hyperspace_get_closed_dimension(ht->space, 0);
+				Dimension *dim =
+					ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 				int num_nodes = list_length(ht->data_nodes) - 1;
 
 				if (dim != NULL && num_nodes < dim->fd.num_slices && num_nodes > 0)

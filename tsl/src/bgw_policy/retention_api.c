@@ -146,7 +146,7 @@ policy_retention_add(PG_FUNCTION_ARGS)
 
 	Oid owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 	Oid partitioning_type;
-	Dimension *dim;
+	const Dimension *dim;
 	/* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
 	Interval default_schedule_interval = { .day = 1 };
 	/* Default max runtime should not be very long. Right now set to 5 minutes */

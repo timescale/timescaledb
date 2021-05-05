@@ -131,41 +131,44 @@ extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);
 extern int ts_hypertable_delete_by_name(const char *schema_name, const char *table_name);
 extern int ts_hypertable_delete_by_id(int32 hypertable_id);
-extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(Hypertable *ht, CreateTrigStmt *stmt,
+extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *ht,
+															  CreateTrigStmt *stmt,
 															  const char *query);
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Oid relid, const char *trigger_name);
 extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 
-extern TSDLLEXPORT void ts_hypertable_check_partitioning(Hypertable *ht,
+extern TSDLLEXPORT void ts_hypertable_check_partitioning(const Hypertable *ht,
 														 int32 id_of_updated_dimension);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
-extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_if_exists(Hypertable *h, Point *point);
-extern TSDLLEXPORT Chunk *ts_hypertable_get_or_create_chunk(Hypertable *h, Point *point);
+extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_if_exists(const Hypertable *h,
+															 const Point *point);
+extern TSDLLEXPORT Chunk *ts_hypertable_get_or_create_chunk(const Hypertable *h,
+															const Point *point);
 extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
-extern bool ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid);
-extern Tablespace *ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk);
-extern const char *ts_hypertable_select_tablespace_name(Hypertable *ht, Chunk *chunk);
+extern bool ts_hypertable_has_tablespace(const Hypertable *ht, Oid tspc_oid);
+extern Tablespace *ts_hypertable_select_tablespace(const Hypertable *ht, const Chunk *chunk);
+extern const char *ts_hypertable_select_tablespace_name(const Hypertable *ht, const Chunk *chunk);
 extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id,
 															   Oid tablespace_oid, int16 offset);
 extern bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
-extern bool ts_is_partitioning_column(Hypertable *ht, Index column_attno);
+extern bool ts_is_partitioning_column(const Hypertable *ht, Index column_attno);
 extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
 													 int32 compressed_hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
-extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(Hypertable *ht,
+extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(const Hypertable *ht,
 																	  List *constraint_list);
 extern List *ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube);
-extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(Hypertable *ht);
+extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(const Hypertable *ht);
+extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(const Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(const Hypertable *ht,
 																bool error_if_missing);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(Hypertable *ht);
-extern TSDLLEXPORT HypertableType ts_hypertable_get_type(Hypertable *ht);
-extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(Hypertable *ht,
+extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(const Hypertable *ht);
+extern TSDLLEXPORT HypertableType ts_hypertable_get_type(const Hypertable *ht);
+extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(const Hypertable *ht,
 															  FunctionCallInfo fcinfo);
 extern TSDLLEXPORT int16 ts_validate_replication_factor(int32 replication_factor, bool is_null,
 														bool is_dist_call);

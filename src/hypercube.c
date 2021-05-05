@@ -62,7 +62,7 @@ hypercube_is_sorted(const Hypercube *hc)
 #endif
 
 Hypercube *
-ts_hypercube_copy(Hypercube *hc)
+ts_hypercube_copy(const Hypercube *hc)
 {
 	Hypercube *copy;
 	size_t nbytes = HYPERCUBE_SIZE(hc->capacity);
@@ -78,7 +78,7 @@ ts_hypercube_copy(Hypercube *hc)
 }
 
 bool
-ts_hypercube_equal(Hypercube *hc1, Hypercube *hc2)
+ts_hypercube_equal(const Hypercube *hc1, const Hypercube *hc2)
 {
 	int i;
 
@@ -105,11 +105,14 @@ cmp_slices_by_dimension_id(const void *left, const void *right)
 	return 1;
 }
 
-void
-ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice)
+DimensionSlice *
+ts_hypercube_add_slice_from_range(Hypercube *hc, int32 dimension_id, int64 start, int64 end)
 {
+	DimensionSlice *slice;
+
 	Assert(hc->capacity > hc->num_slices);
 
+	slice = ts_dimension_slice_create(dimension_id, start, end);
 	hc->slices[hc->num_slices++] = slice;
 
 	/* Check if we require a sort to maintain dimension order */
@@ -118,6 +121,22 @@ ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice)
 		ts_hypercube_slice_sort(hc);
 
 	Assert(hypercube_is_sorted(hc));
+
+	return slice;
+}
+
+DimensionSlice *
+ts_hypercube_add_slice(Hypercube *hc, const DimensionSlice *slice)
+{
+	DimensionSlice *new_slice;
+
+	new_slice = ts_hypercube_add_slice_from_range(hc,
+												  slice->fd.dimension_id,
+												  slice->fd.range_start,
+												  slice->fd.range_end);
+	new_slice->fd.id = slice->fd.id;
+
+	return new_slice;
 }
 
 /*
@@ -130,7 +149,7 @@ ts_hypercube_slice_sort(Hypercube *hc)
 	qsort(hc->slices, hc->num_slices, sizeof(DimensionSlice *), cmp_slices_by_dimension_id);
 }
 
-DimensionSlice *
+const DimensionSlice *
 ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
 {
 	DimensionSlice slice = {
@@ -159,7 +178,7 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
  * Given a set of constraints, build the corresponding hypercube.
  */
 Hypercube *
-ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
+ts_hypercube_from_constraints(const ChunkConstraints *constraints, MemoryContext mctx)
 {
 	Hypercube *hc;
 	int i;
@@ -217,7 +236,7 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
  * found.
  */
 int
-ts_hypercube_find_existing_slices(Hypercube *cube, ScanTupLock *tuplock)
+ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tuplock)
 {
 	int i;
 	int num_found = 0;
@@ -259,7 +278,7 @@ ts_hypercube_find_existing_slices(Hypercube *cube, ScanTupLock *tuplock)
  * hypercubes. This happens in a later step.
  */
 Hypercube *
-ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock)
+ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p, const ScanTupLock *tuplock)
 {
 	Hypercube *cube;
 	int i;
@@ -269,7 +288,7 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock
 	/* For each dimension, calculate the hypercube's slice in that dimension */
 	for (i = 0; i < hs->num_dimensions; i++)
 	{
-		Dimension *dim = &hs->dimensions[i];
+		const Dimension *dim = &hs->dimensions[i];
 		int64 value = p->coordinates[i];
 		bool found = false;
 
@@ -325,7 +344,7 @@ ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock
  * dimension and only if all dimensions collide there is a hypercube collision.
  */
 bool
-ts_hypercubes_collide(Hypercube *cube1, Hypercube *cube2)
+ts_hypercubes_collide(const Hypercube *cube1, const Hypercube *cube2)
 {
 	int i;
 

@@ -33,19 +33,23 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
  ***************************/
 
 static void spi_update_materializations(SchemaAndName partial_view,
-										SchemaAndName materialization_table, Name time_column_name,
+										SchemaAndName materialization_table,
+										const NameData *time_column_name,
 										TimeRange invalidation_range, const int32 chunk_id);
-static void spi_delete_materializations(SchemaAndName materialization_table, Name time_column_name,
+static void spi_delete_materializations(SchemaAndName materialization_table,
+										const NameData *time_column_name,
 										TimeRange invalidation_range,
 										const char *const chunk_condition);
 static void spi_insert_materializations(SchemaAndName partial_view,
-										SchemaAndName materialization_table, Name time_column_name,
+										SchemaAndName materialization_table,
+										const NameData *time_column_name,
 										TimeRange materialization_range,
 										const char *const chunk_condition);
 
 void
 continuous_agg_update_materialization(SchemaAndName partial_view,
-									  SchemaAndName materialization_table, Name time_column_name,
+									  SchemaAndName materialization_table,
+									  const NameData *time_column_name,
 									  InternalTimeRange new_materialization_range,
 									  InternalTimeRange invalidation_range, int32 chunk_id)
 {
@@ -205,7 +209,7 @@ internal_time_range_to_time_range(InternalTimeRange internal)
 
 static void
 spi_update_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-							Name time_column_name, TimeRange invalidation_range,
+							const NameData *time_column_name, TimeRange invalidation_range,
 							const int32 chunk_id)
 {
 	StringInfo chunk_condition = makeStringInfo();
@@ -230,7 +234,7 @@ spi_update_materializations(SchemaAndName partial_view, SchemaAndName materializ
 }
 
 static void
-spi_delete_materializations(SchemaAndName materialization_table, Name time_column_name,
+spi_delete_materializations(SchemaAndName materialization_table, const NameData *time_column_name,
 							TimeRange invalidation_range, const char *const chunk_condition)
 {
 	int res;
@@ -268,7 +272,7 @@ spi_delete_materializations(SchemaAndName materialization_table, Name time_colum
 
 static void
 spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materialization_table,
-							Name time_column_name, TimeRange materialization_range,
+							const NameData *time_column_name, TimeRange materialization_range,
 							const char *const chunk_condition)
 {
 	int res;

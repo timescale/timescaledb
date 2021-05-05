@@ -60,7 +60,7 @@ typedef enum ScanFilterResult
 } ScanFilterResult;
 
 typedef ScanTupleResult (*tuple_found_func)(TupleInfo *ti, void *data);
-typedef ScanFilterResult (*tuple_filter_func)(TupleInfo *ti, void *data);
+typedef ScanFilterResult (*tuple_filter_func)(const TupleInfo *ti, void *data);
 typedef void (*postscan_func)(int num_tuples, void *data);
 
 typedef struct ScannerCtx
@@ -75,7 +75,7 @@ typedef struct ScannerCtx
 	LOCKMODE lockmode;
 	MemoryContext result_mctx; /* The memory context to allocate the result
 								* on */
-	ScanTupLock *tuplock;
+	const ScanTupLock *tuplock;
 	ScanDirection scandirection;
 	Snapshot snapshot; /* Snapshot requested by the caller. Set automatically
 						* when NULL */
@@ -99,7 +99,7 @@ typedef struct ScannerCtx
 	 * tuples that should be passed on to tuple_found, or SCAN_EXCLUDE
 	 * otherwise.
 	 */
-	ScanFilterResult (*filter)(TupleInfo *ti, void *data);
+	ScanFilterResult (*filter)(const TupleInfo *ti, void *data);
 
 	/*
 	 * Handler for found tuples. Should return SCAN_CONTINUE to continue the

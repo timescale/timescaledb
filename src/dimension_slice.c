@@ -38,7 +38,7 @@ dimension_slice_alloc(void)
 }
 
 static inline DimensionSlice *
-dimension_slice_from_form_data(Form_dimension_slice fd)
+dimension_slice_from_form_data(const Form_dimension_slice fd)
 {
 	DimensionSlice *slice = dimension_slice_alloc();
 
@@ -179,7 +179,7 @@ static int
 dimension_slice_scan_limit_direction_internal(int indexid, ScanKeyData *scankey, int nkeys,
 											  tuple_found_func on_tuple_found, void *scandata,
 											  int limit, ScanDirection scandir, LOCKMODE lockmode,
-											  ScanTupLock *tuplock, MemoryContext mctx)
+											  const ScanTupLock *tuplock, MemoryContext mctx)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
@@ -202,7 +202,8 @@ dimension_slice_scan_limit_direction_internal(int indexid, ScanKeyData *scankey,
 static int
 dimension_slice_scan_limit_internal(int indexid, ScanKeyData *scankey, int nkeys,
 									tuple_found_func on_tuple_found, void *scandata, int limit,
-									LOCKMODE lockmode, ScanTupLock *tuplock, MemoryContext mctx)
+									LOCKMODE lockmode, const ScanTupLock *tuplock,
+									MemoryContext mctx)
 {
 	return dimension_slice_scan_limit_direction_internal(indexid,
 														 scankey,
@@ -222,7 +223,8 @@ dimension_slice_scan_limit_internal(int indexid, ScanKeyData *scankey, int nkeys
  * Returns a dimension vector of slices that enclose the coordinate.
  */
 DimensionVec *
-ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit, ScanTupLock *tuplock)
+ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
+							  const ScanTupLock *tuplock)
 {
 	ScanKeyData scankey[3];
 	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
@@ -266,7 +268,7 @@ static void
 dimension_slice_scan_with_strategies(int32 dimension_id, StrategyNumber start_strategy,
 									 int64 start_value, StrategyNumber end_strategy,
 									 int64 end_value, void *data, tuple_found_func tuple_found,
-									 int limit, ScanTupLock *tuplock)
+									 int limit, const ScanTupLock *tuplock)
 {
 	ScanKeyData scankey[3];
 	int nkeys = 1;
@@ -349,7 +351,7 @@ dimension_slice_scan_with_strategies(int32 dimension_id, StrategyNumber start_st
 DimensionVec *
 ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy,
 									int64 start_value, StrategyNumber end_strategy, int64 end_value,
-									int limit, ScanTupLock *tuplock)
+									int limit, const ScanTupLock *tuplock)
 {
 	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
 
@@ -582,7 +584,7 @@ dimension_slice_fill(TupleInfo *ti, void *data)
  * otherwise.
  */
 bool
-ts_dimension_slice_scan_for_existing(DimensionSlice *slice, ScanTupLock *tuplock)
+ts_dimension_slice_scan_for_existing(const DimensionSlice *slice, const ScanTupLock *tuplock)
 {
 	ScanKeyData scankey[3];
 
@@ -607,7 +609,7 @@ ts_dimension_slice_scan_for_existing(DimensionSlice *slice, ScanTupLock *tuplock
 		scankey,
 		3,
 		dimension_slice_fill,
-		&slice,
+		(DimensionSlice **) &slice,
 		1,
 		AccessShareLock,
 		tuplock,
@@ -634,7 +636,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
  * concurrent threads can do bad things with the tuple and you probably want
  * it to not change nor disappear. */
 DimensionSlice *
-ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, ScanTupLock *tuplock,
+ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLock *tuplock,
 									   MemoryContext mctx)
 {
 	DimensionSlice *slice = NULL;
@@ -678,7 +680,7 @@ ts_dimension_slice_copy(const DimensionSlice *original)
  * Returns true if the slices collide, otherwise false.
  */
 bool
-ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
+ts_dimension_slices_collide(const DimensionSlice *slice1, const DimensionSlice *slice2)
 {
 	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);
 
@@ -695,7 +697,7 @@ ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2)
  * Returns true if the slices have identical ranges, otherwise false.
  */
 bool
-ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2)
+ts_dimension_slices_equal(const DimensionSlice *slice1, const DimensionSlice *slice2)
 {
 	Assert(slice1->fd.dimension_id == slice2->fd.dimension_id);
 
@@ -720,7 +722,7 @@ ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2)
  * Returns true if the slice was cut, otherwise false.
  */
 bool
-ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord)
+ts_dimension_slice_cut(DimensionSlice *to_cut, const DimensionSlice *other, int64 coord)
 {
 	Assert(to_cut->fd.dimension_id == other->fd.dimension_id);
 
@@ -753,7 +755,7 @@ ts_dimension_slice_free(DimensionSlice *slice)
 }
 
 static bool
-dimension_slice_insert_relation(Relation rel, DimensionSlice *slice)
+dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension_slice];

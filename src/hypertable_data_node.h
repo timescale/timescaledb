@@ -24,6 +24,7 @@ extern TSDLLEXPORT void ts_hypertable_data_node_insert_multi(List *hypertable_da
 extern TSDLLEXPORT int
 ts_hypertable_data_node_delete_by_node_name_and_hypertable_id(const char *node_name,
 															  int32 hypertable_id);
-extern TSDLLEXPORT int ts_hypertable_data_node_update(HypertableDataNode *hypertable_data_node);
+extern TSDLLEXPORT int
+ts_hypertable_data_node_update(const HypertableDataNode *hypertable_data_node);
 
 #endif /* TIMESCALEDB_HYPERTABLE_DATA_NODE_H */

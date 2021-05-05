@@ -83,8 +83,8 @@ enable_fast_restart(int32 job_id, const char *job_name)
 static int
 get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 {
-	Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	DimensionSlice *nth_dimension =
+	const Dimension *time_dimension = hyperspace_get_open_dimension(ht->space, 0);
+	const DimensionSlice *nth_dimension =
 		ts_dimension_slice_nth_latest_slice(time_dimension->fd.id,
 											REORDER_SKIP_RECENT_DIM_SLICES_N);
 
@@ -262,11 +262,11 @@ policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy
 	}
 }
 
-static Dimension *
-get_open_dimension_for_hypertable(Hypertable *ht)
+static const Dimension *
+get_open_dimension_for_hypertable(const Hypertable *ht)
 {
 	int32 mat_id = ht->fd.id;
-	Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
@@ -306,7 +306,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	Oid object_relid;
 	Hypertable *hypertable;
 	Cache *hcache;
-	Dimension *open_dim;
+	const Dimension *open_dim;
 	Datum boundary;
 	Datum boundary_type;
 	ContinuousAgg *cagg;
@@ -360,7 +360,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 {
 	int32 materialization_id;
 	Hypertable *mat_ht;
-	Dimension *open_dim;
+	const Dimension *open_dim;
 	Oid dim_type;
 	int64 refresh_start, refresh_end;
 
@@ -514,7 +514,7 @@ bool
 policy_compression_execute(int32 job_id, Jsonb *config)
 {
 	int32 chunkid;
-	Dimension *dim;
+	const Dimension *dim;
 	PolicyCompressionData policy_data;
 
 	policy_compression_read_and_validate_config(config, &policy_data);
@@ -593,7 +593,7 @@ bool
 policy_recompression_execute(int32 job_id, Jsonb *config)
 {
 	int32 chunkid;
-	Dimension *dim;
+	const Dimension *dim;
 	PolicyCompressionData policy_data;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);

@@ -111,7 +111,7 @@ static ScanTupleResult
 hypertable_data_node_tuple_update(TupleInfo *ti, void *data)
 {
 	CatalogSecurityContext sec_ctx;
-	HypertableDataNode *update = data;
+	const HypertableDataNode *update = data;
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	HeapTuple new_tuple = heap_copytuple(tuple);
@@ -331,13 +331,13 @@ ts_hypertable_data_node_scan_by_node_name(const char *node_name, MemoryContext m
 }
 
 int
-ts_hypertable_data_node_update(HypertableDataNode *hypertable_data_node)
+ts_hypertable_data_node_update(const HypertableDataNode *hypertable_data_node)
 {
 	return hypertable_data_node_scan_by_hypertable_id_and_node_name(
 		hypertable_data_node->fd.hypertable_id,
 		NameStr(hypertable_data_node->fd.node_name),
 		hypertable_data_node_tuple_update,
-		hypertable_data_node,
+		(void *) hypertable_data_node,
 		RowExclusiveLock,
 		CurrentMemoryContext);
 }

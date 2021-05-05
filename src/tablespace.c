@@ -39,7 +39,7 @@ tablespaces_alloc(int capacity)
 }
 
 Tablespace *
-ts_tablespaces_add(Tablespaces *tspcs, FormData_tablespace *form, Oid tspc_oid)
+ts_tablespaces_add(Tablespaces *tspcs, const FormData_tablespace *form, Oid tspc_oid)
 {
 	Tablespace *tspc;
 
@@ -57,7 +57,7 @@ ts_tablespaces_add(Tablespaces *tspcs, FormData_tablespace *form, Oid tspc_oid)
 }
 
 bool
-ts_tablespaces_contain(Tablespaces *tspcs, Oid tspc_oid)
+ts_tablespaces_contain(const Tablespaces *tspcs, Oid tspc_oid)
 {
 	int i;
 
@@ -401,7 +401,7 @@ ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
 }
 
 static ScanFilterResult
-tablespace_tuple_owner_filter(TupleInfo *ti, void *data)
+tablespace_tuple_owner_filter(const TupleInfo *ti, void *data)
 {
 	TablespaceScanInfo *info = data;
 	bool isnull;

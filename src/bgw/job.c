@@ -126,7 +126,7 @@ bgw_job_accum_tuple_found(TupleInfo *ti, void *data)
 }
 
 static ScanFilterResult
-bgw_job_filter_scheduled(TupleInfo *ti, void *data)
+bgw_job_filter_scheduled(const TupleInfo *ti, void *data)
 {
 	bool isnull;
 	Datum scheduled = slot_getattr(ti->slot, Anum_bgw_job_scheduled, &isnull);

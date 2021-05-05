@@ -762,7 +762,7 @@ cagg_validate_query(Query *query)
 	}
 	if (rte->relkind == RELKIND_RELATION)
 	{
-		Dimension *part_dimension = NULL;
+		const Dimension *part_dimension = NULL;
 
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
 
