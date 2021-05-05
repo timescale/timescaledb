@@ -122,8 +122,8 @@ TimescaleDB is available pre-packaged for several platforms:
     - [RedHat / CentOS](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/rhel-centos/installation-yum/)
     - [Ubuntu](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/ubuntu/installation-apt-ubuntu/)
     - [Debian](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/debian/installation-apt-debian/)
-- [Docker](https://tsdb.co/GitHubTimescaleDocker)
-- [MacOS (Homebrew)](https://tsdb.co/GitHubTimescaleMacOS)
+- [Docker](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/docker/installation-docker/)
+- [MacOS (Homebrew)](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/macos/installation-homebrew/)
 - [Windows](https://tsdb.co/GitHubTimescaleWindows)
 
 [Timescale Cloud](https://tsdb.co/GitHubTimescaleInstallCloud)
@@ -131,7 +131,7 @@ TimescaleDB is available pre-packaged for several platforms:
 instances in the cloud of your choice and use TimescaleDB to power your
 queries, automating common operational tasks and reducing management overhead.
 
-We recommend following our detailed [installation instructions](https://tsdb.co/GitHubTimescaleInstall).
+We recommend following our detailed [installation instructions](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/).
 
 To build from source, see instructions
 [here](https://github.com/timescale/timescaledb/blob/master/docs/BuildSource.md).
