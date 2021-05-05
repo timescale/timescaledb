@@ -118,21 +118,21 @@ typedef struct CrossModuleFunctions
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
 
-	Datum (*data_node_add)(PG_FUNCTION_ARGS);
-	Datum (*data_node_delete)(PG_FUNCTION_ARGS);
-	Datum (*data_node_attach)(PG_FUNCTION_ARGS);
-	Datum (*data_node_ping)(PG_FUNCTION_ARGS);
-	Datum (*data_node_detach)(PG_FUNCTION_ARGS);
-	Datum (*data_node_allow_new_chunks)(PG_FUNCTION_ARGS);
-	Datum (*data_node_block_new_chunks)(PG_FUNCTION_ARGS);
+	PGFunction data_node_add;
+	PGFunction data_node_delete;
+	PGFunction data_node_attach;
+	PGFunction data_node_ping;
+	PGFunction data_node_detach;
+	PGFunction data_node_allow_new_chunks;
+	PGFunction data_node_block_new_chunks;
 
-	Datum (*chunk_set_default_data_node)(PG_FUNCTION_ARGS);
-	Datum (*create_chunk)(PG_FUNCTION_ARGS);
-	Datum (*show_chunk)(PG_FUNCTION_ARGS);
+	PGFunction chunk_set_default_data_node;
+	PGFunction create_chunk;
+	PGFunction show_chunk;
 	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);
 	void (*hypertable_make_distributed)(Hypertable *ht, List *data_node_names);
-	Datum (*timescaledb_fdw_handler)(PG_FUNCTION_ARGS);
-	Datum (*timescaledb_fdw_validator)(PG_FUNCTION_ARGS);
+	PGFunction timescaledb_fdw_handler;
+	PGFunction timescaledb_fdw_validator;
 	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
 	PGFunction remote_txn_id_in;
 	PGFunction remote_txn_id_out;
