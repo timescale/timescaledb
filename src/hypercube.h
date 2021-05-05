@@ -28,15 +28,21 @@ typedef struct Hypercube
 
 extern TSDLLEXPORT Hypercube *ts_hypercube_alloc(int16 num_dimensions);
 extern void ts_hypercube_free(Hypercube *hc);
-extern TSDLLEXPORT void ts_hypercube_add_slice(Hypercube *hc, DimensionSlice *slice);
-extern Hypercube *ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx);
-extern int ts_hypercube_find_existing_slices(Hypercube *cube, ScanTupLock *tuplock);
-extern Hypercube *ts_hypercube_calculate_from_point(Hyperspace *hs, Point *p, ScanTupLock *tuplock);
-extern bool ts_hypercubes_collide(Hypercube *cube1, Hypercube *cube2);
-extern TSDLLEXPORT DimensionSlice *ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc,
-																		  int32 dimension_id);
-extern Hypercube *ts_hypercube_copy(Hypercube *hc);
-extern bool ts_hypercube_equal(Hypercube *hc1, Hypercube *hc2);
+
+extern TSDLLEXPORT DimensionSlice *
+ts_hypercube_add_slice_from_range(Hypercube *hc, int32 dimension_id, int64 start, int64 end);
+extern TSDLLEXPORT DimensionSlice *ts_hypercube_add_slice(Hypercube *hc,
+														  const DimensionSlice *slice);
+extern Hypercube *ts_hypercube_from_constraints(const ChunkConstraints *constraints,
+												MemoryContext mctx);
+extern int ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tuplock);
+extern Hypercube *ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p,
+													const ScanTupLock *tuplock);
+extern bool ts_hypercubes_collide(const Hypercube *cube1, const Hypercube *cube2);
+extern TSDLLEXPORT const DimensionSlice *ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc,
+																				int32 dimension_id);
+extern Hypercube *ts_hypercube_copy(const Hypercube *hc);
+extern bool ts_hypercube_equal(const Hypercube *hc1, const Hypercube *hc2);
 extern void ts_hypercube_slice_sort(Hypercube *hc);
 
 #endif /* TIMESCALEDB_HYPERCUBE_H */

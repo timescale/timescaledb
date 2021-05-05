@@ -200,7 +200,7 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
 	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
 	Hypertable *cagg_ht = ts_hypertable_get_by_id(fd->mat_hypertable_id);
-	Dimension *time_dim;
+	const Dimension *time_dim;
 
 	Assert(NULL != cagg_ht);
 	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
@@ -909,15 +909,15 @@ find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
  * Walk the materialization hypertable ->raw hypertable tree till
  * we find a hypertable that has integer_now_func set.
  */
-TSDLLEXPORT Dimension *
+TSDLLEXPORT const Dimension *
 ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid)
 {
 	int32 raw_htid = mat_htid;
-	Dimension *par_dim = NULL;
+	const Dimension *par_dim = NULL;
 	while (raw_htid != INVALID_HYPERTABLE_ID)
 	{
 		Hypertable *raw_ht = ts_hypertable_get_by_id(raw_htid);
-		Dimension *open_dim = hyperspace_get_open_dimension(raw_ht->space, 0);
+		const Dimension *open_dim = hyperspace_get_open_dimension(raw_ht->space, 0);
 		if (strlen(NameStr(open_dim->fd.integer_now_func)) != 0 &&
 			strlen(NameStr(open_dim->fd.integer_now_func_schema)) != 0)
 		{
@@ -977,7 +977,7 @@ static Watermark *
 watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
 {
 	Hypertable *ht;
-	Dimension *dim;
+	const Dimension *dim;
 	Datum maxdat;
 	bool max_isnull;
 	Oid timetype;

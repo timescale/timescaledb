@@ -657,7 +657,7 @@ chunk_index_tuple_delete(TupleInfo *ti, void *data)
 }
 
 static ScanFilterResult
-chunk_index_name_and_schema_filter(TupleInfo *ti, void *data)
+chunk_index_name_and_schema_filter(const TupleInfo *ti, void *data)
 {
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
@@ -803,7 +803,7 @@ ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid, ChunkIndexM
 }
 
 static ScanFilterResult
-chunk_hypertable_index_name_filter(TupleInfo *ti, void *data)
+chunk_hypertable_index_name_filter(const TupleInfo *ti, void *data)
 {
 	ChunkIndexMapping *cim = data;
 	const char *hypertable_indexname = get_rel_name(cim->parent_indexoid);

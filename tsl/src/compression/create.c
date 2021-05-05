@@ -652,8 +652,8 @@ static List *
 add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, Hypertable *ht)
 {
 	ListCell *lc;
-	Dimension *time_dim;
-	char *time_col_name;
+	const Dimension *time_dim;
+	const char *time_col_name;
 	bool found = false;
 
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);

@@ -117,7 +117,7 @@ hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
  *  "device": [-9223372036854775808, 1073741823]}
  */
 static Hypercube *
-hypercube_from_jsonb(Jsonb *json, Hyperspace *hs, const char **parse_error)
+hypercube_from_jsonb(Jsonb *json, const Hyperspace *hs, const char **parse_error)
 {
 	JsonbIterator *it;
 	JsonbIteratorToken type;
@@ -146,8 +146,7 @@ hypercube_from_jsonb(Jsonb *json, Hyperspace *hs, const char **parse_error)
 	while ((type = JsonbIteratorNext(&it, &v, false)))
 	{
 		int i;
-		Dimension *dim;
-		DimensionSlice *slice;
+		const Dimension *dim;
 		int64 range[2];
 		const char *name;
 
@@ -211,8 +210,7 @@ hypercube_from_jsonb(Jsonb *json, Hyperspace *hs, const char **parse_error)
 			goto out_err;
 		}
 
-		slice = ts_dimension_slice_create(dim->fd.id, range[0], range[1]);
-		ts_hypercube_add_slice(hc, slice);
+		ts_hypercube_add_slice_from_range(hc, dim->fd.id, range[0], range[1]);
 	}
 
 out_err:
@@ -421,7 +419,7 @@ chunk_api_dimension_slices_json(const Chunk *chunk, const Hypertable *ht)
  * Create a replica of a chunk on all its assigned data nodes.
  */
 void
-chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
+chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht)
 {
 	AsyncRequestSet *reqset = async_request_set_create();
 	const char *params[4] = {
@@ -485,8 +483,8 @@ chunk_api_create_on_data_nodes(Chunk *chunk, Hypertable *ht)
 			DatumGetCString(values[AttrNumberGetAttrOffset(Anum_create_chunk_schema_name)]);
 		table_name = DatumGetCString(values[AttrNumberGetAttrOffset(Anum_create_chunk_table_name)]);
 
-		if (namestrcmp(&chunk->fd.schema_name, schema_name) != 0 ||
-			namestrcmp(&chunk->fd.table_name, table_name) != 0)
+		if (namestrcmp((Name) &chunk->fd.schema_name, schema_name) != 0 ||
+			namestrcmp((Name) &chunk->fd.table_name, table_name) != 0)
 			elog(ERROR, "remote chunk has mismatching schema or table name");
 
 		cdn->fd.node_chunk_id =
