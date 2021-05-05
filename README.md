@@ -119,9 +119,9 @@ analysis that are not present in vanilla PostgreSQL. (For example, the `time_buc
 TimescaleDB is available pre-packaged for several platforms:
 
 - Linux:
-    - [RedHat / CentOS](https://tsdb.co/GitHubTimescaleRedHatCentOS)
-    - [Ubuntu](https://tsdb.co/GitHubTimescaleUbuntu)
-    - [Debian](https://tsdb.co/GitHubTimescaleDebian)
+    - [RedHat / CentOS](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/rhel-centos/installation-yum/)
+    - [Ubuntu](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/ubuntu/installation-apt-ubuntu/)
+    - [Debian](https://docs.timescale.com/timescaledb/latest/how-to-guides/install-timescaledb/self-hosted/debian/installation-apt-debian/)
 - [Docker](https://tsdb.co/GitHubTimescaleDocker)
 - [MacOS (Homebrew)](https://tsdb.co/GitHubTimescaleMacOS)
 - [Windows](https://tsdb.co/GitHubTimescaleWindows)
