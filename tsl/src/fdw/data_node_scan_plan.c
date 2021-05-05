@@ -351,7 +351,7 @@ static void
 push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 					DataNodeChunkAssignments *scas)
 {
-	Dimension *dim;
+	const Dimension *dim;
 	bool overlaps;
 
 	Assert(hs->num_dimensions >= 1);

@@ -142,7 +142,7 @@ chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_sli
 }
 
 static void
-chunk_constraint_fill_tuple_values(ChunkConstraint *cc, Datum values[Natts_chunk_constraint],
+chunk_constraint_fill_tuple_values(const ChunkConstraint *cc, Datum values[Natts_chunk_constraint],
 								   bool nulls[Natts_chunk_constraint])
 {
 	memset(values, 0, sizeof(Datum) * Natts_chunk_constraint);
@@ -162,7 +162,7 @@ chunk_constraint_fill_tuple_values(ChunkConstraint *cc, Datum values[Natts_chunk
 }
 
 static void
-chunk_constraint_insert_relation(Relation rel, ChunkConstraint *cc)
+chunk_constraint_insert_relation(const Relation rel, const ChunkConstraint *cc)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_chunk_constraint];
@@ -176,7 +176,7 @@ chunk_constraint_insert_relation(Relation rel, ChunkConstraint *cc)
  * Insert multiple chunk constraints into the metadata catalog.
  */
 void
-ts_chunk_constraints_insert_metadata(ChunkConstraints *ccs)
+ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -260,7 +260,7 @@ chunk_constraints_add_from_tuple(ChunkConstraints *ccs, TupleInfo *ti)
  * Add a constraint to a chunk table.
  */
 static Oid
-chunk_constraint_create_on_table(ChunkConstraint *cc, Oid chunk_oid)
+chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid)
 {
 	HeapTuple tuple;
 	Datum values[Natts_chunk_constraint];
@@ -286,8 +286,8 @@ chunk_constraint_create_on_table(ChunkConstraint *cc, Oid chunk_oid)
  * the catalog.
  */
 static Oid
-chunk_constraint_create(ChunkConstraint *cc, Oid chunk_oid, int32 chunk_id, Oid hypertable_oid,
-						int32 hypertable_id)
+chunk_constraint_create(const ChunkConstraint *cc, Oid chunk_oid, int32 chunk_id,
+						Oid hypertable_oid, int32 hypertable_id)
 {
 	Oid chunk_constraint_oid;
 
@@ -333,7 +333,7 @@ chunk_constraint_create(ChunkConstraint *cc, Oid chunk_oid, int32 chunk_id, Oid 
  * Create a set of constraints on a chunk table.
  */
 void
-ts_chunk_constraints_create(ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id,
+ts_chunk_constraints_create(const ChunkConstraints *ccs, Oid chunk_oid, int32 chunk_id,
 							Oid hypertable_oid, int32 hypertable_id)
 {
 	int i;
@@ -432,7 +432,7 @@ typedef struct ChunkConstraintScanData
  * constraints are saved in the chunk scan context.
  */
 int
-ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx *ctx,
+ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkScanCtx *ctx,
 											MemoryContext mctx)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
@@ -441,7 +441,7 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
 	init_scan_by_dimension_slice_id(&iterator, slice->fd.id);
 	ts_scanner_foreach(&iterator)
 	{
-		Hyperspace *hs = ctx->space;
+		const Hyperspace *hs = ctx->space;
 		ChunkStub *stub;
 		ChunkScanEntry *entry;
 		bool found;
@@ -493,7 +493,7 @@ ts_chunk_constraint_scan_by_dimension_slice(DimensionSlice *slice, ChunkScanCtx 
  * in a list, which is easier to traverse and provides deterministic chunk selection.
  */
 int
-ts_chunk_constraint_scan_by_dimension_slice_to_list(DimensionSlice *slice, List **list,
+ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSlice *slice, List **list,
 													MemoryContext mctx)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
@@ -568,7 +568,7 @@ chunk_constraint_need_on_chunk(const char chunk_relkind, Form_pg_constraint conf
 
 int
 ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
-											   Hypercube *cube)
+											   const Hypercube *cube)
 {
 	int i;
 
@@ -615,7 +615,7 @@ ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 ch
 }
 
 void
-ts_chunk_constraint_create_on_chunk(Chunk *chunk, Oid constraint_oid)
+ts_chunk_constraint_create_on_chunk(const Chunk *chunk, Oid constraint_oid)
 {
 	HeapTuple tuple;
 	Form_pg_constraint con;
@@ -792,7 +792,7 @@ ts_chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 }
 
 void
-ts_chunk_constraint_recreate(ChunkConstraint *cc, Oid chunk_oid)
+ts_chunk_constraint_recreate(const ChunkConstraint *cc, Oid chunk_oid)
 {
 	ObjectAddress constrobj = {
 		.classId = ConstraintRelationId,

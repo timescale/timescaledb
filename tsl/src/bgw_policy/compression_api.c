@@ -159,7 +159,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Hypertable *hypertable;
 	Cache *hcache;
-	Dimension *dim;
+	const Dimension *dim;
 	Oid owner_id;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();

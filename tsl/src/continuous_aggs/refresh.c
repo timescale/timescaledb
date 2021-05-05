@@ -253,7 +253,7 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 		.start = 0,
 		.end = 0,
 	};
-	Dimension *time_dim = hyperspace_get_open_dimension(refresh->cagg_ht->space, 0);
+	const Dimension *time_dim = hyperspace_get_open_dimension(refresh->cagg_ht->space, 0);
 
 	Assert(time_dim != NULL);
 

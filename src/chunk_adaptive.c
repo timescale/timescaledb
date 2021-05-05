@@ -417,7 +417,7 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	int64 current_interval;
 	int32 hypertable_id;
 	Hypertable *ht;
-	Dimension *dim;
+	const Dimension *dim;
 	List *chunks = NIL;
 	ListCell *lc;
 	int num_intervals = 0;
@@ -467,7 +467,8 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
-		DimensionSlice *slice = ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
+		const DimensionSlice *slice =
+			ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
 		int64 chunk_size, slice_interval;
 		Datum minmax[2];
 		AttrNumber attno =
@@ -748,7 +749,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 		.check_for_index = true,
 	};
 	Hypertable *ht;
-	Dimension *dim;
+	const Dimension *dim;
 	Cache *hcache;
 	HeapTuple tuple;
 	TupleDesc tupdesc;

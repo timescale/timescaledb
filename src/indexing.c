@@ -30,7 +30,7 @@
 #include "partitioning.h"
 
 static bool
-index_has_attribute(List *indexelems, const char *attrname)
+index_has_attribute(const List *indexelems, const char *attrname)
 {
 	ListCell *lc;
 
@@ -83,13 +83,13 @@ index_has_attribute(List *indexelems, const char *attrname)
  * the index columns.
  */
 void
-ts_indexing_verify_columns(Hyperspace *hs, List *indexelems)
+ts_indexing_verify_columns(const Hyperspace *hs, const List *indexelems)
 {
 	int i;
 
 	for (i = 0; i < hs->num_dimensions; i++)
 	{
-		Dimension *dim = &hs->dimensions[i];
+		const Dimension *dim = &hs->dimensions[i];
 
 		if (!index_has_attribute(indexelems, NameStr(dim->fd.column_name)))
 			ereport(ERROR,
@@ -106,7 +106,7 @@ ts_indexing_verify_columns(Hyperspace *hs, List *indexelems)
  * We only care about UNIQUE, PRIMARY KEY or EXCLUSION indexes.
  */
 void
-ts_indexing_verify_index(Hyperspace *hs, IndexStmt *stmt)
+ts_indexing_verify_index(const Hyperspace *hs, const IndexStmt *stmt)
 {
 	if (stmt->unique || stmt->excludeOpNames != NULL)
 		ts_indexing_verify_columns(hs, stmt->indexParams);
@@ -116,7 +116,7 @@ ts_indexing_verify_index(Hyperspace *hs, IndexStmt *stmt)
  * Build a list of string Values representing column names that an index covers.
  */
 static List *
-build_indexcolumn_list(Relation idxrel)
+build_indexcolumn_list(const Relation idxrel)
 {
 	List *columns = NIL;
 	int i;
@@ -132,13 +132,15 @@ build_indexcolumn_list(Relation idxrel)
 }
 
 static void
-create_default_index(Hypertable *ht, List *indexelems)
+create_default_index(const Hypertable *ht, List *indexelems)
 {
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,
 		.idxname = NULL,
-		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+		.relation = makeRangeVar((char *) NameStr(ht->fd.schema_name),
+								 (char *) NameStr(ht->fd.table_name),
+								 0),
 		.tableSpace = get_tablespace_name(get_rel_tablespace(ht->main_table_relid)),
 		.indexParams = indexelems,
 	};
@@ -155,8 +157,8 @@ create_default_index(Hypertable *ht, List *indexelems)
 				true);		/* quiet */
 }
 
-static Node *
-get_open_dim_expr(Dimension *dim)
+static const Node *
+get_open_dim_expr(const Dimension *dim)
 {
 	if (dim == NULL || dim->partitioning == NULL)
 		return NULL;
@@ -164,8 +166,8 @@ get_open_dim_expr(Dimension *dim)
 	return dim->partitioning->partfunc.func_fmgr.fn_expr;
 }
 
-static char *
-get_open_dim_name(Dimension *dim)
+static const char *
+get_open_dim_name(const Dimension *dim)
 {
 	if (dim == NULL || dim->partitioning != NULL)
 		return NULL;
@@ -174,14 +176,15 @@ get_open_dim_name(Dimension *dim)
 }
 
 static void
-create_default_indexes(Hypertable *ht, Dimension *time_dim, Dimension *space_dim, bool has_time_idx,
-					   bool has_time_space_idx)
+create_default_indexes(const Hypertable *ht, const Dimension *time_dim, const Dimension *space_dim,
+					   bool has_time_idx, bool has_time_space_idx)
 {
+	const char *dimname = get_open_dim_name(time_dim);
 	IndexElem telem = {
 		.type = T_IndexElem,
-		.name = get_open_dim_name(time_dim),
+		.name = dimname ? (char *) dimname : NULL,
 		.ordering = SORTBY_DESC,
-		.expr = get_open_dim_expr(time_dim),
+		.expr = (Node *) get_open_dim_expr(time_dim),
 	};
 
 	/* In case we'd allow tables that are only space partitioned */
@@ -197,7 +200,7 @@ create_default_indexes(Hypertable *ht, Dimension *time_dim, Dimension *space_dim
 	{
 		IndexElem selem = {
 			.type = T_IndexElem,
-			.name = NameStr(space_dim->fd.column_name),
+			.name = pstrdup(NameStr(space_dim->fd.column_name)),
 			.ordering = SORTBY_ASC,
 		};
 
@@ -213,11 +216,12 @@ create_default_indexes(Hypertable *ht, Dimension *time_dim, Dimension *space_dim
  * optionally, the first closed ("space") dimension.
  */
 static void
-indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_default, bool verify)
+indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_default,
+											  bool verify)
 {
 	Relation tblrel = table_open(ht->main_table_relid, AccessShareLock);
-	Dimension *time_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
-	Dimension *space_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
+	const Dimension *time_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+	const Dimension *space_dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 	List *indexlist = RelationGetIndexList(tblrel);
 	bool has_time_idx = false;
 	bool has_time_space_idx = false;
@@ -389,13 +393,13 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 }
 
 void
-ts_indexing_verify_indexes(Hypertable *ht)
+ts_indexing_verify_indexes(const Hypertable *ht)
 {
 	indexing_create_and_verify_hypertable_indexes(ht, false, true);
 }
 
 void
-ts_indexing_create_default_indexes(Hypertable *ht)
+ts_indexing_create_default_indexes(const Hypertable *ht)
 {
 	indexing_create_and_verify_hypertable_indexes(ht, true, false);
 }

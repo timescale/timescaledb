@@ -126,8 +126,8 @@ get_relation_qualified_name(Oid relid)
 static const double FILL_FACTOR_CURRENT_CHUNK = 0.5;
 static const double FILL_FACTOR_HISTORICAL_CHUNK = 1;
 
-static DimensionSlice *
-get_chunk_time_slice(Chunk *chunk, Hyperspace *space)
+static const DimensionSlice *
+get_chunk_time_slice(const Chunk *chunk, const Hyperspace *space)
 {
 	int32 time_dim_id = hyperspace_get_open_dimension(space, 0)->fd.id;
 	return ts_hypercube_get_slice_by_dimension_id(chunk->cube, time_dim_id);
@@ -178,8 +178,8 @@ get_total_number_of_slices(Hyperspace *space)
 static double
 estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 {
-	Dimension *time_dim = hyperspace_get_open_dimension(space, 0);
-	DimensionSlice *time_slice = get_chunk_time_slice(chunk, space);
+	const Dimension *time_dim = hyperspace_get_open_dimension(space, 0);
+	const DimensionSlice *time_slice = get_chunk_time_slice(chunk, space);
 	Oid time_dim_type = ts_dimension_get_partition_type(time_dim);
 	int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
 	int total_slices = get_total_number_of_slices(space);
@@ -248,7 +248,7 @@ estimate_tuples_and_pages_using_prev_chunks(PlannerInfo *root, Hyperspace *space
 	int32 total_pages = 0;
 	int non_zero_reltuples_cnt = 0;
 	int non_zero_relpages_cnt = 0;
-	DimensionSlice *time_slice = get_chunk_time_slice(current_chunk, space);
+	const DimensionSlice *time_slice = get_chunk_time_slice(current_chunk, space);
 	List *prev_chunks = ts_chunk_get_window(time_slice->fd.dimension_id,
 											time_slice->fd.range_start,
 											DEFAULT_CHUNK_LOOKBACK_WINDOW,

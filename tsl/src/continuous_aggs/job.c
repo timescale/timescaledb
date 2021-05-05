@@ -36,7 +36,7 @@
 static Interval *
 continuous_agg_job_get_default_schedule_interval(int32 raw_table_id, int64 bucket_width)
 {
-	Dimension *dim;
+	const Dimension *dim;
 	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Hypertable *ht = ts_hypertable_get_by_id(raw_table_id);
 	Oid partition_type;

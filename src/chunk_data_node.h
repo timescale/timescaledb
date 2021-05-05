@@ -22,7 +22,7 @@ ts_chunk_data_node_scan_by_chunk_id_and_node_name(int32 chunk_id, const char *no
 extern TSDLLEXPORT ChunkDataNode *
 ts_chunk_data_node_scan_by_remote_chunk_id_and_node_name(int32 chunk_id, const char *node_name,
 														 MemoryContext mctx);
-extern TSDLLEXPORT void ts_chunk_data_node_insert(ChunkDataNode *node);
+extern TSDLLEXPORT void ts_chunk_data_node_insert(const ChunkDataNode *node);
 extern void ts_chunk_data_node_insert_multi(List *chunk_data_nodes);
 extern int ts_chunk_data_node_delete_by_chunk_id(int32 chunk_id);
 extern TSDLLEXPORT int ts_chunk_data_node_delete_by_chunk_id_and_node_name(int32 chunk_id,

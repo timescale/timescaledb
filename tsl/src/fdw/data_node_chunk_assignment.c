@@ -57,7 +57,7 @@ get_or_create_sca(DataNodeChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
 	return sca;
 }
 
-static DimensionSlice *
+static const DimensionSlice *
 get_slice_for_dimension(Oid chunk_relid, int32 dimension_id)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
@@ -170,13 +170,13 @@ data_node_chunk_assignment_get_or_create(DataNodeChunkAssignments *scas, RelOptI
  * approach would be to use, e.g., an interval tree.
  */
 static bool
-dimension_slice_overlaps_with_others(DimensionSlice *slice, List *other_slices)
+dimension_slice_overlaps_with_others(const DimensionSlice *slice, const List *other_slices)
 {
 	ListCell *lc;
 
 	foreach (lc, other_slices)
 	{
-		DimensionSlice *other_slice = lfirst(lc);
+		const DimensionSlice *other_slice = lfirst(lc);
 
 		if (ts_dimension_slices_collide(slice, other_slice))
 			return true;
@@ -255,7 +255,7 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 		foreach (lc, sca->chunk_oids)
 		{
 			Oid chunk_oid = lfirst_oid(lc);
-			DimensionSlice *slice;
+			const DimensionSlice *slice;
 			DataNodeSlice *ss;
 			bool found;
 
@@ -270,7 +270,7 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 			{
 				ss->sliceid = slice->fd.id;
 				ss->node_serverid = sca->node_server_oid;
-				data_node_slices = lappend(data_node_slices, slice);
+				data_node_slices = lappend(data_node_slices, ts_dimension_slice_copy(slice));
 			}
 
 			/* First detect "same-slice overlap", and then do a more expensive

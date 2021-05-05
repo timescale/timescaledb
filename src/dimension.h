@@ -105,22 +105,26 @@ typedef struct DimensionInfo
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
-extern DimensionSlice *ts_dimension_calculate_default_slice(Dimension *dim, int64 value);
-extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(Hyperspace *h, TupleTableSlot *slot);
-extern int ts_dimension_get_slice_ordinal(Dimension *dim, DimensionSlice *slice);
-extern Dimension *ts_hyperspace_get_dimension_by_id(Hyperspace *hs, int32 id);
-extern TSDLLEXPORT Dimension *ts_hyperspace_get_dimension(Hyperspace *hs, DimensionType type,
-														  Index n);
+extern DimensionSlice *ts_dimension_calculate_default_slice(const Dimension *dim, int64 value);
+extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(const Hyperspace *h, TupleTableSlot *slot);
+extern int ts_dimension_get_slice_ordinal(const Dimension *dim, const DimensionSlice *slice);
+extern const Dimension *ts_hyperspace_get_dimension_by_id(const Hyperspace *hs, int32 id);
+extern TSDLLEXPORT const Dimension *ts_hyperspace_get_dimension(const Hyperspace *hs,
+																DimensionType type, Index n);
+extern TSDLLEXPORT Dimension *ts_hyperspace_get_mutable_dimension(Hyperspace *hs,
+																  DimensionType type, Index n);
+extern TSDLLEXPORT const Dimension *
+ts_hyperspace_get_dimension_by_name(const Hyperspace *hs, DimensionType type, const char *name);
 extern TSDLLEXPORT Dimension *
-ts_hyperspace_get_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
-extern DimensionVec *ts_dimension_get_slices(Dimension *dim);
+ts_hyperspace_get_mutable_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
+extern DimensionVec *ts_dimension_get_slices(const Dimension *dim);
 extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
 extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
 extern TSDLLEXPORT int ts_dimension_set_number_of_slices(Dimension *dim, int16 num_slices);
-extern Datum ts_dimension_transform_value(Dimension *dim, Oid collation, Datum value,
+extern Datum ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
 
@@ -134,11 +138,12 @@ extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_reli
 
 extern void ts_dimension_info_validate(DimensionInfo *info);
 extern int32 ts_dimension_add_from_info(DimensionInfo *info);
-extern void ts_dimensions_rename_schema_name(char *oldname, char *newname);
-extern TSDLLEXPORT void ts_dimension_update(Hypertable *ht, Name dimname, DimensionType dimtype,
-											Datum *interval, Oid *intervaltype, int16 *num_slices,
+extern void ts_dimensions_rename_schema_name(const char *oldname, const char *newname);
+extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData *dimname,
+											DimensionType dimtype, Datum *interval,
+											Oid *intervaltype, int16 *num_slices,
 											Oid *integer_now_func);
-extern TSDLLEXPORT List *ts_dimension_get_partexprs(Dimension *dim, Index hyper_varno);
+extern TSDLLEXPORT List *ts_dimension_get_partexprs(const Dimension *dim, Index hyper_varno);
 
 #define hyperspace_get_open_dimension(space, i)                                                    \
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

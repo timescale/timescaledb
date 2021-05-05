@@ -106,14 +106,14 @@ chunk_stub_is_valid(const ChunkStub *stub, unsigned int expected_slices)
 }
 
 typedef ChunkResult (*on_chunk_stub_func)(ChunkScanCtx *ctx, ChunkStub *stub);
-static void chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p);
+static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *p);
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
-static void chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube);
+static void chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
 											 uint16 limit);
 static Datum chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
-static Chunk *chunk_find(Hypertable *ht, Point *p, bool resurrect, bool lock_slices);
+static Chunk *chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slices);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
 											  const char *table_name);
 static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid);
@@ -331,14 +331,15 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	CollisionInfo *info = scanctx->data;
 	Hypercube *cube = info->cube;
-	Hyperspace *space = scanctx->space;
+	const Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
 
 	for (i = 0; i < space->num_dimensions; i++)
 	{
-		Dimension *dim = &space->dimensions[i];
-		DimensionSlice *chunk_slice, *cube_slice;
+		const Dimension *dim = &space->dimensions[i];
+		const DimensionSlice *chunk_slice;
+		DimensionSlice *cube_slice;
 		int64 coord = scanctx->point->coordinates[i];
 
 		if (!dim->fd.aligned)
@@ -374,7 +375,7 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
  * Calculate, and potentially set, a new chunk interval for an open dimension.
  */
 static bool
-calculate_and_set_new_chunk_interval(Hypertable *ht, Point *p)
+calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
 {
 	Hyperspace *hs = ht->space;
 	Dimension *dim = NULL;
@@ -436,7 +437,7 @@ do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	CollisionInfo *info = scanctx->data;
 	Hypercube *cube = info->cube;
-	Hyperspace *space = scanctx->space;
+	const Hyperspace *space = scanctx->space;
 	ChunkResult res = CHUNK_IGNORED;
 	int i;
 
@@ -478,7 +479,7 @@ check_for_collisions(ChunkScanCtx *scanctx, ChunkStub *stub)
 {
 	CollisionInfo *info = scanctx->data;
 	Hypercube *cube = info->cube;
-	Hyperspace *space = scanctx->space;
+	const Hyperspace *space = scanctx->space;
 
 	/* Check if this chunk collides with our hypercube */
 	if (stub->cube->num_slices == space->num_dimensions && ts_hypercubes_collide(cube, stub->cube))
@@ -497,11 +498,11 @@ check_for_collisions(ChunkScanCtx *scanctx, ChunkStub *stub)
  * chunk.
  */
 static ChunkStub *
-chunk_collides(Hypertable *ht, Hypercube *hc)
+chunk_collides(const Hypertable *ht, const Hypercube *hc)
 {
 	ChunkScanCtx scanctx;
 	CollisionInfo info = {
-		.cube = hc,
+		.cube = (Hypercube *) hc,
 		.colliding_chunk = NULL,
 	};
 
@@ -565,7 +566,7 @@ chunk_collides(Hypertable *ht, Hypercube *hc)
  * collisions. After alignment we check for any remaining collisions.
  */
 static void
-chunk_collision_resolve(Hypertable *ht, Hypercube *cube, Point *p)
+chunk_collision_resolve(const Hypertable *ht, Hypercube *cube, const Point *p)
 {
 	ChunkScanCtx scanctx;
 	CollisionInfo info = {
@@ -711,7 +712,7 @@ get_am_name_for_rel(Oid relid)
 #endif
 
 static void
-copy_hypertable_acl_to_relid(Hypertable *ht, Oid relid)
+copy_hypertable_acl_to_relid(const Hypertable *ht, Oid relid)
 {
 	HeapTuple ht_tuple;
 	bool is_null;
@@ -780,13 +781,11 @@ copy_hypertable_acl_to_relid(Hypertable *ht, Oid relid)
  * instead needs the proper permissions on the database to create the schema.
  */
 Oid
-ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
+ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename)
 {
 	Relation rel;
 	ObjectAddress objaddr;
 	int sec_ctx;
-	char *namespace = NameStr(ht->fd.schema_name);
-	char *hyper_name = NameStr(ht->fd.table_name);
 
 	/*
 	 * The CreateForeignTableStmt embeds a regular CreateStmt, so we can use
@@ -794,10 +793,13 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 	 */
 	CreateForeignTableStmt stmt = {
 		.base.type = T_CreateStmt,
-		.base.relation =
-			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
-		.base.inhRelations = list_make1(makeRangeVar(namespace, hyper_name, 0)),
-		.base.tablespacename = tablespacename ? pstrdup(tablespacename) : NULL,
+		.base.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
+									  (char *) NameStr(chunk->fd.table_name),
+									  0),
+		.base.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
+													 (char *) NameStr(ht->fd.table_name),
+													 0)),
+		.base.tablespacename = tablespacename ? (char *) tablespacename : NULL,
 		/* Propagate storage options of the main table to a regular chunk
 		 * table, but avoid using it for a foreign chunk table. */
 		.base.options =
@@ -818,7 +820,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 	 * If the chunk is created in the internal schema, become the catalog
 	 * owner, otherwise become the hypertable owner
 	 */
-	if (namestrcmp(&chunk->fd.schema_name, INTERNAL_SCHEMA_NAME) == 0)
+	if (namestrcmp((Name) &chunk->fd.schema_name, INTERNAL_SCHEMA_NAME) == 0)
 		uid = ts_catalog_database_info_get()->owner_uid;
 	else
 		uid = rel->rd_rel->relowner;
@@ -893,7 +895,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 }
 
 static List *
-chunk_assign_data_nodes(Chunk *chunk, const Hypertable *ht)
+chunk_assign_data_nodes(const Chunk *chunk, const Hypertable *ht)
 {
 	List *htnodes;
 	List *chunk_data_nodes = NIL;
@@ -1021,7 +1023,7 @@ chunk_insert_into_metadata_after_lock(const Chunk *chunk)
 }
 
 static void
-chunk_create_table_constraints(Chunk *chunk)
+chunk_create_table_constraints(const Chunk *chunk)
 {
 	/* Create the chunk's constraints, triggers, and indexes */
 	ts_chunk_constraints_create(chunk->constraints,
@@ -1041,7 +1043,7 @@ chunk_create_table_constraints(Chunk *chunk)
 }
 
 static Oid
-chunk_create_table(Chunk *chunk, Hypertable *ht)
+chunk_create_table(Chunk *chunk, const Hypertable *ht)
 {
 	/* Create the actual table relation for the chunk */
 	const char *tablespace = ts_hypertable_select_tablespace_name(ht, chunk);
@@ -1065,8 +1067,9 @@ init_scan_by_chunk_id(ScanIterator *iterator, int32 chunk_id)
 }
 
 static Chunk *
-chunk_create_from_hypercube_after_lock(Hypertable *ht, Hypercube *cube, const char *schema_name,
-									   const char *table_name, const char *prefix)
+chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
+									   const char *schema_name, const char *table_name,
+									   const char *prefix)
 {
 	Chunk *chunk;
 
@@ -1087,7 +1090,7 @@ chunk_create_from_hypercube_after_lock(Hypertable *ht, Hypercube *cube, const ch
 }
 
 static Chunk *
-chunk_create_from_point_after_lock(Hypertable *ht, Point *p, const char *schema_name,
+chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const char *schema_name,
 								   const char *table_name, const char *prefix)
 {
 	Hyperspace *hs = ht->space;
@@ -1120,7 +1123,7 @@ chunk_create_from_point_after_lock(Hypertable *ht, Point *p, const char *schema_
 }
 
 Chunk *
-ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *schema_name,
+ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, bool *created)
 {
 	ChunkStub *stub;
@@ -1192,7 +1195,8 @@ ts_chunk_find_or_create_without_cuts(Hypertable *ht, Hypercube *hc, const char *
  * Create a chunk through insertion of a tuple at a given point.
  */
 Chunk *
-ts_chunk_create_from_point(Hypertable *ht, Point *p, const char *schema, const char *prefix)
+ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
+						   const char *prefix)
 {
 	Chunk *chunk;
 
@@ -1316,7 +1320,7 @@ chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub
 }
 
 static ScanFilterResult
-chunk_tuple_dropped_filter(TupleInfo *ti, void *arg)
+chunk_tuple_dropped_filter(const TupleInfo *ti, void *arg)
 {
 	ChunkStubScanCtx *stubctx = arg;
 	bool isnull;
@@ -1335,7 +1339,7 @@ chunk_tuple_dropped_filter(TupleInfo *ti, void *arg)
  * and tuple_found function share the argument.
  */
 static ScanFilterResult
-chunk_check_ignorearg_dropped_filter(TupleInfo *ti, void *arg)
+chunk_check_ignorearg_dropped_filter(const TupleInfo *ti, void *arg)
 {
 	bool isnull;
 	Datum dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
@@ -1423,7 +1427,7 @@ chunk_create_from_stub(ChunkStubScanCtx *stubctx)
  * tables during scans.
  */
 static void
-chunk_scan_ctx_init(ChunkScanCtx *ctx, Hyperspace *hs, Point *p)
+chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hyperspace *hs, const Point *p)
 {
 	struct HASHCTL hctl = {
 		.keysize = sizeof(int32),
@@ -1451,7 +1455,7 @@ chunk_scan_ctx_destroy(ChunkScanCtx *ctx)
 }
 
 static inline void
-dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, DimensionVec *vec)
+dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, const DimensionVec *vec)
 {
 	int i;
 
@@ -1477,7 +1481,7 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, DimensionVec *v
  * to two chunks.
  */
 static void
-chunk_point_scan(ChunkScanCtx *scanctx, Point *p, bool lock_slices)
+chunk_point_scan(ChunkScanCtx *scanctx, const Point *p, bool lock_slices)
 {
 	int i;
 
@@ -1515,7 +1519,7 @@ chunk_point_scan(ChunkScanCtx *scanctx, Point *p, bool lock_slices)
  * that require alignment.
  */
 static void
-chunk_collision_scan(ChunkScanCtx *scanctx, Hypercube *cube)
+chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube)
 {
 	int i;
 
@@ -1653,7 +1657,7 @@ chunk_scan_ctx_get_chunk_stub(ChunkScanCtx *ctx)
  * including recreating the table and related objects.
  */
 static Chunk *
-chunk_resurrect(Hypertable *ht, ChunkStub *stub)
+chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 {
 	ScanIterator iterator;
 	Chunk *chunk = NULL;
@@ -1726,7 +1730,7 @@ chunk_resurrect(Hypertable *ht, ChunkStub *stub)
  * case it needs to live beyond the lifetime of the other data.
  */
 static Chunk *
-chunk_find(Hypertable *ht, Point *p, bool resurrect, bool lock_slices)
+chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slices)
 {
 	ChunkStub *stub;
 	Chunk *chunk = NULL;
@@ -1773,7 +1777,7 @@ chunk_find(Hypertable *ht, Point *p, bool resurrect, bool lock_slices)
 }
 
 Chunk *
-ts_chunk_find(Hypertable *ht, Point *p, bool lock_slices)
+ts_chunk_find(const Hypertable *ht, const Point *p, bool lock_slices)
 {
 	return chunk_find(ht, p, false, lock_slices);
 }
@@ -1785,10 +1789,10 @@ ts_chunk_find(Hypertable *ht, Point *p, bool lock_slices)
  * usage.
  */
 static void
-chunks_find_all_in_range_limit(Hypertable *ht, Dimension *time_dim, StrategyNumber start_strategy,
-							   int64 start_value, StrategyNumber end_strategy, int64 end_value,
-							   int limit, uint64 *num_found, ScanTupLock *tuplock,
-							   ChunkScanCtx *ctx)
+chunks_find_all_in_range_limit(const Hypertable *ht, const Dimension *time_dim,
+							   StrategyNumber start_strategy, int64 start_value,
+							   StrategyNumber end_strategy, int64 end_value, int limit,
+							   uint64 *num_found, ScanTupLock *tuplock, ChunkScanCtx *ctx)
 {
 	DimensionVec *slices;
 
@@ -1884,8 +1888,8 @@ append_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 }
 
 static void *
-chunk_find_all(Hypertable *ht, List *dimension_vecs, on_chunk_stub_func on_chunk, LOCKMODE lockmode,
-			   unsigned int *num_chunks)
+chunk_find_all(const Hypertable *ht, const List *dimension_vecs, on_chunk_stub_func on_chunk,
+			   LOCKMODE lockmode, unsigned int *num_chunks)
 {
 	ChunkScanCtx ctx;
 	ListCell *lc;
@@ -1901,7 +1905,7 @@ chunk_find_all(Hypertable *ht, List *dimension_vecs, on_chunk_stub_func on_chunk
 	/* Scan all dimensions for slices enclosing the point */
 	foreach (lc, dimension_vecs)
 	{
-		DimensionVec *vec = lfirst(lc);
+		const DimensionVec *vec = lfirst(lc);
 
 		dimension_slice_and_chunk_constraint_join(&ctx, vec);
 	}
@@ -1918,7 +1922,8 @@ chunk_find_all(Hypertable *ht, List *dimension_vecs, on_chunk_stub_func on_chunk
 }
 
 Chunk **
-ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode, unsigned int *num_chunks)
+ts_chunk_find_all(const Hypertable *ht, const List *dimension_vecs, LOCKMODE lockmode,
+				  unsigned int *num_chunks)
 {
 	Chunk **chunks = chunk_find_all(ht, dimension_vecs, append_chunk, lockmode, num_chunks);
 
@@ -1934,7 +1939,7 @@ ts_chunk_find_all(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode, unsig
 }
 
 List *
-ts_chunk_find_all_oids(Hypertable *ht, List *dimension_vecs, LOCKMODE lockmode)
+ts_chunk_find_all_oids(const Hypertable *ht, const List *dimension_vecs, LOCKMODE lockmode)
 {
 	List *chunks = chunk_find_all(ht, dimension_vecs, append_chunk_oid, lockmode, NULL);
 
@@ -1965,7 +1970,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		FuncCallContext *funcctx;
 		Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 		Hypertable *ht;
-		Dimension *time_dim;
+		const Dimension *time_dim;
 		Cache *hcache;
 		int64 older_than = PG_INT64_MAX;
 		int64 newer_than = PG_INT64_MIN;
@@ -2011,7 +2016,7 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 	ChunkScanCtx chunk_scan_ctx;
 	Chunk *chunks;
 	ChunkScanCtxAddChunkData data;
-	Dimension *time_dim;
+	const Dimension *time_dim;
 	StrategyNumber start_strategy;
 	StrategyNumber end_strategy;
 	uint64 num_chunks = 0;
@@ -2935,7 +2940,7 @@ ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_
  * contain no data.
  */
 void
-ts_chunk_drop_fks(Chunk *const chunk)
+ts_chunk_drop_fks(const Chunk *const chunk)
 {
 	Relation rel;
 	List *fks;
@@ -2963,7 +2968,7 @@ ts_chunk_drop_fks(Chunk *const chunk)
  * dropped during compression.
  */
 void
-ts_chunk_create_fks(Chunk *const chunk)
+ts_chunk_create_fks(const Chunk *const chunk)
 {
 	Relation rel;
 	List *fks;
@@ -3683,7 +3688,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	int elevel;
 	List *data_node_oids = NIL;
 	Cache *hcache;
-	Dimension *time_dim;
+	const Dimension *time_dim;
 	Oid time_type;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
