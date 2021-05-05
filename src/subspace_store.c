@@ -58,7 +58,7 @@ subspace_store_internal_node_free(void *node)
 static size_t
 subspace_store_internal_node_descendants(SubspaceStoreInternalNode *node, int index)
 {
-	DimensionSlice *slice = ts_dimension_vec_get(node->vector, index);
+	const DimensionSlice *slice = ts_dimension_vec_get(node->vector, index);
 
 	if (slice == NULL)
 		return 0;
@@ -70,7 +70,7 @@ subspace_store_internal_node_descendants(SubspaceStoreInternalNode *node, int in
 }
 
 SubspaceStore *
-ts_subspace_store_init(Hyperspace *space, MemoryContext mcxt, int16 max_items)
+ts_subspace_store_init(const Hyperspace *space, MemoryContext mcxt, int16 max_items)
 {
 	MemoryContext old = MemoryContextSwitchTo(mcxt);
 	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
@@ -195,7 +195,7 @@ ts_subspace_store_add(SubspaceStore *store, const Hypercube *hc, void *object,
 }
 
 void *
-ts_subspace_store_get(SubspaceStore *store, Point *target)
+ts_subspace_store_get(const SubspaceStore *store, const Point *target)
 {
 	int i;
 	DimensionVec *vec = store->origin->vector;
@@ -224,7 +224,7 @@ ts_subspace_store_free(SubspaceStore *store)
 }
 
 MemoryContext
-ts_subspace_store_mcxt(SubspaceStore *store)
+ts_subspace_store_mcxt(const SubspaceStore *store)
 {
 	return store->mcxt;
 }

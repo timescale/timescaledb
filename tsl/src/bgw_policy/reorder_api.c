@@ -124,7 +124,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
-	Dimension *dim;
+	const Dimension *dim;
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Oid ht_oid = PG_GETARG_OID(0);
 	Name index_name = PG_GETARG_NAME(1);

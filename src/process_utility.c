@@ -1640,7 +1640,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 
 	add_hypertable_to_process_args(args, ht);
 
-	dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
+	dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
 
 	if (dim)
 		ts_dimension_set_name(dim, stmt->newname);
@@ -2741,7 +2741,8 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 {
 	ColumnDef *coldef = (ColumnDef *) cmd->def;
 	Oid new_type = TypenameGetTypid(typename_get_unqual_name(coldef->typeName));
-	Dimension *dim = ts_hyperspace_get_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, cmd->name);
+	Dimension *dim =
+		ts_hyperspace_get_mutable_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, cmd->name);
 
 	if (NULL == dim)
 		return;

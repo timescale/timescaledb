@@ -43,16 +43,17 @@ typedef struct DimensionVec DimensionVec;
 typedef struct Hypercube Hypercube;
 
 extern DimensionVec *ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
-												   ScanTupLock *tuplock);
+												   const ScanTupLock *tuplock);
 extern DimensionVec *
 ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy,
 									int64 start_value, StrategyNumber end_strategy, int64 end_value,
-									int limit, ScanTupLock *tuplock);
+									int limit, const ScanTupLock *tuplock);
 extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start,
 															 int64 range_end, int limit);
-extern bool ts_dimension_slice_scan_for_existing(DimensionSlice *slice, ScanTupLock *tuplock);
+extern bool ts_dimension_slice_scan_for_existing(const DimensionSlice *slice,
+												 const ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
-															  ScanTupLock *tuplock,
+															  const ScanTupLock *tuplock,
 															  MemoryContext mctx);
 extern DimensionVec *ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit);
 extern DimensionVec *ts_dimension_slice_scan_by_dimension_before_point(int32 dimension_id,
@@ -63,10 +64,12 @@ extern int ts_dimension_slice_delete_by_dimension_id(int32 dimension_id, bool de
 extern int ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraints);
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_create(int dimension_id, int64 range_start,
 															 int64 range_end);
-extern DimensionSlice *ts_dimension_slice_copy(const DimensionSlice *original);
-extern TSDLLEXPORT bool ts_dimension_slices_collide(DimensionSlice *slice1, DimensionSlice *slice2);
-extern bool ts_dimension_slices_equal(DimensionSlice *slice1, DimensionSlice *slice2);
-extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, DimensionSlice *other, int64 coord);
+extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_copy(const DimensionSlice *original);
+extern TSDLLEXPORT bool ts_dimension_slices_collide(const DimensionSlice *slice1,
+													const DimensionSlice *slice2);
+extern bool ts_dimension_slices_equal(const DimensionSlice *slice1, const DimensionSlice *slice2);
+extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, const DimensionSlice *other,
+								   int64 coord);
 extern void ts_dimension_slice_free(DimensionSlice *slice);
 extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);

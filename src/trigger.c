@@ -27,7 +27,8 @@
  * checks.
  */
 void
-ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk_table_name)
+ts_trigger_create_on_chunk(Oid trigger_oid, const char *chunk_schema_name,
+						   const char *chunk_table_name)
 {
 	Datum datum_def = DirectFunctionCall1(pg_get_triggerdef, ObjectIdGetDatum(trigger_oid));
 	const char *def = TextDatumGetCString(datum_def);
@@ -53,8 +54,8 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 	} while (0);
 
 	Assert(IsA(stmt, CreateTrigStmt));
-	stmt->relation->relname = chunk_table_name;
-	stmt->relation->schemaname = chunk_schema_name;
+	stmt->relation->relname = (char *) chunk_table_name;
+	stmt->relation->schemaname = (char *) chunk_schema_name;
 
 	CreateTrigger(stmt,
 				  def,
@@ -72,7 +73,7 @@ ts_trigger_create_on_chunk(Oid trigger_oid, char *chunk_schema_name, char *chunk
 								* twice */
 }
 
-typedef bool (*trigger_handler)(Trigger *trigger, void *arg);
+typedef bool (*trigger_handler)(const Trigger *trigger, void *arg);
 
 static inline void
 for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
@@ -103,9 +104,9 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 }
 
 static bool
-create_trigger_handler(Trigger *trigger, void *arg)
+create_trigger_handler(const Trigger *trigger, void *arg)
 {
-	Chunk *chunk = arg;
+	const Chunk *chunk = arg;
 
 	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
 		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
@@ -134,7 +135,7 @@ create_trigger_handler(Trigger *trigger, void *arg)
  * chunk.
  */
 void
-ts_trigger_create_all_on_chunk(Chunk *chunk)
+ts_trigger_create_all_on_chunk(const Chunk *chunk)
 {
 	int sec_ctx;
 	Oid saved_uid;
@@ -152,14 +153,14 @@ ts_trigger_create_all_on_chunk(Chunk *chunk)
 	if (saved_uid != owner)
 		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
-	for_each_trigger(chunk->hypertable_relid, create_trigger_handler, chunk);
+	for_each_trigger(chunk->hypertable_relid, create_trigger_handler, (Chunk *) chunk);
 
 	if (saved_uid != owner)
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
 }
 
 static bool
-check_for_transition_table(Trigger *trigger, void *arg)
+check_for_transition_table(const Trigger *trigger, void *arg)
 {
 	bool *found = arg;
 

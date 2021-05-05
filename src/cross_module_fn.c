@@ -224,7 +224,7 @@ empty_fn(PG_FUNCTION_ARGS)
 }
 
 static void
-create_chunk_on_data_nodes_default(Chunk *chunk, Hypertable *ht)
+create_chunk_on_data_nodes_default(const Chunk *chunk, const Hypertable *ht)
 {
 	error_no_default_fn_community();
 }

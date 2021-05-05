@@ -18,7 +18,8 @@
 #include "chunk.h"
 
 static void
-chunk_data_node_insert_relation(Relation rel, int32 chunk_id, int32 node_chunk_id, Name node_name)
+chunk_data_node_insert_relation(const Relation rel, int32 chunk_id, int32 node_chunk_id,
+								const NameData *node_name)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_chunk_data_node];
@@ -36,7 +37,7 @@ chunk_data_node_insert_relation(Relation rel, int32 chunk_id, int32 node_chunk_i
 }
 
 static void
-chunk_data_node_insert_internal(int32 chunk_id, int32 node_chunk_id, Name node_name)
+chunk_data_node_insert_internal(int32 chunk_id, int32 node_chunk_id, const NameData *node_name)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -49,7 +50,7 @@ chunk_data_node_insert_internal(int32 chunk_id, int32 node_chunk_id, Name node_n
 }
 
 void
-ts_chunk_data_node_insert(ChunkDataNode *node)
+ts_chunk_data_node_insert(const ChunkDataNode *node)
 {
 	chunk_data_node_insert_internal(node->fd.chunk_id, node->fd.node_chunk_id, &node->fd.node_name);
 }

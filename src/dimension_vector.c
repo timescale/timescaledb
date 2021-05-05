@@ -133,7 +133,7 @@ ts_dimension_vec_remove_slice(DimensionVec **vecptr, int32 index)
 
 #if defined(USE_ASSERT_CHECKING)
 static inline bool
-dimension_vec_is_sorted(DimensionVec *vec)
+dimension_vec_is_sorted(const DimensionVec *vec)
 {
 	int i;
 
@@ -149,7 +149,7 @@ dimension_vec_is_sorted(DimensionVec *vec)
 #endif
 
 DimensionSlice *
-ts_dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
+ts_dimension_vec_find_slice(const DimensionVec *vec, int64 coordinate)
 {
 	DimensionSlice **res;
 
@@ -171,7 +171,7 @@ ts_dimension_vec_find_slice(DimensionVec *vec, int64 coordinate)
 }
 
 int
-ts_dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
+ts_dimension_vec_find_slice_index(const DimensionVec *vec, int32 dimension_slice_id)
 {
 	int i;
 
@@ -182,8 +182,8 @@ ts_dimension_vec_find_slice_index(DimensionVec *vec, int32 dimension_slice_id)
 	return -1;
 }
 
-DimensionSlice *
-ts_dimension_vec_get(DimensionVec *vec, int32 index)
+const DimensionSlice *
+ts_dimension_vec_get(const DimensionVec *vec, int32 index)
 {
 	if (index >= vec->num_slices)
 		return NULL;
