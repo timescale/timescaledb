@@ -16,7 +16,7 @@
 
 typedef struct RecompressChunkState
 {
-	TupleDesc chunk_desc;
+	//TupleDesc chunk_desc;
 	TupleDesc compress_desc;
 	RecompressTuple *rcstate;
 	Datum *compressed_datums;
@@ -35,16 +35,16 @@ rc_query_state_init(FunctionCallInfo fcinfo, Oid uncompressed_chunk_relid)
 		elog(ERROR, "no compressed chunk found for %s", get_rel_name(uncompressed_chunk_relid));
 	RecompressChunkState *state =
 		(RecompressChunkState *) MemoryContextAlloc(qcontext, sizeof(RecompressChunkState));
-	Relation chunk_rel = table_open(chunk->table_id, RowExclusiveLock); // TODO what lock here?
-	Relation compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+	Relation chunk_rel = table_open(chunk->table_id, AccessShareLock); // TODO what lock here?
+	Relation compress_rel = table_open(compress_chunk_relid, AccessShareLock);
 	state->rcstate = recompress_tuple_init(chunk->fd.hypertable_id, chunk_rel, compress_rel);
-	state->chunk_desc = RelationGetDescr(chunk_rel);
+	//state->chunk_desc = RelationGetDescr(chunk_rel);
 	state->compress_desc = RelationGetDescr(compress_rel);
 	state->compressed_datums = palloc(sizeof(Datum) * state->compress_desc->natts);
 	state->compressed_is_nulls = palloc(sizeof(bool) * state->compress_desc->natts);
 
-	table_close(compress_rel, RowExclusiveLock); // TODO what lock here?
-	table_close(chunk_rel, RowExclusiveLock);	// TODO what lock here?
+	table_close(compress_rel, AccessShareLock); // TODO what lock here?
+	table_close(chunk_rel, AccessShareLock);	// TODO what lock here?
 	MemoryContextSwitchTo(oldcontext);
 	return state;
 }
@@ -53,14 +53,15 @@ rc_query_state_init(FunctionCallInfo fcinfo, Oid uncompressed_chunk_relid)
 Datum
 tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS)
 {
+static int rwcnt = 0;
 	RecompressChunkState *tstate =
 		PG_ARGISNULL(0) ? NULL : (RecompressChunkState *) PG_GETARG_POINTER(0);
 	Oid uncompressed_chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	HeapTupleHeader rec = PG_GETARG_HEAPTUPLEHEADER(2);
-
-	//Oid arg1_typeid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	//Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
-	//elog(NOTICE, "typeis is %d %d", arg1_typeid, arg2_typeid);
+elog( NOTICE, "call sfunc ###########");
+	// Oid arg1_typeid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	// Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
+	// elog(NOTICE, "typeis is %d %d", arg1_typeid, arg2_typeid);
 	MemoryContext fa_context, old_context;
 
 	if (!AggCheckCallContext(fcinfo, &fa_context) || !IsA(fcinfo->context, AggState))
@@ -83,7 +84,9 @@ tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS)
 		else
 		{
 			/* now dealing with a new group */
-			recompress_tuple_reset(tstate->rcstate);
+elog(NOTICE, "resetting rowcnt old cnt= %d", rwcnt);
+rwcnt = 0;
+			//recompress_tuple_reset(tstate->rcstate);
 		}
 	}
 	/* construct a tuple from passed in record */
@@ -100,6 +103,7 @@ tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS)
 	recompress_tuple_append_row(tstate->rcstate,
 								tstate->compressed_datums,
 								tstate->compressed_is_nulls);
+    rwcnt++;
 	MemoryContextSwitchTo(old_context);
 
 	PG_RETURN_POINTER(tstate);
@@ -111,14 +115,15 @@ tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS)
 Datum
 tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 {
-int rowcnt = 0;
+	int rowcnt = 0;
 	HeapTuple compressed_tuple;
-    ArrayBuildState *arrstate = NULL;
+	ArrayBuildState *arrstate = NULL;
 	RecompressChunkState *tstate =
 		PG_ARGISNULL(0) ? NULL : (RecompressChunkState *) PG_GETARG_POINTER(0);
 	Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
 	MemoryContext fa_context, old_context;
 	Assert(tstate != NULL);
+elog( NOTICE, "call ffunc !!!!!!!!!!!!");
 	if (!AggCheckCallContext(fcinfo, &fa_context))
 	{
 		/* cannot be called directly because of internal-type argument */
@@ -128,15 +133,18 @@ int rowcnt = 0;
 	// test what happens on empty table
 	while ((compressed_tuple = recompress_tuple_get_next(tstate->rcstate)))
 	{
-       HeapTupleHeader result;
-       result = (HeapTupleHeader) palloc(compressed_tuple->t_len);
-       memcpy(result, compressed_tuple->t_data, compressed_tuple->t_len);
-       Datum datum = HeapTupleHeaderGetDatum(result);
-       arrstate = accumArrayResult(arrstate, datum, false, arg2_typeid, CurrentMemoryContext);
-		//print_tuple(compressed_tuple, tstate->compress_desc);
-rowcnt++;
+		HeapTupleHeader result;
+		result = (HeapTupleHeader) palloc(compressed_tuple->t_len);
+		memcpy(result, compressed_tuple->t_data, compressed_tuple->t_len);
+		Datum datum = HeapTupleHeaderGetDatum(result);
+		arrstate = accumArrayResult(arrstate, datum, false, arg2_typeid, CurrentMemoryContext);
+		// print_tuple(compressed_tuple, tstate->compress_desc);
+		rowcnt++;
 	}
 	MemoryContextSwitchTo(old_context);
-elog(NOTICE, "arg type is %d rwcnt %d !!!!!!", arg2_typeid, rowcnt);
-    PG_RETURN_DATUM( makeArrayResult(arrstate, CurrentMemoryContext));
+	elog(NOTICE, "arg type is %d rwcnt %d !!!!!!", arg2_typeid, rowcnt);
+    if ( arrstate )
+	PG_RETURN_DATUM(makeArrayResult(arrstate, CurrentMemoryContext));
+    else
+    PG_RETURN_NULL();
 }
