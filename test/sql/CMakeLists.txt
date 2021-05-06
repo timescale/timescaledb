@@ -80,6 +80,7 @@ set(SOLO_TESTS
   index-13
   loader
   net
+  pg_dump
   pg_dump_unprivileged
   tablespace
   telemetry
