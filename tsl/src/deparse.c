@@ -195,7 +195,14 @@ deparse_columns(StringInfo stmt, Relation rel)
 																CStringGetTextDatum(attr_def.adbin),
 																ObjectIdGetDatum(rel->rd_id)));
 
-					appendStringInfo(stmt, " DEFAULT %s", attr_default);
+#if PG12_GE
+					if (attr->attgenerated == ATTRIBUTE_GENERATED_STORED)
+						appendStringInfo(stmt, " GENERATED ALWAYS AS %s STORED", attr_default);
+					else
+#endif
+					{
+						appendStringInfo(stmt, " DEFAULT %s", attr_default);
+					}
 					break;
 				}
 			}

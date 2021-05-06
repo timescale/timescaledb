@@ -11,6 +11,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
 #include <executor/executor.h>
+#include <executor/nodeModifyTable.h>
 #include <utils/lsyscache.h>
 #include <utils/builtins.h>
 #include <utils/hsearch.h>
@@ -706,6 +707,19 @@ handle_read(DataNodeDispatchState *sds)
 			ListCell *lc;
 			bool primary_data_node = true;
 			MemoryContext oldcontext;
+#if PG12_GE
+			TupleDesc rri_desc = RelationGetDescr(rri->ri_RelationDesc);
+
+			if (NULL != rri->ri_projectReturning && rri_desc->constr &&
+				rri_desc->constr->has_generated_stored)
+				ExecComputeStoredGenerated(estate,
+										   slot
+#if PG13_GE
+										   ,
+										   CMD_INSERT
+#endif
+				);
+#endif /* PG12_GE */
 
 			Assert(NULL != cis);
 
@@ -1063,8 +1077,14 @@ get_insert_attrs(Relation rel)
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 
-		if (!attr->attisdropped)
-			attrs = lappend_int(attrs, AttrOffsetGetAttrNumber(i));
+		if (attr->attisdropped
+#if PG12_GE
+			|| attr->attgenerated != '\0'
+#endif
+		)
+			continue;
+
+		attrs = lappend_int(attrs, AttrOffsetGetAttrNumber(i));
 	}
 
 	return attrs;

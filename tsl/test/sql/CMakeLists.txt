@@ -105,7 +105,7 @@ endif()
 
 if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
   list(APPEND TEST_FILES_DEBUG
-    dist_hypertable_am.sql
+    dist_hypertable_pg12.sql
     continuous_aggs_tableam.sql
   )
 endif()
