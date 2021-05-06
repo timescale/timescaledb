@@ -52,7 +52,8 @@ set(SOURCE_FILES
     restoring.sql
     job_api.sql
     policy_api.sql
-    policy_internal.sql)
+    policy_internal.sql
+    recompress.sql
 
 # These files should be pre-pended to update scripts so that they are executed
 # before anything else during updates

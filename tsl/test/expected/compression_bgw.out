@@ -223,7 +223,11 @@ SELECT COUNT(*) AS dropped_chunks_count
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
 CALL run_job(:job_id);
+<<<<<<< HEAD
 \i include/recompress_basic.sql
+=======
+\ir include/recompress_basic.sql
+>>>>>>> 89c45cf5... seperate into grp and query state parts
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -233,6 +237,7 @@ SELECT
    h.table_name AS hypertable_name,
    c.schema_name as chunk_schema,
    c.table_name as chunk_name,
+<<<<<<< HEAD
    c.status as chunk_status, 
    comp.schema_name as compressed_chunk_schema,
    comp.table_name as compressed_chunk_name
@@ -245,12 +250,30 @@ ON comp.id = c.compressed_chunk_id
 CREATE TABLE test2 (timec timestamptz NOT NULL, i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
+=======
+   comp.schema_name as compressed_chunk_schema,
+   comp.table_name as compressed_chunk_name
+FROM
+   _timescaledb_catalog.hypertable h,
+  _timescaledb_catalog.chunk c,
+   _timescaledb_catalog.chunk comp
+WHERE h.id = c.hypertable_id and comp.id = c.compressed_chunk_id
+and c.compressed_chunk_id > 0;
+CREATE TABLE test2 (timec timestamptz , i integer ,
+      b bigint, t text);
+SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
+psql:include/recompress_basic.sql:22: NOTICE:  adding not-null constraint to column "timec"
+>>>>>>> 89c45cf5... seperate into grp and query state parts
  table_name 
 ------------
  test2
 (1 row)
 
+<<<<<<< HEAD
 INSERT INTO test2 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+=======
+INSERT INTO test2 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
+>>>>>>> 89c45cf5... seperate into grp and query state parts
 ALTER TABLE test2 set (timescaledb.compress, 
 timescaledb.compress_segmentby = 'b', 
 timescaledb.compress_orderby = 'timec DESC');
@@ -262,6 +285,7 @@ FROM show_chunks('test2') c;
 (1 row)
 
 ---insert into the middle of the range ---
+<<<<<<< HEAD
 INSERT INTO test2 values ( '2020-01-03 10:01:00+00', 20, 11, '2row'); 
 INSERT INTO test2 values ( '2020-01-03 11:01:00+00', 20, 11, '3row'); 
 INSERT INTO test2 values ( '2020-01-03 12:01:00+00', 20, 11, '4row'); 
@@ -289,6 +313,13 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
             3 | _hyper_10_48_chunk
 (1 row)
 
+=======
+INSERT INTO test2 values ( '2020-01-03 10:01:00-05', 20, 11, '2row'); 
+INSERT INTO test2 values ( '2020-01-03 11:01:00-05', 20, 11, '3row'); 
+INSERT INTO test2 values ( '2020-01-03 12:01:00-05', 20, 11, '4row'); 
+--- insert a new segment  by ---
+INSERT INTO test2 values ( '2020-01-03 11:01:00-05', 20, 12, '12row'); 
+>>>>>>> 89c45cf5... seperate into grp and query state parts
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
         chunk_schema || '.' || chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view 
@@ -299,6 +330,7 @@ SELECT count(*) from test2;
     29
 (1 row)
 
+<<<<<<< HEAD
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass); 
              recompress_chunk             
 ------------------------------------------
@@ -520,3 +552,19 @@ SELECT delete_job(:JOB_RECOMPRESS);
  
 (1 row)
 
+=======
+SELECT :'CHUNK_NAME', 'got here';
+                 ?column?                 | ?column? 
+------------------------------------------+----------
+ _timescaledb_internal._hyper_10_48_chunk | got here
+(1 row)
+
+SELECT b, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
+FROM :COMP_CHUNK_NAME c  group by b;
+ b  |                                                                                                                                                                                                         arr                                                                                                                                                                                                         
+----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 12 | {"(BAAAAj49Lz7nAAACPj0vPucAAAAAAQAAAAEAAAAAAAAADgAEfHpefc4A,BAAAAAAAAAAAFAAAAAAAAAAUAAAAAQAAAAEAAAAAAAAABgAAAAAAAAAo,12,AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAABTEycm93,1,10,\"Fri Jan 03 08:01:00 2020 PST\",\"Fri Jan 03 08:01:00 2020 PST\")"}
+ 11 | {"(BAAAAj48VRe8AP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHwLpRYAAAR8fBLMI/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,20,\"Fri Jan 03 07:00:00 2020 PST\",\"Fri Jan 03 09:01:00 2020 PST\")"}
+(2 rows)
+
+>>>>>>> 89c45cf5... seperate into grp and query state parts

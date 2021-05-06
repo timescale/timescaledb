@@ -1727,24 +1727,32 @@ enum RecompressTupleState
 	RecompressTupleDone
 };
 
+typedef struct RecompressTupleGroupState
+{
+	MemoryContext mcontext;
+	/* group specific state */
+	Tuplesortstate *tupsortstate;
+	TupleTableSlot *chunk_rel_tuple_slot;
+	enum RecompressTupleState state;
+	bool changed_groups;
+} RecompressTupleGroupState;
+
 typedef struct RecompressTuple
 {
 	TupleDesc compress_tupdesc;
 	TupleDesc chunk_tupdesc;
 	RowDecompressor *decompressor;
 	RowCompressor *compressor;
-	// Datum *compressed_datums;
-	// bool *compressed_is_nulls;
-	Tuplesortstate *tupsortstate;
-	TupleTableSlot *chunk_rel_tuple_slot;
-	bool changed_groups;
-	enum RecompressTupleState state;
+	AttrNumber *sort_keys;
+	Oid *sort_operators;
+	Oid *sort_collations;
+	bool *nulls_first;
+	int n_keys;
 } RecompressTuple;
 
 RecompressTuple *
 recompress_tuple_init(int srcht_id, Relation chunk_rel, Relation compress_rel)
 {
-	int n_keys;
 	const ColumnCompressionInfo **keys;
 	RecompressTuple *rcstate = palloc(sizeof(RecompressTuple));
 	rcstate->decompressor = palloc(sizeof(RowDecompressor));
@@ -1754,12 +1762,13 @@ recompress_tuple_init(int srcht_id, Relation chunk_rel, Relation compress_rel)
 								srcht_id,
 								chunk_rel,
 								compress_rel,
-								&n_keys,
+								&rcstate->n_keys,
 								&keys);
-	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
-	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
-	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
-	bool *nulls_first = palloc(sizeof(*nulls_first) * n_keys);
+	int n_keys = rcstate->n_keys;
+	rcstate->sort_keys = palloc(sizeof(*rcstate->sort_keys) * n_keys);
+	rcstate->sort_operators = palloc(sizeof(*rcstate->sort_operators) * n_keys);
+	rcstate->sort_collations = palloc(sizeof(*rcstate->sort_collations) * n_keys);
+	rcstate->nulls_first = palloc(sizeof(*rcstate->nulls_first) * n_keys);
 
 	rcstate->compress_tupdesc = RelationGetDescr(compress_rel);
 	rcstate->chunk_tupdesc = RelationGetDescr(chunk_rel);
@@ -1769,30 +1778,49 @@ recompress_tuple_init(int srcht_id, Relation chunk_rel, Relation compress_rel)
 	for (int i = 0; i < n_keys; i++)
 		compress_chunk_populate_sort_info_for_column(RelationGetRelid(chunk_rel),
 													 keys[i],
-													 &sort_keys[i],
-													 &sort_operators[i],
-													 &sort_collations[i],
-													 &nulls_first[i]);
-	/* we sort the decompressed tuples using tuplesort */
-	rcstate->tupsortstate = tuplesort_begin_heap(rcstate->chunk_tupdesc,
-												 n_keys,
-												 sort_keys,
-												 sort_operators,
-												 sort_collations,
-												 nulls_first,
-												 work_mem,
-												 NULL,
-												 false /*=randomAccess*/);
-	rcstate->chunk_rel_tuple_slot =
-		MakeSingleTupleTableSlot(rcstate->chunk_tupdesc, &TTSOpsMinimalTuple);
-	rcstate->state = RecompressTupleNoSort;
-	rcstate->changed_groups = false;
+													 &rcstate->sort_keys[i],
+													 &rcstate->sort_operators[i],
+													 &rcstate->sort_collations[i],
+													 &rcstate->nulls_first[i]);
 	return rcstate;
 }
 
+RecompressTupleGroupState *
+recompress_tuple_group_init(RecompressTuple *rcstate)
+{
+	RecompressTupleGroupState *grpstate =
+		(RecompressTupleGroupState *) palloc(sizeof(RecompressTupleGroupState));
+	/* we sort the decompressed tuples using tuplesort */
+	grpstate->tupsortstate = tuplesort_begin_heap(rcstate->chunk_tupdesc,
+												  rcstate->n_keys,
+												  rcstate->sort_keys,
+												  rcstate->sort_operators,
+												  rcstate->sort_collations,
+												  rcstate->nulls_first,
+												  work_mem,
+												  NULL,
+												  false /*=randomAccess*/);
+	grpstate->changed_groups = false;
+	grpstate->chunk_rel_tuple_slot =
+		MakeSingleTupleTableSlot(rcstate->chunk_tupdesc, &TTSOpsMinimalTuple);
+	// elog(NOTICE, "in group init  %p %p ************", CurrentMemoryContext, grpstate);
+	grpstate->state = RecompressTupleNoSort;
+	return grpstate;
+}
+
 void
-recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
-							bool *compressed_is_nulls)
+recompress_tuple_group_destroy(RecompressTupleGroupState *grpstate)
+{
+	// elog(NOTICE, "in group destroy  %p %p************", CurrentMemoryContext, grpstate);
+	if (grpstate->tupsortstate)
+		tuplesort_end(grpstate->tupsortstate);
+	grpstate->tupsortstate = NULL;
+	ExecDropSingleTupleTableSlot(grpstate->chunk_rel_tuple_slot);
+}
+
+void
+recompress_tuple_append_row(RecompressTuple *rcstate, RecompressTupleGroupState *grpstate,
+							Datum *compressed_datums, bool *compressed_is_nulls)
 {
 	bool is_done = false;
 	int rwcnt = 0;
@@ -1816,9 +1844,9 @@ recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
 		is_done = true;
 		Datum *decompressed_datums;
 		bool *decompressed_isnull;
-		ExecClearTuple(rcstate->chunk_rel_tuple_slot);
-		decompressed_datums = rcstate->chunk_rel_tuple_slot->tts_values;
-		decompressed_isnull = rcstate->chunk_rel_tuple_slot->tts_isnull;
+		ExecClearTuple(grpstate->chunk_rel_tuple_slot);
+		decompressed_datums = grpstate->chunk_rel_tuple_slot->tts_values;
+		decompressed_isnull = grpstate->chunk_rel_tuple_slot->tts_isnull;
 		for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
 		{
 			bool col_is_done = per_compressed_col_get_data(&decompressor->per_compressed_cols[col],
@@ -1838,9 +1866,9 @@ recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
 		*/
 		if (!is_done)
 		{
-			ExecStoreVirtualTuple(rcstate->chunk_rel_tuple_slot);
+			ExecStoreVirtualTuple(grpstate->chunk_rel_tuple_slot);
 			/* copied into tuplesort, so we can reuse the slot */
-			tuplesort_puttupleslot(rcstate->tupsortstate, rcstate->chunk_rel_tuple_slot);
+			tuplesort_puttupleslot(grpstate->tupsortstate, grpstate->chunk_rel_tuple_slot);
 			rwcnt++;
 		}
 	} while (!is_done);
@@ -1851,33 +1879,33 @@ recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
  * returns true if the current group is done
  */
 HeapTuple
-recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done)
+recompress_tuple_get_next(RecompressTuple *rcstate, RecompressTupleGroupState *grpstate,
+						  bool *group_done)
 {
 	MemoryContext old_ctx = NULL, fn_ctx = CurrentMemoryContext;
 	bool flush_tuple = false, got_tuple;
 	HeapTuple compressed_tuple = NULL;
 	RowCompressor *row_compressor = rcstate->compressor;
 	*group_done = false;
+	Assert(grpstate != NULL);
 	/* sort the data */
-	if (rcstate->state == RecompressTupleNoSort)
+	if (grpstate->state == RecompressTupleNoSort)
 	{
 		/* first iteration */
-		tuplesort_performsort(rcstate->tupsortstate);
+		tuplesort_performsort(grpstate->tupsortstate);
 	}
-	Assert((rcstate->state == RecompressTupleNoSort) ||
-		   (rcstate->state == RecompressTupleInProgress));
 	/* compress the tuples
 	 * The logic is similar to row_compressor_append_sorted_rows
 	 */
-	TupleTableSlot *slot = rcstate->chunk_rel_tuple_slot;
+	TupleTableSlot *slot = grpstate->chunk_rel_tuple_slot;
 	ExecClearTuple(slot);
-	for (got_tuple = tuplesort_gettupleslot(rcstate->tupsortstate,
+	for (got_tuple = tuplesort_gettupleslot(grpstate->tupsortstate,
 											true /*=forward*/,
 											false /*=copy*/,
 											slot,
 											NULL /*=abbrev*/);
 		 got_tuple;
-		 got_tuple = tuplesort_gettupleslot(rcstate->tupsortstate,
+		 got_tuple = tuplesort_gettupleslot(grpstate->tupsortstate,
 											true /*=forward*/,
 											false /*=copy*/,
 											slot,
@@ -1888,15 +1916,15 @@ recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done)
 		old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
 
 		/* first time through */
-		if (rcstate->state == RecompressTupleNoSort)
+		if (grpstate->state == RecompressTupleNoSort)
 		{
 			row_compressor_update_group(row_compressor, slot);
-			rcstate->state = RecompressTupleInProgress;
+			grpstate->state = RecompressTupleInProgress;
 		}
-		rcstate->changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
+		grpstate->changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
 		compressed_row_is_full =
 			row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
-		if (compressed_row_is_full || rcstate->changed_groups)
+		if (compressed_row_is_full || grpstate->changed_groups)
 		{
 			if (row_compressor->rows_compressed_into_current_value > 0)
 			{
@@ -1916,10 +1944,10 @@ recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done)
 	if (flush_tuple)
 	{
 		compressed_tuple = row_compressor_get_compressed_tuple(row_compressor, fn_ctx);
-		row_compressor_cleanup_after_flush(row_compressor, rcstate->changed_groups);
+		row_compressor_cleanup_after_flush(row_compressor, grpstate->changed_groups);
 		if (got_tuple)
 		{
-			if (rcstate->changed_groups)
+			if (grpstate->changed_groups)
 			{
 				*group_done = true;
 				row_compressor_update_group(row_compressor, slot);
@@ -1930,25 +1958,9 @@ recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done)
 	if (got_tuple == false)
 	{
 		/* no more tuples */
-		rcstate->state = RecompressTupleDone;
+		grpstate->state = RecompressTupleDone;
 		*group_done = true;
 	}
 	MemoryContextSwitchTo(old_ctx); // to do is it correct?
 	return compressed_tuple;
-}
-
-void
-recompress_tuple_reset(RecompressTuple *rcstate)
-{
-	tuplesort_reset(rcstate->tupsortstate);
-	rcstate->state = RecompressTupleNoSort;
-}
-
-void
-recompress_tuple_destroy(RecompressTuple *rcstate)
-{
-	if (rcstate->tupsortstate)
-		tuplesort_end(rcstate->tupsortstate);
-	rcstate->tupsortstate = NULL;
-	ExecDropSingleTupleTableSlot(rcstate->chunk_rel_tuple_slot);
 }

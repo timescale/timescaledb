@@ -23,6 +23,7 @@ CREATE TABLE test2 (timec timestamptz NOT NULL, i integer ,
 SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
 
 INSERT INTO test2 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+
 ALTER TABLE test2 set (timescaledb.compress, 
 timescaledb.compress_segmentby = 'b', 
 timescaledb.compress_orderby = 'timec DESC');
@@ -186,4 +187,14 @@ CALL run_job(:JOB_RECOMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
 
 SELECT delete_job(:JOB_RECOMPRESS);
+
+-- test recompress_tuples --
+SELECT chunk_status,
+       chunk_name as "CHUNK_NAME"
+FROM compressed_chunk_info_view 
+WHERE hypertable_name = 'test2' ORDER BY chunk_name;
+
+SELECT :'CHUNK_NAME', 'got here';
+SELECT b, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
+FROM :COMP_CHUNK_NAME c  group by b;
 
