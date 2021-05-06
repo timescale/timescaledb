@@ -12,44 +12,41 @@
 #include "compat.h"
 #include "compression.h"
 #include "recompress.h"
-#include "debug_tup.h" //debugging
+
+typedef struct RCQueryState
+{
+	TupleDesc compress_desc;
+	RecompressTuple *rctuple;
+	Datum *compressed_datums;
+	bool *compressed_is_nulls;
+} RCQueryState;
 
 typedef struct RecompressChunkState
 {
-	// TupleDesc chunk_desc;
-	TupleDesc compress_desc;
-	RecompressTuple *rcstate;
-	Datum *compressed_datums;
-	bool *compressed_is_nulls;
+	RCQueryState *qrystate;
+	RecompressTupleGroupState *grpstate;
 } RecompressChunkState;
 
 static void rc_query_shutdown(Datum arg);
 
-static RecompressChunkState *
+static RCQueryState *
 rc_query_state_init(FunctionCallInfo fcinfo, Oid uncompressed_chunk_relid)
 {
 	// TupleDesc in_desc;
-	MemoryContext qcontext = fcinfo->flinfo->fn_mcxt;
-	MemoryContext oldcontext = MemoryContextSwitchTo(qcontext);
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
 	Oid compress_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
 	if (compress_chunk_relid == InvalidOid)
 		elog(ERROR, "no compressed chunk found for %s", get_rel_name(uncompressed_chunk_relid));
-	RecompressChunkState *state =
-		(RecompressChunkState *) MemoryContextAlloc(qcontext, sizeof(RecompressChunkState));
+	RCQueryState *state = palloc(sizeof(RCQueryState));
 	Relation chunk_rel = table_open(chunk->table_id, AccessShareLock); // TODO what lock here?
 	Relation compress_rel = table_open(compress_chunk_relid, AccessShareLock);
-	state->rcstate = recompress_tuple_init(chunk->fd.hypertable_id, chunk_rel, compress_rel);
-	// state->chunk_desc = RelationGetDescr(chunk_rel);
+	state->rctuple = recompress_tuple_init(chunk->fd.hypertable_id, chunk_rel, compress_rel);
 	state->compress_desc = RelationGetDescr(compress_rel);
 	state->compressed_datums = palloc(sizeof(Datum) * state->compress_desc->natts);
 	state->compressed_is_nulls = palloc(sizeof(bool) * state->compress_desc->natts);
 
 	table_close(compress_rel, AccessShareLock); // TODO what lock here?
 	table_close(chunk_rel, AccessShareLock);	// TODO what lock here?
-	AggRegisterCallback(fcinfo, rc_query_shutdown, PointerGetDatum(state));
-
-	MemoryContextSwitchTo(oldcontext);
 	return state;
 }
 
@@ -57,57 +54,77 @@ static void
 rc_query_shutdown(Datum arg)
 {
 	RecompressChunkState *state = (RecompressChunkState *) DatumGetPointer(arg);
-	recompress_tuple_destroy(state->rcstate);
-	state->rcstate = NULL;
+	recompress_tuple_group_destroy(state->grpstate);
+}
+
+static RecompressChunkState *
+rc_state_setup(FunctionCallInfo fcinfo, Oid uncompressed_chunk_relid)
+{
+	MemoryContext qcontext, grpcontext, oldcontext;
+	RCQueryState *qrystate = (RCQueryState *) fcinfo->flinfo->fn_extra;
+	RecompressChunkState *tstate;
+
+	if (qrystate == NULL) /*first time the function is called */
+	{
+		/* want to keep this information for the duration of the query */
+		qcontext = fcinfo->flinfo->fn_mcxt;
+		oldcontext = MemoryContextSwitchTo(qcontext);
+		qrystate = rc_query_state_init(fcinfo, uncompressed_chunk_relid);
+		fcinfo->flinfo->fn_extra = qrystate;
+		MemoryContextSwitchTo(oldcontext);
+	}
+	if (AggCheckCallContext(fcinfo, &grpcontext) != AGG_CONTEXT_AGGREGATE)
+		elog(ERROR, "recompress_chunk_tuples called in non-aggregate context");
+	/* per group initialization, switch to aggregate context */
+	oldcontext = MemoryContextSwitchTo(grpcontext);
+	tstate = palloc(sizeof(RecompressChunkState));
+	tstate->qrystate = qrystate;
+	tstate->grpstate = recompress_tuple_group_init(tstate->qrystate->rctuple);
+	AggRegisterCallback(fcinfo, rc_query_shutdown, PointerGetDatum(tstate));
+	MemoryContextSwitchTo(oldcontext);
+	return tstate;
 }
 
 /* args are (internal, oid, record) */
 Datum
 tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS)
 {
-	RecompressChunkState *tstate =
-		PG_ARGISNULL(0) ? NULL : (RecompressChunkState *) PG_GETARG_POINTER(0);
+	RecompressChunkState *tstate;
 	Oid uncompressed_chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	HeapTupleHeader rec = PG_GETARG_HEAPTUPLEHEADER(2);
 	// Oid arg1_typeid = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	// Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
 	// elog(NOTICE, "typeis is %d %d", arg1_typeid, arg2_typeid);
-	MemoryContext fa_context, old_context;
+	MemoryContext grp_context, old_context;
 
-	if (!AggCheckCallContext(fcinfo, &fa_context) || !IsA(fcinfo->context, AggState))
+	if (!AggCheckCallContext(fcinfo, &grp_context) || !IsA(fcinfo->context, AggState))
 	{
-		/* cannot be called directly because of internal-type argument */
 		elog(ERROR, "recompress_chunk_sfunc called in non-aggregate context");
 	}
-	if (PG_ARGISNULL(1))
-		elog(ERROR, "unexpected null record in tsl_recompress_chunk_sfunc");
-	old_context = MemoryContextSwitchTo(fa_context);
+	if (PG_ARGISNULL(2) || uncompressed_chunk_relid == InvalidOid)
+		elog(ERROR, "unexpected null in tsl_recompress_chunk_sfunc");
 
-	if (tstate == NULL)
-	{
-		tstate = (RecompressChunkState *) fcinfo->flinfo->fn_extra;
-		if (fcinfo->flinfo->fn_extra == NULL)
-		{
-			tstate = rc_query_state_init(fcinfo, uncompressed_chunk_relid);
-			fcinfo->flinfo->fn_extra = tstate;
-		}
-	}
+	if (PG_ARGISNULL(0))
+		tstate = rc_state_setup(fcinfo, uncompressed_chunk_relid);
+	else
+		tstate = (RecompressChunkState *) PG_GETARG_POINTER(0);
 	/* construct a tuple from passed in record */
+	old_context = MemoryContextSwitchTo(grp_context);
 	HeapTupleData tuple;
 	tuple.t_len = HeapTupleHeaderGetDatumLength(rec);
 	ItemPointerSetInvalid(&(tuple.t_self));
 	tuple.t_tableOid = InvalidOid;
 	tuple.t_data = rec;
 	heap_deform_tuple(&tuple,
-					  tstate->compress_desc,
-					  tstate->compressed_datums,
-					  tstate->compressed_is_nulls);
+					  tstate->qrystate->compress_desc,
+					  tstate->qrystate->compressed_datums,
+					  tstate->qrystate->compressed_is_nulls);
 
-	recompress_tuple_append_row(tstate->rcstate,
-								tstate->compressed_datums,
-								tstate->compressed_is_nulls);
+	recompress_tuple_append_row(tstate->qrystate->rctuple,
+								tstate->grpstate,
+								tstate->qrystate->compressed_datums,
+								tstate->qrystate->compressed_is_nulls);
 	MemoryContextSwitchTo(old_context);
-
 	PG_RETURN_POINTER(tstate);
 }
 
@@ -124,16 +141,17 @@ tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 	RecompressChunkState *tstate =
 		PG_ARGISNULL(0) ? NULL : (RecompressChunkState *) PG_GETARG_POINTER(0);
 	Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
-	MemoryContext fa_context, old_context;
+	MemoryContext grp_context, old_context;
 	Assert(tstate != NULL);
-	if (!AggCheckCallContext(fcinfo, &fa_context))
+	if (!AggCheckCallContext(fcinfo, &grp_context))
 	{
 		/* cannot be called directly because of internal-type argument */
 		elog(ERROR, "recompress_chunk_ffunc called in non-aggregate context");
 	}
-	old_context = MemoryContextSwitchTo(fa_context);
+	old_context = MemoryContextSwitchTo(grp_context);
 	// test what happens on empty table
-	while ((compressed_tuple = recompress_tuple_get_next(tstate->rcstate, &grp_done)))
+	while ((compressed_tuple =
+				recompress_tuple_get_next(tstate->qrystate->rctuple, tstate->grpstate, &grp_done)))
 	{
 		HeapTupleHeader result;
 		result = (HeapTupleHeader) palloc(compressed_tuple->t_len);
@@ -142,11 +160,9 @@ tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 		arrstate = accumArrayResult(arrstate, datum, false, arg2_typeid, CurrentMemoryContext);
 		if (grp_done)
 			break;
-		// print_tuple(compressed_tuple, tstate->compress_desc);
 		rowcnt++;
 	}
 	MemoryContextSwitchTo(old_context);
-	elog(NOTICE, "arg type is %d rwcnt %d !!!!!!", arg2_typeid, rowcnt);
 	if (arrstate)
 		PG_RETURN_DATUM(makeArrayResult(arrstate, CurrentMemoryContext));
 	else

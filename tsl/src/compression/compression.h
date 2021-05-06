@@ -163,12 +163,15 @@ extern void compress_row_destroy(CompressSingleRowState *cr);
 
 /* RecompressTuple methods */
 typedef struct RecompressTuple RecompressTuple;
+typedef struct RecompressTupleGroupState RecompressTupleGroupState;
 extern RecompressTuple *recompress_tuple_init(int srcht_id, Relation chunk_rel,
 											  Relation compress_rel);
 // extern void recompress_tuple_append_row(RecompressTuple *rcstate, HeapTuple compressed_tuple);
-extern void recompress_tuple_append_row(RecompressTuple *rcstate, Datum *compressed_datums,
-										bool *compressed_is_nulls);
-extern HeapTuple recompress_tuple_get_next(RecompressTuple *rcstate, bool *group_done);
-extern void recompress_tuple_reset(RecompressTuple *rcstate);
-extern void recompress_tuple_destroy(RecompressTuple *rcstate);
+extern void recompress_tuple_append_row(RecompressTuple *rcstate,
+										RecompressTupleGroupState *grpstate,
+										Datum *compressed_datums, bool *compressed_is_nulls);
+extern HeapTuple recompress_tuple_get_next(RecompressTuple *rcstate,
+										   RecompressTupleGroupState *grpstate, bool *group_done);
+extern RecompressTupleGroupState *recompress_tuple_group_init(RecompressTuple *rcstate);
+extern void recompress_tuple_group_destroy(RecompressTupleGroupState *grpstate);
 #endif
