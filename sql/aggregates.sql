@@ -57,3 +57,12 @@ CREATE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT,  inner_agg_co
     FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
     FINALFUNC_EXTRA
 );
+
+CREATE AGGREGATE _timescaledb_internal.recompress_tuples(compressed_chunk_name REGCLASS, val anyelement)
+(
+    SFUNC = _timescaledb_internal.recompress_chunk_sfunc,
+    STYPE = internal,
+    FINALFUNC = _timescaledb_internal.recompress_chunk_ffunc,
+    FINALFUNC_EXTRA
+);
+
