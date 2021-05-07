@@ -268,7 +268,7 @@ relation_not_only(RangeVar *rv)
 }
 
 static void
-add_hypertable_to_process_args(ProcessUtilityArgs *args, Hypertable *ht)
+add_hypertable_to_process_args(ProcessUtilityArgs *args, const Hypertable *ht)
 {
 	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
 }
@@ -331,6 +331,42 @@ process_drop_foreign_server_start(DropStmt *stmt)
 					 errhint("Use delete_data_node() to remove data nodes from a "
 							 "distributed database.")));
 	}
+}
+
+static void
+process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
+{
+	Cache *hcache = ts_hypertable_cache_pin();
+	ListCell *lc;
+
+	foreach (lc, stmt->objects)
+	{
+		Node *object = lfirst(lc);
+		Relation rel = NULL;
+		ObjectAddress objaddr;
+
+		/* Get the relation of the trigger */
+		objaddr =
+			get_object_address(stmt->removeType, object, &rel, AccessShareLock, stmt->missing_ok);
+
+		if (OidIsValid(objaddr.objectId))
+		{
+			const Hypertable *ht;
+
+			Assert(NULL != rel);
+			Assert(objaddr.classId == TriggerRelationId);
+			ht =
+				ts_hypertable_cache_get_entry(hcache, RelationGetRelid(rel), CACHE_FLAG_MISSING_OK);
+
+			if (NULL != ht)
+				add_hypertable_to_process_args(args, ht);
+
+			/* Lock from get_object_address must be held until transaction end */
+			table_close(rel, NoLock);
+		}
+	}
+
+	ts_cache_release(hcache);
 }
 
 static DDLResult
@@ -1409,6 +1445,9 @@ process_drop_start(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_FOREIGN_SERVER:
 			process_drop_foreign_server_start(stmt);
+			break;
+		case OBJECT_TRIGGER:
+			process_drop_trigger_start(args, stmt);
 			break;
 		default:
 			break;

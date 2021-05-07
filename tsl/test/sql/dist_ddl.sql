@@ -176,12 +176,24 @@ RETURN OLD;
 END
 $BODY$;
 
+-- Also create the trigger function on the data nodes
+CALL distributed_exec($$
+	 CREATE OR REPLACE FUNCTION test_trigger()
+	 RETURNS TRIGGER LANGUAGE PLPGSQL AS
+	 $BODY$
+	 BEGIN
+	 RETURN OLD;
+	 END
+	 $BODY$;
+$$);
+
 CREATE TRIGGER disttable_trigger_test
 BEFORE INSERT ON disttable
 FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 DROP TRIGGER disttable_trigger_test on disttable;
 DROP FUNCTION test_trigger;
+CALL distributed_exec($$ DROP FUNCTION test_trigger $$);
 
 -- DROP INDEX
 \set ON_ERROR_STOP 0

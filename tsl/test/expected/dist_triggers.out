@@ -1,0 +1,511 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\unset ECHO
+psql:include/filter_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\set TABLESPACE_1 :TEST_DBNAME _1
+\set TABLESPACE_2 :TEST_DBNAME _2
+SELECT
+    test.make_tablespace_path(:'TEST_TABLESPACE1_PREFIX', :'TEST_DBNAME') AS spc1path,
+    test.make_tablespace_path(:'TEST_TABLESPACE2_PREFIX', :'TEST_DBNAME') AS spc2path
+\gset
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+     node_name      |   host    | port  |      database      | node_created | database_created | extension_created 
+--------------------+-----------+-------+--------------------+--------------+------------------+-------------------
+ db_dist_triggers_1 | localhost | 55432 | db_dist_triggers_1 | t            | t                | t
+ db_dist_triggers_2 | localhost | 55432 | db_dist_triggers_2 | t            | t                | t
+ db_dist_triggers_3 | localhost | 55432 | db_dist_triggers_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- Import testsupport.sql file to data nodes
+\unset ECHO
+SET ROLE :ROLE_1;
+CREATE TABLE hyper (
+  time BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1
+);
+-- Table to log trigger events
+CREATE TABLE trigger_events (
+   tg_when text,
+   tg_level text,
+   tg_op text,
+   tg_name text
+);
+  
+CREATE OR REPLACE FUNCTION test_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP);	
+    RETURN NEW;
+END
+$BODY$;
+CALL distributed_exec($$
+CREATE TABLE trigger_events (
+   tg_when text,
+   tg_level text,
+   tg_op text,
+   tg_name text
+);
+$$);
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION test_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);	
+    RETURN NEW;
+END
+$BODY$;
+$$);
+-- row triggers: BEFORE
+CREATE TRIGGER _0_test_trigger_insert
+    BEFORE INSERT ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_update
+    BEFORE UPDATE ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_delete
+    BEFORE DELETE ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER z_test_trigger_all
+    BEFORE INSERT OR UPDATE OR DELETE ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+-- row triggers: AFTER
+CREATE TRIGGER _0_test_trigger_insert_after
+    AFTER INSERT ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_insert_after_when_dev1
+    AFTER INSERT ON hyper
+    FOR EACH ROW
+    WHEN (NEW.device_id = 'dev1')
+    EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_update_after
+    AFTER UPDATE ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_delete_after
+    AFTER DELETE ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER z_test_trigger_all_after
+    AFTER INSERT OR UPDATE OR DELETE ON hyper
+    FOR EACH ROW EXECUTE FUNCTION test_trigger();
+-- statement triggers: BEFORE
+CREATE TRIGGER _0_test_trigger_insert_s_before
+    BEFORE INSERT ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_update_s_before
+    BEFORE UPDATE ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_delete_s_before
+    BEFORE DELETE ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+-- statement triggers: AFTER
+CREATE TRIGGER _0_test_trigger_insert_s_after
+    AFTER INSERT ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_update_s_after
+    AFTER UPDATE ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER _0_test_trigger_delete_s_after
+    AFTER DELETE ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+SELECT * FROM create_distributed_hypertable('hyper', 'time', chunk_time_interval => 10);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | hyper      | t
+(1 row)
+
+--test triggers before create_distributed_hypertable
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987600000000000, 'dev1', 1);
+-- Show trigger count on access node. Only statement-level triggers
+-- fire on the access node.
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4;
+ tg_when | tg_level  | tg_op  | tg_name | count 
+---------+-----------+--------+---------+-------
+ AFTER   | STATEMENT | INSERT |         |     1
+ BEFORE  | STATEMENT | INSERT |         |     1
+(2 rows)
+
+-- Show trigger counts on data nodes. Both statement-level and
+-- row-level triggers fire on the data nodes.
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4;
+$$);
+NOTICE:  [db_dist_triggers_1]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_1]:
+tg_when|tg_level |tg_op |tg_name                               |count
+-------+---------+------+--------------------------------------+-----
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after          |    1
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after_when_dev1|    1
+AFTER  |ROW      |INSERT|z_test_trigger_all_after              |    1
+AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after        |    1
+BEFORE |ROW      |INSERT|_0_test_trigger_insert                |    1
+BEFORE |ROW      |INSERT|z_test_trigger_all                    |    1
+BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before       |    1
+(7 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_2]:
+tg_when|tg_level|tg_op|tg_name|count
+-------+--------+-----+-------+-----
+(0 rows)
+
+
+NOTICE:  [db_dist_triggers_3]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_3]:
+tg_when|tg_level|tg_op|tg_name|count
+-------+--------+-----+-------+-----
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+TRUNCATE trigger_events;
+CALL distributed_exec($$
+TRUNCATE trigger_events;
+$$);
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987700000000000, 'dev2', 1), (1257987800000000000, 'dev2', 1);
+UPDATE hyper SET sensor_1 = 2;
+DELETE FROM hyper;
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4;
+ tg_when | tg_level  | tg_op  | tg_name | count 
+---------+-----------+--------+---------+-------
+ AFTER   | STATEMENT | DELETE |         |     1
+ AFTER   | STATEMENT | INSERT |         |     1
+ AFTER   | STATEMENT | UPDATE |         |     1
+ BEFORE  | STATEMENT | DELETE |         |     1
+ BEFORE  | STATEMENT | INSERT |         |     1
+ BEFORE  | STATEMENT | UPDATE |         |     1
+(6 rows)
+
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4;
+$$);
+NOTICE:  [db_dist_triggers_1]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_1]:
+tg_when|tg_level|tg_op |tg_name                     |count
+-------+--------+------+----------------------------+-----
+AFTER  |ROW     |UPDATE|_0_test_trigger_update_after|    1
+AFTER  |ROW     |UPDATE|z_test_trigger_all_after    |    1
+BEFORE |ROW     |DELETE|_0_test_trigger_delete      |    1
+BEFORE |ROW     |UPDATE|_0_test_trigger_update      |    1
+BEFORE |ROW     |UPDATE|z_test_trigger_all          |    1
+(5 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_2]:
+tg_when|tg_level |tg_op |tg_name                        |count
+-------+---------+------+-------------------------------+-----
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after   |    1
+AFTER  |ROW      |INSERT|z_test_trigger_all_after       |    1
+AFTER  |ROW      |UPDATE|_0_test_trigger_update_after   |    1
+AFTER  |ROW      |UPDATE|z_test_trigger_all_after       |    1
+AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after |    1
+BEFORE |ROW      |DELETE|_0_test_trigger_delete         |    1
+BEFORE |ROW      |INSERT|_0_test_trigger_insert         |    1
+BEFORE |ROW      |INSERT|z_test_trigger_all             |    1
+BEFORE |ROW      |UPDATE|_0_test_trigger_update         |    1
+BEFORE |ROW      |UPDATE|z_test_trigger_all             |    1
+BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before|    1
+(11 rows)
+
+
+NOTICE:  [db_dist_triggers_3]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_3]:
+tg_when|tg_level |tg_op |tg_name                        |count
+-------+---------+------+-------------------------------+-----
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after   |    1
+AFTER  |ROW      |INSERT|z_test_trigger_all_after       |    1
+AFTER  |ROW      |UPDATE|_0_test_trigger_update_after   |    1
+AFTER  |ROW      |UPDATE|z_test_trigger_all_after       |    1
+AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after |    1
+BEFORE |ROW      |DELETE|_0_test_trigger_delete         |    1
+BEFORE |ROW      |INSERT|_0_test_trigger_insert         |    1
+BEFORE |ROW      |INSERT|z_test_trigger_all             |    1
+BEFORE |ROW      |UPDATE|_0_test_trigger_update         |    1
+BEFORE |ROW      |UPDATE|z_test_trigger_all             |    1
+BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before|    1
+(11 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+--test drop trigger
+DROP TRIGGER _0_test_trigger_insert ON hyper;
+DROP TRIGGER _0_test_trigger_insert_s_before ON hyper;
+DROP TRIGGER _0_test_trigger_insert_after ON hyper;
+DROP TRIGGER _0_test_trigger_insert_s_after ON hyper;
+DROP TRIGGER _0_test_trigger_update ON hyper;
+DROP TRIGGER _0_test_trigger_update_s_before ON hyper;
+DROP TRIGGER _0_test_trigger_update_after ON hyper;
+DROP TRIGGER _0_test_trigger_update_s_after ON hyper;
+DROP TRIGGER _0_test_trigger_delete ON hyper;
+DROP TRIGGER _0_test_trigger_delete_s_before ON hyper;
+DROP TRIGGER _0_test_trigger_delete_after ON hyper;
+DROP TRIGGER _0_test_trigger_delete_s_after ON hyper;
+DROP TRIGGER z_test_trigger_all ON hyper;
+DROP TRIGGER z_test_trigger_all_after ON hyper;
+DROP TRIGGER _0_test_trigger_insert_after_when_dev1 ON hyper;
+-- Triggers are dropped on all data nodes:
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('hyper') st;
+$$);
+NOTICE:  [db_dist_triggers_1]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('hyper') st
+NOTICE:  [db_dist_triggers_1]:
+chunk_relid|show_triggers
+-----------+-------------
+(0 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('hyper') st
+NOTICE:  [db_dist_triggers_2]:
+chunk_relid|show_triggers
+-----------+-------------
+(0 rows)
+
+
+NOTICE:  [db_dist_triggers_3]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('hyper') st
+NOTICE:  [db_dist_triggers_3]:
+chunk_relid|show_triggers
+-----------+-------------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Test triggers that modify tuples and make sure RETURNING is done
+-- properly (i.e., the modified tuple is returned).
+-- Add serial (autoincrement) and DEFAULT value columns to test that
+-- these work with custom insert nodes.
+CREATE TABLE disttable(
+    id serial,
+    time timestamptz NOT NULL,
+    device int DEFAULT 100,
+    temp_c float
+);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | disttable  | t
+(1 row)
+
+-- Create a datatable to source data from. Add array of composite data
+-- type to test switching to text mode below. Arrays include the type
+-- Oid when serialized in binary format. Since the Oid of a
+-- user-created type can differ across data nodes, such serialization
+-- is not safe.
+CREATE TABLE datatable (LIKE disttable);
+INSERT INTO datatable (id, time, device, temp_c) VALUES
+       (1, '2017-01-01 06:01', 1, 1),
+       (2, '2017-01-01 09:11', 3, 2),
+       (3, '2017-01-01 08:01', 1, 3),
+       (4, '2017-01-02 08:01', 2, 4),
+       (5, '2018-07-02 08:01', 87, 5),
+       (6, '2018-07-01 06:01', 13, 6),
+       (7, '2018-07-01 09:11', 90, 7),
+       (8, '2018-07-01 08:01', 29, 8);
+CREATE OR REPLACE FUNCTION temp_increment_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+	   NEW.temp_c = NEW.temp_c+1.0;	   
+	END IF;
+    RETURN NEW;
+END
+$BODY$;
+-- Create the trigger function on the data nodes
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION temp_increment_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+	   NEW.temp_c = NEW.temp_c+1.0;	   
+	END IF;
+    RETURN NEW;
+END
+$BODY$;
+$$);
+-- Add a BEFORE INSERT trigger to see that plan reverts to
+-- DataNodeDispatch when using RETURNING
+CREATE TRIGGER _0_temp_increment
+    BEFORE INSERT ON disttable
+    FOR EACH ROW EXECUTE FUNCTION temp_increment_trigger();
+-- Show that the trigger exists on a data node
+SELECT test.remote_exec(ARRAY[:'DATA_NODE_3'], $$ SELECT test.show_triggers('disttable') $$);
+NOTICE:  [db_dist_triggers_3]:  SELECT test.show_triggers('disttable') 
+NOTICE:  [db_dist_triggers_3]:
+show_triggers                                             
+----------------------------------------------------------
+(_0_temp_increment,7,temp_increment_trigger)              
+(ts_insert_blocker,7,_timescaledb_internal.insert_blocker)
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+TRUNCATE disttable;
+-- Without RETURNING
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
+   ->  Insert on public.disttable  (cost=0.00..33.55 rows=1570 width=24)
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+               Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+               Batch size: 1000
+               Remote SQL: INSERT INTO public.disttable(id, "time", device, temp_c) VALUES ($1, $2, $3, $4), ..., ($3997, $3998, $3999, $4000)
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+                     Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+                     ->  Seq Scan on public.datatable  (cost=0.00..33.55 rows=1570 width=24)
+                           Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c
+(12 rows)
+
+-- With RETURNING
+EXPLAIN VERBOSE
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM datatable RETURNING *;
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+   Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
+   ->  Insert on public.disttable  (cost=0.00..33.55 rows=1570 width=24)
+         Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+               Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+               Batch size: 1000
+               Remote SQL: INSERT INTO public.disttable(id, "time", device, temp_c) VALUES ($1, $2, $3, $4), ..., ($3997, $3998, $3999, $4000) RETURNING id, "time", device, temp_c
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..33.55 rows=1570 width=24)
+                     Output: ((nextval('disttable_id_seq'::regclass))::integer), datatable."time", datatable.device, datatable.temp_c
+                     ->  Seq Scan on public.datatable  (cost=0.00..33.55 rows=1570 width=24)
+                           Output: nextval('disttable_id_seq'::regclass), datatable."time", datatable.device, datatable.temp_c
+(14 rows)
+
+-- Do the actual INSERT, but wrap in CTE to ensure ordered output in
+-- order to avoid flakiness. The returned rows should have temp_c
+-- incremented by the trigger
+WITH inserted AS (
+	 INSERT INTO disttable (time, device, temp_c)
+	 SELECT time, device, temp_c FROM datatable RETURNING *
+) SELECT * FROM inserted ORDER BY 1;
+ id |             time             | device | temp_c 
+----+------------------------------+--------+--------
+  1 | Sun Jan 01 06:01:00 2017 PST |      1 |      2
+  2 | Sun Jan 01 09:11:00 2017 PST |      3 |      3
+  3 | Sun Jan 01 08:01:00 2017 PST |      1 |      4
+  4 | Mon Jan 02 08:01:00 2017 PST |      2 |      5
+  5 | Mon Jul 02 08:01:00 2018 PDT |     87 |      6
+  6 | Sun Jul 01 06:01:00 2018 PDT |     13 |      7
+  7 | Sun Jul 01 09:11:00 2018 PDT |     90 |      8
+  8 | Sun Jul 01 08:01:00 2018 PDT |     29 |      9
+(8 rows)
+
+-- Show that the RETURNING rows are the same as those stored after
+-- INSERT. Expect temp_c to be incremented by one compared to the
+-- original data.
+SELECT di.id, di.time, di.device, di.temp_c AS temp_c, da.temp_c AS temp_c_orig
+FROM disttable di, datatable da
+WHERE di.id = da.id
+ORDER BY 1;
+ id |             time             | device | temp_c | temp_c_orig 
+----+------------------------------+--------+--------+-------------
+  1 | Sun Jan 01 06:01:00 2017 PST |      1 |      2 |           1
+  2 | Sun Jan 01 09:11:00 2017 PST |      3 |      3 |           2
+  3 | Sun Jan 01 08:01:00 2017 PST |      1 |      4 |           3
+  4 | Mon Jan 02 08:01:00 2017 PST |      2 |      5 |           4
+  5 | Mon Jul 02 08:01:00 2018 PDT |     87 |      6 |           5
+  6 | Sun Jul 01 06:01:00 2018 PDT |     13 |      7 |           6
+  7 | Sun Jul 01 09:11:00 2018 PDT |     90 |      8 |           7
+  8 | Sun Jul 01 08:01:00 2018 PDT |     29 |      9 |           8
+(8 rows)
+
+DROP TRIGGER _0_temp_increment ON disttable;
+-- Trigger should be dropped on data nodes
+SELECT test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT test.show_triggers('disttable') $$);
+NOTICE:  [db_dist_triggers_1]:  SELECT test.show_triggers('disttable') 
+NOTICE:  [db_dist_triggers_1]:
+show_triggers                                             
+----------------------------------------------------------
+(ts_insert_blocker,7,_timescaledb_internal.insert_blocker)
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
