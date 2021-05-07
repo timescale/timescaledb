@@ -63,6 +63,14 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
+#if PG13_GE
+#define ExecComputeStoredGeneratedCompat(estate, slot, cmd_type)                                   \
+	ExecComputeStoredGenerated(estate, slot, cmd_type)
+#else
+#define ExecComputeStoredGeneratedCompat(estate, slot, cmd_type)                                   \
+	ExecComputeStoredGenerated(estate, slot)
+#endif
+
 #if PG11
 #define ExecInsertIndexTuplesCompat(slot, estate, no_dup_err, spec_conflict, arbiter_indexes)      \
 	ExecInsertIndexTuples(slot,                                                                    \
