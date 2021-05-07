@@ -142,7 +142,8 @@ BEFORE INSERT ON htable
 FOR EACH ROW EXECUTE FUNCTION test_trigger();
 NOTICE:  test_ddl_command_start: public.htable
 DROP TRIGGER htable_trigger_test on htable;
-NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TRIGGER htable_trigger_test on htable;
+NOTICE:  test_ddl_command_start: 1 hypertables, query: DROP TRIGGER htable_trigger_test on htable;
+NOTICE:  test_ddl_command_start: public.htable
 NOTICE:  test_sql_drop: trigger
 DROP FUNCTION test_trigger();
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP FUNCTION test_trigger();

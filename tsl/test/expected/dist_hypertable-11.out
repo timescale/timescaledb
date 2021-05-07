@@ -96,7 +96,7 @@ $BODY$
 DECLARE
     cnt INTEGER;
 BEGIN
-    SELECT count(*) INTO cnt FROM hyper;
+    SELECT count(*) INTO cnt FROM public.disttable;
     RAISE WARNING 'FIRING trigger when: % level: % op: % cnt: % trigger_name %',
         tg_when, tg_level, tg_op, cnt, tg_name;
 
@@ -106,6 +106,25 @@ BEGIN
     RETURN NEW;
 END
 $BODY$;
+-- Create the trigger function on the data nodes:
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION test_trigger()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    cnt INTEGER;
+BEGIN
+    SELECT count(*) INTO cnt FROM public.disttable;
+    RAISE WARNING 'FIRING trigger when: % level: % op: % cnt: % trigger_name %',
+        tg_when, tg_level, tg_op, cnt, tg_name;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END
+$BODY$;
+$$);
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE FUNCTION test_trigger();

@@ -357,21 +357,35 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			break;
 		}
 		case T_DropStmt:
+		{
+			DropStmt *stmt = castNode(DropStmt, args->parsetree);
 			/*
 			 * CASCADE operations of DROP TABLE and DROP SCHEMA are handled in
 			 * sql_drop trigger.
 			 */
-
-			/*
-			 * Handle DROP INDEX as an exception, because otherwise information
-			 * about the related hypertable will be missed during sql_drop hook
-			 * execution. Also expect cascade index drop to be handled in
-			 * combination with table or schema drop.
-			 */
-			Assert(((DropStmt *) args->parsetree)->removeType == OBJECT_INDEX);
-			set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+			switch (stmt->removeType)
+			{
+				case OBJECT_INDEX:
+					/*
+					 * Need to handle drop index here because otherwise
+					 * information about the related hypertable will be missed
+					 * during sql_drop hook execution. Also expect cascade index
+					 * drop to be handled in combination with table or schema
+					 * drop.
+					 */
+					set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+					break;
+				case OBJECT_TRIGGER:
+					set_dist_exec_type(DIST_DDL_EXEC_ON_START);
+					break;
+				default:
+					/* Only the object types above are forwarded from
+					 * process_utility processing */
+					Assert(false);
+					break;
+			}
 			break;
-
+		}
 		case T_IndexStmt:
 			/* Since we have custom CREATE INDEX implementation, currently it
 			 * does not support ddl_command_end trigger. */
@@ -379,8 +393,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			break;
 
 		case T_CreateTrigStmt:
-			/* Allow CREATE TRIGGER on hypertable locally, but do not send it
-			 * to other data nodes. */
+			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 			break;
 
 		case T_VacuumStmt:

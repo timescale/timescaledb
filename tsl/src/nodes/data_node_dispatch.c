@@ -880,9 +880,9 @@ get_returning_tuple(DataNodeDispatchState *sds)
 		}
 	}
 
-	econtext->ecxt_scantuple = res_slot;
+	econtext->ecxt_scantuple = slot;
 
-	return slot;
+	return res_slot;
 }
 
 /*
