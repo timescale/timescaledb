@@ -197,6 +197,11 @@ SELECT * FROM test.remote_exec( NULL,
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
 
+-- insert data into compressed chunk
+INSERT INTO compressed 
+SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
+SELECT * from compressed where new_coli = 3;
+
 -- We're done with the table, so drop it.
 DROP TABLE IF EXISTS compressed CASCADE;
 
