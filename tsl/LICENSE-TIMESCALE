@@ -162,7 +162,7 @@ Agreement ("You").
    analytical function, procedural, and other types of application programming
    interfaces or commands, that allow the use, manipulation, and control of
    data present in a Timescale Database, including Data Manipulation Language
-   (DDL) commands such as SELECT, INSERT, UPDATE, and DELETE, Data Control
+   (DML) commands such as SELECT, INSERT, UPDATE, and DELETE, Data Control
    Language (DCL) commands such as GRANT and REVOKE, and Transaction Control
    Language (TCL) commands such as COMMIT, ROLLBACK, SAVEPOINT, and SET
    TRANSACTION.
