@@ -137,4 +137,22 @@ int64_saturating_sub(int64 a, int64 b)
 	return result;
 }
 
+static inline bool
+ts_flags_are_set_32(uint32 bitmap, uint32 flags)
+{
+	return (bitmap & flags) == flags;
+}
+
+static inline uint32
+ts_set_flags_32(uint32 bitmap, uint32 flags)
+{
+	return bitmap | flags;
+}
+
+static inline uint32
+ts_clear_flags_32(uint32 bitmap, uint32 flags)
+{
+	return bitmap & ~flags;
+}
+
 #endif /* TIMESCALEDB_UTILS_H */

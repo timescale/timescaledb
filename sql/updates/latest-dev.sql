@@ -47,7 +47,12 @@ INSERT INTO _timescaledb_catalog.chunk
 ( id, hypertable_id, schema_name, table_name,
   compressed_chunk_id, dropped, status)
 SELECT id, hypertable_id, schema_name, table_name,
-  compressed_chunk_id, dropped, 0
+  compressed_chunk_id, dropped, (
+    CASE
+      WHEN compressed_chunk_id IS NULL THEN 0
+      ELSE 1
+    END
+  )
 FROM _timescaledb_catalog.chunk_tmp;
 
 --add indexes to the chunk table

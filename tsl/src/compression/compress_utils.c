@@ -344,7 +344,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 										  cstat.rowcnt_pre_compression,
 										  cstat.rowcnt_post_compression);
 
-	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id, false);
+	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 	ts_cache_release(hcache);
 }
 
@@ -403,7 +403,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	/* Recreate FK constraints, since they were dropped during compression. */
 	ts_chunk_create_fks(uncompressed_chunk);
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
-	ts_chunk_set_compressed_chunk(uncompressed_chunk, INVALID_CHUNK_ID, true);
+	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	/* reenable autovacuum if necessary */
 	restore_autovacuum_on_decompress(uncompressed_hypertable_relid, uncompressed_chunk_relid);
@@ -412,7 +412,12 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	return true;
 }
 
-bool
+/*
+ * Set if_not_compressed to true for idempotent operation. Aborts transaction if the chunk is
+ * already compressed, unless it is running in idempotent mode.
+ */
+
+void
 tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed)
 {
 	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
@@ -420,11 +425,10 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed)
 		ereport((if_not_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
-		return false;
+		return;
 	}
 
 	compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
-	return true;
 }
 
 /*
@@ -507,11 +511,17 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		if (!compress_remote_chunk(fcinfo, chunk, if_not_compressed))
 			PG_RETURN_NULL();
 
+		/*
+		 * Updating the chunk compression status of the Access Node AFTER executing remote
+		 * compression. In the event of failure, the compressed status will NOT be set. The
+		 * distributed compression policy will attempt to compress again, which is idempotent, thus
+		 * the metadata are eventually consistent.
+		 */
+		ts_chunk_set_compressed_chunk(chunk, INVALID_CHUNK_ID);
+
 		PG_RETURN_OID(uncompressed_chunk_id);
 	}
-
-	if (!tsl_compress_chunk_wrapper(chunk, if_not_compressed))
-		PG_RETURN_NULL();
+	tsl_compress_chunk_wrapper(chunk, if_not_compressed);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -528,6 +538,19 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 	if (uncompressed_chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
+		/*
+		 * Updating the chunk compression status of the Access Node BEFORE executing remote
+		 * decompression. In the event of failure, the compressed status will be cleared. The
+		 * distributed compression policy will attempt to compress again, which is idempotent, thus
+		 * the metadata are eventually consistent.
+		 * If CHUNK_STATUS_COMPRESSED is cleared, then it is probable that a remote compress_chunk()
+		 * has not taken place, but not certain. For this above reason, this flag should not be
+		 * assumed to be consistent (when it is cleared) for Access-Nodes. When used in distributed
+		 * hypertables one should take advantage of the idempotent properties of remote
+		 * compress_chunk() and distributed compression policy to make progress.
+		 */
+		ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+
 		if (!decompress_remote_chunk(fcinfo, uncompressed_chunk, if_compressed))
 			PG_RETURN_NULL();
 
