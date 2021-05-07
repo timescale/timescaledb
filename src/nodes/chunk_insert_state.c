@@ -59,7 +59,7 @@ prepare_constr_expr(Expr *node)
  * is not done here, then ExecRelCheck will do it for you but put it into
  * the query memory context, which will cause a memory leak.
  *
- * See the comment in `chunk_insert_state_destroy` for more information
+ * See the comment in `ts_chunk_insert_state_destroy` for more information
  * on the implications of this.
  */
 static inline void
@@ -770,6 +770,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	if (state->compress_rel)
 	{
 		table_close(state->compress_rel, NoLock);
+		ts_cm_functions->compress_row_end(state->compress_state);
 		ts_cm_functions->compress_row_destroy(state->compress_state);
 	}
 
