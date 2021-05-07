@@ -12,8 +12,8 @@ NOTICE:  adding not-null constraint to column "timec"
 (1 row)
 
 INSERT INTO test1 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
-ALTER TABLE test1 set (timescaledb.compress, 
-timescaledb.compress_segmentby = 'b', 
+ALTER TABLE test1 set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
 timescaledb.compress_orderby = 'timec DESC');
 SELECT compress_chunk(c)
 FROM show_chunks('test1') c;
@@ -57,6 +57,22 @@ SELECT count(*) from test1;
     37
 (1 row)
 
+-- single row copy
+COPY test1 FROM STDIN DELIMITER ',';
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+    14
+(1 row)
+
+-- multi row copy
+COPY test1 FROM STDIN DELIMITER ',';
+SELECT COUNT(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+    17
+(1 row)
+
 --Verify that all the data went into the initial chunk
 SELECT count(*)
 FROM show_chunks('test1') c;
@@ -96,14 +112,25 @@ SELECT * FROM test1 WHERE b = 11 order by i, timec ;
 (25 rows)
 
 SELECT * FROM test1 WHERE i = 11 order by 1, 2, 3, 4;
-            timec             | i  | b  |  t   
-------------------------------+----+----+------
+            timec             | i  | b  |     t     
+------------------------------+----+----+-----------
  Thu Jan 02 08:16:00 2020 PST | 11 | 16 | clay
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | copy
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | multicopy
  Thu Jan 02 08:16:00 2020 PST | 11 | 16 | new
-(2 rows)
+(4 rows)
 
 -- insert nulls except for timec
 INSERT INTO test1 SELECT '2020-01-02 11:46:00-05' , NULL, NULL, NULL;
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+-- copy NULL
+COPY test1 FROM STDIN DELIMITER ',' NULL 'NULL';
 SELECT count(*)
 FROM show_chunks('test1') c;
  count 
@@ -115,7 +142,8 @@ SELECT * from test1 WHERE i is NULL;
             timec             | i | b | t 
 ------------------------------+---+---+---
  Thu Jan 02 08:46:00 2020 PST |   |   | 
-(1 row)
+ Thu Jan 02 08:46:00 2020 PST |   |   | 
+(2 rows)
 
 --TEST 2 now alter the table and add a new column to it
 ALTER TABLE test1 ADD COLUMN newtcol varchar(400);
@@ -123,30 +151,32 @@ ALTER TABLE test1 ADD COLUMN newtcol varchar(400);
 SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    14
+    19
 (1 row)
 
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , 100, 101, 'prev101', 'this is the newtcol101';
 INSERT INTO test1 SELECT '2020-01-02 11:16:00-05' , i, 16, 'prev16', 'this is the newtcol16'
 FROM (Select generate_series(11, 16, 1) i ) q;
 SELECT * FROM test1 WHERE b = 16 order by 1, 2, 3, 4, 5;
-            timec             | i  | b  |   t    |        newtcol        
-------------------------------+----+----+--------+-----------------------
- Thu Jan 02 08:16:00 2020 PST | 11 | 16 | clay   | 
- Thu Jan 02 08:16:00 2020 PST | 11 | 16 | new    | 
- Thu Jan 02 08:16:00 2020 PST | 11 | 16 | prev16 | this is the newtcol16
- Thu Jan 02 08:16:00 2020 PST | 12 | 16 | prev16 | this is the newtcol16
- Thu Jan 02 08:16:00 2020 PST | 13 | 16 | prev16 | this is the newtcol16
- Thu Jan 02 08:16:00 2020 PST | 14 | 16 | prev16 | this is the newtcol16
- Thu Jan 02 08:16:00 2020 PST | 15 | 16 | prev16 | this is the newtcol16
- Thu Jan 02 08:16:00 2020 PST | 16 | 16 | prev16 | this is the newtcol16
-(8 rows)
+            timec             | i  | b  |     t     |        newtcol        
+------------------------------+----+----+-----------+-----------------------
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | clay      | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | copy      | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | multicopy | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | new       | 
+ Thu Jan 02 08:16:00 2020 PST | 11 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 12 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 13 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 14 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 15 | 16 | prev16    | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 16 | 16 | prev16    | this is the newtcol16
+(10 rows)
 
 --number of rows in the chunk
 SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
  count 
 -------
-    21
+    26
 (1 row)
 
 SELECT count(*)
@@ -155,6 +185,38 @@ FROM show_chunks('test1') c;
 -------
      1
 (1 row)
+
+COPY test1 FROM STDIN DELIMITER ',';
+COPY test1 FROM STDIN DELIMITER ',';
+--number of rows in the chunk
+SELECT count(*) from _timescaledb_internal.compress_hyper_2_2_chunk;
+ count 
+-------
+    30
+(1 row)
+
+SELECT count(*)
+FROM show_chunks('test1') c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM test1 WHERE newtcol IS NOT NULL ORDER BY 1,2,3;
+            timec             |  i  |  b  |    t    |        newtcol         
+------------------------------+-----+-----+---------+------------------------
+ Thu Jan 02 08:16:00 2020 PST |  11 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  11 |  16 | prev16  | newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  12 |  16 | prev16  | newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  12 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  13 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  13 |  16 | prev16  | newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  14 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  15 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST |  16 |  16 | prev16  | this is the newtcol16
+ Thu Jan 02 08:16:00 2020 PST | 100 | 101 | prev101 | newtcol101
+ Thu Jan 02 08:16:00 2020 PST | 100 | 101 | prev101 | this is the newtcol101
+(11 rows)
 
 DROP TABLE test1;
 -- TEST 3 add tests with dropped columns on hypertable
@@ -167,13 +229,13 @@ NOTICE:  adding not-null constraint to column "itime"
  test2
 (1 row)
 
---create a chunk 
-INSERT INTO test2 SELECT t, 10,  'first'::text FROM generate_series(1, 7, 1) t;
+--create a chunk
+INSERT INTO test2 SELECT t, 10,  'first'::text FROM generate_series(1, 7) t;
 ALTER TABLE test2 DROP COLUMN b;
 ALTER TABLE test2 ADD COLUMN c INT DEFAULT -15;
 ALTER TABLE test2 ADD COLUMN d INT;
 --create a new chunk
-INSERT INTO test2 SELECT t, 'second'::text, 120, 1 FROM generate_series(11, 15, 1) t;
+INSERT INTO test2 SELECT t, 'second'::text, 120, 1 FROM generate_series(11, 15) t;
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, itime DESC');
 SELECT count(*) from ( SELECT compress_chunk(c)
 FROM show_chunks('test2') c ) q;
@@ -182,47 +244,54 @@ FROM show_chunks('test2') c ) q;
      2
 (1 row)
 
---write to both old chunks and new chunks 
+--write to both old chunks and new chunks
 INSERT INTO test2(itime ,t , d)  SELECT 9, '9', 90 ;
 INSERT INTO test2(itime ,t , d)  SELECT 17, '17', 1700 ;
+COPY test2(itime,t,d) FROM STDIN DELIMITER ',';
 SELECT count(*) FROM show_chunks('test2') q;
  count 
 -------
      2
 (1 row)
 
-SELECT * from test2 WHERE itime >= 9 and itime <= 17 
-ORDER BY itime;
+SELECT * from test2 WHERE itime >= 9 and itime <= 17
+ORDER BY 1,2,3;
  itime |   t    |  c  |  d   
 -------+--------+-----+------
      9 | 9      | -15 |   90
+     9 | 9copy  | -15 |   90
     11 | second | 120 |    1
     12 | second | 120 |    1
     13 | second | 120 |    1
     14 | second | 120 |    1
     15 | second | 120 |    1
     17 | 17     | -15 | 1700
-(7 rows)
+    17 | 17copy | -15 | 1700
+(9 rows)
 
 -- now add a column to the compressed hypertable
 -- we have dropped columns and newly added columns now
 ALTER TABLE test2 ADD COLUMN charcol varchar(45);
-INSERT INTO test2(itime ,t , d, charcol) 
+INSERT INTO test2(itime ,t , d, charcol)
 values (2, '2', 22, 'thisis22'), (17, '17', 1701, 'thisis1700') ;
-SELECT * from test2 where itime = 2 or itime =17 
-ORDER BY 1, 2, 3, 4, 5;   
- itime |   t   |  c  |  d   |  charcol   
--------+-------+-----+------+------------
-     2 | 2     | -15 |   22 | thisis22
-     2 | first | -15 |      | 
-    17 | 17    | -15 | 1700 | 
-    17 | 17    | -15 | 1701 | thisis1700
-(4 rows)
+COPY test2(itime,t,d,charcol) FROM STDIN DELIMITER ',';
+SELECT * from test2 where itime = 2 or itime =17
+ORDER BY 1, 2, 3, 4, 5;
+ itime |   t    |  c  |  d   |  charcol   
+-------+--------+-----+------+------------
+     2 | 2      | -15 |   22 | thisis22
+     2 | 2copy  | -15 |   22 | 22copy
+     2 | first  | -15 |      | 
+    17 | 17     | -15 | 1700 | 
+    17 | 17     | -15 | 1701 | thisis1700
+    17 | 17copy | -15 | 1700 | 
+    17 | 17copy | -15 | 1701 | 1700copy
+(7 rows)
 
 DROP TABLE test2;
 --- TEST3 tables with defaults ---
 --  sequences, generated values, check constraints into compressed chunks
-CREATE TABLE test2 (timec timestamptz , 
+CREATE TABLE test2 (timec timestamptz ,
       i integer CHECK ( i > 10) ,
       b bigint default 20 ,
       t text NOT NULL,
@@ -235,8 +304,8 @@ NOTICE:  adding not-null constraint to column "timec"
  test2
 (1 row)
 
-ALTER TABLE test2 set (timescaledb.compress, 
-timescaledb.compress_segmentby = 'b', 
+ALTER TABLE test2 set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
 timescaledb.compress_orderby = 'timec DESC');
 INSERT INTO test2 values('2020-01-02 11:16:00-05' , 100, 105, 'first' );
 SELECT compress_chunk(c)
@@ -248,22 +317,30 @@ FROM show_chunks('test2') c;
 
 -- test if default value for b is used
 INSERT INTO test2(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
+COPY test2(timec,i,t) FROM STDIN DELIMITER ',';
 SELECT b from test2 ORDER BY 1;
   b  
 -----
   20
+  20
  105
-(2 rows)
+(3 rows)
 
 \set ON_ERROR_STOP 0
 --null value for t, should fail
 INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 100, 200, NULL);
 ERROR:  null value in column "t" violates not-null constraint
+COPY test2 FROM STDIN DELIMITER ',' NULL 'NULL';
+ERROR:  null value in column "t" violates not-null constraint
 -- i=1, should fail
 INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 1, 10, 'null i');
 ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "test2_i_check"
+COPY test2 FROM STDIN DELIMITER ',';
+ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "test2_i_check"
 -- b < i, should fail
 INSERT INTO test2 values ( '2020-01-02 01:00:00-05', 22, 1, 'null i');
+ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "rowconstr"
+COPY test2 FROM STDIN DELIMITER ',';
 ERROR:  new row for relation "_hyper_5_7_chunk" violates check constraint "rowconstr"
 \set ON_ERROR_STOP 1
 --verify we are still INSERTing into the compressed chunk i.e did not
@@ -282,10 +359,10 @@ CREATE SEQUENCE vessel_id_seq
     MAXVALUE 9223372036854775807
     CACHE 1;
 CREATE TABLE vessels (timec timestamptz ,
-      id bigint NOT NULL DEFAULT nextval('vessel_id_seq'::regclass) , 
+      id bigint NOT NULL DEFAULT nextval('vessel_id_seq'::regclass),
       i integer CHECK ( i > 10) ,
       b bigint default 20 ,
-      t text NOT NULL,  
+      t text NOT NULL,
       CONSTRAINT rowconstr CHECK ( b > i )
 );
 SELECT table_name from create_hypertable('vessels', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -295,8 +372,8 @@ NOTICE:  adding not-null constraint to column "timec"
  vessels
 (1 row)
 
-ALTER TABLE vessels set (timescaledb.compress, 
-timescaledb.compress_segmentby = 'b', 
+ALTER TABLE vessels set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
 timescaledb.compress_orderby = 'timec DESC');
 INSERT INTO vessels(timec, i, b, t) values('2020-01-02 11:16:00-05' , 100, 105, 'first' );
 SELECT compress_chunk(c)
@@ -308,12 +385,14 @@ FROM show_chunks('vessels') c;
 
 -- test if default value for b and sequence value for id is used
 INSERT INTO vessels(timec, i, t) values('2020-01-02 10:16:00-05' , 11, 'default' );
+COPY vessels(timec,i,t )FROM STDIN DELIMITER ',';
 SELECT timec, id, b from vessels order by 2, 1;
             timec             | id |  b  
 ------------------------------+----+-----
  Thu Jan 02 08:16:00 2020 PST |  1 | 105
  Thu Jan 02 07:16:00 2020 PST |  2 |  20
-(2 rows)
+ Thu Jan 02 07:16:00 2020 PST |  3 |  20
+(3 rows)
 
 -- TEST5 generated values
 CREATE table test_gen (
@@ -347,6 +426,13 @@ SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
  id | payload 
 ----+---------
  16 | 17
+(1 row)
+
+COPY test_gen(payload) FROM STDIN DELIMITER ',';
+SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
+ id | payload 
+----+---------
+ 17 | 18
 (1 row)
 
 -- test interaction between newly inserted batches and pathkeys/ordered append
