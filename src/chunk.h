@@ -26,8 +26,6 @@
 #define COMPRESS_CHUNK_FUNCNAME "compress_chunk"
 #define COMPRESS_CHUNK_NARGS 2
 
-#define CHUNK_STATUS_UNORDERED 1U
-
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct Hyperspace Hyperspace;
@@ -102,12 +100,6 @@ chunk_stub_is_complete(ChunkStub *stub, Hyperspace *space)
 	return space->num_dimensions == stub->constraints->num_dimension_constraints;
 }
 
-static inline bool
-chunk_is_unordered(Chunk *chunk)
-{
-	return ((uint32) chunk->fd.status) & CHUNK_STATUS_UNORDERED;
-}
-
 /* The hash table entry for the ChunkScanCtx */
 typedef struct ChunkScanEntry
 {
@@ -155,6 +147,8 @@ extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
 											 MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
+
+extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
@@ -167,6 +161,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, H
 															   const char *table_name,
 															   bool *created);
 extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);

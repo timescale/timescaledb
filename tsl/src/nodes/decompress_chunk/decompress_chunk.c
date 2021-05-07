@@ -1221,7 +1221,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 	ListCell *lc = list_head(pathkeys);
 	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
 
-	if (pathkeys == NIL || chunk_is_unordered(chunk))
+	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
 		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */

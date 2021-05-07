@@ -49,7 +49,6 @@ typedef struct ChunkInsertState
 
 	/* Slot for inserted/new tuples going into the chunk */
 	TupleTableSlot *slot;
-	TupleTableSlot *compress_slot;
 	/* Map for converting tuple from hypertable (root table) format to chunk format */
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
