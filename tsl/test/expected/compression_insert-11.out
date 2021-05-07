@@ -417,7 +417,7 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
- 
+ _timescaledb_internal._hyper_11_15_chunk
  _timescaledb_internal._hyper_11_17_chunk
 (2 rows)
 
