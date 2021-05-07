@@ -69,26 +69,52 @@ FROM show_chunks('compressed') AS chunk
 ORDER BY chunk
 LIMIT 1;
 
-
 -- Check that one chunk, and its replica, is compressed
 SELECT * from chunk_compression_stats( 'compressed')
 ORDER BY chunk_name, node_name;
 select * from hypertable_compression_stats('compressed'); 
 
--- Compress twice to generate NOTICE that the chunk is already compressed
-SELECT compress_chunk(chunk, if_not_compressed => true)
-FROM show_chunks('compressed') AS chunk
-ORDER BY chunk
-LIMIT 1;
-
--- Decompress the chunk and replica
+--- Decompress the chunk and replica
 SELECT decompress_chunk(chunk)
 FROM show_chunks('compressed') AS chunk
 ORDER BY chunk
 LIMIT 1;
 
+-- Compress odd numbered chunks
+SELECT compress_chunk(chunk) FROM
+(
+  SELECT *, row_number() OVER () AS rownum
+  FROM show_chunks('compressed') AS chunk
+  ORDER BY chunk
+) AS t
+WHERE rownum % 2 = 1;
+SELECT * from chunk_compression_stats('compressed')
+ORDER BY chunk_name, node_name;
+
+-- Compress twice to notice idempotent operation
+SELECT compress_chunk(chunk, if_not_compressed => true)
+FROM show_chunks('compressed') AS chunk
+ORDER BY chunk;
+
+-- Compress again to verify errors are ignored
+SELECT compress_chunk(chunk, if_not_compressed => true)
+FROM show_chunks('compressed') AS chunk
+ORDER BY chunk;
+
+-- There should be no uncompressed chunks
+SELECT * from chunk_compression_stats('compressed')
+ORDER BY chunk_name, node_name;
+SELECT test.remote_exec(NULL, $$
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+$$);
+
+-- Decompress the chunks and replicas
+SELECT decompress_chunk(chunk)
+FROM show_chunks('compressed') AS chunk
+ORDER BY chunk;
+
 -- Should now be decompressed
-SELECT * from chunk_compression_stats( 'compressed')
+SELECT * from chunk_compression_stats('compressed')
 ORDER BY chunk_name, node_name;
 
 -- Decompress twice to generate NOTICE that the chunk is already decompressed
@@ -109,12 +135,6 @@ ORDER BY hypertable_name, dimension_number;
 SELECT * FROM chunks_detailed_size('compressed'::regclass) 
 ORDER BY chunk_name, node_name;
 SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_name;
-
--- Test compression policy with distributed hypertable
---
-\set ON_ERROR_STOP 0
-SELECT add_compression_policy('compressed', '60d'::interval);
-\set ON_ERROR_STOP 1
 
 -- Disable compression on distributed table tests
 ALTER TABLE compressed SET (timescaledb.compress = false);
@@ -176,3 +196,92 @@ SELECT * FROM test.remote_exec( NULL,
        WHERE attname = 'device' OR attname = 'new_coli'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
+
+-- We're done with the table, so drop it.
+DROP TABLE IF EXISTS compressed CASCADE;
+
+------------------------------------------------------
+-- Test compression policy on a distributed hypertable
+------------------------------------------------------
+
+CREATE TABLE conditions (
+      time        TIMESTAMPTZ       NOT NULL,
+      location    TEXT              NOT NULL,
+      location2    char(10)              NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+SELECT create_distributed_hypertable('conditions', 'time', chunk_time_interval => '31days'::interval, replication_factor => 2);
+
+--TEST 1--
+--cannot set policy without enabling compression --
+\set ON_ERROR_STOP 0
+select add_compression_policy('conditions', '60d'::interval);
+\set ON_ERROR_STOP 1
+
+-- TEST2 --
+--add a policy to compress chunks --
+alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'time');
+insert into conditions
+select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+
+select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
+\gset
+
+select * from _timescaledb_config.bgw_job where id = :compressjob_id;
+select * from alter_job(:compressjob_id, schedule_interval=>'1s');
+select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
+insert into conditions
+select now()::timestamp, 'TOK', 'sony', 55, 75;
+
+-- TEST3 --
+--only the old chunks will get compressed when policy is executed--
+CALL run_job(:compressjob_id);
+select chunk_name, node_name, pg_size_pretty(before_compression_total_bytes) before_total,
+pg_size_pretty( after_compression_total_bytes)  after_total
+from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
+
+-- TEST 4 --
+--cannot set another policy
+\set ON_ERROR_STOP 0
+select add_compression_policy('conditions', '60d'::interval, if_not_exists=>true);
+select add_compression_policy('conditions', '60d'::interval);
+select add_compression_policy('conditions', '30d'::interval, if_not_exists=>true);
+\set ON_ERROR_STOP 1
+
+--TEST 5 --
+-- drop the policy --
+select remove_compression_policy('conditions');
+select count(*) from _timescaledb_config.bgw_job WHERE id>=1000;
+
+--TEST 6 --
+-- try to execute the policy after it has been dropped --
+\set ON_ERROR_STOP 0
+CALL run_job(:compressjob_id);
+\set ON_ERROR_STOP 1
+
+-- We're done with the table, so drop it.
+DROP TABLE IF EXISTS conditions CASCADE;
+
+--TEST 7
+--compression policy for integer based partition hypertable
+CREATE TABLE test_table_int(time bigint, val int);
+SELECT create_distributed_hypertable('test_table_int', 'time', chunk_time_interval => 1, replication_factor => 2);
+
+CREATE OR REPLACE FUNCTION dummy_now() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION dummy_now() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT'
+$$);
+select set_integer_now_func('test_table_int', 'dummy_now');
+insert into test_table_int select generate_series(1,5), 10;
+alter table test_table_int set (timescaledb.compress);
+select add_compression_policy('test_table_int', 2::int) AS compressjob_id
+\gset
+
+select * from _timescaledb_config.bgw_job where id=:compressjob_id;
+\gset
+CALL run_job(:compressjob_id);
+CALL run_job(:compressjob_id);
+select chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
+from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;

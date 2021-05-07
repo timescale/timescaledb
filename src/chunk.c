@@ -134,7 +134,27 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 
 #define ASSERT_IS_NULL_OR_VALID_CHUNK(chunk) Assert(chunk == NULL || IS_VALID_CHUNK(chunk))
 
+/*
+ * The chunk status field values are persisted in the database and must never be changed.
+ * Those values are used as flags and must always be powers of 2 to allow bitwise operations.
+ */
 #define CHUNK_STATUS_DEFAULT 0
+/*
+ * Setting a Data-Node chunk as CHUNK_STATUS_COMPRESSED means that the corresponding
+ * compressed_chunk_id field points to a chunk that holds the compressed data. Otherwise,
+ * the corresponding compressed_chunk_id is NULL.
+ *
+ * However, for Access-Nodes compressed_chunk_id is always NULL. CHUNK_STATUS_COMPRESSED being set
+ * means that a remote compress_chunk() operation has taken place for this distributed
+ * meta-chunk. On the other hand, if CHUNK_STATUS_COMPRESSED is cleared, then it is probable
+ * that a remote compress_chunk() has not taken place, but not certain.
+ *
+ * For the above reason, this flag should not be assumed to be consistent (when it is cleared)
+ * for Access-Nodes. When used in distributed hypertables one should take advantage of the
+ * idempotent properties of remote compress_chunk() and distributed compression policy to
+ * make progress.
+ */
+#define CHUNK_STATUS_COMPRESSED 1
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -3035,7 +3055,7 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
 {
-	return ts_chunk_set_status(chunk, ((uint32) chunk->fd.status) | (uint32) status);
+	return ts_chunk_set_status(chunk, ts_set_flags_32(chunk->fd.status, status));
 }
 
 bool
@@ -3046,16 +3066,31 @@ ts_chunk_set_status(Chunk *chunk, int32 status)
 	return chunk_update_status(&chunk->fd);
 }
 
+/*
+ * Setting (INVALID_CHUNK_ID, true) is valid for an Access Node. It means
+ * the data nodes contain the actual compressed chunks, and the meta-chunk is
+ * marked as compressed in the Access Node.
+ * Setting (is_compressed => false) means that the chunk is uncompressed.
+ */
 static ScanTupleResult
-chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
+chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id,
+										bool is_compressed)
 {
 	FormData_chunk form;
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
-	int32 compressed_chunk_id = *((int32 *) data);
 
 	chunk_formdata_fill(&form, ti);
-	form.compressed_chunk_id = compressed_chunk_id;
+	if (is_compressed)
+	{
+		form.compressed_chunk_id = compressed_chunk_id;
+		form.status = ts_set_flags_32(form.status, CHUNK_STATUS_COMPRESSED);
+	}
+	else
+	{
+		form.compressed_chunk_id = INVALID_CHUNK_ID;
+		form.status = ts_clear_flags_32(form.status, CHUNK_STATUS_COMPRESSED);
+	}
 	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -3066,27 +3101,59 @@ chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+static ScanTupleResult
+chunk_clear_compressed_status_in_tuple(TupleInfo *ti, void *data)
+{
+	return chunk_change_compressed_status_in_tuple(ti, INVALID_CHUNK_ID, false);
+}
+
+static ScanTupleResult
+chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
+{
+	int32 compressed_chunk_id = *((int32 *) data);
+
+	return chunk_change_compressed_status_in_tuple(ti, compressed_chunk_id, true);
+}
+
 /*Assume permissions are already checked */
 bool
-ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id, bool isnull)
+ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 {
-	int32 compress_id;
 	ScanKeyData scankey[1];
 	ScanKeyInit(&scankey[0],
 				Anum_chunk_idx_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
 				Int32GetDatum(chunk->fd.id));
-	if (isnull)
-		compress_id = INVALID_CHUNK_ID;
-	else
-		compress_id = compressed_chunk_id;
 	return chunk_scan_internal(CHUNK_ID_INDEX,
 							   scankey,
 							   1,
 							   chunk_tuple_dropped_filter,
 							   chunk_set_compressed_id_in_tuple,
-							   &compress_id,
+							   &compressed_chunk_id,
+							   0,
+							   ForwardScanDirection,
+							   RowExclusiveLock,
+							   CurrentMemoryContext) > 0;
+}
+
+/*Assume permissions are already checked */
+bool
+ts_chunk_clear_compressed_chunk(Chunk *chunk)
+{
+	int32 compressed_chunk_id = INVALID_CHUNK_ID;
+	ScanKeyData scankey[1];
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk->fd.id));
+	return chunk_scan_internal(CHUNK_ID_INDEX,
+							   scankey,
+							   1,
+							   chunk_tuple_dropped_filter,
+							   chunk_clear_compressed_status_in_tuple,
+							   &compressed_chunk_id,
 							   0,
 							   ForwardScanDirection,
 							   RowExclusiveLock,
@@ -3649,14 +3716,16 @@ ts_chunk_can_be_compressed(int32 chunk_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool dropped_isnull;
-		bool compressed_chunkid_isnull;
-		Datum dropped;
+		bool dropped_isnull, status_isnull, status_is_compressed;
+		Datum dropped, status;
 
 		dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull);
-		compressed_chunkid_isnull = slot_attisnull(ti->slot, Anum_chunk_compressed_chunk_id);
 		Assert(!dropped_isnull);
-		can_be_compressed = !DatumGetBool(dropped) && compressed_chunkid_isnull;
+
+		status = slot_getattr(ti->slot, Anum_chunk_status, &status_isnull);
+		Assert(!status_isnull);
+		status_is_compressed = ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED);
+		can_be_compressed = !DatumGetBool(dropped) && !status_is_compressed;
 	}
 	ts_scan_iterator_close(&iterator);
 	return can_be_compressed;

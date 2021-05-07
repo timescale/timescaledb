@@ -116,11 +116,6 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	/* check if this is a table with compression enabled */
 	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 
-	if (hypertable_is_distributed(hypertable))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression policies not supported on distributed hypertables")));
-
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(hypertable))
 	{
 		ts_cache_release(hcache);

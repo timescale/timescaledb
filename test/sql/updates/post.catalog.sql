@@ -47,6 +47,7 @@ SELECT obj::regclass::text
 FROM (SELECT unnest(extconfig) AS obj FROM pg_extension WHERE extname='timescaledb') AS objects
 ORDER BY obj::regclass::text;
 
+SELECT * FROM _timescaledb_catalog.chunk ORDER BY id, hypertable_id;
 SELECT * FROM _timescaledb_catalog.chunk_constraint ORDER BY chunk_id, dimension_slice_id, constraint_name;
 SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 

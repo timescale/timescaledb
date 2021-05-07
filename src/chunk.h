@@ -20,9 +20,11 @@
 
 #define INVALID_CHUNK_ID 0
 
-/* Should match definition in ddl_api.sql */
+/* Should match definitions in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
 #define DROP_CHUNKS_NARGS 4
+#define COMPRESS_CHUNK_FUNCNAME "compress_chunk"
+#define COMPRESS_CHUNK_NARGS 2
 
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
@@ -145,8 +147,8 @@ extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
 											 MemoryContext mctx);
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
-extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id,
-													  bool isnull);
+extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
+extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);

@@ -234,9 +234,9 @@ select compress_chunk(:'CHUNK_NAME');
 ERROR:  chunk "_hyper_11_2_chunk" is already compressed
 select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
 NOTICE:  chunk "_hyper_11_2_chunk" is already compressed
- compress_chunk 
-----------------
- 
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_11_2_chunk
 (1 row)
 
 select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
