@@ -608,6 +608,15 @@ hypertable_id|attname |compression_algorithm_id|segmentby_column_index|orderby_c
  
 (1 row)
 
+-- insert data into compressed chunk
+INSERT INTO compressed 
+SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
+SELECT * from compressed where new_coli = 3;
+             time             | device | temp | new_coli | new_colv 
+------------------------------+--------+------+----------+----------
+ Thu Aug 01 01:00:00 2019 PDT |    300 |  300 |        3 | newcolv
+(1 row)
+
 -- We're done with the table, so drop it.
 DROP TABLE IF EXISTS compressed CASCADE;
 ------------------------------------------------------
@@ -667,16 +676,16 @@ pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
       chunk_name       |       node_name       | before_total | after_total 
 -----------------------+-----------------------+--------------+-------------
- _dist_hyper_2_5_chunk | db_dist_compression_1 | 32 kB        | 32 kB
- _dist_hyper_2_5_chunk | db_dist_compression_2 | 32 kB        | 32 kB
+ _dist_hyper_2_6_chunk | db_dist_compression_1 | 32 kB        | 32 kB
+ _dist_hyper_2_6_chunk | db_dist_compression_2 | 32 kB        | 32 kB
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
  id | hypertable_id |      schema_name      |      table_name       | compressed_chunk_id | dropped | status 
 ----+---------------+-----------------------+-----------------------+---------------------+---------+--------
-  5 |             2 | _timescaledb_internal | _dist_hyper_2_5_chunk |                     | f       |      1
-  6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      0
+  6 |             2 | _timescaledb_internal | _dist_hyper_2_6_chunk |                     | f       |      1
   7 |             2 | _timescaledb_internal | _dist_hyper_2_7_chunk |                     | f       |      0
+  8 |             2 | _timescaledb_internal | _dist_hyper_2_8_chunk |                     | f       |      0
 (3 rows)
 
 -- TEST 4 --
@@ -756,11 +765,11 @@ CALL run_job(:compressjob_id);
 CALL run_job(:compressjob_id);
 select chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
-      chunk_name       |       node_name       | before_compression_total_bytes | after_compression_total_bytes 
------------------------+-----------------------+--------------------------------+-------------------------------
- _dist_hyper_3_8_chunk | db_dist_compression_1 |                          24576 |                         16384
- _dist_hyper_3_8_chunk | db_dist_compression_2 |                          24576 |                         16384
- _dist_hyper_3_9_chunk | db_dist_compression_2 |                          24576 |                         16384
- _dist_hyper_3_9_chunk | db_dist_compression_3 |                          24576 |                         16384
+       chunk_name       |       node_name       | before_compression_total_bytes | after_compression_total_bytes 
+------------------------+-----------------------+--------------------------------+-------------------------------
+ _dist_hyper_3_10_chunk | db_dist_compression_2 |                          24576 |                         16384
+ _dist_hyper_3_10_chunk | db_dist_compression_3 |                          24576 |                         16384
+ _dist_hyper_3_9_chunk  | db_dist_compression_1 |                          24576 |                         16384
+ _dist_hyper_3_9_chunk  | db_dist_compression_2 |                          24576 |                         16384
 (4 rows)
 
