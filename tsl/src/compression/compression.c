@@ -1591,7 +1591,6 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 	TupleTableSlot *out_slot = cr->out_slot;
 	RowCompressor *row_compressor = &cr->row_compressor;
 
-	slot_getallattrs(in_slot);
 	ExecClearTuple(out_slot);
 
 	invalues = in_slot->tts_values;

@@ -155,12 +155,12 @@ chunk_dispatch_exec(CustomScanState *node)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 	if (cis->compress_state != NULL)
 	{
-		/*
-				if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
-					ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
-				if (cis->rel->rd_att->constr)
-					ExecConstraints(cis->orig_result_relation_info, slot, estate);
-		*/
+#if PG12_GE
+		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
+			ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
+#endif
+		if (cis->rel->rd_att->constr)
+			ExecConstraints(cis->orig_result_relation_info, slot, estate);
 		estate->es_result_relation_info = cis->result_relation_info;
 		Assert(ts_cm_functions->compress_row_exec != NULL);
 		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
