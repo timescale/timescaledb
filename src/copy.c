@@ -398,12 +398,39 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 				Assert(resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
 				ExecConstraints(resultRelInfo, myslot, estate);
 			}
+			else if (cis->compress_state &&
+					 cis->orig_result_relation_info->ri_RelationDesc->rd_att->constr)
+			{
+				Assert(cis->orig_result_relation_info->ri_RangeTableIndex > 0 &&
+					   estate->es_range_table);
+				ExecConstraints(cis->orig_result_relation_info, myslot, estate);
+			}
 
-			/* OK, store the tuple and create index entries for it */
-			table_tuple_insert(resultRelInfo->ri_RelationDesc, myslot, mycid, ti_options, bistate);
+			if (cis->compress_state)
+			{
+				TupleTableSlot *compress_slot =
+					ts_cm_functions->compress_row_exec(cis->compress_state, myslot);
+				table_tuple_insert(resultRelInfo->ri_RelationDesc,
+								   compress_slot,
+								   mycid,
+								   ti_options,
+								   bistate);
+				if (resultRelInfo->ri_NumIndices > 0)
+					recheckIndexes =
+						ExecInsertIndexTuplesCompat(compress_slot, estate, false, NULL, NIL);
+			}
+			else
+			{
+				/* OK, store the tuple and create index entries for it */
+				table_tuple_insert(resultRelInfo->ri_RelationDesc,
+								   myslot,
+								   mycid,
+								   ti_options,
+								   bistate);
 
-			if (resultRelInfo->ri_NumIndices > 0)
-				recheckIndexes = ExecInsertIndexTuplesCompat(myslot, estate, false, NULL, NIL);
+				if (resultRelInfo->ri_NumIndices > 0)
+					recheckIndexes = ExecInsertIndexTuplesCompat(myslot, estate, false, NULL, NIL);
+			}
 
 			/* AFTER ROW INSERT Triggers */
 			ExecARInsertTriggersCompat(estate,
