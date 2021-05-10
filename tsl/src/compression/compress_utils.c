@@ -16,6 +16,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/pg_list.h>
 #include <nodes/parsenodes.h>
+#include <parser/parse_func.h>
 #include <storage/lmgr.h>
 #include <trigger.h>
 #include <utils/builtins.h>
@@ -508,4 +509,74 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	PG_RETURN_OID(uncompressed_chunk_id);
+}
+
+/* setup FunctionCallInfo for compress_chunk/decompress_chunk
+ * alloc memory for decompfn_fcinfo and init it.
+*/
+static void
+get_compression_fcinfo(char *fname, FmgrInfo *decompfn, FunctionCallInfo *decompfn_fcinfo,
+					   FunctionCallInfo orig_fcinfo)
+{
+	/* compress_chunk, decompress_chunk have the same args */
+	Oid argtyp[] = { REGCLASSOID, BOOLOID };
+	fmNodePtr cxt = orig_fcinfo->context; /* pass in the context from the current FunctionCallInfo */
+
+	Oid decomp_func_oid =
+		//LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(fname)),
+		LookupFuncName(list_make1(makeString(fname)),
+					   lengthof(argtyp),
+					   argtyp,
+					   false);
+
+	fmgr_info(decomp_func_oid, decompfn);
+    *decompfn_fcinfo = HEAP_FCINFO(2);
+	InitFunctionCallInfoData(**decompfn_fcinfo,
+							 decompfn,
+							 2,
+							 InvalidOid, /* collation */
+							 cxt,
+							 NULL);
+    FC_ARG(*decompfn_fcinfo, 0) = FC_ARG(orig_fcinfo, 0);
+    FC_NULL(*decompfn_fcinfo, 0) = FC_NULL(orig_fcinfo, 0);
+    FC_ARG(*decompfn_fcinfo, 1) = FC_ARG(orig_fcinfo, 1);
+    FC_NULL(*decompfn_fcinfo, 1) = FC_NULL(orig_fcinfo, 1);
+}
+
+#define DECOMPRESS_CHUNK_NAME "decompress_chunk"
+#define COMPRESS_CHUNK_NAME "compress_chunk"
+
+Datum
+tsl_recompress_chunk(PG_FUNCTION_ARGS)
+{
+	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	FmgrInfo decompfn;
+	FmgrInfo compfn;
+	FunctionCallInfo decompfn_fcinfo;
+	FunctionCallInfo compfn_fcinfo;
+	if (NULL == uncompressed_chunk)
+		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+
+	get_compression_fcinfo(DECOMPRESS_CHUNK_NAME, &decompfn, &decompfn_fcinfo, fcinfo);
+
+
+	FunctionCallInvoke(decompfn_fcinfo);
+	if (decompfn_fcinfo->isnull)
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("decompression failed for recompress_chunk for %u",
+						uncompressed_chunk_id)));
+		PG_RETURN_NULL();
+	}
+	get_compression_fcinfo(COMPRESS_CHUNK_NAME, &compfn, &compfn_fcinfo, fcinfo);
+	Datum compoid = FunctionCallInvoke(compfn_fcinfo);
+	if (compfn_fcinfo->isnull)
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("compression failed for recompress_chunk for %u", uncompressed_chunk_id)));
+	}
+	return compoid;
 }
