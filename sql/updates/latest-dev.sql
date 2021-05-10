@@ -94,3 +94,33 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.chunk table --
+
+-- First we update the permissions of the compressed hypertables to
+-- match the associated hypertable.
+WITH
+    hypertables AS (
+	SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable_oid,
+	       format('%I.%I', ct.schema_name, ct.table_name)::regclass AS compressed_hypertable_oid
+	FROM _timescaledb_catalog.hypertable ht
+	JOIN _timescaledb_catalog.hypertable ct ON ht.compressed_hypertable_id = ct.id
+    )
+UPDATE pg_class
+   SET relacl = (SELECT relacl FROM pg_class WHERE oid = hypertable_oid)
+  FROM hypertables
+ WHERE oid = compressed_hypertable_oid;
+
+-- Now we update the permissions of chunks of both compressed and
+-- uncompressed hypertables to match the permissions of the associated
+-- hypertable.
+WITH
+    chunks AS (
+        SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable_oid,
+               format('%I.%I', ch.schema_name, ch.table_name)::regclass AS chunk_oid
+          FROM _timescaledb_catalog.hypertable ht
+	  JOIN _timescaledb_catalog.chunk ch ON ht.id = ch.hypertable_id
+	  WHERE NOT ch.dropped
+    )
+UPDATE pg_class
+   SET relacl = (SELECT relacl FROM pg_class WHERE oid = hypertable_oid)
+  FROM chunks
+ WHERE oid = chunk_oid;

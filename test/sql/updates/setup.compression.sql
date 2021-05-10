@@ -35,3 +35,7 @@ FROM _timescaledb_catalog.chunk chunk
 INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
 WHERE hypertable.table_name = 'compress' and chunk.compressed_chunk_id IS NULL
 ORDER BY chunk.id;
+
+\if :WITH_ROLES
+GRANT SELECT ON compress TO tsdbadmin;
+\endif
