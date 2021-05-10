@@ -25,6 +25,17 @@
 #define DROP_CHUNKS_NARGS 4
 #define COMPRESS_CHUNK_FUNCNAME "compress_chunk"
 #define COMPRESS_CHUNK_NARGS 2
+#define DECOMPRESS_CHUNK_FUNCNAME "decompress_chunk"
+#define RECOMPRESS_CHUNK_FUNCNAME "recompress_chunk"
+#define RECOMPRESS_CHUNK_NARGS 2
+
+typedef enum ChunkCompressionStatus
+{
+	CHUNK_COMPRESS_NONE = 0,
+	CHUNK_COMPRESS_UNORDERED,
+	CHUNK_COMPRESS_ORDERED,
+	CHUNK_DROPPED
+} ChunkCompressionStatus;
 
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
@@ -162,8 +173,9 @@ extern TSDLLEXPORT Chunk *ts_chunk_find_or_create_without_cuts(Hypertable *ht, H
 															   bool *created);
 extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
-extern TSDLLEXPORT bool ts_chunk_can_be_compressed(int32 chunk_id);
+extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_data_node_name_list(const Chunk *chunk);

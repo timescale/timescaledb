@@ -897,7 +897,7 @@ dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
 		BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(info->job_id, chunk_id);
 
 		if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
-			ts_chunk_can_be_compressed(chunk_id))
+			ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
 		{
 			/* Save the chunk_id */
 			info->chunk_id = chunk_id;
@@ -943,9 +943,12 @@ dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *dat
 	foreach (lc, chunk_ids)
 	{
 		int32 chunk_id = lfirst_int(lc);
-		if (ts_chunk_can_be_compressed(chunk_id))
+		ChunkCompressionStatus st = ts_chunk_get_compression_status(chunk_id);
+		if (st == CHUNK_COMPRESS_NONE || st == CHUNK_COMPRESS_UNORDERED)
 		{
-			/* found a chunk that has not yet been compressed */
+			/* found a chunk that is not compressed or needs recompress
+			 * caller needs to check the correct chunk status
+			 */
 			*((int32 *) data) = chunk_id;
 			return SCAN_DONE;
 		}
