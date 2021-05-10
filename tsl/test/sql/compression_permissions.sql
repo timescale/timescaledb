@@ -4,6 +4,34 @@
 
 \set ON_ERROR_STOP 0
 
+CREATE VIEW hypertable_details AS
+WITH
+  names AS (SELECT * FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace)
+SELECT (SELECT format('%I.%I', ht.schema_name, ht.table_name) FROM names
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable,
+       (SELECT relacl FROM names
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable_acl,
+       (SELECT format('%I.%I', ct.schema_name, ct.table_name) FROM names
+	WHERE ct.schema_name = nspname AND ct.table_name = relname) AS compressed,
+       (SELECT relacl FROM names
+	WHERE ct.schema_name = nspname AND ct.table_name = relname) AS compressed_acl
+  FROM _timescaledb_catalog.hypertable ht
+  LEFT JOIN _timescaledb_catalog.hypertable ct ON ht.compressed_hypertable_id = ct.id;
+
+CREATE VIEW chunk_details AS
+WITH
+  names AS (SELECT * FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace)
+SELECT (SELECT format('%I.%I', ht.schema_name, ht.table_name) FROM names
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable,
+       (SELECT relacl FROM names
+	WHERE ht.schema_name = nspname AND ht.table_name = relname) AS hypertable_acl,
+       (SELECT format('%I.%I', ch.schema_name, ch.table_name) FROM names
+	WHERE ch.schema_name = nspname AND ch.table_name = relname) AS chunk,
+       (SELECT relacl FROM names
+	WHERE ch.schema_name = nspname AND ch.table_name = relname) AS chunk_acl
+  FROM _timescaledb_catalog.hypertable ht
+  JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id;
+
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
@@ -84,13 +112,6 @@ delete from conditions
 where timec = '2019-04-01 00:00+0'::timestamp with time zone;
 select location from conditions where timec = '2019-04-01 00:00+0';
 
---should fail.
-SELECT ch1.schema_name|| '.' || ch1.table_name as "COMPT_NAME"
-FROM _timescaledb_catalog.hypertable ch1, _timescaledb_catalog.hypertable ht where ht.table_name like 'conditions' and ht.compressed_hypertable_id = ch1.id
-\gset
-
-select count(*) from :COMPT_NAME;
-
 CREATE VIEW v2 as select * from conditions;
 select count(*) from v2;
 --should fail after revoking permissions 
@@ -98,3 +119,62 @@ select count(*) from v2;
 REVOKE SELECT on conditions FROM :ROLE_DEFAULT_PERM_USER_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 select count(*) from v2;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP TABLE conditions CASCADE;
+
+-- Testing that permissions propagate to compressed hypertables and to
+-- compressed chunks.
+
+CREATE TABLE conditions (
+      timec TIMESTAMPTZ NOT NULL,
+      location TEXT NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity DOUBLE PRECISION  NULL
+    );
+
+SELECT table_name FROM create_hypertable( 'conditions', 'timec',
+       chunk_time_interval => '1 week'::interval);
+
+ALTER TABLE conditions SET (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = 'location',
+      timescaledb.compress_orderby = 'timec'
+);
+
+INSERT INTO conditions
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75;
+
+SELECT compress_chunk(show_chunks('conditions'));
+
+-- Check that ACL propagates to compressed hypertable.  We could prune
+-- the listing by only selecting chunks where the ACL does not match
+-- the hypertable ACL, but for now we list all to make debugging easy.
+
+\x on
+SELECT * FROM hypertable_details WHERE hypertable = 'public.conditions';
+
+SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
+  FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
+ORDER BY hypertable, chunk;
+
+GRANT SELECT ON conditions TO :ROLE_DEFAULT_PERM_USER;
+
+SELECT * FROM hypertable_details WHERE hypertable = 'public.conditions';
+
+SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
+  FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
+ORDER BY hypertable, chunk;
+
+-- Add some new data and compress the chunks. The chunks should get
+-- the permissions of the hypertable. We pick a start date to make
+-- sure that we are not inserting into an already compressed chunk.
+INSERT INTO conditions
+SELECT generate_series('2019-01-07 00:00'::timestamp, '2019-02-07 00:00'::timestamp, '1 day'), 'XYZ', 47, 11;
+
+SELECT compress_chunk(show_chunks('conditions', newer_than => '2019-01-01'));
+
+SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
+  FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
+ORDER BY hypertable, chunk;
+\x off

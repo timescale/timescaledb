@@ -1319,14 +1319,33 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 					ContinuousAgg *const cagg = ts_continuous_agg_find_by_rv(relation);
 					if (cagg)
 					{
-						Hypertable *ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-						process_grant_add_by_name(stmt, &ht->fd.schema_name, &ht->fd.table_name);
+						Hypertable *mat_hypertable =
+							ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+						process_grant_add_by_name(stmt,
+												  &mat_hypertable->fd.schema_name,
+												  &mat_hypertable->fd.table_name);
 						process_grant_add_by_name(stmt,
 												  &cagg->data.direct_view_schema,
 												  &cagg->data.direct_view_name);
 						process_grant_add_by_name(stmt,
 												  &cagg->data.partial_view_schema,
 												  &cagg->data.partial_view_name);
+					}
+
+					/*
+					 * If this is a hypertable and it has a compressed
+					 * hypertable associated with it, add it to the list of
+					 * hypertables to process.
+					 */
+					Hypertable *hypertable = ts_hypertable_cache_get_entry_rv(hcache, relation);
+					if (hypertable && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(hypertable))
+					{
+						Hypertable *compressed_hypertable =
+							ts_hypertable_get_by_id(hypertable->fd.compressed_hypertable_id);
+						Assert(compressed_hypertable);
+						process_grant_add_by_name(stmt,
+												  &compressed_hypertable->fd.schema_name,
+												  &compressed_hypertable->fd.table_name);
 					}
 				}
 
@@ -1338,7 +1357,6 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 					if (ht)
 					{
-						/* Here we know that there is at least one hypertable */
 						add_hypertable_to_process_args(args, ht);
 						foreach_chunk(ht, add_chunk_oid, args);
 					}
