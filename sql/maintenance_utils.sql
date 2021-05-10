@@ -28,3 +28,9 @@ CREATE OR REPLACE FUNCTION decompress_chunk(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION recompress_chunk(
+    uncompressed_chunk REGCLASS,
+    if_not_compressed BOOLEAN = false
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk' LANGUAGE C STRICT VOLATILE;
+
