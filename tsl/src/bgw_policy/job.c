@@ -399,8 +399,65 @@ policy_invoke_compress_chunk(Chunk *chunk)
 		castNode(Const, makeBoolConst(true, false)),
 	};
 	Oid type_id[COMPRESS_CHUNK_NARGS] = { REGCLASSOID, BOOLOID };
-	char *const schema_name = ts_extension_schema_name();
-	List *const fqn = list_make2(makeString(schema_name), makeString(COMPRESS_CHUNK_FUNCNAME));
+	char *schema_name = ts_extension_schema_name();
+	List *fqn = list_make2(makeString(schema_name), makeString(COMPRESS_CHUNK_FUNCNAME));
+
+	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
+					 "argarr and type_id should have matching lengths");
+
+	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
+	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
+
+	/* Prepare the function expr with argument list */
+	get_func_result_type(func_oid, &restype, NULL);
+
+	for (i = 0; i < lengthof(argarr); i++)
+		args = lappend(args, argarr[i]);
+
+	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
+	fexpr->funcretset = false;
+
+	estate = CreateExecutorState();
+	econtext = CreateExprContext(estate);
+
+	ExprState *exprstate = ExecInitExpr(&fexpr->xpr, NULL);
+
+	ExecEvalExprSwitchContext(exprstate, econtext, &isnull);
+
+	/* Cleanup */
+	FreeExprContext(econtext, false);
+	FreeExecutorState(estate);
+}
+
+/*
+ * Invoke recompress_chunk via fmgr so that the call can be deparsed and sent to
+ * remote data nodes.
+ */
+static void
+policy_invoke_recompress_chunk(Chunk *chunk)
+{
+	EState *estate;
+	ExprContext *econtext;
+	FuncExpr *fexpr;
+	Oid relid = chunk->table_id;
+	Oid restype;
+	Oid func_oid;
+	List *args = NIL;
+	int i;
+	bool isnull;
+	Const *argarr[RECOMPRESS_CHUNK_NARGS] = {
+		makeConst(REGCLASSOID,
+				  -1,
+				  InvalidOid,
+				  sizeof(relid),
+				  ObjectIdGetDatum(relid),
+				  false,
+				  false),
+		castNode(Const, makeBoolConst(true, false)),
+	};
+	Oid type_id[RECOMPRESS_CHUNK_NARGS] = { REGCLASSOID, BOOLOID };
+	char *schema_name = ts_extension_schema_name();
+	List *fqn = list_make2(makeString(schema_name), makeString(RECOMPRESS_CHUNK_FUNCNAME));
 
 	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
 					 "argarr and type_id should have matching lengths");
@@ -450,9 +507,19 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 	{
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		if (hypertable_is_distributed(policy_data.hypertable))
-			policy_invoke_compress_chunk(chunk);
+		{
+			if (ts_chunk_is_unordered(chunk))
+				policy_invoke_recompress_chunk(chunk);
+			else
+				policy_invoke_compress_chunk(chunk);
+		}
 		else
-			tsl_compress_chunk_wrapper(chunk, true);
+		{
+			if (ts_chunk_is_unordered(chunk))
+				tsl_recompress_chunk_wrapper(chunk);
+			else
+				tsl_compress_chunk_wrapper(chunk, true);
+		}
 		elog(LOG,
 			 "completed compressing chunk %s.%s",
 			 NameStr(chunk->fd.schema_name),
