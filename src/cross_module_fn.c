@@ -64,6 +64,7 @@ CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
+CROSSMODULE_WRAPPER(recompress_chunk);
 
 /* continous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -345,6 +346,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.process_compress_table = process_compress_table_default,
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,
+	.recompress_chunk = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,

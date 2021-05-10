@@ -764,14 +764,28 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	ExecCloseIndices(state->result_relation_info);
 	table_close(state->rel, NoLock);
 
-	/* TODO check if we nee to keep rel open for this case. Is compress_rel
-	 * sufficient?
-	 */
 	if (state->compress_rel)
 	{
+		ResultRelInfo *orig_chunk_rri = state->orig_result_relation_info;
+		Oid chunk_relid = RelationGetRelid(orig_chunk_rri->ri_RelationDesc);
 		table_close(state->compress_rel, NoLock);
 		ts_cm_functions->compress_row_end(state->compress_state);
 		ts_cm_functions->compress_row_destroy(state->compress_state);
+		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+		if (!ts_chunk_is_unordered(chunk))
+			ts_chunk_set_unordered(chunk);
+	}
+	else if (RelationGetForm(state->result_relation_info->ri_RelationDesc)->relkind ==
+			 RELKIND_FOREIGN_TABLE)
+	{
+		/* If a distributed chunk shows compressed status on AN,
+		 * we mark it as unordered , because the insert now goes into
+		 * a previously compressed chunk
+		 */
+		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
+		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
+			ts_chunk_set_unordered(chunk);
 	}
 
 	if (NULL != state->slot)
