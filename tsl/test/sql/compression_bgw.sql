@@ -141,3 +141,5 @@ SELECT COUNT(*) AS dropped_chunks_count
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
 CALL run_job(:job_id);
+
+\i include/recompress_basic.sql
