@@ -513,53 +513,41 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 /* setup FunctionCallInfo for compress_chunk/decompress_chunk
  * alloc memory for decompfn_fcinfo and init it.
-*/
+ */
 static void
 get_compression_fcinfo(char *fname, FmgrInfo *decompfn, FunctionCallInfo *decompfn_fcinfo,
 					   FunctionCallInfo orig_fcinfo)
 {
 	/* compress_chunk, decompress_chunk have the same args */
 	Oid argtyp[] = { REGCLASSOID, BOOLOID };
-	fmNodePtr cxt = orig_fcinfo->context; /* pass in the context from the current FunctionCallInfo */
+	fmNodePtr cxt =
+		orig_fcinfo->context; /* pass in the context from the current FunctionCallInfo */
 
 	Oid decomp_func_oid =
-		//LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(fname)),
-		LookupFuncName(list_make1(makeString(fname)),
-					   lengthof(argtyp),
-					   argtyp,
-					   false);
+		LookupFuncName(list_make1(makeString(fname)), lengthof(argtyp), argtyp, false);
 
 	fmgr_info(decomp_func_oid, decompfn);
-    *decompfn_fcinfo = HEAP_FCINFO(2);
+	*decompfn_fcinfo = HEAP_FCINFO(2);
 	InitFunctionCallInfoData(**decompfn_fcinfo,
 							 decompfn,
 							 2,
 							 InvalidOid, /* collation */
 							 cxt,
 							 NULL);
-    FC_ARG(*decompfn_fcinfo, 0) = FC_ARG(orig_fcinfo, 0);
-    FC_NULL(*decompfn_fcinfo, 0) = FC_NULL(orig_fcinfo, 0);
-    FC_ARG(*decompfn_fcinfo, 1) = FC_ARG(orig_fcinfo, 1);
-    FC_NULL(*decompfn_fcinfo, 1) = FC_NULL(orig_fcinfo, 1);
+	FC_ARG(*decompfn_fcinfo, 0) = FC_ARG(orig_fcinfo, 0);
+	FC_NULL(*decompfn_fcinfo, 0) = FC_NULL(orig_fcinfo, 0);
+	FC_ARG(*decompfn_fcinfo, 1) = FC_ARG(orig_fcinfo, 1);
+	FC_NULL(*decompfn_fcinfo, 1) = FC_NULL(orig_fcinfo, 1);
 }
 
-#define DECOMPRESS_CHUNK_NAME "decompress_chunk"
-#define COMPRESS_CHUNK_NAME "compress_chunk"
-
-Datum
-tsl_recompress_chunk(PG_FUNCTION_ARGS)
+static Datum
+tsl_recompress_remote_chunk(Chunk *uncompressed_chunk, FunctionCallInfo fcinfo)
 {
-	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	FmgrInfo decompfn;
 	FmgrInfo compfn;
 	FunctionCallInfo decompfn_fcinfo;
 	FunctionCallInfo compfn_fcinfo;
-	if (NULL == uncompressed_chunk)
-		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
-
-	get_compression_fcinfo(DECOMPRESS_CHUNK_NAME, &decompfn, &decompfn_fcinfo, fcinfo);
-
+	get_compression_fcinfo(DECOMPRESS_CHUNK_FUNCNAME, &decompfn, &decompfn_fcinfo, fcinfo);
 
 	FunctionCallInvoke(decompfn_fcinfo);
 	if (decompfn_fcinfo->isnull)
@@ -567,16 +555,70 @@ tsl_recompress_chunk(PG_FUNCTION_ARGS)
 		ereport(WARNING,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("decompression failed for recompress_chunk for %u",
-						uncompressed_chunk_id)));
+						uncompressed_chunk->fd.id)));
 		PG_RETURN_NULL();
 	}
-	get_compression_fcinfo(COMPRESS_CHUNK_NAME, &compfn, &compfn_fcinfo, fcinfo);
+	get_compression_fcinfo(COMPRESS_CHUNK_FUNCNAME, &compfn, &compfn_fcinfo, fcinfo);
 	Datum compoid = FunctionCallInvoke(compfn_fcinfo);
 	if (compfn_fcinfo->isnull)
 	{
 		ereport(WARNING,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("compression failed for recompress_chunk for %u", uncompressed_chunk_id)));
+				 errmsg("compression failed for recompress_chunk for %u",
+						uncompressed_chunk->fd.id)));
+		PG_RETURN_NULL();
 	}
 	return compoid;
+}
+
+bool
+tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
+{
+	Oid uncompressed_chunk_relid = uncompressed_chunk->table_id;
+	if (ts_chunk_is_unordered(uncompressed_chunk))
+	{
+		if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
+								   uncompressed_chunk_relid,
+								   false))
+			return false;
+	}
+	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
+	Assert(!ts_chunk_is_compressed(chunk));
+	tsl_compress_chunk_wrapper(chunk, false);
+	return true;
+}
+
+Datum
+tsl_recompress_chunk(PG_FUNCTION_ARGS)
+{
+	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	if (uncompressed_chunk == NULL)
+		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+	if (!ts_chunk_is_unordered(uncompressed_chunk))
+	{
+		if (!ts_chunk_is_compressed(uncompressed_chunk))
+		{
+			ereport((if_compressed ? NOTICE : ERROR),
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("call compress_chunk instead of recompress_chunk")));
+			PG_RETURN_NULL();
+		}
+		else
+		{
+			ereport((if_compressed ? NOTICE : ERROR),
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("chunk \"%s\" is already compressed",
+							get_rel_name(uncompressed_chunk->table_id))));
+			PG_RETURN_NULL();
+		}
+	}
+	if (uncompressed_chunk->relkind == RELKIND_FOREIGN_TABLE)
+		return tsl_recompress_remote_chunk(uncompressed_chunk, fcinfo);
+	else
+	{
+		tsl_recompress_chunk_wrapper(uncompressed_chunk);
+		PG_RETURN_OID(uncompressed_chunk_id);
+	}
 }

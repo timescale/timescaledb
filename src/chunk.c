@@ -3712,12 +3712,12 @@ ts_chunks_in(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-/* Check if this chunk can be compressed, that it is not dropped and has not
- * already been compressed. */
-bool
-ts_chunk_can_be_compressed(int32 chunk_id)
+/* Return the compression status for the chunk
+ */
+ChunkCompressionStatus
+ts_chunk_get_compression_status(int32 chunk_id)
 {
-	bool can_be_compressed = false;
+	ChunkCompressionStatus st = CHUNK_COMPRESS_NONE;
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	ts_scan_iterator_scan_key_init(&iterator,
@@ -3729,28 +3729,48 @@ ts_chunk_can_be_compressed(int32 chunk_id)
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool dropped_isnull, status_isnull, status_is_compressed;
-		Datum dropped, status;
+		bool dropped_isnull, status_isnull;
+		Datum status;
 
-		dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull);
+		bool dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
 		Assert(!dropped_isnull);
 
 		status = slot_getattr(ti->slot, Anum_chunk_status, &status_isnull);
 		Assert(!status_isnull);
-		status_is_compressed = ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED);
-		can_be_compressed = !DatumGetBool(dropped) && !status_is_compressed;
+		if (!dropped)
+		{
+			bool status_is_compressed =
+				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED);
+			bool status_is_unordered =
+				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_UNORDERED);
+			if (status_is_unordered)
+			{
+				Assert(status_is_compressed);
+				st = CHUNK_COMPRESS_UNORDERED;
+			}
+			else if (status_is_compressed)
+				st = CHUNK_COMPRESS_ORDERED;
+			else
+				st = CHUNK_COMPRESS_NONE;
+		}
+		else
+			st = CHUNK_DROPPED;
 	}
 	ts_scan_iterator_close(&iterator);
-	return can_be_compressed;
+	return st;
 }
 
+/*Note that only a compressed chunk can have unordered flag set */
 bool
 ts_chunk_is_unordered(const Chunk *chunk)
 {
-	/* only compressed Chunks can be unordered so we should never be
-	 * called for uncompressed chunks */
-	Assert(ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED));
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_UNORDERED);
+}
+
+bool
+ts_chunk_is_compressed(const Chunk *chunk)
+{
+	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
 }
 
 Datum
