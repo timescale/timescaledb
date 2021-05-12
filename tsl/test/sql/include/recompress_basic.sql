@@ -42,8 +42,6 @@ FROM test2
 GROUP BY time_bucket(INTERVAL '2 hour', timec), b
 ORDER BY 1, 2;
  
---SELECT * FROM test2 order by b, timec;
-
 --check status for chunk --
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
@@ -64,12 +62,11 @@ SELECT chunk_status,
 FROM compressed_chunk_info_view 
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 
---- insert into a compressed chunk again --
-INSERT INTO test2 values ( '2020-01-03 11:01:03+00', 20, 11, '33row'); 
-INSERT INTO test2 values ( '2020-01-03 11:01:06+00', 20, 11, '36row'); 
-INSERT INTO test2 values ( '2020-01-03 11:02:00+00', 20, 12, '12row'); 
---insert into a new chunk as well --
-INSERT INTO test2 values ( '2020-04-03 00:02:00+00', 30, 13, '3013row'); 
+--- insert into a compressed chunk again + a new chunk--
+INSERT INTO test2 values ( '2020-01-03 11:01:03+00', 20, 11, '33row'), 
+                         ( '2020-01-03 11:01:06+00', 20, 11, '36row'), 
+                         ( '2020-01-03 11:02:00+00', 20, 12, '12row'), 
+                         ( '2020-04-03 00:02:00+00', 30, 13, '3013row'); 
 
 SELECT time_bucket(INTERVAL '2 hour', timec), b, count(*)
 FROM test2
@@ -84,8 +81,6 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('test2', '30d'::interval) \gset
----call the job twice to avoid timing issues when we check the chunk status
---- for both the chunks
 CALL run_job(:job_id);
 CALL run_job(:job_id);
 
@@ -95,4 +90,12 @@ SELECT chunk_status,
 FROM compressed_chunk_info_view 
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 
+\set ON_ERROR_STOP 0
+-- call recompress_chunk when status is not unordered
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass, true); 
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass, false); 
 
+--now decompress it , then try and recompress 
+SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
+\set ON_ERROR_STOP 1
