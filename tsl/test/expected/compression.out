@@ -80,10 +80,9 @@ select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 select tgname , tgtype, tgenabled , relname
 from pg_trigger t, pg_class rel
 where t.tgrelid = rel.oid and rel.relname like '_hyper_1_2_chunk' order by tgname;
-             tgname              | tgtype | tgenabled |     relname      
----------------------------------+--------+-----------+------------------
- compressed_chunk_insert_blocker |      7 | O         | _hyper_1_2_chunk
-(1 row)
+ tgname | tgtype | tgenabled | relname 
+--------+--------+-----------+---------
+(0 rows)
 
 \x
 select * from chunk_compression_stats('foo')
@@ -211,7 +210,6 @@ do update set b = excluded.b;
 ERROR:  insert with ON CONFLICT and RETURNING clause is not supported on compressed chunks
 --TEST2c Do DML directly on the chunk.
 insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
-ERROR:  insert/update/delete not permitted on chunk "_hyper_1_2_chunk"
 update _timescaledb_internal._hyper_1_2_chunk
 set b = 12;
 ERROR:  cannot update/delete rows from chunk "_hyper_1_2_chunk" as it is compressed
@@ -226,12 +224,14 @@ select decompress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
 
 insert into foo values( 11 , 10 , 20, 120);
 update foo set b =20 where a = 10;
+ERROR:  duplicate key value violates unique constraint "_hyper_1_2_chunk_foo_uniq"
 select * from _timescaledb_internal._hyper_1_2_chunk order by a;
  a  | b  | c  |  d  
 ----+----+----+-----
- 10 | 20 | 20 |    
+ 10 | 12 | 12 |  12
+ 10 | 10 | 20 |    
  11 | 10 | 20 | 120
-(2 rows)
+(3 rows)
 
 delete from foo where a = 10;
 select * from _timescaledb_internal._hyper_1_2_chunk order by a;

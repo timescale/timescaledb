@@ -70,7 +70,6 @@ compress_chunk
 _timescaledb_internal._hyper_3_5_chunk
 step Cc: COMMIT;
 step I1: <... completed>
-error in steps Cc I1: ERROR:  insert/update/delete not permitted on chunk "_hyper_3_5_chunk"
 step Ic: COMMIT;
 
 starting permutation: LockChunk1 A1 C1 UnlockChunk Cc A2
