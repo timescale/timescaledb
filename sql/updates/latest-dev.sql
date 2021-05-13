@@ -124,3 +124,6 @@ UPDATE pg_class
    SET relacl = (SELECT relacl FROM pg_class WHERE oid = hypertable_oid)
   FROM chunks
  WHERE oid = chunk_oid;
+
+DROP FUNCTION _timescaledb_internal.chunk_dml_blocker CASCADE;
+
