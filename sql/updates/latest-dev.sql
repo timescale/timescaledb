@@ -125,5 +125,7 @@ UPDATE pg_class
   FROM chunks
  WHERE oid = chunk_oid;
 
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_dml_blocker CASCADE;
+
 -- drop the view as view definition changed
 DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size ;
