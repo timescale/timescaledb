@@ -435,6 +435,314 @@ SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
  17 | 18
 (1 row)
 
+-- TEST triggers
+-- insert into compressed hypertables with triggers
+CREATE OR REPLACE FUNCTION row_trig_value_gt_0() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  IF NEW.value <= 0 THEN
+    RAISE NOTICE 'Skipping insert';
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION row_trig_value_mod() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  NEW.value = NEW.value + 100;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION stmt_trig_error() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NULL;
+END
+$$ LANGUAGE plpgsql;
+CREATE TABLE trigger_test(time timestamptz NOT NULL, device int, value int, dropcol1 int);
+SELECT create_hypertable('trigger_test','time');
+     create_hypertable      
+----------------------------
+ (11,public,trigger_test,t)
+(1 row)
+
+--create chunk and compress
+--the first chunk is created with dropcol1
+INSERT INTO trigger_test(time, device, value,dropcol1) SELECT '2000-01-01',1,1,1;
+-- drop the column before we compress
+ALTER TABLE trigger_test DROP COLUMN dropcol1;
+ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
+SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_15_chunk
+(1 row)
+
+-- BEFORE ROW trigger
+CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
+-- should be 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+-- try insert that gets skipped by trigger
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Skipping insert
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
+NOTICE:  Skipping insert
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+-- try again without being skipped
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,1) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,1) <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t1 ON trigger_test;
+-- BEFORE ROW trigger that modifies tuple
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111
+ Fri Dec 31 22:00:00 1999 PST |      1 |   112
+(3 rows)
+
+ROLLBACK;
+DROP TRIGGER t1_mod ON trigger_test;
+-- BEFORE ROW conditional trigger
+CREATE TRIGGER t1_cond BEFORE INSERT ON trigger_test FOR EACH ROW WHEN (NEW.value > 10) EXECUTE FUNCTION row_trig_value_mod();
+-- test with condition being false
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+COPY trigger_test FROM STDIN DELIMITER ',';
+-- value for both new tuples should not be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Fri Dec 31 22:00:00 1999 PST |      1 |     2
+(3 rows)
+
+ROLLBACK;
+-- test with condition being true
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111
+ Fri Dec 31 22:00:00 1999 PST |      1 |   112
+(3 rows)
+
+ROLLBACK;
+DROP TRIGGER t1_cond ON trigger_test;
+-- BEFORE ROW error in trigger
+CREATE TRIGGER t1_error BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t1_error ON trigger_test;
+-- BEFORE STATEMENT trigger
+CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t2 BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t2 BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t2 ON trigger_test;
+-- BEFORE STATEMENT error in trigger
+CREATE TRIGGER t2_error BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t2_error BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t2_error BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t2_error ON trigger_test;
+-- AFTER STATEMENT trigger
+CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t3 AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t3 AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t3 ON trigger_test;
+-- AFTER STATEMENT error in trigger
+CREATE TRIGGER t3_error AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t3_error AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t3_error AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t3_error ON trigger_test;
+-- test unsupported features are blocked
+-- INSTEAD OF INSERT is only supported for VIEWs
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t4_instead INSTEAD OF INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+ERROR:  "trigger_test" is a table
+\set ON_ERROR_STOP 1
+-- AFTER INSERT ROW trigger not supported on compressed chunk
+CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+ERROR:  after insert row trigger on compressed chunk not supported
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  after insert row trigger on compressed chunk not supported
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2001-01-01',1,0;
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Mon Jan 01 00:00:00 2001 PST",1,0) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Sun Dec 31 22:00:00 2000 PST",1,0) <NULL>
+-- insert into new uncompressed chunk should not be blocked
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t4_ar ON trigger_test;
+-- CONSTRAINT trigger not supported on compressed chunk
+CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+ERROR:  after insert row trigger on compressed chunk not supported
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  after insert row trigger on compressed chunk not supported
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP trigger t4_constraint ON trigger_test;
+-- test row triggers after adding/dropping columns
+-- now add a new column to the table and insert into a new chunk
+ALTER TABLE trigger_test ADD COLUMN addcolv varchar(10);
+ALTER TABLE trigger_test ADD COLUMN addcoli integer;
+INSERT INTO trigger_test(time, device, value, addcolv, addcoli) 
+VALUES ( '2010-01-01', 10, 10, 'ten', 222);
+SELECT compress_chunk(c, true) FROM show_chunks('trigger_test') c;
+NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_15_chunk
+ _timescaledb_internal._hyper_11_18_chunk
+(2 rows)
+
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     2
+(1 row)
+
+BEGIN;
+INSERT INTO trigger_test VALUES
+                   ( '2000-01-01',1,11, 'eleven', 111),
+                   ( '2010-01-01',10,10, 'ten', 222);
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11,eleven,111) <NULL>
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_18_chunk: ("Fri Jan 01 00:00:00 2010 PST",10,10,ten,222) <NULL>
+SELECT * FROM trigger_test ORDER BY 1 ,2, 5;
+             time             | device | value | addcolv | addcoli 
+------------------------------+--------+-------+---------+---------
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111 | eleven  |     111
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1 |         |        
+ Fri Jan 01 00:00:00 2010 PST |     10 |    10 | ten     |     222
+ Fri Jan 01 00:00:00 2010 PST |     10 |   110 | ten     |     222
+(4 rows)
+
+ROLLBACK;
+DROP TABLE trigger_test;
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
@@ -452,13 +760,13 @@ INSERT INTO test_ordering VALUES (5),(4),(3);
 ------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Index Only Scan Backward using _hyper_11_15_chunk_test_ordering_time_idx on _hyper_11_15_chunk
+   ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
 (3 rows)
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_15_chunk
+ _timescaledb_internal._hyper_13_20_chunk
 (1 row)
 
 -- should be ordered append
@@ -467,10 +775,10 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 -------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_11_15_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_12_16_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_12_16_chunk
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_21_chunk
 (6 rows)
 
 INSERT INTO test_ordering SELECT 1;
@@ -479,10 +787,10 @@ INSERT INTO test_ordering SELECT 1;
                            QUERY PLAN                            
 -----------------------------------------------------------------
  Sort
-   Sort Key: _hyper_11_15_chunk."time"
+   Sort Key: _hyper_13_20_chunk."time"
    ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_11_15_chunk
-               ->  Seq Scan on compress_hyper_12_16_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Seq Scan on compress_hyper_14_21_chunk
 (5 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
@@ -493,10 +801,10 @@ INSERT INTO test_ordering VALUES (105),(104),(103);
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Sort
-         Sort Key: _hyper_11_15_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_11_15_chunk
-               ->  Seq Scan on compress_hyper_12_16_chunk
-   ->  Index Only Scan Backward using _hyper_11_17_chunk_test_ordering_time_idx on _hyper_11_17_chunk
+         Sort Key: _hyper_13_20_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Seq Scan on compress_hyper_14_21_chunk
+   ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
 (7 rows)
 
 --insert into compressed + uncompressed chunk
@@ -519,11 +827,11 @@ INSERT INTO test_ordering VALUES (23), (24),(115) RETURNING *;
 ERROR:  insert with ON CONFLICT and RETURNING clause is not supported on compressed chunks
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
-NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
+NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_15_chunk
- _timescaledb_internal._hyper_11_17_chunk
+ _timescaledb_internal._hyper_13_20_chunk
+ _timescaledb_internal._hyper_13_22_chunk
 (2 rows)
 
 -- should be ordered append
@@ -533,12 +841,12 @@ NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Sort
-         Sort Key: _hyper_11_15_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_11_15_chunk
-               ->  Seq Scan on compress_hyper_12_16_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_11_17_chunk
+         Sort Key: _hyper_13_20_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+               ->  Seq Scan on compress_hyper_14_21_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
          ->  Sort
-               Sort Key: compress_hyper_12_18_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_12_18_chunk
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_23_chunk
 (10 rows)
 

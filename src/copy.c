@@ -130,6 +130,13 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 {
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
+	/* if copies are directed to a chunk that is compressed, we redirect
+	 * them to the internal compressed chunk. But we still
+	 * need to check triggers, constrainst etc. against the original
+	 * chunk (not the internal compressed chunk).
+	 * check_resultRelInfo saves that information
+	 */
+	ResultRelInfo *check_resultRelInfo = NULL;
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
 	TupleTableSlot *singleslot;
@@ -354,19 +361,26 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 		resultRelInfo = cis->result_relation_info;
 		estate->es_result_relation_info = resultRelInfo;
 
+		if (cis->compress_state != NULL)
+			check_resultRelInfo = cis->orig_result_relation_info;
+		else
+			check_resultRelInfo = resultRelInfo;
+
 		/* Set the right relation for triggers */
-		ts_tuptableslot_set_table_oid(myslot, RelationGetRelid(resultRelInfo->ri_RelationDesc));
+		ts_tuptableslot_set_table_oid(myslot,
+									  RelationGetRelid(check_resultRelInfo->ri_RelationDesc));
 
 		skip_tuple = false;
 
 		/* BEFORE ROW INSERT Triggers */
-		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
+		if (check_resultRelInfo->ri_TrigDesc &&
+			check_resultRelInfo->ri_TrigDesc->trig_insert_before_row)
 		{
 #if PG12_LT
-			myslot = ExecBRInsertTriggers(estate, resultRelInfo, myslot);
+			myslot = ExecBRInsertTriggers(estate, check_resultRelInfo, myslot);
 			skip_tuple = (myslot == NULL);
 #else
-			skip_tuple = !ExecBRInsertTriggers(estate, resultRelInfo, myslot);
+			skip_tuple = !ExecBRInsertTriggers(estate, check_resultRelInfo, myslot);
 #endif
 		}
 
@@ -380,8 +394,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 
 #if PG12_GE
 			/* Compute stored generated columns */
-			if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
-				resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+			if (check_resultRelInfo->ri_RelationDesc->rd_att->constr &&
+				check_resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
 #if PG13_GE
 				ExecComputeStoredGenerated(estate, myslot, CMD_INSERT);
 #else
@@ -392,18 +406,11 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 			 * If the target is a plain table, check the constraints of
 			 * the tuple.
 			 */
-			if (resultRelInfo->ri_FdwRoutine == NULL &&
-				resultRelInfo->ri_RelationDesc->rd_att->constr)
+			if (check_resultRelInfo->ri_FdwRoutine == NULL &&
+				check_resultRelInfo->ri_RelationDesc->rd_att->constr)
 			{
-				Assert(resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
-				ExecConstraints(resultRelInfo, myslot, estate);
-			}
-			else if (cis->compress_state &&
-					 cis->orig_result_relation_info->ri_RelationDesc->rd_att->constr)
-			{
-				Assert(cis->orig_result_relation_info->ri_RangeTableIndex > 0 &&
-					   estate->es_range_table);
-				ExecConstraints(cis->orig_result_relation_info, myslot, estate);
+				Assert(check_resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
+				ExecConstraints(check_resultRelInfo, myslot, estate);
 			}
 
 			if (cis->compress_state)
@@ -434,7 +441,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 
 			/* AFTER ROW INSERT Triggers */
 			ExecARInsertTriggersCompat(estate,
-									   resultRelInfo,
+									   check_resultRelInfo,
 									   myslot,
 									   recheckIndexes,
 									   NULL /* transition capture */);

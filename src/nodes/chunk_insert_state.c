@@ -640,12 +640,27 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		resrelinfo->ri_IndexRelationDescs == NULL)
 		ExecOpenIndices(resrelinfo, onconflict_action != ONCONFLICT_NONE);
 
-	if (resrelinfo->ri_TrigDesc != NULL)
+	if (relinfo->ri_TrigDesc != NULL)
 	{
-		if (resrelinfo->ri_TrigDesc->trig_insert_instead_row ||
-			resrelinfo->ri_TrigDesc->trig_insert_after_statement ||
-			resrelinfo->ri_TrigDesc->trig_insert_before_statement)
-			elog(ERROR, "insert trigger on chunk table not supported");
+		TriggerDesc *tg = relinfo->ri_TrigDesc;
+
+		/* instead of triggers can only be created on VIEWs */
+		Assert(!tg->trig_insert_instead_row);
+
+		/*
+		 * A statement that targets a parent table in an inheritance or
+		 * partitioning hierarchy does not cause the statement-level triggers
+		 * of affected child tables to be fired; only the parent table's
+		 * statement-level triggers are fired. However, row-level triggers
+		 * of any affected child tables will be fired.
+		 * During chunk creation we only copy ROW trigger to chunks so
+		 * statement triggers should not exist on chunks.
+		 */
+		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
+			elog(ERROR, "statement trigger on chunk table not supported");
+
+		if (is_compressed && tg->trig_insert_after_row)
+			elog(ERROR, "after insert row trigger on compressed chunk not supported");
 	}
 
 	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
