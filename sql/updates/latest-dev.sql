@@ -125,5 +125,5 @@ UPDATE pg_class
   FROM chunks
  WHERE oid = chunk_oid;
 
-DROP FUNCTION _timescaledb_internal.chunk_dml_blocker CASCADE;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_dml_blocker CASCADE;
 
