@@ -153,14 +153,35 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
+
 	if (cis->compress_state != NULL)
 	{
+		/*
+		 * When the chunk is compressed, we redirect the insert to the internal compressed
+		 * chunk. However, any BEFORE ROW triggers defined on the chunk have to be executed
+		 * before we redirect the insert.
+		 */
+		if (cis->orig_result_relation_info->ri_TrigDesc &&
+			cis->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
+		{
+			bool skip_tuple;
+#if PG12_LT
+			slot = ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
+			skip_tuple = (slot == NULL);
+#else
+			skip_tuple = !ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
+#endif
+
+			if (skip_tuple)
+				return NULL;
+		}
 #if PG12_GE
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
 #endif
 		if (cis->rel->rd_att->constr)
 			ExecConstraints(cis->orig_result_relation_info, slot, estate);
+
 		estate->es_result_relation_info = cis->result_relation_info;
 		Assert(ts_cm_functions->compress_row_exec != NULL);
 		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
