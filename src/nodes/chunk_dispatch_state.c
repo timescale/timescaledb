@@ -144,7 +144,10 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * just when the chunk changes.
 	 */
 	if (cis->compress_state != NULL)
+	{
 		estate->es_result_relation_info = cis->orig_result_relation_info;
+		//		ExecBRInsertTriggers(estate, cis->orig_result_relation_info, myslot);
+	}
 	else
 		estate->es_result_relation_info = cis->result_relation_info;
 
@@ -161,6 +164,7 @@ chunk_dispatch_exec(CustomScanState *node)
 #endif
 		if (cis->rel->rd_att->constr)
 			ExecConstraints(cis->orig_result_relation_info, slot, estate);
+
 		estate->es_result_relation_info = cis->result_relation_info;
 		Assert(ts_cm_functions->compress_row_exec != NULL);
 		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
