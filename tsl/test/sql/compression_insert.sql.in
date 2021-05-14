@@ -259,6 +259,236 @@ COPY test_gen(payload) FROM STDIN DELIMITER ',';
 
 SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
 
+-- insert into compressed hypertables with triggers
+CREATE OR REPLACE FUNCTION row_trig_value_gt_0() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  IF NEW.value <= 0 THEN
+    RAISE NOTICE 'Skipping insert';
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION row_trig_value_mod() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  NEW.value = NEW.value + 100;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION stmt_trig_error() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NULL;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE trigger_test(time timestamptz NOT NULL, device int, value int);
+SELECT create_hypertable('trigger_test','time');
+ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
+
+--create chunk and compress
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
+
+-- BEFORE ROW trigger
+CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
+
+-- should be 1
+SELECT count(*) FROM trigger_test;
+
+-- try insert that gets skipped by trigger
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+-- try again without being skipped
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,1
+\.
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
+DROP TRIGGER t1 ON trigger_test;
+
+-- BEFORE ROW trigger that modifies tuple
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,12
+\.
+
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+ROLLBACK;
+
+DROP TRIGGER t1_mod ON trigger_test;
+
+-- BEFORE ROW conditional trigger
+CREATE TRIGGER t1_cond BEFORE INSERT ON trigger_test FOR EACH ROW WHEN (NEW.value > 10) EXECUTE FUNCTION row_trig_value_mod();
+
+-- test with condition being false
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,2
+\.
+
+-- value for both new tuples should not be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+ROLLBACK;
+
+-- test with condition being true
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,12
+\.
+
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+ROLLBACK;
+
+DROP TRIGGER t1_cond ON trigger_test;
+
+-- BEFORE ROW error in trigger
+CREATE TRIGGER t1_error BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_error();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,12
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+DROP TRIGGER t1_error ON trigger_test;
+
+-- BEFORE STATEMENT trigger
+CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
+DROP TRIGGER t2 ON trigger_test;
+
+-- BEFORE STATEMENT error in trigger
+CREATE TRIGGER t2_error BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,12
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+DROP TRIGGER t2_error ON trigger_test;
+
+-- AFTER STATEMENT trigger
+CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
+DROP TRIGGER t3 ON trigger_test;
+
+-- AFTER STATEMENT error in trigger
+CREATE TRIGGER t3_error AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,12
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+DROP TRIGGER t3_error ON trigger_test;
+
+-- test unsupported features are blocked
+
+-- INSTEAD OF INSERT is only supported for VIEWs
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t4_instead INSTEAD OF INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 1
+
+-- AFTER INSERT ROW trigger not supported on compressed chunk
+CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2001-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2001-01-01 01:00:00-05,1,0
+\.
+-- insert into new uncompressed chunk should not be blocked
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
+DROP TRIGGER t4_ar ON trigger_test;
+
+-- CONSTRAINT trigger not supported on compressed chunk
+CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+DROP TABLE trigger_test;
+
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
