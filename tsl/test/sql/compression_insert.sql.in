@@ -259,6 +259,70 @@ COPY test_gen(payload) FROM STDIN DELIMITER ',';
 
 SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
 
+-- insert into hypertables with triggers
+CREATE OR REPLACE FUNCTION row_trig_value_gt_0() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  IF NEW.value <= 0 THEN
+    RAISE NOTICE 'Skipping insert';
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE trigger_test(time timestamptz NOT NULL, device int, value int);
+SELECT create_hypertable('trigger_test','time');
+ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
+
+--create chunk and compress
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
+
+CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
+
+-- should be 1
+SELECT count(*) FROM trigger_test;
+
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+
+-- should be 1
+SELECT count(*) FROM trigger_test;
+
+DROP TRIGGER t1 ON trigger_test;
+CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
+DROP TRIGGER t2 ON trigger_test;
+CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
