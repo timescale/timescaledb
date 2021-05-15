@@ -13,13 +13,13 @@ jobs:
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
-        pg: ["11.11","12.6","13.2"]
+        pg: ["11.12","12.7","13.3"]
         include:
-          - pg: 11.11
+          - pg: 11.12
             pg_major: 11
-          - pg: 12.6
+          - pg: 12.7
             pg_major: 12
-          - pg: 13.2
+          - pg: 13.3
             pg_major: 13
       fail-fast: false
     env:
