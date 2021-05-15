@@ -25,6 +25,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 # Tests to ignore
 set(PG_IGNORE_TESTS
   advisory_lock
+  event_trigger
   foreign_data
   identity
   opr_sanity

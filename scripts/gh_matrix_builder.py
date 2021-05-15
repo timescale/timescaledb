@@ -21,11 +21,11 @@ import sys
 event_type = sys.argv[1]
 
 PG11_EARLIEST = "11.0"
-PG11_LATEST = "11.11"
+PG11_LATEST = "11.12"
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.6"
+PG12_LATEST = "12.7"
 PG13_EARLIEST = "13.2"
-PG13_LATEST = "13.2"
+PG13_LATEST = "13.3"
 
 m = {"include": [],}
 
@@ -135,15 +135,18 @@ if event_type != "pull_request":
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
 
+  # add debug test for first supported PG13 version
+  m["include"].append(build_debug_config({"pg":PG13_EARLIEST}))
+
   # add debug test for MacOS
   m["include"].append(build_debug_config(macos_config({})))
 
-  # add release test for latest pg11 and latest pg12
+  # add release test for latest pg 11, 12 and 13
   m["include"].append(build_release_config({"pg":PG11_LATEST}))
   m["include"].append(build_release_config({"pg":PG12_LATEST}))
   m["include"].append(build_release_config({"pg":PG13_LATEST}))
 
-  # add apache only test for latest pg11 and latest pg 12
+  # add apache only test for latest pg 11, 12 and 13
   m["include"].append(build_apache_config({"pg":PG11_LATEST}))
   m["include"].append(build_apache_config({"pg":PG12_LATEST}))
   m["include"].append(build_apache_config({"pg":PG13_LATEST}))
