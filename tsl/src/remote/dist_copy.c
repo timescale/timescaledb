@@ -765,10 +765,10 @@ reset_copy_connection_state(CopyConnectionState *state)
 	state->connections_in_use = NIL;
 }
 
-static const Chunk *
+static Chunk *
 get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 {
-	const Chunk *chunk = ts_hypertable_find_chunk_if_exists(ht, p);
+	Chunk *chunk = ts_hypertable_find_chunk_if_exists(ht, p);
 
 	if (chunk == NULL)
 	{
@@ -804,7 +804,7 @@ static bool
 remote_copy_process_and_send_data(RemoteCopyContext *context)
 {
 	Hypertable *ht = context->ht;
-	const Chunk *chunk;
+	Chunk *chunk;
 	Point *point;
 	const List *connections;
 
@@ -815,6 +815,13 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 
 	chunk = get_target_chunk(ht, point, &context->connection_state);
 	connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
+
+	/* for remote copy, we don't use chunk insert states on the AN.
+	 * so we need to explicitly set the chunk as unordered when copies
+	 * are directed to previously compressed chunks
+	 */
+	if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
+		ts_chunk_set_unordered(chunk);
 
 	return send_copy_data(context->row_data, connections);
 }
