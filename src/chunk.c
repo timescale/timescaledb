@@ -3013,7 +3013,7 @@ chunk_update_form(FormData_chunk *form)
 							   form,
 							   0,
 							   ForwardScanDirection,
-							   AccessShareLock,
+							   RowExclusiveLock,
 							   CurrentMemoryContext) > 0;
 }
 
@@ -3032,7 +3032,7 @@ chunk_update_status(FormData_chunk *form)
 							   form,
 							   0,
 							   ForwardScanDirection,
-							   AccessShareLock,
+							   RowExclusiveLock,
 							   CurrentMemoryContext) > 0;
 }
 
