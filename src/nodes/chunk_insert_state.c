@@ -129,19 +129,18 @@ create_compress_chunk_result_relation_info(ChunkDispatch *dispatch, Relation com
 	InitResultRelInfo(rri, compress_rel, hyper_rti, NULL, dispatch->estate->es_instrument);
 
 	rri_orig = dispatch->hypertable_result_rel_info;
-	if (rri_orig->ri_WithCheckOptions || rri_orig->ri_WithCheckOptionExprs ||
-		rri_orig->ri_junkFilter || rri_orig->ri_projectReturning)
-	{
-		elog(ERROR, "CHECK options, RETURNING clause are not supported");
-	}
-	rri->ri_junkFilter = rri_orig->ri_junkFilter; // TODO does this need any translation
+	/* RLS policies are not supported if compression is enabled */
+	Assert(rri_orig->ri_WithCheckOptions == NULL && rri_orig->ri_WithCheckOptionExprs == NULL);
+	Assert(rri_orig->ri_projectReturning == NULL);
+	rri->ri_junkFilter = rri_orig->ri_junkFilter;
 
 	/* compressed rel chunk is on data node. Does not need any FDW access on AN */
 	rri->ri_FdwState = NULL;
 	rri->ri_usesFdwDirectModify = false;
 	rri->ri_FdwRoutine = NULL;
-	// TODO revisit this
-	// create_chunk_rri_constraint_expr(rri, compress_rel);
+	/* constraints are executed on the orig base chunk. So we do
+	 * not call create_chunk_rri_constraint_expr here
+	 */
 	return rri;
 }
 
@@ -580,7 +579,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *resrelinfo, *relinfo;
-	bool is_compressed = (chunk->fd.compressed_chunk_id != 0);
+	bool has_compressed_chunk = (chunk->fd.compressed_chunk_id != 0);
 
 	/* permissions NOT checked here; were checked at hypertable level */
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
@@ -591,11 +590,11 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
 		elog(ERROR, "insert is not on a table");
 
-	if (is_compressed &&
+	if (has_compressed_chunk &&
 		(onconflict_action != ONCONFLICT_NONE || ts_chunk_dispatch_has_returning(dispatch)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("insert with ON CONFLICT and RETURNING clause is not supported on "
+				 errmsg("insert with ON CONFLICT or RETURNING clause is not supported on "
 						"compressed chunks")));
 
 	/*
@@ -605,10 +604,10 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
-	if (is_compressed)
+	if (has_compressed_chunk)
 	{
 		Oid compress_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
-		if (ts_relation_has_primary_or_unique_index(rel))
+		if (ts_indexing_relation_has_primary_or_unique_index(rel))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -621,7 +620,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
-	if (!is_compressed)
+	if (!has_compressed_chunk)
 		resrelinfo = relinfo;
 	else
 	{
@@ -659,7 +658,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
 			elog(ERROR, "statement trigger on chunk table not supported");
 
-		if (is_compressed && tg->trig_insert_after_row)
+		if (has_compressed_chunk && tg->trig_insert_after_row)
 			elog(ERROR, "after insert row trigger on compressed chunk not supported");
 	}
 
@@ -680,7 +679,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
-	if (is_compressed)
+	if (has_compressed_chunk)
 	{
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
 		/* this is true as compressed chunks are not created on access node */
@@ -777,18 +776,17 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);
-	table_close(state->rel, NoLock);
 
 	if (state->compress_rel)
 	{
 		ResultRelInfo *orig_chunk_rri = state->orig_result_relation_info;
 		Oid chunk_relid = RelationGetRelid(orig_chunk_rri->ri_RelationDesc);
-		table_close(state->compress_rel, NoLock);
 		ts_cm_functions->compress_row_end(state->compress_state);
 		ts_cm_functions->compress_row_destroy(state->compress_state);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		if (!ts_chunk_is_unordered(chunk))
 			ts_chunk_set_unordered(chunk);
+		table_close(state->compress_rel, NoLock);
 	}
 	else if (RelationGetForm(state->result_relation_info->ri_RelationDesc)->relkind ==
 			 RELKIND_FOREIGN_TABLE)
@@ -803,6 +801,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 			ts_chunk_set_unordered(chunk);
 	}
 
+	table_close(state->rel, NoLock);
 	if (NULL != state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
 

@@ -207,7 +207,7 @@ ERROR:  cannot update/delete rows from chunk "_hyper_1_1_chunk" as it is compres
 insert into foo values(10, 12, 12, 12)
 on conflict( a, b)
 do update set b = excluded.b;
-ERROR:  insert with ON CONFLICT and RETURNING clause is not supported on compressed chunks
+ERROR:  insert with ON CONFLICT or RETURNING clause is not supported on compressed chunks
 --TEST2c Do DML directly on the chunk.
 insert into _timescaledb_internal._hyper_1_2_chunk values(10, 12, 12, 12);
 update _timescaledb_internal._hyper_1_2_chunk
