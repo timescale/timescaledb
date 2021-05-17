@@ -5,6 +5,9 @@ add_subdirectory(ssl)
 set(_local_install_checks)
 set(_install_checks)
 
+find_program(PROVE prove
+  "/usr/bin")
+
 if(PG_REGRESS)
   add_custom_target(regresscheck-t
     COMMAND ${CMAKE_COMMAND} -E env
@@ -59,7 +62,21 @@ if(PG_REGRESS)
     ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
     USES_TERMINAL)
 
+  add_custom_target(provecheck
+    COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
+    COMMAND BUILDIR=${CMAKE_BINARY_DIR}
+    TESTDIR=${CMAKE_CURRENT_BINARY_DIR}
+    PATH="${PG_BINDIR}:$ENV{PATH}"
+    PGPORT=6${TEST_PGPORT_LOCAL}
+    PG_REGRESS=${PG_REGRESS}
+    ${PROVE} -I "${PG_SOURCE_DIR}/src/test/perl"
+    -I "${CMAKE_SOURCE_DIR}/test/perl"
+    -I "$ENV{HOME}/perl5/lib/perl5"
+    t/*.pl
+    USES_TERMINAL)
+
   list(APPEND _install_checks regresscheck-shared)
+  list(APPEND _install_checks provecheck)
   list(APPEND _local_install_checks regresschecklocal-shared)
 
 endif()
@@ -98,6 +115,7 @@ endif()
 add_subdirectory(shared)
 add_subdirectory(sql)
 add_subdirectory(isolation)
+add_subdirectory(t)
 
 # installchecklocal tests against an existing postgres instance
 add_custom_target(installchecklocal-t DEPENDS ${_local_install_checks})

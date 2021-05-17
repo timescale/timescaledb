@@ -49,6 +49,11 @@ check_file() {
             LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
             FIRST_COMMENT=`get_sql_license ${FILE}`
             ;;
+        ('-p')
+            LICENSE_FILE="${SCRIPTPATH}/license_tsl.spec"
+            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
+            FIRST_COMMENT=`get_sql_license ${FILE}`
+            ;;
         ("--")
             return 0;
             ;;
@@ -67,7 +72,7 @@ check_file() {
     fi
 }
 
-args=`getopt "c:e:i:j:s:t:" $*`; errcode=$?; set -- $args
+args=`getopt "c:e:i:j:p:s:t:" $*`; errcode=$?; set -- $args
 
 if [[ ${errcode} != 0 ]]; then
         echo 'Usage: check_file_license ((-c|-e|-i|-j|-s|-t) <filename> ...)'
