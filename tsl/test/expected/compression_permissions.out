@@ -162,6 +162,7 @@ NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to view v2
 -- Testing that permissions propagate to compressed hypertables and to
 -- compressed chunks.
+-- Table is created by superuser
 CREATE TABLE conditions (
       timec TIMESTAMPTZ NOT NULL,
       location TEXT NOT NULL,
@@ -348,3 +349,32 @@ chunk          | _timescaledb_internal.compress_hyper_4_27_chunk
 chunk_acl      | {super_user=arwdDxt/super_user,default_perm_user=r/super_user}
 
 \x off
+--TEST user that has insert permission can insert into a compressed chunk
+GRANT INSERT ON conditions TO :ROLE_DEFAULT_PERM_USER;
+SELECT count(*) FROM conditions; 
+ count 
+-------
+    63
+(1 row)
+
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q; 
+ count 
+-------
+    11
+(1 row)
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+--insert into a compressed chunk --
+INSERT INTO conditions VALUES( '2018-12-02 00:00'::timestamp, 'NYC', 75, 95);
+SELECT count(*) FROM conditions; 
+ count 
+-------
+    64
+(1 row)
+
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q; 
+ count 
+-------
+    11
+(1 row)
+

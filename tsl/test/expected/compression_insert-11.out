@@ -782,7 +782,7 @@ INSERT INTO test_ordering VALUES (106) RETURNING *;
 -- insert into compressed chunk does not support RETURNING
 \set ON_ERROR_STOP 0
 INSERT INTO test_ordering VALUES (23), (24),(115) RETURNING *;
-ERROR:  insert with ON CONFLICT and RETURNING clause is not supported on compressed chunks
+ERROR:  insert with ON CONFLICT or RETURNING clause is not supported on compressed chunks
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
 NOTICE:  chunk "_hyper_13_18_chunk" is already compressed
