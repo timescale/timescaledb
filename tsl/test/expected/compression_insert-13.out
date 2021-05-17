@@ -435,7 +435,7 @@ SELECT * from test_gen WHERE id = (Select max(id) from test_gen);
  17 | 18
 (1 row)
 
--- insert into hypertables with triggers
+-- insert into compressed hypertables with triggers
 CREATE OR REPLACE FUNCTION row_trig_value_gt_0() RETURNS TRIGGER AS $$
 BEGIN
   RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
@@ -457,6 +457,12 @@ CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
 BEGIN
   RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
   RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION stmt_trig_error() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  RETURN NULL;
 END
 $$ LANGUAGE plpgsql;
 CREATE TABLE trigger_test(time timestamptz NOT NULL, device int, value int);
@@ -491,7 +497,7 @@ NOTICE:  Skipping insert
 COPY trigger_test FROM STDIN DELIMITER ',';
 NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 NOTICE:  Skipping insert
--- should be 1
+-- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
  count 
 -------
@@ -531,6 +537,55 @@ SELECT * FROM trigger_test ORDER BY 3;
 
 ROLLBACK;
 DROP TRIGGER t1_mod ON trigger_test;
+-- BEFORE ROW conditional trigger
+CREATE TRIGGER t1_cond BEFORE INSERT ON trigger_test FOR EACH ROW WHEN (NEW.value > 10) EXECUTE FUNCTION row_trig_value_mod();
+-- test with condition being false
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+COPY trigger_test FROM STDIN DELIMITER ',';
+-- value for both new tuples should not be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Fri Dec 31 22:00:00 1999 PST |      1 |     2
+(3 rows)
+
+ROLLBACK;
+-- test with condition being true
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1_cond BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111
+ Fri Dec 31 22:00:00 1999 PST |      1 |   112
+(3 rows)
+
+ROLLBACK;
+DROP TRIGGER t1_cond ON trigger_test;
+-- BEFORE ROW error in trigger
+CREATE TRIGGER t1_error BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t1_error BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t1_error ON trigger_test;
 -- BEFORE STATEMENT trigger
 CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
 BEGIN;
@@ -547,6 +602,22 @@ SELECT count(*) FROM trigger_test;
 
 ROLLBACK;
 DROP TRIGGER t2 ON trigger_test;
+-- BEFORE STATEMENT error in trigger
+CREATE TRIGGER t2_error BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t2_error BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t2_error BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t2_error ON trigger_test;
 -- AFTER STATEMENT trigger
 CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
 BEGIN;
@@ -562,6 +633,23 @@ SELECT count(*) FROM trigger_test;
 (1 row)
 
 ROLLBACK;
+DROP TRIGGER t3 ON trigger_test;
+-- AFTER STATEMENT error in trigger
+CREATE TRIGGER t3_error AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_error();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+ERROR:  Trigger t3_error AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  Trigger t3_error AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+DROP TRIGGER t3_error ON trigger_test;
 DROP TABLE trigger_test;
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);
