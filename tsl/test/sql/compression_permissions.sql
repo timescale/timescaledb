@@ -125,6 +125,7 @@ DROP TABLE conditions CASCADE;
 
 -- Testing that permissions propagate to compressed hypertables and to
 -- compressed chunks.
+-- Table is created by superuser
 
 CREATE TABLE conditions (
       timec TIMESTAMPTZ NOT NULL,
@@ -178,3 +179,13 @@ SELECT htd.hypertable, htd.hypertable_acl, chunk, chunk_acl
   FROM chunk_details chd JOIN hypertable_details htd ON chd.hypertable = htd.compressed
 ORDER BY hypertable, chunk;
 \x off
+
+--TEST user that has insert permission can insert into a compressed chunk
+GRANT INSERT ON conditions TO :ROLE_DEFAULT_PERM_USER;
+SELECT count(*) FROM conditions; 
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q; 
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+--insert into a compressed chunk --
+INSERT INTO conditions VALUES( '2018-12-02 00:00'::timestamp, 'NYC', 75, 95);
+SELECT count(*) FROM conditions; 
+SELECT count(*) FROM ( SELECT show_chunks('conditions'))q; 

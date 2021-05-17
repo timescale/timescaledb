@@ -880,3 +880,120 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
  _dist_hyper_4_14_chunk |            1
 (1 row)
 
+---run copy tests
+--copy data into existing chunk + for a new chunk
+COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
+SELECT time_bucket(20, time ), count(*)
+FROM test_recomp_int
+GROUP BY time_bucket( 20, time) ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |    12
+         100 |     3
+(2 rows)
+
+--another new chunk
+INSERT INTO test_recomp_int VALUES( 65, 10);
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+       chunk_name       | chunk_status 
+------------------------+--------------
+ _dist_hyper_4_14_chunk |            3
+ _dist_hyper_4_15_chunk |            0
+ _dist_hyper_4_16_chunk |            0
+(3 rows)
+
+--compress all 3 chunks ---
+--check status, unordered chunk status will not change
+SELECT compress_chunk(chunk, true)
+FROM show_chunks('test_recomp_int') AS chunk
+ORDER BY chunk;
+                compress_chunk                
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_4_14_chunk
+ _timescaledb_internal._dist_hyper_4_15_chunk
+ _timescaledb_internal._dist_hyper_4_16_chunk
+(3 rows)
+
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+       chunk_name       | chunk_status 
+------------------------+--------------
+ _dist_hyper_4_14_chunk |            3
+ _dist_hyper_4_15_chunk |            1
+ _dist_hyper_4_16_chunk |            1
+(3 rows)
+
+--interleave copy into 3 different chunks and check status--
+COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+       chunk_name       | chunk_status 
+------------------------+--------------
+ _dist_hyper_4_14_chunk |            3
+ _dist_hyper_4_15_chunk |            3
+ _dist_hyper_4_16_chunk |            3
+(3 rows)
+
+SELECT time_bucket(20, time ), count(*)
+FROM test_recomp_int
+GROUP BY time_bucket( 20, time) ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |    14
+          60 |     3
+         100 |     5
+(3 rows)
+
+--check compression_status afterwards--
+SELECT recompress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 2)q;
+               recompress_chunk               
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_4_14_chunk
+ _timescaledb_internal._dist_hyper_4_15_chunk
+(2 rows)
+
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+       chunk_name       | chunk_status 
+------------------------+--------------
+ _dist_hyper_4_14_chunk |            1
+ _dist_hyper_4_15_chunk |            1
+ _dist_hyper_4_16_chunk |            3
+(3 rows)
+
+CALL run_job(:compressjob_id);
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+       chunk_name       | chunk_status 
+------------------------+--------------
+ _dist_hyper_4_14_chunk |            1
+ _dist_hyper_4_15_chunk |            1
+ _dist_hyper_4_16_chunk |            1
+(3 rows)
+
+--verify that there are no errors if the policy/recompress_chunk is executed again
+--on previously compressed chunks
+CALL run_job(:compressjob_id);
+NOTICE:  no chunks for hypertable public.test_recomp_int that satisfy compress chunk policy
+SELECT recompress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
+NOTICE:  nothing to recompress in chunk "_dist_hyper_4_14_chunk" 
+NOTICE:  nothing to recompress in chunk "_dist_hyper_4_15_chunk" 
+NOTICE:  nothing to recompress in chunk "_dist_hyper_4_16_chunk" 
+ recompress_chunk 
+------------------
+ 
+ 
+ 
+(3 rows)
+
+--decompress and recompress chunk
+\set ON_ERROR_STOP 0
+SELECT decompress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+               decompress_chunk               
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_4_14_chunk
+(1 row)
+
+SELECT recompress_chunk(chunk)  FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+ERROR:  call compress_chunk instead of recompress_chunk
+\set ON_ERROR_STOP 1

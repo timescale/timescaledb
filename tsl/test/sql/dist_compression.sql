@@ -347,3 +347,66 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 CALL run_job(:compressjob_id);
 SELECT count(*) from test_recomp_int;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+---run copy tests
+--copy data into existing chunk + for a new chunk
+COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
+11, 11 
+12, 12 
+13, 13 
+100, 100
+101, 100
+102, 100
+\.
+
+SELECT time_bucket(20, time ), count(*)
+FROM test_recomp_int
+GROUP BY time_bucket( 20, time) ORDER BY 1;
+
+--another new chunk
+INSERT INTO test_recomp_int VALUES( 65, 10);
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+--compress all 3 chunks ---
+--check status, unordered chunk status will not change
+SELECT compress_chunk(chunk, true)
+FROM show_chunks('test_recomp_int') AS chunk
+ORDER BY chunk;
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+--interleave copy into 3 different chunks and check status--
+COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
+14, 14 
+103, 100
+66, 66
+15, 15 
+104, 100
+70, 70
+\.
+
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+SELECT time_bucket(20, time ), count(*)
+FROM test_recomp_int
+GROUP BY time_bucket( 20, time) ORDER BY 1;
+
+--check compression_status afterwards--
+SELECT recompress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 2)q;
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+CALL run_job(:compressjob_id);
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+--verify that there are no errors if the policy/recompress_chunk is executed again
+--on previously compressed chunks
+CALL run_job(:compressjob_id);
+SELECT recompress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
+
+--decompress and recompress chunk
+\set ON_ERROR_STOP 0
+SELECT decompress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+SELECT recompress_chunk(chunk)  FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+\set ON_ERROR_STOP 1
