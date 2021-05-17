@@ -360,14 +360,14 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass, true); 
-psql:include/recompress_basic.sql:95: NOTICE:  chunk "_hyper_10_48_chunk" is already compressed
+psql:include/recompress_basic.sql:95: NOTICE:  nothing to recompress in chunk "_hyper_10_48_chunk" 
  recompress_chunk 
 ------------------
  
 (1 row)
 
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass, false); 
-psql:include/recompress_basic.sql:96: ERROR:  chunk "_hyper_10_48_chunk" is already compressed
+psql:include/recompress_basic.sql:96: ERROR:  nothing to recompress in chunk "_hyper_10_48_chunk" 
 --now decompress it , then try and recompress 
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
