@@ -650,6 +650,56 @@ SELECT count(*) FROM trigger_test;
 (1 row)
 
 DROP TRIGGER t3_error ON trigger_test;
+-- test unsupported features are blocked
+-- INSTEAD OF INSERT is only supported for VIEWs
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t4_instead INSTEAD OF INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+ERROR:  "trigger_test" is a table
+\set ON_ERROR_STOP 1
+-- AFTER INSERT ROW trigger not supported on compressed chunk
+CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+ERROR:  after insert row trigger on compressed chunk not supported
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  after insert row trigger on compressed chunk not supported
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2001-01-01',1,0;
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Mon Jan 01 00:00:00 2001 PST",1,0) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t4_ar AFTER INSERT ROW on _hyper_11_17_chunk: ("Sun Dec 31 22:00:00 2000 PST",1,0) <NULL>
+-- insert into new uncompressed chunk should not be blocked
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
+DROP TRIGGER t4_ar ON trigger_test;
+-- CONSTRAINT trigger not supported on compressed chunk
+CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+ERROR:  after insert row trigger on compressed chunk not supported
+COPY trigger_test FROM STDIN DELIMITER ',';
+ERROR:  after insert row trigger on compressed chunk not supported
+\set ON_ERROR_STOP 1
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     1
+(1 row)
+
 DROP TABLE trigger_test;
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);
@@ -668,13 +718,13 @@ INSERT INTO test_ordering VALUES (5),(4),(3);
 ------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Index Only Scan Backward using _hyper_13_17_chunk_test_ordering_time_idx on _hyper_13_17_chunk
+   ->  Index Only Scan Backward using _hyper_13_18_chunk_test_ordering_time_idx on _hyper_13_18_chunk
 (3 rows)
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_13_17_chunk
+ _timescaledb_internal._hyper_13_18_chunk
 (1 row)
 
 -- should be ordered append
@@ -683,10 +733,10 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 -------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_13_17_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_18_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_18_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_14_18_chunk
+               Sort Key: compress_hyper_14_19_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_19_chunk
 (6 rows)
 
 INSERT INTO test_ordering SELECT 1;
@@ -695,10 +745,10 @@ INSERT INTO test_ordering SELECT 1;
                            QUERY PLAN                            
 -----------------------------------------------------------------
  Sort
-   Sort Key: _hyper_13_17_chunk."time"
+   Sort Key: _hyper_13_18_chunk."time"
    ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_13_17_chunk
-               ->  Seq Scan on compress_hyper_14_18_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_13_18_chunk
+               ->  Seq Scan on compress_hyper_14_19_chunk
 (5 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
@@ -709,10 +759,10 @@ INSERT INTO test_ordering VALUES (105),(104),(103);
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Sort
-         Sort Key: _hyper_13_17_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_17_chunk
-               ->  Seq Scan on compress_hyper_14_18_chunk
-   ->  Index Only Scan Backward using _hyper_13_19_chunk_test_ordering_time_idx on _hyper_13_19_chunk
+         Sort Key: _hyper_13_18_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_18_chunk
+               ->  Seq Scan on compress_hyper_14_19_chunk
+   ->  Index Only Scan Backward using _hyper_13_20_chunk_test_ordering_time_idx on _hyper_13_20_chunk
 (7 rows)
 
 --insert into compressed + uncompressed chunk
@@ -735,11 +785,11 @@ INSERT INTO test_ordering VALUES (23), (24),(115) RETURNING *;
 ERROR:  insert with ON CONFLICT and RETURNING clause is not supported on compressed chunks
 \set ON_ERROR_STOP 1
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
-NOTICE:  chunk "_hyper_13_17_chunk" is already compressed
+NOTICE:  chunk "_hyper_13_18_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_13_17_chunk
- _timescaledb_internal._hyper_13_19_chunk
+ _timescaledb_internal._hyper_13_18_chunk
+ _timescaledb_internal._hyper_13_20_chunk
 (2 rows)
 
 -- should be ordered append
@@ -749,12 +799,12 @@ NOTICE:  chunk "_hyper_13_17_chunk" is already compressed
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Sort
-         Sort Key: _hyper_13_17_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_17_chunk
-               ->  Seq Scan on compress_hyper_14_18_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_13_19_chunk
+         Sort Key: _hyper_13_18_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_13_18_chunk
+               ->  Seq Scan on compress_hyper_14_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_20_chunk._ts_meta_sequence_num DESC
-               ->  Seq Scan on compress_hyper_14_20_chunk
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_21_chunk
 (10 rows)
 

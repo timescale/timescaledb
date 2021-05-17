@@ -443,6 +443,50 @@ SELECT count(*) FROM trigger_test;
 
 DROP TRIGGER t3_error ON trigger_test;
 
+-- test unsupported features are blocked
+
+-- INSTEAD OF INSERT is only supported for VIEWs
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t4_instead INSTEAD OF INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
+\set ON_ERROR_STOP 1
+
+-- AFTER INSERT ROW trigger not supported on compressed chunk
+CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2001-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2001-01-01 01:00:00-05,1,0
+\.
+-- insert into new uncompressed chunk should not be blocked
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
+DROP TRIGGER t4_ar ON trigger_test;
+
+-- CONSTRAINT trigger not supported on compressed chunk
+CREATE CONSTRAINT TRIGGER t4_constraint AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+
+\set ON_ERROR_STOP 0
+INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,0
+\.
+\set ON_ERROR_STOP 1
+
+-- should not insert rows. count is 1
+SELECT count(*) FROM trigger_test;
+
 DROP TABLE trigger_test;
 
 -- test interaction between newly inserted batches and pathkeys/ordered append
