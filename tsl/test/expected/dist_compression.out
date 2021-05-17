@@ -379,7 +379,7 @@ range_start            | Wed Feb 28 16:00:00 2018 PST
 range_end              | Wed Mar 07 16:00:00 2018 PST
 range_start_integer    | 
 range_end_integer      | 
-is_compressed          | 
+is_compressed          | f
 chunk_tablespace       | 
 data_nodes             | {db_dist_compression_1,db_dist_compression_2}
 -[ RECORD 2 ]----------+----------------------------------------------
@@ -393,7 +393,7 @@ range_start            | Wed Feb 28 16:00:00 2018 PST
 range_end              | Wed Mar 07 16:00:00 2018 PST
 range_start_integer    | 
 range_end_integer      | 
-is_compressed          | 
+is_compressed          | f
 chunk_tablespace       | 
 data_nodes             | {db_dist_compression_2,db_dist_compression_3}
 -[ RECORD 3 ]----------+----------------------------------------------
@@ -407,7 +407,7 @@ range_start            | Wed Feb 28 16:00:00 2018 PST
 range_end              | Wed Mar 07 16:00:00 2018 PST
 range_start_integer    | 
 range_end_integer      | 
-is_compressed          | 
+is_compressed          | f
 chunk_tablespace       | 
 data_nodes             | {db_dist_compression_1,db_dist_compression_3}
 

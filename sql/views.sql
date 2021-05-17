@@ -206,12 +206,10 @@ FROM (
     ELSE
       dimsl.range_end
     END AS integer_range_end,
-    CASE WHEN node_list IS NULL THEN 
-      CASE WHEN srcch.compressed_chunk_id IS NOT NULL THEN
-         TRUE
-      ELSE FALSE
-      END
-    ELSE NULL   --distributed chunk case
+    CASE WHEN (srcch.status & 1 = 1) THEN --distributed compress_chunk() has definitely been called
+                                          --remote chunk compression status still uncertain
+        TRUE
+    ELSE FALSE --remote chunk compression status uncertain
     END AS is_compressed,
     pgtab.spcname AS chunk_table_space,
     chdn.node_list
