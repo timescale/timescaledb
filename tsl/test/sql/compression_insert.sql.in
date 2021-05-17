@@ -271,6 +271,14 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION row_trig_value_mod() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  NEW.value = NEW.value + 100;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
 BEGIN
   RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
@@ -286,11 +294,13 @@ ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentb
 INSERT INTO trigger_test SELECT '2000-01-01',1,1;
 SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
 
+-- BEFORE ROW trigger
 CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
 
 -- should be 1
 SELECT count(*) FROM trigger_test;
 
+-- try insert that gets skipped by trigger
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
 COPY trigger_test FROM STDIN DELIMITER ',';
 2000-01-01 01:00:00-05,1,0
@@ -299,7 +309,34 @@ COPY trigger_test FROM STDIN DELIMITER ',';
 -- should be 1
 SELECT count(*) FROM trigger_test;
 
+-- try again without being skipped
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,1
+\.
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ROLLBACK;
+
 DROP TRIGGER t1 ON trigger_test;
+
+-- BEFORE ROW trigger that modifies tuple
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+COPY trigger_test FROM STDIN DELIMITER ',';
+2000-01-01 01:00:00-05,1,12
+\.
+
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+ROLLBACK;
+
+DROP TRIGGER t1_mod ON trigger_test;
+
+-- BEFORE STATEMENT trigger
 CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
 
 BEGIN;
@@ -312,7 +349,9 @@ SELECT count(*) FROM trigger_test;
 ROLLBACK;
 
 DROP TRIGGER t2 ON trigger_test;
-CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+
+-- AFTER STATEMENT trigger
+CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
 
 BEGIN;
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
@@ -322,6 +361,8 @@ COPY trigger_test FROM STDIN DELIMITER ',';
 -- should be 3
 SELECT count(*) FROM trigger_test;
 ROLLBACK;
+
+DROP TABLE trigger_test;
 
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);

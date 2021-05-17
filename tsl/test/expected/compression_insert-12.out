@@ -446,6 +446,13 @@ BEGIN
   RETURN NEW;
 END
 $$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION row_trig_value_mod() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
+  NEW.value = NEW.value + 100;
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION stmt_trig_info() RETURNS TRIGGER AS $$
 BEGIN
   RAISE NOTICE 'Trigger % % % % on %: % %', TG_NAME, TG_WHEN, TG_OP, TG_LEVEL, TG_TABLE_NAME, NEW, OLD;
@@ -468,6 +475,7 @@ SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
  _timescaledb_internal._hyper_11_15_chunk
 (1 row)
 
+-- BEFORE ROW trigger
 CREATE TRIGGER t1 BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_gt_0();
 -- should be 1
 SELECT count(*) FROM trigger_test;
@@ -476,7 +484,10 @@ SELECT count(*) FROM trigger_test;
      1
 (1 row)
 
+-- try insert that gets skipped by trigger
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,0) <NULL>
+NOTICE:  Skipping insert
 COPY trigger_test FROM STDIN DELIMITER ',';
 NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,0) <NULL>
 NOTICE:  Skipping insert
@@ -484,10 +495,43 @@ NOTICE:  Skipping insert
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     2
+     1
 (1 row)
 
+-- try again without being skipped
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,1;
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,1) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1 BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,1) <NULL>
+-- should be 3
+SELECT count(*) FROM trigger_test;
+ count 
+-------
+     3
+(1 row)
+
+ROLLBACK;
 DROP TRIGGER t1 ON trigger_test;
+-- BEFORE ROW trigger that modifies tuple
+CREATE TRIGGER t1_mod BEFORE INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION row_trig_value_mod();
+BEGIN;
+INSERT INTO trigger_test SELECT '2000-01-01',1,11;
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Sat Jan 01 00:00:00 2000 PST",1,11) <NULL>
+COPY trigger_test FROM STDIN DELIMITER ',';
+NOTICE:  Trigger t1_mod BEFORE INSERT ROW on _hyper_11_15_chunk: ("Fri Dec 31 22:00:00 1999 PST",1,12) <NULL>
+-- value for both new tuples should be > 100
+SELECT * FROM trigger_test ORDER BY 3;
+             time             | device | value 
+------------------------------+--------+-------
+ Sat Jan 01 00:00:00 2000 PST |      1 |     1
+ Sat Jan 01 00:00:00 2000 PST |      1 |   111
+ Fri Dec 31 22:00:00 1999 PST |      1 |   112
+(3 rows)
+
+ROLLBACK;
+DROP TRIGGER t1_mod ON trigger_test;
+-- BEFORE STATEMENT trigger
 CREATE TRIGGER t2 BEFORE INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
 BEGIN;
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
@@ -498,24 +542,27 @@ NOTICE:  Trigger t2 BEFORE INSERT STATEMENT on trigger_test: <NULL> <NULL>
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     4
+     3
 (1 row)
 
 ROLLBACK;
 DROP TRIGGER t2 ON trigger_test;
-CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
+-- AFTER STATEMENT trigger
+CREATE TRIGGER t3 AFTER INSERT ON trigger_test FOR EACH STATEMENT EXECUTE FUNCTION stmt_trig_info();
 BEGIN;
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
+NOTICE:  Trigger t3 AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
 COPY trigger_test FROM STDIN DELIMITER ',';
-NOTICE:  Trigger t3 AFTER INSERT ROW on _hyper_11_15_chunk: <NULL> <NULL>
+NOTICE:  Trigger t3 AFTER INSERT STATEMENT on trigger_test: <NULL> <NULL>
 -- should be 3
 SELECT count(*) FROM trigger_test;
  count 
 -------
-     4
+     3
 (1 row)
 
 ROLLBACK;
+DROP TABLE trigger_test;
 -- test interaction between newly inserted batches and pathkeys/ordered append
 CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
