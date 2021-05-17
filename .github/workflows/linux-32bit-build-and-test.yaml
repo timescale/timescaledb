@@ -37,7 +37,7 @@ jobs:
         apt-get update
         apt-get install -y gnupg postgresql-common
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-        apt-get install -y gcc make cmake libssl-dev libkrb5-dev sudo gdb git wget
+        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl libtest-most-perl sudo gdb git wget
         apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
     - name: Build pg_isolation_regress

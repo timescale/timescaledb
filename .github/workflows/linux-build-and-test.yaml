@@ -34,11 +34,17 @@ jobs:
       CXX: ${{ matrix.cxx }}
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install flex bison lcov systemd-coredump gdb ${{ matrix.extra_packages }}
+        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl libtest-most-perl ${{ matrix.extra_packages }}
+
+    - name: Install macOS Dependencies using perl 5.18
+      if: runner.os == 'macOS'
+      run: |
+        sudo perl5.18 -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
+        sudo perl5.18 -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
     # on macOS the path used is depending on the runner version leading to cache failure
     # when the runner version changes so we extract runner version from path and add it

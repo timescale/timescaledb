@@ -1,0 +1,16 @@
+--add-whitespace
+--backup-and-modify-in-place
+--backup-file-extension=/
+--delete-old-whitespace
+--entab-leading-whitespace=4
+--keep-old-blank-lines=2
+--maximum-line-length=78
+--nooutdent-long-comments
+--nooutdent-long-quotes
+--nospace-for-semicolon
+--opening-brace-on-new-line
+--output-line-ending=unix
+--paren-tightness=2
+--paren-vertical-tightness=2
+--paren-vertical-tightness-closing=2
+--noblanks-before-comments
