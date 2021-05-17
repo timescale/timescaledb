@@ -146,7 +146,27 @@ chunk_dispatch_exec(CustomScanState *node)
 	if (cis->compress_state != NULL)
 	{
 		estate->es_result_relation_info = cis->orig_result_relation_info;
-		//		ExecBRInsertTriggers(estate, cis->orig_result_relation_info, myslot);
+
+		/*
+		 * During the insert BEFORE ROW triggers defined on the compressed
+		 * chunk will get executed as part of postgres INSERT processing.
+		 * To support BEFORE ROW insert trigger defined on the uncompressed chunk
+		 * we have to explicitly execute those triggers.
+		 */
+		if (cis->orig_result_relation_info->ri_TrigDesc &&
+			cis->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
+		{
+			bool skip_tuple;
+#if PG12_LT
+			slot = ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
+			skip_tuple = (slot == NULL);
+#else
+			skip_tuple = !ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
+#endif
+
+			if (skip_tuple)
+				return NULL;
+		}
 	}
 	else
 		estate->es_result_relation_info = cis->result_relation_info;
@@ -156,6 +176,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
+
 	if (cis->compress_state != NULL)
 	{
 #if PG12_GE
