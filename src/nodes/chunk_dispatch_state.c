@@ -144,9 +144,18 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * just when the chunk changes.
 	 */
 	if (cis->compress_state != NULL)
-	{
 		estate->es_result_relation_info = cis->orig_result_relation_info;
+	else
+		estate->es_result_relation_info = cis->result_relation_info;
 
+	MemoryContextSwitchTo(old);
+
+	/* Convert the tuple to the chunk's rowtype, if necessary */
+	if (cis->hyper_to_chunk_map != NULL)
+		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
+
+	if (cis->compress_state != NULL)
+	{
 		/*
 		 * During the insert BEFORE ROW triggers defined on the compressed
 		 * chunk will get executed as part of postgres INSERT processing.
@@ -167,18 +176,6 @@ chunk_dispatch_exec(CustomScanState *node)
 			if (skip_tuple)
 				return NULL;
 		}
-	}
-	else
-		estate->es_result_relation_info = cis->result_relation_info;
-
-	MemoryContextSwitchTo(old);
-
-	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL)
-		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
-
-	if (cis->compress_state != NULL)
-	{
 #if PG12_GE
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
