@@ -1732,7 +1732,18 @@ validate_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 }
 
 static void
-process_rename_constraint(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
+rename_hypertable_trigger(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	RenameStmt *stmt = copyObject(castNode(RenameStmt, arg));
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+
+	stmt->relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0);
+	renametrig(stmt);
+}
+
+static void
+process_rename_constraint_or_trigger(ProcessUtilityArgs *args, Cache *hcache, Oid relid,
+									 RenameStmt *stmt)
 {
 	Hypertable *ht;
 
@@ -1742,9 +1753,13 @@ process_rename_constraint(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Re
 	{
 		relation_not_only(stmt->relation);
 		add_hypertable_to_process_args(args, ht);
-		foreach_chunk(ht, rename_hypertable_constraint, stmt);
+
+		if (stmt->renameType == OBJECT_TABCONSTRAINT)
+			foreach_chunk(ht, rename_hypertable_constraint, stmt);
+		else if (stmt->renameType == OBJECT_TRIGGER && !hypertable_is_distributed(ht))
+			foreach_chunk(ht, rename_hypertable_trigger, stmt);
 	}
-	else
+	else if (stmt->renameType == OBJECT_TABCONSTRAINT)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
@@ -1800,7 +1815,8 @@ process_rename(ProcessUtilityArgs *args)
 			process_rename_index(args, hcache, relid, stmt);
 			break;
 		case OBJECT_TABCONSTRAINT:
-			process_rename_constraint(args, hcache, relid, stmt);
+		case OBJECT_TRIGGER:
+			process_rename_constraint_or_trigger(args, hcache, relid, stmt);
 			break;
 		case OBJECT_MATVIEW:
 		case OBJECT_VIEW:
@@ -3466,13 +3482,14 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 				 errmsg("trigger with transition tables not supported on hypertables")));
 	}
 
+	add_hypertable_to_process_args(args, ht);
+
 	if (!stmt->row)
 	{
 		ts_cache_release(hcache);
 		return DDL_CONTINUE;
 	}
 
-	add_hypertable_to_process_args(args, ht);
 	address = ts_hypertable_create_trigger(ht, stmt, args->query_string);
 	Assert(OidIsValid(address.objectId));
 

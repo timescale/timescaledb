@@ -273,13 +273,6 @@ $BODY$;
 CREATE OR REPLACE FUNCTION test.set_memory_cache_size(memory_amount text)
 RETURNS BIGINT AS :MODULE_PATHNAME, 'ts_set_memory_cache_size' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION test.empty_trigger_func()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-END
-$BODY$;
-
 CREATE OR REPLACE FUNCTION test.make_tablespace_path(prefix TEXT, test_name TEXT)
        RETURNS TEXT LANGUAGE plpgsql AS
 $BODY$

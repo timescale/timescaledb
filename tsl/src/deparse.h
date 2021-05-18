@@ -15,6 +15,7 @@ typedef struct TableInfo
 	List *constraints;
 	List *indexes;
 	List *triggers;
+	List *functions;
 	List *rules;
 } TableInfo;
 
@@ -26,6 +27,7 @@ typedef struct TableDef
 	List *index_cmds;
 	List *trigger_cmds;
 	List *rule_cmds;
+	List *function_cmds;
 } TableDef;
 
 typedef struct DeparsedHypertableCommands

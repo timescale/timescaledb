@@ -185,22 +185,20 @@ AS sub;
 
 SELECT * from compressed where new_coli is not null;
 
--- ALTER TABLE rename column does not work on distributed hypertables
-\set ON_ERROR_STOP 0
+-- Test ALTER TABLE rename column on distributed hypertables
 ALTER TABLE compressed RENAME new_coli TO new_intcol  ;
 ALTER TABLE compressed RENAME device TO device_id  ;
-\set ON_ERROR_STOP 1
 
 SELECT * FROM test.remote_exec( NULL, 
     $$ SELECT * FROM _timescaledb_catalog.hypertable_compression
-       WHERE attname = 'device' OR attname = 'new_coli'  and 
+       WHERE attname = 'device_id' OR attname = 'new_intcol'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
 
 -- TEST insert data into compressed chunk
 INSERT INTO compressed 
 SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
-SELECT * from compressed where new_coli = 3;
+SELECT * from compressed where new_intcol = 3;
 
 -- We're done with the table, so drop it.
 DROP TABLE IF EXISTS compressed CASCADE;
