@@ -656,7 +656,11 @@ remote_connection_configure_if_changed(TSConnection *conn)
  * Timezone is indirectly set with the first command executed.
  */
 static const char *default_connection_options[] = {
-	/* Force the search path to contain only pg_catalog (see deparse.c) */
+	/*
+	 * Force the search path to contain only pg_catalog, which will force
+	 * functions to output fully qualified identifier names (i.e., they will
+	 * include the schema).
+	 */
 	"SET search_path = pg_catalog",
 	/*
 	 * Set values needed to ensure unambiguous data output from remote.  (This

@@ -63,7 +63,7 @@ CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP);	
+    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);	
     RETURN NEW;
 END
 $BODY$;
@@ -75,18 +75,7 @@ CREATE TABLE trigger_events (
    tg_op text,
    tg_name text
 );
-$$);
-
-CALL distributed_exec($$
-CREATE OR REPLACE FUNCTION test_trigger()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);	
-    RETURN NEW;
-END
-$BODY$;
-$$);
+$$, ARRAY[:'DATA_NODE_1']);
 
 -- row triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert
@@ -128,6 +117,67 @@ CREATE TRIGGER z_test_trigger_all_after
     AFTER INSERT OR UPDATE OR DELETE ON hyper
     FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
+
+--- Create some triggers before we turn the table into a distributed
+--- hypertable and some triggers after so that we test both cases.
+SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device_id', 3, chunk_time_interval => 10, data_nodes => ARRAY[:'DATA_NODE_1', :'DATA_NODE_2']);
+
+-- FAILURE cases
+\set ON_ERROR_STOP 0
+
+-- Check that CREATE TRIGGER fails if a trigger already exists on a data node.
+CALL distributed_exec($$
+CREATE TRIGGER _0_test_trigger_insert_s_before
+    BEFORE INSERT ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+$$, ARRAY[:'DATA_NODE_1']);
+
+CREATE TRIGGER _0_test_trigger_insert_s_before
+    BEFORE INSERT ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+
+CALL distributed_exec($$
+DROP TRIGGER _0_test_trigger_insert_s_before ON hyper;
+$$, ARRAY[:'DATA_NODE_1']);
+
+-- Test that trigger execution fails if trigger_events table doesn't
+-- exist on all nodes.  Insert should fail
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987600000000000, 'dev1', 1);
+\set ON_ERROR_STOP 1
+
+-- Now, create trigger_events on the other nodes
+CALL distributed_exec($$
+CREATE TABLE trigger_events (
+   tg_when text,
+   tg_level text,
+   tg_op text,
+   tg_name text
+);
+$$, ARRAY[:'DATA_NODE_2', :'DATA_NODE_3']);
+
+-- Test that trigger fails if the user isn't the owner of the trigger
+-- function on one of the nodes.
+RESET ROLE;
+CALL distributed_exec($$
+     ALTER FUNCTION test_trigger OWNER TO current_user;
+$$, ARRAY[:'DATA_NODE_1']);
+SET ROLE :ROLE_1;
+
+\set ON_ERROR_STOP 0
+-- Insert should fail since the trigger function on DN1 isn't owned by
+-- the user.
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987600000000000, 'dev1', 1);
+\set ON_ERROR_STOP 1
+
+-- Reset the owner of the trigger function on DN1 to the non-superuser
+RESET ROLE;
+CALL distributed_exec('ALTER FUNCTION test_trigger OWNER TO ' || :'ROLE_1', ARRAY[:'DATA_NODE_1']);
+SET ROLE :ROLE_1;
+
+-- Add more triggers after the distributed hypertable is created
+
 -- statement triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert_s_before
     BEFORE INSERT ON hyper
@@ -154,8 +204,6 @@ CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
     FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
-SELECT * FROM create_distributed_hypertable('hyper', 'time', chunk_time_interval => 10);
-
 --test triggers before create_distributed_hypertable
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987600000000000, 'dev1', 1);
@@ -169,7 +217,7 @@ ORDER BY 1,2,3,4;
 
 -- Show trigger counts on data nodes. Both statement-level and
 -- row-level triggers fire on the data nodes.
-SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2'], $$
 SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
 GROUP BY 1,2,3,4
@@ -193,7 +241,29 @@ FROM trigger_events
 GROUP BY 1,2,3,4
 ORDER BY 1,2,3,4;
 
-SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2'], $$
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4;
+$$);
+
+-- Attach a new data node and show that the hypertable is created on
+-- the node, including its triggers.
+SELECT attach_data_node(:'DATA_NODE_3', 'hyper');
+
+-- Show that triggers are created on the new data node after attaching
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'],
+$$
+    SELECT test.show_triggers('hyper');
+$$);
+
+-- Insert data on the new data node to create a chunk and fire
+-- triggers.
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987700000000000, 'dev4', 1);
+
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$
 SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
 GROUP BY 1,2,3,4
@@ -266,20 +336,6 @@ BEGIN
 END
 $BODY$;
 
--- Create the trigger function on the data nodes
-CALL distributed_exec($$
-CREATE OR REPLACE FUNCTION temp_increment_trigger()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-	   NEW.temp_c = NEW.temp_c+1.0;	   
-	END IF;
-    RETURN NEW;
-END
-$BODY$;
-$$);
-
 -- Add a BEFORE INSERT trigger to see that plan reverts to
 -- DataNodeDispatch when using RETURNING
 CREATE TRIGGER _0_temp_increment
@@ -333,7 +389,19 @@ FROM disttable di, datatable da
 WHERE di.id = da.id
 ORDER BY 1;
 
-DROP TRIGGER _0_temp_increment ON disttable;
+-- Rename a trigger
+ALTER TRIGGER _0_temp_increment ON disttable RENAME TO _1_temp_increment;
 
--- Trigger should be dropped on data nodes
-SELECT test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT test.show_triggers('disttable') $$);
+-- Show that remote chunks have the new trigger name
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st;
+$$);
+
+-- Drop the trigger and show that it is dropped on data nodes
+DROP TRIGGER _1_temp_increment ON disttable;
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st;
+$$);

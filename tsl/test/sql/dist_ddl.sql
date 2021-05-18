@@ -121,9 +121,6 @@ CLUSTER disttable USING disttable_description_idx;
 
 ALTER TABLE disttable ALTER COLUMN description TYPE INT;
 ALTER TABLE disttable RENAME TO disttable2;
-ALTER TABLE disttable RENAME COLUMN description TO descr;
-ALTER TABLE disttable RENAME CONSTRAINT device_check TO device_chk;
-ALTER INDEX disttable_description_idx RENAME to disttable_descr_idx;
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
 ALTER TABLE disttable SET SCHEMA some_schema;
 
@@ -133,11 +130,9 @@ DROP TABLE disttable, disttable;
 
 \set ON_ERROR_STOP 1
 
--- Test REINDEX command with distributed hypertable
-
-SELECT * FROM test.show_columns('disttable');
-SELECT * FROM test.show_indexes('disttable');
-
+--------------------------------------------------------------------
+-- Test renaming columns, constraints, indexes, and REINDEX command.
+--------------------------------------------------------------------
 INSERT INTO disttable VALUES
 	('2017-01-01 06:01', 1, 1.2, 'test'),
 	('2017-01-01 09:11', 3, 4.3, 'test'),
@@ -150,6 +145,40 @@ INSERT INTO disttable VALUES
 
 SELECT * FROM show_chunks('disttable');
 
+-- Rename column
+ALTER TABLE disttable RENAME COLUMN description TO descr;
+SELECT * FROM test.show_columns('disttable')
+WHERE "Column"='descr';
+
+SELECT * FROM test.remote_exec('{ data_node_1 }', $$
+	   SELECT chunk.relid AS chunk_relid,
+	   		  (SELECT "Column" AS col FROM test.show_columns(chunk.relid) WHERE "Column"='descr')
+	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
+$$);
+
+-- Rename constraint
+ALTER TABLE disttable ADD CONSTRAINT device_check CHECK (device > 0);
+ALTER TABLE disttable RENAME CONSTRAINT device_check TO device_chk;
+SELECT * FROM test.show_constraints('disttable')
+WHERE "Constraint"='device_chk';
+
+SELECT * FROM test.remote_exec('{ data_node_1 }', $$
+       SELECT chunk.relid AS chunk_relid,
+	   		  (SELECT "Constraint" AS constr FROM test.show_constraints(chunk.relid) WHERE "Constraint"='device_chk')
+	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
+$$);
+
+-- Rename index
+ALTER INDEX disttable_description_idx RENAME to disttable_descr_idx;
+SELECT * FROM test.show_indexes('disttable')
+WHERE "Index"='disttable_descr_idx'::regclass;
+
+SELECT * FROM test.remote_exec('{ data_node_1 }', $$
+	   SELECT chunk.relid AS chunk_relid, (test.show_indexes(chunk.relid)).*
+	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
+$$);
+
+-- Test REINDEX command with distributed hypertable
 \c :MY_DB1
 SELECT * FROM test.show_indexes('_timescaledb_internal._dist_hyper_1_1_chunk');
 SELECT pg_relation_filepath('_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk'::regclass::oid) AS oid_before_reindex \gset
@@ -176,17 +205,6 @@ RETURN OLD;
 END
 $BODY$;
 
--- Also create the trigger function on the data nodes
-CALL distributed_exec($$
-	 CREATE OR REPLACE FUNCTION test_trigger()
-	 RETURNS TRIGGER LANGUAGE PLPGSQL AS
-	 $BODY$
-	 BEGIN
-	 RETURN OLD;
-	 END
-	 $BODY$;
-$$);
-
 CREATE TRIGGER disttable_trigger_test
 BEFORE INSERT ON disttable
 FOR EACH ROW EXECUTE FUNCTION test_trigger();
@@ -200,7 +218,7 @@ CALL distributed_exec($$ DROP FUNCTION test_trigger $$);
 DROP INDEX disttable_description_idx, disttable_pk;
 \set ON_ERROR_STOP 1
 
-DROP INDEX disttable_description_idx;
+DROP INDEX disttable_descr_idx;
 DROP INDEX disttable_pk;
 SELECT * FROM test.show_indexes('disttable');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
