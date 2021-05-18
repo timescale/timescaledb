@@ -44,7 +44,7 @@ CREATE OR REPLACE FUNCTION test_trigger()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP);	
+    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);	
     RETURN NEW;
 END
 $BODY$;
@@ -55,17 +55,7 @@ CREATE TABLE trigger_events (
    tg_op text,
    tg_name text
 );
-$$);
-CALL distributed_exec($$
-CREATE OR REPLACE FUNCTION test_trigger()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-    INSERT INTO public.trigger_events VALUES (TG_WHEN, TG_LEVEL, TG_OP, TG_NAME);	
-    RETURN NEW;
-END
-$BODY$;
-$$);
+$$, ARRAY[:'DATA_NODE_1']);
 -- row triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON hyper
@@ -97,6 +87,62 @@ CREATE TRIGGER _0_test_trigger_delete_after
 CREATE TRIGGER z_test_trigger_all_after
     AFTER INSERT OR UPDATE OR DELETE ON hyper
     FOR EACH ROW EXECUTE FUNCTION test_trigger();
+--- Create some triggers before we turn the table into a distributed
+--- hypertable and some triggers after so that we test both cases.
+SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device_id', 3, chunk_time_interval => 10, data_nodes => ARRAY[:'DATA_NODE_1', :'DATA_NODE_2']);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | hyper      | t
+(1 row)
+
+-- FAILURE cases
+\set ON_ERROR_STOP 0
+-- Check that CREATE TRIGGER fails if a trigger already exists on a data node.
+CALL distributed_exec($$
+CREATE TRIGGER _0_test_trigger_insert_s_before
+    BEFORE INSERT ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+$$, ARRAY[:'DATA_NODE_1']);
+CREATE TRIGGER _0_test_trigger_insert_s_before
+    BEFORE INSERT ON hyper
+    FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+ERROR:  [db_dist_triggers_1]: trigger "_0_test_trigger_insert_s_before" for relation "hyper" already exists
+CALL distributed_exec($$
+DROP TRIGGER _0_test_trigger_insert_s_before ON hyper;
+$$, ARRAY[:'DATA_NODE_1']);
+-- Test that trigger execution fails if trigger_events table doesn't
+-- exist on all nodes.  Insert should fail
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987600000000000, 'dev1', 1);
+ERROR:  [db_dist_triggers_2]: relation "public.trigger_events" does not exist
+\set ON_ERROR_STOP 1
+-- Now, create trigger_events on the other nodes
+CALL distributed_exec($$
+CREATE TABLE trigger_events (
+   tg_when text,
+   tg_level text,
+   tg_op text,
+   tg_name text
+);
+$$, ARRAY[:'DATA_NODE_2', :'DATA_NODE_3']);
+-- Test that trigger fails if the user isn't the owner of the trigger
+-- function on one of the nodes.
+RESET ROLE;
+CALL distributed_exec($$
+     ALTER FUNCTION test_trigger OWNER TO current_user;
+$$, ARRAY[:'DATA_NODE_1']);
+SET ROLE :ROLE_1;
+\set ON_ERROR_STOP 0
+-- Insert should fail since the trigger function on DN1 isn't owned by
+-- the user.
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987600000000000, 'dev1', 1);
+\set ON_ERROR_STOP 1
+-- Reset the owner of the trigger function on DN1 to the non-superuser
+RESET ROLE;
+CALL distributed_exec('ALTER FUNCTION test_trigger OWNER TO ' || :'ROLE_1', ARRAY[:'DATA_NODE_1']);
+SET ROLE :ROLE_1;
+-- Add more triggers after the distributed hypertable is created
 -- statement triggers: BEFORE
 CREATE TRIGGER _0_test_trigger_insert_s_before
     BEFORE INSERT ON hyper
@@ -117,12 +163,6 @@ CREATE TRIGGER _0_test_trigger_update_s_after
 CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
     FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
-SELECT * FROM create_distributed_hypertable('hyper', 'time', chunk_time_interval => 10);
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             1 | public      | hyper      | t
-(1 row)
-
 --test triggers before create_distributed_hypertable
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987600000000000, 'dev1', 1);
@@ -132,15 +172,15 @@ SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
 GROUP BY 1,2,3,4
 ORDER BY 1,2,3,4;
- tg_when | tg_level  | tg_op  | tg_name | count 
----------+-----------+--------+---------+-------
- AFTER   | STATEMENT | INSERT |         |     1
- BEFORE  | STATEMENT | INSERT |         |     1
+ tg_when | tg_level  | tg_op  |             tg_name             | count 
+---------+-----------+--------+---------------------------------+-------
+ AFTER   | STATEMENT | INSERT | _0_test_trigger_insert_s_after  |     1
+ BEFORE  | STATEMENT | INSERT | _0_test_trigger_insert_s_before |     1
 (2 rows)
 
 -- Show trigger counts on data nodes. Both statement-level and
 -- row-level triggers fire on the data nodes.
-SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2'], $$
 SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
 GROUP BY 1,2,3,4
@@ -165,25 +205,14 @@ ORDER BY 1,2,3,4
 NOTICE:  [db_dist_triggers_2]:
 tg_when|tg_level |tg_op |tg_name                               |count
 -------+---------+------+--------------------------------------+-----
-AFTER  |ROW      |INSERT|_0_test_trigger_insert_after          |    1
-AFTER  |ROW      |INSERT|_0_test_trigger_insert_after_when_dev1|    1
-AFTER  |ROW      |INSERT|z_test_trigger_all_after              |    1
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after          |    2
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after_when_dev1|    2
+AFTER  |ROW      |INSERT|z_test_trigger_all_after              |    2
 AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after        |    1
-BEFORE |ROW      |INSERT|_0_test_trigger_insert                |    1
-BEFORE |ROW      |INSERT|z_test_trigger_all                    |    1
+BEFORE |ROW      |INSERT|_0_test_trigger_insert                |    2
+BEFORE |ROW      |INSERT|z_test_trigger_all                    |    2
 BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before       |    1
 (7 rows)
-
-
-NOTICE:  [db_dist_triggers_3]: 
-SELECT tg_when, tg_level, tg_op, tg_name, count(*)
-FROM trigger_events
-GROUP BY 1,2,3,4
-ORDER BY 1,2,3,4
-NOTICE:  [db_dist_triggers_3]:
-tg_when|tg_level|tg_op|tg_name|count
--------+--------+-----+-------+-----
-(0 rows)
 
 
  remote_exec 
@@ -203,17 +232,17 @@ SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
 GROUP BY 1,2,3,4
 ORDER BY 1,2,3,4;
- tg_when | tg_level  | tg_op  | tg_name | count 
----------+-----------+--------+---------+-------
- AFTER   | STATEMENT | DELETE |         |     1
- AFTER   | STATEMENT | INSERT |         |     1
- AFTER   | STATEMENT | UPDATE |         |     1
- BEFORE  | STATEMENT | DELETE |         |     1
- BEFORE  | STATEMENT | INSERT |         |     1
- BEFORE  | STATEMENT | UPDATE |         |     1
+ tg_when | tg_level  | tg_op  |             tg_name             | count 
+---------+-----------+--------+---------------------------------+-------
+ AFTER   | STATEMENT | DELETE | _0_test_trigger_delete_s_after  |     1
+ AFTER   | STATEMENT | INSERT | _0_test_trigger_insert_s_after  |     1
+ AFTER   | STATEMENT | UPDATE | _0_test_trigger_update_s_after  |     1
+ BEFORE  | STATEMENT | DELETE | _0_test_trigger_delete_s_before |     1
+ BEFORE  | STATEMENT | INSERT | _0_test_trigger_insert_s_before |     1
+ BEFORE  | STATEMENT | UPDATE | _0_test_trigger_update_s_before |     1
 (6 rows)
 
-SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2'], $$
 SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
 GROUP BY 1,2,3,4
@@ -227,17 +256,17 @@ ORDER BY 1,2,3,4
 NOTICE:  [db_dist_triggers_1]:
 tg_when|tg_level |tg_op |tg_name                        |count
 -------+---------+------+-------------------------------+-----
-AFTER  |ROW      |INSERT|_0_test_trigger_insert_after   |    1
-AFTER  |ROW      |INSERT|z_test_trigger_all_after       |    1
-AFTER  |ROW      |UPDATE|_0_test_trigger_update_after   |    1
-AFTER  |ROW      |UPDATE|z_test_trigger_all_after       |    1
-AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after |    1
-BEFORE |ROW      |DELETE|_0_test_trigger_delete         |    1
-BEFORE |ROW      |INSERT|_0_test_trigger_insert         |    1
-BEFORE |ROW      |INSERT|z_test_trigger_all             |    1
-BEFORE |ROW      |UPDATE|_0_test_trigger_update         |    1
-BEFORE |ROW      |UPDATE|z_test_trigger_all             |    1
-BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before|    1
+AFTER  |ROW      |INSERT|_0_test_trigger_insert_after   |    2
+AFTER  |ROW      |INSERT|z_test_trigger_all_after       |    2
+AFTER  |ROW      |UPDATE|_0_test_trigger_update_after   |    2
+AFTER  |ROW      |UPDATE|z_test_trigger_all_after       |    2
+AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after |    2
+BEFORE |ROW      |DELETE|_0_test_trigger_delete         |    2
+BEFORE |ROW      |INSERT|_0_test_trigger_insert         |    2
+BEFORE |ROW      |INSERT|z_test_trigger_all             |    2
+BEFORE |ROW      |UPDATE|_0_test_trigger_update         |    2
+BEFORE |ROW      |UPDATE|z_test_trigger_all             |    2
+BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before|    2
 (11 rows)
 
 
@@ -249,14 +278,71 @@ ORDER BY 1,2,3,4
 NOTICE:  [db_dist_triggers_2]:
 tg_when|tg_level|tg_op |tg_name                     |count
 -------+--------+------+----------------------------+-----
-AFTER  |ROW     |UPDATE|_0_test_trigger_update_after|    1
-AFTER  |ROW     |UPDATE|z_test_trigger_all_after    |    1
-BEFORE |ROW     |DELETE|_0_test_trigger_delete      |    1
-BEFORE |ROW     |UPDATE|_0_test_trigger_update      |    1
-BEFORE |ROW     |UPDATE|z_test_trigger_all          |    1
+AFTER  |ROW     |UPDATE|_0_test_trigger_update_after|    2
+AFTER  |ROW     |UPDATE|z_test_trigger_all_after    |    2
+BEFORE |ROW     |DELETE|_0_test_trigger_delete      |    2
+BEFORE |ROW     |UPDATE|_0_test_trigger_update      |    2
+BEFORE |ROW     |UPDATE|z_test_trigger_all          |    2
 (5 rows)
 
 
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Attach a new data node and show that the hypertable is created on
+-- the node, including its triggers.
+SELECT attach_data_node(:'DATA_NODE_3', 'hyper');
+     attach_data_node     
+--------------------------
+ (1,1,db_dist_triggers_3)
+(1 row)
+
+-- Show that triggers are created on the new data node after attaching
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'],
+$$
+    SELECT test.show_triggers('hyper');
+$$);
+NOTICE:  [db_dist_triggers_3]: 
+    SELECT test.show_triggers('hyper')
+NOTICE:  [db_dist_triggers_3]:
+show_triggers                                             
+----------------------------------------------------------
+(_0_test_trigger_delete,11,test_trigger)                  
+(_0_test_trigger_delete_after,9,test_trigger)             
+(_0_test_trigger_delete_s_after,8,test_trigger)           
+(_0_test_trigger_delete_s_before,10,test_trigger)         
+(_0_test_trigger_insert,7,test_trigger)                   
+(_0_test_trigger_insert_after,5,test_trigger)             
+(_0_test_trigger_insert_after_when_dev1,5,test_trigger)   
+(_0_test_trigger_insert_s_after,4,test_trigger)           
+(_0_test_trigger_insert_s_before,6,test_trigger)          
+(_0_test_trigger_update,19,test_trigger)                  
+(_0_test_trigger_update_after,17,test_trigger)            
+(_0_test_trigger_update_s_after,16,test_trigger)          
+(_0_test_trigger_update_s_before,18,test_trigger)         
+(ts_insert_blocker,7,_timescaledb_internal.insert_blocker)
+(z_test_trigger_all,31,test_trigger)                      
+(z_test_trigger_all_after,29,test_trigger)                
+(16 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Insert data on the new data node to create a chunk and fire
+-- triggers.
+INSERT INTO hyper(time, device_id,sensor_1) VALUES
+(1257987700000000000, 'dev4', 1);
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4;
+$$);
 NOTICE:  [db_dist_triggers_3]: 
 SELECT tg_when, tg_level, tg_op, tg_name, count(*)
 FROM trigger_events
@@ -267,16 +353,11 @@ tg_when|tg_level |tg_op |tg_name                        |count
 -------+---------+------+-------------------------------+-----
 AFTER  |ROW      |INSERT|_0_test_trigger_insert_after   |    1
 AFTER  |ROW      |INSERT|z_test_trigger_all_after       |    1
-AFTER  |ROW      |UPDATE|_0_test_trigger_update_after   |    1
-AFTER  |ROW      |UPDATE|z_test_trigger_all_after       |    1
 AFTER  |STATEMENT|INSERT|_0_test_trigger_insert_s_after |    1
-BEFORE |ROW      |DELETE|_0_test_trigger_delete         |    1
 BEFORE |ROW      |INSERT|_0_test_trigger_insert         |    1
 BEFORE |ROW      |INSERT|z_test_trigger_all             |    1
-BEFORE |ROW      |UPDATE|_0_test_trigger_update         |    1
-BEFORE |ROW      |UPDATE|z_test_trigger_all             |    1
 BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before|    1
-(11 rows)
+(6 rows)
 
 
  remote_exec 
@@ -378,19 +459,6 @@ BEGIN
     RETURN NEW;
 END
 $BODY$;
--- Create the trigger function on the data nodes
-CALL distributed_exec($$
-CREATE OR REPLACE FUNCTION temp_increment_trigger()
-    RETURNS TRIGGER LANGUAGE PLPGSQL AS
-$BODY$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-	   NEW.temp_c = NEW.temp_c+1.0;	   
-	END IF;
-    RETURN NEW;
-END
-$BODY$;
-$$);
 -- Add a BEFORE INSERT trigger to see that plan reverts to
 -- DataNodeDispatch when using RETURNING
 CREATE TRIGGER _0_temp_increment
@@ -541,15 +609,82 @@ ORDER BY 1;
   8 | Sun Jul 01 08:01:00 2018 PDT |     29 |      9 |           8
 (8 rows)
 
-DROP TRIGGER _0_temp_increment ON disttable;
--- Trigger should be dropped on data nodes
-SELECT test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT test.show_triggers('disttable') $$);
-NOTICE:  [db_dist_triggers_1]:  SELECT test.show_triggers('disttable') 
+-- Rename a trigger
+ALTER TRIGGER _0_temp_increment ON disttable RENAME TO _1_temp_increment;
+-- Show that remote chunks have the new trigger name
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st;
+$$);
+NOTICE:  [db_dist_triggers_1]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st
 NOTICE:  [db_dist_triggers_1]:
-show_triggers                                             
-----------------------------------------------------------
-(ts_insert_blocker,7,_timescaledb_internal.insert_blocker)
+chunk_relid                                |show_triggers                               
+-------------------------------------------+--------------------------------------------
+_timescaledb_internal._dist_hyper_2_6_chunk|(_1_temp_increment,7,temp_increment_trigger)
+_timescaledb_internal._dist_hyper_2_9_chunk|(_1_temp_increment,7,temp_increment_trigger)
+(2 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st
+NOTICE:  [db_dist_triggers_2]:
+chunk_relid                                 |show_triggers                               
+--------------------------------------------+--------------------------------------------
+_timescaledb_internal._dist_hyper_2_8_chunk |(_1_temp_increment,7,temp_increment_trigger)
+_timescaledb_internal._dist_hyper_2_10_chunk|(_1_temp_increment,7,temp_increment_trigger)
+(2 rows)
+
+
+NOTICE:  [db_dist_triggers_3]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st
+NOTICE:  [db_dist_triggers_3]:
+chunk_relid                                 |show_triggers                               
+--------------------------------------------+--------------------------------------------
+_timescaledb_internal._dist_hyper_2_7_chunk |(_1_temp_increment,7,temp_increment_trigger)
+_timescaledb_internal._dist_hyper_2_11_chunk|(_1_temp_increment,7,temp_increment_trigger)
+(2 rows)
+
+
+ remote_exec 
+-------------
+ 
 (1 row)
+
+-- Drop the trigger and show that it is dropped on data nodes
+DROP TRIGGER _1_temp_increment ON disttable;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st;
+$$);
+NOTICE:  [db_dist_triggers_1]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st
+NOTICE:  [db_dist_triggers_1]:
+chunk_relid|show_triggers
+-----------+-------------
+(0 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st
+NOTICE:  [db_dist_triggers_2]:
+chunk_relid|show_triggers
+-----------+-------------
+(0 rows)
+
+
+NOTICE:  [db_dist_triggers_3]: 
+SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
+FROM test.show_subtables('disttable') st
+NOTICE:  [db_dist_triggers_3]:
+chunk_relid|show_triggers
+-----------+-------------
+(0 rows)
 
 
  remote_exec 
