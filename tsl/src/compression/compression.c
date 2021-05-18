@@ -154,7 +154,8 @@ static Tuplesortstate *compress_chunk_sort_relation(Relation in_rel, int n_keys,
 static void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
-								int16 *column_offsets, int16 num_compressed_columns);
+								int16 *column_offsets, int16 num_compressed_columns,
+								bool need_bistate);
 static void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
 static void row_compressor_finish(RowCompressor *row_compressor);
@@ -312,7 +313,8 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 						num_compression_infos,
 						column_compression_info,
 						in_column_offsets,
-						out_desc->natts);
+						out_desc->natts,
+						true /*need_bistate*/);
 
 	row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc);
 
@@ -506,7 +508,7 @@ static void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_columns_in_compressed_table)
+					int16 num_columns_in_compressed_table, bool need_bistate)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
@@ -536,7 +538,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
 		.compressed_table = compressed_table,
-		.bistate = GetBulkInsertState(),
+		.bistate = need_bistate ? GetBulkInsertState() : NULL,
 		.n_input_columns = uncompressed_tuple_desc->natts,
 		.per_column = palloc0(sizeof(PerColumn) * uncompressed_tuple_desc->natts),
 		.uncompressed_col_to_compressed_col =
@@ -844,6 +846,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
 									   row_compressor->compressed_is_null);
+	Assert(row_compressor->bistate != NULL);
 	heap_insert(row_compressor->compressed_table,
 				compressed_tuple,
 				mycid,
@@ -899,7 +902,8 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 static void
 row_compressor_finish(RowCompressor *row_compressor)
 {
-	FreeBulkInsertState(row_compressor->bistate);
+	if (row_compressor->bistate)
+		FreeBulkInsertState(row_compressor->bistate);
 }
 
 /******************
@@ -1565,7 +1569,8 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 						cclen,
 						ccinfo,
 						in_column_offsets,
-						out_desc->natts);
+						out_desc->natts,
+						false /*need_bistate*/);
 	return cr;
 }
 
