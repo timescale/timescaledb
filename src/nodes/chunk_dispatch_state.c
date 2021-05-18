@@ -144,14 +144,22 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * just when the chunk changes.
 	 */
 	if (cis->compress_state != NULL)
-	{
 		estate->es_result_relation_info = cis->orig_result_relation_info;
+	else
+		estate->es_result_relation_info = cis->result_relation_info;
 
+	MemoryContextSwitchTo(old);
+
+	/* Convert the tuple to the chunk's rowtype, if necessary */
+	if (cis->hyper_to_chunk_map != NULL)
+		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
+
+	if (cis->compress_state != NULL)
+	{
 		/*
-		 * During the insert BEFORE ROW triggers defined on the compressed
-		 * chunk will get executed as part of postgres INSERT processing.
-		 * To support BEFORE ROW insert trigger defined on the uncompressed chunk
-		 * we have to explicitly execute those triggers.
+		 * When the chunk is compressed, we redirect the insert to the internal compressed
+		 * chunk. However, any BEFORE ROW triggers defined on the chunk have to be executed
+		 * before we redirect the insert.
 		 */
 		if (cis->orig_result_relation_info->ri_TrigDesc &&
 			cis->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
@@ -167,18 +175,6 @@ chunk_dispatch_exec(CustomScanState *node)
 			if (skip_tuple)
 				return NULL;
 		}
-	}
-	else
-		estate->es_result_relation_info = cis->result_relation_info;
-
-	MemoryContextSwitchTo(old);
-
-	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL)
-		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
-
-	if (cis->compress_state != NULL)
-	{
 #if PG12_GE
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
