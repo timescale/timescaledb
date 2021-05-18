@@ -79,6 +79,12 @@ get_trigger_cmd(Oid oid)
 }
 
 static const char *
+get_function_cmd(Oid oid)
+{
+	return TextDatumGetCString(pg_get_functiondef(build_fcinfo_data(oid)));
+}
+
+static const char *
 get_rule_cmd(Oid oid)
 {
 	return TextDatumGetCString(pg_get_ruledef(build_fcinfo_data(oid)));
@@ -116,6 +122,12 @@ static List *
 get_trigger_cmds(List *trigger_oids)
 {
 	return get_cmds(trigger_oids, get_trigger_cmd);
+}
+
+static List *
+get_function_cmds(List *function_oids)
+{
+	return get_cmds(function_oids, get_function_cmd);
 }
 
 static List *
@@ -294,6 +306,27 @@ get_trigger_oids(Relation rel)
 }
 
 static List *
+get_trigger_function_oids(Relation rel)
+{
+	List *functions = NIL;
+
+	if (rel->trigdesc != NULL)
+	{
+		int i;
+
+		for (i = 0; i < rel->trigdesc->numtriggers; i++)
+		{
+			const Trigger trigger = rel->trigdesc->triggers[i];
+
+			if (!trigger.tgisinternal && strcmp(trigger.tgname, INSERT_BLOCKER_NAME) != 0)
+				functions = lappend_oid(functions, trigger.tgfoid);
+		}
+	}
+
+	return functions;
+}
+
+static List *
 get_rule_oids(Relation rel)
 {
 	List *rules = NIL;
@@ -346,6 +379,7 @@ deparse_create_table_info(Oid relid)
 	table_info->constraints = get_constraint_oids(relid, &exclude_indexes);
 	table_info->indexes = get_index_oids(rel, exclude_indexes);
 	table_info->triggers = get_trigger_oids(rel);
+	table_info->functions = get_trigger_function_oids(rel);
 	table_info->rules = get_rule_oids(rel);
 	table_close(rel, AccessShareLock);
 	return table_info;
@@ -413,6 +447,7 @@ deparse_get_tabledef(TableInfo *table_info)
 	table_def->constraint_cmds = get_constraint_cmds(table_info->constraints);
 	table_def->index_cmds = get_index_cmds(table_info->indexes);
 	table_def->trigger_cmds = get_trigger_cmds(table_info->triggers);
+	table_def->function_cmds = get_function_cmds(table_info->functions);
 	table_def->rule_cmds = get_rule_cmds(table_info->rules);
 
 	table_close(rel, AccessShareLock);
@@ -546,6 +581,7 @@ deparse_get_tabledef_commands_from_tabledef(TableDef *table_def)
 	cmds = lappend(cmds, (char *) table_def->create_cmd);
 	cmds = list_concat(cmds, table_def->constraint_cmds);
 	cmds = list_concat(cmds, table_def->index_cmds);
+	cmds = list_concat(cmds, table_def->function_cmds);
 	cmds = list_concat(cmds, table_def->trigger_cmds);
 	cmds = list_concat(cmds, table_def->rule_cmds);
 	return cmds;

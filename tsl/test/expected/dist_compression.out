@@ -555,51 +555,47 @@ SELECT * from compressed where new_coli is not null;
  Thu Aug 01 00:00:00 2019 PDT |    100 |  100 |        1 | newcolv
 (1 row)
 
--- ALTER TABLE rename column does not work on distributed hypertables
-\set ON_ERROR_STOP 0
+-- Test ALTER TABLE rename column on distributed hypertables
 ALTER TABLE compressed RENAME new_coli TO new_intcol  ;
-ERROR:  operation not supported on distributed hypertable
 ALTER TABLE compressed RENAME device TO device_id  ;
-ERROR:  operation not supported on distributed hypertable
-\set ON_ERROR_STOP 1
 SELECT * FROM test.remote_exec( NULL, 
     $$ SELECT * FROM _timescaledb_catalog.hypertable_compression
-       WHERE attname = 'device' OR attname = 'new_coli'  and 
+       WHERE attname = 'device_id' OR attname = 'new_intcol'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
 NOTICE:  [db_dist_compression_1]:  SELECT * FROM _timescaledb_catalog.hypertable_compression
-       WHERE attname = 'device' OR attname = 'new_coli'  and 
+       WHERE attname = 'device_id' OR attname = 'new_intcol'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname
 NOTICE:  [db_dist_compression_1]:
-hypertable_id|attname |compression_algorithm_id|segmentby_column_index|orderby_column_index|orderby_asc|orderby_nullsfirst
--------------+--------+------------------------+----------------------+--------------------+-----------+------------------
-            1|device  |                       0|                     1|                    |           |                  
-            1|new_coli|                       4|                      |                    |           |                  
+hypertable_id|attname   |compression_algorithm_id|segmentby_column_index|orderby_column_index|orderby_asc|orderby_nullsfirst
+-------------+----------+------------------------+----------------------+--------------------+-----------+------------------
+            1|device_id |                       0|                     1|                    |           |                  
+            1|new_intcol|                       4|                      |                    |           |                  
 (2 rows)
 
 
 NOTICE:  [db_dist_compression_2]:  SELECT * FROM _timescaledb_catalog.hypertable_compression
-       WHERE attname = 'device' OR attname = 'new_coli'  and 
+       WHERE attname = 'device_id' OR attname = 'new_intcol'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname
 NOTICE:  [db_dist_compression_2]:
-hypertable_id|attname |compression_algorithm_id|segmentby_column_index|orderby_column_index|orderby_asc|orderby_nullsfirst
--------------+--------+------------------------+----------------------+--------------------+-----------+------------------
-            1|device  |                       0|                     1|                    |           |                  
-            1|new_coli|                       4|                      |                    |           |                  
+hypertable_id|attname   |compression_algorithm_id|segmentby_column_index|orderby_column_index|orderby_asc|orderby_nullsfirst
+-------------+----------+------------------------+----------------------+--------------------+-----------+------------------
+            1|device_id |                       0|                     1|                    |           |                  
+            1|new_intcol|                       4|                      |                    |           |                  
 (2 rows)
 
 
 NOTICE:  [db_dist_compression_3]:  SELECT * FROM _timescaledb_catalog.hypertable_compression
-       WHERE attname = 'device' OR attname = 'new_coli'  and 
+       WHERE attname = 'device_id' OR attname = 'new_intcol'  and 
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname
 NOTICE:  [db_dist_compression_3]:
-hypertable_id|attname |compression_algorithm_id|segmentby_column_index|orderby_column_index|orderby_asc|orderby_nullsfirst
--------------+--------+------------------------+----------------------+--------------------+-----------+------------------
-            1|device  |                       0|                     1|                    |           |                  
-            1|new_coli|                       4|                      |                    |           |                  
+hypertable_id|attname   |compression_algorithm_id|segmentby_column_index|orderby_column_index|orderby_asc|orderby_nullsfirst
+-------------+----------+------------------------+----------------------+--------------------+-----------+------------------
+            1|device_id |                       0|                     1|                    |           |                  
+            1|new_intcol|                       4|                      |                    |           |                  
 (2 rows)
 
 
@@ -611,10 +607,10 @@ hypertable_id|attname |compression_algorithm_id|segmentby_column_index|orderby_c
 -- TEST insert data into compressed chunk
 INSERT INTO compressed 
 SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
-SELECT * from compressed where new_coli = 3;
-             time             | device | temp | new_coli | new_colv 
-------------------------------+--------+------+----------+----------
- Thu Aug 01 01:00:00 2019 PDT |    300 |  300 |        3 | newcolv
+SELECT * from compressed where new_intcol = 3;
+             time             | device_id | temp | new_intcol | new_colv 
+------------------------------+-----------+------+------------+----------
+ Thu Aug 01 01:00:00 2019 PDT |       300 |  300 |          3 | newcolv
 (1 row)
 
 -- We're done with the table, so drop it.

@@ -4,11 +4,14 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <commands/event_trigger.h>
-#include <utils/guc.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
+#include <commands/event_trigger.h>
 #include <nodes/parsenodes.h>
+#include <parser/parse_func.h>
+#include <utils/builtins.h>
+#include <utils/fmgrprotos.h>
+#include <utils/guc.h>
 
 #include <annotations.h>
 #include <guc.h>
@@ -39,8 +42,8 @@ typedef struct
 {
 	/* Chosen query execution type */
 	DistDDLExecType exec_type;
-	/* Saved SQL command */
-	char *query_string;
+	/* Saved SQL commands to execute on the remote data nodes */
+	List *remote_commands;
 	/* Saved oid for delayed resolving */
 	Oid relid;
 	/* List of data nodes to send query to */
@@ -88,8 +91,9 @@ set_dist_exec_type(DistDDLExecType type)
 void
 dist_ddl_init(void)
 {
+	MemSet(&dist_ddl_state, 0, sizeof(DistDDLState));
 	dist_ddl_state.exec_type = DIST_DDL_EXEC_NONE;
-	dist_ddl_state.query_string = NULL;
+	dist_ddl_state.remote_commands = NIL;
 	dist_ddl_state.relid = InvalidOid;
 	dist_ddl_state.data_node_list = NIL;
 	dist_ddl_state.mctx = NULL;
@@ -99,6 +103,14 @@ void
 dist_ddl_reset(void)
 {
 	dist_ddl_init();
+}
+
+static void
+dist_ddl_add_remote_command(const char *cmd)
+{
+	MemoryContext mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
+	dist_ddl_state.remote_commands = lappend(dist_ddl_state.remote_commands, pstrdup(cmd));
+	MemoryContextSwitchTo(mctx);
 }
 
 static void
@@ -255,11 +267,29 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			 * Save oid for dist_ddl_end execution.
 			 */
 			case T_AlterObjectSchemaStmt:
-			case T_RenameStmt:
-				set_dist_exec_type(DIST_DDL_EXEC_ON_END);
-				dist_ddl_state.relid = relid;
-				return;
+			{
+				AlterObjectSchemaStmt *stmt = castNode(AlterObjectSchemaStmt, args->parsetree);
 
+				if (stmt->objectType == OBJECT_TABLE)
+				{
+					set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+					dist_ddl_state.relid = relid;
+					return;
+				}
+				break;
+			}
+			case T_RenameStmt:
+			{
+				RenameStmt *stmt = castNode(RenameStmt, args->parsetree);
+
+				if (stmt->renameType == OBJECT_TABLE)
+				{
+					set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+					dist_ddl_state.relid = relid;
+					return;
+				}
+				break;
+			}
 			/* Skip COPY here, since it has its own process path using
 			 * cross module API. */
 			case T_CopyStmt:
@@ -311,12 +341,12 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	{
 		case T_AlterTableStmt:
 		{
-			AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
+			AlterTableStmt *stmt = castNode(AlterTableStmt, args->parsetree);
 			ListCell *lc;
 
 			foreach (lc, stmt->cmds)
 			{
-				AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+				AlterTableCmd *cmd = lfirst_node(AlterTableCmd, lc);
 
 				switch (cmd->subtype)
 				{
@@ -393,9 +423,25 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			break;
 
 		case T_CreateTrigStmt:
+		{
+			CreateTrigStmt *stmt = castNode(CreateTrigStmt, args->parsetree);
+
+			if (stmt->funcname != NIL)
+			{
+				Oid funcargtypes[1];
+				Oid funcid = LookupFuncName(stmt->funcname,
+											0 /* nargs */,
+											funcargtypes /* passing NULL is not allowed in PG12 */,
+											false /* missing ok */);
+				Datum datum;
+
+				Assert(OidIsValid(funcid));
+				datum = DirectFunctionCall1(pg_get_functiondef, ObjectIdGetDatum(funcid));
+				dist_ddl_add_remote_command(TextDatumGetCString(datum));
+			}
 			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 			break;
-
+		}
 		case T_VacuumStmt:
 			dist_ddl_state.exec_type =
 				dist_ddl_process_vacuum(castNode(VacuumStmt, args->parsetree));
@@ -429,12 +475,13 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 			break;
 		}
 
+		case T_RenameStmt:
+			/* Note, renaming of hypertable handled above. Only handles other
+			 * renamings here (e.g., triggers). */
 		case T_ReindexStmt:
 			set_dist_exec_type(DIST_DDL_EXEC_ON_START);
 			break;
-
 		/* Currently unsupported */
-		case T_RenameStmt:
 		case T_ClusterStmt:
 			/* Those commands are also targets for execute_on_start in since they
 			 * are not supported by event triggers. */
@@ -464,14 +511,19 @@ dist_ddl_execute(bool transactional)
 	if (list_length(dist_ddl_state.data_node_list) > 0)
 	{
 		const char *search_path = GetConfigOption("search_path", false, false);
+		ListCell *lc;
 
-		result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(dist_ddl_state.query_string,
-																	search_path,
-																	dist_ddl_state.data_node_list,
-																	transactional);
+		foreach (lc, dist_ddl_state.remote_commands)
+		{
+			result =
+				ts_dist_cmd_invoke_on_data_nodes_using_search_path(lfirst(lc),
+																   search_path,
+																   dist_ddl_state.data_node_list,
+																   transactional);
 
-		if (result)
-			ts_dist_cmd_close_response(result);
+			if (result)
+				ts_dist_cmd_close_response(result);
+		}
 	}
 
 	dist_ddl_reset();
@@ -501,7 +553,9 @@ dist_ddl_start(ProcessUtilityArgs *args)
 	if (args->context != PROCESS_UTILITY_TOPLEVEL)
 		return;
 
-	Assert(dist_ddl_state.query_string == NULL);
+	Assert(dist_ddl_state.remote_commands == NIL);
+
+	dist_ddl_state.mctx = CurrentMemoryContext;
 
 	/* Decide if this is a distributed DDL operation and when it
 	 * should be executed. */
@@ -512,8 +566,7 @@ dist_ddl_start(ProcessUtilityArgs *args)
 		/* Prepare execution state. Save origin query and memory context
 		 * used to save information in data_node_list since it will differ during
 		 * event hooks execution. */
-		dist_ddl_state.query_string = pstrdup(args->query_string);
-		dist_ddl_state.mctx = CurrentMemoryContext;
+		dist_ddl_add_remote_command(args->query_string);
 	}
 
 	switch (dist_ddl_state.exec_type)
