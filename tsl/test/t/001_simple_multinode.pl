@@ -5,40 +5,22 @@
 # test a simple multi node cluster creation and basic operations
 use strict;
 use warnings;
-use TimescaleNode qw(get_new_ts_node);
+use AccessNode;
+use DataNode;
 use TestLib;
 use Test::More tests => 9;
 
 #Initialize all the multi-node instances
-my @nodes = ();
-foreach my $nodename ('an', 'dn1', 'dn2')
-{
-	my $node = get_new_ts_node($nodename);
-	$node->init;
-	$node->start;
-	# set up the access node
-	if ($node->name eq 'an')
-	{
-		$node->safe_psql('postgres', "CREATE DATABASE an");
-		$node->safe_psql('an',       "CREATE EXTENSION timescaledb");
-	}
-	push @nodes, $node;
-}
+my $an  = AccessNode->create('an');
+my $dn1 = DataNode->create('dn1');
+my $dn2 = DataNode->create('dn2');
 
-#Add the data nodes from the access node
-foreach my $i (1 .. 2)
-{
-	my $host = $nodes[$i]->host();
-	my $port = $nodes[$i]->port();
-
-	$nodes[0]->safe_psql('an',
-		"SELECT add_data_node('dn$i', database => 'dn$i', host => '$host', port => $port)"
-	);
-}
+$an->add_data_node($dn1);
+$an->add_data_node($dn2);
 
 #Create a distributed hypertable and insert a few rows
-$nodes[0]->safe_psql(
-	'an',
+$an->safe_psql(
+	'postgres',
 	qq[
     CREATE TABLE test(time timestamp NOT NULL, device int, temp float);
     SELECT create_distributed_hypertable('test', 'time', 'device', 3);
@@ -49,23 +31,23 @@ $nodes[0]->safe_psql(
 my $query = q[SELECT * from show_chunks('test');];
 
 #Query Access node
-$nodes[0]->psql_is(
-	'an', $query, q[_timescaledb_internal._dist_hyper_1_1_chunk
+$an->psql_is(
+	'postgres', $query, q[_timescaledb_internal._dist_hyper_1_1_chunk
 _timescaledb_internal._dist_hyper_1_2_chunk
 _timescaledb_internal._dist_hyper_1_3_chunk
 _timescaledb_internal._dist_hyper_1_4_chunk], 'AN shows correct set of chunks'
 );
 
 #Query datanode1
-$nodes[1]->psql_is(
-	'dn1',
+$dn1->psql_is(
+	'postgres',
 	$query,
 	"_timescaledb_internal._dist_hyper_1_1_chunk\n_timescaledb_internal._dist_hyper_1_3_chunk\n_timescaledb_internal._dist_hyper_1_4_chunk",
 	'DN1 shows correct set of chunks');
 
 #Query datanode2
-$nodes[2]->psql_is(
-	'dn2', $query,
+$dn2->psql_is(
+	'postgres', $query,
 	"_timescaledb_internal._dist_hyper_1_2_chunk",
 	'DN2 shows correct set of chunks');
 
