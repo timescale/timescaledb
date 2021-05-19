@@ -6,7 +6,7 @@
 # routines for setup.
 
 package TimescaleNode;
-use parent ("PostgresNode");
+use parent qw(PostgresNode);
 use TestLib qw(slurp_file);
 use strict;
 use warnings;
@@ -14,29 +14,13 @@ use warnings;
 use Carp 'verbose';
 $SIG{__DIE__} = \&Carp::confess;
 
-use Exporter 'import';
-use vars qw(@EXPORT @EXPORT_OK);
-@EXPORT = qw(
-  get_new_ts_node
-);
-@EXPORT_OK = qw(
-);
-
-#
-# Get a new TS-enabled PostgreSQL instance
-#
-# It's not created yet, but ready to restore from backup,
-# initdb, etc.
-#
-sub get_new_ts_node
+sub create
 {
-	my ($name, $class) = @_;
-
-	$class //= 'TimescaleNode';
-
-	my $self = PostgresNode::get_new_node($name);
-	$self = bless $self, $class;
-
+	my ($class, $name, %kwargs) = @_;
+	my $self = $class->get_new_node($name);
+	$self->init(%kwargs);
+	$self->start(%kwargs);
+	$self->safe_psql('postgres', 'CREATE EXTENSION timescaledb');
 	return $self;
 }
 
