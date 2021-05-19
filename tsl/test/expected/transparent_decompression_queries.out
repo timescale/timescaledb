@@ -202,3 +202,25 @@ WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
                      Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
 (10 rows)
 
+-- test pseudoconstant qual #3241
+CREATE TABLE pseudo(time timestamptz NOT NULL);
+SELECT create_hypertable('pseudo','time');
+  create_hypertable  
+---------------------
+ (5,public,pseudo,t)
+(1 row)
+
+ALTER TABLE pseudo SET (timescaledb.compress);
+INSERT INTO pseudo SELECT '2000-01-01';
+SELECT compress_chunk(show_chunks('pseudo'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_11_chunk
+(1 row)
+
+SELECT * FROM pseudo WHERE now() IS NOT NULL;
+             time             
+------------------------------
+ Sat Jan 01 00:00:00 2000 PST
+(1 row)
+

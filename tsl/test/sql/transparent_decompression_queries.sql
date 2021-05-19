@@ -88,3 +88,13 @@ WHERE check_equal_228(rtt) ORDER BY ts;
 EXPLAIN (analyze,costs off,timing off,summary off) 
 SELECT * from test_chartab 
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
+
+-- test pseudoconstant qual #3241
+CREATE TABLE pseudo(time timestamptz NOT NULL);
+SELECT create_hypertable('pseudo','time');
+ALTER TABLE pseudo SET (timescaledb.compress);
+INSERT INTO pseudo SELECT '2000-01-01';
+SELECT compress_chunk(show_chunks('pseudo'));
+
+SELECT * FROM pseudo WHERE now() IS NOT NULL;
+
