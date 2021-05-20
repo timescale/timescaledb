@@ -49,6 +49,7 @@ def build_debug_config(overrides):
     "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON",
     "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
+    "extra_packages": "clang-9 llvm-9 llvm-9-dev llvm-9-tools",
     "llvm_config": "llvm-config-9",
     "clang": "clang-9",
     "os": "ubuntu-20.04",
@@ -100,6 +101,7 @@ def macos_config(overrides):
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
     "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher remote_connection'",
+    "extra_packages": "",
   })
   base_config.update(overrides)
   return base_config
