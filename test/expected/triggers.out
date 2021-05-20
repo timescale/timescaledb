@@ -73,6 +73,13 @@ CREATE TRIGGER _0_test_trigger_update_s_after
 CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
     FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+-- CONSTRAINT TRIGGER
+CREATE CONSTRAINT TRIGGER _0_test_trigger_constraint_insert
+  AFTER INSERT ON hyper FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE CONSTRAINT TRIGGER _0_test_trigger_constraint_update
+  AFTER UPDATE ON hyper FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE CONSTRAINT TRIGGER _0_test_trigger_constraint_delete
+  AFTER DELETE ON hyper FOR EACH ROW EXECUTE FUNCTION test_trigger();
 SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -85,6 +92,7 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: INSERT cnt: 0 trigger_name _0_test_trigger_insert_s_before
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name _0_test_trigger_insert
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after_when_dev1
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all_after
@@ -96,8 +104,10 @@ WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 1 trigger_name 
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 2 trigger_name _0_test_trigger_insert
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 2 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_insert_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_insert_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: INSERT cnt: 3 trigger_name _0_test_trigger_insert_s_after
@@ -109,10 +119,13 @@ WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name 
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_s_after
@@ -124,10 +137,13 @@ WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 2 trigger_name 
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 2 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 1 trigger_name _0_test_trigger_delete
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 1 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_s_after
@@ -139,13 +155,16 @@ DROP TRIGGER _0_test_trigger_insert_s_after ON hyper;
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987600000000000, 'dev1', 1);
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after_when_dev1
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all_after
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 1), (1257987800000000000, 'dev2', 1);
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 2 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name z_test_trigger_all_after
 DROP TRIGGER _0_test_trigger_update ON hyper;
 DROP TRIGGER _0_test_trigger_update_s_before ON hyper;
@@ -155,8 +174,11 @@ UPDATE hyper SET sensor_1 = 2;
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
 DROP TRIGGER _0_test_trigger_delete ON hyper;
 DROP TRIGGER _0_test_trigger_delete_s_before ON hyper;
@@ -166,8 +188,11 @@ DELETE FROM hyper;
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 3 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 2 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 1 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
 DROP TRIGGER z_test_trigger_all ON hyper;
 DROP TRIGGER z_test_trigger_all_after ON hyper;
@@ -223,6 +248,7 @@ INSERT INTO hyper(time, device_id,sensor_1) VALUES
 WARNING:  FIRING trigger when: BEFORE level: STATEMENT op: INSERT cnt: 0 trigger_name _0_test_trigger_insert_s_before
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name _0_test_trigger_insert
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 0 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name _0_test_trigger_insert_after_when_dev1
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all_after
@@ -234,8 +260,10 @@ WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 1 trigger_name 
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 1 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 2 trigger_name _0_test_trigger_insert
 WARNING:  FIRING trigger when: BEFORE level: ROW op: INSERT cnt: 2 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_insert_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_constraint_insert
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name _0_test_trigger_insert_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: INSERT cnt: 3 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: INSERT cnt: 3 trigger_name _0_test_trigger_insert_s_after
@@ -247,10 +275,13 @@ WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name 
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update
 WARNING:  FIRING trigger when: BEFORE level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_constraint_update
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: UPDATE cnt: 3 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: UPDATE cnt: 3 trigger_name _0_test_trigger_update_s_after
@@ -262,10 +293,13 @@ WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 2 trigger_name 
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 2 trigger_name z_test_trigger_all
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 1 trigger_name _0_test_trigger_delete
 WARNING:  FIRING trigger when: BEFORE level: ROW op: DELETE cnt: 1 trigger_name z_test_trigger_all
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
+WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_constraint_delete
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_after
 WARNING:  FIRING trigger when: AFTER level: ROW op: DELETE cnt: 0 trigger_name z_test_trigger_all_after
 WARNING:  FIRING trigger when: AFTER level: STATEMENT op: DELETE cnt: 0 trigger_name _0_test_trigger_delete_s_after

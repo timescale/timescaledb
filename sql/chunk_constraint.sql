@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- Creates a constraint on a chunk.
+-- create constraint on newly created chunk based on hypertable constraint
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_constraint_add_table_constraint(
     chunk_constraint_row  _timescaledb_catalog.chunk_constraint
 )
@@ -12,6 +12,7 @@ DECLARE
     chunk_row _timescaledb_catalog.chunk;
     hypertable_row _timescaledb_catalog.hypertable;
     constraint_oid OID;
+    constraint_type CHAR;
     check_sql TEXT;
     def TEXT;
     indx_tablespace NAME;
@@ -29,20 +30,32 @@ BEGIN
         END IF;
     ELSIF chunk_constraint_row.hypertable_constraint_name IS NOT NULL THEN
 
-        SELECT oid INTO STRICT constraint_oid FROM pg_constraint
+        SELECT oid, contype INTO STRICT constraint_oid, constraint_type FROM pg_constraint
         WHERE conname=chunk_constraint_row.hypertable_constraint_name AND
               conrelid = format('%I.%I', hypertable_row.schema_name, hypertable_row.table_name)::regclass::oid;
 
-        SELECT T.spcname INTO indx_tablespace 
-        FROM pg_constraint C, pg_class I, pg_tablespace T
-        WHERE C.oid = constraint_oid AND C.contype IN ('p', 'u') AND I.oid = C.conindid AND I.reltablespace = T.oid;
+        IF constraint_type IN ('p','u') THEN
+          -- since primary keys and unique constraints are backed by an index
+          -- they might have an index tablespace assigned
+          -- the tablspace is not part of the constraint definition so
+          -- we have to append it explicitly to preserve it
+          SELECT T.spcname INTO indx_tablespace
+          FROM pg_constraint C, pg_class I, pg_tablespace T
+          WHERE C.oid = constraint_oid AND C.contype IN ('p', 'u') AND I.oid = C.conindid AND I.reltablespace = T.oid;
 
-        IF indx_tablespace IS NOT NULL THEN
-            tablespace_def := format(' USING INDEX TABLESPACE %I', indx_tablespace);
+          def := pg_get_constraintdef(constraint_oid);
+
+          IF indx_tablespace IS NOT NULL THEN
+            def := format('%s USING INDEX TABLESPACE %I', def, indx_tablespace);
+          END IF;
+
+        ELSIF constraint_type = 't' THEN
+          -- constraint triggers are copied separately with normal triggers
+          def := NULL;
         ELSE
-            tablespace_def := '';
+          def := pg_get_constraintdef(constraint_oid);
         END IF;
-        def := pg_get_constraintdef(constraint_oid) || tablespace_def;
+
     ELSE
         RAISE 'unknown constraint type';
     END IF;

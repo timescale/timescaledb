@@ -91,6 +91,15 @@ CREATE TRIGGER _0_test_trigger_delete_s_after
     AFTER DELETE ON hyper
     FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
 
+-- CONSTRAINT TRIGGER
+CREATE CONSTRAINT TRIGGER _0_test_trigger_constraint_insert
+  AFTER INSERT ON hyper FOR EACH ROW EXECUTE FUNCTION test_trigger();
+
+CREATE CONSTRAINT TRIGGER _0_test_trigger_constraint_update
+  AFTER UPDATE ON hyper FOR EACH ROW EXECUTE FUNCTION test_trigger();
+
+CREATE CONSTRAINT TRIGGER _0_test_trigger_constraint_delete
+  AFTER DELETE ON hyper FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
 SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
 
