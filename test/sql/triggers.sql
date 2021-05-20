@@ -302,3 +302,26 @@ DROP TRIGGER create_vehicle_trigger ON location;
 SELECT count(1) FROM pg_depend d WHERE d.classid = 'pg_trigger'::regclass AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE oid = d.objid);
 DROP TABLE location;
 
+-- test triggers with transition tables
+-- test creating hypertable from table with triggers with transition tables
+CREATE TABLE transition_test(time timestamptz NOT NULL);
+CREATE TRIGGER t1 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('transition_test','time');
+\set ON_ERROR_STOP 1
+DROP TRIGGER t1 ON transition_test;
+SELECT create_hypertable('transition_test','time');
+
+-- test creating trigger with transition tables on existing hypertable
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+
+CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+\set ON_ERROR_STOP 1
+
+

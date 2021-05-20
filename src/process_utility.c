@@ -3493,12 +3493,23 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	Hypertable *ht;
 	ObjectAddress PG_USED_FOR_ASSERTS_ONLY address;
 
-	if (!stmt->row)
-		return DDL_CONTINUE;
-
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
 	if (ht == NULL)
+	{
+		ts_cache_release(hcache);
+		return DDL_CONTINUE;
+	}
+
+	if (stmt->transitionRels)
+	{
+		ts_cache_release(hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("trigger with transition tables not supported on hypertables")));
+	}
+
+	if (!stmt->row)
 	{
 		ts_cache_release(hcache);
 		return DDL_CONTINUE;

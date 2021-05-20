@@ -412,3 +412,33 @@ SELECT count(1) FROM pg_depend d WHERE d.classid = 'pg_trigger'::regclass AND NO
 (1 row)
 
 DROP TABLE location;
+-- test triggers with transition tables
+-- test creating hypertable from table with triggers with transition tables
+CREATE TABLE transition_test(time timestamptz NOT NULL);
+CREATE TRIGGER t1 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('transition_test','time');
+ERROR:  hypertables do not support transition tables in triggers
+\set ON_ERROR_STOP 1
+DROP TRIGGER t1 ON transition_test;
+SELECT create_hypertable('transition_test','time');
+      create_hypertable       
+------------------------------
+ (4,public,transition_test,t)
+(1 row)
+
+-- test creating trigger with transition tables on existing hypertable
+\set ON_ERROR_STOP 0
+CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+ERROR:  trigger with transition tables not supported on hypertables
+CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+ERROR:  trigger with transition tables not supported on hypertables
+CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH STATEMENT EXECUTE FUNCTION test_trigger();
+ERROR:  trigger with transition tables not supported on hypertables
+CREATE TRIGGER t2 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+ERROR:  trigger with transition tables not supported on hypertables
+CREATE TRIGGER t3 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+ERROR:  trigger with transition tables not supported on hypertables
+CREATE TRIGGER t4 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
+ERROR:  trigger with transition tables not supported on hypertables
+\set ON_ERROR_STOP 1
