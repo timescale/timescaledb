@@ -1322,6 +1322,24 @@ chunk_tuple_dropped_filter(TupleInfo *ti, void *arg)
 	return stubctx->is_dropped ? SCAN_EXCLUDE : SCAN_INCLUDE;
 }
 
+/* This is a modified version of chunk_tuple_dropped_filter that does
+ * not use ChunkStubScanCtx as the arg, it just ignores the passed in
+ * argument.
+ * We need a variant as the ScannerCtx assumes that the the filter function
+ * and tuple_found function share the argument.
+ */
+static ScanFilterResult
+chunk_check_ignorearg_dropped_filter(TupleInfo *ti, void *arg)
+{
+	bool isnull;
+	Datum dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
+
+	Assert(!isnull);
+	bool is_dropped = DatumGetBool(dropped);
+
+	return is_dropped ? SCAN_EXCLUDE : SCAN_INCLUDE;
+}
+
 static ScanTupleResult
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
@@ -3128,7 +3146,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	return chunk_scan_internal(CHUNK_ID_INDEX,
 							   scankey,
 							   1,
-							   chunk_tuple_dropped_filter,
+							   chunk_check_ignorearg_dropped_filter,
 							   chunk_set_compressed_id_in_tuple,
 							   &compressed_chunk_id,
 							   0,
@@ -3151,7 +3169,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	return chunk_scan_internal(CHUNK_ID_INDEX,
 							   scankey,
 							   1,
-							   chunk_tuple_dropped_filter,
+							   chunk_check_ignorearg_dropped_filter,
 							   chunk_clear_compressed_status_in_tuple,
 							   &compressed_chunk_id,
 							   0,
