@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #3209 Propagate grants to compressed hypertables
 * #3241 Fix assertion failure in decompress_chunk_plan_create
 * #3250 Fix constraint triggers on hypertables
+* #3252 Fix blocking triggers with transition tables
 
 ## 2.2.1 (2021-05-05)
 
