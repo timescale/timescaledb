@@ -32,7 +32,7 @@ sub get_new_ts_node
 {
 	my ($name, $class) = @_;
 
-    $class //= 'TimescaleNode';
+	$class //= 'TimescaleNode';
 
 	my $self = PostgresNode::get_new_node($name);
 	$self = bless $self, $class;
@@ -48,7 +48,8 @@ sub init
 	$self->SUPER::init(%kwargs);
 	# append into postgresql.conf from Timescale
 	# template config file
-	$self->append_conf('postgresql.conf', TestLib::slurp_file("$ENV{'BUILDIR'}/tsl/test/postgresql.conf"));
+	$self->append_conf('postgresql.conf',
+		TestLib::slurp_file("$ENV{'BUILDIR'}/tsl/test/postgresql.conf"));
 }
 
 # helper function to check output from PSQL for a query
