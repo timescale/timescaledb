@@ -763,42 +763,42 @@ LIMIT 2;
 SELECT * FROM hypertable_size('disttable');
  hypertable_size 
 -----------------
-          131072
+          180224
 (1 row)
 
 SELECT * FROM hypertable_size('nondisttable');
  hypertable_size 
 -----------------
-          114688
+          163840
 (1 row)
 
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
 -------------+-------------+-------------+-------------+-------------
-       16384 |       49152 |        8192 |       73728 | data_node_1
-        8192 |       32768 |        8192 |       49152 | data_node_2
+       40960 |       49152 |        8192 |       98304 | data_node_1
+       32768 |       32768 |        8192 |       73728 | data_node_2
            0 |        8192 |           0 |        8192 | 
 (3 rows)
 
 SELECT * FROM hypertable_detailed_size('nondisttable') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-       24576 |       73728 |       16384 |      114688 | 
+       73728 |       73728 |       16384 |      163840 | 
 (1 row)
 
 SELECT * FROM chunks_detailed_size('disttable') ORDER BY chunk_schema, chunk_name, node_name;
      chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |  node_name  
 -----------------------+-----------------------+-------------+-------------+-------------+-------------+-------------
- _timescaledb_internal | _dist_hyper_2_2_chunk |        8192 |       24576 |        8192 |       40960 | data_node_1
- _timescaledb_internal | _dist_hyper_2_5_chunk |        8192 |       24576 |        8192 |       40960 | data_node_2
+ _timescaledb_internal | _dist_hyper_2_2_chunk |       32768 |       24576 |        8192 |       65536 | data_node_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk |       32768 |       24576 |        8192 |       65536 | data_node_2
  _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       16384 |           0 |       24576 | data_node_1
 (3 rows)
 
 SELECT * FROM chunks_detailed_size('nondisttable') ORDER BY chunk_schema, chunk_name, node_name;
      chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -----------------------+------------------+-------------+-------------+-------------+-------------+-----------
- _timescaledb_internal | _hyper_1_1_chunk |        8192 |       24576 |        8192 |       40960 | 
- _timescaledb_internal | _hyper_1_3_chunk |        8192 |       24576 |        8192 |       40960 | 
+ _timescaledb_internal | _hyper_1_1_chunk |       32768 |       24576 |        8192 |       65536 | 
+ _timescaledb_internal | _hyper_1_3_chunk |       32768 |       24576 |        8192 |       65536 | 
  _timescaledb_internal | _hyper_1_4_chunk |        8192 |       16384 |           0 |       24576 | 
 (3 rows)
 

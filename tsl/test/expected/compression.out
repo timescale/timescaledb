@@ -439,19 +439,19 @@ select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
 pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('foo');
 -[ RECORD 1 ]--+-----------
-pg_size_pretty | 32 kB
+pg_size_pretty | 72 kB
 pg_size_pretty | 160 kB
 pg_size_pretty | 8192 bytes
-pg_size_pretty | 200 kB
+pg_size_pretty | 240 kB
 
 select pg_size_pretty(table_bytes), pg_size_pretty(index_bytes),
 pg_size_pretty(toast_bytes), pg_size_pretty(total_bytes)
 from hypertable_detailed_size('conditions');
 -[ RECORD 1 ]--+-------
-pg_size_pretty | 16 kB
+pg_size_pretty | 64 kB
 pg_size_pretty | 56 kB
 pg_size_pretty | 32 kB
-pg_size_pretty | 112 kB
+pg_size_pretty | 160 kB
 
 select * from timescaledb_information.hypertables
 where hypertable_name like 'foo' or hypertable_name like 'conditions'

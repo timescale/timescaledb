@@ -15,10 +15,19 @@ SELECT
    c.table_name as chunk_name,
    pg_total_relation_size(format('%I.%I', c.schema_name, c.table_name))::bigint AS total_bytes,
    pg_indexes_size(format('%I.%I', c.schema_name, c.table_name))::bigint AS index_bytes,
-   pg_total_relation_size(reltoastrelid)::bigint AS toast_bytes,
-   map.compressed_heap_size,
-   map.compressed_index_size,
-   map.compressed_toast_size 
+   pg_total_relation_size(pgc.reltoastrelid)::bigint AS toast_bytes,
+   CASE WHEN map.table_name IS NOT NULL 
+        THEN pg_total_relation_size(format('%I.%I', map.schema_name, map.table_name))::bigint 
+        ELSE 0
+   END AS compressed_heap_size,
+   CASE WHEN map.table_name IS NOT NULL 
+        THEN pg_indexes_size(format('%I.%I', map.schema_name, map.table_name))::bigint 
+        ELSE 0
+   END AS compressed_index_size,
+   CASE WHEN map.table_name IS NOT NULL 
+        THEN pg_total_relation_size(map.reltoastrelid)::bigint 
+        ELSE 0
+   END AS compressed_toast_size
 FROM
    _timescaledb_catalog.hypertable h 
    INNER JOIN
@@ -27,15 +36,18 @@ FROM
       and c.dropped = false 
    INNER JOIN
       pg_class pgc 
-      ON pgc.relname = h.table_name 
+      ON pgc.relname = c.table_name 
    INNER JOIN
       pg_namespace pns 
       ON pns.oid = pgc.relnamespace 
-      AND pns.nspname = h.schema_name 
+      AND pns.nspname = c.schema_name 
    LEFT OUTER JOIN
-      _timescaledb_catalog.compression_chunk_size map 
-      ON map.chunk_id = c.id 
-WHERE pgc.relkind = 'r';
+      ( SELECT comp.id, comp.schema_name, comp.table_name, reltoastrelid
+        FROM _timescaledb_catalog.chunk comp, pg_class, pg_namespace
+        WHERE comp.table_name = pg_class.relname
+        AND comp.schema_name = pg_namespace.nspname
+        AND pg_namespace.oid = pg_class.relnamespace ) map
+  ON map.id = c.compressed_chunk_id; 
 
 GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
  
