@@ -6,18 +6,36 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+# 2.3.0 (2021-05-25)
+
+This release adds major new features since the 2.2.1 release. 
+We deem it moderate priority for upgrading.
+
+This release adds support for inserting data into compressed chunks
+and improves performance when inserting data into distributed hypertables. 
+Distributed hypertables now also support triggers and compression policies.
+
+The bug fixes in this release address issues related to the handling
+of privileges on compressed hypertables, locking, and triggers with transition tables.
+
 **Features**
-* #3230 Support inserts into compressed chunks
+* #3116 Add distributed hypertable compression policies
+* #3162 Use COPY when executing distributed INSERTs
+* #3199 Add GENERATED column support on distributed hypertables
+* #3210 Add trigger support on distributed hypertables
+* #3230 Support for inserts into compressed chunks
 
 **Bugfixes**
-* #3209 Propagate grants to compressed hypertables
-* #3241 Fix assertion failure in decompress_chunk_plan_create
+* #3213 Propagate grants to compressed hypertables
+* #3229 Use correct lock mode when updating chunk
+* #3243 Fix assertion failure in decompress_chunk_plan_create
 * #3250 Fix constraint triggers on hypertables
 * #3251 Fix segmentation fault due to incorrect call to chunk_scan_internal
 * #3252 Fix blocking triggers with transition tables
 
 **Thanks**
 * @yyjdelete for reporting a crash with decompress_chunk and identifying the bug in the code
+* @fabriziomello for documenting the prerequisites when compiling against PostgreSQL 13
 
 ## 2.2.1 (2021-05-05)
 
