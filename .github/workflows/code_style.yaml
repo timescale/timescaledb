@@ -8,6 +8,18 @@ on:
       - prerelease_test
   pull_request:
 jobs:
+  perl_checks:
+    name: Check Perl code in tree
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install prerequisites
+        run: sudo apt install perltidy
+      - name: Checkout source
+        uses: actions/checkout@v2
+      - name: Format Perl files, if needed
+        run: find . -name '*.p[lm]' -exec perltidy --profile=scripts/perltidyrc {} +
+      - name: Check for diff
+        run: git diff --exit-code
   misc_checks:
     name: Check formatting, license and git hooks
     runs-on: ubuntu-20.04
