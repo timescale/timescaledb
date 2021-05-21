@@ -579,7 +579,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *resrelinfo, *relinfo;
-	bool is_compressed = (chunk->fd.compressed_chunk_id != 0);
+	bool has_compressed_chunk = (chunk->fd.compressed_chunk_id != 0);
 
 	/* permissions NOT checked here; were checked at hypertable level */
 	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
@@ -590,7 +590,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	if (chunk->relkind != RELKIND_RELATION && chunk->relkind != RELKIND_FOREIGN_TABLE)
 		elog(ERROR, "insert is not on a table");
 
-	if (is_compressed &&
+	if (has_compressed_chunk &&
 		(onconflict_action != ONCONFLICT_NONE || ts_chunk_dispatch_has_returning(dispatch)))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -604,10 +604,10 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
-	if (is_compressed)
+	if (has_compressed_chunk)
 	{
 		Oid compress_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
-		if (ts_relation_has_primary_or_unique_index(rel))
+		if (ts_indexing_relation_has_primary_or_unique_index(rel))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -620,7 +620,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
-	if (!is_compressed)
+	if (!has_compressed_chunk)
 		resrelinfo = relinfo;
 	else
 	{
@@ -658,7 +658,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
 			elog(ERROR, "statement trigger on chunk table not supported");
 
-		if (is_compressed && tg->trig_insert_after_row)
+		if (has_compressed_chunk && tg->trig_insert_after_row)
 			elog(ERROR, "after insert row trigger on compressed chunk not supported");
 	}
 
@@ -679,7 +679,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
-	if (is_compressed)
+	if (has_compressed_chunk)
 	{
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
 		/* this is true as compressed chunks are not created on access node */

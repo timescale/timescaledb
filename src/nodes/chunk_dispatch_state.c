@@ -157,10 +157,9 @@ chunk_dispatch_exec(CustomScanState *node)
 	if (cis->compress_state != NULL)
 	{
 		/*
-		 * During the insert BEFORE ROW triggers defined on the compressed
-		 * chunk will get executed as part of postgres INSERT processing.
-		 * To support BEFORE ROW insert trigger defined on the uncompressed chunk
-		 * we have to explicitly execute those triggers.
+		 * When the chunk is compressed, we redirect the insert to the internal compressed
+		 * chunk. However, any BEFORE ROW triggers defined on the chunk have to be executed
+		 * before we redirect the insert.
 		 */
 		if (cis->orig_result_relation_info->ri_TrigDesc &&
 			cis->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
