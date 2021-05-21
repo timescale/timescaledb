@@ -3075,8 +3075,8 @@ chunk_update_status(FormData_chunk *form)
 {
 	int32 chunk_id = form->id;
 	int32 new_status = form->status;
-	bool success = true;
-	// want to lock the chunk tuple for update. wait for exclusivetuplelock
+	bool success = true, dropped = false;
+	/* lock the chunk tuple for update. Block till we get exclusivetuplelock */
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
@@ -3095,12 +3095,11 @@ chunk_update_status(FormData_chunk *form)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		bool dropped_isnull, status_isnull;
-		Datum status;
+		int status;
 
-		bool dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
+		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
 		Assert(!dropped_isnull);
-
-		status = slot_getattr(ti->slot, Anum_chunk_status, &status_isnull);
+		status = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_status, &status_isnull));
 		Assert(!status_isnull);
 		if (!dropped && status != new_status)
 		{
@@ -3108,6 +3107,10 @@ chunk_update_status(FormData_chunk *form)
 		}
 	}
 	ts_scan_iterator_close(&iterator);
+	if (dropped)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("attempt to update status(%d) on dropped chunk %d", new_status, chunk_id)));
 	return success;
 }
 
