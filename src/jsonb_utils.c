@@ -171,6 +171,24 @@ ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key, bool *field_found)
 	return DatumGetTimestampTz(time_datum);
 }
 
+bool
+ts_jsonb_get_bool_field(const Jsonb *json, const char *key, bool *field_found)
+{
+	Datum bool_datum;
+	char *bool_str = ts_jsonb_get_str_field(json, key);
+
+	if (bool_str == NULL)
+	{
+		*field_found = false;
+		return false;
+	}
+
+	bool_datum = DirectFunctionCall1(boolin, CStringGetDatum(bool_str));
+
+	*field_found = true;
+	return DatumGetBool(bool_datum);
+}
+
 int32
 ts_jsonb_get_int32_field(const Jsonb *json, const char *key, bool *field_found)
 {
