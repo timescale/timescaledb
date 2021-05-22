@@ -132,6 +132,7 @@ get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 	StrategyNumber end_strategy = BTLessStrategyNumber;
+	bool recompress = policy_compression_get_recompress(config);
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
@@ -143,7 +144,30 @@ get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 													  -1,			   /*start_value*/
 													  end_strategy,
 													  ts_time_value_to_internal(boundary,
-																				partitioning_type));
+																				partitioning_type),
+													  true,
+													  recompress);
+}
+
+static int32
+get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
+{
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+	StrategyNumber end_strategy = BTLessStrategyNumber;
+
+	Datum boundary = get_window_boundary(dim,
+										 config,
+										 policy_recompression_get_recompress_after_int,
+										 policy_recompression_get_recompress_after_interval);
+
+	return ts_dimension_slice_get_chunkid_to_compress(dim->fd.id,
+													  InvalidStrategy, /*start_strategy*/
+													  -1,			   /*start_value*/
+													  end_strategy,
+													  ts_time_value_to_internal(boundary,
+																				partitioning_type),
+													  false,
+													  true);
 }
 
 static void
@@ -549,6 +573,61 @@ policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData
 		policy_data->hypertable = hypertable;
 		policy_data->hcache = hcache;
 	}
+}
+
+void
+policy_recompression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
+{
+	Oid table_relid = ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config));
+	Cache *hcache;
+	Hypertable *hypertable =
+		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	if (policy_data)
+	{
+		policy_data->hypertable = hypertable;
+		policy_data->hcache = hcache;
+	}
+}
+
+bool
+policy_recompression_execute(int32 job_id, Jsonb *config)
+{
+	int32 chunkid;
+	Dimension *dim;
+	PolicyCompressionData policy_data;
+
+	policy_recompression_read_and_validate_config(config, &policy_data);
+	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
+	chunkid = get_chunk_to_recompress(dim, config);
+
+	if (chunkid == INVALID_CHUNK_ID)
+		elog(NOTICE,
+			 "no chunks for hypertable \"%s.%s\" that satisfy recompress chunk policy",
+			 policy_data.hypertable->fd.schema_name.data,
+			 policy_data.hypertable->fd.table_name.data);
+
+	if (chunkid != INVALID_CHUNK_ID)
+	{
+		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
+		if (hypertable_is_distributed(policy_data.hypertable))
+			policy_invoke_recompress_chunk(chunk);
+		else
+			tsl_recompress_chunk_wrapper(chunk);
+
+		elog(LOG,
+			 "completed recompressing chunk \"%s.%s\"",
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
+	}
+
+	chunkid = get_chunk_to_recompress(dim, config);
+	if (chunkid != INVALID_CHUNK_ID)
+		enable_fast_restart(job_id, "recompression");
+
+	ts_cache_release(policy_data.hcache);
+
+	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
+	return true;
 }
 
 static void
