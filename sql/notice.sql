@@ -10,7 +10,7 @@ BEGIN
   THEN
     telemetry_string = E'Note: Please enable telemetry to help us improve our product by running: ALTER DATABASE "' || current_database() || E'" SET timescaledb.telemetry_level = ''basic'';';
   ELSE
-    telemetry_string = E'Note: TimescaleDB collects anonymous reports to better understand and assist our users.\nFor more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.';
+    telemetry_string = E'Note: TimescaleDB collects anonymous reports to better understand and assist our users.\nFor more information and how to disable, please see our docs https://docs.timescale.com/timescaledb/latest/how-to-guides/configuration/telemetry.';
   END IF;
 
   RAISE WARNING E'%\n%\n',
@@ -25,9 +25,9 @@ BEGIN
 
     E'For more information on TimescaleDB, please visit the following links:\n\n'
     ||
-    E' 1. Getting started: https://docs.timescale.com/getting-started\n' ||
-    E' 2. API reference documentation: https://docs.timescale.com/api\n' ||
-    E' 3. How TimescaleDB is designed: https://docs.timescale.com/introduction/architecture\n',
+    E' 1. Getting started: https://docs.timescale.com/timescaledb/latest/getting-started\n' ||
+    E' 2. API reference documentation: https://docs.timescale.com/api/latest\n' ||
+    E' 3. How TimescaleDB is designed: https://docs.timescale.com/timescaledb/latest/overview/core-concepts\n',
     telemetry_string;
 END;
 $$;
