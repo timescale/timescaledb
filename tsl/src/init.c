@@ -91,6 +91,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_compression_add = policy_compression_add,
 	.policy_compression_proc = policy_compression_proc,
 	.policy_compression_remove = policy_compression_remove,
+	.policy_recompression_proc = policy_recompression_proc,
 	.policy_refresh_cagg_add = policy_refresh_cagg_add,
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
