@@ -31,6 +31,8 @@ extern TSDLLEXPORT char *ts_jsonb_get_str_field(const Jsonb *jsonb, const char *
 extern TSDLLEXPORT Interval *ts_jsonb_get_interval_field(const Jsonb *jsonb, const char *key);
 extern TSDLLEXPORT TimestampTz ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key,
 													   bool *field_found);
+extern TSDLLEXPORT bool ts_jsonb_get_bool_field(const Jsonb *json, const char *key,
+												bool *field_found);
 extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(const Jsonb *json, const char *key,
 												  bool *field_found);
 extern TSDLLEXPORT int64 ts_jsonb_get_int64_field(const Jsonb *json, const char *key,
