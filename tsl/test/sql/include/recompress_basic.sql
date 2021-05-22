@@ -99,3 +99,91 @@ SELECT recompress_chunk(:'CHUNK_NAME'::regclass, false);
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
 \set ON_ERROR_STOP 1
+
+-- test recompress policy
+CREATE TABLE metrics(time timestamptz NOT NULL);
+SELECT create_hypertable('metrics','time');
+ALTER TABLE metrics SET (timescaledb.compress);
+
+-- create chunk with some data and compress
+INSERT INTO metrics SELECT '2000-01-01' FROM generate_series(1,10);
+
+-- create custom compression job without recompress boolean
+SELECT add_job('_timescaledb_internal.policy_compression','1w','{"hypertable_id": 12, "compress_after": "@ 7 days"}') AS "JOB_COMPRESS" \gset
+
+-- first call should compress
+CALL run_job(:JOB_COMPRESS);
+-- 2nd call should do nothing
+CALL run_job(:JOB_COMPRESS);
+
+---- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- do an INSERT so recompress has something to do
+INSERT INTO metrics SELECT '2000-01-01';
+
+---- status should be 3
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- should recompress
+CALL run_job(:JOB_COMPRESS);
+
+---- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- disable recompress in compress job
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false')) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+
+-- nothing to do
+CALL run_job(:JOB_COMPRESS);
+
+---- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- do an INSERT so recompress has something to do
+INSERT INTO metrics SELECT '2000-01-01';
+
+---- status should be 3
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- still nothing to do since we disabled recompress
+CALL run_job(:JOB_COMPRESS);
+
+---- status should be 3
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- reenable recompress in compress job
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','true')) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+
+-- should recompress now
+CALL run_job(:JOB_COMPRESS);
+
+---- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+SELECT delete_job(:JOB_COMPRESS);
+
+SELECT add_job('_timescaledb_internal.policy_recompression','1w','{"hypertable_id": 12, "recompress_after": "@ 7 days"}') AS "JOB_RECOMPRESS" \gset
+
+---- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+---- nothing to do yet
+CALL run_job(:JOB_RECOMPRESS);
+
+---- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+-- create some work for recompress
+INSERT INTO metrics SELECT '2000-01-01';
+
+-- status should be 3
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+CALL run_job(:JOB_RECOMPRESS);
+
+-- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
+
+SELECT delete_job(:JOB_RECOMPRESS);
+

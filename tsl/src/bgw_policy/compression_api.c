@@ -37,8 +37,20 @@
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
+#define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
 #define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
 #define CONFIG_KEY_COMPRESS_AFTER "compress_after"
+#define CONFIG_KEY_RECOMPRESS_AFTER "recompress_after"
+#define CONFIG_KEY_RECOMPRESS "recompress"
+
+bool
+policy_compression_get_recompress(const Jsonb *config)
+{
+	bool found;
+	bool recompress = ts_jsonb_get_bool_field(config, CONFIG_KEY_RECOMPRESS, &found);
+
+	return found ? recompress : true;
+}
 
 int32
 policy_compression_get_hypertable_id(const Jsonb *config)
@@ -81,6 +93,33 @@ policy_compression_get_compress_after_interval(const Jsonb *config)
 	return interval;
 }
 
+int64
+policy_recompression_get_recompress_after_int(const Jsonb *config)
+{
+	bool found;
+	int64 compress_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_RECOMPRESS_AFTER, &found);
+
+	if (!found)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find %s in config for job", CONFIG_KEY_RECOMPRESS_AFTER)));
+
+	return compress_after;
+}
+
+Interval *
+policy_recompression_get_recompress_after_interval(const Jsonb *config)
+{
+	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_RECOMPRESS_AFTER);
+
+	if (interval == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find %s in config for job", CONFIG_KEY_RECOMPRESS_AFTER)));
+
+	return interval;
+}
+
 Datum
 policy_compression_proc(PG_FUNCTION_ARGS)
 {
@@ -90,6 +129,19 @@ policy_compression_proc(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	policy_compression_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
+
+	PG_RETURN_VOID();
+}
+
+Datum
+policy_recompression_proc(PG_FUNCTION_ARGS)
+{
+	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+		PG_RETURN_VOID();
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	policy_recompression_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
 
 	PG_RETURN_VOID();
 }

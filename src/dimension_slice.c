@@ -931,12 +931,20 @@ ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_
 	return info.chunk_id;
 }
 
+typedef struct CompressChunkSearch
+{
+	int32 chunk_id;
+	bool compress;
+	bool recompress;
+} CompressChunkSearch;
+
 static ScanTupleResult
 dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *data)
 {
 	ListCell *lc;
 	DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
 	List *chunk_ids = NIL;
+	CompressChunkSearch *d = data;
 
 	ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
 
@@ -944,12 +952,13 @@ dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *dat
 	{
 		int32 chunk_id = lfirst_int(lc);
 		ChunkCompressionStatus st = ts_chunk_get_compression_status(chunk_id);
-		if (st == CHUNK_COMPRESS_NONE || st == CHUNK_COMPRESS_UNORDERED)
+		if ((d->compress && st == CHUNK_COMPRESS_NONE) ||
+			(d->recompress && st == CHUNK_COMPRESS_UNORDERED))
 		{
 			/* found a chunk that is not compressed or needs recompress
 			 * caller needs to check the correct chunk status
 			 */
-			*((int32 *) data) = chunk_id;
+			d->chunk_id = chunk_id;
 			return SCAN_DONE;
 		}
 	}
@@ -960,18 +969,20 @@ dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *dat
 int32
 ts_dimension_slice_get_chunkid_to_compress(int32 dimension_id, StrategyNumber start_strategy,
 										   int64 start_value, StrategyNumber end_strategy,
-										   int64 end_value)
+										   int64 end_value, bool compress, bool recompress)
 {
-	int32 chunk_id_ret = INVALID_CHUNK_ID;
+	CompressChunkSearch data = { .compress = compress,
+								 .recompress = recompress,
+								 .chunk_id = INVALID_CHUNK_ID };
 	dimension_slice_scan_with_strategies(dimension_id,
 										 start_strategy,
 										 start_value,
 										 end_strategy,
 										 end_value,
-										 &chunk_id_ret,
+										 &data,
 										 dimension_slice_check_is_chunk_uncompressed_tuple_found,
 										 -1,
 										 NULL);
 
-	return chunk_id_ret;
+	return data.chunk_id;
 }
