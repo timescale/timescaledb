@@ -14,6 +14,10 @@ CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_compression(job_id INTE
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_proc'
 LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_recompression(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_recompression_proc'
+LANGUAGE C;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_refresh_continuous_aggregate(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_proc'
 LANGUAGE C;
