@@ -21,7 +21,7 @@ jobs:
       MAKE_JOBS: 4
     steps:
     - name: Install Dependencies
-      run: sudo apt install flex bison
+      run: sudo apt install flex bison clang-9 llvm-9 llvm-9-dev llvm-9-tools
 
     # this workflow depends on the cached postgres build from the main regression
     # workflow since that workflow runs daily there should always be a cache hit
