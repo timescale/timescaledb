@@ -124,3 +124,6 @@ UPDATE pg_class
    SET relacl = (SELECT relacl FROM pg_class WHERE oid = hypertable_oid)
   FROM chunks
  WHERE oid = chunk_oid;
+
+-- drop the view as view definition changed
+DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size ;
