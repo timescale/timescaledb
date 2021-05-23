@@ -6,7 +6,10 @@
 -- of hypertables, chunks, and indexes on hypertables.
 
 CREATE OR REPLACE VIEW _timescaledb_internal.hypertable_chunk_local_size AS 
-SELECT
+SELECT *, 
+   compressed_total_size - COALESCE(compressed_index_size, 0) - COALESCE(compressed_toast_size, 0) as compressed_heap_size
+FROM
+( SELECT
    h.schema_name AS hypertable_schema,
    h.table_name AS hypertable_name,
    h.id as hypertable_id,
@@ -15,10 +18,19 @@ SELECT
    c.table_name as chunk_name,
    pg_total_relation_size(format('%I.%I', c.schema_name, c.table_name))::bigint AS total_bytes,
    pg_indexes_size(format('%I.%I', c.schema_name, c.table_name))::bigint AS index_bytes,
-   pg_total_relation_size(reltoastrelid)::bigint AS toast_bytes,
-   map.compressed_heap_size,
-   map.compressed_index_size,
-   map.compressed_toast_size 
+   pg_total_relation_size(pgc.reltoastrelid)::bigint AS toast_bytes,
+   CASE WHEN map.table_name IS NOT NULL 
+        THEN pg_total_relation_size(format('%I.%I', map.schema_name, map.table_name))::bigint 
+        ELSE 0
+   END AS compressed_total_size,
+   CASE WHEN map.table_name IS NOT NULL 
+        THEN pg_indexes_size(format('%I.%I', map.schema_name, map.table_name))::bigint 
+        ELSE 0
+   END AS compressed_index_size,
+   CASE WHEN map.reltoastrelid IS NOT NULL 
+        THEN pg_total_relation_size(map.reltoastrelid)::bigint 
+        ELSE 0
+   END AS compressed_toast_size
 FROM
    _timescaledb_catalog.hypertable h 
    INNER JOIN
@@ -27,15 +39,18 @@ FROM
       and c.dropped = false 
    INNER JOIN
       pg_class pgc 
-      ON pgc.relname = h.table_name 
+      ON pgc.relname = c.table_name 
    INNER JOIN
       pg_namespace pns 
       ON pns.oid = pgc.relnamespace 
-      AND pns.nspname = h.schema_name 
+      AND pns.nspname = c.schema_name 
    LEFT OUTER JOIN
-      _timescaledb_catalog.compression_chunk_size map 
-      ON map.chunk_id = c.id 
-WHERE pgc.relkind = 'r';
+      ( SELECT comp.id, comp.schema_name, comp.table_name, reltoastrelid
+        FROM _timescaledb_catalog.chunk comp, pg_class, pg_namespace
+        WHERE comp.table_name = pg_class.relname
+        AND comp.schema_name = pg_namespace.nspname
+        AND pg_namespace.oid = pg_class.relnamespace ) map
+  ON map.id = c.compressed_chunk_id ) subq;
 
 GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
  
@@ -80,7 +95,7 @@ $BODY$
 		(COALESCE(sum(ch.total_bytes), 0) - COALESCE(sum(ch.index_bytes), 0) - COALESCE(sum(ch.toast_bytes), 0) + COALESCE(sum(ch.compressed_heap_size), 0))::bigint + pg_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS heap_bytes,
 		(COALESCE(sum(ch.index_bytes), 0) + COALESCE(sum(ch.compressed_index_size), 0))::bigint + pg_indexes_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS index_bytes,
 		(COALESCE(sum(ch.toast_bytes), 0) + COALESCE(sum(ch.compressed_toast_size), 0))::bigint AS toast_bytes,
-		(COALESCE(sum(ch.total_bytes), 0) + COALESCE(sum(ch.compressed_heap_size), 0) + COALESCE(sum(ch.compressed_index_size), 0) + COALESCE(sum(ch.compressed_toast_size), 0))::bigint + pg_total_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS total_bytes
+		(COALESCE(sum(ch.total_bytes), 0) + COALESCE(sum(ch.compressed_total_size), 0))::bigint + pg_total_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS total_bytes
 	FROM
 		_timescaledb_internal.hypertable_chunk_local_size ch
 	WHERE
@@ -209,7 +224,7 @@ $BODY$
       (ch.total_bytes - COALESCE( ch.index_bytes , 0 ) - COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_heap_size , 0 ))::bigint  as heap_bytes,
       (COALESCE( ch.index_bytes, 0 ) + COALESCE( ch.compressed_index_size , 0) )::bigint as index_bytes,
       (COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_toast_size, 0 ))::bigint as toast_bytes,
-      (ch.total_bytes + COALESCE( ch.compressed_heap_size, 0 ) + COALESCE( ch.compressed_index_size, 0) + COALESCE( ch.compressed_toast_size, 0 ))::bigint as total_bytes 
+      (ch.total_bytes + COALESCE( ch.compressed_total_size, 0 ))::bigint as total_bytes 
    FROM
 	  _timescaledb_internal.hypertable_chunk_local_size ch
    WHERE
