@@ -130,6 +130,12 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 {
 	ResultRelInfo *resultRelInfo;
 	ResultRelInfo *saved_resultRelInfo = NULL;
+	/* if copies are directed to a chunk that is compressed, we redirect
+	 * them to the internal compressed chunk. But we still
+	 * need to check triggers, constrainst etc. against the original
+	 * chunk (not the internal compressed chunk).
+	 * check_resultRelInfo saves that information
+	 */
 	ResultRelInfo *check_resultRelInfo = NULL;
 	EState *estate = ccstate->estate; /* for ExecConstraints() */
 	ExprContext *econtext;
@@ -355,7 +361,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 		resultRelInfo = cis->result_relation_info;
 		estate->es_result_relation_info = resultRelInfo;
 
-		if (cis->compress_state)
+		if (cis->compress_state != NULL)
 			check_resultRelInfo = cis->orig_result_relation_info;
 		else
 			check_resultRelInfo = resultRelInfo;
