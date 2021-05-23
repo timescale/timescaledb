@@ -267,7 +267,7 @@ indexing_create_and_verify_hypertable_indexes(Hypertable *ht, bool create_defaul
 }
 
 bool
-ts_relation_has_primary_or_unique_index(Relation htrel)
+ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 {
 	List *indexoidlist = RelationGetIndexList(htrel);
 	ListCell *lc;
@@ -279,18 +279,18 @@ ts_relation_has_primary_or_unique_index(Relation htrel)
 	foreach (lc, indexoidlist)
 	{
 		Oid indexoid = lfirst_oid(lc);
-		HeapTuple indexTuple;
+		HeapTuple index_tuple;
 		Form_pg_index index;
 
-		indexTuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
-		if (!HeapTupleIsValid(indexTuple)) /* should not happen */
+		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
+		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
 			elog(ERROR,
 				 "cache lookup failed for index %u in %s",
 				 indexoid,
 				 RelationGetRelationName(htrel));
-		index = (Form_pg_index) GETSTRUCT(indexTuple);
+		index = (Form_pg_index) GETSTRUCT(index_tuple);
 		result = index->indisunique;
-		ReleaseSysCache(indexTuple);
+		ReleaseSysCache(index_tuple);
 		if (result)
 			break;
 	}
