@@ -3084,6 +3084,7 @@ chunk_update_status(FormData_chunk *form)
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	iterator.ctx.tuplock = &scantuplock;
+#if PG12_GE
 	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
 	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
 	if (!IsolationUsesXactSnapshot())
@@ -3091,6 +3092,9 @@ chunk_update_status(FormData_chunk *form)
 		/* in read committed mode, we follow all updates to this tuple */
 		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
 	}
+#else
+	scantuplock.lockflags = 1;
+#endif
 
 	ts_scan_iterator_scan_key_init(&iterator,
 								   Anum_chunk_idx_id,
