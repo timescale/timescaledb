@@ -23,11 +23,27 @@ session "I"
 step "I1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); }
 step "Ic"   { COMMIT; }
 
+session "IN"
+step "IN1"   { BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100); }
+step "INc"   { COMMIT; }
+
+session "SI"
+step "SChunkStat" {  SELECT status from _timescaledb_catalog.chunk 
+       WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'); }
+
 session "S"
 step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT count(*) from _timescaledb_internal._hyper_1_1_chunk; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
 
+session "LCT"
+step "LockChunkTuple" {
+  BEGIN;
+  SELECT status as chunk_status from _timescaledb_catalog.chunk 
+  WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table') FOR UPDATE;
+  }
+step "UnlockChunkTuple"   { ROLLBACK; }
+   
 session "LC"
 step "LockChunk1" {
   BEGIN;
@@ -83,3 +99,7 @@ permutation "LockChunk1" "C1" "D1" "UnlockChunk" "Cc" "Dc"
 #concurrent compress and select should execute concurrently
 permutation "LockChunk1" "C1" "S1" "UnlockChunk" "Cc" "SH" 
 permutation "LockChunk1" "C1" "S1" "UnlockChunk" "SH" "Cc"
+
+#concurrent inserts into compressed chunk will wait to update chunk status
+# and not error out.
+permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat" 

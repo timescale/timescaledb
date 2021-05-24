@@ -1,4 +1,4 @@
-Parsed test spec with 6 sessions
+Parsed test spec with 9 sessions
 
 starting permutation: LockChunk1 I1 C1 UnlockChunk Ic Cc SC1 S1
 step LockChunk1: 
@@ -246,3 +246,39 @@ total_chunks   number_compressed_chunks
 
 3              0              
 step Cc: COMMIT;
+
+starting permutation: C1 Cc LockChunkTuple I1 IN1 UnlockChunkTuple Ic INc SChunkStat
+step C1: 
+  BEGIN;
+  SET LOCAL lock_timeout = '500ms';
+  SET LOCAL deadlock_timeout = '10ms';
+  SELECT
+    compress_chunk(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+
+compress_chunk 
+
+_timescaledb_internal._hyper_15_28_chunk
+step Cc: COMMIT;
+step LockChunkTuple: 
+  BEGIN;
+  SELECT status as chunk_status from _timescaledb_catalog.chunk 
+  WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table') FOR UPDATE;
+
+chunk_status   
+
+1              
+step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100); <waiting ...>
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100); <waiting ...>
+step UnlockChunkTuple: ROLLBACK;
+step I1: <... completed>
+step Ic: COMMIT;
+step IN1: <... completed>
+step INc: COMMIT;
+step SChunkStat: SELECT status from _timescaledb_catalog.chunk 
+       WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
+status         
+
+3              

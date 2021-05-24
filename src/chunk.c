@@ -3041,8 +3041,11 @@ chunk_update_form(FormData_chunk *form)
 							   CurrentMemoryContext) > 0;
 }
 
+/* update the status flag for chunk. Should not be called directly
+ * Use chunk_update_status instead
+ */
 static bool
-chunk_update_status(FormData_chunk *form)
+chunk_update_status_internal(FormData_chunk *form)
 {
 	ScanKeyData scankey[1];
 
@@ -3058,6 +3061,69 @@ chunk_update_status(FormData_chunk *form)
 							   ForwardScanDirection,
 							   RowExclusiveLock,
 							   CurrentMemoryContext) > 0;
+}
+
+/* status update is done in 2 steps.
+ * Do the equivalent of SELECT for UPDATE, followed by UPDATE
+ * 1. RowShare lock to read the status.
+ * 2. if status != proposed new status
+ *      update status using RowExclusiveLock
+ * All callers who want to update chunk status should call this function so that locks
+ * are acquired correctly.
+ */
+static bool
+chunk_update_status(FormData_chunk *form)
+{
+	int32 chunk_id = form->id;
+	int32 new_status = form->status;
+	bool success = true, dropped = false;
+	/* lock the chunk tuple for update. Block till we get exclusivetuplelock */
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+#if PG12_GE
+	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+#else
+	scantuplock.lockflags = 1; /* follow updates to the tuple, boolean in PG11 */
+#endif
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool dropped_isnull, status_isnull;
+		int status;
+
+		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
+		Assert(!dropped_isnull);
+		status = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_status, &status_isnull));
+		Assert(!status_isnull);
+		if (!dropped && status != new_status)
+		{
+			success = chunk_update_status_internal(form); // get RowExclusiveLock and update here
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+	if (dropped)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("attempt to update status(%d) on dropped chunk %d", new_status, chunk_id)));
+	return success;
 }
 
 bool
@@ -3756,21 +3822,27 @@ ts_chunk_get_compression_status(int32 chunk_id)
 
 		status = slot_getattr(ti->slot, Anum_chunk_status, &status_isnull);
 		Assert(!status_isnull);
+		/* Note that dropped attribute takes precedence over everything else.
+		 * We should not check status attribute for dropped chunks
+		 */
 		if (!dropped)
 		{
 			bool status_is_compressed =
 				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED);
 			bool status_is_unordered =
 				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED_UNORDERED);
-			if (status_is_unordered)
+			if (status_is_compressed)
 			{
-				Assert(status_is_compressed);
-				st = CHUNK_COMPRESS_UNORDERED;
+				if (status_is_unordered)
+					st = CHUNK_COMPRESS_UNORDERED;
+				else
+					st = CHUNK_COMPRESS_ORDERED;
 			}
-			else if (status_is_compressed)
-				st = CHUNK_COMPRESS_ORDERED;
 			else
+			{
+				Assert(!status_is_unordered);
 				st = CHUNK_COMPRESS_NONE;
+			}
 		}
 		else
 			st = CHUNK_DROPPED;
