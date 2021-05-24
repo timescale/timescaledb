@@ -197,7 +197,7 @@ SELECT * FROM test.remote_exec( NULL,
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
 
--- insert data into compressed chunk
+-- TEST insert data into compressed chunk
 INSERT INTO compressed 
 SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
 SELECT * from compressed where new_coli = 3;
@@ -290,3 +290,60 @@ CALL run_job(:compressjob_id);
 CALL run_job(:compressjob_id);
 select chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
+
+--TEST8 insert into compressed chunks on dist. hypertable
+CREATE TABLE test_recomp_int(time bigint, val int);
+SELECT create_distributed_hypertable('test_recomp_int', 'time', chunk_time_interval => 20);
+
+CREATE OR REPLACE FUNCTION dummy_now() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 100::BIGINT';
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION dummy_now() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 100::BIGINT'
+$$);
+select set_integer_now_func('test_recomp_int', 'dummy_now');
+insert into test_recomp_int select generate_series(1,5), 10;
+alter table test_recomp_int set (timescaledb.compress);
+
+CREATE VIEW test_recomp_int_chunk_status as
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c 
+WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int';
+
+--compress chunks 
+SELECT compress_chunk(chunk)
+FROM show_chunks('test_recomp_int') AS chunk
+ORDER BY chunk;
+
+--check the status 
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+-- insert into compressed chunks of test_recomp_int (using same value for val)--
+insert into test_recomp_int select 10, 10;
+SELECT count(*) from test_recomp_int where val = 10;
+
+--chunk status should change ---
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+
+SELECT
+c.schema_name || '.' || c.table_name as "CHUNK_NAME"
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c 
+WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' \gset
+
+--call recompress_chunk directly on distributed chunk
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
+
+--check chunk status now, should be compressed
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+SELECT count(*) from test_recomp_int;
+
+--add a policy--
+select add_compression_policy('test_recomp_int', 1::int) AS compressjob_id
+\gset
+--once again add data to the compressed chunk
+insert into test_recomp_int select generate_series(5,7), 10;
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
+--run the compression policy job, it will recompress chunks that are unordered
+CALL run_job(:compressjob_id);
+SELECT count(*) from test_recomp_int;
+SELECT * from test_recomp_int_chunk_status ORDER BY 1;
