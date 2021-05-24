@@ -602,7 +602,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 
 	if (chunkid == INVALID_CHUNK_ID)
 		elog(NOTICE,
-			 "no chunks for hypertable %s.%s that satisfy recompress chunk policy",
+			 "no chunks for hypertable \"%s.%s\" that satisfy recompress chunk policy",
 			 policy_data.hypertable->fd.schema_name.data,
 			 policy_data.hypertable->fd.table_name.data);
 
@@ -615,7 +615,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 			tsl_recompress_chunk_wrapper(chunk);
 
 		elog(LOG,
-			 "completed recompressing chunk %s.%s",
+			 "completed recompressing chunk \"%s.%s\"",
 			 NameStr(chunk->fd.schema_name),
 			 NameStr(chunk->fd.table_name));
 	}

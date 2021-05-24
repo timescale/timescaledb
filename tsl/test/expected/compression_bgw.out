@@ -489,7 +489,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 ---- nothing to do yet
 CALL run_job(:JOB_RECOMPRESS);
-psql:include/recompress_basic.sql:172: NOTICE:  no chunks for hypertable public.metrics that satisfy recompress chunk policy
+psql:include/recompress_basic.sql:172: NOTICE:  no chunks for hypertable "public.metrics" that satisfy recompress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
