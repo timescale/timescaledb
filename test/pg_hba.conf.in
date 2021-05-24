@@ -2,12 +2,14 @@
 
 # "local" is for Unix domain socket connections only
 local   all             all                                                         trust
+local   replication     all                                                         trust
 # IPv4 local connections:
 hostssl  all             @TEST_ROLE_CLUSTER_SUPERUSER@  127.0.0.1/32           cert clientcert=verify-full
 hostssl  all             @TEST_ROLE_1@                  127.0.0.1/32           cert clientcert=verify-full
 host     all             @TEST_ROLE_2@                  127.0.0.1/32           password
 host     all             @TEST_ROLE_3@                  127.0.0.1/32           password
 host     all             all                            127.0.0.1/32           trust
+host     replication     all                            127.0.0.1/32           trust
 # IPv6 local connections:
 hostssl  all             @TEST_ROLE_CLUSTER_SUPERUSER@  ::1/128                cert clientcert=verify-full
 hostssl  all             @TEST_ROLE_1@                  ::1/128                cert clientcert=verify-full

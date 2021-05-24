@@ -83,20 +83,51 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	/* Start main transaction if we haven't yet */
 	if (xact_depth == 0)
 	{
-		const char *sql;
+		StringInfoData sql;
+		char *xactReadOnly;
 
 		Assert(remote_connection_get_status(entry->conn) == CONN_IDLE);
 		elog(DEBUG3, "starting remote transaction on connection %p", entry->conn);
 
+		initStringInfo(&sql);
+		appendStringInfo(&sql, "%s", "START TRANSACTION ISOLATION LEVEL");
 		if (IsolationIsSerializable())
-			sql = "START TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+			appendStringInfo(&sql, "%s", " SERIALIZABLE");
 		else
-			sql = "START TRANSACTION ISOLATION LEVEL REPEATABLE READ";
+			appendStringInfo(&sql, "%s", " REPEATABLE READ");
+
+		/*
+		 * Windows MSVC builds have linking issues for GUC variables from postgres for
+		 * use inside this extension. So we use GetConfigOptionByName
+		 */
+		xactReadOnly = GetConfigOptionByName("transaction_read_only", NULL, false);
+
+		/*
+		 * If we are initiating connection from a standby (of an AN for example),
+		 * then the remote connection transaction needs to be also set up as a
+		 * READ ONLY one. This will catch any commands that are sent from the
+		 * read only AN to datanodes but which could have potential read-write
+		 * side effects on data nodes.
+		 *
+		 * Note that when the STANDBY gets promoted then the ongoing transaction
+		 * will remain READ ONLY till its completion. New transactions will be
+		 * suitably READ WRITE. This is a slight change in behavior as compared to
+		 * regular Postgres, but promotion is not a routine activity, so it should
+		 * be acceptable and typically users would be reconnecting to the new
+		 * promoted AN anyways.
+		 *
+		 * Note that the below will also handle the case when primary AN has a
+		 * transaction which does an explicit "BEGIN TRANSACTION READ ONLY;". The
+		 * treatment is the same, mark the remote DN transaction as READ ONLY
+		 */
+		if (strncmp(xactReadOnly, "on", sizeof("on")) == 0)
+			appendStringInfo(&sql, "%s", " READ ONLY");
 
 		remote_connection_xact_transition_begin(entry->conn);
-		remote_connection_cmd_ok(entry->conn, sql);
+		remote_connection_cmd_ok(entry->conn, sql.data);
 		remote_connection_xact_transition_end(entry->conn);
 		xact_depth = remote_connection_xact_depth_inc(entry->conn);
+		pfree(sql.data);
 	}
 	/* If the connection is in COPY mode, then exit out of it */
 	else if (remote_connection_get_status(entry->conn) == CONN_COPY_IN)

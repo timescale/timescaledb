@@ -125,11 +125,11 @@ create_distributed_restore_point(PG_FUNCTION_ARGS)
 		 * inconsistent state when the distributed database is restored from a backup
 		 * using the restore point.
 		 *
-		 * To do that we take an exclusive lock on the remote transaction
+		 * To do that we take an access exclusive lock on the remote transaction
 		 * table, which will force any concurrent transaction
 		 * wait during their PREPARE phase.
 		 */
-		LockRelationOid(ts_catalog_get()->tables[REMOTE_TXN].id, ExclusiveLock);
+		LockRelationOid(ts_catalog_get()->tables[REMOTE_TXN].id, AccessExclusiveLock);
 
 		/* Prevent situation when new data node added during the execution */
 		LockRelationOid(ForeignServerRelationId, ExclusiveLock);

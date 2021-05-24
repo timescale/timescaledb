@@ -5,15 +5,17 @@
  */
 #include <postgres.h>
 #include <access/htup_details.h>
-#include <access/xact.h>
+#include <access/xlog.h>
+#include <storage/lmgr.h>
 #include <utils/hsearch.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
-
 #include "dist_txn.h"
+#include "catalog.h"
 #include "connection.h"
 #include "async.h"
+#include "errors.h"
 #include "txn.h"
 #include "txn_store.h"
 #include "guc.h"
@@ -126,9 +128,20 @@ static void
 dist_txn_xact_callback_1pc_pre_commit()
 {
 	RemoteTxn *remote_txn;
+	Catalog *catalog = ts_catalog_get();
 	AsyncRequestSet *ars = async_request_set_create();
 
 	eventcallback(DTXN_EVENT_PRE_COMMIT);
+
+	/*
+	 * In 1PC, we don't need to add entries to the remote_txn table. However
+	 * we do need to take a SHARE lock on it to interlock with any distributed
+	 * restore point activity that might be happening in parallel.
+	 *
+	 * The catalog table lock is kept until the transaction completes in order to
+	 * synchronize with distributed restore point creation
+	 */
+	LockRelationOid(catalog->tables[REMOTE_TXN].id, AccessShareLock);
 
 	/* send a commit to all connections */
 	remote_txn_store_foreach(store, remote_txn)
@@ -474,11 +487,39 @@ dist_txn_xact_callback_2pc(XactEvent event, void *arg)
 static void
 dist_txn_xact_callback(XactEvent event, void *arg)
 {
+	bool use_2pc;
+	char *xactReadOnly;
+
 	/* Quick exit if no connections were touched in this transaction. */
 	if (store == NULL)
 		return;
 
-	if (ts_guc_enable_2pc)
+	/*
+	 * Windows MSVC builds have linking issues for GUC variables from postgres for
+	 * use inside this extension. So we use GetConfigOptionByName
+	 */
+	xactReadOnly = GetConfigOptionByName("transaction_read_only", NULL, false);
+
+	/*
+	 * The decision to use 2PC rests on multiple factors:
+	 *
+	 * 1) if ts_guc_enable_2pc is enabled and it's a regular backend use it
+	 *
+	 * 2) if ts_guc_enable_2pc is enabled but we are running a read only txn, don't use it
+	 *
+	 * We might be tempted to use 1PC if just one DN is involved in the transaction.
+	 * However, it's possible that a transaction which involves data on AN and the one DN could get
+	 * a failure at the end of the COMMIT processing on the AN due to issues in local AN data. In
+	 * such a case since we send a COMMIT at "XACT_EVENT_PRE_COMMIT" event time to the DN, we might
+	 * end up with a COMMITTED DN but an aborted AN! Hence this optimization is not possible to
+	 * guarantee transactional semantics.
+	 */
+	use_2pc = (ts_guc_enable_2pc && strncmp(xactReadOnly, "on", sizeof("on")) != 0);
+#ifdef TS_DEBUG
+	ereport(DEBUG3, (errmsg("use 2PC: %s", use_2pc ? "true" : "false")));
+#endif
+
+	if (use_2pc)
 		dist_txn_xact_callback_2pc(event, arg);
 	else
 		dist_txn_xact_callback_1pc(event, arg);
