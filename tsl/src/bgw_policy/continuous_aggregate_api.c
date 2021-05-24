@@ -449,7 +449,6 @@ Datum
 policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData refresh_name;
 	NameData proc_name, proc_schema, owner;
 	ContinuousAgg *cagg;
 	CaggPolicyConfig policyconf;
@@ -531,7 +530,6 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Refresh Continuous Aggregate Policy");
-	namestrcpy(&refresh_name, "custom");
 	namestrcpy(&proc_name, POLICY_REFRESH_CAGG_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
@@ -557,7 +555,6 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
-										&refresh_name,
 										&refresh_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,

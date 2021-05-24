@@ -871,7 +871,7 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 }
 
 int
-ts_bgw_job_insert_relation(Name application_name, Name job_type, Interval *schedule_interval,
+ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 						   Interval *max_runtime, int32 max_retries, Interval *retry_period,
 						   Name proc_schema, Name proc_name, Name owner, bool scheduled,
 						   int32 hypertable_id, Jsonb *config)

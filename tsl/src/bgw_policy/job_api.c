@@ -62,7 +62,6 @@ Datum
 job_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData custom_name;
 	NameData proc_name;
 	NameData proc_schema;
 	NameData owner_name;
@@ -106,7 +105,6 @@ job_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "User-Defined Action");
-	namestrcpy(&custom_name, "custom");
 	namestrcpy(&proc_schema, get_namespace_name(get_func_namespace(proc)));
 	namestrcpy(&proc_name, func_name);
 	namestrcpy(&owner_name, GetUserNameFromId(owner, false));
@@ -115,7 +113,6 @@ job_add(PG_FUNCTION_ARGS)
 		job_config_check(&proc_schema, &proc_name, config);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
-										&custom_name,
 										schedule_interval,
 										&max_runtime,
 										DEFAULT_MAX_RETRIES,

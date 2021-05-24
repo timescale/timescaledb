@@ -136,7 +136,6 @@ Datum
 policy_retention_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData drop_chunks_name;
 	int32 job_id;
 	Oid ht_oid = PG_GETARG_OID(0);
 	Datum window_datum = PG_GETARG_DATUM(1);
@@ -257,14 +256,12 @@ policy_retention_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Retention Policy");
-	namestrcpy(&drop_chunks_name, "drop_chunks");
 	NameData proc_name, proc_schema, owner;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
-										&drop_chunks_name,
 										&default_schedule_interval,
 										&default_max_runtime,
 										default_max_retries,

@@ -150,7 +150,6 @@ Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData compress_chunks_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	Oid ht_oid = PG_GETARG_OID(0);
@@ -234,7 +233,6 @@ policy_compression_add(PG_FUNCTION_ARGS)
 
 	/* insert a new job into jobs table */
 	namestrcpy(&application_name, "Compression Policy");
-	namestrcpy(&compress_chunks_name, "compress_chunks");
 	namestrcpy(&proc_name, POLICY_COMPRESSION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
@@ -278,7 +276,6 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
-										&compress_chunks_name,
 										default_schedule_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,

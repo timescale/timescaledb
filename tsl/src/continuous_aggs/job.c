@@ -70,11 +70,9 @@ int32
 ts_continuous_agg_job_add(int32 mat_table_id, int32 raw_table_id, int64 bucket_width)
 {
 	NameData application_name;
-	NameData job_type;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 
-	namestrcpy(&job_type, "continuous_aggregate");
 	namestrcpy(&application_name, "Continuous Aggregate Policy");
 
 	Interval *refresh_interval =
@@ -92,7 +90,6 @@ ts_continuous_agg_job_add(int32 mat_table_id, int32 raw_table_id, int64 bucket_w
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
-										&job_type,
 										refresh_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
