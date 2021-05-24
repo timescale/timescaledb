@@ -3064,6 +3064,7 @@ chunk_update_status_internal(FormData_chunk *form)
 }
 
 /* status update is done in 2 steps.
+ * Do the equivalent of SELECT for UPDATE, followed by UPDATE
  * 1. RowShare lock to read the status.
  * 2. if status != proposed new status
  *      update status using RowExclusiveLock
@@ -3093,7 +3094,7 @@ chunk_update_status(FormData_chunk *form)
 		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
 	}
 #else
-	scantuplock.lockflags = 1;
+	scantuplock.lockflags = 1; /* follow updates to the tuple, boolean in PG11 */
 #endif
 
 	ts_scan_iterator_scan_key_init(&iterator,
@@ -3820,21 +3821,27 @@ ts_chunk_get_compression_status(int32 chunk_id)
 
 		status = slot_getattr(ti->slot, Anum_chunk_status, &status_isnull);
 		Assert(!status_isnull);
+		/* Note that dropped attribute takes precedence over everything else.
+		 * We should not check status attribute for dropped chunks
+		 */
 		if (!dropped)
 		{
 			bool status_is_compressed =
 				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_COMPRESSED);
 			bool status_is_unordered =
 				ts_flags_are_set_32(DatumGetInt32(status), CHUNK_STATUS_UNORDERED);
-			if (status_is_unordered)
+			if (status_is_compressed)
 			{
-				Assert(status_is_compressed);
-				st = CHUNK_COMPRESS_UNORDERED;
+				if (status_is_unordered)
+					st = CHUNK_COMPRESS_UNORDERED;
+				else
+					st = CHUNK_COMPRESS_ORDERED;
 			}
-			else if (status_is_compressed)
-				st = CHUNK_COMPRESS_ORDERED;
 			else
+			{
+				Assert(!status_is_unordered);
 				st = CHUNK_COMPRESS_NONE;
+			}
 		}
 		else
 			st = CHUNK_DROPPED;
