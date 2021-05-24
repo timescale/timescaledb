@@ -122,7 +122,6 @@ Datum
 policy_reorder_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData reorder_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	Dimension *dim;
@@ -212,7 +211,6 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Reorder Policy");
-	namestrcpy(&reorder_name, "reorder");
 	namestrcpy(&proc_name, POLICY_REORDER_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
@@ -226,7 +224,6 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	Jsonb *config = JsonbValueToJsonb(result);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
-										&reorder_name,
 										&schedule_interval,
 										DEFAULT_MAX_RUNTIME,
 										DEFAULT_MAX_RETRIES,
