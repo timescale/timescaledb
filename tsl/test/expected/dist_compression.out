@@ -974,9 +974,9 @@ CALL run_job(:compressjob_id);
 NOTICE:  no chunks for hypertable public.test_recomp_int that satisfy compress chunk policy
 SELECT recompress_chunk(chunk, true) FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
-NOTICE:  chunk "_dist_hyper_4_14_chunk" is already compressed
-NOTICE:  chunk "_dist_hyper_4_15_chunk" is already compressed
-NOTICE:  chunk "_dist_hyper_4_16_chunk" is already compressed
+NOTICE:  nothing to recompress in chunk "_dist_hyper_4_14_chunk" 
+NOTICE:  nothing to recompress in chunk "_dist_hyper_4_15_chunk" 
+NOTICE:  nothing to recompress in chunk "_dist_hyper_4_16_chunk" 
  recompress_chunk 
 ------------------
  
