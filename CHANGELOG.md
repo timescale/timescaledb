@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #3230 Support inserts into compressed chunks
+
 **Bugfixes**
 * #3209 Propagate grants to compressed hypertables
 * #3241 Fix assertion failure in decompress_chunk_plan_create
