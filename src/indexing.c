@@ -285,7 +285,7 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
 		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
 			elog(ERROR,
-				 "cache lookup failed for index %u in %s",
+				 "cache lookup failed for index %u in \"%s\" ",
 				 indexoid,
 				 RelationGetRelationName(htrel));
 		index = (Form_pg_index) GETSTRUCT(index_tuple);
