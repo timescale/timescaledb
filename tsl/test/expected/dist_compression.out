@@ -677,7 +677,7 @@ from chunk_compression_stats('conditions') where compression_status like 'Compre
       chunk_name       |       node_name       | before_total | after_total 
 -----------------------+-----------------------+--------------+-------------
  _dist_hyper_2_6_chunk | db_dist_compression_1 | 32 kB        | 32 kB
- _dist_hyper_2_6_chunk | db_dist_compression_2 | 32 kB        | 32 kB
+ _dist_hyper_2_6_chunk | db_dist_compression_3 | 32 kB        | 32 kB
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk ORDER BY id;
