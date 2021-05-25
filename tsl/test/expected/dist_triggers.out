@@ -152,6 +152,17 @@ FROM trigger_events
 GROUP BY 1,2,3,4
 ORDER BY 1,2,3,4
 NOTICE:  [db_dist_triggers_1]:
+tg_when|tg_level|tg_op|tg_name|count
+-------+--------+-----+-------+-----
+(0 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_2]:
 tg_when|tg_level |tg_op |tg_name                               |count
 -------+---------+------+--------------------------------------+-----
 AFTER  |ROW      |INSERT|_0_test_trigger_insert_after          |    1
@@ -162,17 +173,6 @@ BEFORE |ROW      |INSERT|_0_test_trigger_insert                |    1
 BEFORE |ROW      |INSERT|z_test_trigger_all                    |    1
 BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before       |    1
 (7 rows)
-
-
-NOTICE:  [db_dist_triggers_2]: 
-SELECT tg_when, tg_level, tg_op, tg_name, count(*)
-FROM trigger_events
-GROUP BY 1,2,3,4
-ORDER BY 1,2,3,4
-NOTICE:  [db_dist_triggers_2]:
-tg_when|tg_level|tg_op|tg_name|count
--------+--------+-----+-------+-----
-(0 rows)
 
 
 NOTICE:  [db_dist_triggers_3]: 
@@ -225,22 +225,6 @@ FROM trigger_events
 GROUP BY 1,2,3,4
 ORDER BY 1,2,3,4
 NOTICE:  [db_dist_triggers_1]:
-tg_when|tg_level|tg_op |tg_name                     |count
--------+--------+------+----------------------------+-----
-AFTER  |ROW     |UPDATE|_0_test_trigger_update_after|    1
-AFTER  |ROW     |UPDATE|z_test_trigger_all_after    |    1
-BEFORE |ROW     |DELETE|_0_test_trigger_delete      |    1
-BEFORE |ROW     |UPDATE|_0_test_trigger_update      |    1
-BEFORE |ROW     |UPDATE|z_test_trigger_all          |    1
-(5 rows)
-
-
-NOTICE:  [db_dist_triggers_2]: 
-SELECT tg_when, tg_level, tg_op, tg_name, count(*)
-FROM trigger_events
-GROUP BY 1,2,3,4
-ORDER BY 1,2,3,4
-NOTICE:  [db_dist_triggers_2]:
 tg_when|tg_level |tg_op |tg_name                        |count
 -------+---------+------+-------------------------------+-----
 AFTER  |ROW      |INSERT|_0_test_trigger_insert_after   |    1
@@ -255,6 +239,22 @@ BEFORE |ROW      |UPDATE|_0_test_trigger_update         |    1
 BEFORE |ROW      |UPDATE|z_test_trigger_all             |    1
 BEFORE |STATEMENT|INSERT|_0_test_trigger_insert_s_before|    1
 (11 rows)
+
+
+NOTICE:  [db_dist_triggers_2]: 
+SELECT tg_when, tg_level, tg_op, tg_name, count(*)
+FROM trigger_events
+GROUP BY 1,2,3,4
+ORDER BY 1,2,3,4
+NOTICE:  [db_dist_triggers_2]:
+tg_when|tg_level|tg_op |tg_name                     |count
+-------+--------+------+----------------------------+-----
+AFTER  |ROW     |UPDATE|_0_test_trigger_update_after|    1
+AFTER  |ROW     |UPDATE|z_test_trigger_all_after    |    1
+BEFORE |ROW     |DELETE|_0_test_trigger_delete      |    1
+BEFORE |ROW     |UPDATE|_0_test_trigger_update      |    1
+BEFORE |ROW     |UPDATE|z_test_trigger_all          |    1
+(5 rows)
 
 
 NOTICE:  [db_dist_triggers_3]: 

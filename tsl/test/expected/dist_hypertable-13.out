@@ -2957,18 +2957,18 @@ Tue Jan 01 01:02:00 2019 PST|ts-1-11-20-30|  2|abcabcabcabcabcabcab
 NOTICE:  [db_dist_hypertable_2]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
 NOTICE:  [db_dist_hypertable_2]:
-time                        |txn_id       |val|substring           
-----------------------------+-------------+---+--------------------
-Tue Jan 01 01:02:00 2019 PST|ts-1-11-20-30|  2|abcabcabcabcabcabcab
-(1 row)
+time|txn_id|val|substring
+----+------+---+---------
+(0 rows)
 
 
 NOTICE:  [db_dist_hypertable_3]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
 NOTICE:  [db_dist_hypertable_3]:
-time|txn_id|val|substring
-----+------+---+---------
-(0 rows)
+time                        |txn_id       |val|substring           
+----------------------------+-------------+---+--------------------
+Tue Jan 01 01:02:00 2019 PST|ts-1-11-20-30|  2|abcabcabcabcabcabcab
+(1 row)
 
 
  remote_exec 
@@ -3043,10 +3043,10 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      16|            8|_timescaledb_internal|_dist_hyper_10_27_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
-      17|            8|_timescaledb_internal|_dist_hyper_10_29_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
-      18|            8|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      19|            8|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      15|            8|_timescaledb_internal|_dist_hyper_10_27_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
+      16|            8|_timescaledb_internal|_dist_hyper_10_29_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
+      17|            8|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      18|            8|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
 (4 rows)
 
 
@@ -3056,10 +3056,10 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      14|            7|_timescaledb_internal|_dist_hyper_10_28_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
-      15|            7|_timescaledb_internal|_dist_hyper_10_29_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
-      16|            7|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
-      17|            7|_timescaledb_internal|_dist_hyper_10_32_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+      15|            7|_timescaledb_internal|_dist_hyper_10_28_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [1431655764, 9223372036854775807]}
+      16|            7|_timescaledb_internal|_dist_hyper_10_29_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
+      17|            7|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      18|            7|_timescaledb_internal|_dist_hyper_10_32_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (4 rows)
 
 
@@ -3115,8 +3115,8 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      18|            8|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      19|            8|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      17|            8|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      18|            8|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
 (2 rows)
 
 
@@ -3126,8 +3126,8 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      16|            7|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
-      17|            7|_timescaledb_internal|_dist_hyper_10_32_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
+      17|            7|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      18|            7|_timescaledb_internal|_dist_hyper_10_32_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [1431655764, 9223372036854775807]}
 (2 rows)
 
 
@@ -3494,7 +3494,7 @@ SELECT * FROM dist_device;
    Output: dist_device."time", dist_device.dist_device, dist_device.temp
    Data node: db_dist_hypertable_1
    Chunks: _dist_hyper_15_37_chunk
-   Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[24])
+   Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[22])
 (5 rows)
 
 -- Check that datanodes use ChunkAppend plans with chunks_in function in the
@@ -3508,7 +3508,7 @@ SELECT "time", dist_device, temp FROM public.dist_device ORDER BY "time" ASC NUL
    Output: dist_device."time", dist_device.dist_device, dist_device.temp
    Data node: db_dist_hypertable_1
    Chunks: _dist_hyper_15_37_chunk
-   Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[24]) ORDER BY "time" ASC NULLS LAST
+   Remote SQL: SELECT "time", dist_device, temp FROM public.dist_device WHERE _timescaledb_internal.chunks_in(public.dist_device.*, ARRAY[22]) ORDER BY "time" ASC NULLS LAST
    Remote EXPLAIN: 
      Custom Scan (ChunkAppend) on public.dist_device
        Output: dist_device."time", dist_device.dist_device, dist_device.temp
@@ -3679,7 +3679,7 @@ ORDER BY 1;
 INSERT INTO devices VALUES (6, 'E999');
 \set ON_ERROR_STOP 0
 INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
-ERROR:  [db_dist_hypertable_1]: insert or update on table "_dist_hyper_17_45_chunk" violates foreign key constraint "28_17_hyper_device_fkey"
+ERROR:  [db_dist_hypertable_1]: insert or update on table "_dist_hyper_17_45_chunk" violates foreign key constraint "26_17_hyper_device_fkey"
 \set ON_ERROR_STOP 1
 -- Test alter replication factor with data
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
@@ -3692,9 +3692,9 @@ NOTICE:  [db_dist_hypertable_1]:
 NOTICE:  [db_dist_hypertable_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      28|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
-      29|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
-      30|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      27|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      28|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
 (3 rows)
 
 
@@ -3715,8 +3715,8 @@ NOTICE:  [db_dist_hypertable_3]:
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      21|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
-      22|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      23|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      24|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
 (2 rows)
 
 
@@ -3743,9 +3743,9 @@ NOTICE:  [db_dist_hypertable_1]:
 NOTICE:  [db_dist_hypertable_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      28|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
-      29|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
-      30|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      27|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      28|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
 (3 rows)
 
 
@@ -3766,8 +3766,8 @@ NOTICE:  [db_dist_hypertable_3]:
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      21|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
-      22|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      23|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      24|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
 (2 rows)
 
 
@@ -3787,10 +3787,10 @@ NOTICE:  [db_dist_hypertable_1]:
 NOTICE:  [db_dist_hypertable_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      28|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
-      29|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
-      30|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
-      31|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      27|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      28|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
 (4 rows)
 
 
@@ -3812,9 +3812,9 @@ NOTICE:  [db_dist_hypertable_3]:
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      21|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
-      22|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
-      23|           14|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      23|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      24|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      25|           14|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
 (3 rows)
 
 
@@ -3841,11 +3841,11 @@ NOTICE:  [db_dist_hypertable_1]:
 NOTICE:  [db_dist_hypertable_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      28|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
-      29|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
-      30|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
-      31|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
-      32|           16|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      27|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      28|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
 (5 rows)
 
 
@@ -3868,9 +3868,9 @@ NOTICE:  [db_dist_hypertable_3]:
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      21|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
-      22|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
-      23|           14|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      23|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      24|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      25|           14|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
 (3 rows)
 
 
@@ -3897,11 +3897,11 @@ NOTICE:  [db_dist_hypertable_1]:
 NOTICE:  [db_dist_hypertable_1]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      28|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
-      29|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
-      30|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
-      31|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
-      32|           16|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_45_chunk|r      |{"time": [1483272000000000, 1483336800000000], "device": [-9223372036854775808, 715827882]}
+      27|           16|_timescaledb_internal|_dist_hyper_17_46_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [-9223372036854775808, 715827882]}
+      28|           16|_timescaledb_internal|_dist_hyper_17_49_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [-9223372036854775808, 715827882]}
+      29|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      30|           16|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
 (5 rows)
 
 
@@ -3925,10 +3925,10 @@ NOTICE:  [db_dist_hypertable_3]:
 NOTICE:  [db_dist_hypertable_3]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      21|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
-      22|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
-      23|           14|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
-      24|           14|_timescaledb_internal|_dist_hyper_17_54_chunk|r      |{"time": [1491048000000000, 1491112800000000], "device": [715827882, 1431655764]}          
+      23|           14|_timescaledb_internal|_dist_hyper_17_48_chunk|r      |{"time": [1483401600000000, 1483466400000000], "device": [1431655764, 9223372036854775807]}
+      24|           14|_timescaledb_internal|_dist_hyper_17_51_chunk|r      |{"time": [1515866400000000, 1515931200000000], "device": [1431655764, 9223372036854775807]}
+      25|           14|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      26|           14|_timescaledb_internal|_dist_hyper_17_54_chunk|r      |{"time": [1491048000000000, 1491112800000000], "device": [715827882, 1431655764]}          
 (4 rows)
 
 
@@ -4188,10 +4188,9 @@ NOTICE:  [db_dist_hypertable_1]:
     (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
     ORDER BY relname
 NOTICE:  [db_dist_hypertable_1]:
-relname                |reloptions                        
------------------------+----------------------------------
-_dist_hyper_19_57_chunk|{fillfactor=10,parallel_workers=1}
-(1 row)
+relname|reloptions
+-------+----------
+(0 rows)
 
 
 NOTICE:  [db_dist_hypertable_2]: 
@@ -4201,7 +4200,7 @@ NOTICE:  [db_dist_hypertable_2]:
 NOTICE:  [db_dist_hypertable_2]:
 relname                |reloptions                        
 -----------------------+----------------------------------
-_dist_hyper_19_58_chunk|{fillfactor=10,parallel_workers=1}
+_dist_hyper_19_57_chunk|{fillfactor=10,parallel_workers=1}
 (1 row)
 
 
@@ -4210,9 +4209,10 @@ NOTICE:  [db_dist_hypertable_3]:
     (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
     ORDER BY relname
 NOTICE:  [db_dist_hypertable_3]:
-relname|reloptions
--------+----------
-(0 rows)
+relname                |reloptions                        
+-----------------------+----------------------------------
+_dist_hyper_19_58_chunk|{fillfactor=10,parallel_workers=1}
+(1 row)
 
 
  remote_exec 

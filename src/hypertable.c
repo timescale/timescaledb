@@ -1193,10 +1193,11 @@ ts_hypertable_has_tablespace(Hypertable *ht, Oid tspc_oid)
 }
 
 static int
-hypertable_get_chunk_slice_ordinal(const Hypertable *ht, const Hypercube *hc)
+hypertable_get_chunk_round_robin_index(const Hypertable *ht, const Hypercube *hc)
 {
 	Dimension *dim;
 	DimensionSlice *slice;
+	int offset = 0;
 
 	Assert(NULL != ht);
 	Assert(NULL != hc);
@@ -1204,7 +1205,17 @@ hypertable_get_chunk_slice_ordinal(const Hypertable *ht, const Hypercube *hc)
 	dim = hyperspace_get_closed_dimension(ht->space, 0);
 
 	if (NULL == dim)
+	{
 		dim = hyperspace_get_open_dimension(ht->space, 0);
+		/* Add some randomness between hypertables so that
+		 * if there is no space partitions, but multiple hypertables
+		 * the initial index is different for different hypertables.
+		 * This protects against creating a lot of chunks on the same
+		 * data node when many hypertables are created at roughly
+		 * the same time, e.g., from a bootstrap script.
+		 */
+		offset = (int) ht->fd.id;
+	}
 
 	Assert(NULL != dim);
 
@@ -1212,7 +1223,7 @@ hypertable_get_chunk_slice_ordinal(const Hypertable *ht, const Hypercube *hc)
 
 	Assert(NULL != slice);
 
-	return ts_dimension_get_slice_ordinal(dim, slice);
+	return ts_dimension_get_slice_ordinal(dim, slice) + offset;
 }
 
 /*
@@ -1234,7 +1245,7 @@ ts_hypertable_select_tablespace(Hypertable *ht, Chunk *chunk)
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)
 		return NULL;
 
-	i = hypertable_get_chunk_slice_ordinal(ht, chunk->cube);
+	i = hypertable_get_chunk_round_robin_index(ht, chunk->cube);
 
 	/* Use the index of the slice to find the tablespace */
 	return &tspcs->tablespaces[i % tspcs->num_tablespaces];
@@ -2574,7 +2585,7 @@ ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cub
 	int num_assigned = MIN(ht->fd.replication_factor, list_length(available_nodes));
 	int n, i;
 
-	n = hypertable_get_chunk_slice_ordinal(ht, cube);
+	n = hypertable_get_chunk_round_robin_index(ht, cube);
 
 	for (i = 0; i < num_assigned; i++)
 	{
