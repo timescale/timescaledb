@@ -4,9 +4,7 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
-
-# 2.3.0 (2021-05-25)
+## 2.3.0 (2021-05-25)
 
 This release adds major new features since the 2.2.1 release. 
 We deem it moderate priority for upgrading.
