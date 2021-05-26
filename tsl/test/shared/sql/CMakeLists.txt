@@ -9,15 +9,10 @@ set(TEST_FILES_SHARED
 set(TEST_TEMPLATES_SHARED
   constify_timestamptz_op_interval.sql.in
   gapfill.sql.in
+  generated_columns.sql.in
   ordered_append.sql.in
   ordered_append_join.sql.in
 )
-
-if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
-  list(APPEND TEST_TEMPLATES_SHARED
-    generated_columns.sql.in
-  )
-endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test
 # files are put in the original source directory since all tests must

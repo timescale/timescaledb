@@ -24,6 +24,7 @@ set(TEST_FILES
   insert_single.sql
   join.sql
   lateral.sql
+  misc.sql
   partitioning.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
@@ -32,6 +33,7 @@ set(TEST_FILES
   relocate_extension.sql
   reloptions.sql
   size_utils.sql
+  tableam.sql
   tablespace.sql
   timestamp.sql
   triggers.sql
@@ -58,6 +60,7 @@ set(TEST_TEMPLATES
   partition.sql.in
   partitionwise.sql.in
   plan_expand_hypertable.sql.in
+  plan_hypertable_inline.sql.in
   #hashagg is different in 9.6 and 10 because of hashagg parallelism
   plan_hashagg.sql.in
   query.sql.in
@@ -75,7 +78,6 @@ set(SOLO_TESTS
   alternate_users
   bgw_launcher
   chunk_utils
-  index-11
   index-12
   index-13
   loader
@@ -104,12 +106,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
   )
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
-if(${PG_VERSION_MAJOR} EQUAL "11")
-  list(APPEND TEST_FILES
-    rowsecurity-11.sql
-  )
-endif()
-
 if(${PG_VERSION_MAJOR} EQUAL "12")
   list(APPEND TEST_FILES
     rowsecurity-12.sql
@@ -119,16 +115,6 @@ endif()
 if(${PG_VERSION_MAJOR} EQUAL "13")
   list(APPEND TEST_FILES
     rowsecurity-13.sql
-  )
-endif()
-
-if ((${PG_VERSION_MAJOR} GREATER_EQUAL "12"))
-  list(APPEND TEST_FILES
-    misc.sql
-    tableam.sql
-  )
-  list(APPEND TEST_TEMPLATES
-    plan_hypertable_inline.sql.in
   )
 endif()
 

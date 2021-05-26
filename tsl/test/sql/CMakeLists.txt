@@ -33,6 +33,7 @@ set(TEST_FILES_DEBUG
   continuous_aggs_dump.sql
   continuous_aggs_multi.sql
   continuous_aggs.sql
+  continuous_aggs_tableam.sql
   continuous_aggs_usage.sql
   continuous_aggs_policy_run.sql
   data_fetcher.sql
@@ -46,6 +47,7 @@ set(TEST_FILES_DEBUG
   dist_compression.sql
   dist_ddl.sql
   dist_grant.sql
+  dist_hypertable_pg12.sql
   dist_partial_agg.sql
   dist_policy.sql
   dist_util.sql
@@ -97,21 +99,6 @@ if (EXISTS ${PG_CONFIG_H})
   endif()
 endif()
 
-# oid systemcolumn is PG11 only
-if (${PG_VERSION_MAJOR} EQUAL "11")
-  list(APPEND TEST_FILES_DEBUG
-    compression_with_oids.sql
-    dist_hypertable_with_oids.sql
-  )
-endif()
-
-if (${PG_VERSION_MAJOR} GREATER_EQUAL "12")
-  list(APPEND TEST_FILES_DEBUG
-    dist_hypertable_pg12.sql
-    continuous_aggs_tableam.sql
-  )
-endif()
-
 # the following tests will run by itself before the parallel
 # tests because they fail or are flaky when run in parallel
 # dist_views.sql sets some global information, so do not run it
@@ -126,14 +113,12 @@ set(SOLO_TESTS
   continuous_aggs_dump
   data_fetcher
   dist_util
-  move-11
   move-12
   move-13
   remote_connection_cache
   remote_copy
   remote_txn
   remote_txn_resolve
-  reorder-11
   reorder-12
   reorder-13
   telemetry_distributed
