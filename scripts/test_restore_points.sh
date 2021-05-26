@@ -100,12 +100,8 @@ function instance_recover()
 	PORT=$3
 	cp -R "${BASEBACKUP_DIR}/${NAME}" "${STORAGE_DIR}/${NAME}"
 	chmod 700 "${STORAGE_DIR}/${NAME}"
-	if [ ${PG_VERSION_MAJOR} -eq 11 ]; then
-		RECOVERY_FILE="${STORAGE_DIR}/${NAME}/recovery.conf"
-	else
-		touch "${STORAGE_DIR}/${NAME}/recovery.signal"
-		RECOVERY_FILE="${STORAGE_DIR}/${NAME}/postgresql.conf"
-	fi
+	touch "${STORAGE_DIR}/${NAME}/recovery.signal"
+	RECOVERY_FILE="${STORAGE_DIR}/${NAME}/postgresql.conf"
 	cat >> "${RECOVERY_FILE}" <<EOF
 restore_command = 'cp ${WAL_DIR}/${NAME}/%f %p'
 recovery_target_name = '${RESTORE_POINT_NAME}'
