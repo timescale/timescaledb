@@ -79,21 +79,6 @@ set(POST_UPDATE_FILES
 # to build an update script for that version. Thus, for every new
 # release, an entry should be added here.
 set(MOD_FILES
-  updates/1.1.0--1.1.1.sql
-  updates/1.1.1--1.2.0.sql
-  updates/1.2.0--1.2.1.sql
-  updates/1.2.1--1.2.2.sql
-  updates/1.2.2--1.3.0.sql
-  updates/1.3.0--1.3.1.sql
-  updates/1.3.1--1.3.2.sql
-  updates/1.3.2--1.4.0.sql
-  updates/1.4.0--1.4.1.sql
-  updates/1.4.1--1.4.2.sql
-  updates/1.4.2--1.5.0.sql
-  updates/1.5.0--1.5.1.sql
-  updates/1.5.1--1.6.0.sql
-  updates/1.6.0--1.6.1.sql
-  updates/1.6.1--1.7.0.sql
   updates/1.7.0--1.7.1.sql
   updates/1.7.1--1.7.2.sql
   updates/1.7.2--1.7.3.sql
