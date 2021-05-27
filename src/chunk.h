@@ -118,6 +118,26 @@ typedef struct ChunkScanEntry
 	ChunkStub *stub;
 } ChunkScanEntry;
 
+/* To track a chunk move or copy activity */
+typedef struct ChunkCopyData
+{
+	/* numeric id for this chunk copy/move activity */
+	int32 id;
+	/* chunk to copy */
+	Chunk *chunk;
+	/* shared name used to name replication slot, publication and
+	 * subscription */
+	NameData operation_id;
+	/* from node */
+	const char *src_node;
+	/* to node */
+	const char *dst_node;
+	/* should the chunk be deleted on the source node? */
+	bool delete_on_src_node;
+	/* stage that just completed */
+	const char *completed_stage;
+} ChunkCopyData;
+
 extern Chunk *ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
 										 const char *prefix);
 
