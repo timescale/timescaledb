@@ -195,6 +195,41 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+/*
+ * Implement a distributed chunk copy/move operation.
+ *
+ * We use a procedure because multiple steps need to be performed via multiple
+ * transactions across the access node and the two datanodes that are involved.
+ * The progress of the various stages/steps are tracked in the
+ * CHUNK_COPY_ACTIVITY catalog table
+ */
+Datum
+tsl_move_chunk_proc(PG_FUNCTION_ARGS)
+{
+	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	const char *src_node_name = PG_ARGISNULL(1) ? NULL : NameStr(*PG_GETARG_NAME(1));
+	const char *dst_node_name = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
+	bool verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+
+	/* src_node and dst_node both have to be non-NULL */
+	if (src_node_name == NULL || dst_node_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid source or destination node")));
+
+	if (!OidIsValid(chunk_id))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk")));
+
+	/* perform the actual distributed chunk move after a few sanity checks */
+	chunk_perform_distributed_copy(chunk_id,
+								   verbose,
+								   src_node_name,
+								   dst_node_name,
+								   true); /* delete_on_src_node */
+
+	PG_RETURN_VOID();
+}
+
 void
 reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destination_tablespace,
 			  Oid index_tablespace)

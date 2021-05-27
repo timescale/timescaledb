@@ -38,7 +38,9 @@
 #include "remote/stmt_params.h"
 #include "remote/dist_commands.h"
 #include "remote/tuplefactory.h"
+#include "chunk.h"
 #include "chunk_api.h"
+#include "data_node.h"
 
 /*
  * These values come from the pg_type table.
@@ -440,10 +442,14 @@ chunk_api_dimension_slices_json(const Chunk *chunk, const Hypertable *ht)
 }
 
 /*
- * Create a replica of a chunk on all its assigned data nodes.
+ * Create a replica of a chunk on all its assigned or specified list of data nodes.
+ *
+ * If "data_nodes" list is explicitly specified use that instead of the list of
+ * data nodes from the chunk.
  */
 void
-chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht)
+chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht,
+							   const char *remote_chunk_name, List *data_nodes)
 {
 	AsyncRequestSet *reqset = async_request_set_create();
 	const char *params[CREATE_CHUNK_NUM_ARGS] = {
@@ -451,17 +457,18 @@ chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht)
 		chunk_api_dimension_slices_json(chunk, ht),
 		NameStr(chunk->fd.schema_name),
 		NameStr(chunk->fd.table_name),
-		NULL,
+		remote_chunk_name ? remote_chunk_name : NULL,
 	};
 	AsyncResponseResult *res;
 	ListCell *lc;
 	TupleDesc tupdesc;
 	AttInMetadata *attinmeta;
+	List *target_data_nodes = data_nodes ? data_nodes : chunk->data_nodes;
 
 	get_create_chunk_result_type(&tupdesc);
 	attinmeta = TupleDescGetAttInMetadata(tupdesc);
 
-	foreach (lc, chunk->data_nodes)
+	foreach (lc, target_data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
 		TSConnectionId id = remote_connection_id(cdn->foreign_server_oid, GetUserId());
@@ -1676,6 +1683,41 @@ chunk_create_empty_table(PG_FUNCTION_ARGS)
 #define CREATE_CHUNK_TABLE_NAME "create_chunk_table"
 
 void
+chunk_api_call_create_empty_chunk_table_wrapper(ChunkCopyData *ccd, bool transactional)
+{
+	Cache *hcache;
+	Hypertable *ht;
+
+	if (transactional)
+		StartTransactionCommand();
+
+	ht = ts_hypertable_cache_get_cache_and_entry(ccd->chunk->hypertable_relid,
+												 CACHE_FLAG_NONE,
+												 &hcache);
+
+	chunk_api_call_create_empty_chunk_table(ht, ccd->chunk, ccd->dst_node);
+
+	ts_cache_release(hcache);
+
+	/* Add a new entry in CHUNK_COPY_ACTIVITY to indicate completion of "empty_chunk_create" step */
+	if (transactional)
+	{
+		NameData application_name;
+
+		snprintf(application_name.data,
+				 sizeof(application_name.data),
+				 "chunk_created:%s",
+				 application_name.data);
+		pgstat_report_appname(application_name.data);
+
+		ccd->completed_stage = "chunk_created";
+		chunk_copy_activity_update(ccd);
+
+		CommitTransactionCommand();
+	}
+}
+
+void
 chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk,
 										const char *node_name)
 {
@@ -1691,5 +1733,64 @@ chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk
 		ts_dist_cmd_params_invoke_on_data_nodes(create_cmd,
 												stmt_params_create_from_values(params, 4),
 												list_make1((void *) node_name),
-												true));
+												false));
+}
+
+void
+chunk_api_call_chunk_attach_replica_wrapper(ForeignServer *server, ChunkCopyData *ccd,
+											bool transactional)
+{
+	Cache *hcache;
+	Hypertable *ht;
+	ChunkDataNode *chunk_data_node;
+	const char *remote_chunk_name;
+	Chunk *chunk = ccd->chunk;
+
+	/* We use a 2PC to commit the transaction on the DN as well as on the AN */
+	if (transactional)
+		StartTransactionCommand();
+
+	ht = ts_hypertable_cache_get_cache_and_entry(ccd->chunk->hypertable_relid,
+												 CACHE_FLAG_NONE,
+												 &hcache);
+
+	/* Check that the hypertable is already attached to this data node */
+	data_node_hypertable_get_by_node_name(ht, server->servername, true);
+
+	chunk_data_node = palloc0(sizeof(ChunkDataNode));
+
+	chunk_data_node->fd.chunk_id = chunk->fd.id;
+	chunk_data_node->fd.node_chunk_id = -1; /* below API will fill it up*/
+	namestrcpy(&chunk_data_node->fd.node_name, server->servername);
+	chunk_data_node->foreign_server_oid = server->serverid;
+
+	remote_chunk_name = psprintf("%s.%s",
+								 quote_identifier(chunk->fd.schema_name.data),
+								 quote_identifier(chunk->fd.table_name.data));
+
+	chunk_api_create_on_data_nodes(chunk, ht, remote_chunk_name, list_make1(chunk_data_node));
+
+	/* All ok, update the AN chunk metadata to add this data node to it */
+	chunk->data_nodes = lappend(chunk->data_nodes, chunk_data_node);
+
+	/* persist this association in the metadata */
+	ts_chunk_data_node_insert(chunk_data_node);
+
+	ts_cache_release(hcache);
+	if (transactional)
+	{
+		NameData application_name;
+
+		snprintf(application_name.data,
+				 sizeof(application_name.data),
+				 "chunk_attached_dstdn:%s",
+				 application_name.data);
+		pgstat_report_appname(application_name.data);
+
+		ccd->completed_stage = "chunk_attached_dstdn";
+		/* it gets committed as part of the overall transaction */
+		chunk_copy_activity_update(ccd);
+
+		CommitTransactionCommand();
+	}
 }

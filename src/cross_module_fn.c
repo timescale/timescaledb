@@ -42,6 +42,7 @@ CROSSMODULE_WRAPPER(job_alter);
 
 CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
+CROSSMODULE_WRAPPER(move_chunk_proc);
 
 /* partialize/finalize aggregate */
 CROSSMODULE_WRAPPER(partialize_agg);
@@ -227,7 +228,8 @@ empty_fn(PG_FUNCTION_ARGS)
 }
 
 static void
-create_chunk_on_data_nodes_default(const Chunk *chunk, const Hypertable *ht)
+create_chunk_on_data_nodes_default(const Chunk *chunk, const Hypertable *ht,
+								   const char *remote_chunk_name, List *data_nodes)
 {
 	error_no_default_fn_community();
 }
@@ -331,6 +333,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.job_execute = job_execute_default_fn,
 
 	.move_chunk = error_no_default_fn_pg_community,
+	.move_chunk_proc = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
 
 	.partialize_agg = error_no_default_fn_pg_community,
