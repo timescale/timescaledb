@@ -3,6 +3,7 @@ set(TEST_FILES
   bgw_policy.sql
   compression_bgw.sql
   compression_permissions.sql
+  compression_qualpushdown.sql
   continuous_aggs_errors.sql
   continuous_aggs_invalidation.sql
   continuous_aggs_permissions.sql
@@ -10,7 +11,9 @@ set(TEST_FILES
   continuous_aggs_refresh.sql
   continuous_aggs_watermark.sql
   dist_views.sql
+  move.sql
   partialize_finalize.sql
+  reorder.sql
   skip_scan.sql
 )
 
@@ -18,6 +21,7 @@ set(TEST_FILES_DEBUG
   bgw_db_scheduler.sql
   bgw_reorder_drop_chunks.sql
   compress_bgw_reorder_drop_chunks.sql
+  chunk_api.sql
   chunk_utils_compression.sql
   compression_algos.sql
   compression_ddl.sql
@@ -50,6 +54,7 @@ set(TEST_FILES_DEBUG
   dist_hypertable_pg12.sql
   dist_partial_agg.sql
   dist_policy.sql
+  dist_query.sql
   dist_util.sql
   dist_triggers.sql
   dist_backup.sql
@@ -68,23 +73,17 @@ set(TEST_FILES_DEBUG
 )
 
 set(TEST_TEMPLATES
-  compression_qualpushdown.sql.in
   compression_insert.sql.in
   continuous_aggs_union_view.sql.in
-  move.sql.in
   plan_skip_scan.sql.in
-  reorder.sql.in
   transparent_decompression.sql.in
   transparent_decompression_ordered_index.sql.in
 )
 
 if (CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES
-    #current_timestamp_mock available only in debug mode
-    chunk_api.sql.in
     continuous_aggs_query.sql.in
     dist_hypertable.sql.in
-    dist_query.sql.in
     remote_copy.sql.in
   )
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -113,14 +112,12 @@ set(SOLO_TESTS
   continuous_aggs_dump
   data_fetcher
   dist_util
-  move-12
-  move-13
+  move
   remote_connection_cache
   remote_copy
   remote_txn
   remote_txn_resolve
-  reorder-12
-  reorder-13
+  reorder
   telemetry_distributed
 )
 

@@ -3,6 +3,7 @@ set(TEST_FILES
   alternate_users.sql
   broken_tables.sql
   chunks.sql
+  chunk_adaptive.sql
   chunk_utils.sql
   create_chunks.sql
   create_hypertable.sql
@@ -20,19 +21,26 @@ set(TEST_FILES
   grant_hypertable.sql
   hash.sql
   histogram_test.sql
+  index.sql
   insert_many.sql
   insert_single.sql
   join.sql
   lateral.sql
   misc.sql
+  parallel.sql
+  partition.sql
   partitioning.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
   plain.sql
+  plan_hashagg.sql
   plan_ordered_append.sql
+  query.sql
   relocate_extension.sql
   reloptions.sql
   size_utils.sql
+  sort_optimization.sql
+  sql_query.sql
   tableam.sql
   tablespace.sql
   timestamp.sql
@@ -50,25 +58,15 @@ set(TEST_TEMPLATES
   agg_bookends.sql.in
   append.sql.in
   insert.sql.in
-  chunk_adaptive.sql.in
   cluster.sql.in
   constraint.sql.in
   copy.sql.in
   ddl.sql.in
   delete.sql.in
-  parallel.sql.in
-  partition.sql.in
   partitionwise.sql.in
   plan_expand_hypertable.sql.in
   plan_hypertable_inline.sql.in
-  #hashagg is different in 9.6 and 10 because of hashagg parallelism
-  plan_hashagg.sql.in
-  query.sql.in
-  # Query tests differ in how PostgreSQL deals with projections on partitioned tables.
-  sort_optimization.sql.in
-  sql_query.sql.in
   update.sql.in
-  index.sql.in
 )
 
 # tests that fail or are unreliable when run in parallel
@@ -78,8 +76,7 @@ set(SOLO_TESTS
   alternate_users
   bgw_launcher
   chunk_utils
-  index-12
-  index-13
+  index
   loader
   net
   pg_dump_unprivileged
@@ -94,15 +91,13 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     guc_options.sql
     loader.sql
     metadata.sql
+    multi_transaction_index.sql
     net.sql
     symbol_conflict.sql
     telemetry.sql
     test_utils.sql
     timestamp_limits.sql
     with_clause_parser.sql
-  )
-  list(APPEND TEST_TEMPLATES
-    multi_transaction_index.sql.in
   )
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
 
@@ -127,8 +122,8 @@ endif()
 
 # only test custom type if we are in 64-bit architecture
 if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
-  list(APPEND TEST_TEMPLATES
-    custom_type.sql.in)
+  list(APPEND TEST_FILES
+    custom_type.sql)
 endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test

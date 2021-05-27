@@ -1,4 +1,5 @@
 set(TEST_FILES_SHARED
+  constify_timestamptz_op_interval.sql
   constraint_exclusion_prepared.sql
   decompress_placeholdervar.sql
   dist_gapfill.sql
@@ -7,7 +8,6 @@ set(TEST_FILES_SHARED
 )
 
 set(TEST_TEMPLATES_SHARED
-  constify_timestamptz_op_interval.sql.in
   gapfill.sql.in
   generated_columns.sql.in
   ordered_append.sql.in

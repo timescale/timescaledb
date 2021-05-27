@@ -1,4 +1,3 @@
-/chunk_api-*.sql
 /continuous_aggs_ddl-*.sql
 /continuous_aggs_permissions-*.sql
 /continuous_aggs_query-*.sql
@@ -6,12 +5,8 @@
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
 /compression_permissions-*.sql
-/compression_qualpushdown-*.sql
 /hypertable_distributed-*.sql
 /dist_hypertable-*.sql
-/dist_query-*.sql
-/move-*.sql
 /plan_skip_scan-*.sql
-/reorder-*.sql
 /remote_copy-*.sql
 /jit-*.sql
