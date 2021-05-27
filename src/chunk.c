@@ -874,7 +874,7 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 		/* Create the corresponding chunk replicas on the remote data nodes */
-		ts_cm_functions->create_chunk_on_data_nodes(chunk, ht);
+		ts_cm_functions->create_chunk_on_data_nodes(chunk, ht, NULL, NIL);
 
 		/* Record the remote data node chunk ID mappings */
 		ts_chunk_data_node_insert_multi(chunk->data_nodes);
