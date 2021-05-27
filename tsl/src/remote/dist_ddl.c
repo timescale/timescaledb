@@ -334,9 +334,6 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 					case AT_ReplaceRelOptions:
 					case AT_ResetRelOptions:
 					case AT_SetRelOptions:
-#if PG12_LT
-					case AT_AddOids:
-#endif
 					case AT_DropOids:
 						/* Custom TimescaleDB options (e.g.,
 						 * compression-related options) are not recognized by

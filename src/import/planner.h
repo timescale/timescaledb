@@ -26,11 +26,6 @@
 
 extern TSDLLEXPORT void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
 													 Index newvarno, List **translated_vars);
-#if PG11
-extern size_t ts_estimate_hashagg_tablesize(struct Path *path,
-											const struct AggClauseCosts *agg_costs,
-											double dNumGroups);
-#endif
 
 extern struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *root,
 														  PathTarget *grouping_target);

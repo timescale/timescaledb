@@ -145,11 +145,7 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	 *-----
 	 */
 	ce->run_cost = ofpinfo->rel_total_cost - ofpinfo->rel_startup_cost;
-#if PG12_GE
 	ce->run_cost += aggcosts.finalCost.per_tuple * num_groups;
-#else
-	ce->run_cost += aggcosts.finalCost * num_groups;
-#endif
 	ce->run_cost += cpu_tuple_cost * num_groups;
 	ce->run_cost += ptarget->cost.per_tuple * num_groups;
 

@@ -7,21 +7,14 @@
 #include <catalog/pg_type.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
+#include <nodes/pathnodes.h>
 #include <nodes/pg_list.h>
-#include <optimizer/planner.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/planner.h>
 #include <optimizer/tlist.h>
 #include <parser/parse_func.h>
 #include <utils/lsyscache.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <nodes/relation.h>
-#include <optimizer/var.h>
-#else
-#include <nodes/pathnodes.h>
-#include <optimizer/optimizer.h>
-#endif
 
 #include "plan_partialize.h"
 #include "extension_constants.h"

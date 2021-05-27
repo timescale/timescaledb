@@ -7,14 +7,8 @@
 #define TIMESCALEDB_TSL_FDW_ESTIMATE_H
 
 #include <postgres.h>
-#include <optimizer/cost.h>
-
-#include <compat.h>
-#if PG12_GE
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
+#include <optimizer/cost.h>
 
 extern void fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys,
 										double *p_rows, int *p_width, Cost *p_startup_cost,

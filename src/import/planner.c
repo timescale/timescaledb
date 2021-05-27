@@ -22,6 +22,8 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/paramassign.h>
 #include <optimizer/paths.h>
 #include <optimizer/placeholder.h>
 #include <optimizer/planner.h>
@@ -31,29 +33,7 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/subselect.h>
-#include <optimizer/var.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
-
 #include "planner.h"
-
-#if PG12_GE || (PG11 && PG_VERSION_NUM >= 110002)
-#include <optimizer/paramassign.h>
-#else
-/*
- * these functions need to be backported to allow timescaledb built on older versions
- * to work with latest pg version
- */
-static Param *replace_nestloop_param_var(PlannerInfo *root, Var *var);
-static Param *replace_nestloop_param_placeholdervar(PlannerInfo *root, PlaceHolderVar *phv);
-static Param *generate_new_exec_param(PlannerInfo *root, Oid paramtype, int32 paramtypmod,
-									  Oid paramcollation);
-#endif
 
 static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle,
 												 Relids relids);
@@ -160,32 +140,6 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 
 	*translated_vars = vars;
 }
-
-#if PG11
-/* copied exactly from planner.c */
-size_t
-ts_estimate_hashagg_tablesize(struct Path *path, const struct AggClauseCosts *agg_costs,
-							  double dNumGroups)
-{
-	size_t hashentrysize;
-
-	/* Estimate per-hash-entry space at tuple width... */
-	hashentrysize = MAXALIGN(path->pathtarget->width) + MAXALIGN(SizeofMinimalTupleHeader);
-
-	/* plus space for pass-by-ref transition values... */
-	hashentrysize += agg_costs->transitionSpace;
-	/* plus the per-hash-entry overhead */
-	hashentrysize += hash_agg_entry_size(agg_costs->numAggs);
-
-	/*
-	 * Note that this disregards the effect of fill-factor and growth policy
-	 * of the hash-table. That's probably ok, given default the default
-	 * fill-factor is relatively high. It'd be hard to meaningfully factor in
-	 * "double-in-size" growth policies here.
-	 */
-	return hashentrysize * dNumGroups;
-}
-#endif
 
 /* copied verbatim from planner.c */
 struct PathTarget *
@@ -965,133 +919,3 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 	}
 	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
 }
-
-/*
- * these functions need to be backported to allow timescaledb built on older versions
- * to work with latest pg version
- */
-#if (PG11 && PG_VERSION_NUM < 110002)
-/*
- * Generate a Param node to replace the given Var,
- * which is expected to come from some upper NestLoop plan node.
- * Record the need for the Var in root->curOuterParams.
- *
- * backported from util/paramassign.c
- */
-static Param *
-replace_nestloop_param_var(PlannerInfo *root, Var *var)
-{
-	Param *param;
-	NestLoopParam *nlp;
-	ListCell *lc;
-
-	/* Is this Var already listed in root->curOuterParams? */
-	foreach (lc, root->curOuterParams)
-	{
-		nlp = (NestLoopParam *) lfirst(lc);
-		if (equal(var, nlp->paramval))
-		{
-			/* Yes, so just make a Param referencing this NLP's slot */
-			param = makeNode(Param);
-			param->paramkind = PARAM_EXEC;
-			param->paramid = nlp->paramno;
-			param->paramtype = var->vartype;
-			param->paramtypmod = var->vartypmod;
-			param->paramcollid = var->varcollid;
-			param->location = var->location;
-			return param;
-		}
-	}
-
-	/* No, so assign a PARAM_EXEC slot for a new NLP */
-	param = generate_new_exec_param(root, var->vartype, var->vartypmod, var->varcollid);
-	param->location = var->location;
-
-	/* Add it to the list of required NLPs */
-	nlp = makeNode(NestLoopParam);
-	nlp->paramno = param->paramid;
-	nlp->paramval = copyObject(var);
-	root->curOuterParams = lappend(root->curOuterParams, nlp);
-
-	/* And return the replacement Param */
-	return param;
-}
-
-/*
- * Generate a Param node to replace the given PlaceHolderVar,
- * which is expected to come from some upper NestLoop plan node.
- * Record the need for the PHV in root->curOuterParams.
- *
- * This is just like replace_nestloop_param_var, except for PlaceHolderVars.
- *
- * backported from util/paramassign.c
- */
-Param *
-replace_nestloop_param_placeholdervar(PlannerInfo *root, PlaceHolderVar *phv)
-{
-	Param *param;
-	NestLoopParam *nlp;
-	ListCell *lc;
-
-	/* Is this PHV already listed in root->curOuterParams? */
-	foreach (lc, root->curOuterParams)
-	{
-		nlp = (NestLoopParam *) lfirst(lc);
-		if (equal(phv, nlp->paramval))
-		{
-			/* Yes, so just make a Param referencing this NLP's slot */
-			param = makeNode(Param);
-			param->paramkind = PARAM_EXEC;
-			param->paramid = nlp->paramno;
-			param->paramtype = exprType((Node *) phv->phexpr);
-			param->paramtypmod = exprTypmod((Node *) phv->phexpr);
-			param->paramcollid = exprCollation((Node *) phv->phexpr);
-			param->location = -1;
-			return param;
-		}
-	}
-
-	/* No, so assign a PARAM_EXEC slot for a new NLP */
-	param = generate_new_exec_param(root,
-									exprType((Node *) phv->phexpr),
-									exprTypmod((Node *) phv->phexpr),
-									exprCollation((Node *) phv->phexpr));
-
-	/* Add it to the list of required NLPs */
-	nlp = makeNode(NestLoopParam);
-	nlp->paramno = param->paramid;
-	nlp->paramval = (Var *) copyObject(phv);
-	root->curOuterParams = lappend(root->curOuterParams, nlp);
-
-	/* And return the replacement Param */
-	return param;
-}
-
-/*
- * Generate a new Param node that will not conflict with any other.
- *
- * This is used to create Params representing subplan outputs or
- * NestLoop parameters.
- *
- * We don't need to build a PlannerParamItem for such a Param, but we do
- * need to record the PARAM_EXEC slot number as being allocated.
- *
- * backported from util/paramassign.c
- */
-Param *
-generate_new_exec_param(PlannerInfo *root, Oid paramtype, int32 paramtypmod, Oid paramcollation)
-{
-	Param *retval;
-
-	retval = makeNode(Param);
-	retval->paramkind = PARAM_EXEC;
-	retval->paramid = list_length(root->glob->paramExecTypes);
-	root->glob->paramExecTypes = lappend_oid(root->glob->paramExecTypes, paramtype);
-	retval->paramtype = paramtype;
-	retval->paramtypmod = paramtypmod;
-	retval->paramcollid = paramcollation;
-	retval->location = -1;
-
-	return retval;
-}
-#endif

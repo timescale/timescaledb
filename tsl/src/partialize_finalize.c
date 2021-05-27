@@ -16,7 +16,6 @@
 #include <utils/datum.h>
 #include <utils/syscache.h>
 
-#include "compat.h"
 #include "partialize_finalize.h"
 
 /*
@@ -245,10 +244,10 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 		type_name = DatumGetName(slice_fields[1]);
 
 		schema_oid = get_namespace_oid(NameStr(*schema), false);
-		type_oid = GetSysCacheOid2Compat(TYPENAMENSP,
-										 Anum_pg_type_oid,
-										 PointerGetDatum(NameStr(*type_name)),
-										 ObjectIdGetDatum(schema_oid));
+		type_oid = GetSysCacheOid2(TYPENAMENSP,
+								   Anum_pg_type_oid,
+								   PointerGetDatum(NameStr(*type_name)),
+								   ObjectIdGetDatum(schema_oid));
 		if (!OidIsValid(type_oid))
 			elog(ERROR, "invalid input type: %s.%s", NameStr(*schema), NameStr(*type_name));
 

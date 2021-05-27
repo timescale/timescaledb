@@ -11,7 +11,6 @@
 #include <utils/lsyscache.h>
 #include <miscadmin.h>
 
-#include <compat.h>
 #include <remote/dist_txn.h>
 #include <remote/async.h>
 #include <remote/stmt_params.h>
@@ -327,7 +326,7 @@ fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 	 * CustomScan initializes ss_ScanTupleSlot to a VirtualTupleTableSlot
 	 * while we're storing a HeapTuple.
 	 */
-	ExecForceStoreHeapTupleCompat(tuple, slot, false);
+	ExecForceStoreHeapTuple(tuple, slot, false);
 
 	return slot;
 }

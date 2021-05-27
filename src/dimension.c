@@ -1306,6 +1306,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 	HeapTuple tuple;
 	Datum datum;
 	bool isnull = false;
+	bool isgenerated;
 
 	if (!DIMENSION_INFO_IS_SET(info))
 		ereport(ERROR,
@@ -1334,22 +1335,16 @@ ts_dimension_info_validate(DimensionInfo *info)
 
 	info->set_not_null = !DatumGetBool(datum);
 
-	/* PG12 check that the column is not generated */
-#if PG12_GE
-	{
-		bool isgenerated;
+	/* check that the column is not generated */
+	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attgenerated, &isnull);
+	Assert(!isnull);
+	isgenerated = (DatumGetChar(datum) == ATTRIBUTE_GENERATED_STORED);
 
-		datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attgenerated, &isnull);
-		Assert(!isnull);
-		isgenerated = (DatumGetChar(datum) == ATTRIBUTE_GENERATED_STORED);
-
-		if (isgenerated)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid partitioning column"),
-					 errhint("Generated columns cannot be used as partitioning dimensions.")));
-	}
-#endif
+	if (isgenerated)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid partitioning column"),
+				 errhint("Generated columns cannot be used as partitioning dimensions.")));
 
 	ReleaseSysCache(tuple);
 

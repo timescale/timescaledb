@@ -311,26 +311,6 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
 	return fdw_plan_foreign_modify(root, plan, result_relation, subplan_index);
 }
 
-#if PG12_LT
-static Path *
-create_foreign_upper_path(PlannerInfo *root, RelOptInfo *rel, PathTarget *target, double rows,
-						  Cost startup_cost, Cost total_cost, List *pathkeys, Path *fdw_outerpath,
-						  List *fdw_private)
-{
-	return &create_foreignscan_path(root,
-									rel,
-									target,
-									rows,
-									startup_cost,
-									total_cost,
-									pathkeys,
-									rel->lateral_relids,
-									fdw_outerpath,
-									fdw_private)
-				->path;
-}
-#endif
-
 /*
  * get_foreign_upper_paths
  *		Add paths for post-join operations like aggregation, grouping etc. if

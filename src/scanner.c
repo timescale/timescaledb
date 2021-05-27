@@ -57,21 +57,8 @@ table_scanner_beginscan(InternalScannerCtx *ctx)
 static bool
 table_scanner_getnext(InternalScannerCtx *ctx)
 {
-	bool success;
-#if PG12_LT
-	HeapTuple tuple = heap_getnext(ctx->scan.table_scan, ForwardScanDirection);
-
-	success = HeapTupleIsValid(tuple);
-
-	if (success)
-	{
-		ctx->tinfo.tid = tuple->t_self;
-		/* The tuple is managed by the heap so shouldn't free it */
-		ExecStoreTuple(tuple, ctx->tinfo.slot, InvalidBuffer, false);
-	}
-#else
-	success = table_scan_getnextslot(ctx->scan.table_scan, ForwardScanDirection, ctx->tinfo.slot);
-#endif
+	bool success =
+		table_scan_getnextslot(ctx->scan.table_scan, ForwardScanDirection, ctx->tinfo.slot);
 
 	return success;
 }
@@ -115,21 +102,7 @@ static bool
 index_scanner_getnext(InternalScannerCtx *ctx)
 {
 	bool success;
-#if PG12_LT
-	HeapTuple tuple;
-
-	tuple = index_getnext(ctx->scan.index_scan, ctx->sctx->scandirection);
-	success = HeapTupleIsValid(tuple);
-
-	if (success)
-	{
-		ctx->tinfo.tid = tuple->t_self;
-		/* index_getnext() returns disk page tuples, so should not be freed */
-		ExecStoreTuple(tuple, ctx->tinfo.slot, InvalidBuffer, false);
-	}
-#else
 	success = index_getnext_slot(ctx->scan.index_scan, ctx->sctx->scandirection, ctx->tinfo.slot);
-#endif
 
 	ctx->tinfo.ituple = ctx->scan.index_scan->xs_itup;
 	ctx->tinfo.ituple_desc = ctx->scan.index_scan->xs_itupdesc;
@@ -237,8 +210,7 @@ ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 	ictx->tinfo.scanrel = ictx->tablerel;
 	ictx->tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
-	ictx->tinfo.slot =
-		MakeSingleTupleTableSlotCompat(tuple_desc, table_slot_callbacks(ictx->tablerel));
+	ictx->tinfo.slot = MakeSingleTupleTableSlot(tuple_desc, table_slot_callbacks(ictx->tablerel));
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)
@@ -290,7 +262,6 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 			if (ctx->tuplock)
 			{
-#if PG12_GE
 				TupleTableSlot *slot = ictx->tinfo.slot;
 
 				Assert(ctx->snapshot);
@@ -303,25 +274,6 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 														  ctx->tuplock->waitpolicy,
 														  ctx->tuplock->lockflags,
 														  &ictx->tinfo.lockfd);
-
-#else
-				HeapTuple tuple = ExecFetchSlotTuple(ictx->tinfo.slot);
-				Buffer buffer;
-
-				ictx->tinfo.lockresult = heap_lock_tuple(ictx->tablerel,
-														 tuple,
-														 GetCurrentCommandId(false),
-														 ctx->tuplock->lockmode,
-														 ctx->tuplock->waitpolicy,
-														 ctx->tuplock->lockflags ? true : false,
-														 &buffer,
-														 &ictx->tinfo.lockfd);
-				/*
-				 * A tuple lock pins the underlying buffer, so we need to
-				 * unpin it.
-				 */
-				ReleaseBuffer(buffer);
-#endif
 			}
 
 			/* stop at a valid tuple */
@@ -387,11 +339,7 @@ ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found, const char *item_ty
 ItemPointer
 ts_scanner_get_tuple_tid(TupleInfo *ti)
 {
-#if PG12_GE
 	return &ti->slot->tts_tid;
-#else
-	return &ti->tid;
-#endif
 }
 
 HeapTuple

@@ -15,6 +15,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
 #include <optimizer/clauses.h>
+#include <optimizer/optimizer.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
@@ -23,18 +24,12 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/var.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
-
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/locf.h"
 #include "nodes/gapfill/interpolate.h"
 #include "nodes/gapfill/exec.h"
 #include "time_bucket.h"
+#include "compat.h"
 
 typedef enum GapFillBoundary
 {
@@ -614,12 +609,8 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
-#if PG12_LT
-	state->subslot = NULL;
-#else
-	state->subslot = MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP);
-#endif
-	state->scanslot = MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP);
+	state->subslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
+	state->scanslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(args)))
@@ -716,7 +707,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	state->pi = ExecBuildProjectionInfo(targetlist,
 										state->csstate.ss.ps.ps_ExprContext,
-										MakeSingleTupleTableSlotCompat(tupledesc, TTSOpsVirtualP),
+										MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP),
 										&state->csstate.ss.ps,
 										NULL);
 
@@ -982,7 +973,6 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 	int i;
 	Datum value;
 	bool isnull;
-	bool modified = false;
 
 	foreach_column(column.base, i, state)
 	{
@@ -991,15 +981,11 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			case LOCF_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
 				if (isnull && column.locf->treat_null_as_missing)
-				{
 					gapfill_locf_calculate(column.locf,
 										   state,
 										   state->subslot_time,
 										   &state->subslot->tts_values[i],
 										   &state->subslot->tts_isnull[i]);
-					if (!state->subslot->tts_isnull[i])
-						modified = true;
-				}
 				else
 					gapfill_locf_tuple_returned(column.locf, value, isnull);
 				break;
@@ -1013,31 +999,6 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			default:
 				break;
 		}
-	}
-
-	/*
-	 * If we modified any values we need to make postgres treat this as virtual tuple
-	 * and remove references to the original tuple.
-	 */
-	if (modified)
-	{
-#if PG12_LT
-		if (state->subslot->tts_shouldFree)
-		{
-			heap_freetuple(state->subslot->tts_tuple);
-			state->subslot->tts_shouldFree = false;
-		}
-		state->subslot->tts_tuple = NULL;
-
-		if (state->subslot->tts_shouldFreeMin)
-		{
-			heap_free_minimal_tuple(state->subslot->tts_mintuple);
-			state->subslot->tts_shouldFreeMin = false;
-		}
-		state->subslot->tts_mintuple = NULL;
-
-		state->subslot->tts_nvalid = state->ncolumns;
-#endif
 	}
 
 	return state->subslot;
@@ -1082,15 +1043,11 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	if (!subslot)
 		return NULL;
 
-#if PG12_LT
-	state->subslot = subslot;
-#else
-	/* in PG12 we cannot simply treat an arbitrary source slot as virtual,
+	/* we cannot simply treat an arbitrary source slot as virtual,
 	 * instead we must copy the data into our own slot in order to be able to
 	 * modify it
 	 */
 	ExecCopySlot(state->subslot, subslot);
-#endif
 	time_value = slot_getattr(subslot, AttrOffsetGetAttrNumber(state->time_index), &isnull);
 	if (isnull)
 		ereport(ERROR,

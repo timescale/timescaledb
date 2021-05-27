@@ -7,6 +7,7 @@
 #define TIMESCALEDB_TSL_FDW_MODIFY_EXEC_H
 
 #include <postgres.h>
+#include <commands/explain.h>
 #include <nodes/parsenodes.h>
 #include <nodes/plannodes.h>
 #include <nodes/execnodes.h>

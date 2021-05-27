@@ -292,8 +292,8 @@ function test_diff()
 	diff ${RESULT_DIR}/single_node_${RESTORE_POINT_NAME} ${RESULT_DIR}/multi_node_${RESTORE_POINT_NAME}
 }
 
-if [ ${PG_VERSION_MAJOR} -lt 11 ]; then
-  echo "Current PostgreSQL version is not supported (expected version >= PG11)"
+if [ ${PG_VERSION_MAJOR} -lt 12 ]; then
+  echo "Current PostgreSQL version is not supported (expected version >= PG12)"
   exit 1
 fi
 

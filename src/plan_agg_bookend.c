@@ -43,6 +43,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/planmain.h>
@@ -57,13 +58,6 @@
 #include <utils/regproc.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "plan_agg_bookend.h"
 #include "planner.h"
@@ -568,6 +562,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	Cost path_cost;
 	double path_fraction;
 	MinMaxAggInfo *mminfo;
+	ListCell *lc;
 
 	/*
 	 * We are going to construct what is effectively a sub-SELECT query, so
@@ -661,79 +656,64 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	subroot->tuple_fraction = 1.0;
 	subroot->limit_tuples = 1.0;
 
-#if PG12_GE
+	/* min/max optimizations ususally happen before
+	 * inheritance-relations are expanded, and thus query_planner will
+	 * try to expand our hypertables if they are marked as
+	 * inheritance-relations. Since we do not want this, we must mark
+	 * hypertables as non-inheritance now.
+	 */
+	foreach (lc, subroot->parse->rtable)
 	{
-		ListCell *lc;
-		/* min/max optimizations ususally happen before
-		 * inheritance-relations are expanded, and thus query_planner will
-		 * try to expand our hypertables if they are marked as
-		 * inheritance-relations. Since we do not want this, we must mark
-		 * hypertables as non-inheritance now.
-		 */
-		foreach (lc, subroot->parse->rtable)
-		{
-			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
+		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 
-			if (ts_rte_is_hypertable(rte, NULL))
+		if (ts_rte_is_hypertable(rte, NULL))
+		{
+			ListCell *prev = NULL;
+			ListCell *next = list_head(subroot->append_rel_list);
+			Assert(rte->inh);
+			rte->inh = false;
+			/* query planner gets confused when entries in the
+			 * append_rel_list refer to entries in the relarray that
+			 * don't exist. Since we need to expand hypertables in the
+			 * subquery, all of the chunk entries will be invalid in
+			 * this manner, so we remove them from the list.
+			 */
+			/*  Performance Enhancement: This can be made non-quadratic by:
+			 *  1) Loop once over all RTEs, storing the relid of any RTE that is a hypertable in
+			 * a bitset and setting its 'inh' flag to false 2) Loop over the append_rel_list,
+			 * removing any AppendRelInfo that has a parent relid which is in the previously
+			 * created bitset (i.e., is a hypertable)
+			 */
+			while (next != NULL)
 			{
-				ListCell *prev = NULL;
-				ListCell *next = list_head(subroot->append_rel_list);
-				Assert(rte->inh);
-				rte->inh = false;
-				/* query planner gets confused when entries in the
-				 * append_rel_list refer to entries in the relarray that
-				 * don't exist. Since we need to expand hypertables in the
-				 * subquery, all of the chunk entries will be invalid in
-				 * this manner, so we remove them from the list.
-				 */
-				/*  Performance Enhancement: This can be made non-quadratic by:
-				 *  1) Loop once over all RTEs, storing the relid of any RTE that is a hypertable in
-				 * a bitset and setting its 'inh' flag to false 2) Loop over the append_rel_list,
-				 * removing any AppendRelInfo that has a parent relid which is in the previously
-				 * created bitset (i.e., is a hypertable)
-				 */
-				while (next != NULL)
+				AppendRelInfo *app = lfirst(next);
+				if (app->parent_reloid == rte->relid)
 				{
-					AppendRelInfo *app = lfirst(next);
-					if (app->parent_reloid == rte->relid)
-					{
-						subroot->append_rel_list =
-							list_delete_cell_compat(subroot->append_rel_list, next, prev);
-						next = prev != NULL ? lnext_compat(subroot->append_rel_list, next) :
-											  list_head(subroot->append_rel_list);
-					}
-					else
-					{
-						prev = next;
-						next = lnext_compat(subroot->append_rel_list, next);
-					}
+					subroot->append_rel_list =
+						list_delete_cell_compat(subroot->append_rel_list, next, prev);
+					next = prev != NULL ? lnext_compat(subroot->append_rel_list, next) :
+										  list_head(subroot->append_rel_list);
+				}
+				else
+				{
+					prev = next;
+					next = lnext_compat(subroot->append_rel_list, next);
 				}
 			}
 		}
 	}
-#endif
 
-	final_rel = query_planner(subroot,
-#if PG12_LT
-							  /* as of 333ed24 uses subroot->processed_tlist instead  */
-							  tlist,
-#endif
-							  first_last_qp_callback,
-							  NULL);
+	final_rel = query_planner(subroot, first_last_qp_callback, NULL);
 
-#if PG12_GE
+	/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
+	foreach (lc, root->parse->rtable)
 	{
-		ListCell *lc;
-		/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
-		foreach (lc, root->parse->rtable)
-		{
-			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
+		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 
-			if (ts_rte_is_hypertable(rte, NULL))
-				rte->inh = true;
-		}
+		if (ts_rte_is_hypertable(rte, NULL))
+			rte->inh = true;
 	}
-#endif
+
 	/*
 	 * Since we didn't go through subquery_planner() to handle the subquery,
 	 * we have to do some of the same cleanup it would do, in particular cope

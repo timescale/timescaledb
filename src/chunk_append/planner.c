@@ -9,6 +9,8 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/appendinfo.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/placeholder.h>
@@ -17,15 +19,6 @@
 #include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/var.h>
-#else
-#include <optimizer/appendinfo.h>
-#include <optimizer/optimizer.h>
-#endif
 
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"

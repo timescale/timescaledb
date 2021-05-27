@@ -195,11 +195,9 @@ deparse_columns(StringInfo stmt, Relation rel)
 																CStringGetTextDatum(attr_def.adbin),
 																ObjectIdGetDatum(rel->rd_id)));
 
-#if PG12_GE
 					if (attr->attgenerated == ATTRIBUTE_GENERATED_STORED)
 						appendStringInfo(stmt, " GENERATED ALWAYS AS %s STORED", attr_default);
 					else
-#endif
 					{
 						appendStringInfo(stmt, " DEFAULT %s", attr_default);
 					}
@@ -231,11 +229,7 @@ add_constraint(HeapTuple constraint_tuple, void *ctx)
 
 	if (OidIsValid(constraint->conindid))
 		*cc->constraint_indexes = lappend_oid(*cc->constraint_indexes, constraint->conindid);
-#if PG12_GE
 	constroid = constraint->oid;
-#else
-	constroid = HeapTupleGetOid(constraint_tuple);
-#endif
 	cc->constraints = lappend_oid(cc->constraints, constroid);
 	return CONSTR_PROCESSED;
 }
@@ -402,9 +396,7 @@ deparse_get_tabledef(TableInfo *table_info)
 	deparse_columns(create_table, rel);
 
 	appendStringInfoChar(create_table, ')');
-#if PG12_GE
 	appendStringInfo(create_table, " USING \"%s\" ", get_am_name(rel->rd_rel->relam));
-#endif
 	deparse_get_tabledef_with(table_info, create_table);
 
 	appendStringInfoChar(create_table, ';');

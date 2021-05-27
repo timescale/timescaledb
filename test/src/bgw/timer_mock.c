@@ -13,11 +13,6 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
-#include "compat.h"
-#if PG12_LT
-#include <utils/tqual.h>
-#endif
-
 #include "annotations.h"
 #include "timer_mock.h"
 #include "log.h"

@@ -652,11 +652,7 @@ job_execute_procedure(FuncExpr *funcexpr)
 	call->funcexpr = funcexpr;
 	DestReceiver *dest = CreateDestReceiver(DestNone);
 	/* we don't need to create proper param list cause we pass in all arguments as Const */
-#ifdef PG11
-	ParamListInfo params = palloc0(offsetof(ParamListInfoData, params));
-#else
 	ParamListInfo params = makeParamList(0);
-#endif
 	ExecuteCallStmt(call, params, false, dest);
 }
 

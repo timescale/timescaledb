@@ -72,12 +72,7 @@ print_result(int elevel, const char *server_name, const PGresult *pg_result)
 	FreeFile(result_stream);
 
 	/* Get the size of the written result */
-#if PG12_GE
 	result_text_size = FileSize(tmpfile);
-#else
-	result_text_size = FileSeek(tmpfile, 0, SEEK_END);
-	FileSeek(tmpfile, 0, SEEK_SET);
-#endif
 
 	/* Read the result into a memory buffer */
 	if (result_text_size > 0)
@@ -86,11 +81,7 @@ print_result(int elevel, const char *server_name, const PGresult *pg_result)
 
 		result_text = malloc(result_text_size);
 
-#if PG12_GE
 		nread = FileRead(tmpfile, result_text, result_text_size, 0, 0);
-#else
-		nread = FileRead(tmpfile, result_text, result_text_size, 0);
-#endif
 		if (nread != result_text_size)
 		{
 			free(result_text);

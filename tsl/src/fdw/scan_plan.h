@@ -7,19 +7,14 @@
 #define TIMESCALEDB_TSL_FDW_SCAN_PLAN_H
 
 #include <postgres.h>
+#include <commands/explain.h>
 #include <fmgr.h>
 #include <foreign/foreign.h>
-#include <lib/stringinfo.h>
-#include <utils/relcache.h>
-#include <commands/explain.h>
 #include <funcapi.h>
-
-#include <compat.h>
-#if PG12_GE
+#include <lib/stringinfo.h>
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
+#include <utils/relcache.h>
+
 #include "data_node_chunk_assignment.h"
 
 typedef struct TsFdwRelInfo TsFdwRelInfo;

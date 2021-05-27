@@ -46,7 +46,7 @@ static bool datum_eq(dictionary_hash *tb, Datum a, Datum b);
 #define SH_SCOPE static inline
 #define SH_DEFINE
 #define SH_DECLARE
-#include "adts/simplehash.h"
+#include "lib/simplehash.h"
 
 static uint32
 datum_hash(dictionary_hash *tb, Datum key)
@@ -86,9 +86,7 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 {
 	HashMeta *meta = palloc(sizeof(*meta));
 	Oid collation = InvalidOid;
-#if PG12_GE
 	collation = tentry->typcollation;
-#endif
 
 	if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
 		elog(ERROR,

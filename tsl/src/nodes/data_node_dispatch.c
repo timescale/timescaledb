@@ -349,7 +349,7 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	/* The tuplestores that hold batches of tuples only allow MinimalTuples so
 	 * we need a dedicated slot for getting tuples from the stores since the
 	 * CustomScan's ScanTupleSlot is a VirtualTuple. */
-	sds->batch_slot = MakeSingleTupleTableSlotCompat(tupdesc, &TTSOpsMinimalTuple);
+	sds->batch_slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsMinimalTuple);
 
 	ts_cache_release(hcache);
 }
@@ -367,7 +367,7 @@ store_returning_result(DataNodeDispatchState *sds, int row, TupleTableSlot *slot
 		/* We need to force the tuple into the slot since it is not of the
 		 * right type (conversion to the right type will happen if
 		 * necessary) */
-		ExecForceStoreHeapTupleCompat(newtup, slot, true);
+		ExecForceStoreHeapTuple(newtup, slot, true);
 	}
 	PG_CATCH();
 	{
@@ -705,7 +705,6 @@ handle_read(DataNodeDispatchState *sds)
 			ListCell *lc;
 			bool primary_data_node = true;
 			MemoryContext oldcontext;
-#if PG12_GE
 			TupleDesc rri_desc = RelationGetDescr(rri->ri_RelationDesc);
 
 			if (NULL != rri->ri_projectReturning && rri_desc->constr &&
@@ -717,7 +716,6 @@ handle_read(DataNodeDispatchState *sds)
 										   CMD_INSERT
 #endif
 				);
-#endif /* PG12_GE */
 
 			Assert(NULL != cis);
 
@@ -1075,11 +1073,7 @@ get_insert_attrs(Relation rel)
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 
-		if (attr->attisdropped
-#if PG12_GE
-			|| attr->attgenerated != '\0'
-#endif
-		)
+		if (attr->attisdropped || attr->attgenerated != '\0')
 			continue;
 
 		attrs = lappend_int(attrs, AttrOffsetGetAttrNumber(i));

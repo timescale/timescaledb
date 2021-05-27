@@ -8,9 +8,6 @@
 
 #include <postgres.h>
 #include <nodes/primnodes.h>
-#if PG12_LT
-#include <nodes/relation.h>
-#endif
 
 #include "export.h"
 

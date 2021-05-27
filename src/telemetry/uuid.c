@@ -10,10 +10,6 @@
 #include "compat.h"
 #include "telemetry/uuid.h"
 
-#if PG11
-#include <utils/backend_random.h>
-#endif
-
 /*
  * Generates a v4 UUID. Based on function pg_random_uuid() in the pgcrypto contrib module.
  *

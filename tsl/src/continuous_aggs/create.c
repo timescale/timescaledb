@@ -37,6 +37,7 @@
 #include <nodes/parsenodes.h>
 #include <nodes/pg_list.h>
 #include <optimizer/clauses.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/tlist.h>
 #include <parser/analyze.h>
 #include <parser/parse_func.h>
@@ -51,14 +52,6 @@
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/tlist.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "create.h"
 
@@ -200,15 +193,10 @@ static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
 										int original_query_resno);
 static void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo,
 										   RangeTblEntry *usertbl_rte, int32 usertbl_htid);
-static int32 mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo,
-															 int32 hypertable_id, RangeVar *mat_rel,
-															 CAggTimebucketInfo *origquery_tblinfo,
-															 bool create_addl_index,
-															 char *tablespacename,
-#if PG12_GE
-															 char *table_access_method,
-#endif
-															 ObjectAddress *mataddress);
+static int32 mattablecolumninfo_create_materialization_table(
+	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
+	char *table_access_method, ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
 														  Query *userview_query);
 
@@ -463,9 +451,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 												RangeVar *mat_rel,
 												CAggTimebucketInfo *origquery_tblinfo,
 												bool create_addl_index, char *const tablespacename,
-#if PG12_GE
 												char *const table_access_method,
-#endif
 												ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
@@ -490,9 +476,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
 	create->tablespacename = tablespacename;
-#if PG12_GE
 	create->accessMethod = table_access_method;
-#endif
 	create->if_not_exists = false;
 
 	/*  Create the materialization table.  */
@@ -1685,9 +1669,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													origquery_ht,
 													is_create_mattbl_index,
 													create_stmt->into->tableSpaceName,
-#if PG12_GE
 													create_stmt->into->accessMethod,
-#endif
 													&mataddress);
 	/* Step 2: create view with select finalize from materialization
 	 * table

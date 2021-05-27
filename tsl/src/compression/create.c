@@ -222,13 +222,6 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	tupdesc = rel->rd_att;
 	i = 1;
 
-#if PG12_LT
-	if (rel->rd_rel->relhasoids)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression cannot be used on table with OIDs")));
-#endif
-
 	foreach (lc, segmentby_cols)
 	{
 		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
@@ -762,14 +755,10 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 										&is_null);
 			if (is_null)
 			{
-#if PG12_LT
-				Oid oid = HeapTupleGetOid(tuple);
-#else
 				Oid oid = heap_getattr(tuple,
 									   Anum_pg_constraint_oid,
 									   RelationGetDescr(pg_constr),
 									   &is_null);
-#endif
 				elog(ERROR, "null conkey for constraint %u", oid);
 			}
 

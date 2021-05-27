@@ -5,24 +5,26 @@
  */
 #include <postgres.h>
 #include <access/tsmapi.h>
-#include <nodes/plannodes.h>
-#include <parser/parsetree.h>
-#include <optimizer/clauses.h>
-#include <optimizer/planner.h>
-#include <optimizer/pathnode.h>
-#include <optimizer/paths.h>
-#include <optimizer/tlist.h>
+#include <access/xact.h>
 #include <catalog/namespace.h>
-#include <utils/elog.h>
-#include <utils/guc.h>
+#include <executor/nodeAgg.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/plannodes.h>
+#include <optimizer/appendinfo.h>
+#include <optimizer/clauses.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
+#include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
+#include <optimizer/tlist.h>
+#include <parser/parsetree.h>
+#include <utils/elog.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
-#include <executor/nodeAgg.h>
-#include <utils/timestamp.h>
 #include <utils/selfuncs.h>
-#include <access/xact.h>
+#include <utils/timestamp.h>
 
 #include "compat-msvc-enter.h"
 #include <optimizer/cost.h>
@@ -32,15 +34,6 @@
 #include <parser/analyze.h>
 #include <catalog/pg_constraint.h>
 #include "compat-msvc-exit.h"
-
-#include "compat.h"
-
-#if PG11
-#include <optimizer/var.h>
-#else
-#include <optimizer/appendinfo.h>
-#include <optimizer/optimizer.h>
-#endif
 
 #include <math.h>
 
@@ -570,8 +563,6 @@ should_constraint_aware_append(Hypertable *ht, Path *path)
 	return ts_constraint_aware_append_possible(path);
 }
 
-#if PG12_GE
-
 static bool
 rte_should_expand(const RangeTblEntry *rte)
 {
@@ -662,7 +653,6 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		ts_set_append_rel_pathlist(root, rel, rti, rte);
 	}
 }
-#endif /* PG12_GE */
 
 static void
 apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, RangeTblEntry *rte,
@@ -784,11 +774,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	reltype = classify_relation(root, rel, &ht);
 
-#if PG12_GE
 	/* Check for unexpanded hypertable */
 	if (!rte->inh && rte_is_marked_for_expansion(rte))
 		reenable_inheritance(root, rel, rti, rte);
-#endif
 
 	/* Call other extensions. Do it after table expansion. */
 	if (prev_set_rel_pathlist_hook != NULL)
@@ -838,7 +826,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
-#if PG12_GE
 			/* This only works for PG12 because for earlier versions the inheritance
 			 * expansion happens too early during the planning phase
 			 */
@@ -863,20 +850,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			{
 				rte_mark_for_expansion(rte);
 			}
-#endif
 			ts_create_private_reloptinfo(rel);
-#if PG12_GE
-			/* in earlier versions this is done during expand_hypertable_inheritance() below */
 			ts_plan_expand_timebucket_annotate(root, rel);
-#else
-			if (ts_guc_enable_constraint_exclusion && rel->relid != root->parse->resultRelation)
-			{
-				RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
-
-				if (rte_is_marked_for_expansion(rte) && !inhparent)
-					ts_plan_expand_hypertable_chunks(ht, root, rel);
-			}
-#endif
 			break;
 		}
 		case TS_REL_CHUNK:

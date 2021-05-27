@@ -175,9 +175,7 @@ ts_hypercube_from_constraints(ChunkConstraints *constraints, MemoryContext mctx)
 		ScanTupLock tuplock = {
 			.lockmode = LockTupleKeyShare,
 			.waitpolicy = LockWaitBlock,
-#if PG12_GE
 			.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
-#endif
 		};
 
 		if (is_dimension_constraint(cc))

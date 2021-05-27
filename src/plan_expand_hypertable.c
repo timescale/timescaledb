@@ -12,6 +12,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
@@ -23,15 +24,6 @@
 #include <utils/errcodes.h>
 #include <utils/fmgrprotos.h>
 #include <utils/syscache.h>
-
-#include "compat.h"
-
-#if PG11
-#include <optimizer/clauses.h>
-#include <optimizer/var.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "chunk.h"
 #include "cross_module_fn.h"
@@ -625,15 +617,6 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 
 			ctx->chunk_exclusion_func = func_expr;
 			ctx->restrictions = NIL;
-			/* In PG12 removing the chunk_exclusion function here causes issues
-			 * when the first/last optimization fires, as those subqueries
-			 * will not see the function. Fortunately, in pg12 we do not the
-			 * baserestrictinfo is already populated by the time this function
-			 * is called, so we can remove the functions from that directly
-			 */
-#if PG12_LT
-			quals = (Node *) list_delete_cell_compat((List *) quals, lc, prev);
-#endif
 			return quals;
 		}
 
@@ -680,7 +663,6 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
 
-#if PG12_GE
 static List *
 remove_exclusion_fns(List *restrictinfo)
 {
@@ -715,7 +697,6 @@ remove_exclusion_fns(List *restrictinfo)
 	}
 	return restrictinfo;
 }
-#endif
 
 static Node *
 timebucket_annotate(Node *quals, CollectQualCtx *ctx)
@@ -1238,9 +1219,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.join_level = 0,
 	};
 	Index first_chunk_index = 0;
-#if PG12_GE
 	Index i;
-#endif
 
 	/* double check our permissions are valid */
 	Assert(rti != parse->resultRelation);
@@ -1250,11 +1229,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	if (oldrc && RowMarkRequiresRowShareLock(oldrc->markType))
 		elog(ERROR, "unexpected permissions requested");
 
-		/* mark the parent as an append relation */
-#if PG12_LT
-	rte->inh = true;
-#endif
-
 	init_chunk_exclusion_func();
 
 	/* Walk the tree and find restrictions or chunk exclusion functions */
@@ -1262,9 +1236,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	/* check join_level bookkeeping is balanced */
 	Assert(ctx.join_level == 0);
 
-#if PG12_GE
 	rel->baserestrictinfo = remove_exclusion_fns(rel->baserestrictinfo);
-#endif
 
 	if (ctx.propagate_conditions != NIL)
 		propagate_join_quals(root, rel, &ctx);
@@ -1282,25 +1254,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-#if PG12_GE
 	expand_planner_arrays(root, list_length(inh_oids) + list_length(ht->data_nodes));
-#else
-	Size old_rel_array_len = root->simple_rel_array_size;
-	root->simple_rel_array_size += (list_length(inh_oids) + list_length(ht->data_nodes));
-	root->simple_rel_array =
-		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));
-	/* postgres expects these arrays to be 0'ed until intialized */
-	memset(root->simple_rel_array + old_rel_array_len,
-		   0,
-		   list_length(inh_oids) * sizeof(*root->simple_rel_array));
-
-	root->simple_rte_array =
-		repalloc(root->simple_rte_array, root->simple_rel_array_size * sizeof(RangeTblEntry *));
-	/* postgres expects these arrays to be 0'ed until intialized */
-	memset(root->simple_rte_array + old_rel_array_len,
-		   0,
-		   list_length(inh_oids) * sizeof(*root->simple_rte_array));
-#endif
 
 	/* Adding partition info will make PostgreSQL consider the inheritance
 	 * children as part of a partitioned relation. This will enable
@@ -1319,11 +1273,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		RangeTblEntry *childrte;
 		Index child_rtindex;
 		AppendRelInfo *appinfo;
-#if PG11
-		LOCKMODE chunk_lock = NoLock;
-#else
 		LOCKMODE chunk_lock = rte->rellockmode;
-#endif
 
 		/* Open rel if needed */
 
@@ -1360,9 +1310,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		if (first_chunk_index == 0)
 			first_chunk_index = child_rtindex;
 		root->simple_rte_array[child_rtindex] = childrte;
-#if PG12_LT
-		root->simple_rel_array[child_rtindex] = NULL;
-#endif
 
 		appinfo = makeNode(AppendRelInfo);
 		appinfo->parent_relid = rti;
@@ -1417,7 +1364,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
 	setup_append_rel_array(root);
 
-#if PG12_GE
 	/* In pg12 postgres will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
 	 * build_simple_rel will look things up in the append_rel_array, so we can
@@ -1434,7 +1380,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		if (rel->part_rels != NULL)
 			rel->part_rels[i] = child_rel;
 	}
-#endif
 }
 
 void
@@ -1533,7 +1478,6 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 												 NULL,
 												 NULL);
 				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
-#if PG12_GE
 				/*
 				 * since hypertable expansion happens later in PG12 the propagated
 				 * constraints will not be pushed down to the actual scans but stay
@@ -1551,11 +1495,6 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 					root->parse->jointree->quals =
 						(Node *) lappend((List *) root->parse->jointree->quals, propagated);
 				}
-#else
-				root->parse->jointree->quals =
-					(Node *) lappend((List *) root->parse->jointree->quals, propagated);
-
-#endif
 			}
 		}
 	}

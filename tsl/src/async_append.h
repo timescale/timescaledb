@@ -8,13 +8,7 @@
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
-
-#include "compat.h"
-#if PG12_GE
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
 
 typedef struct AsyncAppendPath
 {

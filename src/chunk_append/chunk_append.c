@@ -5,19 +5,12 @@
  */
 #include <postgres.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/var.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "chunk_append/chunk_append.h"
 #include "chunk_append/planner.h"
@@ -225,9 +218,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				Oid parent_relid = child->parent->relid;
 				bool is_not_pruned =
 					lfirst_oid(lc_oid) == root->simple_rte_array[parent_relid]->relid;
-#if PG12_LT
-				Assert(is_not_pruned);
-#endif
+
 				if (is_not_pruned)
 				{
 					merge_childs = lappend(merge_childs, child);
@@ -252,9 +243,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				has_scan_childs = true;
 				nested_children = lappend(nested_children, linitial(merge_childs));
 			}
-#if PG12_LT
-			Assert(list_length(merge_childs) > 0);
-#endif
 		}
 
 		Assert(flat == NULL);

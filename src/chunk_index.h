@@ -84,21 +84,20 @@ extern Oid ts_chunk_index_get_tablespace(int32 hypertable_id, Relation template_
 										 Relation chunkrel);
 
 static inline bool
-chunk_index_columns_changed(int hypertable_natts, bool hypertable_has_oid, TupleDesc chunkdesc)
+chunk_index_columns_changed(int hypertable_natts, TupleDesc chunkdesc)
 {
 	/*
 	 * We should be able to safely assume that the only reason the number of
 	 * attributes differ is because we have removed columns in the base table,
 	 * leaving junk attributes that aren't inherited by the chunk.
 	 */
-	return !(hypertable_natts == chunkdesc->natts &&
-			 hypertable_has_oid == TUPLE_DESC_HAS_OIDS(chunkdesc));
+	return hypertable_natts != chunkdesc->natts;
 }
 
 static inline bool
 chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
 {
-	return chunk_index_columns_changed(htdesc->natts, TUPLE_DESC_HAS_OIDS(htdesc), chunkdesc);
+	return chunk_index_columns_changed(htdesc->natts, chunkdesc);
 }
 
 #endif /* TIMESCALEDB_CHUNK_INDEX_H */

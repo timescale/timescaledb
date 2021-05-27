@@ -13,13 +13,7 @@
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 #include <catalog/pg_type.h>
-
-#include "compat.h"
-#if PG12_GE
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
 
 #include <annotations.h>
 #include "async.h"

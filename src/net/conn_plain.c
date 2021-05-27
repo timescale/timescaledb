@@ -37,14 +37,6 @@ get_error(void)
 #endif
 }
 
-/* We cannot define `pg_strerror` here because there is a #define in PG12 that
- * sets `strerror` to `pg_strerror`. Instead, we handle the missing case for
- * pre-PG12 on Windows by setting `strerror` to the windows version of the
- * function and use `strerror` below. */
-#if PG12_LT && defined(WIN32)
-#define strerror(ERRNO) pgwin32_socket_strerror((ERRNO))
-#endif
-
 /*  Create socket and connect */
 int
 ts_plain_connect(Connection *conn, const char *host, const char *servname, int port)

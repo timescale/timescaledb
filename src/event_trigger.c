@@ -54,7 +54,7 @@ ts_event_trigger_ddl_commands(void)
 
 	FunctionCallInvoke(fcinfo);
 
-	slot = MakeSingleTupleTableSlotCompat(rsinfo.setDesc, TTSOpsMinimalTupleP);
+	slot = MakeSingleTupleTableSlot(rsinfo.setDesc, TTSOpsMinimalTupleP);
 
 	while (tuplestore_gettupleslot(rsinfo.setResult, true, false, slot))
 	{
@@ -238,7 +238,7 @@ ts_event_trigger_dropped_objects(void)
 
 	FunctionCallInvoke(fcinfo);
 
-	slot = MakeSingleTupleTableSlotCompat(rsinfo.setDesc, TTSOpsMinimalTupleP);
+	slot = MakeSingleTupleTableSlot(rsinfo.setDesc, TTSOpsMinimalTupleP);
 
 	while (tuplestore_gettupleslot(rsinfo.setResult, true, false, slot))
 	{

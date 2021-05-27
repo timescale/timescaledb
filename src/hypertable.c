@@ -871,9 +871,7 @@ ts_hypertable_lock_tuple_simple(Oid table_relid)
 			/* successfully locked */
 			return true;
 
-#if PG12_GE
 		case TM_Deleted:
-#endif
 		case TM_Updated:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
@@ -1363,7 +1361,7 @@ relation_has_tuples(Relation rel)
 {
 	TableScanDesc scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
 	TupleTableSlot *slot =
-		MakeSingleTupleTableSlotCompat(RelationGetDescr(rel), table_slot_callbacks(rel));
+		MakeSingleTupleTableSlot(RelationGetDescr(rel), table_slot_callbacks(rel));
 	bool hastuples = table_scan_getnextslot(scandesc, ForwardScanDirection, slot);
 
 	heap_endscan(scandesc);
@@ -1560,11 +1558,7 @@ old_insert_blocker_trigger_get(Oid relid)
 					strlen(OLD_INSERT_BLOCKER_NAME)) == 0 &&
 			trig->tgisinternal)
 		{
-#if PG12_LT
-			tgoid = HeapTupleGetOid(tuple);
-#else
 			tgoid = trig->oid;
-#endif
 			break;
 		}
 	}

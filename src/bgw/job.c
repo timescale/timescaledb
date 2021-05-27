@@ -40,25 +40,6 @@
 
 #define TELEMETRY_INITIAL_NUM_RUNS 12
 
-#if PG12_LT
-static VirtualTransactionId *
-GetLockConflictsCompat(const LOCKTAG *locktag, LOCKMODE lockmode, int *countp)
-{
-	VirtualTransactionId *ids = GetLockConflicts(locktag, lockmode);
-	if (countp != NULL)
-	{
-		for (*countp = 0; VirtualTransactionIdIsValid(ids[*countp]); (*countp)++)
-		{
-			/* Counts the number of virtual transactions ids into countp */
-		}
-	}
-	return ids;
-}
-#else
-#define GetLockConflictsCompat(locktag, lockmode, countp)                                          \
-	GetLockConflicts(locktag, lockmode, countp)
-#endif
-
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
 static bool is_telemetry_job(BgwJob *job);
@@ -490,7 +471,7 @@ get_job_lock_for_delete(int32 job_id)
 	{
 		/* If I couldn't get a lock, try killing the background worker that's running the job.
 		 * This is probably not bulletproof but best-effort is good enough here. */
-		VirtualTransactionId *vxid = GetLockConflictsCompat(&tag, AccessExclusiveLock, NULL);
+		VirtualTransactionId *vxid = GetLockConflicts(&tag, AccessExclusiveLock, NULL);
 		PGPROC *proc;
 
 		if (VirtualTransactionIdIsValid(*vxid))

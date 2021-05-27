@@ -27,12 +27,6 @@ typedef struct TupleInfo
 {
 	Relation scanrel;
 	TupleTableSlot *slot;
-#if PG12_LT
-	/* Stored tuple's TID. Kept here for backwards compatibility since the TID
-	 * is not available in the TupleTableSlot prior to PG12. Use
-	 * ts_scanner_get_tuple_tid() to access. */
-	ItemPointerData tid;
-#endif
 	/* return index tuple if it was requested -- only for index scans */
 	IndexTuple ituple;
 	TupleDesc ituple_desc;

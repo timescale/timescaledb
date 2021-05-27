@@ -102,20 +102,11 @@ ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
 static bool
 tuple_is_deleted(TupleInfo *ti)
 {
-#if PG12_GE
 #ifdef USE_ASSERT_CHECKING
 	if (ti->lockresult == TM_Deleted)
 		Assert(ItemPointerEquals(ts_scanner_get_tuple_tid(ti), &ti->lockfd.ctid));
 #endif
 	return ti->lockresult == TM_Deleted;
-#else
-	/* If the tid and ctid in the lock failure data is the same, then this is
-	 * a delete. Otherwise it is an update and ctid is the new tuple ID. This
-	 * applies mostly to PG11, since PG12 has an explicit lockresult for
-	 * deleted tuples. */
-	return ti->lockresult == TM_Updated &&
-		   ItemPointerEquals(ts_scanner_get_tuple_tid(ti), &ti->lockfd.ctid);
-#endif
 }
 
 static void
@@ -128,9 +119,7 @@ lock_result_ok_or_abort(TupleInfo *ti)
 		case TM_SelfModified:
 		case TM_Ok:
 			break;
-#if PG12_GE
 		case TM_Deleted:
-#endif
 		case TM_Updated:
 			ereport(ERROR,
 					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
@@ -170,9 +159,7 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 		case TM_SelfModified:
 		case TM_Ok:
 			break;
-#if PG12_GE
 		case TM_Deleted:
-#endif
 		case TM_Updated:
 			/* Treat as not found */
 			return SCAN_CONTINUE;
@@ -573,9 +560,7 @@ dimension_slice_fill(TupleInfo *ti, void *data)
 				heap_freetuple(tuple);
 			break;
 		}
-#if PG12_GE
 		case TM_Deleted:
-#endif
 		case TM_Updated:
 			/* Same as not found */
 			break;

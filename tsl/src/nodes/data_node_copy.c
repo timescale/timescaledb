@@ -178,7 +178,6 @@ data_node_copy_exec(CustomScanState *node)
 			const ChunkInsertState *cis = rri_chunk->ri_FdwState;
 			MemoryContext oldmctx;
 			bool success;
-#if PG12_GE
 			const TupleDesc rri_desc = RelationGetDescr(rri_chunk->ri_RelationDesc);
 
 			if (NULL != rri_chunk->ri_projectReturning && rri_desc->constr &&
@@ -190,7 +189,6 @@ data_node_copy_exec(CustomScanState *node)
 										   CMD_INSERT
 #endif
 				);
-#endif /* PG12_GE */
 
 			ResetPerTupleExprContext(estate);
 			oldmctx = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
@@ -323,11 +321,7 @@ get_insert_attrs(const Relation rel, bool *binary_possible)
 		HeapTuple tup;
 		Form_pg_type pt;
 
-		if (attr->attisdropped
-#if PG12_GE
-			|| attr->attgenerated != '\0'
-#endif
-		)
+		if (attr->attisdropped || attr->attgenerated != '\0')
 			continue;
 
 		attrs = lappend_int(attrs, AttrOffsetGetAttrNumber(i));

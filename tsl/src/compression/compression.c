@@ -219,9 +219,6 @@ truncate_relation(Oid table_oid)
 	/* Take an access exclusive lock now. Note that this may very well
 	 *  be a lock upgrade. */
 	Relation rel = table_open(table_oid, AccessExclusiveLock);
-#if PG12_LT
-	MultiXactId minmulti;
-#endif
 	Oid toast_relid;
 	int pages, visible;
 	float tuples;
@@ -231,19 +228,9 @@ truncate_relation(Oid table_oid)
 		elog(ERROR, "found a FK into a chunk while truncating");
 
 	CheckTableForSerializableConflictIn(rel);
-#if PG12_LT
-	minmulti = GetOldestMultiXactId();
-#endif
 
 	capture_pgclass_stats(table_oid, &pages, &visible, &tuples);
-	RelationSetNewRelfilenode(rel,
-							  rel->rd_rel->relpersistence
-#if PG12_LT
-							  ,
-							  RecentXmin,
-							  minmulti
-#endif
-	);
+	RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
 
 	toast_relid = rel->rd_rel->reltoastrelid;
 
@@ -252,14 +239,7 @@ truncate_relation(Oid table_oid)
 	if (OidIsValid(toast_relid))
 	{
 		rel = table_open(toast_relid, AccessExclusiveLock);
-		RelationSetNewRelfilenode(rel,
-								  rel->rd_rel->relpersistence
-#if PG12_LT
-								  ,
-								  RecentXmin,
-								  minmulti
-#endif
-		);
+		RelationSetNewRelfilenode(rel, rel->rd_rel->relpersistence);
 		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
 		table_close(rel, NoLock);
 	}
@@ -394,7 +374,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 	Tuplesortstate *tuplesortstate;
 	HeapTuple tuple;
 	TableScanDesc heapScan;
-	TupleTableSlot *heap_tuple_slot = MakeTupleTableSlotCompat(tupDesc, TTSOpsHeapTupleP);
+	TupleTableSlot *heap_tuple_slot = MakeTupleTableSlot(tupDesc, TTSOpsHeapTupleP);
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -429,11 +409,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 			 *     Since we use begin_heap() the tuplestore expects tupleslots,
 			 *      so ISTM that the options are this or maybe putdatum().
 			 */
-#if PG12_LT
-			ExecStoreTuple(tuple, heap_tuple_slot, InvalidBuffer, false);
-#else
 			ExecStoreHeapTuple(tuple, heap_tuple_slot, false);
-#endif
 
 			tuplesort_puttupleslot(tuplesortstate, heap_tuple_slot);
 		}
@@ -626,7 +602,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 								  TupleDesc sorted_desc)
 {
 	CommandId mycid = GetCurrentCommandId(true);
-	TupleTableSlot *slot = MakeTupleTableSlotCompat(sorted_desc, TTSOpsMinimalTupleP);
+	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, TTSOpsMinimalTupleP);
 	bool got_tuple;
 	bool first_iteration = true;
 
@@ -1548,7 +1524,7 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 
 	CompressSingleRowState *cr = palloc(sizeof(CompressSingleRowState));
 	cr->out_slot =
-		MakeSingleTupleTableSlotCompat(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
+		MakeSingleTupleTableSlot(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
 	cr->in_rel = in_rel;
 	cr->out_rel = out_rel;
 

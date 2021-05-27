@@ -11,13 +11,6 @@
 #include <utils/memutils.h>
 #include <utils/rel.h>
 
-#include "compat.h"
-
-#if PG12_GE
-#else
-#include <nodes/relation.h>
-#endif
-
 #include "scan_plan.h"
 #include "scan_exec.h"
 #include "data_node_scan_exec.h"
