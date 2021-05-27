@@ -65,7 +65,7 @@ hypertable_create_backend_tables(int32 hypertable_id, List *data_nodes)
 	DeparsedHypertableCommands *commands = deparse_get_distributed_hypertable_create_command(ht);
 
 	foreach (cell, deparse_get_tabledef_commands(ht->main_table_relid))
-		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes);
+		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes, true);
 
 	dist_res = ts_dist_cmd_invoke_on_data_nodes(commands->table_create_command, data_nodes, true);
 	foreach (cell, data_nodes)
@@ -82,10 +82,10 @@ hypertable_create_backend_tables(int32 hypertable_id, List *data_nodes)
 	ts_dist_cmd_close_response(dist_res);
 
 	foreach (cell, commands->dimension_add_commands)
-		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes);
+		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes, true);
 
 	foreach (cell, commands->grant_commands)
-		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes);
+		ts_dist_cmd_run_on_data_nodes(lfirst(cell), data_nodes, true);
 
 	return remote_ids;
 }
