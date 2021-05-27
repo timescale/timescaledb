@@ -23,9 +23,9 @@ jobs:
         build_type: [ Debug ]
         include:
           - pg: 12
-            ignores: append-12 chunk_adaptive-12 continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12 plan_skip_scan-12
+            ignores: append-12 chunk_adaptive continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12 plan_skip_scan-12
           - pg: 13
-            ignores: append-13 chunk_adaptive-13 remote_txn transparent_decompression-13 vacuum_parallel plan_skip_scan-13
+            ignores: append-13 chunk_adaptive remote_txn transparent_decompression-13 vacuum_parallel plan_skip_scan-13
 
     steps:
 
