@@ -41,6 +41,7 @@
 #include "data_node.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"
+#include "dist_util.h"
 
 static bool
 chunk_match_data_node_by_server(const Chunk *chunk, const ForeignServer *server)
@@ -410,7 +411,7 @@ chunk_drop_replica(PG_FUNCTION_ARGS)
 						quote_identifier(chunk->fd.schema_name.data),
 						quote_identifier(chunk->fd.table_name.data));
 	data_nodes = list_make1((char *) node_name);
-	ts_dist_cmd_run_on_data_nodes(drop_cmd, data_nodes);
+	ts_dist_cmd_run_on_data_nodes(drop_cmd, data_nodes, true);
 
 	/*
 	 * This chunk might have this data node as primary, change that association
@@ -418,6 +419,142 @@ chunk_drop_replica(PG_FUNCTION_ARGS)
 	 */
 	chunk_update_foreign_server_if_needed(chunk->fd.id, server->serverid);
 	ts_chunk_data_node_delete_by_chunk_id_and_node_name(chunk->fd.id, node_name);
+
+	PG_RETURN_VOID();
+}
+
+typedef struct
+{
+	/* chunk to copy */
+	Chunk *chunk;
+	/* shared name used to name replication slot, publication and
+	 * subscription */
+	NameData operation_id;
+	/* from node */
+	List *src_node;
+	/* to node */
+	List *dst_node;
+} ChunkCopyData;
+
+static void
+chunk_copy_data_prepare(ChunkCopyData *ccd)
+{
+	const char *cmd;
+	const char *connection_string;
+
+	/* create publication on the source data node */
+	cmd = psprintf("CREATE PUBLICATION %s FOR TABLE %s",
+				   NameStr(ccd->operation_id),
+				   quote_qualified_identifier(NameStr(ccd->chunk->fd.schema_name),
+											  NameStr(ccd->chunk->fd.table_name)));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->src_node, false);
+
+	/* create subscription on the destination data node */
+
+	/*
+	 * CREATE SUBSCRIPTION from a database within the same database cluster will hang,
+	 * create the replication slot separately before creating the subscription
+	 */
+	cmd = psprintf("SELECT pg_create_logical_replication_slot('%s', 'pgoutput')",
+				   NameStr(ccd->operation_id));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->src_node, false);
+
+	/* prepare connection string to the source node */
+	connection_string = remote_connection_get_connstr(lfirst(list_head(ccd->src_node)));
+
+	cmd = psprintf("CREATE SUBSCRIPTION %s CONNECTION '%s' PUBLICATION %s"
+				   " WITH (create_slot = false, enabled = false)",
+				   NameStr(ccd->operation_id),
+				   connection_string,
+				   NameStr(ccd->operation_id));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->dst_node, false);
+}
+
+static void
+chunk_copy_data_perform(ChunkCopyData *ccd)
+{
+	const char *cmd;
+
+	/* start data transfer on the destination node */
+	cmd = psprintf("ALTER SUBSCRIPTION %s ENABLE", NameStr(ccd->operation_id));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->dst_node, false);
+
+	/* wait until data transfer finishes */
+	cmd = psprintf("CALL _timescaledb_internal.wait_subscription_sync(%s, %s)",
+				   quote_literal_cstr(NameStr(ccd->chunk->fd.schema_name)),
+				   quote_literal_cstr(NameStr(ccd->chunk->fd.table_name)));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->dst_node, false);
+}
+
+static void
+chunk_copy_data_end(ChunkCopyData *ccd)
+{
+	const char *cmd;
+	cmd = psprintf("DROP SUBSCRIPTION %s", NameStr(ccd->operation_id));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->dst_node, false);
+
+	cmd = psprintf("DROP PUBLICATION %s", NameStr(ccd->operation_id));
+	ts_dist_cmd_run_on_data_nodes(cmd, ccd->src_node, false);
+}
+
+Datum
+chunk_copy_data(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	const char *src_node_name = PG_ARGISNULL(1) ? NULL : PG_GETARG_CSTRING(1);
+	const char *dst_node_name = PG_ARGISNULL(2) ? NULL : PG_GETARG_CSTRING(2);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht =
+		ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
+	ChunkCopyData ccd;
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	PreventInTransactionBlock(true, get_func_name(FC_FN_OID(fcinfo)));
+
+	if (src_node_name == NULL || dst_node_name == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("data node name cannot be NULL")));
+
+	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function must be run on the access node only")));
+
+	if (!hypertable_is_distributed(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_DISTRIBUTED),
+				 errmsg("hypertable \"%s\" is not distributed",
+						get_rel_name(chunk->hypertable_relid))));
+
+	ts_cache_release(hcache);
+
+	if (!superuser())
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 (errmsg("must be superuser to copy chunk to data node"))));
+
+	ccd.chunk = chunk;
+	ccd.src_node = list_make1((char *) src_node_name);
+	ccd.dst_node = list_make1((char *) dst_node_name);
+
+	/* prepare shared operation id name for publication and subscription */
+	snprintf(ccd.operation_id.data,
+			 sizeof(ccd.operation_id.data),
+			 "ts_copy_%s_%s",
+			 quote_identifier(NameStr(chunk->fd.schema_name)),
+			 quote_identifier(NameStr(chunk->fd.table_name)));
+
+	/* setup logical replication publication and subscription */
+	chunk_copy_data_prepare(&ccd);
+
+	/* begin data transfer and wait for completion */
+	chunk_copy_data_perform(&ccd);
+
+	/* cleanup */
+	chunk_copy_data_end(&ccd);
 
 	PG_RETURN_VOID();
 }
