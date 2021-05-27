@@ -13,10 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [11, 12, 13]
+        pg: [12, 13]
         include:
-          - pg: 11
-            pg_minor_compile: 0
           - pg: 12
             pg_minor_compile: 0
           - pg: 13
@@ -32,20 +30,6 @@ jobs:
     - name: ABI Test
       run: |
         ./scripts/docker-run-abi-test.sh
-
-  sanitizer:
-    name: ASAN and UBSAN
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-
-    steps:
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
-
-    - name: Sanitizer
-      run: |
-        ./scripts/test_sanitizers.sh
 
   memory_leak:
     name: Memory leak on insert
@@ -69,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [11, 12, 13]
+        pg: [12, 13]
     env:
       PG_MAJOR: ${{ matrix.pg }}
       PG_VERSION: ${{ matrix.pg }}

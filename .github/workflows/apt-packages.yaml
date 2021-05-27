@@ -22,7 +22,7 @@ jobs:
         # Debian images:  9 (stretch), or 10 (buster)
         # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal)
         image: [ "debian:9-slim", "debian:10-slim", "ubuntu:bionic", "ubuntu:focal"]
-        pg: [ 11, 12, 13 ]
+        pg: [ 12, 13 ]
 
     steps:
     - name: Add repositories

@@ -16,7 +16,7 @@ read -r VERSION < ${CURRENT_DIR}/../version.config
 EXT_VERSION=${VERSION##version = }
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
-# to get the name of the test (PG 10 and 11 only)
+# to get the name of the test
 TEST_BASE_NAME=${PGAPPNAME##pg_regress/}
 
 # if this is a versioned test our name will have version as suffix
