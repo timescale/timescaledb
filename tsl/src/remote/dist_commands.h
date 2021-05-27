@@ -37,8 +37,8 @@ extern Size ts_dist_cmd_response_count(DistCmdResult *result);
 extern long ts_dist_cmd_total_row_count(DistCmdResult *result);
 extern void ts_dist_cmd_close_response(DistCmdResult *response);
 
-#define ts_dist_cmd_run_on_data_nodes(command, nodes)                                              \
-	ts_dist_cmd_close_response(ts_dist_cmd_invoke_on_data_nodes(command, nodes, true));
+#define ts_dist_cmd_run_on_data_nodes(command, nodes, transactional)                               \
+	ts_dist_cmd_close_response(ts_dist_cmd_invoke_on_data_nodes(command, nodes, transactional));
 
 extern PreparedDistCmd *ts_dist_cmd_prepare_command(const char *sql, size_t n_params,
 													List *node_names);
