@@ -38,6 +38,7 @@
 #include <guc.h>
 #include <telemetry/telemetry_metadata.h>
 #include "connection.h"
+#include "data_node.h"
 #include "debug_wait.h"
 #include "utils.h"
 
@@ -1229,26 +1230,18 @@ finish_connection(PGconn *conn, char **errmsg)
 }
 
 /*
- * This will only open a connection to a specific node, but not do anything
- * else. In particular, it will not perform any validation nor configure the
- * connection since it cannot know that it connects to a data node database or
- * not. For that, please use the `remote_connection_open_with_options`
- * function.
+ * Take options belonging to a foreign server and add additional default and
+ * other user/ssl related options as appropriate
  */
-TSConnection *
-remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options,
-											char **errmsg)
+static void
+setup_full_connection_options(List *connection_options, const char ***all_keywords,
+							  const char ***all_values)
 {
-	PGconn *volatile pg_conn = NULL;
 	const char *user_name = NULL;
-	TSConnection *ts_conn;
 	const char **keywords;
 	const char **values;
 	int option_count;
 	int option_pos;
-
-	if (NULL != errmsg)
-		*errmsg = NULL;
 
 	/*
 	 * Construct connection params from generic options of ForeignServer
@@ -1285,6 +1278,31 @@ remote_connection_open_with_options_nothrow(const char *node_name, List *connect
 	/* Set end marker */
 	keywords[option_pos] = values[option_pos] = NULL;
 	Assert(option_pos <= option_count);
+
+	*all_keywords = keywords;
+	*all_values = values;
+}
+
+/*
+ * This will only open a connection to a specific node, but not do anything
+ * else. In particular, it will not perform any validation nor configure the
+ * connection since it cannot know that it connects to a data node database or
+ * not. For that, please use the `remote_connection_open_with_options`
+ * function.
+ */
+TSConnection *
+remote_connection_open_with_options_nothrow(const char *node_name, List *connection_options,
+											char **errmsg)
+{
+	PGconn *volatile pg_conn = NULL;
+	TSConnection *ts_conn;
+	const char **keywords;
+	const char **values;
+
+	if (NULL != errmsg)
+		*errmsg = NULL;
+
+	setup_full_connection_options(connection_options, &keywords, &values);
 
 	pg_conn = PQconnectdbParams(keywords, values, 0 /* Do not expand dbname param */);
 
@@ -1466,6 +1484,90 @@ add_userinfo_to_server_options(ForeignServer *server, Oid user_id)
 	}
 
 	return options;
+}
+
+/*
+ * Append the given string to the buffer, with suitable quoting for passing
+ * the string as a value in a keyword/value pair in a libpq connection string.
+ *
+ * The implementation is based on libpq appendConnStrVal().
+ */
+static void
+remote_connection_append_connstr_value(StringInfo buf, const char *str)
+{
+	const char *s;
+	bool needquotes;
+
+	/*
+	 * If the string is one or more plain ASCII characters, no need to quote
+	 * it. This is quite conservative, but better safe than sorry.
+	 */
+	needquotes = true;
+	for (s = str; *s; s++)
+	{
+		if (!((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || (*s >= '0' && *s <= '9') ||
+			  *s == '_' || *s == '.'))
+		{
+			needquotes = true;
+			break;
+		}
+		needquotes = false;
+	}
+
+	if (needquotes)
+	{
+		appendStringInfoChar(buf, '\'');
+		while (*str)
+		{
+			/* ' and \ must be escaped by to \' and \\ */
+			if (*str == '\'' || *str == '\\')
+				appendStringInfoChar(buf, '\\');
+
+			appendStringInfoChar(buf, *str);
+			str++;
+		}
+		appendStringInfoChar(buf, '\'');
+	}
+	else
+		appendStringInfoString(buf, str);
+}
+
+char *
+remote_connection_get_connstr(const char *node_name)
+{
+	ForeignServer *server;
+	List *connection_options;
+	const char **keywords;
+	const char **values;
+	StringInfoData connstr;
+	StringInfoData connstr_escape;
+	int i;
+
+	server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false);
+	connection_options = add_userinfo_to_server_options(server, GetUserId());
+	setup_full_connection_options(connection_options, &keywords, &values);
+
+	/* Cycle through the options and create the connection string */
+	initStringInfo(&connstr);
+	i = 0;
+	while (keywords[i] != NULL)
+	{
+		appendStringInfo(&connstr, " %s=", keywords[i]);
+		remote_connection_append_connstr_value(&connstr, values[i]);
+		i++;
+	}
+	Assert(keywords[i] == NULL && values[i] == NULL);
+
+	initStringInfo(&connstr_escape);
+	enlargeStringInfo(&connstr_escape, connstr.len * 2 + 1);
+	connstr_escape.len += PQescapeString(connstr_escape.data, connstr.data, connstr.len);
+
+	/* Cast to (char **) to silence warning with MSVC compiler */
+	pfree((char **) keywords);
+	pfree((char **) values);
+	pfree(connstr.data);
+
+	return connstr_escape.data;
 }
 
 TSConnection *

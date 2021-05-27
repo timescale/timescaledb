@@ -59,6 +59,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk(
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB, created BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_chunk_create' LANGUAGE C VOLATILE;
 
+-- Copy chunk data from the source data node to the destination data node
+CREATE OR REPLACE FUNCTION _timescaledb_internal.copy_chunk_data(chunk REGCLASS, src_node_name NAME, dst_node_name NAME)
+RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunk_copy_data'
+LANGUAGE C VOLATILE;
+
 -- change default data node for a chunk
 CREATE OR REPLACE FUNCTION _timescaledb_internal.set_chunk_default_data_node(chunk REGCLASS, node_name NAME) RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_chunk_set_default_data_node' LANGUAGE C VOLATILE;
