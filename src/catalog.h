@@ -53,6 +53,7 @@ typedef enum CatalogTable
 	HYPERTABLE_COMPRESSION,
 	COMPRESSION_CHUNK_SIZE,
 	REMOTE_TXN,
+	CHUNK_COPY_ACTIVITY,
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -1181,6 +1182,58 @@ enum Anum_remote_data_node_name_idx
 	Anum_remote_txn_data_node_name_idx_data_node_name = 1,
 	_Anum_remote_txn_data_node_name_idx_max,
 };
+
+/********************************************
+ *
+ * table to track chunk copy/move operations
+ *
+ ********************************************/
+
+#define CHUNK_COPY_ACTIVITY_TABLE_NAME "chunk_copy_activity"
+
+enum Anum_chunk_copy_activity
+{
+	Anum_chunk_copy_activity_id = 1,
+	Anum_chunk_copy_activity_operation_id,
+	Anum_chunk_copy_activity_backend_pid,
+	Anum_chunk_copy_activity_completed_stage,
+	Anum_chunk_copy_activity_time_start,
+	Anum_chunk_copy_activity_chunk_id,
+	Anum_chunk_copy_activity_source_node_name,
+	Anum_chunk_copy_activity_dest_node_name,
+	Anum_chunk_copy_activity_delete_on_src_node,
+	_Anum_chunk_copy_activity_max,
+};
+
+#define Natts_chunk_copy_activity (_Anum_chunk_copy_activity_max - 1)
+
+typedef struct FormData_chunk_copy_activity
+{
+	int32 id;
+	NameData operation_id;
+	int32 backend_pid;
+	text *completed_stage;
+	TimestampTz time_start;
+	int32 chunk_id;
+	NameData source_node_name;
+	NameData dest_node_name;
+	bool delete_on_src_node;
+} FormData_chunk_copy_activity;
+
+typedef FormData_chunk_copy_activity *Form_chunk_copy_activity;
+
+enum
+{
+	CHUNK_COPY_ACTIVITY_PKEY_IDX = 0,
+	_MAX_CHUNK_COPY_ACTIVITY_INDEX,
+};
+
+enum Anum_chunk_copy_activity_pkey_idx
+{
+	Anum_chunk_copy_activity_pkey_idx_id = 1,
+	_Anum_chunk_copy_activity_pkey_idx_max,
+};
+#define Natts_chunk_copy_activity_pkey_idx (_Anum_chunk_copy_activity_pkey_idx_max - 1)
 
 typedef enum CacheType
 {
