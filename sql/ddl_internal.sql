@@ -37,3 +37,33 @@ CREATE OR REPLACE FUNCTION  _timescaledb_internal.chunk_drop_replica(
     node_name               NAME
 ) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_chunk_drop_replica' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE PROCEDURE _timescaledb_internal.wait_subscription_sync(
+    schema_name    NAME,
+    table_name     NAME,
+    retry_count    INT DEFAULT 18000,
+    retry_delay_ms NUMERIC DEFAULT 0.200
+)
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    in_sync BOOLEAN;
+BEGIN
+    FOR i in 1 .. retry_count
+    LOOP
+        SELECT pgs.srsubstate = 'r'
+        INTO in_sync
+        FROM pg_subscription_rel pgs
+        JOIN pg_class pgc ON relname = table_name
+        JOIN pg_namespace n ON (n.OID = pgc.relnamespace)
+        WHERE pgs.srrelid = pgc.oid AND schema_name = n.nspname;
+
+        if (in_sync IS NULL OR NOT in_sync) THEN
+          PERFORM pg_sleep(retry_delay_ms);
+        ELSE
+          RETURN;
+        END IF;
+    END LOOP;
+    RAISE 'subscription sync wait timedout';
+END
+$BODY$;
