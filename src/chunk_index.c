@@ -4,33 +4,27 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/htup_details.h>
+#include <access/xact.h>
+#include <catalog/dependency.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
-#include <catalog/pg_index.h>
-#include <catalog/pg_depend.h>
-#include <catalog/dependency.h>
-#include <catalog/pg_constraint.h>
-#include <catalog/objectaddress.h>
 #include <catalog/namespace.h>
-#include <access/htup_details.h>
-#include <utils/syscache.h>
-#include <utils/lsyscache.h>
-#include <utils/rel.h>
-#include <utils/fmgroids.h>
-#include <utils/builtins.h>
-#include <nodes/parsenodes.h>
+#include <catalog/objectaddress.h>
+#include <catalog/pg_constraint.h>
+#include <catalog/pg_depend.h>
+#include <catalog/pg_index.h>
+#include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
-#include <commands/cluster.h>
-#include <access/xact.h>
 #include <miscadmin.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/var.h>
-#else
+#include <nodes/parsenodes.h>
 #include <optimizer/optimizer.h>
-#endif
+#include <utils/builtins.h>
+#include <utils/fmgroids.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <utils/syscache.h>
 
 #include "chunk_index.h"
 #include "hypertable.h"
@@ -604,9 +598,6 @@ chunk_collect_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses 
 		switch (record->deptype)
 		{
 			case DEPENDENCY_INTERNAL:
-#if PG11
-			case DEPENDENCY_INTERNAL_AUTO:
-#endif
 				add_exact_object_address(&refobj, objects);
 				break;
 			default:
@@ -896,7 +887,7 @@ chunk_index_tuple_rename(TupleInfo *ti, void *data)
 		namestrcpy(&chunk_index->hypertable_index_name, info->newname);
 
 		/* Rename the chunk index */
-		RenameRelationInternalCompat(chunk_indexrelid, chunk_index_name, false, true);
+		RenameRelationInternal(chunk_indexrelid, chunk_index_name, false, true);
 	}
 	else
 		namestrcpy(&chunk_index->index_name, info->newname);
@@ -1250,7 +1241,7 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 		performDeletion(&idxobj, DROP_RESTRICT, 0);
 	}
 
-	RenameRelationInternalCompat(chunk_index_oid_new, name, false, true);
+	RenameRelationInternal(chunk_index_oid_new, name, false, true);
 
 	PG_RETURN_VOID();
 }

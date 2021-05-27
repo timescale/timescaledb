@@ -5,41 +5,32 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/xact.h>
+#include <catalog/pg_type.h>
 #include <executor/tuptable.h>
+#include <foreign/fdwapi.h>
+#include <miscadmin.h>
 #include <nodes/execnodes.h>
+#include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
-
+#include <nodes/plannodes.h>
+#include <optimizer/optimizer.h>
+#include <parser/parsetree.h>
+#include <rewrite/rewriteManip.h>
+#include <utils/builtins.h>
+#include <utils/guc.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
-#include <utils/lsyscache.h>
-#include <utils/builtins.h>
-#include <utils/guc.h>
-#include <nodes/plannodes.h>
-#include <access/xact.h>
-#include <miscadmin.h>
-#include <parser/parsetree.h>
-#include <rewrite/rewriteManip.h>
-#include <nodes/makefuncs.h>
-#include <catalog/pg_type.h>
-#include <foreign/fdwapi.h>
 
 #include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/plancat.h>
-#include <optimizer/planner.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
-
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
 #include "chunk_data_node.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
-#include "compat/tupconvert.h"
 #include "indexing.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
@@ -311,7 +302,6 @@ create_on_conflict_where_qual(List *clause)
 	return ExecInitQual(clause, NULL);
 }
 
-#if PG12_GE
 static TupleDesc
 get_default_confl_tupdesc(ChunkInsertState *state, ChunkDispatch *dispatch)
 {
@@ -351,32 +341,6 @@ get_default_existing_slot(ChunkInsertState *state, ChunkDispatch *dispatch)
 
 	return chunk_rri->ri_onConflict->oc_Existing;
 }
-
-#else
-static TupleDesc
-get_default_confl_tupdesc(ChunkInsertState *state, ChunkDispatch *dispatch)
-{
-	return get_hyper_rri(dispatch)->ri_onConflict->oc_ProjTupdesc;
-}
-
-static TupleTableSlot *
-get_default_confl_slot(ChunkInsertState *state, ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->mtstate->mt_conflproj;
-}
-
-static TupleTableSlot *
-get_confl_slot(ChunkInsertState *state, ChunkDispatch *dispatch, TupleDesc projtupdesc)
-{
-	return dispatch->dispatch_state->mtstate->mt_conflproj;
-}
-
-static TupleTableSlot *
-get_default_existing_slot(ChunkInsertState *state, ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->mtstate->mt_existing;
-}
-#endif /* PG12_GE */
 
 /*
  * Setup ON CONFLICT state for a chunk.
@@ -430,8 +394,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 		onconflset = adjust_hypertable_tlist(onconflset, state->hyper_to_chunk_map);
 
 		/* create the tuple slot for the UPDATE SET projection */
-		state->conflproj_tupdesc =
-			ExecTypeFromTLCompat(onconflset, RelationGetDescr(chunk_rel)->tdhasoid);
+		state->conflproj_tupdesc = ExecTypeFromTL(onconflset);
 		state->conflproj_slot = get_confl_slot(state, dispatch, state->conflproj_tupdesc);
 
 		/* build UPDATE SET projection state */
@@ -458,7 +421,6 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 	}
 }
 
-#if PG12_GE
 static void
 destroy_on_conflict_state(ChunkInsertState *state)
 {
@@ -473,9 +435,6 @@ destroy_on_conflict_state(ChunkInsertState *state)
 	if (NULL != state->hyper_to_chunk_map && NULL != state->conflproj_slot)
 		ExecDropSingleTupleTableSlot(state->conflproj_slot);
 }
-#else
-#define destroy_on_conflict_state(state)
-#endif
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
 static void
@@ -703,8 +662,8 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	 * state. Otherwise, memory might blow up when there are many chunks being
 	 * inserted into. This also means that the slot needs to be destroyed with
 	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlotCompat(RelationGetDescr(relinfo->ri_RelationDesc),
-												 table_slot_callbacks(relinfo->ri_RelationDesc));
+	state->slot = MakeSingleTupleTableSlot(RelationGetDescr(relinfo->ri_RelationDesc),
+										   table_slot_callbacks(relinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
 	state->chunk_id = chunk->fd.id;

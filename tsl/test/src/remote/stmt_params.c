@@ -31,11 +31,7 @@ ts_test_stmt_params_format(PG_FUNCTION_ARGS)
 		.atttypid = BOOLOID,
 	};
 
-#if PG12_GE
 	tuple_desc = CreateTupleDesc(2, attrs);
-#else
-	tuple_desc = CreateTupleDesc(2, false, attrs);
-#endif
 	target_attr_nums = list_make2_int(1, 2);
 
 	params = stmt_params_create(target_attr_nums, false, tuple_desc, 2);

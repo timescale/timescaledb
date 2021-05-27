@@ -11,23 +11,19 @@
  * directory for a copy of the PostgreSQL License.
  */
 #include <postgres.h>
-#include <parser/parsetree.h>
+#include <access/htup_details.h>
+#include <access/sysattr.h>
+#include <catalog/pg_type.h>
+#include <libpq-fe.h>
+#include <miscadmin.h>
 #include <optimizer/restrictinfo.h>
-#include <utils/guc.h>
+#include <parser/parsetree.h>
 #include <utils/builtins.h>
+#include <utils/float.h>
+#include <utils/guc.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
-#include <access/sysattr.h>
-#include <access/htup_details.h>
-#include <catalog/pg_type.h>
 #include <utils/syscache.h>
-#include <miscadmin.h>
-#include <libpq-fe.h>
-
-#include <compat.h>
-#if PG12_GE
-#include <utils/float.h>
-#endif
 
 #include <guc.h>
 #include "utils.h"
@@ -87,10 +83,7 @@ conversion_error_callback(void *arg)
 			attname = NameStr(attr->attname);
 		else if (errpos->cur_attno == SelfItemPointerAttributeNumber)
 			attname = "ctid";
-#if PG12_LT
-		else if (errpos->cur_attno == ObjectIdAttributeNumber)
-			attname = "oid";
-#endif
+
 		relname = RelationGetRelationName(errpos->rel);
 	}
 	else
@@ -243,9 +236,6 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 {
 	HeapTuple tuple;
 	ItemPointer ctid = NULL;
-#if PG12_LT
-	Oid oid = InvalidOid;
-#endif
 	MemoryContext oldcontext;
 	ListCell *lc;
 	int j;
@@ -336,21 +326,6 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 				ctid = (ItemPointer) DatumGetPointer(datum);
 			}
 		}
-#if PG12_LT
-		else if (i == ObjectIdAttributeNumber)
-		{
-			/* oid */
-			if (valstr != NULL)
-			{
-				Datum datum;
-				if (format == FORMAT_TEXT)
-					datum = DirectFunctionCall1(oidin, CStringGetDatum(valstr));
-				else
-					datum = DirectFunctionCall1(oidrecv, PointerGetDatum(buf));
-				oid = DatumGetObjectId(datum);
-			}
-		}
-#endif
 		tf->errpos.cur_attno = 0;
 		j++;
 	}
@@ -393,14 +368,6 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 	HeapTupleHeaderSetXmax(tuple->t_data, InvalidTransactionId);
 	HeapTupleHeaderSetXmin(tuple->t_data, InvalidTransactionId);
 	HeapTupleHeaderSetCmin(tuple->t_data, InvalidTransactionId);
-
-#if PG12_LT
-	/*
-	 * If we have an OID to return, install it.
-	 */
-	if (OidIsValid(oid))
-		HeapTupleSetOid(tuple, oid);
-#endif
 
 	/* Clean up */
 	if (tf->per_tuple_mctx_reset)

@@ -11,11 +11,6 @@
 #include <access/transam.h>
 #include <miscadmin.h>
 
-#include "compat.h"
-#if PG12_LT
-#include <utils/tqual.h>
-#endif
-
 #include "txn_resolve.h"
 #include "connection.h"
 #include "txn.h"

@@ -9,15 +9,9 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 #include <nodes/parsenodes.h>
-
-#include "compat.h"
-#include "export.h"
-
-#if PG12_GE
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
+
+#include "export.h"
 
 typedef struct TsFdwRelationInfo TsFdwRelationInfo;
 typedef struct TimescaleDBPrivate

@@ -9,7 +9,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard PostgreSQL 13.2+, 12 or 11.4+ installation with development
+- A standard PostgreSQL 13.2+ or 12  installation with development
 environment (header files) (e.g., `postgresql-server-dev-13` package
 for Linux, Postgres.app for MacOS)
 - C compiler (e.g., gcc or clang)
@@ -28,7 +28,7 @@ cd build && make
 make install
 ```
 
-Note, if you have multiple versions of PostgreSQL installed you can specify the path to `pg_config` 
+Note, if you have multiple versions of PostgreSQL installed you can specify the path to `pg_config`
 that should be used by using `./bootstrap -DPG_CONFIG=/path/to/pg_config`.
 
 Please see our [additional configuration instructions](https://docs.timescale.com/getting-started/installation).
@@ -42,7 +42,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard [PostgreSQL 13.2+, 12 or 11.4+ 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
+- A standard [PostgreSQL 13.2+ or 12 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
 - OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git

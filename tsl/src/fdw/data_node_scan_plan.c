@@ -4,20 +4,23 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <parser/parsetree.h>
-#include <nodes/plannodes.h>
-#include <nodes/extensible.h>
-#include <nodes/nodeFuncs.h>
-#include <nodes/makefuncs.h>
-#include <optimizer/paths.h>
-#include <optimizer/pathnode.h>
-#include <optimizer/prep.h>
-#include <optimizer/clauses.h>
-#include <optimizer/tlist.h>
-#include <optimizer/restrictinfo.h>
 #include <access/sysattr.h>
-#include <utils/memutils.h>
 #include <foreign/fdwapi.h>
+#include <nodes/extensible.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
+#include <nodes/pathnodes.h>
+#include <nodes/plannodes.h>
+#include <optimizer/appendinfo.h>
+#include <optimizer/clauses.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
+#include <optimizer/prep.h>
+#include <optimizer/restrictinfo.h>
+#include <optimizer/tlist.h>
+#include <parser/parsetree.h>
+#include <utils/memutils.h>
 
 #include <export.h>
 #include <chunk_data_node.h>
@@ -30,15 +33,6 @@
 #include <compat.h>
 #include <debug_guc.h>
 #include <debug.h>
-
-#if PG12_GE
-#include <optimizer/appendinfo.h>
-#include <optimizer/optimizer.h>
-#include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#include <optimizer/var.h>
-#endif
 
 #include "relinfo.h"
 #include "data_node_chunk_assignment.h"

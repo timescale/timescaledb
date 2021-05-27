@@ -686,7 +686,6 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	NewRelationCreateToastTable(chunk_oid, toast_options);
 }
 
-#if PG12_GE
 /*
  * Get the access method name for a relation.
  */
@@ -708,7 +707,6 @@ get_am_name_for_rel(Oid relid)
 
 	return get_am_name(amoid);
 }
-#endif
 
 static void
 copy_hypertable_acl_to_relid(Hypertable *ht, Oid relid)
@@ -802,11 +800,9 @@ ts_chunk_create_table(Chunk *chunk, Hypertable *ht, const char *tablespacename)
 		 * table, but avoid using it for a foreign chunk table. */
 		.base.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
-#if PG12_GE
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
 								 get_am_name_for_rel(chunk->hypertable_relid) :
 								 NULL,
-#endif
 	};
 	Oid uid, saved_uid;
 
@@ -3085,7 +3081,7 @@ chunk_update_status(FormData_chunk *form)
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	iterator.ctx.tuplock = &scantuplock;
-#if PG12_GE
+
 	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
 	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
 	if (!IsolationUsesXactSnapshot())
@@ -3093,9 +3089,6 @@ chunk_update_status(FormData_chunk *form)
 		/* in read committed mode, we follow all updates to this tuple */
 		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
 	}
-#else
-	scantuplock.lockflags = 1; /* follow updates to the tuple, boolean in PG11 */
-#endif
 
 	ts_scan_iterator_scan_key_init(&iterator,
 								   Anum_chunk_idx_id,

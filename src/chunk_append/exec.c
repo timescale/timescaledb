@@ -12,6 +12,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/plancat.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
@@ -21,14 +22,6 @@
 #include <utils/typcache.h>
 
 #include <math.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/predtest.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "chunk_append/exec.h"
 #include "chunk_append/chunk_append.h"
@@ -211,7 +204,6 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	ListCell *lc;
 	int i;
 
-#if PG12_GE
 	/* CustomScan hard-codes the scan and result tuple slot to a fixed
 	 * TTSOpsVirtual ops (meaning it expects the slot ops of the child tuple to
 	 * also have this type). Oddly, when reading slots from subscan nodes
@@ -232,7 +224,6 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	 * result slot is not fixed either. */
 	node->ss.ps.resultopsfixed = false;
 	ExecAssignScanProjectionInfoWithVarno(&node->ss, INDEX_VAR);
-#endif
 
 	initialize_constraints(state, lthird(cscan->custom_private));
 

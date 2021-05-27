@@ -4,12 +4,7 @@ This directory contains a collection of Abstract Data Types.
 These ADTS are containers that can store data of any other type.
 These ADTs use macros as oppossed to void pointers for performance
 reasons, as well as for better type safety. This approach to
-ADTs follows Postgres convention (see simplehash).
-
-## Simplehash
-
-This is a hash table implementation. Copied over from Postgres (where it's
-available after PG 11).
+ADTs follows Postgres convention.
 
 ## Vector
 

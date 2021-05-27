@@ -7,18 +7,11 @@
 #define TIMESCALEDB_TSL_FDW_RELINFO_H
 
 #include <postgres.h>
-#include <nodes/nodes.h>
 #include <foreign/foreign.h>
 #include <lib/stringinfo.h>
-
-#include <compat.h>
-#if PG12_GE
+#include <nodes/nodes.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
-#else
-#include <nodes/relation.h>
-#include <optimizer/var.h>
-#endif
 
 #include "remote/connection.h"
 #include "data_node_chunk_assignment.h"

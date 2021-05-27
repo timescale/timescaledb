@@ -14,10 +14,12 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
-#include <nodes/plannodes.h>
 #include <nodes/parsenodes.h>
-#include <optimizer/plancat.h>
+#include <nodes/plannodes.h>
+#include <optimizer/appendinfo.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/plancat.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/lsyscache.h>
@@ -25,14 +27,6 @@
 #include <utils/syscache.h>
 
 #include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/prep.h>
-#else
-#include <optimizer/appendinfo.h>
-#include <optimizer/optimizer.h>
-#endif
-
 #include "constraint_aware_append.h"
 #include "chunk_append/transform.h"
 #include "guc.h"
@@ -145,7 +139,6 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 		.parse = &parse,
 	};
 
-#if PG12_GE
 	/* CustomScan hard-codes the scan and result tuple slot to a fixed
 	 * TTSOpsVirtual ops (meaning it expects the slot ops of the child tuple to
 	 * also have this type). Oddly, when reading slots from subscan nodes
@@ -166,7 +159,6 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	 * result slot is not fixed either. */
 	node->ss.ps.resultopsfixed = false;
 	ExecAssignScanProjectionInfoWithVarno(&node->ss, INDEX_VAR);
-#endif
 
 	switch (nodeTag(subplan))
 	{

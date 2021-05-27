@@ -11,29 +11,28 @@
  * directory for a copy of the PostgreSQL License.
  */
 #include <postgres.h>
-#include <nodes/parsenodes.h>
-#include <nodes/plannodes.h>
-#include <nodes/nodeFuncs.h>
-#include <optimizer/pathnode.h>
-#include <optimizer/paths.h>
-#include <optimizer/cost.h>
-#include <optimizer/clauses.h>
-#include <optimizer/planner.h>
-#include <optimizer/plancat.h>
-#include <optimizer/prep.h>
-#include <foreign/fdwapi.h>
-#include <utils/rel.h>
 #include <access/tsmapi.h>
 #include <catalog/pg_proc.h>
+#include <foreign/fdwapi.h>
 #include <miscadmin.h>
+#include <nodes/nodeFuncs.h>
+#include <nodes/parsenodes.h>
+#include <nodes/plannodes.h>
+#include <optimizer/appendinfo.h>
+#include <optimizer/clauses.h>
+#include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
+#include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
+#include <optimizer/plancat.h>
+#include <optimizer/planner.h>
+#include <optimizer/prep.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
+
 #include <math.h>
 
 #include "allpaths.h"
-
-#if PG12_GE
-#include <optimizer/appendinfo.h>
-#include <optimizer/optimizer.h>
-#endif
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
@@ -232,9 +231,7 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *r
 			case RTE_VALUES:
 			case RTE_CTE:
 			case RTE_NAMEDTUPLESTORE:
-#if PG12_GE
 			case RTE_RESULT:
-#endif
 			default:
 				elog(ERROR, "unexpected rtekind: %d", (int) rel->rtekind);
 				break;
@@ -276,7 +273,6 @@ set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *r
 #endif
 }
 
-#if PG12_GE
 /*
  * set_dummy_rel_pathlist, copied from allpaths.c.
  *
@@ -314,8 +310,6 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 	 */
 	set_cheapest(rel);
 }
-
-#endif /* PG12_GE */
 
 /*
  * Exported version of set_dummy_rel_pathlist.
@@ -470,11 +464,9 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 			 * infrastructure to support that.
 			 */
 			return;
-#if PG12_GE
 		case RTE_RESULT:
 			/* RESULT RTEs, in themselves, are no problem. */
 			break;
-#endif
 	}
 
 	/*
@@ -894,9 +886,7 @@ ts_set_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rt
 			case RTE_VALUES:
 			case RTE_CTE:
 			case RTE_NAMEDTUPLESTORE:
-#if PG12_GE
 			case RTE_RESULT:
-#endif
 			default:
 				elog(ERROR, "unexpected rtekind: %d", (int) rel->rtekind);
 				break;

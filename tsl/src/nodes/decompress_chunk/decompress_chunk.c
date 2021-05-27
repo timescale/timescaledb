@@ -11,22 +11,13 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/typcache.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/restrictinfo.h>
-#include <optimizer/tlist.h>
-#include <optimizer/var.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "hypertable_compression.h"
 #include "import/planner.h"
@@ -1055,9 +1046,7 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	rte->rtekind = RTE_RELATION;
 	rte->relid = compressed_relid;
 	rte->relkind = r->rd_rel->relkind;
-#if PG12_GE
 	rte->rellockmode = lockmode;
-#endif
 	rte->eref = makeAlias(RelationGetRelationName(r), NULL);
 
 	/*

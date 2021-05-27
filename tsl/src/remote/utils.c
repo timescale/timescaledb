@@ -18,11 +18,8 @@
 #include <utils/syscache.h>
 #include <utils/guc.h>
 #include <utils/builtins.h>
-
-#include <compat.h>
-#if PG12_GE
 #include <utils/float.h>
-#endif
+
 #include "utils.h"
 #include "compat.h"
 #include "guc.h"

@@ -175,20 +175,11 @@ preserve_uncompressed_chunk_stats(Oid chunk_relid)
 	VacuumStmt vs = {
 		.type = T_VacuumStmt,
 		.rels = list_make1(&vr),
-#if PG12_GE
 		.is_vacuumcmd = false,
 		.options = NIL,
-#else
-		.options = VACOPT_ANALYZE,
-#endif
 	};
 
-#if PG12_GE
 	ExecVacuum(NULL, &vs, true);
-#else
-	ExecVacuum(&vs, true);
-	CommandCounterIncrement();
-#endif
 	AlterTableInternal(chunk_relid, list_make1(&at_cmd), false);
 }
 

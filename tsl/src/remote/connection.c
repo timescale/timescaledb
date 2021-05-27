@@ -1406,11 +1406,7 @@ get_user_mapping(Oid userid, Oid serverid)
 		return NULL;
 
 	um = (UserMapping *) palloc(sizeof(UserMapping));
-#if PG12_GE
 	um->umid = ((Form_pg_user_mapping) GETSTRUCT(tp))->oid;
-#else
-	um->umid = HeapTupleGetOid(tp);
-#endif
 	um->userid = userid;
 	um->serverid = serverid;
 
@@ -1667,11 +1663,8 @@ remote_connection_drain(TSConnection *conn, TimestampTz endtime, PGresult **resu
 
 				/* Sleep until there's something to do */
 				wc = WaitLatchOrSocket(MyLatch,
-									   WL_LATCH_SET | WL_SOCKET_READABLE
-#if PG12_GE
-										   | WL_EXIT_ON_PM_DEATH
-#endif
-										   | WL_TIMEOUT,
+									   WL_LATCH_SET | WL_SOCKET_READABLE | WL_EXIT_ON_PM_DEATH |
+										   WL_TIMEOUT,
 									   PQsocket(pg_conn),
 									   cur_timeout_ms,
 									   PG_WAIT_EXTENSION);

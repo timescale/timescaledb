@@ -407,15 +407,9 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 			ptype = "MergeAppend";
 			subpath_list = castNode(MergeAppendPath, path)->subpaths;
 			break;
-#if PG12_GE
 		case T_GroupResultPath:
 			ptype = "GroupResult";
 			break;
-#else
-		case T_ResultPath:
-			ptype = "Result";
-			break;
-#endif
 		case T_MaterialPath:
 			ptype = "Material";
 			subpath = castNode(MaterialPath, path)->subpath;

@@ -5,16 +5,10 @@
  */
 #include <postgres.h>
 #include <access/genam.h>
+#include <access/table.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_constraint.h>
 #include <utils/fmgroids.h>
-
-#include "compat.h"
-#if PG12_GE
-#include <access/table.h>
-#else
-#include "compat/tableam.h"
-#endif
 
 #include "constraint.h"
 

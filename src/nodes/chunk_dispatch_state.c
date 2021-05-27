@@ -47,7 +47,6 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
  * Prepare the ModifyTableState executor node for inserting into another
  * chunk. Called every time we switch to another chunk for inserts.
  */
-#if PG12_GE
 static void
 on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 {
@@ -58,41 +57,6 @@ on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 	 * we need to make sure it is up-to-date with the current chunk here. */
 	mtstate->mt_scans[mtstate->mt_whichplan] = cis->slot;
 }
-#else
-static void
-on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
-{
-	ChunkDispatchState *state = data;
-	ModifyTableState *mtstate = state->mtstate;
-	ModifyTable *mtplan = castNode(ModifyTable, mtstate->ps.plan);
-
-	/*
-	 * Update the arbiter indexes for ON CONFLICT statements so that they
-	 * match the chunk. In PG12, every result relation has its own arbiter
-	 * index list, so no update is needed here.
-	 */
-	if (cis->arbiter_indexes != NIL)
-	{
-		/*
-		 * In PG11 several fields were removed from the
-		 * ModifyTableState node and ExecInsert function nodes, as
-		 * they were redundant.
-		 */
-		mtplan->arbiterIndexes = cis->arbiter_indexes;
-	}
-
-	/* Update slot tuple descriptors to handle ON CONFLICT DO UPDATE for the
-	 * new chunk. */
-	if (mtplan->onConflictAction == ONCONFLICT_UPDATE)
-	{
-		Assert(NULL != mtstate->mt_existing);
-		Assert(NULL != mtstate->mt_conflproj);
-		Assert(NULL != cis->conflproj_tupdesc);
-		ExecSetSlotDescriptor(mtstate->mt_existing, RelationGetDescr(cis->rel));
-		ExecSetSlotDescriptor(mtstate->mt_conflproj, cis->conflproj_tupdesc);
-	}
-}
-#endif /* PG12_GE */
 
 static TupleTableSlot *
 chunk_dispatch_exec(CustomScanState *node)
@@ -165,20 +129,15 @@ chunk_dispatch_exec(CustomScanState *node)
 			cis->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
 		{
 			bool skip_tuple;
-#if PG12_LT
-			slot = ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
-			skip_tuple = (slot == NULL);
-#else
 			skip_tuple = !ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
-#endif
 
 			if (skip_tuple)
 				return NULL;
 		}
-#if PG12_GE
+
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
-#endif
+
 		if (cis->rel->rd_att->constr)
 			ExecConstraints(cis->orig_result_relation_info, slot, estate);
 
@@ -242,62 +201,6 @@ ts_chunk_dispatch_state_create(Oid hypertable_relid, Plan *subplan)
 	return state;
 }
 
-#if PG12_GE
-/* In PG12, tuple table slots moved to the result relation struct, which exists
- * in one instance per relation (including chunks). Therefore, no changes to
- * these slots are required when changing chunk.
- */
-#define setup_tuple_slots_for_on_conflict_handling(state)
-#else
-/*
- * In PG11, tuple table slots for ON CONFLICT handling are tied to the format of
- * the "root" table, unless partition routing is enabled (which isn't the case
- * for hypertables).
- *
- * We need to replace the PG11 slots with new ones (that aren't tied to the
- * tuple descriptor of the root table) since we need to be able to dynamically
- * set the tuple descriptor to match the current chunk being inserted into.
- *
- * The slots in question are stored in the executor state's tuple table, which
- * is destroyed, along with all slots, at the end of execution
- * (ExecResetTupleTable). The slots in question include:
- *
- * - mt_existing: the slot that holds the old/existing tuple in the table that
- *   would be updated when there is a conflict.
- * - mt_conflproj: the slot that holds the projected "update" tuple.
- */
-static void
-setup_tuple_slots_for_on_conflict_handling(ChunkDispatchState *state)
-{
-	ModifyTableState *mtstate = state->mtstate;
-	ModifyTable *mtplan = castNode(ModifyTable, mtstate->ps.plan);
-
-	if (mtplan->onConflictAction == ONCONFLICT_UPDATE)
-	{
-		TupleDesc tupdesc;
-
-		Assert(mtstate->mt_existing != NULL);
-		Assert(mtstate->mt_conflproj != NULL);
-
-		tupdesc = mtstate->mt_existing->tts_tupleDescriptor;
-		mtstate->mt_existing = ExecInitExtraTupleSlot(mtstate->ps.state, NULL);
-		ExecSetSlotDescriptor(mtstate->mt_existing, tupdesc);
-
-		/*
-		 * in this case we must overwrite mt_conflproj because there are
-		 * several pointers to it throughout expressions and other
-		 * evaluations, and the original tuple will otherwise be stored to the
-		 * old slot, whose pointer is saved there.
-		 */
-		tupdesc = mtstate->mt_conflproj->tts_tupleDescriptor;
-		mtstate->mt_conflproj = ExecInitExtraTupleSlot(mtstate->ps.state, NULL);
-		ExecSetSlotDescriptor(mtstate->mt_conflproj, tupdesc);
-		mtstate->resultRelInfo->ri_onConflict->oc_ProjInfo->pi_state.resultslot =
-			mtstate->mt_conflproj;
-	}
-}
-#endif
-
 /*
  * This function is called during the init phase of the INSERT (ModifyTable)
  * plan, and gives the ChunkDispatchState node the access it needs to the
@@ -315,6 +218,5 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	/* Inserts on hypertables should always have one subplan */
 	Assert(mtstate->mt_nplans == 1);
 	state->mtstate = mtstate;
-	setup_tuple_slots_for_on_conflict_handling(state);
 	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }

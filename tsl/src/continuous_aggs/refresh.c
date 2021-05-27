@@ -382,7 +382,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	if (tuplestore_tuple_count(invalidations->tupstore) > materialization_per_refresh_window())
 		do_merged_refresh = true;
 
-	slot = MakeSingleTupleTableSlotCompat(invalidations->tupdesc, &TTSOpsMinimalTuple);
+	slot = MakeSingleTupleTableSlot(invalidations->tupdesc, &TTSOpsMinimalTuple);
 
 	while (tuplestore_gettupleslot(invalidations->tupstore,
 								   true /* forward */,

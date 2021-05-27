@@ -22,7 +22,6 @@
 #include <remote/tuplefactory.h>
 #include <chunk_data_node.h>
 #include <nodes/chunk_insert_state.h>
-#include <compat.h>
 
 #include "scan_plan.h"
 #include "modify_exec.h"
@@ -374,7 +373,7 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 			tuplefactory_make_tuple(fmstate->tupfactory, res, 0, PQbinaryTuples(res));
 
 		/* tuple will be deleted when it is cleared from the slot */
-		ExecStoreHeapTupleCompat(newtup, slot, true);
+		ExecStoreHeapTuple(newtup, slot, true);
 	}
 	PG_CATCH();
 	{

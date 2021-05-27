@@ -642,16 +642,16 @@ convert_op_oid_to_strings(Oid op_id, Datum *result_strings)
 static Oid
 convert_strings_to_type_id(Datum *input_strings)
 {
-	Oid arg_namespace = GetSysCacheOid1Compat(NAMESPACENAME,
-											  Anum_pg_namespace_oid,
-											  input_strings[ENCODED_TYPE_NAMESPACE]);
+	Oid arg_namespace = GetSysCacheOid1(NAMESPACENAME,
+										Anum_pg_namespace_oid,
+										input_strings[ENCODED_TYPE_NAMESPACE]);
 	Oid result;
 
 	Assert(arg_namespace != InvalidOid);
-	result = GetSysCacheOid2Compat(TYPENAMENSP,
-								   Anum_pg_type_oid,
-								   input_strings[ENCODED_TYPE_NAME],
-								   ObjectIdGetDatum(arg_namespace));
+	result = GetSysCacheOid2(TYPENAMENSP,
+							 Anum_pg_type_oid,
+							 input_strings[ENCODED_TYPE_NAME],
+							 ObjectIdGetDatum(arg_namespace));
 	Assert(result != InvalidOid);
 	return result;
 }
@@ -659,20 +659,19 @@ convert_strings_to_type_id(Datum *input_strings)
 static Oid
 convert_strings_to_op_id(Datum *input_strings)
 {
-	Oid proc_namespace = GetSysCacheOid1Compat(NAMESPACENAME,
-											   Anum_pg_namespace_oid,
-											   input_strings[ENCODED_OP_NAMESPACE]);
+	Oid proc_namespace =
+		GetSysCacheOid1(NAMESPACENAME, Anum_pg_namespace_oid, input_strings[ENCODED_OP_NAMESPACE]);
 	Oid larg = convert_strings_to_type_id(LargSubarrayForOpArray(input_strings));
 	Oid rarg = convert_strings_to_type_id(RargSubarrayForOpArray(input_strings));
 	Oid result;
 
 	Assert(proc_namespace != InvalidOid);
-	result = GetSysCacheOid4Compat(OPERNAMENSP,
-								   Anum_pg_operator_oid,
-								   input_strings[ENCODED_OP_NAME],
-								   ObjectIdGetDatum(larg),
-								   ObjectIdGetDatum(rarg),
-								   ObjectIdGetDatum(proc_namespace));
+	result = GetSysCacheOid4(OPERNAMENSP,
+							 Anum_pg_operator_oid,
+							 input_strings[ENCODED_OP_NAME],
+							 ObjectIdGetDatum(larg),
+							 ObjectIdGetDatum(rarg),
+							 ObjectIdGetDatum(proc_namespace));
 	Assert(result != InvalidOid);
 	return result;
 }
@@ -713,11 +712,7 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 		const int numbers_idx = AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_numbers) + i;
 		const int values_idx = AttrNumberGetAttrOffset(Anum_chunk_colstats_slot1_values) + i;
 
-#if PG12_GE
 		slot_collation[i] = ObjectIdGetDatum(((Oid *) &formdata->stacoll1)[i]);
-#else
-		slot_collation[i] = 0;
-#endif
 
 		slotkind[i] = ObjectIdGetDatum(kind);
 		if (kind == InvalidOid)
@@ -918,11 +913,9 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
 		values[i++] = Int16GetDatum(slot_kinds[k]); /* stakindN */
 
-#if PG12_GE
 	i = AttrNumberGetAttrOffset(Anum_pg_statistic_stacoll1);
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)
 		values[i++] = ObjectIdGetDatum(((Oid *) ARR_DATA_PTR(collations))[k]); /* stacollN */
-#endif
 
 	i = AttrNumberGetAttrOffset(Anum_pg_statistic_staop1);
 	for (k = 0; k < STATISTIC_NUM_SLOTS; k++)

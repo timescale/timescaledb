@@ -11,6 +11,7 @@
 #include <nodes/makefuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/planmain.h>
@@ -19,12 +20,6 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include <compat.h>
-#if PG11
-#include <optimizer/var.h>
-#elif PG12_GE
-#include <optimizer/optimizer.h>
-#endif
 #include <import/planner.h>
 #include "guc.h"
 #include "nodes/skip_scan/skip_scan.h"

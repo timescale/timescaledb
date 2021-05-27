@@ -7,17 +7,10 @@
 #define TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT
 
 #include <postgres.h>
-#include <nodes/pg_list.h>
-
-#include "compat.h"
-
-#if PG12_GE
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
-#include <utils/hsearch.h>
+#include <nodes/pg_list.h>
 #include <storage/block.h>
+#include <utils/hsearch.h>
 
 /*
  * data node-chunk assignments map chunks to the data nodes that will be responsible

@@ -15,11 +15,6 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
-#include "compat.h"
-#if PG12_LT
-#include <utils/tqual.h>
-#endif
-
 #include "params.h"
 #include "timer_mock.h"
 #include "test_utils.h"

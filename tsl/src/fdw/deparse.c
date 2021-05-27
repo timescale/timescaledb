@@ -53,8 +53,11 @@
 #include <commands/defrem.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/pathnodes.h>
 #include <nodes/plannodes.h>
+#include <optimizer/appendinfo.h>
 #include <optimizer/clauses.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
@@ -63,17 +66,6 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-
-#include <compat.h>
-#if PG12_GE
-#include <nodes/pathnodes.h>
-#include <optimizer/appendinfo.h>
-#include <optimizer/optimizer.h>
-#else
-#include <nodes/relation.h>
-#include <optimizer/var.h>
-#include <compat/nodes.h>
-#endif
 
 #include <func_cache.h>
 #include <remote/utils.h>
@@ -437,13 +429,7 @@ foreign_expr_walker(Node *node, foreign_glob_cxt *glob_cxt)
 				 * ensure that local and remote values match (tableoid, in
 				 * particular, almost certainly doesn't match).
 				 */
-				if (var->varattno < 0 &&
-					var->varattno != SelfItemPointerAttributeNumber
-#if PG12_LT
-					/* ObjectId attribute removed in PG12 */
-					&& var->varattno != ObjectIdAttributeNumber
-#endif
-				)
+				if (var->varattno < 0 && var->varattno != SelfItemPointerAttributeNumber)
 					return false;
 			}
 		}
@@ -1134,23 +1120,6 @@ deparseTargetList(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation re
 
 		*retrieved_attrs = lappend_int(*retrieved_attrs, SelfItemPointerAttributeNumber);
 	}
-#if PG12_LT
-	/* ObjectId attribute removed in PG12 */
-	if (bms_is_member(ObjectIdAttributeNumber - FirstLowInvalidHeapAttributeNumber, attrs_used))
-	{
-		if (!first)
-			appendStringInfoString(buf, ", ");
-		else if (is_returning)
-			appendStringInfoString(buf, " RETURNING ");
-		first = false;
-
-		if (qualify_col)
-			ADD_REL_QUALIFIER(buf, rtindex);
-		appendStringInfoString(buf, "oid");
-
-		*retrieved_attrs = lappend_int(*retrieved_attrs, ObjectIdAttributeNumber);
-	}
-#endif
 	/* Don't generate bad syntax if no undropped columns */
 	if (first && !is_returning)
 		appendStringInfoString(buf, "NULL");
@@ -1858,15 +1827,6 @@ deparseColumnRef(StringInfo buf, int varno, int varattno, RangeTblEntry *rte, bo
 			ADD_REL_QUALIFIER(buf, varno);
 		appendStringInfoString(buf, "ctid");
 	}
-#if PG12_LT
-	/* ObjectId attribute removed in PG12 */
-	else if (varattno == ObjectIdAttributeNumber)
-	{
-		if (qualify_col)
-			ADD_REL_QUALIFIER(buf, varno);
-		appendStringInfoString(buf, "oid");
-	}
-#endif
 	else if (varattno < 0)
 	{
 		/*

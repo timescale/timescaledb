@@ -11,11 +11,6 @@
 #include <libpq-fe.h>
 #include <miscadmin.h>
 
-#include "compat.h"
-#if PG12_LT
-#include <utils/tqual.h>
-#endif
-
 #include "remote/async.h"
 #include "remote/txn_store.h"
 #include "txn.h"

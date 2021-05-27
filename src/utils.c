@@ -617,11 +617,7 @@ ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, 
 			if (rettype)
 				*rettype = procform->prorettype;
 
-#if PG12_LT
-			func = HeapTupleGetOid(proctup);
-#else
 			func = procform->oid;
-#endif
 			break;
 		}
 	}
@@ -650,12 +646,8 @@ ts_get_operator(const char *name, Oid namespace, Oid left, Oid right)
 						  ObjectIdGetDatum(namespace));
 	if (HeapTupleIsValid(tup))
 	{
-#if PG12_LT
-		opoid = HeapTupleGetOid(tup);
-#else
 		Form_pg_operator oprform = (Form_pg_operator) GETSTRUCT(tup);
 		opoid = oprform->oid;
-#endif
 		ReleaseSysCache(tup);
 	}
 

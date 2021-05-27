@@ -12,25 +12,13 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <optimizer/clauses.h>
-#include <optimizer/pathnode.h>
-#include <optimizer/placeholder.h>
-#include <optimizer/planmain.h>
-#include <optimizer/prep.h>
-#include <optimizer/subselect.h>
-#include <optimizer/var.h>
-#else
-#include <optimizer/optimizer.h>
-#endif
 
 #include "compression/compression.h"
 #include "compression/create.h"

@@ -10,14 +10,10 @@
 #include <access/htup_details.h>
 #include <catalog/pg_proc.h>
 #include <common/int.h>
+#include <nodes/pathnodes.h>
 #include <utils/datetime.h>
 
 #include "compat.h"
-#if PG12_GE
-#include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
 
 #define MAX(x, y) ((x) > (y) ? x : y)
 #define MIN(x, y) ((x) < (y) ? x : y)

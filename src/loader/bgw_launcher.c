@@ -372,11 +372,7 @@ populate_database_htab(HTAB *db_htab)
 		if (!pgdb->datallowconn || pgdb->datistemplate)
 			continue; /* don't bother with dbs that don't allow
 					   * connections or are templates */
-#if PG12_LT
-		db_hash_entry_create_if_not_exists(db_htab, HeapTupleGetOid(tup));
-#else
 		db_hash_entry_create_if_not_exists(db_htab, pgdb->oid);
-#endif
 	}
 	heap_endscan(scan);
 	table_close(rel, AccessShareLock);

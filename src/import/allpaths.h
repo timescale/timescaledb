@@ -7,24 +7,13 @@
 #define TIMESCALEDB_IMPORT_ALLPATHS_H
 
 #include <postgres.h>
-
-#include "compat.h"
-#include "export.h"
-
-#if PG12_GE
 #include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
+
+#include "export.h"
 
 extern void ts_set_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 extern void ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti,
 									   RangeTblEntry *rte);
-#if PG12_GE
 extern TSDLLEXPORT void ts_set_dummy_rel_pathlist(RelOptInfo *rel);
-#else
-/* Prior to PostgreSQL 12, set_dummy_rel_pathlist was public. */
-#define ts_set_dummy_rel_pathlist(rel) set_dummy_rel_pathlist(rel)
-#endif
 
 #endif /* TIMESCALEDB_IMPORT_ALLPATHS_H */

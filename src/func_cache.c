@@ -4,29 +4,21 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <miscadmin.h>
-#include <parser/parse_oper.h>
-#include <catalog/namespace.h>
-#include <catalog/pg_type.h>
-#include <catalog/pg_proc.h>
-#include <access/htup.h>
 #include <access/heapam.h>
-#include <utils/hsearch.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/selfuncs.h>
-#include <utils/builtins.h>
-#include <utils/rel.h>
-
-#include "compat.h"
-#if PG12_LT
-#include <nodes/relation.h>
-#include <optimizer/cost.h>
-#include <optimizer/clauses.h>
-#else
+#include <access/htup.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_proc.h>
+#include <catalog/pg_type.h>
+#include <miscadmin.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
-#endif
+#include <parser/parse_oper.h>
+#include <utils/builtins.h>
+#include <utils/hsearch.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <utils/selfuncs.h>
+#include <utils/syscache.h>
 
 #include "utils.h"
 #include "cache.h"
@@ -374,12 +366,8 @@ static HTAB *func_hash = NULL;
 static Oid
 proc_get_oid(HeapTuple tuple)
 {
-#if PG12_LT
-	return HeapTupleGetOid(tuple);
-#else
 	Form_pg_proc form = (Form_pg_proc) GETSTRUCT(tuple);
 	return form->oid;
-#endif
 }
 
 static void

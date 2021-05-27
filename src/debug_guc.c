@@ -4,17 +4,11 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <nodes/pathnodes.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
 #include <utils/varlena.h>
 #include <fmgr.h>
-
-#include "compat.h"
-#if PG12_GE
-#include <nodes/pathnodes.h>
-#else
-#include <nodes/relation.h>
-#endif
 
 #include "debug_guc.h"
 

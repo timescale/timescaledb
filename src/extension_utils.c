@@ -9,26 +9,22 @@
  */
 
 #include <postgres.h>
+#include <access/genam.h>
+#include <access/relscan.h>
 #include <access/xact.h>
-#include <commands/extension.h>
+#include <catalog/indexing.h>
 #include <catalog/namespace.h>
-#include <utils/lsyscache.h>
+#include <catalog/pg_authid.h>
+#include <catalog/pg_extension.h>
+#include <commands/extension.h>
 #include <miscadmin.h>
 #include <parser/analyze.h>
-#include <access/relscan.h>
-#include <catalog/pg_extension.h>
-#include <catalog/pg_authid.h>
 #include <utils/acl.h>
-#include <utils/fmgroids.h>
 #include <utils/builtins.h>
-#include <utils/rel.h>
+#include <utils/fmgroids.h>
 #include <utils/guc.h>
-#include <catalog/indexing.h>
-
-#include "compat.h"
-#if PG12_GE
-#include <access/genam.h>
-#endif
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
 
 #include "extension_constants.h"
 

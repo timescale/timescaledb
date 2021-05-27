@@ -695,13 +695,8 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 static StringInfo
 parse_next_binary_row(CopyState cstate, List *attnums, BinaryCopyContext *ctx)
 {
-#if PG12_GE
 	if (!NextCopyFrom(cstate, ctx->econtext, ctx->values, ctx->nulls))
 		return NULL;
-#else
-	if (!NextCopyFrom(cstate, ctx->econtext, ctx->values, ctx->nulls, NULL))
-		return NULL;
-#endif
 
 	return generate_binary_copy_data(ctx->values, ctx->nulls, attnums, ctx->out_functions);
 }

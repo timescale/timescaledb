@@ -8,14 +8,8 @@
 #include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <utils/lsyscache.h>
-
-#include "compat.h"
-#ifdef PG12_LT
-#include <optimizer/clauses.h>
-#else
 #include <optimizer/optimizer.h>
-#endif
+#include <utils/lsyscache.h>
 
 #include "chunk_append/transform.h"
 #include "utils.h"
