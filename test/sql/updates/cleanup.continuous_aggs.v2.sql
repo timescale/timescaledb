@@ -22,22 +22,61 @@ SELECT extversion < '2.0.0' AS has_refresh_mat_view,
 \endif
 
 \if :has_continuous_aggs_policy
-SELECT drop_continuous_aggregate_policy('mat_drop');
+SELECT remove_continuous_aggregate_policy('mat_drop');
 \endif
 
-:DROP_CAGG mat_drop
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_drop;
+\else
+DROP VIEW mat_drop;
+\endif
+
 DROP TABLE drop_test;
-:DROP_CAGG mat_conflict;
+
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_conflict;
+\else
+DROP VIEW mat_conflict;
+\endif
+
 DROP TABLE conflict_test;
-:DROP_CAGG mat_inttime;
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_inttime;
+\else
+DROP VIEW mat_inttime;
+\endif
+
 DROP FUNCTION integer_now_test;
 DROP TABLE int_time_test;
-:DROP_CAGG mat_inval;
+
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_inval;
+\else
+DROP VIEW mat_inval;
+\endif
+
 DROP TABLE inval_test;
-:DROP_CAGG mat_ignoreinval;
-:DROP_CAGG cagg.realtime_mat;
+
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_ignoreinval;
+\else
+DROP VIEW mat_ignoreinval;
+\endif
+
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW cagg.realtime_mat;
+\else
+DROP VIEW cagg.realtime_mat;
+\endif
+
 DROP SCHEMA cagg;
-:DROP_CAGG mat_before;
+
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW mat_before;
+\else
+DROP VIEW mat_before;
+\endif
+
 DROP TABLE conditions_before;
 DROP TYPE custom_type;
 
