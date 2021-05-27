@@ -367,6 +367,40 @@ CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx ON _timescaledb_catalog
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
+-- This table stores information about the stage that has been completed of a
+-- chunk move/copy activity
+--
+-- A cleanup activity can query and check if the backend is running. If the
+-- backend has exited then we can commence cleanup. The cleanup
+-- activity can also do a diff with the "time_start" value to ascertain if
+-- the entire end-to-end activity is going on for too long
+--
+-- We also track the end time of every stage. A diff with the current time
+-- will give us an idea about how long the current stage has been running
+--
+-- Entry for a chunk move/copy activity gets deleted on successful completion
+--
+-- We don't want to pg_dump this table's contents. A node restored using it
+-- could be part of a totally different multinode setup and we don't want to
+-- carry over chunk copy/move operations from earlier (if it makes sense at all)
+--
+
+CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_copy_activity_id_seq MINVALUE 1;
+
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_copy_activity (
+  id integer PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.chunk_copy_activity_id_seq'),
+  operation_id name NOT NULL UNIQUE, -- the publisher/subscriber identifier used
+  backend_pid integer NOT NULL, -- the pid of the backend running this activity
+  completed_stage text NOT NULL, -- the completed stage/step
+  time_start timestamptz NOT NULL DEFAULT NOW(), -- start time of the activity
+  chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  source_node_name name NOT NULL,
+  dest_node_name name NOT NULL,
+  delete_on_source_node bool NOT NULL -- is a move or copy activity
+);
+
+ALTER SEQUENCE _timescaledb_catalog.chunk_copy_activity_id_seq OWNED BY _timescaledb_catalog.chunk_copy_activity.id;
+
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
