@@ -16,8 +16,8 @@ TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 # to get the name of the test
 CURRENT_TEST=${PGAPPNAME##pg_regress/}
 
-# Since PG11 and PG12 tests do not run in parallel, we remove the
-# trailing "-11" (or "-12") suffix to get a good symbol that can be
+# Since different PG version tests cannot run in parallel in the same instance,
+# we remove the trailing version suffix to get a good symbol that can be
 # used as identifier as well.
 TEST_DBNAME="db_${CURRENT_TEST%%-[0-9][0-9]}"
 

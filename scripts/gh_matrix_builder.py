@@ -20,8 +20,6 @@ import sys
 # github event type which is either push, pull_request or schedule
 event_type = sys.argv[1]
 
-PG11_EARLIEST = "11.0"
-PG11_LATEST = "11.12"
 PG12_EARLIEST = "12.0"
 PG12_LATEST = "12.7"
 PG13_EARLIEST = "13.2"
@@ -106,8 +104,7 @@ def macos_config(overrides):
   base_config.update(overrides)
   return base_config
 
-# always test debug build on latest pg 11, 12, 13
-m["include"].append(build_debug_config({"pg":PG11_LATEST}))
+# always test debug build on latest of all supported pg versions
 m["include"].append(build_debug_config({"pg":PG12_LATEST}))
 m["include"].append(build_debug_config({"pg":PG13_LATEST}))
 
@@ -117,18 +114,6 @@ m["include"].append(build_release_config(macos_config({})))
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
 if event_type != "pull_request":
-
-  # add debug test for first supported PG11 version
-  # there is a problem when building PG 11.0 on ubuntu
-  # with llvm-9 so we use llvm-8 instead
-  pg11_debug_earliest = {
-    "pg": PG11_EARLIEST,
-    "llvm_config": "/usr/bin/llvm-config-8",
-    "clang": "clang-8",
-    "extra_packages": "clang-8 llvm-8 llvm-8-dev llvm-8-tools",
-    "installcheck_args": "IGNORES='cluster-11 continuous_aggs_insert continuous_aggs_multi continuous_aggs_concurrent_refresh'"
-  }
-  m["include"].append(build_debug_config(pg11_debug_earliest))
 
   # add debug test for first supported PG12 version
   pg12_debug_earliest = {
@@ -143,13 +128,11 @@ if event_type != "pull_request":
   # add debug test for MacOS
   m["include"].append(build_debug_config(macos_config({})))
 
-  # add release test for latest pg 11, 12 and 13
-  m["include"].append(build_release_config({"pg":PG11_LATEST}))
+  # add release test for latest pg 12 and 13
   m["include"].append(build_release_config({"pg":PG12_LATEST}))
   m["include"].append(build_release_config({"pg":PG13_LATEST}))
 
-  # add apache only test for latest pg 11, 12 and 13
-  m["include"].append(build_apache_config({"pg":PG11_LATEST}))
+  # add apache only test for latest pg 12 and 13
   m["include"].append(build_apache_config({"pg":PG12_LATEST}))
   m["include"].append(build_apache_config({"pg":PG13_LATEST}))
 

@@ -1,5 +1,5 @@
 # vim:set ft=dockerfile:
-ARG major_version=11
+ARG major_version=12
 ARG minor_version=0
 FROM postgres:$major_version.$minor_version-alpine
 
