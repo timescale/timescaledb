@@ -6,6 +6,8 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_table;
 DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_replica_table;
 DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_drop_replica;
 DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk;
+DROP FUNCTION IF EXISTS _timescaledb_internal.copy_chunk_data;
+DROP PROCEDURE IF EXISTS _timescaledb_internal.wait_subscription_sync;
 
 -- We need to rewrite all continuous aggregates to make sure that the
 -- queries do not contain qualification. They will be re-written in

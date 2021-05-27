@@ -71,6 +71,7 @@ TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
+TS_FUNCTION_INFO_V1(ts_chunk_copy_data);
 
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
@@ -4089,4 +4090,10 @@ Datum
 ts_chunk_create(PG_FUNCTION_ARGS)
 {
 	return ts_cm_functions->create_chunk(fcinfo);
+}
+
+Datum
+ts_chunk_copy_data(PG_FUNCTION_ARGS)
+{
+	return ts_cm_functions->copy_chunk_data(fcinfo);
 }
