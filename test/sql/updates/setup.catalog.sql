@@ -18,6 +18,6 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO tsdbadmin;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO tsdbadmin;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_catalog
-      GRANT SELECT ON tables TO tsdbadmin;
+      GRANT SELECT ON TABLES TO tsdbadmin;
 ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_config
-      GRANT SELECT ON tables TO tsdbadmin;
+      GRANT SELECT ON TABLES TO tsdbadmin;
