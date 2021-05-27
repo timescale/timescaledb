@@ -78,6 +78,10 @@ ts_dist_cmd_collect_responses(List *requests)
  *
  * The list of data nodes can either be a list of data node names, or foreign
  * server OIDs.
+ *
+ * If "transactional" is false then it means that the SQL should be executed
+ * in autocommit (implicit statement level commit) mode without the need for
+ * an explicit 2PC from the access node
  */
 DistCmdResult *
 ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, List *data_nodes,
