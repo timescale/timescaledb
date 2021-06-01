@@ -823,12 +823,14 @@ row_compressor_get_compressed_tuple(RowCompressor *row_compressor, MemoryContext
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
 									   row_compressor->compressed_is_null);
-	Assert(row_compressor->bistate != NULL);
+/*	Assert(row_compressor->bistate != NULL);
+	CommandId mycid = GetCurrentCommandId(true);
 	heap_insert(row_compressor->compressed_table,
 				compressed_tuple,
 				mycid,
-				0 /*=options*/,
+				0 ,
 				row_compressor->bistate);
+*/
 	MemoryContextSwitchTo(old_ctx);
 	return compressed_tuple;
 }
@@ -1572,7 +1574,7 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 	const ColumnCompressionInfo **keys;
 	CompressSingleRowState *cr = palloc(sizeof(CompressSingleRowState));
 	cr->out_slot =
-		MakeSingleTupleTableSlotCompat(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
+		MakeSingleTupleTableSlot(RelationGetDescr(out_rel), table_slot_callbacks(out_rel));
 	cr->in_rel = in_rel;
 	cr->out_rel = out_rel;
 	row_compressor_init_wrapper(&cr->row_compressor, srcht_id, in_rel, out_rel, &n_keys, &keys);

@@ -223,11 +223,7 @@ SELECT COUNT(*) AS dropped_chunks_count
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
 CALL run_job(:job_id);
-<<<<<<< HEAD
 \i include/recompress_basic.sql
-=======
-\ir include/recompress_basic.sql
->>>>>>> 89c45cf5... seperate into grp and query state parts
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
@@ -237,7 +233,6 @@ SELECT
    h.table_name AS hypertable_name,
    c.schema_name as chunk_schema,
    c.table_name as chunk_name,
-<<<<<<< HEAD
    c.status as chunk_status, 
    comp.schema_name as compressed_chunk_schema,
    comp.table_name as compressed_chunk_name
@@ -250,30 +245,12 @@ ON comp.id = c.compressed_chunk_id
 CREATE TABLE test2 (timec timestamptz NOT NULL, i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
-=======
-   comp.schema_name as compressed_chunk_schema,
-   comp.table_name as compressed_chunk_name
-FROM
-   _timescaledb_catalog.hypertable h,
-  _timescaledb_catalog.chunk c,
-   _timescaledb_catalog.chunk comp
-WHERE h.id = c.hypertable_id and comp.id = c.compressed_chunk_id
-and c.compressed_chunk_id > 0;
-CREATE TABLE test2 (timec timestamptz , i integer ,
-      b bigint, t text);
-SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
-psql:include/recompress_basic.sql:22: NOTICE:  adding not-null constraint to column "timec"
->>>>>>> 89c45cf5... seperate into grp and query state parts
  table_name 
 ------------
  test2
 (1 row)
 
-<<<<<<< HEAD
 INSERT INTO test2 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
-=======
-INSERT INTO test2 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00-05', '2020-01-03 12:00:00-05' , '5 min'::interval) q;
->>>>>>> 89c45cf5... seperate into grp and query state parts
 ALTER TABLE test2 set (timescaledb.compress, 
 timescaledb.compress_segmentby = 'b', 
 timescaledb.compress_orderby = 'timec DESC');
@@ -285,7 +262,6 @@ FROM show_chunks('test2') c;
 (1 row)
 
 ---insert into the middle of the range ---
-<<<<<<< HEAD
 INSERT INTO test2 values ( '2020-01-03 10:01:00+00', 20, 11, '2row'); 
 INSERT INTO test2 values ( '2020-01-03 11:01:00+00', 20, 11, '3row'); 
 INSERT INTO test2 values ( '2020-01-03 12:01:00+00', 20, 11, '4row'); 
@@ -313,13 +289,6 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
             3 | _hyper_10_48_chunk
 (1 row)
 
-=======
-INSERT INTO test2 values ( '2020-01-03 10:01:00-05', 20, 11, '2row'); 
-INSERT INTO test2 values ( '2020-01-03 11:01:00-05', 20, 11, '3row'); 
-INSERT INTO test2 values ( '2020-01-03 12:01:00-05', 20, 11, '4row'); 
---- insert a new segment  by ---
-INSERT INTO test2 values ( '2020-01-03 11:01:00-05', 20, 12, '12row'); 
->>>>>>> 89c45cf5... seperate into grp and query state parts
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
         chunk_schema || '.' || chunk_name as "CHUNK_NAME"
 FROM compressed_chunk_info_view 
@@ -330,7 +299,6 @@ SELECT count(*) from test2;
     29
 (1 row)
 
-<<<<<<< HEAD
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass); 
              recompress_chunk             
 ------------------------------------------
@@ -392,14 +360,14 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass, true); 
-psql:include/recompress_basic.sql:95: NOTICE:  nothing to recompress in chunk "_hyper_10_48_chunk" 
+psql:include/recompress_basic.sql:96: NOTICE:  nothing to recompress in chunk "_hyper_10_48_chunk" 
  recompress_chunk 
 ------------------
  
 (1 row)
 
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass, false); 
-psql:include/recompress_basic.sql:96: ERROR:  nothing to recompress in chunk "_hyper_10_48_chunk" 
+psql:include/recompress_basic.sql:97: ERROR:  nothing to recompress in chunk "_hyper_10_48_chunk" 
 --now decompress it , then try and recompress 
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
@@ -408,7 +376,7 @@ SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
 (1 row)
 
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:100: ERROR:  call compress_chunk instead of recompress_chunk
+psql:include/recompress_basic.sql:101: ERROR:  call compress_chunk instead of recompress_chunk
 \set ON_ERROR_STOP 1
 -- test recompress policy
 CREATE TABLE metrics(time timestamptz NOT NULL);
@@ -427,7 +395,7 @@ SELECT add_job('_timescaledb_internal.policy_compression','1w','{"hypertable_id"
 CALL run_job(:JOB_COMPRESS);
 -- 2nd call should do nothing
 CALL run_job(:JOB_COMPRESS);
-psql:include/recompress_basic.sql:117: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
+psql:include/recompress_basic.sql:118: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
@@ -462,7 +430,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false')) FROM _time
 
 -- nothing to do
 CALL run_job(:JOB_COMPRESS);
-psql:include/recompress_basic.sql:138: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
+psql:include/recompress_basic.sql:139: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
@@ -481,7 +449,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 -- still nothing to do since we disabled recompress
 CALL run_job(:JOB_COMPRESS);
-psql:include/recompress_basic.sql:150: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
+psql:include/recompress_basic.sql:151: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
 ---- status should be 3
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
@@ -521,7 +489,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 ---- nothing to do yet
 CALL run_job(:JOB_RECOMPRESS);
-psql:include/recompress_basic.sql:172: NOTICE:  no chunks for hypertable "public.metrics" that satisfy recompress chunk policy
+psql:include/recompress_basic.sql:173: NOTICE:  no chunks for hypertable "public.metrics" that satisfy recompress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
@@ -552,19 +520,90 @@ SELECT delete_job(:JOB_RECOMPRESS);
  
 (1 row)
 
-=======
-SELECT :'CHUNK_NAME', 'got here';
-                 ?column?                 | ?column? 
-------------------------------------------+----------
- _timescaledb_internal._hyper_10_48_chunk | got here
+-- test recompress_tuples --
+CREATE TABLE test3 (timec timestamptz NOT NULL, i integer ,
+      b bigint, t text);
+SELECT table_name from create_hypertable('test3', 'timec', chunk_time_interval=> INTERVAL '7 days');
+ table_name 
+------------
+ test3
 (1 row)
 
-SELECT b, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
-FROM :COMP_CHUNK_NAME c  group by b;
- b  |                                                                                                                                                                                                         arr                                                                                                                                                                                                         
-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- 12 | {"(BAAAAj49Lz7nAAACPj0vPucAAAAAAQAAAAEAAAAAAAAADgAEfHpefc4A,BAAAAAAAAAAAFAAAAAAAAAAUAAAAAQAAAAEAAAAAAAAABgAAAAAAAAAo,12,AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAABTEycm93,1,10,\"Fri Jan 03 08:01:00 2020 PST\",\"Fri Jan 03 08:01:00 2020 PST\")"}
- 11 | {"(BAAAAj48VRe8AP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHwLpRYAAAR8fBLMI/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,20,\"Fri Jan 03 07:00:00 2020 PST\",\"Fri Jan 03 09:01:00 2020 PST\")"}
-(2 rows)
+-- insert into 2 segments and then compress
+INSERT INTO test3 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+INSERT INTO test3 SELECT q, 10, 15, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+ALTER TABLE test3 set (timescaledb.compress, 
+timescaledb.compress_segmentby = 'b', 
+timescaledb.compress_orderby = 'timec DESC');
+SELECT compress_chunk(c)
+FROM show_chunks('test3') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_14_59_chunk
+(1 row)
 
->>>>>>> 89c45cf5... seperate into grp and query state parts
+SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
+        chunk_schema || '.' || chunk_name as "CHUNK_NAME"
+FROM compressed_chunk_info_view 
+WHERE hypertable_name = 'test3' \gset
+--insert into middle of a range of compressed chunk
+INSERT INTO test3 values ( '2020-01-03 10:01:00+00', 20, 11, '2row');
+INSERT INTO test3 values ( '2020-01-03 11:01:00+00', 20, 11, '3row');
+INSERT INTO test3 values ( '2020-01-03 12:01:00+00', 20, 11, '4row');
+--- insert a new segment  by ---
+INSERT INTO test3 values ( '2020-01-03 11:01:00+00', 20, 12, '12row');
+SELECT b, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
+FROM :COMP_CHUNK_NAME c  WHERE b = 11 group by b;
+ b  |                                                                                                                                                                                                     arr                                                                                                                                                                                                     
+----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 11 | (BAAAAj44JDWIAP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHOp4K4AAAR8c7EHu/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,10,"Fri Jan 03 02:00:00 2020 PST","Fri Jan 03 04:01:00 2020 PST")
+(1 row)
+
+SELECT count(*) from test3;
+ count 
+-------
+    54
+(1 row)
+
+SELECT count(*) from :COMP_CHUNK_NAME;
+ count 
+-------
+     6
+(1 row)
+
+CREATE TABLE test4 as select * from test3;
+WITH cdel AS
+(
+DELETE FROM :COMP_CHUNK_NAME
+WHERE b in
+ ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 )
+)
+INSERT INTO :COMP_CHUNK_NAME
+SELECT  (_timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c)).*
+FROM :COMP_CHUNK_NAME c
+where b in
+ ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 ) GROUP BY b;
+SELECT * FROM
+(( SELECT * from test4) EXCEPT (select * from test3) ) q;
+ timec | i | b | t 
+-------+---+---+---
+(0 rows)
+
+SELECT * FROM
+(( SELECT * from test3) EXCEPT (select * from test4) ) q;
+ timec | i | b | t 
+-------+---+---+---
+(0 rows)
+
+SELECT count(*) from test3;
+ count 
+-------
+    54
+(1 row)
+
+SELECT count(*) from :COMP_CHUNK_NAME;
+ count 
+-------
+     3
+(1 row)
+

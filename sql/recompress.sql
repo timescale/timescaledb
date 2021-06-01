@@ -11,6 +11,6 @@ LANGUAGE C IMMUTABLE ;;
 DROP FUNCTION IF EXISTS _timescaledb_internal.recompress_chunk_ffunc;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.recompress_chunk_ffunc( tstate internal, compressed_chunk_name regclass, extra anyelement)
-RETURNS anyarray
+RETURNS anyelement
 AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_ffunc'
 LANGUAGE C IMMUTABLE ;
