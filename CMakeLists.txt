@@ -268,8 +268,8 @@ message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 # Ensure that PostgreSQL version is supported and consistent
 # with src/compat.h version check
 if ((${PG_VERSION_MAJOR} LESS "12") OR
-    (${PG_VERSION_MAJOR} GREATER "13"))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 12 and 13")
+    (${PG_VERSION_MAJOR} GREATER "14"))
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 12, 13 and 14")
 endif()
 
 # Get PostgreSQL configuration from pg_config
