@@ -1489,8 +1489,11 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 			stmt->relation->relname = NameStr(chunk->fd.table_name);
 			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
 			ReindexTable(stmt->relation,
-						 stmt->options,
+						 stmt->options
+#if PG14_LT
+						 ,
 						 stmt->concurrent /* should test for deadlocks */
+#endif
 			);
 			break;
 		case REINDEX_OBJECT_INDEX:
@@ -1534,7 +1537,11 @@ process_reindex(ProcessUtilityArgs *args)
 			{
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
+#if PG14_LT
 				if (stmt->concurrent)
+#else
+				if (stmt->options & REINDEXOPT_CONCURRENTLY)
+#endif
 					ereport(ERROR,
 							(errmsg("concurrent index creation on hypertables is not supported")));
 
