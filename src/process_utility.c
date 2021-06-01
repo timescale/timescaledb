@@ -2635,7 +2635,14 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * Since we keep OIDs between transactions, there is a potential
 			 * issue if an OID gets reassigned between two subtransactions
 			 */
-			cluster_rel(cim->chunkoid, cim->indexoid, stmt->options);
+			cluster_rel(cim->chunkoid,
+						cim->indexoid,
+						stmt->options
+#if PG14_GE
+						,
+						args->context == PROCESS_UTILITY_TOPLEVEL
+#endif
+			);
 			PopActiveSnapshot();
 			CommitTransactionCommand();
 		}
