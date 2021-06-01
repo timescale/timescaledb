@@ -5,6 +5,11 @@
 
 -- This file is always prepended to all upgrade scripts.
 
+-- Disable parallel execution for the duration of the update process.
+-- This avoids version mismatch errors that would have beeen triggered by the
+-- parallel workers in ts_extension_check_version().
+SET LOCAL max_parallel_workers = 0;
+
 -- Triggers should be disabled during upgrades to avoid having them
 -- invoke functions that might load an old version of the shared
 -- library before those functions have been updated.
