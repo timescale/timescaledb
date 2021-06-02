@@ -314,6 +314,14 @@ SHOW timescaledb.restoring;
  off
 (1 row)
 
+-- timescaledb_post_restore restarts background worker so we have to stop them
+-- to make sure they dont interfere with this database being used as template below
+SELECT _timescaledb_internal.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
 --should be same as count above
 SELECT count(*) = :num_dependent_objects as dependent_objects_match
   FROM pg_depend
