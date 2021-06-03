@@ -66,11 +66,6 @@
 	ExecComputeStoredGenerated(estate, slot)
 #endif
 
-#define TTSOpsVirtualP (&TTSOpsVirtual)
-#define TTSOpsHeapTupleP (&TTSOpsHeapTuple)
-#define TTSOpsMinimalTupleP (&TTSOpsMinimalTuple)
-#define TTSOpsBufferHeapTupleP (&TTSOpsBufferHeapTuple)
-
 /* fmgr
  * In a9c35cf postgres changed how it calls SQL functions so that the number of
  * argument-slots allocated is chosen dynamically, instead of being fixed. This
