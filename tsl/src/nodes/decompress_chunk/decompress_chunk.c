@@ -369,6 +369,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 								 info,
 								 &sort_info);
 
+	/* compute parent relids of the chunk and use it to filter paths*/
+	Relids parent_relids = find_childrel_parents(root, chunk_rel);
 	/* create non-parallel paths */
 	foreach (lc, compressed_rel->pathlist)
 	{
@@ -379,11 +381,26 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * Filter out all paths that try to JOIN the compressed chunk on the
 		 * hypertable or the uncompressed chunk
 		 * Ideally, we wouldn't create these paths in the first place.
+		 * However, create_join_clause code is called by PG while generating paths for the
+		 * compressed_rel via generate_implied_equalities_for_column.
+		 * create_join_clause ends up creating rinfo's between compressed_rel and ht because
+		 * PG does not know that compressed_rel is related to ht in anyway.
+		 * The parent-child relationship between chunk_rel and ht is known
+		 * to PG and so it does not try to create meaningless rinfos for that case.
 		 */
-		if (child_path->param_info != NULL &&
-			(bms_is_member(chunk_rel->relid, child_path->param_info->ppi_req_outer) ||
-			 bms_is_member(ht_index, child_path->param_info->ppi_req_outer)))
-			continue;
+		if (child_path->param_info != NULL)
+		{
+			if (bms_is_member(chunk_rel->relid, child_path->param_info->ppi_req_outer))
+				continue;
+			/* check if this is path made with references between
+			 * compressed_rel + hypertable or a nesting subquery.
+			 * The latter can happen in the case of UNION queries. see github 2917. This
+			 * happens since PG is not aware that the nesting
+			 * subquery that references the hypertable is a parent of compressed_rel as well.
+			 */
+			if (bms_overlap(parent_relids, child_path->param_info->ppi_req_outer))
+				continue;
+		}
 
 		path = decompress_chunk_path_create(root, info, 0, child_path);
 

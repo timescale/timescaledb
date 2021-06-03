@@ -983,3 +983,121 @@ ORDER BY m.v0;
 (32 rows)
 
 SET timescaledb.enable_chunk_append TO TRUE;
+-- github bug 2917 with UNION ALL that references compressed ht
+CREATE TABLE entity
+(
+  oid bigint PRIMARY KEY,
+  type text,
+  name text
+);
+INSERT INTO entity values(10, 'VMEM', 'cpu');
+CREATE TABLE entity_m2 
+( 
+ timec         timestamp with time zone  NOT NULL, 
+ entity_oid    bigint                    , 
+ entity_hash   bigint                    , 
+ type          text               , 
+ current       double precision, 
+ capacity      double precision, 
+ utilization   double precision, 
+ peak          double precision       
+);
+SELECT create_hypertable('entity_m2', 'timec', chunk_time_interval=>'30 days'::interval);
+   create_hypertable    
+------------------------
+ (5,public,entity_m2,t)
+(1 row)
+
+INSERT INTO entity_m2 values (
+ '2020-12-21 15:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
+INSERT INTO entity_m2 values (
+ '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  2097152 ,           0 ,  100);
+ALTER TABLE entity_m2 SET (timescaledb.compress, 
+timescaledb.compress_segmentby = 'entity_oid', 
+timescaledb.compress_orderby = 'type, timec');
+SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+(1 row)
+
+CREATE TABLE entity_m1 
+( 
+timec         timestamp with time zone  , 
+ entity_oid    bigint                    , 
+ entity_hash   bigint                    , 
+ type          text               , 
+ current       double precision, 
+ capacity      double precision, 
+ utilization   double precision 
+);
+SELECT create_hypertable('entity_m1', 'timec', chunk_time_interval=>'30 days'::interval);
+NOTICE:  adding not-null constraint to column "timec"
+   create_hypertable    
+------------------------
+ (7,public,entity_m1,t)
+(1 row)
+
+INSERT INTO entity_m1 values (
+ '2020-12-21 16:47:58.778-05' , 10 , -7792214420424674003 , 'VMEM' , 0,  100 ,           0 );
+create view metric_view as
+ SELECT m2.timec,
+    m2.entity_oid,
+    m2.entity_hash,
+    m2.type,
+    m2.current,
+    m2.capacity,
+    m2.utilization,
+    m2.peak
+   FROM entity_m2 m2
+UNION ALL
+ SELECT m1.timec,
+    m1.entity_oid,
+    m1.entity_hash,
+    m1.type,
+    m1.current,
+    m1.capacity,
+    m1.utilization,
+    NULL::double precision AS peak
+   FROM entity_m1 m1;
+SET enable_bitmapscan = false;
+SET enable_hashjoin = false;
+SET enable_mergejoin = false;
+SELECT m.timec, avg(m.utilization) AS avg_util
+   FROM  metric_view m, entity e
+   WHERE m.type = 'VMEM'
+   AND m.timec BETWEEN '2020-12-21T00:00:00'::timestamptz - interval '7 day' AND date_trunc('day', '2020-12-22T00:00:00'::timestamptz)
+   AND m.entity_oid = e.oid
+   GROUP BY 1 ORDER BY 1;
+              timec               | avg_util 
+----------------------------------+----------
+ Mon Dec 21 12:47:58.778 2020 PST |        0
+ Mon Dec 21 13:47:58.778 2020 PST |        0
+(2 rows)
+
+--now compress the other table too and rerun the query --
+ALTER TABLE entity_m1 SET (timescaledb.compress, 
+timescaledb.compress_segmentby = 'entity_oid', 
+timescaledb.compress_orderby = 'type, timec');
+SELECT compress_chunk(c) FROM show_chunks('entity_m1') c;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_15_chunk
+(1 row)
+
+SELECT m.timec, avg(m.utilization) AS avg_util
+   FROM  metric_view m, entity e
+   WHERE m.type = 'VMEM'
+   AND m.timec BETWEEN '2020-12-21T00:00:00'::timestamptz - interval '7 day' AND date_trunc('day', '2020-12-22T00:00:00'::timestamptz)
+   AND m.entity_oid = e.oid
+   GROUP BY 1 ORDER BY 1;
+              timec               | avg_util 
+----------------------------------+----------
+ Mon Dec 21 12:47:58.778 2020 PST |        0
+ Mon Dec 21 13:47:58.778 2020 PST |        0
+(2 rows)
+
+RESET enable_bitmapscan ;
+RESET enable_hashjoin ;
+RESET enable_mergejoin;
+-- end github bug 2917
