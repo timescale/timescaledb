@@ -374,7 +374,7 @@ compress_chunk_sort_relation(Relation in_rel, int n_keys, const ColumnCompressio
 	Tuplesortstate *tuplesortstate;
 	HeapTuple tuple;
 	TableScanDesc heapScan;
-	TupleTableSlot *heap_tuple_slot = MakeTupleTableSlot(tupDesc, TTSOpsHeapTupleP);
+	TupleTableSlot *heap_tuple_slot = MakeTupleTableSlot(tupDesc, &TTSOpsHeapTuple);
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -602,7 +602,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 								  TupleDesc sorted_desc)
 {
 	CommandId mycid = GetCurrentCommandId(true);
-	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, TTSOpsMinimalTupleP);
+	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, &TTSOpsMinimalTuple);
 	bool got_tuple;
 	bool first_iteration = true;
 

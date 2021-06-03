@@ -29,7 +29,6 @@
 #include "nodes/gapfill/interpolate.h"
 #include "nodes/gapfill/exec.h"
 #include "time_bucket.h"
-#include "compat.h"
 
 typedef enum GapFillBoundary
 {
@@ -609,8 +608,8 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
-	state->subslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
-	state->scanslot = MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP);
+	state->subslot = MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual);
+	state->scanslot = MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual);
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(args)))
@@ -707,7 +706,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	state->pi = ExecBuildProjectionInfo(targetlist,
 										state->csstate.ss.ps.ps_ExprContext,
-										MakeSingleTupleTableSlot(tupledesc, TTSOpsVirtualP),
+										MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual),
 										&state->csstate.ss.ps,
 										NULL);
 
