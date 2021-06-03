@@ -129,7 +129,7 @@ build_script:
 
     # build timescale
 
-     .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP
+     .\bootstrap -DUSE_OPENSSL=0 -DPG_PATH="C:\Program Files\PostgreSQL\12" -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CONFIGURATION_TYPES=Debug -DCMAKE_C_FLAGS=/MP -DTAP_CHECKS=OFF
 
     # Filter ssl and local configuration from pg_hba.conf file since
     # we have turned off SSL and local (unix domain socket)
@@ -178,7 +178,7 @@ build_script:
 
     docker exec -it pgregress /bin/bash -c "git clone  --depth 1 https://github.com/timescale/timescaledb.git /timescaledb && cd /timescaledb && git fetch -q origin $commit && git checkout -qf FETCH_HEAD"
 
-    docker exec -it pgregress /bin/bash -c "cd /timescaledb && ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF -DPG_REGRESS=/usr/local/bin/pg_regress -DTEST_PGHOST=docker.for.win.localhost -DTEST_PGPORT_LOCAL=55432"
+    docker exec -it pgregress /bin/bash -c "cd /timescaledb && ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF -DPG_REGRESS=/usr/local/bin/pg_regress -DTEST_PGHOST=docker.for.win.localhost -DTEST_PGPORT_LOCAL=55432 -DTAP_CHECKS=OFF"
 
 test_script:
 - ps: >-

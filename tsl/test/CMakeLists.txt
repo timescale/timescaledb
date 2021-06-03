@@ -5,9 +5,6 @@ add_subdirectory(ssl)
 set(_local_install_checks)
 set(_install_checks)
 
-find_program(PROVE prove
-  "/usr/bin")
-
 if(PG_REGRESS)
   add_custom_target(regresscheck-t
     COMMAND ${CMAKE_COMMAND} -E env
@@ -62,6 +59,7 @@ if(PG_REGRESS)
     ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
     USES_TERMINAL)
 
+if (TAP_CHECKS)
   add_custom_target(provecheck
     COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
     COMMAND BUILDIR=${CMAKE_BINARY_DIR}
@@ -71,12 +69,12 @@ if(PG_REGRESS)
     PG_REGRESS=${PG_REGRESS}
     ${PROVE} -I "${PG_SOURCE_DIR}/src/test/perl"
     -I "${CMAKE_SOURCE_DIR}/test/perl"
-    -I "$ENV{HOME}/perl5/lib/perl5"
     t/*.pl
     USES_TERMINAL)
+  list(APPEND _install_checks provecheck)
+endif()
 
   list(APPEND _install_checks regresscheck-shared)
-  list(APPEND _install_checks provecheck)
   list(APPEND _local_install_checks regresschecklocal-shared)
 
 endif()

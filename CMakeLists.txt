@@ -487,6 +487,38 @@ if (CODECOVERAGE)
   add_link_options(--coverage)
 endif (CODECOVERAGE)
 
+# TAP test support
+option(TAP_CHECKS "Enable TAP test support" ON)
+
+if (TAP_CHECKS)
+  find_package(Perl 5.8)
+
+  if (PERL_FOUND)
+    get_filename_component(PERL_BIN_PATH ${PERL_EXECUTABLE} DIRECTORY)
+
+    find_program(PROVE prove
+      HINTS
+      ${PERL_BIN_PATH}
+      PATHS
+      "/usr/bin"
+      NO_DEFAULT_PATH)
+
+    if (NOT PROVE)
+      message(FATAL_ERROR "The prove binary was not found. Disable TAP tests with -DTAP_CHECKS=OFF.")
+    endif ()
+
+    # Check for the IPC::Run module
+    execute_process(COMMAND ${PERL_EXECUTABLE} -MIPC::Run -e ""
+      ERROR_QUIET RESULT_VARIABLE PERL_MODULE_STATUS)
+
+    if (PERL_MODULE_STATUS)
+      message(FATAL_ERROR "IPC::Run Perl module not found. Disable TAP tests with -DTAP_CHECKS=OFF.")
+    endif ()
+  else ()
+    message(FATAL_ERROR "Perl not found. Disable TAP tests with -DTAP_CHECKS=OFF or set -DPERL_EXECUTABLE=<path/to/perl>. Requires Perl 5.8 or greater (http://perlbrew.pl).")
+  endif()
+endif (TAP_CHECKS)
+
 if (UNIX)
   add_subdirectory(scripts)
 endif (UNIX)
