@@ -345,4 +345,14 @@ get_vacuum_options(const VacuumStmt *stmt)
 	create_merge_append_path(root, rel, subpaths, pathkeys, required_outer)
 #endif
 
+/* PG14 adds a parse mode argument to raw_parser.
+ *
+ * https://github.com/postgres/postgres/commit/844fe9f159
+ */
+#if PG14_LT
+#define raw_parser_compat(cmd) raw_parser(cmd)
+#else
+#define raw_parser_compat(cmd) raw_parser(cmd, RAW_PARSE_DEFAULT)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
