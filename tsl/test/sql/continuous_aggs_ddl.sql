@@ -374,7 +374,7 @@ WHERE hypertable_name = 'drop_chunks_table';
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 
 --refresh to process the invalidations and then drop
-SELECT _timescaledb_internal.refresh_continuous_aggregate('drop_chunks_view', 
+SELECT timescaledb_experimental.refresh_continuous_aggregate('drop_chunks_view', 
   show_chunks('drop_chunks_table', older_than => (integer_now_test2()-9)));
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
 
@@ -488,7 +488,7 @@ ORDER BY 1;
 -- Insert a large value in one of the chunks that will be dropped
 INSERT INTO drop_chunks_table VALUES (:range_start_integer-1, 100);
 -- Now refresh and drop the two adjecent chunks
-SELECT _timescaledb_internal.refresh_continuous_aggregate('drop_chunks_view',
+SELECT timescaledb_experimental.refresh_continuous_aggregate('drop_chunks_view',
   show_chunks('drop_chunks_table', older_than=>30));
 SELECT drop_chunks('drop_chunks_table', older_than=>30);
 

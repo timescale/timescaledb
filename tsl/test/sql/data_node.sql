@@ -431,10 +431,10 @@ CREATE TABLE devices(device int, name text);
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 
 -- Block one data node for specific hypertable
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', 'disttable');
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1', 'disttable');
 
 -- Block one data node for all hypertables
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1');
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1');
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 
@@ -450,22 +450,22 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 -- some ERROR cases
 \set ON_ERROR_STOP 0
 -- Will error due to under-replication
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_2');
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_2');
 -- can't block/allow non-existing data node
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_12345', 'disttable');
-SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_12345', 'disttable');
+SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_12345', 'disttable');
 -- NULL data node
-SELECT * FROM _timescaledb_internal.block_new_chunks(NULL, 'disttable');
-SELECT * FROM _timescaledb_internal.allow_new_chunks(NULL, 'disttable');
+SELECT * FROM timescaledb_experimental.block_new_chunks(NULL, 'disttable');
+SELECT * FROM timescaledb_experimental.allow_new_chunks(NULL, 'disttable');
 -- can't block/allow on non hypertable
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', 'devices');
-SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_1', 'devices');
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1', 'devices');
+SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_1', 'devices');
 \set ON_ERROR_STOP 1
 
 -- Force block all data nodes
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_2', force => true);
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_1', force => true);
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_3', force => true);
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_2', force => true);
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1', force => true);
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_3', force => true);
 
 -- All data nodes are blocked
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -476,9 +476,9 @@ INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
 \set ON_ERROR_STOP 1
 
 -- unblock data nodes for all hypertables
-SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_1');
-SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_2');
-SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_3');
+SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_1');
+SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_2');
+SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_3');
 
 SELECT table_name, node_name, block_chunks
 FROM _timescaledb_catalog.hypertable_data_node dn,
@@ -561,8 +561,8 @@ SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_f
 \set ON_ERROR_STOP 0
 -- error due to missing permissions
 SELECT * FROM detach_data_node('data_node_4', 'disttable_3');
-SELECT * FROM _timescaledb_internal.block_new_chunks('data_node_4', 'disttable_3');
-SELECT * FROM _timescaledb_internal.allow_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_4', 'disttable_3');
+SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_4', 'disttable_3');
 \set ON_ERROR_STOP 1
 
 -- detach table(s) where user has permissions, otherwise show NOTICE
