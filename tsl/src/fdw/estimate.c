@@ -7,6 +7,7 @@
 #include <nodes/nodes.h>
 #include <optimizer/cost.h>
 #include <optimizer/clauses.h>
+#include <optimizer/prep.h>
 #include <optimizer/tlist.h>
 #include <utils/selfuncs.h>
 #include <utils/rel.h>
@@ -101,14 +102,14 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	{
 		AggSplit aggsplit = get_aggsplit(rel);
 
-		get_agg_clause_costs(root, (Node *) fpinfo->grouped_tlist, aggsplit, &aggcosts);
+		get_agg_clause_costs_compat(root, (Node *) fpinfo->grouped_tlist, aggsplit, &aggcosts);
 
 		/*
 		 * The cost of aggregates in the HAVING qual will be the same
 		 * for each child as it is for the parent, so there's no need
 		 * to use a translated version of havingQual.
 		 */
-		get_agg_clause_costs(root, (Node *) root->parse->havingQual, aggsplit, &aggcosts);
+		get_agg_clause_costs_compat(root, (Node *) root->parse->havingQual, aggsplit, &aggcosts);
 	}
 
 	/* Get number of grouping columns and possible number of groups */
