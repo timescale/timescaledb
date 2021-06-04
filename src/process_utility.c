@@ -1488,16 +1488,14 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		case REINDEX_OBJECT_TABLE:
 			stmt->relation->relname = NameStr(chunk->fd.table_name);
 			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
-			ReindexTable(stmt->relation,
-						 stmt->options
 #if PG14_LT
-						 ,
+			ReindexTable(stmt->relation,
+						 get_reindex_options(stmt),
 						 stmt->concurrent /* should test for deadlocks */
-#elif PG14_GE
-						 ,
-						 false /* isTopLevel */
-#endif
 			);
+#elif PG14_GE
+			ExecReindex(NULL, stmt, false);
+#endif
 			break;
 		case REINDEX_OBJECT_INDEX:
 			/* Not supported, a.t.m. See note in process_reindex(). */
@@ -1543,7 +1541,7 @@ process_reindex(ProcessUtilityArgs *args)
 #if PG14_LT
 				if (stmt->concurrent)
 #else
-				if (stmt->options & REINDEXOPT_CONCURRENTLY)
+				if (get_reindex_options(stmt) & REINDEXOPT_CONCURRENTLY)
 #endif
 					ereport(ERROR,
 							(errmsg("concurrent index creation on hypertables is not supported")));
@@ -2645,14 +2643,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * Since we keep OIDs between transactions, there is a potential
 			 * issue if an OID gets reassigned between two subtransactions
 			 */
-			cluster_rel(cim->chunkoid,
-						cim->indexoid,
-						stmt->options
-#if PG14_GE
-						,
-						args->context == PROCESS_UTILITY_TOPLEVEL
-#endif
-			);
+			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt));
 			PopActiveSnapshot();
 			CommitTransactionCommand();
 		}
