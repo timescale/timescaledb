@@ -631,7 +631,7 @@ remote_copy_get_copycmd(RemoteCopyContext *context)
 }
 
 static StringInfo
-parse_next_text_row(CopyState cstate, List *attnums, TextCopyContext *ctx)
+parse_next_text_row(CopyFromState cstate, List *attnums, TextCopyContext *ctx)
 {
 	StringInfo row_data = makeStringInfo();
 	int i;
@@ -693,7 +693,7 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 }
 
 static StringInfo
-parse_next_binary_row(CopyState cstate, List *attnums, BinaryCopyContext *ctx)
+parse_next_binary_row(CopyFromState cstate, List *attnums, BinaryCopyContext *ctx)
 {
 	if (!NextCopyFrom(cstate, ctx->econtext, ctx->values, ctx->nulls))
 		return NULL;
@@ -702,7 +702,7 @@ parse_next_binary_row(CopyState cstate, List *attnums, BinaryCopyContext *ctx)
 }
 
 static bool
-read_next_copy_row(RemoteCopyContext *context, CopyState cstate)
+read_next_copy_row(RemoteCopyContext *context, CopyFromState cstate)
 {
 	if (context->binary_operation)
 		context->row_data = parse_next_binary_row(cstate, context->attnums, context->data_context);

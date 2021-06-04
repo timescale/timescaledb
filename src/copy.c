@@ -36,6 +36,7 @@
 #include <utils/rel.h>
 #include <utils/rls.h>
 
+#include "compat/compat.h"
 #include "hypertable.h"
 #include "copy.h"
 #include "dimension.h"
@@ -56,7 +57,7 @@
  */
 
 static CopyChunkState *
-copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, CopyState cstate,
+copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, CopyFromState cstate,
 						TableScanDesc scandesc)
 {
 	CopyChunkState *ccstate;
@@ -272,7 +273,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 	/* Set up callback to identify error line number.
 	 *
 	 * It is not necessary to add an entry to the error context stack if we do
-	 * not have a CopyState or callback. In that case, we just use the existing
+	 * not have a CopyFromState or callback. In that case, we just use the existing
 	 * error already on the context stack. */
 	if (ccstate->cstate && callback)
 	{
@@ -608,7 +609,7 @@ void
 timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed, Hypertable *ht)
 {
 	CopyChunkState *ccstate;
-	CopyState cstate;
+	CopyFromState cstate;
 	bool pipe = (stmt->filename == NULL);
 	Relation rel;
 	List *attnums = NIL;
@@ -653,6 +654,9 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	cstate = BeginCopyFrom(pstate,
 						   rel,
+#if PG14_GE
+						   NULL,
+#endif
 						   stmt->filename,
 						   stmt->is_program,
 						   NULL,
