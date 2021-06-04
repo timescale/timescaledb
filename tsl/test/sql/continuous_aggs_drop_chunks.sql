@@ -92,7 +92,7 @@ UPDATE conditions SET value = 4.00 WHERE time_int = 2;
 UPDATE conditions SET value = 4.00 WHERE time_int = 9;
 UPDATE conditions SET value = 4.00 WHERE time_int = 11;
 
-SELECT _timescaledb_internal.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 20));
+SELECT timescaledb_experimental.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 20));
 SELECT drop_chunks('conditions', 20);
 SELECT * FROM see_cagg;
 
@@ -109,13 +109,13 @@ UPDATE conditions SET value = 4.00 WHERE time_int = 41;
 -- After the call to drop_chunks the update in 39 will be refreshed and present in the cagg, 
 -- but not the update in 41.
 BEGIN;
-    SELECT _timescaledb_internal.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 40));
+    SELECT timescaledb_experimental.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 40));
     SELECT drop_chunks('conditions', 40);
 END;
 SELECT * FROM see_cagg;
 
 -- Now refresh includes the update in 41.
-SELECT _timescaledb_internal.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 60));
+SELECT timescaledb_experimental.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 60));
 SELECT drop_chunks('conditions', 60);
 SELECT * FROM see_cagg;
 

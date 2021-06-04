@@ -473,7 +473,7 @@ INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
 
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.refresh_continuous_aggregate(
+SELECT timescaledb_experimental.refresh_continuous_aggregate(
   'mat_with_test',
   show_chunks('measurements')
 );

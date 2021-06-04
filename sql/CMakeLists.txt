@@ -28,7 +28,8 @@ set(SOURCE_FILES
   hypertable.sql
   chunk.sql
   data_node.sql
-  ddl_internal.sql  
+  ddl_internal.sql
+  ddl_experimental.sql
   util_time.sql
   util_internal_table_ddl.sql
   chunk_constraint.sql
