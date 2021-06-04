@@ -709,13 +709,7 @@ handle_read(DataNodeDispatchState *sds)
 
 			if (NULL != rri->ri_projectReturning && rri_desc->constr &&
 				rri_desc->constr->has_generated_stored)
-				ExecComputeStoredGenerated(estate,
-										   slot
-#if PG13_GE
-										   ,
-										   CMD_INSERT
-#endif
-				);
+				ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
 
 			Assert(NULL != cis);
 
