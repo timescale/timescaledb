@@ -367,11 +367,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 			/* Compute stored generated columns */
 			if (check_resultRelInfo->ri_RelationDesc->rd_att->constr &&
 				check_resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
-#if PG13_GE
-				ExecComputeStoredGenerated(estate, myslot, CMD_INSERT);
-#else
-				ExecComputeStoredGenerated(estate, myslot);
-#endif
+				ExecComputeStoredGeneratedCompat(estate, myslot, CMD_INSERT);
+
 			/*
 			 * If the target is a plain table, check the constraints of
 			 * the tuple.
