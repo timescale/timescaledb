@@ -27,7 +27,7 @@ typedef struct CopyChunkState
 	EState *estate;
 	ChunkDispatch *dispatch;
 	CopyFromFunc next_copy_from;
-	CopyState cstate;
+	CopyFromState cstate;
 	TableScanDesc scandesc;
 	Node *where_clause;
 } CopyChunkState;
