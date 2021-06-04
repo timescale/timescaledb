@@ -279,6 +279,22 @@ get_reindex_options(ReindexStmt *stmt)
 #define CopyFromState CopyState
 #endif
 
+#if PG14_LT
+#define estimate_hashagg_tablesize_compat(root, path, agg_costs, num_groups)                       \
+	estimate_hashagg_tablesize(path, agg_costs, num_groups)
+#else
+#define estimate_hashagg_tablesize_compat(root, path, agg_costs, num_groups)                       \
+	estimate_hashagg_tablesize(root, path, agg_costs, num_groups)
+#endif
+
+#if PG14_LT
+#define get_agg_clause_costs_compat(root, clause, split, costs)                                    \
+	get_agg_clause_costs(root, clause, split, costs)
+#else
+#define get_agg_clause_costs_compat(root, clause, split, costs)                                    \
+	get_agg_clause_costs(root, split, costs)
+#endif
+
 /* PG13 added a dstlen parameter to pg_b64_decode and pg_b64_encode */
 #if PG13_LT
 #define pg_b64_encode_compat(src, srclen, dst, dstlen) pg_b64_encode((src), (srclen), (dst))
