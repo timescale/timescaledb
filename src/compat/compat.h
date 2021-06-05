@@ -225,4 +225,16 @@ get_vacuum_options(const VacuumStmt *stmt)
 #define convert_tuples_by_name_compat(in, out, msg) convert_tuples_by_name(in, out)
 #endif
 
+/* PG14 adds estinfo parameter to estimate_num_groups for additional context
+ * about the estimation
+ * https://github.com/postgres/postgres/commit/ed934d4fa3
+ */
+#if PG14_LT
+#define estimate_num_groups_compat(root, exprs, rows, pgset, estinfo)                              \
+	estimate_num_groups(root, exprs, rows, pgset)
+#else
+#define estimate_num_groups_compat(root, exprs, rows, pgset, estinfo)                              \
+	estimate_num_groups(root, exprs, rows, pgset, estinfo)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
