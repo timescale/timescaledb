@@ -858,7 +858,7 @@ find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmod
 	 * otherwise using the cached inheritance hierarchy is faster.
 	 */
 	if (!ts_hypertable_restrict_info_has_restrictions(hri))
-		return find_inheritance_children(ht->main_table_relid, lockmode);
+		return find_inheritance_children_compat(ht->main_table_relid, false, lockmode);
 
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there

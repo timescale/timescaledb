@@ -1611,7 +1611,7 @@ chunk_api_get_chunk_stats(FunctionCallInfo fcinfo, bool col_stats)
 				CommandCounterIncrement();
 			}
 
-			chunk_oids = find_inheritance_children(relid, NoLock);
+			chunk_oids = find_inheritance_children_compat(relid, false, NoLock);
 		}
 
 		if (ht)

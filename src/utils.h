@@ -101,7 +101,7 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 #define is_inheritance_child(relid) (ts_inheritance_parent_relid(relid) != InvalidOid)
 
 #define is_inheritance_parent(relid)                                                               \
-	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
+	(find_inheritance_children_compat(table_relid, false, AccessShareLock) != NIL)
 
 #define is_inheritance_table(relid) (is_inheritance_child(relid) || is_inheritance_parent(relid))
 

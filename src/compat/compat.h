@@ -225,4 +225,16 @@ get_vacuum_options(const VacuumStmt *stmt)
 #define convert_tuples_by_name_compat(in, out, msg) convert_tuples_by_name(in, out)
 #endif
 
+/* PG14 adds include_detached to find_inheritance_children
+ *
+ * https://github.com/postgres/postgres/commit/71f4c8c6f7
+ */
+#if PG14_LT
+#define find_inheritance_children_compat(parentrelid, include_detached, lockmode)                  \
+	find_inheritance_children(parentrelid, lockmode)
+#else
+#define find_inheritance_children_compat(parentrelid, include_detached, lockmode)                  \
+	find_inheritance_children(parentrelid, include_detached, lockmode)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

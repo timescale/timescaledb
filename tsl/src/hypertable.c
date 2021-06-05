@@ -208,7 +208,7 @@ static bool
 hypertable_is_underreplicated(Hypertable *const ht, const int16 replication_factor)
 {
 	ListCell *lc;
-	List *chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+	List *chunks = find_inheritance_children_compat(ht->main_table_relid, false, NoLock);
 
 	Assert(hypertable_is_distributed(ht));
 
