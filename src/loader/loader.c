@@ -111,7 +111,12 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 static post_parse_analyze_hook_type extension_post_parse_analyze_hook = NULL;
 
 static void inline extension_check(void);
+#if PG14_LT
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query);
+#else
+static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
+												   JumbleState *jstate);
+#endif
 
 extern char *
 ts_loader_extension_version(void)
@@ -332,7 +337,11 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 }
 
 static void
+#if PG14_LT
 post_analyze_hook(ParseState *pstate, Query *query)
+#else
+post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
+#endif
 {
 	if (query->commandType == CMD_UTILITY)
 	{
@@ -437,19 +446,27 @@ post_analyze_hook(ParseState *pstate, Query *query)
 		(query->commandType != CMD_UTILITY || load_utility_cmd(query->utilityStmt)))
 		extension_check();
 
-	/*
-	 * Call the extension's hook. This is necessary since the extension is
-	 * installed during the hook. If we did not do this the extension's hook
-	 * would not be called during the first command because the extension
-	 * would not have yet been installed. Thus the loader captures the
-	 * extension hook and calls it explicitly after the check for installing
-	 * the extension.
-	 */
+		/*
+		 * Call the extension's hook. This is necessary since the extension is
+		 * installed during the hook. If we did not do this the extension's hook
+		 * would not be called during the first command because the extension
+		 * would not have yet been installed. Thus the loader captures the
+		 * extension hook and calls it explicitly after the check for installing
+		 * the extension.
+		 */
+#if PG14_LT
 	call_extension_post_parse_analyze_hook(pstate, query);
+#else
+	call_extension_post_parse_analyze_hook(pstate, query, jstate);
+#endif
 
 	if (prev_post_parse_analyze_hook != NULL)
 	{
+#if PG14_LT
 		prev_post_parse_analyze_hook(pstate, query);
+#else
+		prev_post_parse_analyze_hook(pstate, query, jstate);
+#endif
 	}
 }
 
@@ -696,10 +713,18 @@ ts_loader_extension_check(void)
 }
 
 static void
+#if PG14_LT
 call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query)
+#else
+call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
+#endif
 {
 	if (loaded && extension_post_parse_analyze_hook != NULL)
 	{
+#if PG14_LT
 		extension_post_parse_analyze_hook(pstate, query);
+#else
+		extension_post_parse_analyze_hook(pstate, query, jstate);
+#endif
 	}
 }
