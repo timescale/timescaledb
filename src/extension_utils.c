@@ -26,6 +26,7 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
+#include "compat.h"
 #include "extension_constants.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
@@ -185,7 +186,7 @@ extension_load_without_preload()
 		 */
 		/* Only privileged users can get the value of `config file` */
 
-		if (is_member_of_role(GetUserId(), DEFAULT_ROLE_READ_ALL_SETTINGS))
+		if (is_member_of_role(GetUserId(), ROLE_PG_READ_ALL_SETTINGS))
 		{
 			char *config_file = GetConfigOptionByName("config_file", NULL, false);
 
