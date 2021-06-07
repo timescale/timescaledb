@@ -13,6 +13,7 @@
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
 #include <nodes/nodes.h>
+#include <optimizer/restrictinfo.h>
 #include <pgstat.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
@@ -64,6 +65,30 @@
 #else
 #define ExecComputeStoredGeneratedCompat(estate, slot, cmd_type)                                   \
 	ExecComputeStoredGenerated(estate, slot)
+#endif
+
+/* PG14 fixes a bug in miscomputation of relids set in pull_varnos. The bugfix
+ * got backported to PG12 and PG13 but changes the signature of pull_varnos,
+ * make_simple_restrictinfo and make_restrictinfo. To not break existing code
+ * the modified functions get added under different name in PG12 and PG13.
+ * We add a compatibility macro that uses the modified functions when compiling
+ * against a postgres version that has them available.
+ *
+ * https://github.com/postgres/postgres/commit/1cce024fd2
+ * https://github.com/postgres/postgres/commit/73fc2e5bab
+ */
+
+#if (PG12 && PG_VERSION_NUM < 120006) || (PG13 && PG_VERSION_NUM < 130002)
+#define pull_varnos_compat(root, expr) pull_varnos(expr)
+#define make_simple_restrictinfo_compat(root, expr) make_simple_restrictinfo(expr)
+#define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
+	make_restrictinfo(a, b, c, d, e, f, g, h)
+#else
+#define pull_varnos_compat(root, expr) pull_varnos_new(root, expr)
+#define make_simple_restrictinfo_compat(root, expr)                                                \
+	make_restrictinfo_new(root, expr, true, false, false, 0, NULL, NULL, NULL)
+#define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
+	make_restrictinfo_new(root, a, b, c, d, e, f, g, h)
 #endif
 
 /* fmgr
