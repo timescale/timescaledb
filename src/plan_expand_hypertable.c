@@ -34,6 +34,7 @@
 #endif
 
 #include "chunk.h"
+#include "compat.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "extension.h"
@@ -605,7 +606,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		 prev = lc, lc = lnext_compat((List *) quals, lc))
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos((Node *) qual);
+		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/* stop processing if not for current rel */
@@ -675,7 +676,8 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		 * the restriction would exclude chunks and thus rows of the outer
 		 * relation when it should show all rows */
 		if (!is_outer_join)
-			ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(qual));
+			ctx->restrictions =
+				lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -726,7 +728,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 	foreach (lc, castNode(List, quals))
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos((Node *) qual);
+		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/* stop processing if not for current rel */
@@ -760,7 +762,8 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 			}
 		}
 
-		ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(qual));
+		ctx->restrictions =
+			lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -790,7 +793,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 	foreach (lc, (List *) quals)
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos((Node *) qual);
+		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/*
@@ -1521,17 +1524,18 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 
 			if (new_qual)
 			{
-				Relids relids = pull_varnos((Node *) propagated);
+				Relids relids = pull_varnos_compat(root, (Node *) propagated);
 				RestrictInfo *restrictinfo;
 
-				restrictinfo = make_restrictinfo((Expr *) propagated,
-												 true,
-												 false,
-												 false,
-												 ctx->root->qual_security_level,
-												 relids,
-												 NULL,
-												 NULL);
+				restrictinfo = make_restrictinfo_compat(root,
+														(Expr *) propagated,
+														true,
+														false,
+														false,
+														ctx->root->qual_security_level,
+														relids,
+														NULL,
+														NULL);
 				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
 #if PG12_GE
 				/*

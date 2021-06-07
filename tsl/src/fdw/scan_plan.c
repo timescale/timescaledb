@@ -502,14 +502,15 @@ foreign_grouping_ok(PlannerInfo *root, RelOptInfo *grouped_rel, GroupPathExtraDa
 			 * RestrictInfos, so we must make our own.
 			 */
 			Assert(!IsA(expr, RestrictInfo));
-			rinfo = make_restrictinfo(expr,
-									  true,
-									  false,
-									  false,
-									  root->qual_security_level,
-									  grouped_rel->relids,
-									  NULL,
-									  NULL);
+			rinfo = make_restrictinfo_compat(root,
+											 expr,
+											 true,
+											 false,
+											 false,
+											 root->qual_security_level,
+											 grouped_rel->relids,
+											 NULL,
+											 NULL);
 			if (is_foreign_expr(root, grouped_rel, expr))
 				fpinfo->remote_conds = lappend(fpinfo->remote_conds, rinfo);
 			else
