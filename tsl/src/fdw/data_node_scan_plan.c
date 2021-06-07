@@ -177,14 +177,15 @@ adjust_data_node_rel_attrs(PlannerInfo *root, RelOptInfo *data_node_rel, RelOptI
 			}
 			/* reconstitute RestrictInfo with appropriate properties */
 			nodequals = lappend(nodequals,
-								make_restrictinfo((Expr *) onecq,
-												  rinfo->is_pushed_down,
-												  rinfo->outerjoin_delayed,
-												  pseudoconstant,
-												  rinfo->security_level,
-												  NULL,
-												  NULL,
-												  NULL));
+								make_restrictinfo_compat(root,
+														 (Expr *) onecq,
+														 rinfo->is_pushed_down,
+														 rinfo->outerjoin_delayed,
+														 pseudoconstant,
+														 rinfo->security_level,
+														 NULL,
+														 NULL,
+														 NULL));
 		}
 	}
 
