@@ -53,7 +53,8 @@ static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEnt
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
 static List *sort_indexquals(IndexOptInfo *indexinfo, List *quals);
 static OpExpr *fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber distinct_column);
-static bool build_skip_qual(SkipScanPath *skip_scan_path, IndexPath *index_path, Var *var);
+static bool build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *index_path,
+							Var *var);
 static List *build_subpath(PlannerInfo *root, List *subpaths, double ndistinct);
 static ChunkAppendPath *copy_chunk_append_path(ChunkAppendPath *ca, List *subpaths);
 
@@ -389,7 +390,7 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 		return NULL;
 
 	/* build skip qual this may fail if we cannot look up the operator */
-	if (!build_skip_qual(skip_scan_path, index_path, castNode(Var, tle->expr)))
+	if (!build_skip_qual(root, skip_scan_path, index_path, castNode(Var, tle->expr)))
 		return NULL;
 
 	return skip_scan_path;
@@ -435,7 +436,7 @@ build_subpath(PlannerInfo *root, List *subpaths, double ndistinct)
 }
 
 static bool
-build_skip_qual(SkipScanPath *skip_scan_path, IndexPath *index_path, Var *var)
+build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *index_path, Var *var)
 {
 	IndexOptInfo *info = index_path->indexinfo;
 	Oid column_type = exprType((Node *) var);
@@ -478,7 +479,7 @@ build_skip_qual(SkipScanPath *skip_scan_path, IndexPath *index_path, Var *var)
 										  info->indexcollations[idx_key] /*inputcollid*/);
 	set_opfuncid(castNode(OpExpr, comparison_expr));
 
-	skip_scan_path->skip_clause = make_simple_restrictinfo(comparison_expr);
+	skip_scan_path->skip_clause = make_simple_restrictinfo_compat(root, comparison_expr);
 
 	return true;
 }

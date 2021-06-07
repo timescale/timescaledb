@@ -82,12 +82,13 @@ pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_
 				{
 					compressed_rel->baserestrictinfo =
 						lappend(compressed_rel->baserestrictinfo,
-								make_simple_restrictinfo(lfirst(lc_and)));
+								make_simple_restrictinfo_compat(root, lfirst(lc_and)));
 				}
 			}
 			else
 				compressed_rel->baserestrictinfo =
-					lappend(compressed_rel->baserestrictinfo, make_simple_restrictinfo(expr));
+					lappend(compressed_rel->baserestrictinfo,
+							make_simple_restrictinfo_compat(root, expr));
 		}
 		/* We need to check the restriction clause on the decompress node if the clause can't be
 		 * pushed down or needs re-checking */
