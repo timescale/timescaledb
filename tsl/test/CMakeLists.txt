@@ -63,13 +63,11 @@ if (TAP_CHECKS)
   add_custom_target(provecheck
     COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
     COMMAND BUILDIR=${CMAKE_BINARY_DIR}
-    TESTDIR=${CMAKE_CURRENT_BINARY_DIR}
     PATH="${PG_BINDIR}:$ENV{PATH}"
-    PGPORT=6${TEST_PGPORT_LOCAL}
     PG_REGRESS=${PG_REGRESS}
-    ${PROVE} -I "${PG_SOURCE_DIR}/src/test/perl"
-    -I "${CMAKE_SOURCE_DIR}/test/perl"
-    t/*.pl
+    SRC_DIR=${PG_SOURCE_DIR}
+    CM_SRC_DIR=${CMAKE_SOURCE_DIR}
+    ${PRIMARY_TEST_DIR}/pg_prove.sh
     USES_TERMINAL)
   list(APPEND _install_checks provecheck)
 endif()
