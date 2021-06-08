@@ -262,7 +262,6 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,
 										  unused_invalidation_range,
-										  refresh->cagg.data.bucket_width,
 										  chunk_id);
 }
 
