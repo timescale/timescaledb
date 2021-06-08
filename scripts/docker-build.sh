@@ -17,6 +17,7 @@ TAG_NAME=${TAG_NAME:-$GIT_ID}
 BUILD_TYPE=${BUILD_TYPE:-Debug}
 USE_OPENSSL=${USE_OPENSSL:-true}
 PUSH_PG_IMAGE=${PUSH_PG_IMAGE:-false}
+GENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT:-OFF}
 
 # Full image identifiers
 PG_IMAGE=${BUILD_IMAGE_NAME}:${PG_IMAGE_TAG}
@@ -54,7 +55,7 @@ create_postgres_build_image() {
     docker run -d --name ${BUILD_CONTAINER_NAME} --env POSTGRES_HOST_AUTH_METHOD=trust -v ${BASE_DIR}:/src postgres:${PG_IMAGE_TAG}
 
     # Install build dependencies
-    docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps gdb coreutils dpkg-dev gcc git libc-dev make cmake util-linux-dev diffutils openssl-dev && mkdir -p /build/debug"
+    docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c "apk add --no-cache --virtual .build-deps postgresql-dev gdb coreutils dpkg-dev gcc git libc-dev make cmake util-linux-dev diffutils openssl-dev && mkdir -p /build/debug"
     docker commit -a $USER -m "TimescaleDB build base image version $PG_IMAGE_TAG" ${BUILD_CONTAINER_NAME} ${image}
     remove_build_container ${BUILD_CONTAINER_NAME}
 
@@ -76,8 +77,8 @@ build_timescaledb()
     run_postgres_build_image ${PG_IMAGE}
 
     # Build and install the extension with debug symbols and assertions
-    tar -c -C ${BASE_DIR} {src,sql,test,scripts,tsl,version.config,CMakeLists.txt,timescaledb.control.in} | docker cp - ${BUILD_CONTAINER_NAME}:/build/
-    docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c "cd /build/debug && cmake -DUSE_OPENSSL=${USE_OPENSSL} -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=${BUILD_TYPE} .. && make && make install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample && cd / && rm -rf /build"
+    tar -c -C ${BASE_DIR} {cmake,src,sql,test,scripts,tsl,version.config,CMakeLists.txt,timescaledb.control.in} | docker cp - ${BUILD_CONTAINER_NAME}:/build/
+    docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c "cd /build/debug && cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DUSE_OPENSSL=${USE_OPENSSL} -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src && make && make install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample && cd / && rm -rf /build"
     if [ $? -ne 0 ]; then
       echo "Building timescaledb failed"
       return 1
