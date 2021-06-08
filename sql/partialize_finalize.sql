@@ -17,3 +17,9 @@ RETURNS anyelement
 AS '@MODULE_PATHNAME@', 'ts_finalize_agg_ffunc'
 LANGUAGE C IMMUTABLE ;
 
+CREATE OR REPLACE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT,  inner_agg_collation_schema NAME,  inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val anyelement) (
+    SFUNC = _timescaledb_internal.finalize_agg_sfunc,
+    STYPE = internal,
+    FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
+    FINALFUNC_EXTRA
+);
