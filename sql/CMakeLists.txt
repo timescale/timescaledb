@@ -1,68 +1,6 @@
 set(INSTALL_FILE ${PROJECT_NAME}--${PROJECT_VERSION_MOD}.sql)
 
-# Source files that define the schemas and tables for our metadata
-set(PRE_INSTALL_SOURCE_FILES
-    pre_install/schemas.sql # Must be first
-    pre_install/types.pre.sql
-    pre_install/types.functions.sql
-    pre_install/types.post.sql # Must be before tables.sql
-    pre_install/tables.sql
-    pre_install/insert_data.sql
-    pre_install/bgw_scheduler_startup.sql
-    pre_install/fdw_functions.sql
-    pre_install/timescaledb_fdw.sql)
-
-# Things like aggregate functions cannot be REPLACEd and really need to be
-# created just once(like PRE_INSTALL_SOURCE_FILES) but unlike
-# PRE_INSTALL_SOURCE_FILES these have to be loaded after everything else is
-# loaded.
-set(IMMUTABLE_API_SOURCE_FILES aggregates.sql)
-
-# The rest of the source files defining mostly functions
-set(SOURCE_FILES
-    pre_install/types.functions.sql
-    pre_install/fdw_functions.sql
-    hypertable.sql
-    chunk.sql
-    data_node.sql
-    ddl_internal.sql
-    ddl_experimental.sql
-    util_time.sql
-    util_internal_table_ddl.sql
-    chunk_constraint.sql
-    hypertable_constraint.sql
-    partitioning.sql
-    schema_info.sql
-    ddl_api.sql
-    ddl_triggers.sql
-    bookend.sql
-    time_bucket.sql
-    time_bucket_ng.sql
-    version.sql
-    size_utils.sql
-    histogram.sql
-    cache.sql
-    bgw_scheduler.sql
-    metadata.sql
-    dist_internal.sql
-    views.sql
-    gapfill.sql
-    maintenance_utils.sql
-    partialize_finalize.sql
-    restoring.sql
-    job_api.sql
-    policy_api.sql
-    policy_internal.sql)
-
-# These files should be pre-pended to update scripts so that they are executed
-# before anything else during updates
-set(PRE_UPDATE_FILES updates/pre-update.sql)
-
-# The POST_UPDATE_FILES should be executed as the last part of the update
-# script. sets state for executing POST_UPDATE_FILES during ALTER EXTENSION
-set(SET_POST_UPDATE_STAGE updates/set_post_update_stage.sql)
-set(UNSET_UPDATE_STAGE updates/unset_update_stage.sql)
-set(POST_UPDATE_FILES updates/post-update.sql)
+include(ScriptFiles)
 
 # These files represent the modifications that happen in each version, excluding
 # new objects or updates to functions. We use them to build a path (update
@@ -89,12 +27,50 @@ set(MOD_FILES
     updates/2.2.0--2.2.1.sql
     updates/2.2.1--2.3.0.sql)
 
+# Files for downgrade scripts.
+set(REV_FILES)
+
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
 
 set(TS_MODULE_PATHNAME
     ${MODULE_PATHNAME}
     PARENT_SCOPE)
+
+if(NOT GENERATE_DOWNGRADE_SCRIPT)
+  message(
+    STATUS "Not generating downgrade script: downgrade generation disabled.")
+elseif(NOT GIT_FOUND)
+  message(STATUS "Not generating downgrade script: Git not available.")
+else()
+  generate_downgrade_script(
+    SOURCE_VERSION
+    ${PROJECT_VERSION_MOD}
+    TARGET_VERSION
+    ${UPDATE_FROM_VERSION}
+    INPUT_DIRECTORY
+    ${CMAKE_CURRENT_SOURCE_DIR}/updates
+    FILES
+    reverse-dev.sql)
+  foreach(_downgrade_file ${REV_FILES})
+    if(${_downgrade_file} MATCHES
+       "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
+      set(_source_version ${CMAKE_MATCH_1})
+      set(_target_version ${CMAKE_MATCH_2})
+      generate_downgrade_script(
+        SOURCE_VERSION
+        ${_source_version}
+        TARGET_VERSION
+        ${_target_version}
+        INPUT_DIRECTORY
+        ${CMAKE_CURRENT_SOURCE_DIR}/updates
+        FILES
+        ${_downgrade_file})
+    else()
+      message(FATAL_ERROR "${_downgrade_file} is not a downgrade file")
+    endif()
+  endforeach()
+endif()
 
 # Function to replace @MODULE_PATHNAME@ in source files, producing an output
 # file in the build dir
