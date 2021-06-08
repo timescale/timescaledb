@@ -47,8 +47,7 @@ void
 continuous_agg_update_materialization(SchemaAndName partial_view,
 									  SchemaAndName materialization_table, Name time_column_name,
 									  InternalTimeRange new_materialization_range,
-									  InternalTimeRange invalidation_range, int64 bucket_width,
-									  int32 chunk_id)
+									  InternalTimeRange invalidation_range, int32 chunk_id)
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
