@@ -1,4 +1,4 @@
-name: Update test
+name: Test Update and Downgrade
 on:
   schedule:
     # run daily 20:00 on master branch
@@ -32,6 +32,54 @@ jobs:
         ./scripts/test_updates_pg${{ matrix.pg_major }}.sh
 
     - name: Update diff
+      if: failure()
+      run: |
+        find . -name "update_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+
+    - name: Upload Artifacts
+      if: failure()
+      uses: actions/upload-artifact@v2
+      with:
+        name: Extension update diff ${{ matrix.pg }}
+        path: update_test.*.diff.*
+
+  downgrade_test:
+    name: Downgrade test PG${{ matrix.pg }}
+    runs-on: 'ubuntu-latest'
+    strategy:
+      matrix:
+        pg: ["12.7","13.3"]
+        include:
+          - pg: 12.7
+            pg_major: 12
+          - pg: 13.3
+            pg_major: 13
+      fail-fast: false
+    env:
+      PG_VERSION: ${{ matrix.pg }}
+      POSTGRES_HOST_AUTH_METHOD: trust
+      GENERATE_DOWNGRADE_SCRIPT: ON
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    # We need the tags to be able to build a downgrade script.
+    - name: Fetch all tags
+      run: git fetch --tags && git tag
+
+    - name: Read version
+      id: read_version
+      shell: perl -n {0} version.config
+      run: |
+        print "::set-output name=from_version::$1\n" if /update_from_version\s*=\s*(\S+)/
+
+    - name: Downgrade tests ${{ matrix.pg }}
+      env:
+        UPDATE_FROM_TAG: ${{ steps.read_version.outputs.from_version }}-pg${{ matrix.pg_major }}
+        TEST_VERSION: v7
+      run: bash scripts/test_downgrade_from_tag.sh
+
+    - name: Downgrade diff
       if: failure()
       run: |
         find . -name "update_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"

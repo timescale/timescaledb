@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.11)
+
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
 include(CheckCCompilerFlag)
+include(GitCommands)
+include(GenerateScripts)
 
 # Function to call pg_config and extract values.
 #
@@ -96,6 +101,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Code coverage is optional and OFF by default
 option(CODECOVERAGE "Enable code coverage for the build" OFF)
+
+# Generate downgrade script
+option(GENERATE_DOWNGRADE_SCRIPT
+       "Generate downgrade script. Defaults to not generate a downgrade script."
+       OFF)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of
