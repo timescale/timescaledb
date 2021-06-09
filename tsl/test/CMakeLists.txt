@@ -67,6 +67,7 @@ if (TAP_CHECKS)
     PG_REGRESS=${PG_REGRESS}
     SRC_DIR=${PG_SOURCE_DIR}
     CM_SRC_DIR=${CMAKE_SOURCE_DIR}
+    PG_LIBDIR=${PG_LIBDIR}
     ${PRIMARY_TEST_DIR}/pg_prove.sh
     USES_TERMINAL)
   list(APPEND _install_checks provecheck)

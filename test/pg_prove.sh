@@ -30,4 +30,9 @@ else
     FINAL_TESTS=$PROVE_TESTS
 fi
 
-${PROVE} -I "${SRC_DIR}/src/test/perl" -I "${CM_SRC_DIR}/test/perl" $FINAL_TESTS
+${PROVE} \
+    -I "${SRC_DIR}/src/test/perl" \
+    -I "${CM_SRC_DIR}/test/perl" \
+    -I "${PG_LIBDIR}/pgxs/src/test/perl" \
+    -I "${PG_LIBDIR}/postgresql/pgxs/src/test/perl" \
+    $FINAL_TESTS
