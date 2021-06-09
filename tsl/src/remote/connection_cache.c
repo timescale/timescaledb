@@ -358,15 +358,18 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 	Datum values[Natts_show_conn];
 	bool nulls[Natts_show_conn] = { false };
 	PGconn *pgconn = remote_connection_get_pg_conn(entry->conn);
+	NameData conn_node_name, conn_user_name, conn_db;
 
-	values[AttrNumberGetAttrOffset(Anum_show_conn_node_name)] =
-		CStringGetDatum(remote_connection_node_name(entry->conn));
-	values[AttrNumberGetAttrOffset(Anum_show_conn_user_name)] =
-		CStringGetDatum(GetUserNameFromId(entry->id.user_id, false));
+	namestrcpy(&conn_node_name, remote_connection_node_name(entry->conn));
+	namestrcpy(&conn_user_name, GetUserNameFromId(entry->id.user_id, false));
+	namestrcpy(&conn_db, PQdb(pgconn));
+
+	values[AttrNumberGetAttrOffset(Anum_show_conn_node_name)] = NameGetDatum(&conn_node_name);
+	values[AttrNumberGetAttrOffset(Anum_show_conn_user_name)] = NameGetDatum(&conn_user_name);
 	values[AttrNumberGetAttrOffset(Anum_show_conn_host)] = CStringGetTextDatum(PQhost(pgconn));
 	values[AttrNumberGetAttrOffset(Anum_show_conn_port)] =
 		Int32GetDatum(pg_atoi(PQport(pgconn), sizeof(int32), '\0'));
-	values[AttrNumberGetAttrOffset(Anum_show_conn_db)] = CStringGetDatum(PQdb(pgconn));
+	values[AttrNumberGetAttrOffset(Anum_show_conn_db)] = NameGetDatum(&conn_db);
 	values[AttrNumberGetAttrOffset(Anum_show_conn_backend_pid)] =
 		Int32GetDatum(PQbackendPID(pgconn));
 	values[AttrNumberGetAttrOffset(Anum_show_conn_status)] =
