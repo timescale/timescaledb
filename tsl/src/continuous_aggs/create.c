@@ -63,7 +63,6 @@
 #include "hypertable_cache.h"
 #include "hypertable.h"
 #include "invalidation.h"
-#include "continuous_aggs/job.h"
 #include "dimension.h"
 #include "continuous_agg.h"
 #include "options.h"

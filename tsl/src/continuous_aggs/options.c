@@ -18,7 +18,6 @@
 #include "hypertable_cache.h"
 #include "cache.h"
 #include "scan_iterator.h"
-#include "job.h"
 
 static void
 update_materialized_only(ContinuousAgg *agg, bool materialized_only)
