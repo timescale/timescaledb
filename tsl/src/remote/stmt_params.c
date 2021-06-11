@@ -179,7 +179,7 @@ stmt_params_convert_values(StmtParams *params, TupleTableSlot *slot, ItemPointer
 	MemoryContext old;
 	int idx;
 	ListCell *lc;
-	int nest_level;
+	int nest_level = 0;
 	bool all_binary;
 	int param_idx = 0;
 
