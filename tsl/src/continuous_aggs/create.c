@@ -48,6 +48,7 @@
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/int8.h>
+#include <utils/regproc.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -979,7 +980,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 	aggref->aggsplit = AGGSPLIT_SIMPLE;
 	aggref->location = -1;
 	/* construct the arguments */
-	agggregate_signature = DatumGetCString(DirectFunctionCall1(regprocedureout, inp->aggfnoid));
+	agggregate_signature = format_procedure_qualified(inp->aggfnoid);
 	aggregate_signature_const = makeConst(TEXTOID,
 										  -1,
 										  DEFAULT_COLLATION_OID,

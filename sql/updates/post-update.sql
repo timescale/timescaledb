@@ -2,12 +2,13 @@
 DO $$
 DECLARE
  vname regclass;
+ materialized_only bool;
  altercmd text;
  ts_version TEXT;
 BEGIN
     SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
 
-    FOR vname IN select format('%I.%I', user_view_schema, user_view_name)::regclass from _timescaledb_catalog.continuous_agg where materialized_only = false
+    FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
     LOOP
         -- the cast from oid to text returns
         -- quote_qualified_identifier (see regclassout).
@@ -17,9 +18,9 @@ BEGIN
         -- to have something more generic, but right now it is just
         -- this case.
         IF ts_version < '2.0.0' THEN
-            altercmd := format('ALTER VIEW %s SET (timescaledb.materialized_only=false) ', vname::text);
+            altercmd := format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
         ELSE
-            altercmd := format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=false) ', vname::text);
+            altercmd := format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
         END IF;
         RAISE INFO 'cmd executed: %', altercmd;
         EXECUTE altercmd;
