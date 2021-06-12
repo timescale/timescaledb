@@ -8,6 +8,11 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #3305 Fix pull_varnos miscomputation of relids set
+* #3327 Make aggregates in caggs fully qualified
+
+**Thanks**
+* @db-adrian for reporting an issue when accessing cagg view through postgres_fdw
+* @fncaldas and @pgwhalen for reporting an issue accessing caggs when public is not in search_path
 
 ## 2.3.0 (2021-05-25)
 
