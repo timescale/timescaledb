@@ -342,32 +342,6 @@ interval_to_int64(Datum interval, Oid type)
 	return 0;
 }
 
-static const char *
-two_buckets_to_str(const ContinuousAgg *cagg)
-{
-	Oid bucket_type;
-	Oid outfuncid;
-	int64 two_buckets;
-	Datum min_range;
-	bool isvarlena;
-
-	if (IS_TIMESTAMP_TYPE(cagg->partition_type))
-		bucket_type = INTERVALOID;
-	else
-		bucket_type = cagg->partition_type;
-
-	two_buckets = ts_time_saturating_add(cagg->data.bucket_width,
-										 cagg->data.bucket_width,
-										 cagg->partition_type);
-
-	min_range = ts_internal_to_interval_value(two_buckets, bucket_type);
-
-	getTypeOutputInfo(bucket_type, &outfuncid, &isvarlena);
-	Assert(!isvarlena);
-
-	return DatumGetCString(OidFunctionCall1(outfuncid, min_range));
-}
-
 /*
  * Enforce that a policy has a refresh window of at least two buckets to
  * ensure we materialize at least one bucket each run.
@@ -401,10 +375,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 				 errmsg("policy refresh window too small"),
 				 errdetail("The start and end offsets must cover at least"
 						   " two buckets in the valid time range of type \"%s\".",
-						   format_type_be(cagg->partition_type)),
-				 errhint("Use a start and end offset that specifies"
-						 " a window of at least %s.",
-						 two_buckets_to_str(cagg))));
+						   format_type_be(cagg->partition_type))));
 }
 
 static void

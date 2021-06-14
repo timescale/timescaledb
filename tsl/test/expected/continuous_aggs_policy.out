@@ -63,12 +63,10 @@ HINT:  Use time interval of type integer with the continuous aggregate.
 SELECT add_continuous_aggregate_policy('mat_m1', 5, 10, '1h'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "integer".
-HINT:  Use a start and end offset that specifies a window of at least 2.
 --refresh window less than two buckets
 SELECT add_continuous_aggregate_policy('mat_m1', 11, 10, '1h'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "integer".
-HINT:  Use a start and end offset that specifies a window of at least 2.
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
@@ -165,20 +163,16 @@ HINT:  Use time interval with a continuous aggregate using timestamp-based time 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '2 days'::interval , '1 day'::interval) ;
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
-HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
 --interval less than two buckets
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '7 days', '1 day', '1 day'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
-HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '14 days', '1 day', '1 day'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
-HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-10 hours', '1 day'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
-HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- Negative start offset gives two bucket window:
@@ -256,11 +250,9 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '900000 years' , '1 h'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "timestamp without time zone".
-HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '301 days', '10 months' , '1 h'::interval);
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "timestamp without time zone".
-HINT:  Use a start and end offset that specifies a window of at least @ 14 days.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 days', '1 h'::interval , '1 h'::interval) as job_id \gset
@@ -325,7 +317,6 @@ ERROR:  smallint out of range
 SELECT add_continuous_aggregate_policy('mat_smallint', 5::smallint, 10::smallint , '1 h'::interval) as job_id \gset
 ERROR:  policy refresh window too small
 DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "smallint".
-HINT:  Use a start and end offset that specifies a window of at least 2.
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('mat_smallint', 15::smallint, 0::smallint , '1 h'::interval) as job_id \gset
