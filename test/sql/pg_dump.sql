@@ -183,6 +183,13 @@ drop function get_sqlstate(TEXT);
 
 \c postgres :ROLE_SUPERUSER
 --need to shutdown workers to use db as template
+--<exclude_from_test>
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
+--</exclude_from_test>
+-- there should be no sessions for that database
+-- columns are explicit so the output is the same on PG12 and PG13 since PG13 has extra column leader_pid
+SELECT datid,datname,pid,usesysid,usename,application_name,client_addr,client_hostname,client_port,backend_start,xact_start,query_start,state_change,wait_event_type,wait_event,state,backend_xid,backend_xmin,query,backend_type FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
+
 CREATE DATABASE db_dump_error WITH TEMPLATE :TEST_DBNAME;
 
 --now test functions for permission errors
