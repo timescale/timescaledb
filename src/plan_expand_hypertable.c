@@ -1160,11 +1160,21 @@ timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 	{
 		FromExpr *f = castNode(FromExpr, node);
 		f->quals = timebucket_annotate(f->quals, ctx);
+		collect_join_quals(f->quals, ctx, false);
 	}
 	else if (IsA(node, JoinExpr))
 	{
 		JoinExpr *j = castNode(JoinExpr, node);
 		j->quals = timebucket_annotate(j->quals, ctx);
+		collect_join_quals(j->quals, ctx, ctx->join_level == 0 && !IS_OUTER_JOIN(j->jointype));
+
+		if (IS_OUTER_JOIN(j->jointype))
+		{
+			ctx->join_level++;
+			bool result = expression_tree_walker(node, timebucket_annotate_walker, ctx);
+			ctx->join_level--;
+			return result;
+		}
 	}
 
 	/* skip processing if we found a chunks_in call for current relation */
