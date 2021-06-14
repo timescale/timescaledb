@@ -8,6 +8,20 @@ on:
       - prerelease_test
   pull_request:
 jobs:
+  cmake_checks:
+    name: Check CMake files
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install prerequisites
+        run: pip install cmakelang
+      - name: Checkout source
+        uses: actions/checkout@v2
+      - name: Run format on CMake files
+        run: |
+          find  -name CMakeLists.txt  -exec cmake-format -i {} +
+          find src test tsl -name '*.cmake' -exec cmake-format -i {} +
+      - name: Check for diff
+        run: git diff --exit-code
   perl_checks:
     name: Check Perl code in tree
     runs-on: ubuntu-20.04

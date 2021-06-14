@@ -1,94 +1,94 @@
 set(PRIMARY_TEST_DIR ${CMAKE_CURRENT_LIST_DIR})
-set(PRIMARY_TEST_DIR ${CMAKE_CURRENT_LIST_DIR} PARENT_SCOPE)
+set(PRIMARY_TEST_DIR
+    ${CMAKE_CURRENT_LIST_DIR}
+    PARENT_SCOPE)
 set(_local_install_checks)
 set(_install_checks)
 
 # Testing support
 find_program(PG_REGRESS pg_regress
-  HINTS
-  "${PG_BINDIR}"
-  "${PG_PKGLIBDIR}/pgxs/src/test/regress/")
+             HINTS "${PG_BINDIR}" "${PG_PKGLIBDIR}/pgxs/src/test/regress/")
 
-find_program(PG_ISOLATION_REGRESS
+find_program(
+  PG_ISOLATION_REGRESS
   NAMES pg_isolation_regress
-  HINTS
-  ${PG_BINDIR}
-  ${PG_PKGLIBDIR}/pgxs/src/test/isolation
-  ${PG_SOURCE_DIR}/src/test/isolation
-  ${BINDIR})
+  HINTS ${PG_BINDIR} ${PG_PKGLIBDIR}/pgxs/src/test/isolation
+        ${PG_SOURCE_DIR}/src/test/isolation ${BINDIR})
 
 include(test-defs.cmake)
 
 if(PG_REGRESS)
   message(STATUS "Using pg_regress ${PG_REGRESS}")
 
-  add_custom_target(regresscheck
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_REGRESS_ENV}
-    TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_REGRESS_OPTS_EXTRA}
-    ${PG_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+  add_custom_target(
+    regresscheck
+    COMMAND
+      ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
+      TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
+      ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
     USES_TERMINAL)
 
-  add_custom_target(regresschecklocal
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_REGRESS_ENV}
-    TEST_PGPORT=${TEST_PGPORT_LOCAL}
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_REGRESS_OPTS_EXTRA}
-    ${PG_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
+  add_custom_target(
+    regresschecklocal
+    COMMAND
+      ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV} TEST_PGPORT=${TEST_PGPORT_LOCAL}
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
+      ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
     USES_TERMINAL)
 
   list(APPEND _local_install_checks regresschecklocal)
   list(APPEND _install_checks regresscheck)
 elseif(REGRESS_CHECKS)
-  message(FATAL_ERROR
-    "Program 'pg_regress' not found, but regressions checks were required.\n"
-    "Skip regression checks using -DREGRESS_CHECKS=OFF")
+  message(
+    FATAL_ERROR
+      "Program 'pg_regress' not found, but regressions checks were required.\n"
+      "Skip regression checks using -DREGRESS_CHECKS=OFF")
 else()
-  message(STATUS "Skipping isolation regress checks since program 'pg_regress' was not found")
+  message(
+    STATUS
+      "Skipping isolation regress checks since program 'pg_regress' was not found"
+  )
 endif()
 
 if(PG_ISOLATION_REGRESS)
   message(STATUS "Using pg_isolation_regress ${PG_ISOLATION_REGRESS}")
 
-  add_custom_target(isolationcheck
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_ISOLATION_REGRESS_ENV}
-    SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
-    TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
-    ${PG_ISOLATION_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+  add_custom_target(
+    isolationcheck
+    COMMAND
+      ${CMAKE_COMMAND} -E env ${PG_ISOLATION_REGRESS_ENV}
+      SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
+      TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
+      ${PG_ISOLATION_REGRESS_OPTS_EXTRA} ${PG_ISOLATION_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
     USES_TERMINAL)
 
-  add_custom_target(isolationchecklocal
-    COMMAND ${CMAKE_COMMAND} -E env
-    ${PG_ISOLATION_REGRESS_ENV}
-    SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
-    TEST_PGPORT=${TEST_PGPORT_LOCAL}
-    ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
-    ${PG_REGRESS_OPTS_BASE}
-    ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
-    ${PG_ISOLATION_REGRESS_OPTS_INOUT}
-    ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
+  add_custom_target(
+    isolationchecklocal
+    COMMAND
+      ${CMAKE_COMMAND} -E env ${PG_ISOLATION_REGRESS_ENV}
+      SPECS_DIR=${CMAKE_CURRENT_SOURCE_DIR}/isolation/specs
+      TEST_PGPORT=${TEST_PGPORT_LOCAL} ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE} ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
+      ${PG_ISOLATION_REGRESS_OPTS_INOUT} ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
     USES_TERMINAL)
 
   list(APPEND _local_install_checks isolationchecklocal)
   list(APPEND _install_checks isolationcheck)
 elseif(REGRESS_CHECKS)
-  message(FATAL_ERROR
-    "Program 'pg_isolation_regress' not found, but regressions checks were required.\n"
-    "Skip regression checks using -DREGRESS_CHECKS=OFF")
+  message(
+    FATAL_ERROR
+      "Program 'pg_isolation_regress' not found, but regressions checks were required.\n"
+      "Skip regression checks using -DREGRESS_CHECKS=OFF")
 else()
-  message(STATUS "Skipping isolation regress checks since program 'pg_isolation_regress' was not found")
+  message(
+    STATUS
+      "Skipping isolation regress checks since program 'pg_isolation_regress' was not found"
+  )
 endif()
 
 # installcheck starts up new temporary instances for testing code
@@ -99,15 +99,15 @@ endif()
 if(_install_checks)
   add_custom_target(installcheck DEPENDS ${_install_checks})
 
-  # Define a post test hook that is invoked after the installcheck
-  # target finishes. One can use add_dependencies on post hook target
-  # to run other targets after tests complete. This is used, e.g., by
-  # code coverage.
+  # Define a post test hook that is invoked after the installcheck target
+  # finishes. One can use add_dependencies on post hook target to run other
+  # targets after tests complete. This is used, e.g., by code coverage.
   add_custom_target(installcheck-post-hook COMMENT "Post test hook")
   add_custom_command(
     TARGET installcheck
     POST_BUILD
-    COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target installcheck-post-hook)
+    COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target
+            installcheck-post-hook)
 endif()
 
 # installchecklocal tests against an existing postgres instance
@@ -118,10 +118,10 @@ endif()
 add_subdirectory(sql)
 add_subdirectory(isolation)
 
-if (PG_SOURCE_DIR)
+if(PG_SOURCE_DIR)
   add_subdirectory(pgtest)
-endif (PG_SOURCE_DIR)
+endif(PG_SOURCE_DIR)
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Debug)
   add_subdirectory(src)
-endif (CMAKE_BUILD_TYPE MATCHES Debug)
+endif(CMAKE_BUILD_TYPE MATCHES Debug)

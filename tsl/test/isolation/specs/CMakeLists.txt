@@ -1,29 +1,25 @@
-## these tests need MODULE_NAME and cannot be added as is to TEST_FILES
-set(TEST_TEMPLATES_MODULE
-  reorder_deadlock.spec.in
-  reorder_vs_insert_other_chunk.spec.in
-)
+# these tests need MODULE_NAME and cannot be added as is to TEST_FILES
+set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
+                          reorder_vs_insert_other_chunk.spec.in)
 
 set(TEST_TEMPLATES_MODULE_DEBUG
-  reorder_vs_insert.spec.in
-  reorder_vs_select.spec.in
-  remote_create_chunk.spec.in
-  dist_restore_point.spec.in
-)
+    reorder_vs_insert.spec.in reorder_vs_select.spec.in
+    remote_create_chunk.spec.in dist_restore_point.spec.in)
 
-list(APPEND TEST_FILES
+list(
+  APPEND
+  TEST_FILES
   compression_ddl.spec
   continuous_aggs_insert.spec
   continuous_aggs_multi.spec
   continuous_aggs_concurrent_refresh.spec
-  deadlock_drop_chunks_compress.spec
-)
+  deadlock_drop_chunks_compress.spec)
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-##need to generate MODULE name for the .spec files
+# need to generate MODULE name for the .spec files
 foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
   get_filename_component(TEMPLATE ${TEMP_FILE} NAME_WE)
   set(TEST_FILE ${TEMPLATE}.spec)
@@ -31,7 +27,7 @@ foreach(TEMP_FILE ${TEST_TEMPLATES_MODULE})
   list(APPEND TEST_FILES "${TEST_FILE}")
 endforeach(TEMP_FILE)
 
-##generate PG version specific .spec file
+# generate PG version specific .spec file
 foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   get_filename_component(TEMPLATE ${TEMPLATE_FILE} NAME_WE)
   set(TEST_FILE ${TEMPLATE}-${TEST_VERSION_SUFFIX}.spec)
