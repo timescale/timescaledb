@@ -22,9 +22,9 @@ set(TEST_FILES
   hash.sql
   histogram_test.sql
   index.sql
+  information_views.sql
   insert_many.sql
   insert_single.sql
-  join.sql
   lateral.sql
   misc.sql
   parallel.sql
@@ -32,6 +32,7 @@ set(TEST_FILES
   partitioning.sql
   pg_dump.sql
   pg_dump_unprivileged.sql
+  pg_join.sql
   plain.sql
   plan_hashagg.sql
   plan_ordered_append.sql
@@ -50,7 +51,6 @@ set(TEST_FILES
   util.sql
   vacuum.sql
   version.sql
-  views.sql
   license.sql
 )
 

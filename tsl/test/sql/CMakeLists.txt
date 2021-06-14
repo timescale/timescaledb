@@ -51,7 +51,6 @@ set(TEST_FILES_DEBUG
   dist_compression.sql
   dist_ddl.sql
   dist_grant.sql
-  dist_hypertable_pg12.sql
   dist_partial_agg.sql
   dist_policy.sql
   dist_query.sql

@@ -5023,3 +5023,202 @@ CALL distributed_exec($$ ALTER TABLE disttable DROP COLUMN minmaxes $$);
 INSERT INTO disttable SELECT * FROM datatable;
 ERROR:  [db_dist_hypertable_1]: column "minmaxes" of relation "disttable" does not exist
 \set ON_ERROR_STOP 1
+DROP TABLE disttable;
+-- Create a new table access method by reusing heap handler
+CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler;
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler;
+$$);
+NOTICE:  [db_dist_hypertable_1]: 
+CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler
+NOTICE:  [db_dist_hypertable_2]: 
+CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler
+NOTICE:  [db_dist_hypertable_3]: 
+CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Create distributed hypertable using non-default access method
+CREATE TABLE disttable(time timestamptz NOT NULL, device int, temp_c float, temp_f float GENERATED ALWAYS AS (temp_c * 9 / 5 + 32) STORED) USING test_am;
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            28 | public      | disttable  | t
+(1 row)
+
+-- Make sure that distributed hypertable created on data nodes is
+-- using the correct table access method
+SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
+
+SELECT amname AS hypertable_amname
+FROM pg_class cl, pg_am am
+WHERE cl.oid = 'disttable'::regclass
+AND cl.relam = am.oid;
+$$);
+NOTICE:  [db_dist_hypertable_1]: 
+
+SELECT amname AS hypertable_amname
+FROM pg_class cl, pg_am am
+WHERE cl.oid = 'disttable'::regclass
+AND cl.relam = am.oid
+NOTICE:  [db_dist_hypertable_1]:
+hypertable_amname
+-----------------
+test_am          
+(1 row)
+
+
+NOTICE:  [db_dist_hypertable_2]: 
+
+SELECT amname AS hypertable_amname
+FROM pg_class cl, pg_am am
+WHERE cl.oid = 'disttable'::regclass
+AND cl.relam = am.oid
+NOTICE:  [db_dist_hypertable_2]:
+hypertable_amname
+-----------------
+test_am          
+(1 row)
+
+
+NOTICE:  [db_dist_hypertable_3]: 
+
+SELECT amname AS hypertable_amname
+FROM pg_class cl, pg_am am
+WHERE cl.oid = 'disttable'::regclass
+AND cl.relam = am.oid
+NOTICE:  [db_dist_hypertable_3]:
+hypertable_amname
+-----------------
+test_am          
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Check that basic operations are working as expected
+INSERT INTO disttable VALUES
+       ('2017-01-01 06:01', 1, -10.0),
+       ('2017-01-01 09:11', 3, -5.0),
+       ('2017-01-01 08:01', 1, 1.0),
+       ('2017-01-02 08:01', 2, 5.0),
+       ('2018-07-02 08:01', 87, 10.0),
+       ('2018-07-01 06:01', 13, 15.0),
+       ('2018-07-01 09:11', 90, 20.0),
+       ('2018-07-01 08:01', 29, 24.0);
+SELECT * FROM disttable ORDER BY time;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Sun Jan 01 06:01:00 2017 PST |      1 |    -10 |     14
+ Sun Jan 01 08:01:00 2017 PST |      1 |      1 |   33.8
+ Sun Jan 01 09:11:00 2017 PST |      3 |     -5 |     23
+ Mon Jan 02 08:01:00 2017 PST |      2 |      5 |     41
+ Sun Jul 01 06:01:00 2018 PDT |     13 |     15 |     59
+ Sun Jul 01 08:01:00 2018 PDT |     29 |     24 |   75.2
+ Sun Jul 01 09:11:00 2018 PDT |     90 |     20 |     68
+ Mon Jul 02 08:01:00 2018 PDT |     87 |     10 |     50
+(8 rows)
+
+-- Show that GENERATED columns work for INSERT with RETURNING clause
+-- (should use DataNodeCopy)
+TRUNCATE disttable;
+EXPLAIN VERBOSE
+INSERT INTO disttable VALUES ('2017-08-01 06:01', 1, 35.0) RETURNING *;
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=28)
+   Output: disttable."time", disttable.device, disttable.temp_c, disttable.temp_f
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
+   ->  Insert on public.disttable  (cost=0.00..0.01 rows=1 width=28)
+         Output: disttable."time", disttable.device, disttable.temp_c, disttable.temp_f
+         ->  Custom Scan (DataNodeCopy)  (cost=0.00..0.01 rows=1 width=28)
+               Output: 'Tue Aug 01 06:01:00 2017 PDT'::timestamp with time zone, 1, '35'::double precision, NULL::double precision
+               Remote SQL: COPY public.disttable ("time", device, temp_c) FROM STDIN
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=28)
+                     Output: 'Tue Aug 01 06:01:00 2017 PDT'::timestamp with time zone, 1, '35'::double precision, NULL::double precision
+                     ->  Result  (cost=0.00..0.01 rows=1 width=28)
+                           Output: 'Tue Aug 01 06:01:00 2017 PDT'::timestamp with time zone, 1, '35'::double precision, NULL::double precision
+(13 rows)
+
+INSERT INTO disttable VALUES ('2017-08-01 06:01', 1, 35.0) RETURNING *;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Tue Aug 01 06:01:00 2017 PDT |      1 |     35 |     95
+(1 row)
+
+-- Same values returned with SELECT:
+SELECT * FROM disttable ORDER BY 1;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Tue Aug 01 06:01:00 2017 PDT |      1 |     35 |     95
+(1 row)
+
+UPDATE disttable SET temp_c=40.0 WHERE device=1;
+SELECT * FROM disttable ORDER BY 1;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Tue Aug 01 06:01:00 2017 PDT |      1 |     40 |    104
+(1 row)
+
+-- Insert another value
+INSERT INTO disttable VALUES ('2017-09-01 06:01', 2, 30.0);
+SELECT * FROM disttable ORDER BY 1;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Tue Aug 01 06:01:00 2017 PDT |      1 |     40 |    104
+ Fri Sep 01 06:01:00 2017 PDT |      2 |     30 |     86
+(2 rows)
+
+-- Delete a value based on the generated column
+DELETE FROM disttable WHERE temp_f=104;
+SELECT * FROM disttable ORDER BY 1;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Fri Sep 01 06:01:00 2017 PDT |      2 |     30 |     86
+(1 row)
+
+-- Test also with DataNodeDispatch
+TRUNCATE disttable;
+SET timescaledb.enable_distributed_insert_with_copy=false;
+EXPLAIN VERBOSE
+INSERT INTO disttable VALUES ('2017-09-01 06:01', 5, 40.0) RETURNING *;
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=28)
+   Output: disttable."time", disttable.device, disttable.temp_c, disttable.temp_f
+ Insert on distributed hypertable public.disttable
+   Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
+   ->  Insert on public.disttable  (cost=0.00..0.01 rows=1 width=28)
+         Output: disttable."time", disttable.device, disttable.temp_c, disttable.temp_f
+         ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=28)
+               Output: 'Fri Sep 01 06:01:00 2017 PDT'::timestamp with time zone, 5, '40'::double precision, NULL::double precision
+               Batch size: 1000
+               Remote SQL: INSERT INTO public.disttable("time", device, temp_c) VALUES ($1, $2, $3), ..., ($2998, $2999, $3000) RETURNING "time", device, temp_c, temp_f
+               ->  Custom Scan (ChunkDispatch)  (cost=0.00..0.01 rows=1 width=28)
+                     Output: 'Fri Sep 01 06:01:00 2017 PDT'::timestamp with time zone, 5, '40'::double precision, NULL::double precision
+                     ->  Result  (cost=0.00..0.01 rows=1 width=28)
+                           Output: 'Fri Sep 01 06:01:00 2017 PDT'::timestamp with time zone, 5, '40'::double precision, NULL::double precision
+(14 rows)
+
+INSERT INTO disttable VALUES ('2017-09-01 06:01', 5, 40.0) RETURNING *;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Fri Sep 01 06:01:00 2017 PDT |      5 |     40 |    104
+(1 row)
+
+-- Generated columns with SELECT
+SELECT * FROM disttable ORDER BY 1;
+             time             | device | temp_c | temp_f 
+------------------------------+--------+--------+--------
+ Fri Sep 01 06:01:00 2017 PDT |      5 |     40 |    104
+(1 row)
+
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
