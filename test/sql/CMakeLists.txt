@@ -66,6 +66,7 @@ set(TEST_TEMPLATES
   partitionwise.sql.in
   plan_expand_hypertable.sql.in
   plan_hypertable_inline.sql.in
+  rowsecurity.sql.in
   update.sql.in
 )
 
@@ -100,18 +101,6 @@ if (CMAKE_BUILD_TYPE MATCHES Debug)
     with_clause_parser.sql
   )
 endif (CMAKE_BUILD_TYPE MATCHES Debug)
-
-if(${PG_VERSION_MAJOR} EQUAL "12")
-  list(APPEND TEST_FILES
-    rowsecurity-12.sql
-  )
-endif()
-
-if(${PG_VERSION_MAJOR} EQUAL "13")
-  list(APPEND TEST_FILES
-    rowsecurity-13.sql
-  )
-endif()
 
 if ((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
   list(APPEND TEST_FILES
