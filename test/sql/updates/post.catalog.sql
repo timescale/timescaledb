@@ -21,7 +21,7 @@ SELECT nspname AS schema,
        relname AS name,
        unnest(initprivs)::text AS initpriv
 FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
-            LEFT JOIN pg_init_privs ON objoid = cl.oid
+            LEFT JOIN pg_init_privs ON objoid = cl.oid AND objsubid = 0
 WHERE classoid = 'pg_class'::regclass
   AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
 ORDER BY schema, name, initpriv;
