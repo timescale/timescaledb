@@ -711,6 +711,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 			TupleInfo *ti;
 			MemoryContext oldmctx;
 			Invalidation logentry;
+			int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
 
 			oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 			ti = ts_scan_iterator_tuple_info(&iterator);
@@ -719,7 +720,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 														   ti,
 														   cagg_hyper_id,
 														   state->dimtype,
-														   cagg->data.bucket_width);
+														   bucket_width);
 
 			if (!IS_VALID_INVALIDATION(&mergedentry))
 			{
@@ -882,12 +883,10 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		MemoryContext oldmctx;
 		Invalidation logentry;
+		int64 bucket_width = ts_continuous_agg_bucket_width(&state->cagg);
 
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
-		invalidation_entry_set_from_cagg_invalidation(&logentry,
-													  ti,
-													  state->dimtype,
-													  state->cagg.data.bucket_width);
+		invalidation_entry_set_from_cagg_invalidation(&logentry, ti, state->dimtype, bucket_width);
 
 		if (!IS_VALID_INVALIDATION(&mergedentry))
 			mergedentry = logentry;

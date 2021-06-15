@@ -871,6 +871,12 @@ typedef struct FormData_continuous_agg
 	NameData user_view_name;
 	NameData partial_view_schema;
 	NameData partial_view_name;
+	/*
+	 * Don't access bucket_width directly to determine the width of the bucket.
+	 * Use corresponding procedures instead:
+	 * - ts_continuous_agg_bucket_width
+	 * - ts_continuous_agg_max_bucket_width
+	 */
 	int64 bucket_width;
 	NameData direct_view_schema;
 	NameData direct_view_name;
