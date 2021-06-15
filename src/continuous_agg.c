@@ -1001,12 +1001,13 @@ watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
 	if (!max_isnull)
 	{
 		int64 value;
+		int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
 
 		/* The materialized hypertable is already bucketed, which means the
 		 * max is the start of the last bucket. Add one bucket to move to the
 		 * point where the materialized data ends. */
 		value = ts_time_value_to_internal(maxdat, timetype);
-		w->value = ts_time_saturating_add(value, cagg->data.bucket_width, timetype);
+		w->value = ts_time_saturating_add(value, bucket_width, timetype);
 	}
 	else
 	{
@@ -1066,4 +1067,30 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	watermark = watermark_create(cagg, TopTransactionContext);
 
 	PG_RETURN_INT64(watermark->value);
+}
+
+/*
+ * Determines bucket width for given continuous aggregate.
+ *
+ * Currently all buckets are fixed in size but this is going to change in the
+ * future. Any code that needs to know bucket width has to determine it using
+ * this procedure instead of accessing any ContinuousAgg fields directly.
+ */
+int64
+ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
+{
+	return agg->data.bucket_width;
+}
+
+/*
+ * Determines maximum possible bucket width for given continuous aggregate.
+ *
+ * E.g. for monthly continuous aggreagtes this procedure will return 31 days.
+ * This is not true for ts_continuous_agg_bucket_width which may use additional
+ * arguments to determine the width of a concrete bucket.
+ */
+int64
+ts_continuous_agg_max_bucket_width(const ContinuousAgg *agg)
+{
+	return agg->data.bucket_width;
 }
