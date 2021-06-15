@@ -48,9 +48,9 @@ INSERT INTO saved_privs
 SELECT nspname, relname, relacl, initprivs
   FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
                    JOIN pg_init_privs ip ON ip.objoid = cl.oid AND ip.objsubid = 0
-WHERE nspname IN ('_timescaledb_catalog', '_timescaledb_config')
+WHERE classoid = 'pg_class'::regclass
+  AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
    OR nspname = '_timescaledb_internal'
   AND relname IN ('hypertable_chunk_local_size', 'compressed_chunk_stats',
                   'bgw_job_stat', 'bgw_policy_chunk_stats');
-
 
