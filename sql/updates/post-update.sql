@@ -46,7 +46,21 @@ INSERT INTO saved_privs
         WHERE tmpnsp = '_timescaledb_catalog' AND tmpname = 'chunk')
        FROM pg_class JOIN pg_namespace ns ON ns.oid = relnamespace
          LEFT JOIN saved_privs ON tmpnsp = nspname AND tmpname = relname
-      WHERE nspname IN ('_timescaledb_catalog', '_timescaledb_config')
+      WHERE relkind IN ('r', 'v') AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
+        OR nspname = '_timescaledb_internal'
+        AND relname IN ('hypertable_chunk_local_size', 'compressed_chunk_stats',
+                        'bgw_job_stat', 'bgw_policy_chunk_stats')
+ON CONFLICT DO NOTHING;
+
+-- The above is good enough for tables and views. However sequences need to
+-- use the "chunk_id_seq" catalog sequence as a template
+INSERT INTO saved_privs
+     SELECT nspname, relname, relacl,
+        (SELECT tmpini FROM saved_privs
+	     WHERE tmpnsp = '_timescaledb_catalog' AND tmpname = 'chunk_id_seq')
+        FROM pg_class JOIN pg_namespace ns ON ns.oid = relnamespace
+		    LEFT JOIN saved_privs ON tmpnsp = nspname AND tmpname = relname
+      WHERE relkind IN ('S') AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
         OR nspname = '_timescaledb_internal'
         AND relname IN ('hypertable_chunk_local_size', 'compressed_chunk_stats',
                         'bgw_job_stat', 'bgw_policy_chunk_stats')
