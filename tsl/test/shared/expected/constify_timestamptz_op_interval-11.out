@@ -13,9 +13,9 @@ FROM metrics;
              QUERY PLAN             
 ------------------------------------
  Append
-   ->  Seq Scan on _hyper_1_1_chunk
-   ->  Seq Scan on _hyper_1_2_chunk
-   ->  Seq Scan on _hyper_1_3_chunk
+   ->  Seq Scan on _hyper_X_X_chunk
+   ->  Seq Scan on _hyper_X_X_chunk
+   ->  Seq Scan on _hyper_X_X_chunk
 (4 rows)
 
 -- all of these should have all chunk exclusion happening at plan time
@@ -26,7 +26,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
 (3 rows)
 
@@ -37,7 +37,7 @@ WHERE time < '2000-01-01'::timestamptz + '6h'::interval;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone + '@ 6 hours'::interval))
 (3 rows)
 
@@ -48,7 +48,7 @@ WHERE time < '6h'::interval + '2000-01-01'::timestamptz;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone + '@ 6 hours'::interval))
 (3 rows)
 
@@ -59,7 +59,7 @@ WHERE time < '2000-01-07'::timestamptz - '7 day 8 seconds'::interval;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone - '@ 7 days 8 secs'::interval))
 (3 rows)
 
@@ -70,7 +70,7 @@ WHERE time < '2000-03-01'::timestamptz - '60 day'::interval;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Wed Mar 01 00:00:00 2000 PST'::timestamp with time zone - '@ 60 days'::interval))
 (3 rows)
 
@@ -82,7 +82,7 @@ WHERE '2000-01-01'::timestamptz - '6h'::interval > time;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
 (3 rows)
 
@@ -93,7 +93,7 @@ WHERE '2000-01-07'::timestamptz - '7 day'::interval > time;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone - '@ 7 days'::interval))
 (3 rows)
 
@@ -104,7 +104,7 @@ WHERE '2000-03-01'::timestamptz - '60 day'::interval > time;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Wed Mar 01 00:00:00 2000 PST'::timestamp with time zone - '@ 60 days'::interval))
 (3 rows)
 
@@ -117,7 +117,7 @@ WHERE time > '2000-01-10'::timestamptz - '6h'::interval
                                                                                                       QUERY PLAN                                                                                                       
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > ('Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval)) AND ("time" < ('Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone + '@ 6 hours'::interval)))
 (3 rows)
 
@@ -130,7 +130,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Scan using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk
+   ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
          Filter: (device_id = 1)
 (4 rows)
@@ -143,9 +143,9 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_3_13_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
          Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-         ->  Seq Scan on compress_hyper_4_18_chunk
+         ->  Seq Scan on compress_hyper_X_X_chunk
                Filter: (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
 (5 rows)
 
@@ -158,9 +158,9 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval
                                                                     QUERY PLAN                                                                     
 ---------------------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_5_19_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
          Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-         ->  Seq Scan on compress_hyper_6_36_chunk
+         ->  Seq Scan on compress_hyper_X_X_chunk
                Filter: ((device_id = 1) AND (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval)))
 (5 rows)
 
@@ -172,11 +172,11 @@ WHERE time < '2000-02-01'::timestamptz - '1 month'::interval;
                                                    QUERY PLAN                                                    
 -----------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon'::interval))
 (7 rows)
 
@@ -187,11 +187,11 @@ WHERE time < '2000-02-01'::timestamptz - '1 month - 1 day'::interval;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon -1 days'::interval))
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon -1 days'::interval))
-   ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon -1 days'::interval))
 (7 rows)
 
@@ -202,11 +202,11 @@ WHERE time < '2000-02-01'::timestamptz - '1 month + 1 day'::interval;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon 1 day'::interval))
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon 1 day'::interval))
-   ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon 1 day'::interval))
 (7 rows)
 
@@ -217,11 +217,11 @@ WHERE '2000-02-01'::timestamptz - '1 year'::interval > time;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 year'::interval))
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 year'::interval))
-   ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 year'::interval))
 (7 rows)
 
@@ -233,11 +233,11 @@ WHERE time < '1 day' + '2000-02-01'::timestamptz - '1 month'::interval;
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < (('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone + '@ 1 day'::interval) - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < (('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone + '@ 1 day'::interval) - '@ 1 mon'::interval))
-   ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < (('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone + '@ 1 day'::interval) - '@ 1 mon'::interval))
 (7 rows)
 
@@ -249,11 +249,11 @@ WHERE time > now() - '6h'::interval;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Append
-   ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 6 hours'::interval))
-   ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 6 hours'::interval))
-   ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 6 hours'::interval))
 (7 rows)
 
