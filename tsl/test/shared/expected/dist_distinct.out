@@ -39,17 +39,17 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
 (23 rows)
 
@@ -74,17 +74,17 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: (metrics_dist_1.device_id * metrics_dist_1.v1)
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY (device_id * v1) ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: (metrics_dist_2.device_id * metrics_dist_2.v1)
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY (device_id * v1) ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: (metrics_dist_3.device_id * metrics_dist_3.v1)
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY (device_id * v1) ASC NULLS LAST
 (23 rows)
 
@@ -108,80 +108,80 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_37_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk.device_id
                                ->  Merge Append
-                                     Sort Key: _dist_hyper_7_37_chunk.device_id
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_37_chunk
-                                           Output: _dist_hyper_7_37_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_37_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_37_chunk
-                                                 Output: _dist_hyper_7_37_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_37_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_40_chunk
-                                           Output: _dist_hyper_7_40_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_40_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_40_chunk
-                                                 Output: _dist_hyper_7_40_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_40_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_43_chunk
-                                           Output: _dist_hyper_7_43_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_43_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_43_chunk
-                                                 Output: _dist_hyper_7_43_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_43_chunk.device_id > NULL::integer)
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_38_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk.device_id
                                ->  Merge Append
-                                     Sort Key: _dist_hyper_7_38_chunk.device_id
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_38_chunk
-                                           Output: _dist_hyper_7_38_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_38_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_38_chunk
-                                                 Output: _dist_hyper_7_38_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_38_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_41_chunk
-                                           Output: _dist_hyper_7_41_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_41_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_41_chunk
-                                                 Output: _dist_hyper_7_41_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_41_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_44_chunk
-                                           Output: _dist_hyper_7_44_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_44_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_44_chunk
-                                                 Output: _dist_hyper_7_44_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_44_chunk.device_id > NULL::integer)
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_39_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk.device_id
                                ->  Merge Append
-                                     Sort Key: _dist_hyper_7_39_chunk.device_id
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_39_chunk
-                                           Output: _dist_hyper_7_39_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_39_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_39_chunk
-                                                 Output: _dist_hyper_7_39_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_39_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_42_chunk
-                                           Output: _dist_hyper_7_42_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_42_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_42_chunk
-                                                 Output: _dist_hyper_7_42_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_42_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_45_chunk
-                                           Output: _dist_hyper_7_45_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_45_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_45_chunk
-                                                 Output: _dist_hyper_7_45_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_45_chunk.device_id > NULL::integer)
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
 (86 rows)
 
@@ -204,80 +204,80 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id, NULL::text, 'const1'::text
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_37_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk.device_id
                                ->  Merge Append
-                                     Sort Key: _dist_hyper_7_37_chunk.device_id
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_37_chunk
-                                           Output: _dist_hyper_7_37_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_37_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_37_chunk
-                                                 Output: _dist_hyper_7_37_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_37_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_40_chunk
-                                           Output: _dist_hyper_7_40_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_40_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_40_chunk
-                                                 Output: _dist_hyper_7_40_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_40_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_43_chunk
-                                           Output: _dist_hyper_7_43_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_43_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_43_chunk
-                                                 Output: _dist_hyper_7_43_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_43_chunk.device_id > NULL::integer)
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id, NULL::text, 'const1'::text
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_38_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk.device_id
                                ->  Merge Append
-                                     Sort Key: _dist_hyper_7_38_chunk.device_id
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_38_chunk
-                                           Output: _dist_hyper_7_38_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_38_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_38_chunk
-                                                 Output: _dist_hyper_7_38_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_38_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_41_chunk
-                                           Output: _dist_hyper_7_41_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_41_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_41_chunk
-                                                 Output: _dist_hyper_7_41_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_41_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_44_chunk
-                                           Output: _dist_hyper_7_44_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_44_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_44_chunk
-                                                 Output: _dist_hyper_7_44_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_44_chunk.device_id > NULL::integer)
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id, NULL::text, 'const1'::text
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_39_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk.device_id
                                ->  Merge Append
-                                     Sort Key: _dist_hyper_7_39_chunk.device_id
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_39_chunk
-                                           Output: _dist_hyper_7_39_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_39_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_39_chunk
-                                                 Output: _dist_hyper_7_39_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_39_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_42_chunk
-                                           Output: _dist_hyper_7_42_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_42_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_42_chunk
-                                                 Output: _dist_hyper_7_42_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_42_chunk.device_id > NULL::integer)
-                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_45_chunk
-                                           Output: _dist_hyper_7_45_chunk.device_id
-                                           ->  Index Only Scan using _dist_hyper_7_45_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_45_chunk
-                                                 Output: _dist_hyper_7_45_chunk.device_id
-                                                 Index Cond: (_dist_hyper_7_45_chunk.device_id > NULL::integer)
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
+                                     ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
+                                           Output: _dist_hyper_X_X_chunk.device_id
+                                           ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk.device_id
+                                                 Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
 (86 rows)
 
@@ -300,60 +300,60 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id, metrics_dist_1."time", NULL::text, 'const1'::text
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                     Sort Key: _dist_hyper_7_37_chunk.device_id, _dist_hyper_7_37_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_37_chunk
-                                                 Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_40_chunk
-                                                 Output: _dist_hyper_7_40_chunk."time", _dist_hyper_7_40_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_43_chunk
-                                                 Output: _dist_hyper_7_43_chunk."time", _dist_hyper_7_43_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id, metrics_dist_2."time", NULL::text, 'const1'::text
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Sort
-                               Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                               Sort Key: _dist_hyper_7_38_chunk.device_id, _dist_hyper_7_38_chunk."time"
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                               Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                ->  HashAggregate
-                                     Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                     Group Key: _dist_hyper_7_38_chunk.device_id, _dist_hyper_7_38_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Group Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_38_chunk
-                                                 Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_41_chunk
-                                                 Output: _dist_hyper_7_41_chunk."time", _dist_hyper_7_41_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_44_chunk
-                                                 Output: _dist_hyper_7_44_chunk."time", _dist_hyper_7_44_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id, metrics_dist_3."time", NULL::text, 'const1'::text
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                     Sort Key: _dist_hyper_7_39_chunk.device_id, _dist_hyper_7_39_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_39_chunk
-                                                 Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_42_chunk
-                                                 Output: _dist_hyper_7_42_chunk."time", _dist_hyper_7_42_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_45_chunk
-                                                 Output: _dist_hyper_7_45_chunk."time", _dist_hyper_7_45_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
 (66 rows)
 
@@ -376,60 +376,60 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id, metrics_dist_1."time"
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                     Sort Key: _dist_hyper_7_37_chunk.device_id, _dist_hyper_7_37_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_37_chunk
-                                                 Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_40_chunk
-                                                 Output: _dist_hyper_7_40_chunk."time", _dist_hyper_7_40_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_43_chunk
-                                                 Output: _dist_hyper_7_43_chunk."time", _dist_hyper_7_43_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id, metrics_dist_2."time"
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Sort
-                               Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                               Sort Key: _dist_hyper_7_38_chunk.device_id, _dist_hyper_7_38_chunk."time"
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                               Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                ->  HashAggregate
-                                     Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                     Group Key: _dist_hyper_7_38_chunk.device_id, _dist_hyper_7_38_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Group Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_38_chunk
-                                                 Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_41_chunk
-                                                 Output: _dist_hyper_7_41_chunk."time", _dist_hyper_7_41_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_44_chunk
-                                                 Output: _dist_hyper_7_44_chunk."time", _dist_hyper_7_44_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id, metrics_dist_3."time"
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                     Sort Key: _dist_hyper_7_39_chunk.device_id, _dist_hyper_7_39_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_39_chunk
-                                                 Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_42_chunk
-                                                 Output: _dist_hyper_7_42_chunk."time", _dist_hyper_7_42_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_45_chunk
-                                                 Output: _dist_hyper_7_45_chunk."time", _dist_hyper_7_45_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
 (66 rows)
 
@@ -452,59 +452,59 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id, metrics_dist_1."time"
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                     Sort Key: _dist_hyper_7_37_chunk.device_id, _dist_hyper_7_37_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_37_chunk
-                                                 Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_40_chunk
-                                                 Output: _dist_hyper_7_40_chunk."time", _dist_hyper_7_40_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_43_chunk
-                                                 Output: _dist_hyper_7_43_chunk."time", _dist_hyper_7_43_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id, metrics_dist_2."time"
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                     Sort Key: _dist_hyper_7_38_chunk.device_id, _dist_hyper_7_38_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_38_chunk
-                                                 Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_41_chunk
-                                                 Output: _dist_hyper_7_41_chunk."time", _dist_hyper_7_41_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_44_chunk
-                                                 Output: _dist_hyper_7_44_chunk."time", _dist_hyper_7_44_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id, metrics_dist_3."time"
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
-                               Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
+                               Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                ->  Sort
-                                     Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                     Sort Key: _dist_hyper_7_39_chunk.device_id, _dist_hyper_7_39_chunk."time"
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                     Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                      ->  Append
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_39_chunk
-                                                 Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_42_chunk
-                                                 Output: _dist_hyper_7_42_chunk."time", _dist_hyper_7_42_chunk.device_id
-                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_7_45_chunk
-                                                 Output: _dist_hyper_7_45_chunk."time", _dist_hyper_7_45_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                 Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
 (65 rows)
 
@@ -529,59 +529,59 @@ LIMIT 10) a;
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                                  Output: metrics_dist_1.device_id, metrics_dist_1."time"
                                  Data node: data_node_1
-                                 Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                                 Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                                  Remote EXPLAIN: 
                                    Unique
-                                     Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                      ->  Sort
-                                           Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                           Sort Key: _dist_hyper_7_37_chunk.device_id, _dist_hyper_7_37_chunk."time"
+                                           Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                            ->  Append
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_37_chunk
-                                                       Output: _dist_hyper_7_37_chunk."time", _dist_hyper_7_37_chunk.device_id
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_40_chunk
-                                                       Output: _dist_hyper_7_40_chunk."time", _dist_hyper_7_40_chunk.device_id
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_43_chunk
-                                                       Output: _dist_hyper_7_43_chunk."time", _dist_hyper_7_43_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                                  Output: metrics_dist_2.device_id, metrics_dist_2."time"
                                  Data node: data_node_2
-                                 Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                                 Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                                  Remote EXPLAIN: 
                                    Unique
-                                     Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                      ->  Sort
-                                           Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                           Sort Key: _dist_hyper_7_38_chunk.device_id, _dist_hyper_7_38_chunk."time"
+                                           Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                            ->  Append
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_38_chunk
-                                                       Output: _dist_hyper_7_38_chunk."time", _dist_hyper_7_38_chunk.device_id
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_41_chunk
-                                                       Output: _dist_hyper_7_41_chunk."time", _dist_hyper_7_41_chunk.device_id
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_44_chunk
-                                                       Output: _dist_hyper_7_44_chunk."time", _dist_hyper_7_44_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                                  Output: metrics_dist_3.device_id, metrics_dist_3."time"
                                  Data node: data_node_3
-                                 Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                                 Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                                  Remote EXPLAIN: 
                                    Unique
-                                     Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
+                                     Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
                                      ->  Sort
-                                           Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                           Sort Key: _dist_hyper_7_39_chunk.device_id, _dist_hyper_7_39_chunk."time"
+                                           Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                           Sort Key: _dist_hyper_X_X_chunk.device_id, _dist_hyper_X_X_chunk."time"
                                            ->  Append
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_39_chunk
-                                                       Output: _dist_hyper_7_39_chunk."time", _dist_hyper_7_39_chunk.device_id
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_42_chunk
-                                                       Output: _dist_hyper_7_42_chunk."time", _dist_hyper_7_42_chunk.device_id
-                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_7_45_chunk
-                                                       Output: _dist_hyper_7_45_chunk."time", _dist_hyper_7_45_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
+                                                 ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                                                       Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
  
 (67 rows)
 
@@ -595,127 +595,127 @@ LIMIT 10;
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _dist_hyper_7_37_chunk.device_id
+   Output: _dist_hyper_X_X_chunk.device_id
    ->  Unique
-         Output: _dist_hyper_7_37_chunk.device_id
+         Output: _dist_hyper_X_X_chunk.device_id
          ->  Merge Append
-               Sort Key: _dist_hyper_7_37_chunk.device_id
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_37_chunk
-                     Output: _dist_hyper_7_37_chunk.device_id
+               Sort Key: _dist_hyper_X_X_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_1
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_37_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_37_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_37_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_37_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_37_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_38_chunk
-                     Output: _dist_hyper_7_38_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_2
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_38_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_38_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_38_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_38_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_38_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_39_chunk
-                     Output: _dist_hyper_7_39_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_3
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_39_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_39_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_39_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_39_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_39_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_40_chunk
-                     Output: _dist_hyper_7_40_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_1
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_40_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_40_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_40_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_40_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_40_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_41_chunk
-                     Output: _dist_hyper_7_41_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_2
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_41_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_41_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_41_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_41_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_41_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_42_chunk
-                     Output: _dist_hyper_7_42_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_3
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_42_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_42_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_42_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_42_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_42_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_43_chunk
-                     Output: _dist_hyper_7_43_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_1
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_43_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_43_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_43_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_43_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_43_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_44_chunk
-                     Output: _dist_hyper_7_44_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_2
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_44_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_44_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_44_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_44_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_44_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
-               ->  Foreign Scan on _timescaledb_internal._dist_hyper_7_45_chunk
-                     Output: _dist_hyper_7_45_chunk.device_id
+               ->  Foreign Scan on _timescaledb_internal._dist_hyper_X_X_chunk
+                     Output: _dist_hyper_X_X_chunk.device_id
                      Data node: data_node_3
-                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_7_45_chunk ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM _timescaledb_internal._dist_hyper_X_X_chunk ORDER BY device_id ASC NULLS LAST
                      Remote EXPLAIN: 
                        Unique
                          Output: device_id
-                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_7_45_chunk
+                         ->  Custom Scan (SkipScan) on _timescaledb_internal._dist_hyper_X_X_chunk
                                Output: device_id
-                               ->  Index Only Scan using _dist_hyper_7_45_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_7_45_chunk
+                               ->  Index Only Scan using _dist_hyper_X_X_chunk_metrics_dist_device_id_time_idx on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: device_id
-                                     Index Cond: (_dist_hyper_7_45_chunk.device_id > NULL::integer)
+                                     Index Cond: (_dist_hyper_X_X_chunk.device_id > NULL::integer)
  
 (123 rows)
 
@@ -740,17 +740,17 @@ ORDER BY 1;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1.device_id, metrics_dist_1.device_id
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id, metrics_dist_2.device_id
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id, metrics_dist_3.device_id
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
 (24 rows)
 
@@ -773,17 +773,17 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1."time", metrics_dist_1.device_id, metrics_dist_1.v0, metrics_dist_1.v1, metrics_dist_1.v2, metrics_dist_1.v3
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2."time", metrics_dist_2.device_id, metrics_dist_2.v0, metrics_dist_2.v1, metrics_dist_2.v2, metrics_dist_2.v3
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3."time", metrics_dist_3.device_id, metrics_dist_3.v0, metrics_dist_3.v1, metrics_dist_3.v2, metrics_dist_3.v3
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
 (23 rows)
 
@@ -806,17 +806,17 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: metrics_dist_1."time", metrics_dist_1.device_id, metrics_dist_1.v0, metrics_dist_1.v1, metrics_dist_1.v2, metrics_dist_1.v3
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2."time", metrics_dist_2.device_id, metrics_dist_2.v0, metrics_dist_2.v1, metrics_dist_2.v2, metrics_dist_2.v3
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3."time", metrics_dist_3.device_id, metrics_dist_3.v0, metrics_dist_3.v1, metrics_dist_3.v2, metrics_dist_3.v3
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
@@ -841,17 +841,17 @@ LIMIT 10;
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                                  Output: metrics_dist_1.*
                                  Data node: data_node_1
-                                 Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                                 Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                                  Output: metrics_dist_2.*
                                  Data node: data_node_2
-                                 Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                                 Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                                  Output: metrics_dist_3.*
                                  Data node: data_node_3
-                                 Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                                 Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
 (25 rows)
 
@@ -874,17 +874,17 @@ LIMIT 10;
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                            Output: time_bucket('@ 1 hour'::interval, metrics_dist_1."time")
                            Data node: data_node_1
-                           Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: time_bucket('@ 1 hour'::interval, metrics_dist_2."time")
                            Data node: data_node_2
-                           Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: time_bucket('@ 1 hour'::interval, metrics_dist_3."time")
                            Data node: data_node_3
-                           Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                           Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
 (23 rows)
 
@@ -902,17 +902,17 @@ FROM metrics_dist;
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_1
                      Output: 1, 'constx'::text
                      Data node: data_node_1
-                     Chunks: _dist_hyper_7_37_chunk, _dist_hyper_7_40_chunk, _dist_hyper_7_43_chunk
+                     Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                      Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                      Output: 1, 'constx'::text
                      Data node: data_node_2
-                     Chunks: _dist_hyper_7_38_chunk, _dist_hyper_7_41_chunk, _dist_hyper_7_44_chunk
+                     Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                      Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                      Output: 1, 'constx'::text
                      Data node: data_node_3
-                     Chunks: _dist_hyper_7_39_chunk, _dist_hyper_7_42_chunk, _dist_hyper_7_45_chunk
+                     Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                      Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
 (20 rows)
 
