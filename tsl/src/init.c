@@ -12,8 +12,8 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/reorder_api.h"
-#include "chunk_api.h"
 #include "chunk.h"
+#include "chunk_api.h"
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/compress_utils.h"
@@ -120,6 +120,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,
 	.move_chunk_proc = tsl_move_chunk_proc,
+	.copy_chunk_proc = tsl_copy_chunk_proc,
 	.partialize_agg = tsl_partialize_agg,
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
@@ -165,7 +166,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = chunk_create,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
 	.chunk_drop_replica = chunk_drop_replica,
-	.copy_chunk_data = chunk_copy_data,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.get_and_validate_data_node_list = hypertable_get_and_validate_data_nodes,
 	.timescaledb_fdw_handler = timescaledb_fdw_handler,

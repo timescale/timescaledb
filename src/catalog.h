@@ -1206,15 +1206,13 @@ typedef struct FormData_chunk_copy_activity
 	int32 id;
 	NameData operation_id;
 	int32 backend_pid;
-	text *completed_stage;
+	NameData completed_stage;
 	TimestampTz time_start;
 	int32 chunk_id;
 	NameData source_node_name;
 	NameData dest_node_name;
 	bool delete_on_src_node;
 } FormData_chunk_copy_activity;
-
-typedef FormData_chunk_copy_activity *Form_chunk_copy_activity;
 
 enum
 {
