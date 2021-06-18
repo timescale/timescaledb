@@ -25,3 +25,15 @@ CREATE OR REPLACE FUNCTION timescaledb_experimental.refresh_continuous_aggregate
     continuous_aggregate     REGCLASS,
     hypertable_chunk         REGCLASS
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh_chunk' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE PROCEDURE timescaledb_experimental.move_chunk(
+    chunk REGCLASS,
+    source_node NAME = NULL,
+    destination_node NAME = NULL)
+AS '@MODULE_PATHNAME@', 'ts_move_chunk_proc' LANGUAGE C;
+
+CREATE OR REPLACE PROCEDURE timescaledb_experimental.copy_chunk(
+    chunk REGCLASS,
+    source_node NAME = NULL,
+    destination_node NAME = NULL)
+AS '@MODULE_PATHNAME@', 'ts_copy_chunk_proc' LANGUAGE C;

@@ -80,6 +80,7 @@ typedef struct CrossModuleFunctions
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
 	PGFunction move_chunk_proc;
+	PGFunction copy_chunk_proc;
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);
 	void (*sql_drop)(List *dropped_objects);
@@ -133,7 +134,6 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_set_default_data_node;
 	PGFunction create_chunk;
 	PGFunction show_chunk;
-	PGFunction copy_chunk_data;
 
 	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);
 	void (*hypertable_make_distributed)(Hypertable *ht, List *data_node_names);
