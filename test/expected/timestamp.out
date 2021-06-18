@@ -1223,6 +1223,204 @@ FROM unnest(ARRAY[
     ]) AS time;
 ERROR:  timestamp out of range
 \set ON_ERROR_STOP 1
+------------------------------------------------------------
+--- Test timescaledb_experimental.time_bucket_ng function --
+------------------------------------------------------------
+-- not supported functionality
+\set ON_ERROR_STOP 0
+SELECT timescaledb_experimental.time_bucket_ng('1 hour', '2001-02-03' :: date) AS result;
+ERROR:  interval must be either days and weeks, or months and years
+SELECT timescaledb_experimental.time_bucket_ng('0 days', '2001-02-03' :: date) AS result;
+ERROR:  interval must be at least one day
+SELECT timescaledb_experimental.time_bucket_ng('1 month', '2001-02-03' :: date, origin => '2000-01-02') AS result;
+ERROR:  origin must be the first day of the month
+SELECT timescaledb_experimental.time_bucket_ng('1 month', '2000-01-02' :: date, origin => '2001-01-01') AS result;
+ERROR:  origin must be before the given date
+SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, origin => '2001-01-01') AS result;
+ERROR:  origin must be before the given date
+\set ON_ERROR_STOP 1
+-- infinity
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+-- wrappers
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp) AS result;
+          result          
+--------------------------
+ Fri Jan 01 00:00:00 2021
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz) AS result;
+            result            
+------------------------------
+ Fri Jan 01 00:00:00 2021 EST
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp, origin => '2021-06-01') AS result;
+          result          
+--------------------------
+ Tue Jun 01 00:00:00 2021
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz, origin => '2021-06-01') AS result;
+            result            
+------------------------------
+ Tue Jun 01 00:00:00 2021 EDT
+(1 row)
+
+-- N days / weeks buckets
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 day', d),  'YYYY-MM-DD') AS d1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 days', d),  'YYYY-MM-DD') AS d2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 days', d),  'YYYY-MM-DD') AS d3,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week', d),  'YYYY-MM-DD') AS w1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week 2 days', d),  'YYYY-MM-DD') AS w1d2
+FROM generate_series('2020-01-01' :: date, '2020-01-12', '1 day') AS ts,
+     unnest(array[ts :: date]) AS d;
+     d      |     d1     |     d2     |     d3     |     w1     |    w1d2    
+------------+------------+------------+------------+------------+------------
+ 2020-01-01 | 2020-01-01 | 2019-12-31 | 2020-01-01 | 2019-12-28 | 2019-12-26
+ 2020-01-02 | 2020-01-02 | 2020-01-02 | 2020-01-01 | 2019-12-28 | 2019-12-26
+ 2020-01-03 | 2020-01-03 | 2020-01-02 | 2020-01-01 | 2019-12-28 | 2019-12-26
+ 2020-01-04 | 2020-01-04 | 2020-01-04 | 2020-01-04 | 2020-01-04 | 2020-01-04
+ 2020-01-05 | 2020-01-05 | 2020-01-04 | 2020-01-04 | 2020-01-04 | 2020-01-04
+ 2020-01-06 | 2020-01-06 | 2020-01-06 | 2020-01-04 | 2020-01-04 | 2020-01-04
+ 2020-01-07 | 2020-01-07 | 2020-01-06 | 2020-01-07 | 2020-01-04 | 2020-01-04
+ 2020-01-08 | 2020-01-08 | 2020-01-08 | 2020-01-07 | 2020-01-04 | 2020-01-04
+ 2020-01-09 | 2020-01-09 | 2020-01-08 | 2020-01-07 | 2020-01-04 | 2020-01-04
+ 2020-01-10 | 2020-01-10 | 2020-01-10 | 2020-01-10 | 2020-01-04 | 2020-01-04
+ 2020-01-11 | 2020-01-11 | 2020-01-10 | 2020-01-10 | 2020-01-11 | 2020-01-04
+ 2020-01-12 | 2020-01-12 | 2020-01-12 | 2020-01-10 | 2020-01-11 | 2020-01-04
+(12 rows)
+
+-- N days / weeks buckets with given 'origin'
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 day', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS d1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 days', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS d2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 days', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS d3,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS w1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week 2 days', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS w1d2
+FROM generate_series('2020-01-01' :: date, '2020-01-12', '1 day') AS ts,
+     unnest(array[ts :: date]) AS d;
+     d      |     d1     |     d2     |     d3     |     w1     |    w1d2    
+------------+------------+------------+------------+------------+------------
+ 2020-01-01 | 2000-01-01 | 2000-01-01 | 2000-01-01 | 2000-01-01 | 2000-01-01
+ 2020-01-02 | 2000-01-02 | 2000-01-01 | 2000-01-01 | 2000-01-01 | 2000-01-01
+ 2020-01-03 | 2000-01-03 | 2000-01-03 | 2000-01-01 | 2000-01-01 | 2000-01-01
+ 2020-01-04 | 2000-01-04 | 2000-01-03 | 2000-01-04 | 2000-01-01 | 2000-01-01
+ 2020-01-05 | 2000-01-05 | 2000-01-05 | 2000-01-04 | 2000-01-01 | 2000-01-01
+ 2020-01-06 | 2000-01-06 | 2000-01-05 | 2000-01-04 | 2000-01-01 | 2000-01-01
+ 2020-01-07 | 2000-01-07 | 2000-01-07 | 2000-01-07 | 2000-01-01 | 2000-01-01
+ 2020-01-08 | 2000-01-08 | 2000-01-07 | 2000-01-07 | 2000-01-08 | 2000-01-01
+ 2020-01-09 | 2000-01-09 | 2000-01-09 | 2000-01-07 | 2000-01-08 | 2000-01-01
+ 2020-01-10 | 2000-01-10 | 2000-01-09 | 2000-01-10 | 2000-01-08 | 2000-01-10
+ 2020-01-11 | 2000-01-11 | 2000-01-11 | 2000-01-10 | 2000-01-08 | 2000-01-10
+ 2020-01-12 | 2000-01-12 | 2000-01-11 | 2000-01-10 | 2000-01-08 | 2000-01-10
+(12 rows)
+
+-- N month buckets
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 month', d), 'YYYY-MM-DD') AS m1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 month', d), 'YYYY-MM-DD') AS m2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 month', d), 'YYYY-MM-DD') AS m3,
+        to_char(timescaledb_experimental.time_bucket_ng('4 month', d), 'YYYY-MM-DD') AS m4,
+        to_char(timescaledb_experimental.time_bucket_ng('5 month', d), 'YYYY-MM-DD') AS m5
+FROM generate_series('2020-01-01' :: date, '2020-12-01', '1 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+     d      |     m1     |     m2     |     m3     |     m4     |     m5     
+------------+------------+------------+------------+------------+------------
+ 2020-01-01 | 2020-01-01 | 2020-01-01 | 2020-01-01 | 2020-01-01 | 2020-01-01
+ 2020-02-01 | 2020-02-01 | 2020-01-01 | 2020-01-01 | 2020-01-01 | 2020-01-01
+ 2020-03-01 | 2020-03-01 | 2020-03-01 | 2020-01-01 | 2020-01-01 | 2020-01-01
+ 2020-04-01 | 2020-04-01 | 2020-03-01 | 2020-04-01 | 2020-01-01 | 2020-01-01
+ 2020-05-01 | 2020-05-01 | 2020-05-01 | 2020-04-01 | 2020-05-01 | 2020-01-01
+ 2020-06-01 | 2020-06-01 | 2020-05-01 | 2020-04-01 | 2020-05-01 | 2020-06-01
+ 2020-07-01 | 2020-07-01 | 2020-07-01 | 2020-07-01 | 2020-05-01 | 2020-06-01
+ 2020-08-01 | 2020-08-01 | 2020-07-01 | 2020-07-01 | 2020-05-01 | 2020-06-01
+ 2020-09-01 | 2020-09-01 | 2020-09-01 | 2020-07-01 | 2020-09-01 | 2020-06-01
+ 2020-10-01 | 2020-10-01 | 2020-09-01 | 2020-10-01 | 2020-09-01 | 2020-06-01
+ 2020-11-01 | 2020-11-01 | 2020-11-01 | 2020-10-01 | 2020-09-01 | 2020-11-01
+ 2020-12-01 | 2020-12-01 | 2020-11-01 | 2020-10-01 | 2020-09-01 | 2020-11-01
+(12 rows)
+
+-- N month buckets with given 'origin'
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m3,
+        to_char(timescaledb_experimental.time_bucket_ng('4 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m4,
+        to_char(timescaledb_experimental.time_bucket_ng('5 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m5
+FROM generate_series('2020-01-01' :: date, '2020-12-01', '1 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+     d      |     m1     |     m2     |     m3     |     m4     |     m5     
+------------+------------+------------+------------+------------+------------
+ 2020-01-01 | 2019-01-01 | 2019-01-01 | 2019-11-01 | 2019-01-01 | 2019-10-01
+ 2020-02-01 | 2019-02-01 | 2019-01-01 | 2019-02-01 | 2019-01-01 | 2019-10-01
+ 2020-03-01 | 2019-03-01 | 2019-03-01 | 2019-02-01 | 2019-01-01 | 2019-03-01
+ 2020-04-01 | 2019-04-01 | 2019-03-01 | 2019-02-01 | 2019-01-01 | 2019-03-01
+ 2020-05-01 | 2020-05-01 | 2020-05-01 | 2020-05-01 | 2020-05-01 | 2019-03-01
+ 2020-06-01 | 2020-06-01 | 2020-05-01 | 2020-05-01 | 2020-05-01 | 2019-03-01
+ 2020-07-01 | 2020-07-01 | 2020-07-01 | 2020-05-01 | 2020-05-01 | 2019-03-01
+ 2020-08-01 | 2020-08-01 | 2020-07-01 | 2020-08-01 | 2020-05-01 | 2020-08-01
+ 2020-09-01 | 2020-09-01 | 2020-09-01 | 2020-08-01 | 2020-09-01 | 2020-08-01
+ 2020-10-01 | 2020-10-01 | 2020-09-01 | 2020-08-01 | 2020-09-01 | 2020-08-01
+ 2020-11-01 | 2020-11-01 | 2020-11-01 | 2020-11-01 | 2020-09-01 | 2020-08-01
+ 2020-12-01 | 2020-12-01 | 2020-11-01 | 2020-11-01 | 2020-09-01 | 2020-08-01
+(12 rows)
+
+-- N years / N years, M month buckets
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year', d), 'YYYY-MM-DD') AS y1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year 6 month', d), 'YYYY-MM-DD') AS y1m6,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years', d), 'YYYY-MM-DD') AS y2,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years 6 month', d), 'YYYY-MM-DD') AS y2m6,
+        to_char(timescaledb_experimental.time_bucket_ng('3 years', d), 'YYYY-MM-DD') AS y3
+FROM generate_series('2015-01-01' :: date, '2020-12-01', '6 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+     d      |     y1     |    y1m6    |     y2     |    y2m6    |     y3     
+------------+------------+------------+------------+------------+------------
+ 2015-01-01 | 2015-01-01 | 2015-01-01 | 2014-01-01 | 2015-01-01 | 2015-01-01
+ 2015-07-01 | 2015-01-01 | 2015-01-01 | 2014-01-01 | 2015-01-01 | 2015-01-01
+ 2016-01-01 | 2016-01-01 | 2015-01-01 | 2016-01-01 | 2015-01-01 | 2015-01-01
+ 2016-07-01 | 2016-01-01 | 2016-07-01 | 2016-01-01 | 2015-01-01 | 2015-01-01
+ 2017-01-01 | 2017-01-01 | 2016-07-01 | 2016-01-01 | 2015-01-01 | 2015-01-01
+ 2017-07-01 | 2017-01-01 | 2016-07-01 | 2016-01-01 | 2017-07-01 | 2015-01-01
+ 2018-01-01 | 2018-01-01 | 2018-01-01 | 2018-01-01 | 2017-07-01 | 2018-01-01
+ 2018-07-01 | 2018-01-01 | 2018-01-01 | 2018-01-01 | 2017-07-01 | 2018-01-01
+ 2019-01-01 | 2019-01-01 | 2018-01-01 | 2018-01-01 | 2017-07-01 | 2018-01-01
+ 2019-07-01 | 2019-01-01 | 2019-07-01 | 2018-01-01 | 2017-07-01 | 2018-01-01
+ 2020-01-01 | 2020-01-01 | 2019-07-01 | 2020-01-01 | 2020-01-01 | 2018-01-01
+ 2020-07-01 | 2020-01-01 | 2019-07-01 | 2020-01-01 | 2020-01-01 | 2018-01-01
+(12 rows)
+
+-- N years / N years, M month buckets with given 'origin'
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year 6 month', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y1m6,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y2,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years 6 month', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y2m6,
+        to_char(timescaledb_experimental.time_bucket_ng('3 years', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y3
+FROM generate_series('2015-01-01' :: date, '2020-12-01', '6 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+     d      |     y1     |    y1m6    |     y2     |    y2m6    |     y3     
+------------+------------+------------+------------+------------+------------
+ 2015-01-01 | 2014-06-01 | 2013-12-01 | 2014-06-01 | 2012-12-01 | 2012-06-01
+ 2015-07-01 | 2015-06-01 | 2015-06-01 | 2014-06-01 | 2015-06-01 | 2015-06-01
+ 2016-01-01 | 2015-06-01 | 2015-06-01 | 2014-06-01 | 2015-06-01 | 2015-06-01
+ 2016-07-01 | 2016-06-01 | 2015-06-01 | 2016-06-01 | 2015-06-01 | 2015-06-01
+ 2017-01-01 | 2016-06-01 | 2016-12-01 | 2016-06-01 | 2015-06-01 | 2015-06-01
+ 2017-07-01 | 2017-06-01 | 2016-12-01 | 2016-06-01 | 2015-06-01 | 2015-06-01
+ 2018-01-01 | 2017-06-01 | 2016-12-01 | 2016-06-01 | 2017-12-01 | 2015-06-01
+ 2018-07-01 | 2018-06-01 | 2018-06-01 | 2018-06-01 | 2017-12-01 | 2018-06-01
+ 2019-01-01 | 2018-06-01 | 2018-06-01 | 2018-06-01 | 2017-12-01 | 2018-06-01
+ 2019-07-01 | 2019-06-01 | 2018-06-01 | 2018-06-01 | 2017-12-01 | 2018-06-01
+ 2020-01-01 | 2019-06-01 | 2019-12-01 | 2018-06-01 | 2017-12-01 | 2018-06-01
+ 2020-07-01 | 2020-06-01 | 2019-12-01 | 2020-06-01 | 2020-06-01 | 2018-06-01
+(12 rows)
+
 -------------------------------------
 --- Test time input functions --
 -------------------------------------
