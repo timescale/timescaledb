@@ -25,15 +25,20 @@
 
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 #define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
+#define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
 
 #define is_supported_pg_version(version)                                                           \
-	(is_supported_pg_version_12(version) || is_supported_pg_version_13(version))
+	(is_supported_pg_version_12(version) || is_supported_pg_version_13(version) ||                 \
+	 is_supported_pg_version_14(version))
 
 #define PG12 is_supported_pg_version_12(PG_VERSION_NUM)
 #define PG13 is_supported_pg_version_13(PG_VERSION_NUM)
+#define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
 
 #define PG13_LT (PG_VERSION_NUM < 130000)
 #define PG13_GE (PG_VERSION_NUM >= 130000)
+#define PG14_LT (PG_VERSION_NUM < 140000)
+#define PG14_GE (PG_VERSION_NUM >= 140000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -78,7 +83,7 @@
  * https://github.com/postgres/postgres/commit/73fc2e5bab
  */
 
-#if (PG12 && PG_VERSION_NUM < 120006) || (PG13 && PG_VERSION_NUM < 130002)
+#if (PG12 && PG_VERSION_NUM < 120006) || (PG13 && PG_VERSION_NUM < 130002) || PG14
 #define pull_varnos_compat(root, expr) pull_varnos(expr)
 #define make_simple_restrictinfo_compat(root, expr) make_simple_restrictinfo(expr)
 #define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \

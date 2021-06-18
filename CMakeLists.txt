@@ -101,6 +101,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Code coverage is optional and OFF by default
 option(CODECOVERAGE "Enable code coverage for the build" OFF)
+option(EXPERIMENTAL "Skip postgres version compatibility check" OFF)
 
 # Generate downgrade script
 option(GENERATE_DOWNGRADE_SCRIPT
@@ -307,7 +308,7 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if(NOT ${PG_VERSION_STRING} MATCHES
-   "^PostgreSQL[ ]+([0-9]+)(\\.([0-9]+)|devel|rc[0-9]+)")
+   "^PostgreSQL[ ]+([0-9]+)(\\.([0-9]+)|beta|devel|rc[0-9]+)")
   message(FATAL_ERROR "Could not parse PostgreSQL version ${PG_VERSION_STRING}")
 endif()
 
@@ -323,7 +324,9 @@ message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if((${PG_VERSION_MAJOR} LESS "12") OR (${PG_VERSION_MAJOR} GREATER "13"))
+if((${PG_VERSION_MAJOR} LESS "12")
+   OR (${PG_VERSION_MAJOR} GREATER "13")
+   AND NOT (${EXPERIMENTAL}))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 12 and 13")
 endif()
 
