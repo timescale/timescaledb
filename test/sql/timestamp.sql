@@ -598,6 +598,88 @@ FROM unnest(ARRAY[
     ]) AS time;
 \set ON_ERROR_STOP 1
 
+------------------------------------------------------------
+--- Test timescaledb_experimental.time_bucket_ng function --
+------------------------------------------------------------
+
+-- not supported functionality
+\set ON_ERROR_STOP 0
+SELECT timescaledb_experimental.time_bucket_ng('1 hour', '2001-02-03' :: date) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('0 days', '2001-02-03' :: date) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 month', '2001-02-03' :: date, origin => '2000-01-02') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 month', '2000-01-02' :: date, origin => '2001-01-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, origin => '2001-01-01') AS result;
+\set ON_ERROR_STOP 1
+
+-- infinity
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
+
+-- wrappers
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz, origin => '2021-06-01') AS result;
+
+-- N days / weeks buckets
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 day', d),  'YYYY-MM-DD') AS d1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 days', d),  'YYYY-MM-DD') AS d2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 days', d),  'YYYY-MM-DD') AS d3,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week', d),  'YYYY-MM-DD') AS w1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week 2 days', d),  'YYYY-MM-DD') AS w1d2
+FROM generate_series('2020-01-01' :: date, '2020-01-12', '1 day') AS ts,
+     unnest(array[ts :: date]) AS d;
+
+-- N days / weeks buckets with given 'origin'
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 day', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS d1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 days', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS d2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 days', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS d3,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS w1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 week 2 days', d, origin => '2020-01-01'), 'YYYY-MM-DD') AS w1d2
+FROM generate_series('2020-01-01' :: date, '2020-01-12', '1 day') AS ts,
+     unnest(array[ts :: date]) AS d;
+
+-- N month buckets
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 month', d), 'YYYY-MM-DD') AS m1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 month', d), 'YYYY-MM-DD') AS m2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 month', d), 'YYYY-MM-DD') AS m3,
+        to_char(timescaledb_experimental.time_bucket_ng('4 month', d), 'YYYY-MM-DD') AS m4,
+        to_char(timescaledb_experimental.time_bucket_ng('5 month', d), 'YYYY-MM-DD') AS m5
+FROM generate_series('2020-01-01' :: date, '2020-12-01', '1 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+
+-- N month buckets with given 'origin'
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m1,
+        to_char(timescaledb_experimental.time_bucket_ng('2 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m2,
+        to_char(timescaledb_experimental.time_bucket_ng('3 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m3,
+        to_char(timescaledb_experimental.time_bucket_ng('4 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m4,
+        to_char(timescaledb_experimental.time_bucket_ng('5 month', d, origin => '2019-05-01'), 'YYYY-MM-DD') AS m5
+FROM generate_series('2020-01-01' :: date, '2020-12-01', '1 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+
+-- N years / N years, M month buckets
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year', d), 'YYYY-MM-DD') AS y1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year 6 month', d), 'YYYY-MM-DD') AS y1m6,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years', d), 'YYYY-MM-DD') AS y2,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years 6 month', d), 'YYYY-MM-DD') AS y2m6,
+        to_char(timescaledb_experimental.time_bucket_ng('3 years', d), 'YYYY-MM-DD') AS y3
+FROM generate_series('2015-01-01' :: date, '2020-12-01', '6 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+
+-- N years / N years, M month buckets with given 'origin'
+SELECT  to_char(d, 'YYYY-MM-DD') AS d,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y1,
+        to_char(timescaledb_experimental.time_bucket_ng('1 year 6 month', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y1m6,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y2,
+        to_char(timescaledb_experimental.time_bucket_ng('2 years 6 month', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y2m6,
+        to_char(timescaledb_experimental.time_bucket_ng('3 years', d, origin => '2000-06-01'), 'YYYY-MM-DD') AS y3
+FROM generate_series('2015-01-01' :: date, '2020-12-01', '6 month') AS ts,
+     unnest(array[ts :: date]) AS d;
+
 -------------------------------------
 --- Test time input functions --
 -------------------------------------
