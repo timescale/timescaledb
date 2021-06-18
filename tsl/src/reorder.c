@@ -61,6 +61,7 @@
 
 #include "annotations.h"
 #include "chunk.h"
+#include "chunk_copy.h"
 #include "chunk_index.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
@@ -203,13 +204,16 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
  * The progress of the various stages/steps are tracked in the
  * CHUNK_COPY_ACTIVITY catalog table
  */
-Datum
-tsl_move_chunk_proc(PG_FUNCTION_ARGS)
+static void
+tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
 {
 	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	const char *src_node_name = PG_ARGISNULL(1) ? NULL : NameStr(*PG_GETARG_NAME(1));
 	const char *dst_node_name = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
-	bool verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	PreventInTransactionBlock(true, get_func_name(FC_FN_OID(fcinfo)));
 
 	/* src_node and dst_node both have to be non-NULL */
 	if (src_node_name == NULL || dst_node_name == NULL)
@@ -221,11 +225,21 @@ tsl_move_chunk_proc(PG_FUNCTION_ARGS)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk")));
 
 	/* perform the actual distributed chunk move after a few sanity checks */
-	chunk_perform_distributed_copy(chunk_id,
-								   verbose,
-								   src_node_name,
-								   dst_node_name,
-								   true); /* delete_on_src_node */
+	chunk_copy(chunk_id, src_node_name, dst_node_name, delete_on_src_node);
+}
+
+Datum
+tsl_move_chunk_proc(PG_FUNCTION_ARGS)
+{
+	tsl_copy_or_move_chunk_proc(fcinfo, true);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+tsl_copy_chunk_proc(PG_FUNCTION_ARGS)
+{
+	tsl_copy_or_move_chunk_proc(fcinfo, false);
 
 	PG_RETURN_VOID();
 }

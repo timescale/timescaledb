@@ -19,14 +19,6 @@ CREATE OR REPLACE FUNCTION move_chunk(
     verbose BOOLEAN=FALSE
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_chunk' LANGUAGE C VOLATILE;
 
--- Use the experimental schema for this new procedure
-CREATE OR REPLACE PROCEDURE timescaledb_experimental.move_chunk(
-    chunk REGCLASS,
-    source_node Name = NULL,
-    destination_node Name = NULL,
-    verbose BOOLEAN=FALSE)
-AS '@MODULE_PATHNAME@', 'ts_move_chunk_proc' LANGUAGE C;
-
 CREATE OR REPLACE FUNCTION compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = false
@@ -41,4 +33,3 @@ CREATE OR REPLACE FUNCTION recompress_chunk(
     chunk REGCLASS,
     if_not_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk' LANGUAGE C STRICT VOLATILE;
-
