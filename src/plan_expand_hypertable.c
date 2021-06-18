@@ -90,10 +90,8 @@ is_time_bucket_function(Expr *node)
 	return false;
 }
 
-#if PG13_GE
-/* PG13 merged setup_append_rel_array with setup_simple_rel_arrays */
 static void
-setup_append_rel_array(PlannerInfo *root)
+ts_setup_append_rel_array(PlannerInfo *root)
 {
 	root->append_rel_array =
 		repalloc(root->append_rel_array, root->simple_rel_array_size * sizeof(AppendRelInfo *));
@@ -106,7 +104,6 @@ setup_append_rel_array(PlannerInfo *root)
 		root->append_rel_array[child_relid] = appinfo;
 	}
 }
-#endif
 
 /*
  * Pre-check to determine if an expression is eligible for constification.
@@ -1365,7 +1362,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-	setup_append_rel_array(root);
+	ts_setup_append_rel_array(root);
 
 	/* In pg12 postgres will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
