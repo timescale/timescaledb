@@ -130,7 +130,7 @@ $$);
 CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE FUNCTION test_trigger();
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+SELECT * FROM _timescaledb_catalog.hypertable_data_node ORDER BY 1,2,3;
  hypertable_id | node_hypertable_id |      node_name       | block_chunks 
 ---------------+--------------------+----------------------+--------------
              1 |                  1 | db_dist_hypertable_1 | f
@@ -141,7 +141,7 @@ SELECT * FROM _timescaledb_catalog.hypertable_data_node;
              2 |                  2 | db_dist_hypertable_3 | f
 (6 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
  chunk_id | node_chunk_id | node_name 
 ----------+---------------+-----------
 (0 rows)
@@ -304,7 +304,7 @@ FROM show_chunks('disttable');
 (6 rows)
 
 -- Show that there are assigned node_chunk_id:s in chunk data node mappings
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
  chunk_id | node_chunk_id |      node_name       
 ----------+---------------+----------------------
         1 |             1 | db_dist_hypertable_1
@@ -1030,7 +1030,7 @@ FROM test.show_subtables('disttable') st;
 (0 rows)
 
 -- Check that the chunks are assigned data nodes
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
  chunk_id | node_chunk_id |      node_name       
 ----------+---------------+----------------------
         1 |             1 | db_dist_hypertable_1
@@ -1612,7 +1612,7 @@ ORDER BY hypertable_schema, hypertable_name;
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
 WARNING:  insufficient number of data nodes
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
  chunk_id | node_chunk_id |      node_name       
 ----------+---------------+----------------------
        10 |             4 | db_dist_hypertable_1
@@ -1628,7 +1628,7 @@ FROM show_chunks('underreplicated');
 (1 row)
 
 -- Show chunk data node mappings
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
  chunk_id | node_chunk_id |      node_name       
 ----------+---------------+----------------------
        10 |             4 | db_dist_hypertable_1

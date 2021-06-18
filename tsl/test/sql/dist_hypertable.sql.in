@@ -124,8 +124,8 @@ CREATE TRIGGER _0_test_trigger_insert
     BEFORE INSERT ON disttable
     FOR EACH ROW EXECUTE FUNCTION test_trigger();
 
-SELECT * FROM _timescaledb_catalog.hypertable_data_node;
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.hypertable_data_node ORDER BY 1,2,3;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 
 -- The constraints, indexes, and triggers on the hypertable
 SELECT * FROM test.show_constraints('disttable');
@@ -213,7 +213,7 @@ SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 
 -- Show that there are assigned node_chunk_id:s in chunk data node mappings
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 
 -- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
@@ -334,7 +334,7 @@ SELECT st."Child" as chunk_relid, test.show_triggers((st)."Child")
 FROM test.show_subtables('disttable') st;
 
 -- Check that the chunks are assigned data nodes
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 
 -- Adding a new trigger should not recurse to foreign chunks
 CREATE TRIGGER _1_test_trigger_insert
@@ -494,12 +494,12 @@ ORDER BY hypertable_schema, hypertable_name;
 INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
 
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 
 -- Show chunk data node mappings
-SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 
 -- Show that chunks are created on remote data nodes and that all
 -- data nodes/chunks have the same data due to replication
