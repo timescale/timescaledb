@@ -12,6 +12,7 @@
 extern Datum tsl_reorder_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_move_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_move_chunk_proc(PG_FUNCTION_ARGS);
+extern Datum tsl_copy_chunk_proc(PG_FUNCTION_ARGS);
 extern void reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id,
 						  Oid destination_tablespace, Oid index_tablespace);
 
