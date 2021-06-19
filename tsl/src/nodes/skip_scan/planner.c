@@ -9,6 +9,7 @@
 #include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/makefuncs.h>
+#include <nodes/pathnodes.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
@@ -17,6 +18,8 @@
 #include <optimizer/planmain.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parsetree.h>
+#include <rewrite/rewriteManip.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
@@ -25,6 +28,7 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "chunk_append/chunk_append.h"
+#include "compat.h"
 
 #include <math.h>
 
@@ -35,23 +39,26 @@ typedef struct SkipScanPath
 
 	/* Index clause which we'll use to skip past elements we've already seen */
 	RestrictInfo *skip_clause;
-	/* The column offset, on the index, of the column we are calling DISTINCT on */
-	int distinct_column;
+	/* attribute number of the distinct column on the table/chunk */
+	AttrNumber distinct_attno;
+	/* The column offset on the index we are calling DISTINCT on */
+	AttrNumber scankey_attno;
 	int distinct_typ_len;
 	bool distinct_by_val;
-	int sk_attno;
+	/* Var referencing the distinct column on the relation */
+	Var *distinct_var;
 } SkipScanPath;
 
-static TargetEntry *get_tle_for_pathkey(List *tlist, PathKey *pathkey, bool missing_ok);
-static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle,
-												 Relids relids);
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
 static List *sort_indexquals(IndexOptInfo *indexinfo, List *quals);
-static OpExpr *fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber distinct_column);
+static OpExpr *fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber scankey_attno);
 static bool build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *index_path,
 							Var *var);
 static List *build_subpath(PlannerInfo *root, List *subpaths, double ndistinct);
 static ChunkAppendPath *copy_chunk_append_path(ChunkAppendPath *ca, List *subpaths);
+static Var *get_distinct_var(PlannerInfo *root, IndexPath *index_path,
+							 SkipScanPath *skip_scan_path);
+static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
 
 /**************************
  * SkipScan Plan Creation *
@@ -83,7 +90,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	CustomScan *skip_plan = makeNode(CustomScan);
 	IndexPath *index_path = path->index_path;
 
-	OpExpr *op = fix_indexqual(index_path->indexinfo, path->skip_clause, path->distinct_column);
+	OpExpr *op = fix_indexqual(index_path->indexinfo, path->skip_clause, path->scankey_attno);
 
 	Plan *plan = linitial(custom_plans);
 	if (IsA(plan, IndexScan))
@@ -113,14 +120,17 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	skip_plan->methods = &skip_scan_plan_methods;
 	skip_plan->custom_plans = custom_plans;
 	/* get position of skipped column in tuples produced by child scan */
-	PathKey *pk = linitial_node(PathKey, best_path->path.pathkeys);
-	TargetEntry *tle = get_tle_for_pathkey(plan->targetlist, pk, false);
+	TargetEntry *tle = tlist_member_match_var(path->distinct_var, plan->targetlist);
+
+	bool nulls_first = index_path->indexinfo->nulls_first[path->scankey_attno - 1];
+	if (index_path->indexscandir == BackwardScanDirection)
+		nulls_first = !nulls_first;
 
 	skip_plan->custom_private = list_make5_int(tle->resno,
 											   path->distinct_by_val,
 											   path->distinct_typ_len,
-											   pk->pk_nulls_first,
-											   path->sk_attno);
+											   nulls_first,
+											   path->scankey_attno);
 	return &skip_plan->scan.plan;
 }
 
@@ -372,23 +382,112 @@ skip_scan_path_create(PlannerInfo *root, IndexPath *index_path, double ndistinct
 	 * free so reusing the IndexPath here is safe. */
 	skip_scan_path->index_path = index_path;
 
-	/* find the ordering operator we'll use to skip around each key column
-	 * Since the DISTINCT columns are required to be prefix of ORDER BY
-	 * and we only support single column DISTINCT the first pathkey
-	 * has to be the distinct column
-	 */
-	PathKey *first_pathkey = linitial(index_path->path.pathkeys);
-	TargetEntry *tle = get_tle_for_pathkey(index_path->indexinfo->indextlist, first_pathkey, true);
+	Var *var = get_distinct_var(root, index_path, skip_scan_path);
 
-	/* SkipScan on expressions not supported */
-	if (!tle || !IsA(tle->expr, Var))
+	if (!var)
 		return NULL;
 
+	skip_scan_path->distinct_var = var;
+
 	/* build skip qual this may fail if we cannot look up the operator */
-	if (!build_skip_qual(root, skip_scan_path, index_path, castNode(Var, tle->expr)))
+	if (!build_skip_qual(root, skip_scan_path, index_path, var))
 		return NULL;
 
 	return skip_scan_path;
+}
+
+/* Extract the Var to use for the SkipScan and do attno mapping if required. */
+static Var *
+get_distinct_var(PlannerInfo *root, IndexPath *index_path, SkipScanPath *skip_scan_path)
+{
+	ListCell *lc;
+	int num_vars = 0;
+	RelOptInfo *rel = index_path->path.parent;
+	Expr *tlexpr = NULL;
+
+	foreach (lc, root->parse->distinctClause)
+	{
+		SortGroupClause *clause = lfirst_node(SortGroupClause, lc);
+		Node *expr = get_sortgroupclause_expr(clause, root->parse->targetList);
+
+		/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
+		 * column */
+		if (IsA(estimate_expression_value(root, expr), Const))
+			continue;
+
+		num_vars++;
+
+		/* We ignore binary-compatible relabeling */
+		tlexpr = (Expr *) expr;
+		while (tlexpr && IsA(tlexpr, RelabelType))
+			tlexpr = ((RelabelType *) tlexpr)->arg;
+	}
+
+	if (num_vars != 1)
+		return NULL;
+
+	/* SkipScan on expressions not supported */
+	if (!tlexpr || !IsA(tlexpr, Var))
+		return NULL;
+
+	Var *var = castNode(Var, tlexpr);
+
+	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
+	 * the parent hypertable while the IndexPath will be on a Chunk.
+	 * For a normal table they point to the same relation and we are done here. */
+	if (var->varno == rel->relid)
+		return var;
+
+	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
+	RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
+
+	/* Check for hypertable */
+	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
+		return NULL;
+
+	Relation ht_rel = table_open(ht_rte->relid, AccessShareLock);
+	Relation chunk_rel = table_open(chunk_rte->relid, AccessShareLock);
+	bool found_wholerow;
+	TupleConversionMap *map =
+		convert_tuples_by_name_compat(RelationGetDescr(chunk_rel),
+									  RelationGetDescr(ht_rel),
+									  gettext_noop("could not convert row type"));
+
+	/* attno mapping necessary */
+	if (map)
+	{
+		var = (Var *) map_variable_attnos_compat((Node *) var,
+												 var->varno,
+												 0,
+												 map->attrMap,
+												 map->outdesc->natts,
+												 InvalidOid,
+												 &found_wholerow);
+
+		free_conversion_map(map);
+
+		/* If we found whole row here skipscan wouldn't be applicable
+		 * but this should have been caught already in previous checks */
+		Assert(!found_wholerow);
+		if (found_wholerow)
+		{
+			table_close(ht_rel, NoLock);
+			table_close(chunk_rel, NoLock);
+
+			return NULL;
+		}
+	}
+	else
+	{
+		var = copyObject(var);
+	}
+
+	table_close(ht_rel, NoLock);
+	table_close(chunk_rel, NoLock);
+
+	var->varno = rel->relid;
+
+	return var;
 }
 
 /*
@@ -439,11 +538,11 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 	TypeCacheEntry *tce = lookup_type_cache(column_type, 0);
 	int idx_key = get_idx_key(info, var->varattno);
 
-	skip_scan_path->distinct_column = var->varattno;
+	skip_scan_path->distinct_attno = var->varattno;
 	skip_scan_path->distinct_by_val = tce->typbyval;
 	skip_scan_path->distinct_typ_len = tce->typlen;
 	/* sk_attno of the skip qual */
-	skip_scan_path->sk_attno = idx_key + 1;
+	skip_scan_path->scankey_attno = idx_key + 1;
 
 	int16 strategy = info->reverse_sort[idx_key] ? BTLessStrategyNumber : BTGreaterStrategyNumber;
 	if (index_path->indexscandir == BackwardScanDirection)
@@ -479,32 +578,6 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 	return true;
 }
 
-static TargetEntry *
-get_tle_for_pathkey(List *tlist, PathKey *pathkey, bool missing_ok)
-{
-	EquivalenceClass *ec = pathkey->pk_eclass;
-	TargetEntry *tle;
-
-	/* since SkipScan is on top of an index the EquivalenceClass
-	 * should not be volatile */
-	Assert(!ec->ec_has_volatile);
-
-	ListCell *lc;
-	foreach (lc, tlist)
-	{
-		tle = (TargetEntry *) lfirst(lc);
-		if (find_ec_member_for_tle(ec, tle, NULL))
-			return tle;
-	}
-
-	/* If PathKey is an expression it might not yet be in the targetlist */
-	if (missing_ok)
-		return NULL;
-
-	elog(ERROR, "skip column not found in targetlist");
-	pg_unreachable();
-}
-
 static int
 get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno)
 {
@@ -516,48 +589,6 @@ get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno)
 
 	elog(ERROR, "column not present in index: %d", attno);
 	pg_unreachable();
-}
-
-/*
- * find_ec_member_for_tle
- *
- * copied from createplan.c
- * check for childreen has been removed as targetlist we deal with here
- * may be for a child since each chunk gets its own skipscan node
- */
-static EquivalenceMember *
-find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle, Relids relids)
-{
-	Expr *tlexpr;
-	ListCell *lc;
-
-	/* We ignore binary-compatible relabeling on both ends */
-	tlexpr = tle->expr;
-	while (tlexpr && IsA(tlexpr, RelabelType))
-		tlexpr = ((RelabelType *) tlexpr)->arg;
-
-	foreach (lc, ec->ec_members)
-	{
-		EquivalenceMember *em = (EquivalenceMember *) lfirst(lc);
-		Expr *emexpr;
-
-		/*
-		 * We shouldn't be trying to sort by an equivalence class that
-		 * contains a constant, so no need to consider such cases any further.
-		 */
-		if (em->em_is_const)
-			continue;
-
-		/* Match if same expression (after stripping relabel) */
-		emexpr = em->em_expr;
-		while (emexpr && IsA(emexpr, RelabelType))
-			emexpr = ((RelabelType *) emexpr)->arg;
-
-		if (equal(emexpr, tlexpr))
-			return em;
-	}
-
-	return NULL;
 }
 
 /* Sort quals according to index column order.
@@ -593,7 +624,7 @@ sort_indexquals(IndexOptInfo *indexinfo, List *quals)
 }
 
 static OpExpr *
-fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber distinct_column)
+fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber scankey_attno)
 {
 	/* technically our placeholder col > NULL is unsatisfiable, and in some instances
 	 * the planner will realize this and use is as an excuse to remove other quals.
@@ -601,22 +632,50 @@ fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber distinct_colu
 	 */
 
 	/* fix_indexqual_references */
-	int indexcol = get_idx_key(index, distinct_column);
 	OpExpr *op = copyObject(castNode(OpExpr, rinfo->clause));
 	Assert(list_length(op->args) == 2);
 	Assert(bms_equal(rinfo->left_relids, index->rel->relids));
 
 	/* fix_indexqual_operand */
-	Assert(index->indexkeys[indexcol] != 0);
+	Assert(index->indexkeys[scankey_attno - 1] != 0);
 	Var *node = linitial_node(Var, op->args);
 	Assert(((Var *) node)->varno == index->rel->relid &&
-		   ((Var *) node)->varattno == index->indexkeys[indexcol]);
+		   ((Var *) node)->varattno == index->indexkeys[scankey_attno - 1]);
 
 	Var *result = (Var *) copyObject(node);
 	result->varno = INDEX_VAR;
-	result->varattno = indexcol + 1;
+	result->varattno = scankey_attno;
 
 	linitial(op->args) = result;
 
 	return op;
+}
+
+/*
+ * tlist_member_match_var
+ *    Same as tlist_member, except that we match the provided Var on the basis
+ *    of varno/varattno/varlevelsup/vartype only, rather than full equal().
+ *
+ * This is needed in some cases where we can't be sure of an exact typmod
+ * match.  For safety, though, we insist on vartype match.
+ *
+ * static function copied from src/backend/optimizer/util/tlist.c
+ */
+static TargetEntry *
+tlist_member_match_var(Var *var, List *targetlist)
+{
+	ListCell *temp;
+
+	foreach (temp, targetlist)
+	{
+		TargetEntry *tlentry = (TargetEntry *) lfirst(temp);
+		Var *tlvar = (Var *) tlentry->expr;
+
+		if (!tlvar || !IsA(tlvar, Var))
+			continue;
+		if (var->varno == tlvar->varno && var->varattno == tlvar->varattno &&
+			var->varlevelsup == tlvar->varlevelsup && var->vartype == tlvar->vartype)
+			return tlentry;
+	}
+	return NULL;
 }

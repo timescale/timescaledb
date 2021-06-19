@@ -10,15 +10,17 @@ accidentally triggering the load of a previous DB version.**
 * #3305 Fix pull_varnos miscomputation of relids set
 * #3327 Make aggregates in caggs fully qualified
 * #3336 Fix pg_init_privs objsubid handling
+* #3345 Fix SkipScan distinct column identification
 
 **Thanks**
 * @db-adrian for reporting an issue when accessing cagg view through postgres_fdw
 * @fncaldas and @pgwhalen for reporting an issue accessing caggs when public is not in search_path
 * @fvannee, @mglonnro and @ebreijo for reporting an issue with the upgrade script
+* @fvannee for reporting a performance regression with SkipScan
 
 ## 2.3.0 (2021-05-25)
 
-This release adds major new features since the 2.2.1 release. 
+This release adds major new features since the 2.2.1 release.
 We deem it moderate priority for upgrading.
 
 This release adds support for inserting data into compressed chunks
