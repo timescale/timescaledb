@@ -205,4 +205,11 @@ get_vacuum_options(const VacuumStmt *stmt)
 	map_variable_attnos((node), (varno), (sublevels_up), (map), (rowtype), (found_wholerow))
 #endif
 
+/* PG13 removes msg parameter from convert_tuples_by_name */
+#if PG12
+#define convert_tuples_by_name_compat(in, out, msg) convert_tuples_by_name(in, out, msg)
+#else
+#define convert_tuples_by_name_compat(in, out, msg) convert_tuples_by_name(in, out)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
