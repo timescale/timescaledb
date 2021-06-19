@@ -110,6 +110,11 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_stable(), 'q3_14' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev, int_func_volatile(), 'q3_15' FROM :TABLE;
 
+\qecho DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+-- should not use SkipScan since we only support SkipScan on single-column distinct
+:PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
+
 \qecho LIMIT queries on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC LIMIT 3;
@@ -161,6 +166,9 @@ CREATE INDEX ON :TABLE(time,dev,val);
 
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev IS NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NULL;
+
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
 
 -- CTE
 :PREFIX WITH devices AS (
