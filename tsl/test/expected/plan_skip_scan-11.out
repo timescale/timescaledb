@@ -684,6 +684,27 @@ stable expression in targetlist on skip_scan
                ->  Index Scan using skip_scan_dev_name_idx on skip_scan (actual rows=12 loops=1)
 (4 rows)
 
+\qecho DISTINCT with wholerow var
+DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Unique (actual rows=12 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
+         ->  Index Scan using skip_scan_dev_time_idx on skip_scan (actual rows=12 loops=1)
+(3 rows)
+
+-- should not use SkipScan since we only support SkipScan on single-column distinct
+:PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Unique (actual rows=10022 loops=1)
+   ->  Sort (actual rows=10022 loops=1)
+         Sort Key: skip_scan.*
+         Sort Method: quicksort 
+         ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
+(5 rows)
+
 \qecho LIMIT queries on :TABLE
 LIMIT queries on skip_scan
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
@@ -1024,6 +1045,16 @@ WHERE CLAUSES
                Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
                Heap Fetches: 1
 (5 rows)
+
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Unique (actual rows=1 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=1 loops=1)
+         ->  Index Scan Backward using skip_scan_dev_time_idx on skip_scan (actual rows=1 loops=1)
+               Index Cond: (dev = 1)
+(4 rows)
 
 -- CTE
 :PREFIX WITH devices AS (
@@ -2535,6 +2566,39 @@ stable expression in targetlist on skip_scan_ht
                      ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_name_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
 (12 rows)
 
+\qecho DISTINCT with wholerow var
+DISTINCT with wholerow var
+:PREFIX SELECT DISTINCT ON (dev) :TABLE FROM :TABLE;
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=11 loops=1)
+   ->  Merge Append (actual rows=44 loops=1)
+         Sort Key: _hyper_1_1_chunk.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=11 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=11 loops=1)
+(11 rows)
+
+-- should not use SkipScan since we only support SkipScan on single-column distinct
+:PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Unique (actual rows=10020 loops=1)
+   ->  Sort (actual rows=10020 loops=1)
+         Sort Key: ((_hyper_1_1_chunk.*)::skip_scan_ht)
+         Sort Method: quicksort 
+         ->  Append (actual rows=10020 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(9 rows)
+
 \qecho LIMIT queries on :TABLE
 LIMIT queries on skip_scan_ht
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE LIMIT 3;
@@ -3203,6 +3267,27 @@ WHERE CLAUSES
                      Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
                      Heap Fetches: 1
 (19 rows)
+
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=1 loops=1)
+   ->  Merge Append (actual rows=4 loops=1)
+         Sort Key: _hyper_1_1_chunk."time" DESC
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
+                     Index Cond: (dev = 1)
+(15 rows)
 
 -- CTE
 :PREFIX WITH devices AS (
