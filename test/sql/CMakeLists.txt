@@ -95,9 +95,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     net.sql
     symbol_conflict.sql
     telemetry.sql
-    test_utils.sql
-    timestamp_limits.sql
-    with_clause_parser.sql)
+    test_utils.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
