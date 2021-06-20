@@ -1,6 +1,6 @@
--- This file and its contents are licensed under the Apache License 2.0.
+-- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
--- LICENSE-APACHE for a copy of the license.
+-- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION test.min_pg_timestamptz() RETURNS TIMESTAMPTZ
@@ -103,34 +103,34 @@ SELECT test.end_ts_timestamptz(),
 --Test insert of time values close to or at limits
 --Suitable constraints should be created on chunks
 CREATE TABLE smallint_table(time smallint);
-SELECT create_hypertable('smallint_table', 'time', chunk_time_interval=>10);
+SELECT table_name FROM create_hypertable('smallint_table', 'time', chunk_time_interval=>10);
 INSERT INTO smallint_table VALUES (-32768), (32767);
 
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('smallint_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 
 CREATE TABLE int_table(time int);
-SELECT create_hypertable('int_table', 'time', chunk_time_interval=>10);
+SELECT table_name FROM create_hypertable('int_table', 'time', chunk_time_interval=>10);
 INSERT INTO int_table VALUES (-2147483648), (2147483647);
 
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('int_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 
 CREATE TABLE bigint_table(time bigint);
-SELECT create_hypertable('bigint_table', 'time', chunk_time_interval=>10);
+SELECT table_name FROM create_hypertable('bigint_table', 'time', chunk_time_interval=>10);
 INSERT INTO bigint_table VALUES (-9223372036854775808), (9223372036854775807);
 
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('bigint_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 
 CREATE TABLE date_table(time date);
-SELECT create_hypertable('date_table', 'time');
+SELECT table_name FROM create_hypertable('date_table', 'time');
 INSERT INTO date_table VALUES (test.min_ts_date()), (test.end_ts_date() - INTERVAL '1 day');
 -- Test out-of-range dates
 \set ON_ERROR_STOP 0
@@ -141,10 +141,10 @@ INSERT INTO date_table VALUES (test.end_ts_date());
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('date_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 
 CREATE TABLE timestamp_table(time timestamp);
-SELECT create_hypertable('timestamp_table', 'time');
+SELECT table_name FROM create_hypertable('timestamp_table', 'time');
 
 INSERT INTO timestamp_table VALUES (test.min_ts_timestamp());
 INSERT INTO timestamp_table VALUES (test.end_ts_timestamp() - INTERVAL '1 microsecond');
@@ -158,10 +158,10 @@ INSERT INTO timestamp_table VALUES (test.end_ts_timestamp());
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('timestamp_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 
 CREATE TABLE timestamptz_table(time timestamp);
-SELECT create_hypertable('timestamptz_table', 'time');
+SELECT table_name FROM create_hypertable('timestamptz_table', 'time');
 
 -- Need to be at UTC for this to work for timestamp with time zone
 INSERT INTO timestamptz_table VALUES (test.min_ts_timestamptz());
@@ -176,7 +176,7 @@ INSERT INTO timestamptz_table VALUES (test.end_ts_timestamptz());
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('timestamptz_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 
 RESET datestyle;
 RESET timezone;

@@ -1,6 +1,6 @@
--- This file and its contents are licensed under the Apache License 2.0.
+-- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
--- LICENSE-APACHE for a copy of the license.
+-- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION test.min_pg_timestamptz() RETURNS TIMESTAMPTZ
 AS :MODULE_PATHNAME, 'ts_timestamptz_pg_min' LANGUAGE C VOLATILE;
@@ -103,64 +103,64 @@ end_ts_internal_date        | 294247-01-02
 --Test insert of time values close to or at limits
 --Suitable constraints should be created on chunks
 CREATE TABLE smallint_table(time smallint);
-SELECT create_hypertable('smallint_table', 'time', chunk_time_interval=>10);
+SELECT table_name FROM create_hypertable('smallint_table', 'time', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "time"
--[ RECORD 1 ]-----+----------------------------
-create_hypertable | (1,public,smallint_table,t)
+-[ RECORD 1 ]--------------
+table_name | smallint_table
 
 INSERT INTO smallint_table VALUES (-32768), (32767);
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('smallint_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
--[ RECORD 1 ]--------+---------------------------------------
-chunk                | _timescaledb_internal._hyper_1_1_chunk
+AND c.contype = 'c' ORDER BY 1;
+-[ RECORD 1 ]--------+-----------------------------------------
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" < '-32760'::smallint))
--[ RECORD 2 ]--------+---------------------------------------
-chunk                | _timescaledb_internal._hyper_1_2_chunk
+-[ RECORD 2 ]--------+-----------------------------------------
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" >= '32760'::smallint))
 
 CREATE TABLE int_table(time int);
-SELECT create_hypertable('int_table', 'time', chunk_time_interval=>10);
+SELECT table_name FROM create_hypertable('int_table', 'time', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "time"
--[ RECORD 1 ]-----+-----------------------
-create_hypertable | (2,public,int_table,t)
+-[ RECORD 1 ]---------
+table_name | int_table
 
 INSERT INTO int_table VALUES (-2147483648), (2147483647);
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('int_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 -[ RECORD 1 ]--------+------------------------------------------
-chunk                | _timescaledb_internal._hyper_2_3_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" < '-2147483640'::integer))
 -[ RECORD 2 ]--------+------------------------------------------
-chunk                | _timescaledb_internal._hyper_2_4_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" >= 2147483640))
 
 CREATE TABLE bigint_table(time bigint);
-SELECT create_hypertable('bigint_table', 'time', chunk_time_interval=>10);
+SELECT table_name FROM create_hypertable('bigint_table', 'time', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "time"
--[ RECORD 1 ]-----+--------------------------
-create_hypertable | (3,public,bigint_table,t)
+-[ RECORD 1 ]------------
+table_name | bigint_table
 
 INSERT INTO bigint_table VALUES (-9223372036854775808), (9223372036854775807);
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('bigint_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 -[ RECORD 1 ]--------+--------------------------------------------------
-chunk                | _timescaledb_internal._hyper_3_5_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" < '-9223372036854775800'::bigint))
 -[ RECORD 2 ]--------+--------------------------------------------------
-chunk                | _timescaledb_internal._hyper_3_6_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" >= '9223372036854775800'::bigint))
 
 CREATE TABLE date_table(time date);
-SELECT create_hypertable('date_table', 'time');
+SELECT table_name FROM create_hypertable('date_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
--[ RECORD 1 ]-----+------------------------
-create_hypertable | (4,public,date_table,t)
+-[ RECORD 1 ]----------
+table_name | date_table
 
 INSERT INTO date_table VALUES (test.min_ts_date()), (test.end_ts_date() - INTERVAL '1 day');
 -- Test out-of-range dates
@@ -173,19 +173,19 @@ ERROR:  timestamp out of range
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('date_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 -[ RECORD 1 ]--------+-----------------------------------------
-chunk                | _timescaledb_internal._hyper_4_7_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" < '4714-11-27 BC'::date))
 -[ RECORD 2 ]--------+-----------------------------------------
-chunk                | _timescaledb_internal._hyper_4_8_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" >= '294246-12-31'::date))
 
 CREATE TABLE timestamp_table(time timestamp);
-SELECT create_hypertable('timestamp_table', 'time');
+SELECT table_name FROM create_hypertable('timestamp_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
--[ RECORD 1 ]-----+-----------------------------
-create_hypertable | (5,public,timestamp_table,t)
+-[ RECORD 1 ]---------------
+table_name | timestamp_table
 
 INSERT INTO timestamp_table VALUES (test.min_ts_timestamp());
 INSERT INTO timestamp_table VALUES (test.end_ts_timestamp() - INTERVAL '1 microsecond');
@@ -199,19 +199,19 @@ ERROR:  timestamp out of range
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('timestamp_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 -[ RECORD 1 ]--------+-------------------------------------------------------------------------
-chunk                | _timescaledb_internal._hyper_5_9_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" < '4714-11-27 00:00:00 BC'::timestamp without time zone))
 -[ RECORD 2 ]--------+-------------------------------------------------------------------------
-chunk                | _timescaledb_internal._hyper_5_10_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" >= '294246-12-31 00:00:00'::timestamp without time zone))
 
 CREATE TABLE timestamptz_table(time timestamp);
-SELECT create_hypertable('timestamptz_table', 'time');
+SELECT table_name FROM create_hypertable('timestamptz_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
--[ RECORD 1 ]-----+-------------------------------
-create_hypertable | (6,public,timestamptz_table,t)
+-[ RECORD 1 ]-----------------
+table_name | timestamptz_table
 
 -- Need to be at UTC for this to work for timestamp with time zone
 INSERT INTO timestamptz_table VALUES (test.min_ts_timestamptz());
@@ -226,12 +226,12 @@ ERROR:  timestamp out of range
 SELECT chunk, pg_get_constraintdef(c.oid)
 FROM show_chunks('timestamptz_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c';
+AND c.contype = 'c' ORDER BY 1;
 -[ RECORD 1 ]--------+-------------------------------------------------------------------------
-chunk                | _timescaledb_internal._hyper_6_11_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" < '4714-11-27 00:00:00 BC'::timestamp without time zone))
 -[ RECORD 2 ]--------+-------------------------------------------------------------------------
-chunk                | _timescaledb_internal._hyper_6_12_chunk
+chunk                | _timescaledb_internal._hyper_X_X_chunk
 pg_get_constraintdef | CHECK (("time" >= '294246-12-31 00:00:00'::timestamp without time zone))
 
 RESET datestyle;
