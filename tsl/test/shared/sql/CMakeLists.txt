@@ -2,6 +2,10 @@ set(TEST_FILES_SHARED
     constraint_exclusion_prepared.sql decompress_placeholdervar.sql
     dist_gapfill.sql dist_insert.sql dist_distinct.sql)
 
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES_SHARED timestamp_limits.sql with_clause_parser.sql)
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
 set(TEST_TEMPLATES_SHARED
     constify_timestamptz_op_interval.sql.in gapfill.sql.in
     ordered_append.sql.in ordered_append_join.sql.in)
