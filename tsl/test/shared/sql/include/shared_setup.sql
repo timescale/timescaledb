@@ -6,6 +6,8 @@ SET client_min_messages TO ERROR;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
+CREATE SCHEMA test;
+
 -- create normal hypertable with dropped columns, each chunk will have different attribute numbers
 CREATE TABLE metrics(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 CREATE INDEX ON metrics(time DESC);
