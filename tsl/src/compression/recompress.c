@@ -96,7 +96,7 @@ tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS)
 	// Oid arg1_typeid = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	// Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
 	// elog(NOTICE, "typeis is %d %d", arg1_typeid, arg2_typeid);
-    //my_spi_function();
+	// my_spi_function();
 	MemoryContext grp_context, old_context;
 
 	if (!AggCheckCallContext(fcinfo, &grp_context) || !IsA(fcinfo->context, AggState))
@@ -138,12 +138,12 @@ tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 {
 	bool grp_done = false;
 	int rowcnt = 0;
-	HeapTuple compressed_tuple = NULL ;
+	HeapTuple compressed_tuple = NULL;
 	HeapTupleHeader result;
-	//ArrayBuildState *arrstate = NULL;
+	ArrayBuildState *arrstate = NULL;
 	RecompressChunkState *tstate =
 		PG_ARGISNULL(0) ? NULL : (RecompressChunkState *) PG_GETARG_POINTER(0);
-	//Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
+	Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
 	MemoryContext grp_context, old_context;
 	Assert(tstate != NULL);
 	if (!AggCheckCallContext(fcinfo, &grp_context))
@@ -158,47 +158,45 @@ tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 	{
 		result = (HeapTupleHeader) palloc(compressed_tuple->t_len);
 		memcpy(result, compressed_tuple->t_data, compressed_tuple->t_len);
-		//Datum datum = HeapTupleHeaderGetDatum(result);
-//		arrstate = accumArrayResult(arrstate, datum, false, arg2_typeid, CurrentMemoryContext);
-//		if (grp_done)
-//			break;
+		Datum datum = HeapTupleHeaderGetDatum(result);
+		arrstate = accumArrayResult(arrstate, datum, false, arg2_typeid, CurrentMemoryContext);
+		if (grp_done)
+			break;
 		rowcnt++;
-        break;   /* we combine vereything into 1 row */
+		// break;   /* we combine vereything into 1 row */
 	}
 	MemoryContextSwitchTo(old_context);
-//	if (arrstate)
-		//PG_RETURN_DATUM(makeArrayResult(arrstate, CurrentMemoryContext));
-    if ( compressed_tuple )
-	    PG_RETURN_HEAPTUPLEHEADER(result);
+	if (arrstate)
+		PG_RETURN_DATUM(makeArrayResult(arrstate, CurrentMemoryContext));
+	// if ( compressed_tuple )
+	// PG_RETURN_HEAPTUPLEHEADER(result);
 	else
 		PG_RETURN_NULL();
 }
 
-
 /* spi function */
-void my_spi_function(void)
+void
+my_spi_function(void)
 {
-    StringInfoData querybuf;
-    initStringInfo(&querybuf);
-    /* Open SPI context. */
-    if (SPI_connect_ext( SPI_OPT_NONATOMIC ) != SPI_OK_CONNECT)
-        elog(ERROR, "SPI_connect failed");
+	StringInfoData querybuf;
+	initStringInfo(&querybuf);
+	/* Open SPI context. */
+	if (SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT)
+		elog(ERROR, "SPI_connect failed");
 
-    //SPI_start_transaction();
-    appendStringInfo(&querybuf, "SET transaction isolation level read committed");
+	// SPI_start_transaction();
+	appendStringInfo(&querybuf, "SET transaction isolation level read committed");
 
+	if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
+		elog(ERROR, "SPI_exec failed: %s", querybuf.data);
 
-    if (SPI_exec(querybuf.data, 0) != SPI_OK_UTILITY)
-        elog(ERROR, "SPI_exec failed: %s", querybuf.data);
-
-    resetStringInfo(&querybuf);
-    appendStringInfo(&querybuf, "insert into tabA values(10, 4, 'four');");
-    if (SPI_exec(querybuf.data, 0) != SPI_OK_INSERT)
-        elog(ERROR, "SPI_exec insert failed: %s", querybuf.data);
-    resetStringInfo(&querybuf);
-    appendStringInfo(&querybuf, "update tabA set c = 'new' where b < 10");
-    if (SPI_exec(querybuf.data, 0) != SPI_OK_UPDATE)
-        elog(ERROR, "SPI_exec upd failed: %s", querybuf.data);
-    SPI_commit();
+	resetStringInfo(&querybuf);
+	appendStringInfo(&querybuf, "insert into tabA values(10, 4, 'four');");
+	if (SPI_exec(querybuf.data, 0) != SPI_OK_INSERT)
+		elog(ERROR, "SPI_exec insert failed: %s", querybuf.data);
+	resetStringInfo(&querybuf);
+	appendStringInfo(&querybuf, "update tabA set c = 'new' where b < 10");
+	if (SPI_exec(querybuf.data, 0) != SPI_OK_UPDATE)
+		elog(ERROR, "SPI_exec upd failed: %s", querybuf.data);
+	SPI_commit();
 }
-

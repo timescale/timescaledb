@@ -554,9 +554,9 @@ INSERT INTO test3 values ( '2020-01-03 12:01:00+00', 20, 11, '4row');
 INSERT INTO test3 values ( '2020-01-03 11:01:00+00', 20, 12, '12row');
 SELECT b, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
 FROM :COMP_CHUNK_NAME c  WHERE b = 11 group by b;
- b  |                                                                                                                                                                                                     arr                                                                                                                                                                                                     
-----+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- 11 | (BAAAAj44JDWIAP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHOp4K4AAAR8c7EHu/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,10,"Fri Jan 03 02:00:00 2020 PST","Fri Jan 03 04:01:00 2020 PST")
+ b  |                                                                                                                                                                                                         arr                                                                                                                                                                                                         
+----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 11 | {"(BAAAAj44JDWIAP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHOp4K4AAAR8c7EHu/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,10,\"Fri Jan 03 02:00:00 2020 PST\",\"Fri Jan 03 04:01:00 2020 PST\")"}
 (1 row)
 
 SELECT count(*) from test3;
@@ -579,7 +579,7 @@ WHERE b in
  ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 )
 )
 INSERT INTO :COMP_CHUNK_NAME
-SELECT  (_timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c)).*
+SELECT  (unnest(_timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c))).*
 FROM :COMP_CHUNK_NAME c
 where b in
  ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 ) GROUP BY b;

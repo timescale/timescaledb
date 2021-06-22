@@ -823,14 +823,14 @@ row_compressor_get_compressed_tuple(RowCompressor *row_compressor, MemoryContext
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
 									   row_compressor->compressed_is_null);
-/*	Assert(row_compressor->bistate != NULL);
-	CommandId mycid = GetCurrentCommandId(true);
-	heap_insert(row_compressor->compressed_table,
-				compressed_tuple,
-				mycid,
-				0 ,
-				row_compressor->bistate);
-*/
+	/*	Assert(row_compressor->bistate != NULL);
+		CommandId mycid = GetCurrentCommandId(true);
+		heap_insert(row_compressor->compressed_table,
+					compressed_tuple,
+					mycid,
+					0 ,
+					row_compressor->bistate);
+	*/
 	MemoryContextSwitchTo(old_ctx);
 	return compressed_tuple;
 }
@@ -1564,7 +1564,6 @@ row_compressor_init_wrapper(RowCompressor *row_compressor, int srcht_id, Relatio
 						in_column_offsets,
 						out_desc->natts,
 						false /*need_bistate*/);
-
 }
 
 CompressSingleRowState *

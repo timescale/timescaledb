@@ -231,7 +231,7 @@ WHERE b in
  ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 )
 )
 INSERT INTO :COMP_CHUNK_NAME
-SELECT  (_timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c)).*
+SELECT  (unnest(_timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c))).*
 FROM :COMP_CHUNK_NAME c
 where b in
  ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 ) GROUP BY b;
