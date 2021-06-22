@@ -26,6 +26,13 @@ fi
 #    loader_hello                 used to test that our name collision resistance works
 #    test_symbol_conflict         used to test that our name collision resistance works
 #    tsl_license_update_check     used to check for valid license
+#    __sanitizer.* __sancov.*     llvm sanitizer
+#    _ZN11__sanitizer.*           llvm sanitizer
+#    __asan.* __odr_asan.*        address sanitizer
+#    __ubsan.* _ZN7__ubsan.*      undefined behaviour sanitizer
+#    internal_sigreturn           gcc
+#    OnPrint                      gcc
+#    backtrace_uncompress_zdebug  libbacktrace
 # all of these symbols start with an additional leading '_' on macos
 exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
     | xargs -0 @NM@ ${DEFINED_ONLY} ${EXTERN_ONLY} \
@@ -50,6 +57,16 @@ exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
         -e '^_\?timescaledb_' \
         -e '^_\?loader_hello$' \
         -e '^_\?test_symbol_conflict$' \
+        -e '^_\?__sanitizer' \
+        -e '^_\?__sancov' \
+        -e '^_\?__asan' \
+        -e '^_\?__odr_asan' \
+        -e '^_\?__ubsan' \
+        -e '^_\?_ZN7__ubsan' \
+        -e '^_\?_ZN11__sanitizer' \
+        -e '^_\?internal_sigreturn$' \
+        -e '^_\?OnPrint$' \
+        -e '^_\?backtrace_uncompress_zdebug$' \
 )
 
 num_exports=$(echo "${exports}" | grep -v '^$' | wc -l)
