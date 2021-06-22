@@ -571,8 +571,7 @@ if(TAP_CHECKS)
     find_program(
       PROVE prove
       HINTS ${PERL_BIN_PATH}
-      PATHS "/usr/bin"
-      NO_DEFAULT_PATH)
+      PATHS "/usr/bin")
 
     if(NOT PROVE)
       message(
