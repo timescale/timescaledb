@@ -26,6 +26,7 @@ typedef struct RecompressChunkState
 {
 	RCQueryState *qrystate;
 	RecompressTupleGroupState *grpstate;
+    Tuplestorestate *tupstore;
 } RecompressChunkState;
 
 static void rc_query_shutdown(Datum arg);
@@ -81,6 +82,7 @@ rc_state_setup(FunctionCallInfo fcinfo, Oid uncompressed_chunk_relid)
 	tstate = palloc(sizeof(RecompressChunkState));
 	tstate->qrystate = qrystate;
 	tstate->grpstate = recompress_tuple_group_init(tstate->qrystate->rctuple);
+    tstate->tupstore = tuplestore_begin_heap(true, false, work_mem); //how much memory should this hold!!!!!! TODO
 	AggRegisterCallback(fcinfo, rc_query_shutdown, PointerGetDatum(tstate));
 	MemoryContextSwitchTo(oldcontext);
 	return tstate;
@@ -143,6 +145,7 @@ tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 	//ArrayBuildState *arrstate = NULL;
 	RecompressChunkState *tstate =
 		PG_ARGISNULL(0) ? NULL : (RecompressChunkState *) PG_GETARG_POINTER(0);
+    ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
 	//Oid arg2_typeid = get_fn_expr_argtype(fcinfo->flinfo, 2);
 	MemoryContext grp_context, old_context;
 	Assert(tstate != NULL);
@@ -151,27 +154,36 @@ tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS)
 		/* cannot be called directly because of internal-type argument */
 		elog(ERROR, "recompress_chunk_ffunc called in non-aggregate context");
 	}
+    if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("set-valued function called in context that cannot accept a set")));
+    if (!(rsinfo->allowedModes & SFRM_Materialize))
+        ereport(ERROR,
+                (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                 errmsg("materialize mode required, but it is not allowed in this context")));
+
 	old_context = MemoryContextSwitchTo(grp_context);
 	// test what happens on empty table
 	while ((compressed_tuple =
 				recompress_tuple_get_next(tstate->qrystate->rctuple, tstate->grpstate, &grp_done)))
 	{
-		result = (HeapTupleHeader) palloc(compressed_tuple->t_len);
-		memcpy(result, compressed_tuple->t_data, compressed_tuple->t_len);
+//		result = (HeapTupleHeader) palloc(compressed_tuple->t_len);
+//		memcpy(result, compressed_tuple->t_data, compressed_tuple->t_len);
 		//Datum datum = HeapTupleHeaderGetDatum(result);
 //		arrstate = accumArrayResult(arrstate, datum, false, arg2_typeid, CurrentMemoryContext);
 //		if (grp_done)
 //			break;
+//to return setof record
+        tuplestore_puttuple( tstate->tupstore, compressed_tuple);
 		rowcnt++;
-        break;   /* we combine vereything into 1 row */
 	}
+    rsinfo->returnMode = SFRM_Materialize;
+    rsinfo->setResult = tstate->tupstore;
+    rsinfo->setDesc = tstate->qrystate->compress_desc;
 	MemoryContextSwitchTo(old_context);
-//	if (arrstate)
-		//PG_RETURN_DATUM(makeArrayResult(arrstate, CurrentMemoryContext));
-    if ( compressed_tuple )
-	    PG_RETURN_HEAPTUPLEHEADER(result);
-	else
-		PG_RETURN_NULL();
+
+    return (Datum)0;
 }
 
 
