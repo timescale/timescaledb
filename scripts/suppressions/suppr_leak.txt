@@ -2,6 +2,8 @@ leak:save_ps_display_args
 leak:psql/startup.c
 #don't care about the frontend leaks
 leak:fe_memutils.c
+leak:fe-connect.c
+leak:fe-exec.c
 leak:initdb.c
 #annoingly have to supress strdup because it leaks in PostmasterMain -D option
 leak:strdup
@@ -9,6 +11,7 @@ leak:ProcessConfigFileInternal
 leak:internal_load_library
 
 leak:pg_timezone_abbrev_initialize
+leak:check_timezone_abbreviations
 leak:check_session_authorization
 leak:InitializeGUCOptions
 leak:CheckMyDatabase
