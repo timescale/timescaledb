@@ -19,13 +19,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "12", "13" ]
+        pg: [ "12.7", "13.3" ]
         build_type: [ Debug ]
         include:
-          - pg: 12
+          - pg: 12.7
             ignores: append-12 chunk_adaptive continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12 plan_skip_scan-12
-          - pg: 13
+            pg_major: 12
+          - pg: 13.3
             ignores: append-13 chunk_adaptive remote_txn transparent_decompression-13 vacuum_parallel plan_skip_scan-13
+            pg_major: 13
 
     steps:
 
@@ -36,15 +38,15 @@ jobs:
         apt-get install -y gnupg postgresql-common
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl libtest-most-perl sudo gdb git wget
-        apt-get install -y postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+        apt-get install -y postgresql-${{ matrix.pg_major }} postgresql-server-dev-${{ matrix.pg_major }}
 
     - name: Build pg_isolation_regress
       run: |
-        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
+        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/postgresql
         tar --extract --file postgresql.tar.bz2 --directory ~/postgresql --strip-components 1
         cd ~/postgresql
-        ./configure --prefix=/usr/lib/postgresql/${{ matrix.pg }} --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib
+        ./configure --prefix=/usr/lib/postgresql/${{ matrix.pg_major }} --enable-debug --enable-cassert --with-openssl --without-readline --without-zlib
         make -C src/test/isolation
         chown -R postgres:postgres ~/postgresql
 
@@ -82,10 +84,10 @@ jobs:
       shell: bash
       run: |
         if compgen -G "/tmp/core*" > /dev/null; then
-          apt-get install postgresql-${{ matrix.pg }}-dbgsym >/dev/null
+          apt-get install postgresql-${{ matrix.pg_major }}-dbgsym >/dev/null
           for file in /tmp/core*
           do
-            gdb /usr/lib/postgresql/${{ matrix.pg }}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
+            gdb /usr/lib/postgresql/${{ matrix.pg_major }}/bin/postgres -c $file <<<'bt full' | tee -a stacktraces.log
           done
           echo "::set-output name=coredumps::true"
           exit 1
