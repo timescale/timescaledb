@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <utils/builtins.h>
 
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -175,6 +176,7 @@ ts_hypertable_compression_rename_column(int32 htid, char *old_column_name, char 
 
 	ts_scanner_foreach(&iterator)
 	{
+		NameData name_new_column_name;
 		bool isnull;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		Datum datum = slot_getattr(ti->slot, Anum_hypertable_compression_attname, &isnull);
@@ -191,8 +193,9 @@ ts_hypertable_compression_rename_column(int32 htid, char *old_column_name, char 
 			tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			heap_deform_tuple(tuple, tupdesc, values, isnulls);
 
+			namestrcpy(&name_new_column_name, new_column_name);
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] =
-				CStringGetDatum(new_column_name);
+				NameGetDatum(&name_new_column_name);
 			repl[AttrNumberGetAttrOffset(Anum_hypertable_compression_attname)] = true;
 			new_tuple = heap_modify_tuple(tuple, tupdesc, values, isnulls, repl);
 			ts_catalog_update(ti->scanrel, new_tuple);
