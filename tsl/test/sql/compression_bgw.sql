@@ -143,3 +143,4 @@ SELECT add_compression_policy AS job_id
 CALL run_job(:job_id);
 
 \i include/recompress_basic.sql
+\i include/recompress_tuples.sql

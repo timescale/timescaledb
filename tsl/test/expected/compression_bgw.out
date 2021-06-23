@@ -520,9 +520,28 @@ SELECT delete_job(:JOB_RECOMPRESS);
  
 (1 row)
 
--- test recompress_tuples --
+\i include/recompress_tuples.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE OR REPLACE VIEW compressed_chunk_info_view AS
+SELECT
+   h.schema_name AS hypertable_schema,
+   h.table_name AS hypertable_name,
+   c.schema_name as chunk_schema,
+   c.table_name as chunk_name,
+   c.status as chunk_status, 
+   comp.schema_name as compressed_chunk_schema,
+   comp.table_name as compressed_chunk_name
+FROM
+   _timescaledb_catalog.hypertable h JOIN
+  _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
+   LEFT JOIN _timescaledb_catalog.chunk comp
+ON comp.id = c.compressed_chunk_id
+;
+-- TEST1 test recompress_tuples has 1 output row per segment --
 CREATE TABLE test3 (timec timestamptz NOT NULL, i integer ,
-      b bigint, t text);
+      segcol bigint, t text);
 SELECT table_name from create_hypertable('test3', 'timec', chunk_time_interval=> INTERVAL '7 days');
  table_name 
 ------------
@@ -533,7 +552,7 @@ SELECT table_name from create_hypertable('test3', 'timec', chunk_time_interval=>
 INSERT INTO test3 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
 INSERT INTO test3 SELECT q, 10, 15, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
 ALTER TABLE test3 set (timescaledb.compress, 
-timescaledb.compress_segmentby = 'b', 
+timescaledb.compress_segmentby = 'segcol', 
 timescaledb.compress_orderby = 'timec DESC');
 SELECT compress_chunk(c)
 FROM show_chunks('test3') c;
@@ -552,58 +571,89 @@ INSERT INTO test3 values ( '2020-01-03 11:01:00+00', 20, 11, '3row');
 INSERT INTO test3 values ( '2020-01-03 12:01:00+00', 20, 11, '4row');
 --- insert a new segment  by ---
 INSERT INTO test3 values ( '2020-01-03 11:01:00+00', 20, 12, '12row');
-SELECT b, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
-FROM :COMP_CHUNK_NAME c  WHERE b = 11 group by b;
- b  |                                                                                                                                                                                                         arr                                                                                                                                                                                                         
-----+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- 11 | {"(BAAAAj44JDWIAP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHOp4K4AAAR8c7EHu/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,10,\"Fri Jan 03 02:00:00 2020 PST\",\"Fri Jan 03 04:01:00 2020 PST\")"}
+SELECT segcol, _timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c ) arr 
+FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
+ segcol |                                                                                                                                                                                                         arr                                                                                                                                                                                                         
+--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+     11 | {"(BAAAAj44JDWIAP/////8bHkAAAAAHAAAAAgAAAAA19197gAEfHOp4K4AAAR8c7EHu/8AAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgAAAAAAHJw3/wAAAAAAAAAAFXUqAAcnDgA=,BAAAAAAAAAAACv/////////2AAAAHAAAAAMAAAAAAAAGZgAAAAAAAU7oAAAABSdQAAAAAJ1AAAAAAA==,11,AgBwZ19jYXRhbG9nAHRleHQAAAAAHAAAAAEAAAAAAAAAAgB1VVVZVVVUAAEAAAAEAAAABDRyb3cAAAAFaGVsbG8AAAAEM3JvdwAAAAQycm93,28,10,\"Fri Jan 03 02:00:00 2020 PST\",\"Fri Jan 03 04:01:00 2020 PST\")"}
 (1 row)
 
-SELECT count(*) from test3;
- count 
--------
-    54
+\set TABLE_NAME test3 
+\ir recompress_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ before_recompress_count 
+-------------------------
+                      54
 (1 row)
 
-SELECT count(*) from :COMP_CHUNK_NAME;
- count 
--------
-     6
+ before_recompress_chunk_table_count 
+-------------------------------------
+                                   6
 (1 row)
 
-CREATE TABLE test4 as select * from test3;
-WITH cdel AS
-(
-DELETE FROM :COMP_CHUNK_NAME
-WHERE b in
- ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 )
-)
-INSERT INTO :COMP_CHUNK_NAME
-SELECT  (unnest(_timescaledb_internal.recompress_tuples(:'CHUNK_NAME'::regclass, c))).*
-FROM :COMP_CHUNK_NAME c
-where b in
- ( SELECT distinct b from :COMP_CHUNK_NAME WHERE _ts_meta_sequence_num = 0 ) GROUP BY b;
-SELECT * FROM
-(( SELECT * from test4) EXCEPT (select * from test3) ) q;
- timec | i | b | t 
--------+---+---+---
+ timec | i | segcol | t 
+-------+---+--------+---
 (0 rows)
 
-SELECT * FROM
-(( SELECT * from test3) EXCEPT (select * from test4) ) q;
- timec | i | b | t 
--------+---+---+---
+ timec | i | segcol | t 
+-------+---+--------+---
 (0 rows)
 
-SELECT count(*) from test3;
- count 
--------
-    54
+ after_recompress_count 
+------------------------
+                     54
 (1 row)
 
-SELECT count(*) from :COMP_CHUNK_NAME;
- count 
--------
-     3
+ after_compress_chunk_table_count 
+----------------------------------
+                                3
 (1 row)
+
+ segcol | _ts_meta_count | _ts_meta_sequence_num |        _ts_meta_min_1        |        _ts_meta_max_1        
+--------+----------------+-----------------------+------------------------------+------------------------------
+     11 |             28 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:01:00 2020 PST
+     12 |              1 |                    20 | Fri Jan 03 03:01:00 2020 PST | Fri Jan 03 03:01:00 2020 PST
+     15 |             25 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
+(3 rows)
+
+ before_recompress_count 
+-------------------------
+                    3655
+(1 row)
+
+ before_recompress_chunk_table_count 
+-------------------------------------
+                                3604
+(1 row)
+
+ timec | i | segcol | t 
+-------+---+--------+---
+(0 rows)
+
+ timec | i | segcol | t 
+-------+---+--------+---
+(0 rows)
+
+ after_recompress_count 
+------------------------
+                   3655
+(1 row)
+
+ after_compress_chunk_table_count 
+----------------------------------
+                                6
+(1 row)
+
+ segcol | _ts_meta_count | _ts_meta_sequence_num |        _ts_meta_min_1        |        _ts_meta_max_1        
+--------+----------------+-----------------------+------------------------------+------------------------------
+     11 |             28 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:01:00 2020 PST
+     12 |           1000 |                    10 | Fri Jan 03 02:43:22 2020 PST | Fri Jan 03 03:01:00 2020 PST
+     12 |           1000 |                    20 | Fri Jan 03 02:26:42 2020 PST | Fri Jan 03 02:43:21 2020 PST
+     12 |           1000 |                    30 | Fri Jan 03 02:10:02 2020 PST | Fri Jan 03 02:26:41 2020 PST
+     12 |            602 |                    40 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 02:10:01 2020 PST
+     15 |             25 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
+(6 rows)
 
