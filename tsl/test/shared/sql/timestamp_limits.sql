@@ -106,28 +106,28 @@ CREATE TABLE smallint_table(time smallint);
 SELECT table_name FROM create_hypertable('smallint_table', 'time', chunk_time_interval=>10);
 INSERT INTO smallint_table VALUES (-32768), (32767);
 
-SELECT chunk, pg_get_constraintdef(c.oid)
+SELECT pg_get_constraintdef(c.oid)
 FROM show_chunks('smallint_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c' ORDER BY 1;
+AND c.contype = 'c' ORDER BY chunk;
 
 CREATE TABLE int_table(time int);
 SELECT table_name FROM create_hypertable('int_table', 'time', chunk_time_interval=>10);
 INSERT INTO int_table VALUES (-2147483648), (2147483647);
 
-SELECT chunk, pg_get_constraintdef(c.oid)
+SELECT pg_get_constraintdef(c.oid)
 FROM show_chunks('int_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c' ORDER BY 1;
+AND c.contype = 'c' ORDER BY chunk;
 
 CREATE TABLE bigint_table(time bigint);
 SELECT table_name FROM create_hypertable('bigint_table', 'time', chunk_time_interval=>10);
 INSERT INTO bigint_table VALUES (-9223372036854775808), (9223372036854775807);
 
-SELECT chunk, pg_get_constraintdef(c.oid)
+SELECT pg_get_constraintdef(c.oid)
 FROM show_chunks('bigint_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c' ORDER BY 1;
+AND c.contype = 'c' ORDER BY chunk;
 
 CREATE TABLE date_table(time date);
 SELECT table_name FROM create_hypertable('date_table', 'time');
@@ -138,10 +138,10 @@ INSERT INTO date_table VALUES (test.min_ts_date() - INTERVAL '1 day');
 INSERT INTO date_table VALUES (test.end_ts_date());
 \set ON_ERROR_STOP 1
 
-SELECT chunk, pg_get_constraintdef(c.oid)
+SELECT pg_get_constraintdef(c.oid)
 FROM show_chunks('date_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c' ORDER BY 1;
+AND c.contype = 'c' ORDER BY chunk;
 
 CREATE TABLE timestamp_table(time timestamp);
 SELECT table_name FROM create_hypertable('timestamp_table', 'time');
@@ -155,10 +155,10 @@ INSERT INTO timestamp_table VALUES (test.min_ts_timestamp() - INTERVAL '1 micros
 INSERT INTO timestamp_table VALUES (test.end_ts_timestamp());
 \set ON_ERROR_STOP 1
 
-SELECT chunk, pg_get_constraintdef(c.oid)
+SELECT pg_get_constraintdef(c.oid)
 FROM show_chunks('timestamp_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c' ORDER BY 1;
+AND c.contype = 'c' ORDER BY chunk;
 
 CREATE TABLE timestamptz_table(time timestamp);
 SELECT table_name FROM create_hypertable('timestamptz_table', 'time');
@@ -173,10 +173,10 @@ INSERT INTO timestamptz_table VALUES (test.min_ts_timestamptz() - INTERVAL '1 mi
 INSERT INTO timestamptz_table VALUES (test.end_ts_timestamptz());
 \set ON_ERROR_STOP 1
 
-SELECT chunk, pg_get_constraintdef(c.oid)
+SELECT pg_get_constraintdef(c.oid)
 FROM show_chunks('timestamptz_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
-AND c.contype = 'c' ORDER BY 1;
+AND c.contype = 'c' ORDER BY chunk;
 
 RESET datestyle;
 RESET timezone;
