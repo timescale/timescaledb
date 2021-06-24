@@ -138,7 +138,6 @@ typedef struct RowCompressor
 	uint32 rows_compressed_into_current_value;
 	/* a unique monotonically increasing (according to order by) id for each compressed row */
 	int32 sequence_num;
-
 	/* cached arrays used to build the HeapTuple */
 	Datum *compressed_values;
 	bool *compressed_is_null;
@@ -678,6 +677,18 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 		segment_info_update(column->segment_info, val, is_null);
 		MemoryContextSwitchTo(row_compressor->per_row_ctx);
 	}
+}
+
+/* use this function if you want the sequence numbering to start at a different offset
+ * instead of the default
+ */
+static inline void
+row_compressor_set_sequence_num(RowCompressor *row_compressor, int32 seqnum)
+{
+	if (seqnum > 0)
+		row_compressor->sequence_num = seqnum;
+	else
+		row_compressor->sequence_num = SEQUENCE_NUM_GAP;
 }
 
 static bool
@@ -1736,6 +1747,7 @@ typedef struct RecompressTupleGroupState
 	TupleTableSlot *chunk_rel_tuple_slot;
 	enum RecompressTupleState state;
 	bool changed_groups;
+	int32 row_sequence_num;
 } RecompressTupleGroupState;
 
 typedef struct RecompressTuple
@@ -1749,12 +1761,16 @@ typedef struct RecompressTuple
 	Oid *sort_collations;
 	bool *nulls_first;
 	int n_keys;
+	int16 compress_rel_sequence_column_offset;
 } RecompressTuple;
 
 RecompressTuple *
 recompress_tuple_init(int srcht_id, Relation chunk_rel, Relation compress_rel)
 {
 	const ColumnCompressionInfo **keys;
+	Name sequence_num_metadata_name = DatumGetName(
+		DirectFunctionCall1(namein,
+							CStringGetDatum(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME)));
 	RecompressTuple *rcstate = palloc(sizeof(RecompressTuple));
 	rcstate->decompressor = palloc(sizeof(RowDecompressor));
 	row_decompressor_init(rcstate->decompressor, chunk_rel, compress_rel);
@@ -1773,7 +1789,8 @@ recompress_tuple_init(int srcht_id, Relation chunk_rel, Relation compress_rel)
 
 	rcstate->compress_tupdesc = RelationGetDescr(compress_rel);
 	rcstate->chunk_tupdesc = RelationGetDescr(chunk_rel);
-
+	rcstate->compress_rel_sequence_column_offset = AttrNumberGetAttrOffset(
+		get_attnum(compress_rel->rd_id, NameStr(*sequence_num_metadata_name)));
 	// rcstate->compressed_datums = palloc(sizeof(Datum) * rcstate->compress_tupdesc->natts);
 	// rcstate->compressed_is_nulls = palloc(sizeof(bool) * rcstate->compress_tupdesc->natts);
 	for (int i = 0; i < n_keys; i++)
@@ -1806,6 +1823,7 @@ recompress_tuple_group_init(RecompressTuple *rcstate)
 		MakeSingleTupleTableSlot(rcstate->chunk_tupdesc, &TTSOpsMinimalTuple);
 	// elog(NOTICE, "in group init  %p %p ************", CurrentMemoryContext, grpstate);
 	grpstate->state = RecompressTupleNoSort;
+	grpstate->row_sequence_num = 0;
 	return grpstate;
 }
 
@@ -1819,6 +1837,10 @@ recompress_tuple_group_destroy(RecompressTupleGroupState *grpstate)
 	ExecDropSingleTupleTableSlot(grpstate->chunk_rel_tuple_slot);
 }
 
+/* Pass in a compressed row.
+ * Decompress the row and add tuples into sort area for recompression.
+ * Keep track of min non zero sequence number for the appended set of rows
+ */
 void
 recompress_tuple_append_row(RecompressTuple *rcstate, RecompressTupleGroupState *grpstate,
 							Datum *compressed_datums, bool *compressed_is_nulls)
@@ -1834,11 +1856,14 @@ recompress_tuple_append_row(RecompressTuple *rcstate, RecompressTupleGroupState 
 						  rcstate->compress_tupdesc,
 						  rcstate->compressed_datums,
 						  rcstate->compressed_is_nulls); */
+	/* any metadata column is not retrieved. Do that specifically */
 	populate_per_compressed_columns_from_data(decompressor->per_compressed_cols,
 											  rcstate->compress_tupdesc->natts,
 											  compressed_datums,
 											  compressed_is_nulls);
-
+	int32 seqnum = compressed_datums[rcstate->compress_rel_sequence_column_offset];
+	if (seqnum > 0 && seqnum < grpstate->row_sequence_num)
+		grpstate->row_sequence_num = seqnum;
 	/* decompress the row and add tuples for sorting*/
 	do
 	{
@@ -1877,7 +1902,11 @@ recompress_tuple_append_row(RecompressTuple *rcstate, RecompressTupleGroupState 
 
 /* Compresses the added tuples (by recompress_tuple_append_row )
  * and returns 1 or more compressed tuples
- * returns true if the current group is done
+ * Returns the compressed tuple, or NULL when the tuples are exhausted
+ * group_done is set to true when the current group is done
+ * Notes:
+ * RecompressTupleGroupState is not reset by this function. The caller
+ * deals with this as needed based on group_done status information.
  */
 HeapTuple
 recompress_tuple_get_next(RecompressTuple *rcstate, RecompressTupleGroupState *grpstate,
@@ -1892,6 +1921,7 @@ recompress_tuple_get_next(RecompressTuple *rcstate, RecompressTupleGroupState *g
 	/* sort the data */
 	if (grpstate->state == RecompressTupleNoSort)
 	{
+		row_compressor_set_sequence_num(rcstate->compressor, grpstate->row_sequence_num);
 		/* first iteration */
 		tuplesort_performsort(grpstate->tupsortstate);
 	}

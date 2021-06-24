@@ -60,9 +60,15 @@ ORDER BY 1, 3;
 -- insert into 1 segments and then compress
 INSERT INTO test3 SELECT q, 10, 12, 'seg12' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 11:00:00+00' , '1 s'::interval) q;
 
+SELECT segcol, min(_ts_meta_sequence_num)
+FROM :COMP_CHUNK_NAME
+WHERE _ts_meta_sequence_num > 0
+GROUP BY segcol
+ORDER BY 1;
+
 \set TABLE_NAME test3 
 \ir recompress_test.sql
 
 SELECT segcol, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_max_1
 FROM :COMP_CHUNK_NAME
-ORDER BY 1, 3;
+ORDER BY 1, 3, 4, 5;

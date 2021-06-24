@@ -615,8 +615,15 @@ FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
  segcol | _ts_meta_count | _ts_meta_sequence_num |        _ts_meta_min_1        |        _ts_meta_max_1        
 --------+----------------+-----------------------+------------------------------+------------------------------
      11 |             28 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:01:00 2020 PST
-     12 |              1 |                    20 | Fri Jan 03 03:01:00 2020 PST | Fri Jan 03 03:01:00 2020 PST
+     12 |              1 |                    10 | Fri Jan 03 03:01:00 2020 PST | Fri Jan 03 03:01:00 2020 PST
      15 |             25 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
+(3 rows)
+
+ segcol | min 
+--------+-----
+     11 |  10
+     12 |  10
+     15 |  20
 (3 rows)
 
  before_recompress_count 
