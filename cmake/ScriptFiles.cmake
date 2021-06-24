@@ -54,6 +54,7 @@ set(SOURCE_FILES
     metadata.sql
     dist_internal.sql
     views.sql
+    views_experimental.sql
     gapfill.sql
     maintenance_utils.sql
     partialize_finalize.sql
