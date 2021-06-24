@@ -1,4 +1,3 @@
-DROP SCHEMA IF EXISTS timescaledb_experimental CASCADE;
 DROP FUNCTION IF EXISTS _timescaledb_internal.block_new_chunks;
 DROP FUNCTION IF EXISTS _timescaledb_internal.allow_new_chunks;
 DROP FUNCTION IF EXISTS _timescaledb_internal.refresh_continuous_aggregate;
@@ -12,6 +11,8 @@ DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk;
 DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk;
 DROP TABLE IF EXISTS _timescaledb_catalog.chunk_copy_activity;
 DROP SEQUENCE IF EXISTS _timescaledb_catalog.chunk_copy_activity_id_seq;
+DROP VIEW IF EXISTS timescaledb_experimental.chunk_replication_status;
+DROP SCHEMA IF EXISTS timescaledb_experimental CASCADE;
 
 -- We need to rewrite all continuous aggregates to make sure that the
 -- queries do not contain qualification. They will be re-written in
