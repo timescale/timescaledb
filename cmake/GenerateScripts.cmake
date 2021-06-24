@@ -1,16 +1,32 @@
 # Functions and macros to generate upgrade and downgrade scripts
 
-# concatenate_files(<output> <file> ...)
+# add_concat_command(<output> <file> ...)
 #
-# Concatenate a list of files into <output>
-function(concatenate_files OUTPUT_FILE FIRST_FILE)
-  file(READ ${FIRST_FILE} _contents)
-  file(WRITE ${OUTPUT_FILE} "${_contents}")
-  foreach(_file ${ARGN})
-    file(READ ${_file} _contents)
-    file(APPEND ${OUTPUT_FILE} "${_contents}")
-  endforeach()
-endfunction()
+# Add command that will concatenate a list of files into <output> and
+# create a custom target that is dependent on the files.
+macro(add_concat_command OUTPUT_FILE)
+  list(JOIN ARGN " + " _files)
+  message(STATUS "ARGN: ${ARGN}")
+  message(STATUS "_files: ${_files}")
+  message(STATUS "WIN32: ${WIN32}")
+  if(WIN32)
+    add_custom_command(
+      OUTPUT ${OUTPUT_FILE}
+      DEPENDS ${ARGN}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      COMMAND copy/a/y $<$<BOOL:${ARGN}>:$<JOIN:${ARGN},;+;>> ${OUTPUT_FILE}
+      COMMENT "Generating ${OUTPUT_FILE}"
+      VERBATIM COMMAND_EXPAND_LISTS)
+  else()
+    add_custom_command(
+      OUTPUT ${OUTPUT_FILE}
+      DEPENDS ${ARGN}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      COMMAND cat ${ARGN} > ${OUTPUT_FILE}
+      COMMENT "Generating ${OUTPUT_FILE}"
+      VERBATIM COMMAND_EXPAND_LISTS)
+  endif()
+endmacro()
 
 # generate_script(...)
 #
@@ -24,9 +40,12 @@ endfunction()
 # Defaults to CMAKE_CURRENT_BINARY_DIR.
 #
 # FILES <file> ... List of files to include, in order, in the script file.
+#
+# RESULT_FILE <var> Variable that will contain the result file from
+# generating the script.
 function(generate_script)
   set(options)
-  set(oneValueArgs VERSION SCRIPT OUTPUT_DIRECTORY)
+  set(oneValueArgs VERSION SCRIPT OUTPUT_DIRECTORY RESULT_FILE)
   set(multiValueArgs FILES)
   cmake_parse_arguments(_generate "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
@@ -53,12 +72,10 @@ function(generate_script)
   endforeach()
 
   # Concatenate the real files into the update file.
-  message(STATUS "Generating script ${_generate_SCRIPT}")
-  concatenate_files(${_generate_OUTPUT_DIRECTORY}/${_generate_SCRIPT}
-                    ${_result_files})
-
-  install(FILES ${_generate_OUTPUT_DIRECTORY}/${_generate_SCRIPT}
-          DESTINATION "${PG_SHAREDIR}/extension")
+  add_concat_command(
+    ${_generate_OUTPUT_DIRECTORY}/${_generate_SCRIPT}
+    ${_result_files})
+  set(${_generate_RESULT_FILE} ${_generate_OUTPUT_DIRECTORY}/${_generate_SCRIPT} PARENT_SCOPE)
 endfunction()
 
 # generate_downgrade_script(<options>)
@@ -108,10 +125,13 @@ endfunction()
 #
 # MODULE_PATHNAME: Pathname to timescale extension of the version being dowgraded
 # to. This can be used to load "old" functions from the correct library.
+#
+# RESULT_FILE <var> Variable that will contain the result file from
+# generating the script.
 function(generate_downgrade_script)
   set(options)
   set(oneValueArgs SOURCE_VERSION TARGET_VERSION OUTPUT_DIRECTORY
-                   INPUT_DIRECTORY FILES)
+                   INPUT_DIRECTORY FILES RESULT_FILE)
   cmake_parse_arguments(_downgrade "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
@@ -180,6 +200,7 @@ function(generate_downgrade_script)
   endforeach()
   list(APPEND _files ${_epilog_files})
 
+  set(_result_file)
   generate_script(
     VERSION
     ${_downgrade_TARGET_VERSION}
@@ -188,5 +209,7 @@ function(generate_downgrade_script)
     OUTPUT_DIRECTORY
     ${_downgrade_OUTPUT_DIRECTORY}
     FILES
-    ${_files})
+    ${_files}
+    RESULT_FILE _result_file)
+  set(${_downgrade_RESULT_FILE} ${_result_file} PARENT_SCOPE)
 endfunction()

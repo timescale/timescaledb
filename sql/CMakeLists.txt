@@ -47,6 +47,7 @@ if(NOT GENERATE_DOWNGRADE_SCRIPT)
 elseif(NOT GIT_FOUND)
   message(STATUS "Not generating downgrade script: Git not available.")
 else()
+  set(_script_files)
   generate_downgrade_script(
     SOURCE_VERSION
     ${PROJECT_VERSION_MOD}
@@ -55,7 +56,10 @@ else()
     INPUT_DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/updates
     FILES
-    reverse-dev.sql)
+    reverse-dev.sql
+    RESULT_FILE
+    _script)
+  list(APPEND _script_files ${_script})
   foreach(_downgrade_file ${REV_FILES})
     if(${_downgrade_file} MATCHES
        "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
@@ -69,11 +73,16 @@ else()
         INPUT_DIRECTORY
         ${CMAKE_CURRENT_SOURCE_DIR}/updates
         FILES
-        ${_downgrade_file})
+        ${_downgrade_file}
+        RESULT_FILE
+        _script)
+      list(APPEND _script_files ${_script})
     else()
       message(FATAL_ERROR "${_downgrade_file} is not a downgrade file")
     endif()
   endforeach()
+  install(FILES ${_script_files} DESTINATION "${PG_SHAREDIR}/extension")
+  add_custom_target(sqldowngradescripts ALL DEPENDS ${_script_files})
 endif()
 
 # Function to replace @MODULE_PATHNAME@ in source files, producing an output
@@ -102,30 +111,11 @@ version_files("${MOD_FILES}" MOD_FILES_VERSIONED)
 version_files("updates/latest-dev.sql" LASTEST_MOD_VERSIONED)
 version_files("notice.sql" NOTICE_FILE)
 
-# Function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
-function(cat_files SRC_FILE_LIST OUTPUT_FILE)
-  if(WIN32)
-    # Make list of files into string of files separated by "+" to make Windows
-    # copy concatenate them
-    file(TO_NATIVE_PATH "${SRC_FILE_LIST}" SRC_FILE_LIST_NATIVE)
-    string(REPLACE ";" ";+;" SQL_LIST_JOINED "${SRC_FILE_LIST_NATIVE}")
-    file(TO_NATIVE_PATH "${OUTPUT_FILE}" OUTPUT_FILE_NATIVE)
-    set(CAT_CMD copy /B /y ${SQL_LIST_JOINED} "\"${OUTPUT_FILE_NATIVE}\"" >NUL)
-  else()
-    set(CAT_CMD cat ${SRC_FILE_LIST} > ${OUTPUT_FILE})
-  endif()
-  add_custom_command(
-    OUTPUT ${OUTPUT_FILE}
-    DEPENDS ${SRC_FILE_LIST}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    COMMAND ${CAT_CMD}
-    COMMENT "Generating ${OUTPUT_FILE}")
-endfunction()
-
 # Generate the extension file used with CREATE EXTENSION
-cat_files(
-  "${PRE_INSTALL_SOURCE_FILES_VERSIONED};${SOURCE_FILES_VERSIONED};${NOTICE_FILE}"
-  ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
+add_concat_command(
+  ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
+  ${PRE_INSTALL_SOURCE_FILES_VERSIONED} ${SOURCE_FILES_VERSIONED}
+  ${NOTICE_FILE})
 add_custom_target(sqlfile ALL
                   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
 
@@ -157,8 +147,8 @@ set(UPDATE_SCRIPTS "")
 set(CURR_MOD_FILES "${LASTEST_MOD_VERSIONED}")
 
 # Now loop through the modfiles and generate the update files
+message(STATUS "MOD_FILES_LIST: ${MOD_FILES_LIST}")
 foreach(transition_mod_file ${MOD_FILES_LIST})
-
   if(NOT (${transition_mod_file} MATCHES ${MOD_FILE_REGEX}))
     message(FATAL_ERROR "Cannot parse update file name ${mod_file}")
   endif()
@@ -167,9 +157,8 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
   set(END_VERSION ${CMAKE_MATCH_2})
   set(PRE_FILES ${PRE_UPDATE_FILES_VERSIONED})
   set(POST_FILES_PROCESSED ${POST_UPDATE_FILES_VERSIONED}.processed)
-  cat_files(
-    "${SET_POST_UPDATE_STAGE};${POST_UPDATE_FILES_VERSIONED};${UNSET_UPDATE_STAGE}"
-    ${POST_FILES_PROCESSED})
+  add_concat_command(${POST_FILES_PROCESSED} ${SET_POST_UPDATE_STAGE}
+                     ${POST_UPDATE_FILES_VERSIONED} ${UNSET_UPDATE_STAGE})
   # Check for version-specific update code with fixes
   if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/updates/${START_VERSION}.sql)
     version_files("updates/${START_VERSION}.sql" ORIGIN_MOD_FILE)
@@ -189,12 +178,11 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
   )
   list(APPEND UPDATE_SCRIPTS ${UPDATE_SCRIPT})
   if(CURR_MOD_FILES)
-    cat_files(
-      "${PRE_FILES};${CURR_MOD_FILES};${SOURCE_FILES_VERSIONED};${POST_FILES_PROCESSED}"
-      ${UPDATE_SCRIPT})
+    add_concat_command(${UPDATE_SCRIPT} ${PRE_FILES} ${CURR_MOD_FILES}
+                       ${SOURCE_FILES_VERSIONED} ${POST_FILES_PROCESSED})
   else()
-    cat_files("${PRE_FILES};${SOURCE_FILES_VERSIONED};${POST_FILES_PROCESSED}"
-              ${UPDATE_SCRIPT})
+    add_concat_command(${UPDATE_SCRIPT} ${PRE_FILES} ${SOURCE_FILES_VERSIONED}
+                       ${POST_FILES_PROCESSED})
   endif()
 endforeach(transition_mod_file)
 
