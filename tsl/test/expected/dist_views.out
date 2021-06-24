@@ -164,3 +164,49 @@ SELECT * FROM  hypertable_index_size( 'dist_table_time_idx') ;
                 114688
 (1 row)
 
+-- Test chunk_replication_status view
+SELECT * FROM timescaledb_experimental.chunk_replication_status
+ORDER BY chunk_schema, chunk_name
+LIMIT 4;
+ hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | desired_num_replicas | num_replicas |       replica_nodes       | non_replica_nodes 
+-------------------+-----------------+-----------------------+-----------------------+----------------------+--------------+---------------------------+-------------------
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk |                    2 |            2 | {view_node_1,view_node_2} | {view_node_3}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_2_chunk |                    2 |            2 | {view_node_2,view_node_3} | {view_node_1}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_3_chunk |                    2 |            2 | {view_node_3,view_node_1} | {view_node_2}
+ public            | quote'tab       | _timescaledb_internal | _dist_hyper_2_4_chunk |                    2 |            2 | {view_node_1,view_node_2} | {view_node_3}
+(4 rows)
+
+-- drop one chunk replica
+SELECT _timescaledb_internal.chunk_drop_replica(format('%I.%I', chunk_schema, chunk_name)::regclass, replica_nodes[1])
+FROM timescaledb_experimental.chunk_replication_status
+ORDER BY chunk_schema, chunk_name
+LIMIT 1;
+ chunk_drop_replica 
+--------------------
+ 
+(1 row)
+
+SELECT * FROM timescaledb_experimental.chunk_replication_status
+WHERE num_replicas < desired_num_replicas
+ORDER BY chunk_schema, chunk_name;
+ hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | desired_num_replicas | num_replicas | replica_nodes |     non_replica_nodes     
+-------------------+-----------------+-----------------------+-----------------------+----------------------+--------------+---------------+---------------------------
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk |                    2 |            1 | {view_node_2} | {view_node_1,view_node_3}
+(1 row)
+
+-- Example usage of finding data nodes to copy/move chunks between
+SELECT
+    format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk,
+    replica_nodes[1] AS copy_from_node,
+    non_replica_nodes[1] AS copy_to_node
+FROM
+    timescaledb_experimental.chunk_replication_status
+WHERE
+    num_replicas < desired_num_replicas
+ORDER BY
+    chunk_schema, chunk_name;
+                    chunk                    | copy_from_node | copy_to_node 
+---------------------------------------------+----------------+--------------
+ _timescaledb_internal._dist_hyper_1_1_chunk | view_node_2    | view_node_1
+(1 row)
+

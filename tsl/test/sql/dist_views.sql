@@ -60,3 +60,30 @@ SELECT create_hypertable( 'special#tab', 'a', 'b', replication_factor=>2, chunk_
 INSERT into "special#tab" select generate_series( '2020-02-02 10:00', '2020-02-05 10:00' , '1 day'::interval), 10;
 SELECT * FROM  chunks_detailed_size( '"special#tab"') ORDER BY chunk_name, node_name;
 SELECT * FROM  hypertable_index_size( 'dist_table_time_idx') ;
+
+-- Test chunk_replication_status view
+SELECT * FROM timescaledb_experimental.chunk_replication_status
+ORDER BY chunk_schema, chunk_name
+LIMIT 4;
+
+-- drop one chunk replica
+SELECT _timescaledb_internal.chunk_drop_replica(format('%I.%I', chunk_schema, chunk_name)::regclass, replica_nodes[1])
+FROM timescaledb_experimental.chunk_replication_status
+ORDER BY chunk_schema, chunk_name
+LIMIT 1;
+
+SELECT * FROM timescaledb_experimental.chunk_replication_status
+WHERE num_replicas < desired_num_replicas
+ORDER BY chunk_schema, chunk_name;
+
+-- Example usage of finding data nodes to copy/move chunks between
+SELECT
+    format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk,
+    replica_nodes[1] AS copy_from_node,
+    non_replica_nodes[1] AS copy_to_node
+FROM
+    timescaledb_experimental.chunk_replication_status
+WHERE
+    num_replicas < desired_num_replicas
+ORDER BY
+    chunk_schema, chunk_name;
