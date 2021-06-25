@@ -664,3 +664,63 @@ FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
      15 |             25 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
 (6 rows)
 
+ segcol | min 
+--------+-----
+     11 |  10
+     12 |  10
+     15 |  20
+(3 rows)
+
+ before_recompress_count 
+-------------------------
+                   18178
+(1 row)
+
+ before_recompress_chunk_table_count 
+-------------------------------------
+                               14529
+(1 row)
+
+ timec | i | segcol | t 
+-------+---+--------+---
+(0 rows)
+
+ timec | i | segcol | t 
+-------+---+--------+---
+(0 rows)
+
+ after_recompress_count 
+------------------------
+                  18178
+(1 row)
+
+ after_compress_chunk_table_count 
+----------------------------------
+                               21
+(1 row)
+
+ segcol | _ts_meta_count | _ts_meta_sequence_num |        _ts_meta_min_1        |        _ts_meta_max_1        
+--------+----------------+-----------------------+------------------------------+------------------------------
+     11 |           1000 |                    10 | Fri Jan 03 04:43:21 2020 PST | Fri Jan 03 05:00:00 2020 PST
+     11 |            829 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:43:20 2020 PST
+     12 |           1000 |                    10 | Fri Jan 03 04:13:21 2020 PST | Fri Jan 03 04:30:00 2020 PST
+     12 |           1000 |                    20 | Fri Jan 03 03:56:41 2020 PST | Fri Jan 03 04:13:20 2020 PST
+     12 |           1000 |                    30 | Fri Jan 03 03:40:01 2020 PST | Fri Jan 03 03:56:40 2020 PST
+     12 |           1000 |                    40 | Fri Jan 03 03:23:21 2020 PST | Fri Jan 03 03:40:00 2020 PST
+     12 |           1000 |                    50 | Fri Jan 03 03:06:41 2020 PST | Fri Jan 03 03:23:20 2020 PST
+     12 |           1000 |                    60 | Fri Jan 03 02:51:03 2020 PST | Fri Jan 03 03:06:40 2020 PST
+     12 |           1000 |                    70 | Fri Jan 03 02:34:23 2020 PST | Fri Jan 03 02:51:02 2020 PST
+     12 |           1000 |                    80 | Fri Jan 03 02:17:43 2020 PST | Fri Jan 03 02:34:22 2020 PST
+     12 |           1000 |                    90 | Fri Jan 03 02:01:03 2020 PST | Fri Jan 03 02:17:42 2020 PST
+     12 |             63 |                   100 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 02:01:02 2020 PST
+     14 |           1000 |                    10 | Fri Jan 03 04:43:21 2020 PST | Fri Jan 03 05:00:00 2020 PST
+     14 |           1000 |                    20 | Fri Jan 03 04:26:41 2020 PST | Fri Jan 03 04:43:20 2020 PST
+     14 |           1000 |                    30 | Fri Jan 03 04:10:01 2020 PST | Fri Jan 03 04:26:40 2020 PST
+     14 |           1000 |                    40 | Fri Jan 03 03:53:21 2020 PST | Fri Jan 03 04:10:00 2020 PST
+     14 |           1000 |                    50 | Fri Jan 03 03:36:41 2020 PST | Fri Jan 03 03:53:20 2020 PST
+     14 |           1000 |                    60 | Fri Jan 03 03:20:01 2020 PST | Fri Jan 03 03:36:40 2020 PST
+     14 |           1000 |                    70 | Fri Jan 03 03:03:21 2020 PST | Fri Jan 03 03:20:00 2020 PST
+     14 |            261 |                    80 | Fri Jan 03 02:59:00 2020 PST | Fri Jan 03 03:03:20 2020 PST
+     15 |             25 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
+(21 rows)
+

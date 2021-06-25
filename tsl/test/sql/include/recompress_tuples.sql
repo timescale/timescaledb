@@ -72,3 +72,25 @@ ORDER BY 1;
 SELECT segcol, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_max_1
 FROM :COMP_CHUNK_NAME
 ORDER BY 1, 3, 4, 5;
+
+--TEST3 test recompress_tuples has > 1 output row, now affects multiple segment bys.
+-- and add a brand new segment-by
+--existing segement=12, new range and middle of a range
+INSERT INTO test3 SELECT q, 10, 12, 'seg1222' FROM generate_series( '2020-01-03 10:59:00+00', '2020-01-03 12:30:00+00' , '1 s'::interval) q;
+--new segment = 14
+INSERT INTO test3 SELECT q, 10, 14, 'seg1444' FROM generate_series( '2020-01-03 10:59:00+00', '2020-01-03 13:00:00+00' , '1 s'::interval) q;
+INSERT INTO test3 SELECT q, 10, 11, 'seg1111' FROM generate_series( '2020-01-03 12:30:00+00', '2020-01-03 13:00:00+00' , '1 s'::interval) q;
+
+SELECT segcol, min(_ts_meta_sequence_num)
+FROM :COMP_CHUNK_NAME
+WHERE _ts_meta_sequence_num > 0
+GROUP BY segcol
+ORDER BY 1;
+
+\set TABLE_NAME test3
+\ir recompress_test.sql
+
+SELECT segcol, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_max_1
+FROM :COMP_CHUNK_NAME
+ORDER BY 1, 3, 4, 5;
+
