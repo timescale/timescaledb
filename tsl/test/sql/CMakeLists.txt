@@ -10,6 +10,7 @@ set(TEST_FILES
     continuous_aggs_policy.sql
     continuous_aggs_refresh.sql
     continuous_aggs_watermark.sql
+    continuous_aggs_experimental.sql
     dist_views.sql
     move.sql
     partialize_finalize.sql

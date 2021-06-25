@@ -176,7 +176,7 @@ typedef struct FuncEntry
 /* Information about functions that we put in the cache */
 static FuncInfo funcinfo[] = {
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
@@ -185,7 +185,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
@@ -194,7 +194,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
@@ -203,7 +203,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
@@ -212,7 +212,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
@@ -221,7 +221,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
@@ -230,7 +230,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
@@ -239,7 +239,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
@@ -248,7 +248,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
@@ -257,7 +257,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
@@ -266,7 +266,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
@@ -275,7 +275,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
@@ -283,9 +283,44 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
-
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
+		.is_bucketing_func = true,
+		.funcname = "time_bucket_ng",
+		.nargs = 2,
+		.arg_types = { INTERVALOID, DATEOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
+		.is_bucketing_func = true,
+		.funcname = "time_bucket_ng",
+		.nargs = 3,
+		.arg_types = { INTERVALOID, DATEOID, DATEOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
+		.is_bucketing_func = true,
+		.funcname = "time_bucket_ng",
+		.nargs = 2,
+		.arg_types = { INTERVALOID, TIMESTAMPOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
+		.is_bucketing_func = true,
+		.funcname = "time_bucket_ng",
+		.nargs = 3,
+		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
@@ -294,7 +329,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
@@ -303,7 +338,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
@@ -312,7 +347,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
@@ -321,7 +356,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
@@ -330,7 +365,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		.is_timescaledb_func = true,
+		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
@@ -340,7 +375,7 @@ static FuncInfo funcinfo[] = {
 	},
 
 	{
-		.is_timescaledb_func = false,
+		.origin = ORIGIN_POSTGRES,
 		.is_bucketing_func = true,
 		.funcname = "date_trunc",
 		.nargs = 2,
@@ -349,7 +384,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = date_trunc_sort_transform,
 	},
 	{
-		.is_timescaledb_func = false,
+		.origin = ORIGIN_POSTGRES,
 		.is_bucketing_func = true,
 		.funcname = "date_trunc",
 		.nargs = 2,
@@ -379,6 +414,7 @@ initialize_func_info()
 		.hcxt = CacheMemoryContext,
 	};
 	Oid extension_nsp = ts_extension_schema_oid();
+	Oid experimental_nsp = get_namespace_oid(ts_experimental_schema_name(), false);
 	Oid pg_nsp = get_namespace_oid("pg_catalog", false);
 	HeapTuple tuple;
 	Relation rel;
@@ -391,11 +427,20 @@ initialize_func_info()
 	for (i = 0; i < _MAX_CACHE_FUNCTIONS; i++)
 	{
 		FuncInfo *finfo = &funcinfo[i];
-		Oid namespaceoid = finfo->is_timescaledb_func ? extension_nsp : pg_nsp;
+		Oid namespaceoid = pg_nsp;
 		oidvector *paramtypes = buildoidvector(finfo->arg_types, finfo->nargs);
 		FuncEntry *fentry;
 		bool hash_found;
 		Oid funcid;
+
+		if (finfo->origin == ORIGIN_TIMESCALE)
+		{
+			namespaceoid = extension_nsp;
+		}
+		else if (finfo->origin == ORIGIN_TIMESCALE_EXPERIMENTAL)
+		{
+			namespaceoid = experimental_nsp;
+		}
 
 		tuple = SearchSysCache3(PROCNAMEARGSNSP,
 								PointerGetDatum(finfo->funcname),
