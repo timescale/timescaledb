@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #3327 Make aggregates in caggs fully qualified
 * #3336 Fix pg_init_privs objsubid handling
 * #3345 Fix SkipScan distinct column identification
+* #3367 Improve DecompressChunk qual pushdown
 
 **Thanks**
 * @db-adrian for reporting an issue when accessing cagg view through postgres_fdw

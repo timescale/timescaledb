@@ -98,3 +98,24 @@ select factorid, end_dt, logret
 from metaseg_tab 
 where fmid = 56
 and end_dt::date = 'dec 2010'::date;
+
+-- test casts between different char types are pushed down
+CREATE TABLE pushdown_relabel(time timestamptz NOT NULL, dev_vc varchar(10), dev_c char(10));
+SELECT table_name FROM create_hypertable('pushdown_relabel', 'time');
+ALTER TABLE pushdown_relabel SET (timescaledb.compress, timescaledb.compress_segmentby='dev_vc,dev_c');
+
+INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
+SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
+
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+
+-- test again with index scans
+SET enable_seqscan TO false;
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
+EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+
