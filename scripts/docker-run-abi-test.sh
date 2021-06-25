@@ -38,7 +38,7 @@ create_base_container() {
   docker exec -u root $1 /bin/bash -c "apk add --no-cache --virtual .build-deps coreutils dpkg-dev gcc libc-dev make util-linux-dev diffutils cmake bison flex openssl-dev && mkdir -p /build/debug"
 
   # Copy the source files to build directory
-  docker exec -u root $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,tsl,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && make -C /build/debug install && chown -R postgres /build"
+  docker exec -u root $1 /bin/bash -c "cp -a /src/{src,sql,scripts,test,tsl,cmake,CMakeLists.txt,timescaledb.control.in,version.config} /build/ && cd /build/debug/ && CFLAGS=-Werror cmake .. -DCMAKE_BUILD_TYPE=Debug -DREGRESS_CHECKS=OFF && make -C /build/debug install && chown -R postgres /build"
 }
 
 create_base_container $CONTAINER_NAME_COMPILE $PG_IMAGE_TAG_COMPILE
