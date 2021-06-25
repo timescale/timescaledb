@@ -15,6 +15,7 @@ extern void ts_extension_check_version(const char *so_version);
 extern void ts_extension_check_server_version(void);
 extern Oid ts_extension_schema_oid(void);
 extern TSDLLEXPORT char *ts_extension_schema_name(void);
+extern const char *ts_experimental_schema_name(void);
 extern const char *ts_extension_get_so_name(void);
 extern TSDLLEXPORT const char *ts_extension_get_version(void);
 
