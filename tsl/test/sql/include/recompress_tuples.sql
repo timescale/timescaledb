@@ -57,7 +57,7 @@ SELECT segcol, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_m
 FROM :COMP_CHUNK_NAME
 ORDER BY 1, 3;
 
--- insert into 1 segments and then compress
+-- insert into 1 segments and then recompress
 INSERT INTO test3 SELECT q, 10, 12, 'seg12' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 11:00:00+00' , '1 s'::interval) q;
 
 SELECT segcol, min(_ts_meta_sequence_num)
@@ -94,3 +94,44 @@ SELECT segcol, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_m
 FROM :COMP_CHUNK_NAME
 ORDER BY 1, 3, 4, 5;
 
+---- TEST4 table with multiple segment by---
+CREATE TABLE test_multseg (timec timestamptz NOT NULL, segcol2 integer ,
+      segcol bigint, t text);
+SELECT table_name from create_hypertable('test_multseg', 'timec', chunk_time_interval=> INTERVAL '7 days');
+
+-- insert into 2 segments and then compress
+INSERT INTO test_multseg SELECT q, 100, 11, 'seg11_100' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+INSERT INTO test_multseg SELECT q, 200, 11, 'seg11_200' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+INSERT INTO test_multseg SELECT q, 900, 15, 'seg15_900' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
+
+ALTER TABLE test_multseg set (timescaledb.compress, 
+timescaledb.compress_segmentby = 'segcol, segcol2', 
+timescaledb.compress_orderby = 'timec DESC');
+
+SELECT compress_chunk(c)
+FROM show_chunks('test_multseg') c;
+
+SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
+        chunk_schema || '.' || chunk_name as "CHUNK_NAME"
+FROM compressed_chunk_info_view 
+WHERE hypertable_name = 'test_multseg' \gset
+
+--now insert into all the existing segments --
+INSERT INTO test_multseg values ( '2020-01-03 10:01:00+00', 100, 11, '2row');
+INSERT INTO test_multseg values ( '2020-01-03 11:01:00+00', 200, 11, '3row');
+INSERT INTO test_multseg values ( '2020-01-03 12:01:00+00', 900, 15, '4row');
+--- insert a new segment  by ---
+INSERT INTO test_multseg values ( '2020-01-03 11:01:00+00', 20, 12, '12row');
+
+SELECT segcol, segcol2, min(_ts_meta_sequence_num)
+FROM :COMP_CHUNK_NAME
+WHERE _ts_meta_sequence_num > 0
+GROUP BY segcol, segcol2
+ORDER BY 1;
+
+\set TABLE_NAME test_multseg
+\ir recompress_test2.sql
+
+SELECT segcol, segcol2, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_max_1
+FROM :COMP_CHUNK_NAME
+ORDER BY 1, 2, 3, 4, 5;

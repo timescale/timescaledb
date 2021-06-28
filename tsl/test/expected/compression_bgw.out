@@ -724,3 +724,56 @@ FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
      15 |             25 |                    20 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
 (21 rows)
 
+  table_name  
+--------------
+ test_multseg
+(1 row)
+
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_16_61_chunk
+(1 row)
+
+ segcol | segcol2 | min 
+--------+---------+-----
+     11 |     100 |  10
+     11 |     200 |  20
+     15 |     900 |  30
+(3 rows)
+
+ before_recompress_count 
+-------------------------
+                      79
+(1 row)
+
+ before_recompress_chunk_table_count 
+-------------------------------------
+                                   7
+(1 row)
+
+ timec | segcol2 | segcol | t 
+-------+---------+--------+---
+(0 rows)
+
+ timec | segcol2 | segcol | t 
+-------+---------+--------+---
+(0 rows)
+
+ after_recompress_count 
+------------------------
+                     79
+(1 row)
+
+ after_compress_chunk_table_count 
+----------------------------------
+                                4
+(1 row)
+
+ segcol | segcol2 | _ts_meta_count | _ts_meta_sequence_num |        _ts_meta_min_1        |        _ts_meta_max_1        
+--------+---------+----------------+-----------------------+------------------------------+------------------------------
+     11 |     100 |             26 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
+     11 |     200 |             26 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:00:00 2020 PST
+     12 |      20 |              1 |                    10 | Fri Jan 03 03:01:00 2020 PST | Fri Jan 03 03:01:00 2020 PST
+     15 |     900 |             26 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:01:00 2020 PST
+(4 rows)
+
