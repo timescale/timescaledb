@@ -376,7 +376,7 @@ DECLARE
 	row_count_parent BIGINT;
 	row_count        BIGINT;
 BEGIN
-	SELECT relname, nspname, c.reltuples::bigint
+	SELECT relname, nspname, CASE WHEN c.reltuples > 0 THEN c.reltuples::bigint ELSE 0 END
 	INTO table_name, schema_name, row_count_parent
 	FROM pg_class c
 	INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
@@ -394,7 +394,7 @@ BEGIN
 		FROM pg_inherits i
 		JOIN inherited_id b ON i.inhparent = b.oid
 	)
-	SELECT sum(child.reltuples)::bigint
+	SELECT sum(CASE WHEN child.reltuples > 0 THEN child.reltuples ELSE 0 END)::bigint
 	INTO row_count
 	FROM inherited_id i
 	JOIN pg_class child ON i.oid = child.oid

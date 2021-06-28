@@ -162,7 +162,8 @@ SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
 ----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
+-- reltuples is -1 on PG14 when no VACUUM/ANALYZE has run yet
+SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
 (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
  FROM show_chunks('chunkapi'))
 ORDER BY relname;

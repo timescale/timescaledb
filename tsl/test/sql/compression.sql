@@ -541,7 +541,8 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ht.table_name = 'stattest' AND ch.hypertable_id = ht.id
         AND compch.id = ch.compressed_chunk_id AND ch.compressed_chunk_id > 0  \gset
 
-SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
+SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
 
 -- Now verify stats are not changed when we analyze the hypertable
 ANALYZE stattest;
@@ -584,7 +585,8 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id and ht.table_name like 'stattest2'
  ORDER BY ch1.id limit 1;
 
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
+SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM 
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
@@ -602,7 +604,8 @@ SET reltuples = 0, relpages = 0
         AND ch.compressed_chunk_id > 0 );
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
+SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM 
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
@@ -616,7 +619,8 @@ WHERE ht.table_name = 'stattest2' AND ht.compressed_hypertable_id = compht.id \g
 --analyze the compressed table, will update stats for the raw table.
 ANALYZE :STAT_COMP_TABLE;
 
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class
+-- reltuples is initially -1 on PG14 before VACUUM/ANALYZE has been run
+SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class
  WHERE relname in ( SELECT ch.table_name FROM 
                    _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
   WHERE ht.table_name = 'stattest2' AND ch.hypertable_id = ht.id )
