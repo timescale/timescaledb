@@ -341,7 +341,7 @@ estimate_tuples_and_pages(PlannerInfo *root, RelOptInfo *rel)
 	Hyperspace *hyperspace;
 	RelEstimates *estimates;
 
-	Assert(rel->tuples == 0);
+	Assert(rel->tuples <= 0);
 	Assert(rel->pages == 0);
 
 	/* In some cases (e.g., UPDATE stmt) top_parent_relids is not set so the best
@@ -366,7 +366,7 @@ estimate_tuples_and_pages(PlannerInfo *root, RelOptInfo *rel)
 	/* Let's first try figuring out number of tuples/pages using stats from previous chunks,
 	otherwise make an estimation based on shared buffers size */
 	estimates = estimate_tuples_and_pages_using_prev_chunks(root, hyperspace, chunk);
-	if (estimates->tuples == 0 || estimates->pages == 0)
+	if (estimates->tuples <= 0 || estimates->pages == 0)
 		estimates = estimate_tuples_and_pages_using_shared_buffers(root, ht, rel->reltarget->width);
 
 	chunk_fillfactor = estimate_chunk_fillfactor(chunk, hyperspace);
@@ -478,9 +478,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	/*
 	 * If the foreign table has never been ANALYZEd, it will have relpages
 	 * and reltuples equal to zero, which most likely has nothing to do
-	 * with reality. The best we can do is estimate number of tuples/pages.
+	 * with reality. Starting with PG14 it will have reltuples < 0, meaning
+	 * "unknown". The best we can do is estimate number of tuples/pages.
 	 */
-	if (rel->pages == 0 && rel->tuples == 0 && type == TS_FDW_RELINFO_FOREIGN_TABLE)
+	if (rel->pages == 0 && rel->tuples <= 0 && type == TS_FDW_RELINFO_FOREIGN_TABLE)
 		estimate_tuples_and_pages(root, rel);
 
 	/* Estimate rel size as best we can with local statistics. There are

@@ -10,7 +10,7 @@ jobs:
       PG_INSTALL_DIR: postgresql
       MAKE_JOBS: 2
       # postgres version to build against this can either be commit hash, branch or tag
-      PG_COMMIT: 5028981923
+      PG_COMMIT: 3d351d916b
       CLANG: clang-9
       LLVM_CONFIG: llvm-config-9
       CC: gcc

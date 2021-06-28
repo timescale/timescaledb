@@ -173,18 +173,19 @@ INSERT INTO disttable VALUES
 --
 
 -- First show no statistics
-SELECT relname, relkind, reltuples, relpages
+-- reltuples is initially -1 before any VACUUM/ANALYZE has been run on PG14
+SELECT relname, relkind, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages
 FROM pg_class
 WHERE oid = 'disttable'::regclass;
 
-SELECT relname, relkind, reltuples, relpages
+SELECT relname, relkind, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages
 FROM pg_class cl, (SELECT show_chunks AS chunk FROM show_chunks('disttable')) ch
 WHERE cl.oid = ch.chunk::regclass;
 
 ANALYZE disttable;
 
 -- Show updated statistics
-SELECT relname, relkind, reltuples, relpages
+SELECT relname, relkind, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages
 FROM pg_class
 WHERE oid = 'disttable'::regclass;
 

@@ -512,6 +512,7 @@ chunk_get_single_stats_tuple(Chunk *chunk, TupleDesc tupdesc)
 	Form_pg_class pgcform;
 	Datum values[_Anum_chunk_relstats_max];
 	bool nulls[_Anum_chunk_relstats_max] = { false };
+	float reltuples = 0;
 
 	ctup = SearchSysCache1(RELOID, ObjectIdGetDatum(chunk->table_id));
 
@@ -528,8 +529,8 @@ chunk_get_single_stats_tuple(Chunk *chunk, TupleDesc tupdesc)
 		Int32GetDatum(chunk->fd.hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_pages)] =
 		Int32GetDatum(pgcform->relpages);
-	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_tuples)] =
-		Float4GetDatum(pgcform->reltuples);
+	reltuples = Float4GetDatum(pgcform->reltuples);
+	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_tuples)] = reltuples > 0 ? reltuples : 0;
 	values[AttrNumberGetAttrOffset(Anum_chunk_relstats_num_allvisible)] =
 		Int32GetDatum(pgcform->relallvisible);
 
