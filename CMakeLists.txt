@@ -421,8 +421,30 @@ if(NOT CLANG_FORMAT)
 else()
   message(STATUS "Using local clang-format")
   add_custom_target(
-    format COMMAND ${CMAKE_COMMAND} -E env CLANG_FORMAT=${CLANG_FORMAT}
-                   ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh)
+    clang-format COMMAND ${CMAKE_COMMAND} -E env CLANG_FORMAT=${CLANG_FORMAT}
+                         ${PROJECT_SOURCE_DIR}/scripts/clang_format_all.sh)
+endif()
+
+find_program(
+  CMAKE_FORMAT
+  NAMES cmake-format
+  PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin /opt/bin
+  DOC "The path to cmake-format")
+
+if(CMAKE_FORMAT)
+  add_custom_target(
+    cmake-format COMMAND ${CMAKE_COMMAND} -E env CMAKE_FORMAT=${CMAKE_FORMAT}
+                         ${PROJECT_SOURCE_DIR}/scripts/cmake_format_all.sh)
+endif()
+
+if(TARGET clang-format OR TARGET cmake-format)
+  add_custom_target(format)
+  if(TARGET clang-format)
+    add_dependencies(format clang-format)
+  endif()
+  if(TARGET cmake-format)
+    add_dependencies(format cmake-format)
+  endif()
 endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang")
