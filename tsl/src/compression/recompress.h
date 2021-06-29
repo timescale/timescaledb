@@ -14,5 +14,5 @@
 
 extern Datum tsl_recompress_chunk_sfunc(PG_FUNCTION_ARGS);
 extern Datum tsl_recompress_chunk_ffunc(PG_FUNCTION_ARGS);
-extern void my_spi_function(void);
+extern void recompress_chunk_tuple(Chunk *uncompressed_chunk);
 #endif
