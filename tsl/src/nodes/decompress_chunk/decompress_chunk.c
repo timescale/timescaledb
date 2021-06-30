@@ -929,6 +929,11 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 	Oid compressed_relid = compressed_chunk->table_id;
 	RelOptInfo *compressed_rel;
 
+	/* repalloc() does not work with NULL argument */
+	Assert(root->simple_rel_array);
+	Assert(root->simple_rte_array);
+	Assert(root->append_rel_array);
+
 	root->simple_rel_array_size++;
 	root->simple_rel_array =
 		repalloc(root->simple_rel_array, root->simple_rel_array_size * sizeof(RelOptInfo *));

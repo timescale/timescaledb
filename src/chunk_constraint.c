@@ -75,6 +75,7 @@ chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 
 	old = MemoryContextSwitchTo(ccs->mctx);
 	ccs->capacity = new_capacity;
+	Assert(ccs->constraints); /* repalloc() does not work with NULL argument */
 	ccs->constraints = repalloc(ccs->constraints, CHUNK_CONSTRAINTS_SIZE(new_capacity));
 	MemoryContextSwitchTo(old);
 }
