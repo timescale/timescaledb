@@ -66,6 +66,7 @@ CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(recompress_chunk);
+CROSSMODULE_WRAPPER(recompress_chunk_tuples);
 CROSSMODULE_WRAPPER(recompress_chunk_sfunc);
 CROSSMODULE_WRAPPER(recompress_chunk_ffunc);
 
@@ -351,6 +352,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,
 	.recompress_chunk = error_no_default_fn_pg_community,
+	.recompress_chunk_tuples = error_no_default_fn_pg_community,
 	.recompress_chunk_sfunc = error_no_default_fn_pg_community,
 	.recompress_chunk_ffunc = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,

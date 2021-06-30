@@ -33,12 +33,13 @@
 #include "hypertable_cache.h"
 #include "hypertable_compression.h"
 #include "create.h"
+#include "compat.h"
 #include "compress_utils.h"
 #include "compression.h"
-#include "compat.h"
+#include "compression_chunk_size.h"
+#include "recompress.h"
 #include "scanner.h"
 #include "scan_iterator.h"
-#include "compression_chunk_size.h"
 
 typedef struct CompressChunkCxt
 {
@@ -616,4 +617,34 @@ tsl_recompress_chunk(PG_FUNCTION_ARGS)
 		tsl_recompress_chunk_wrapper(uncompressed_chunk);
 		PG_RETURN_OID(uncompressed_chunk_id);
 	}
+}
+
+Datum
+tsl_recompress_chunk_tuples(PG_FUNCTION_ARGS)
+{
+	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	Chunk *uncompressed_chunk =
+		ts_chunk_get_by_relid(uncompressed_chunk_id, true /* fail_if_not_found */);
+	if (!ts_chunk_is_unordered(uncompressed_chunk))
+	{
+		if (!ts_chunk_is_compressed(uncompressed_chunk))
+		{
+			ereport((if_compressed ? NOTICE : ERROR),
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("call compress_chunk instead of recompress_chunk")));
+			PG_RETURN_NULL();
+		}
+		else
+		{
+			ereport((if_compressed ? NOTICE : ERROR),
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("nothing to recompress in chunk \"%s\" ",
+							get_rel_name(uncompressed_chunk->table_id))));
+			PG_RETURN_NULL();
+		}
+	}
+	// no support for distr. hypertables here
+	recompress_chunk_tuple(uncompressed_chunk);
+	PG_RETURN_OID(uncompressed_chunk_id);
 }

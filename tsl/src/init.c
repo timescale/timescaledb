@@ -149,6 +149,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.recompress_chunk = tsl_recompress_chunk,
+	.recompress_chunk_tuples = tsl_recompress_chunk_tuples,
 	.recompress_chunk_sfunc = tsl_recompress_chunk_sfunc,
 	.recompress_chunk_ffunc = tsl_recompress_chunk_ffunc,
 	.compress_row_init = compress_row_init,

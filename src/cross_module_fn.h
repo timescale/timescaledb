@@ -105,6 +105,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	PGFunction recompress_chunk;
+	PGFunction recompress_chunk_tuples;
 	PGFunction recompress_chunk_sfunc;
 	PGFunction recompress_chunk_ffunc;
 	/* The compression functions below are not installed in SQL as part of create extension;
