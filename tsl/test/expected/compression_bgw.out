@@ -751,6 +751,11 @@ FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
                                    7
 (1 row)
 
+         recompress_chunk_tuples          
+------------------------------------------
+ _timescaledb_internal._hyper_16_61_chunk
+(1 row)
+
  timec | segcol2 | segcol | t 
 -------+---------+--------+---
 (0 rows)

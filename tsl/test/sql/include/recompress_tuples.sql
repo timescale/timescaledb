@@ -130,7 +130,8 @@ GROUP BY segcol, segcol2
 ORDER BY 1;
 
 \set TABLE_NAME test_multseg
-\ir recompress_test2.sql
+\ir recompress_test3.sql
+--\ir recompress_test2.sql
 
 SELECT segcol, segcol2, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_max_1
 FROM :COMP_CHUNK_NAME
