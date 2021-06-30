@@ -101,8 +101,13 @@ is_time_bucket_function(Expr *node)
 static void
 ts_setup_append_rel_array(PlannerInfo *root)
 {
-	root->append_rel_array =
-		repalloc(root->append_rel_array, root->simple_rel_array_size * sizeof(AppendRelInfo *));
+	/* repalloc() does not work with NULL argument */
+	if (root->append_rel_array)
+		root->append_rel_array =
+			repalloc(root->append_rel_array, root->simple_rel_array_size * sizeof(AppendRelInfo *));
+	else
+		root->append_rel_array = palloc(root->simple_rel_array_size * sizeof(AppendRelInfo *));
+
 	ListCell *lc;
 	foreach (lc, root->append_rel_list)
 	{

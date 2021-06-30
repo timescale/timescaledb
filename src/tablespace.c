@@ -46,6 +46,7 @@ ts_tablespaces_add(Tablespaces *tspcs, const FormData_tablespace *form, Oid tspc
 	if (tspcs->num_tablespaces >= tspcs->capacity)
 	{
 		tspcs->capacity += TABLESPACE_DEFAULT_CAPACITY;
+		Assert(tspcs->tablespaces); /* repalloc() does not work with NULL argument */
 		tspcs->tablespaces = repalloc(tspcs->tablespaces, sizeof(Tablespace) * tspcs->capacity);
 	}
 
