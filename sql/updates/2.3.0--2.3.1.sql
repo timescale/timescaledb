@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS _timescaledb_internal.refresh_continuous_aggregate;
