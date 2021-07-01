@@ -25,7 +25,8 @@ set(MOD_FILES
     updates/2.1.0--2.1.1.sql
     updates/2.1.1--2.2.0.sql
     updates/2.2.0--2.2.1.sql
-    updates/2.2.1--2.3.0.sql)
+    updates/2.2.1--2.3.0.sql
+    updates/2.3.0--2.3.1.sql)
 
 # Files for downgrade scripts.
 set(REV_FILES)
