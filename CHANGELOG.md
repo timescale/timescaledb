@@ -4,14 +4,30 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.3.1 (2021-07-05)
+
+This maintenance release contains bugfixes since the 2.3.0 release. We
+deem it moderate priority for upgrading. The release introduces the
+possibility of generating downgrade scripts, improves the trigger
+handling for distributed hypertables, adds some more randomness to
+chunk assignment to avoid thundering herd issues in chunk assignment,
+and fixes some issues in update handling as well as some other bugs.
 
 **Bugfixes**
+* #3279 Add some more randomness to chunk assignment
+* #3288 Fix failed update with parallel workers
+* #3300 Improve trigger handling on distributed hypertables
+* #3304 Remove paths that reference parent relids for compressed chunks
 * #3305 Fix pull_varnos miscomputation of relids set
+* #3310 Generate downgrade script
+* #3314 Fix heap buffer overflow in hypertable expansion
+* #3317 Fix heap buffer overflow in remote connection cache.
 * #3327 Make aggregates in caggs fully qualified
 * #3336 Fix pg_init_privs objsubid handling
 * #3345 Fix SkipScan distinct column identification
+* #3355 Fix heap buffer overflow when renaming compressed hypertable columns.
 * #3367 Improve DecompressChunk qual pushdown
+* #3377 Fix bad use of repalloc
 
 **Thanks**
 * @db-adrian for reporting an issue when accessing cagg view through postgres_fdw
