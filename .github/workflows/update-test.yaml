@@ -71,11 +71,11 @@ jobs:
       id: read_version
       shell: perl -n {0} version.config
       run: |
-        print "::set-output name=from_version::$1\n" if /update_from_version\s*=\s*(\S+)/
+        print "::set-output name=to_version::$1\n" if /downgrade_to_version\s*=\s*(\S+)/
 
     - name: Downgrade tests ${{ matrix.pg }}
       env:
-        UPDATE_FROM_TAG: ${{ steps.read_version.outputs.from_version }}-pg${{ matrix.pg_major }}
+        UPDATE_FROM_TAG: ${{ steps.read_version.outputs.to_version }}-pg${{ matrix.pg_major }}
         TEST_VERSION: v7
       run: bash scripts/test_downgrade_from_tag.sh
 

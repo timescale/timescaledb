@@ -7,14 +7,14 @@ SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 WITH_SUPERUSER=true # Update tests have superuser privileges when running tests.
 TEST_VERSION=${TEST_VERSION:-v2}
-TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test' || mkdir -p /tmp/${RANDOM})}
+TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_downgrade_test' || mkdir -p /tmp/${RANDOM})}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
 PG_VERSION=${PG_VERSION:-12.0}
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
-UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
+UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-downgrade_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
 DO_CLEANUP=${DO_CLEANUP:-true}
 PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v TEST_REPAIR=${TEST_REPAIR} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=true -v WITH_CHUNK=true"
@@ -109,8 +109,8 @@ docker_pgtest() {
 
 docker_pgdiff_all() {
     local database=${2:-single}
-    diff_file1=update_test.restored.diff.${UPDATE_FROM_TAG}
-    diff_file2=update_test.clean.diff.${UPDATE_FROM_TAG}
+    diff_file1=downgrade_test.restored.diff.${UPDATE_FROM_TAG}
+    diff_file2=downgrade_test.clean.diff.${UPDATE_FROM_TAG}
     docker_pgtest ${CONTAINER_UPDATED} $1 $database
     docker_pgtest ${CONTAINER_CLEAN_RESTORE} $1 $database
     docker_pgtest ${CONTAINER_CLEAN_RERUN} $1 $database

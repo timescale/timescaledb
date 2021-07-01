@@ -35,30 +35,40 @@ endfunction()
 
 configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
-set(VERSION_REGEX
-    "version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)([-]([a-z]+[0-9]*))?([-](dev))?\r?\nupdate_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*([-]([a-z]+[0-9]*))?)*(\r?\n)*$"
-)
 
-if(NOT (${VERSION_CONFIG} MATCHES ${VERSION_REGEX}))
-  message(FATAL_ERROR "Cannot read version from version.config")
+if(VERSION_CONFIG
+   MATCHES
+   "(^|.*[^a-z])version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)-([a-z]+[0-9]*|dev)?.*"
+)
+  set(VERSION ${CMAKE_MATCH_2})
+  if(CMAKE_MATCH_3)
+    set(PROJECT_VERSION_MOD ${CMAKE_MATCH_2}-${CMAKE_MATCH_3})
+  else()
+    set(PROJECT_VERSION_MOD ${CMAKE_MATCH_2})
+  endif()
 endif()
+
+if(VERSION_CONFIG
+   MATCHES
+   ".*update_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
+)
+  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
+endif()
+
+if(VERSION_CONFIG
+   MATCHES
+   ".*downgrade_to_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
+)
+  set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
+endif()
+
+message(STATUS "VERSION: ${VERSION}")
+message(STATUS "PROJECT_VERSION_MOD: ${PROJECT_VERSION_MOD}")
+message(STATUS "UPDATE_FROM_VERSION: ${UPDATE_FROM_VERSION}")
+message(STATUS "DOWNGRADE_TO_VERSION: ${DOWNGRADE_TO_VERSION}")
 
 # a hack to avoid change of SQL extschema variable
 set(extschema "@extschema@")
-set(VERSION ${CMAKE_MATCH_1})
-set(VERSION_MOD ${CMAKE_MATCH_3})
-set(VERSION_DEV ${CMAKE_MATCH_5})
-set(UPDATE_FROM_VERSION ${CMAKE_MATCH_6})
-
-if(VERSION_MOD AND VERSION_DEV)
-  set(PROJECT_VERSION_MOD ${VERSION}-${VERSION_MOD}-${VERSION_DEV})
-elseif(VERSION_MOD)
-  set(PROJECT_VERSION_MOD ${VERSION}-${VERSION_MOD})
-elseif(VERSION_DEV)
-  set(PROJECT_VERSION_MOD ${VERSION}-${VERSION_DEV})
-else()
-  set(PROJECT_VERSION_MOD ${VERSION})
-endif()
 
 # Set project name, version, and language. Language needs to be set for compiler
 # checks
