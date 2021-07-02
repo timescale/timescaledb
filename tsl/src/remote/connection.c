@@ -38,7 +38,7 @@
 #include <guc.h>
 #include <telemetry/telemetry_metadata.h>
 #include "connection.h"
-#include "debug_wait.h"
+#include "debug_point.h"
 #include "utils.h"
 
 /*

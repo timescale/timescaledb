@@ -18,7 +18,7 @@
 #include "errors.h"
 #include "guc.h"
 #include "catalog.h"
-#include "debug_wait.h"
+#include "debug_point.h"
 #include "dist_util.h"
 #include "remote/dist_commands.h"
 #include "dist_backup.h"

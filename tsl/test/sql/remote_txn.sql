@@ -34,12 +34,12 @@ LANGUAGE C;
 --
 CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT)
 RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_debug_waitpoint_enable'
+AS :MODULE_PATHNAME, 'ts_debug_point_enable'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT)
 RETURNS VOID
-AS :MODULE_PATHNAME, 'ts_debug_waitpoint_release'
+AS :MODULE_PATHNAME, 'ts_debug_point_release'
 LANGUAGE C VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION add_loopback_server(

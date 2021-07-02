@@ -4,8 +4,13 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <fmgr.h>
+#include <utils/builtins.h>
 
 #include "test_utils.h"
+#include "debug_point.h"
+
+TS_FUNCTION_INFO_V1(ts_test_error_injection);
 
 /*
  * Test assertion macros.
@@ -57,5 +62,13 @@ TS_TEST_FN(ts_test_utils_double_eq)
 	TestAssertDoubleEq(big_double, big_double);
 	TestAssertDoubleEq(big_double, small_double);
 
+	PG_RETURN_VOID();
+}
+
+Datum
+ts_test_error_injection(PG_FUNCTION_ARGS)
+{
+	text *name = PG_GETARG_TEXT_PP(0);
+	DEBUG_ERROR_INJECTION(text_to_cstring(name));
 	PG_RETURN_VOID();
 }
