@@ -66,7 +66,7 @@
 #include "continuous_agg.h"
 #include "compression_with_clause.h"
 #include "partitioning.h"
-#include "debug_wait.h"
+#include "debug_point.h"
 
 #include "cross_module_fn.h"
 

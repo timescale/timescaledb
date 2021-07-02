@@ -21,3 +21,47 @@ SELECT test.int64_eq();
 SELECT test.ptr_eq();
 SELECT test.double_eq();
 \set ON_ERROR_STOP 1
+
+-- Test debug points
+--
+\set ECHO all
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION debug_point_enable(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_debug_point_enable'
+LANGUAGE C VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION debug_point_release(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_debug_point_release'
+LANGUAGE C VOLATILE STRICT;
+
+-- debug point already enabled
+SELECT debug_point_enable('test_debug_point');
+\set ON_ERROR_STOP 0
+SELECT debug_point_enable('test_debug_point');
+\set ON_ERROR_STOP 1
+SELECT debug_point_release('test_debug_point');
+
+-- debug point not enabled
+\set ON_ERROR_STOP 0
+SELECT debug_point_release('test_debug_point');
+\set ON_ERROR_STOP 1
+
+-- error injections
+--
+CREATE OR REPLACE FUNCTION test_error_injection(TEXT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_error_injection'
+LANGUAGE C VOLATILE STRICT;
+
+SELECT test_error_injection('test_error');
+
+SELECT debug_point_enable('test_error');
+\set ON_ERROR_STOP 0
+SELECT test_error_injection('test_error');
+\set ON_ERROR_STOP 1
+
+SELECT debug_point_release('test_error');
+SELECT test_error_injection('test_error');

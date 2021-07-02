@@ -36,7 +36,7 @@
 #include <access/tupdesc.h>
 
 #include "export.h"
-#include "debug_wait.h"
+#include "debug_point.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "chunk_data_node.h"
