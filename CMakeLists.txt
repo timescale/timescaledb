@@ -38,11 +38,11 @@ file(READ version.config VERSION_CONFIG)
 
 if(VERSION_CONFIG
    MATCHES
-   "(^|.*[^a-z])version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)-([a-z]+[0-9]*|dev)?.*"
+   "(^|.*[^a-z])version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)(-([a-z]+[0-9]*|dev))?.*"
 )
   set(VERSION ${CMAKE_MATCH_2})
   if(CMAKE_MATCH_3)
-    set(PROJECT_VERSION_MOD ${CMAKE_MATCH_2}-${CMAKE_MATCH_3})
+    set(PROJECT_VERSION_MOD ${CMAKE_MATCH_2}${CMAKE_MATCH_3})
   else()
     set(PROJECT_VERSION_MOD ${CMAKE_MATCH_2})
   endif()
