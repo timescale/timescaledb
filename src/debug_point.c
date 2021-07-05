@@ -17,6 +17,7 @@
 #include <utils/builtins.h>
 
 #include "export.h"
+#include "annotations.h"
 
 TS_FUNCTION_INFO_V1(ts_debug_point_enable);
 TS_FUNCTION_INFO_V1(ts_debug_point_release);
@@ -84,7 +85,7 @@ debug_point_enable(const DebugPoint *point)
 		case LOCKACQUIRE_ALREADY_HELD:
 		case LOCKACQUIRE_ALREADY_CLEAR:
 			LockRelease(&point->tag, ExclusiveLock, true);
-			/* fallthrough */
+			TS_FALLTHROUGH;
 		case LOCKACQUIRE_NOT_AVAIL:
 			ereport(ERROR, (errmsg("debug point \"%s\" already enabled", point->name)));
 			break;
