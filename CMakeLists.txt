@@ -41,6 +41,7 @@ if(VERSION_CONFIG
    "(^|.*[^a-z])version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.*[0-9]*)(-([a-z]+[0-9]*|dev))?.*"
 )
   set(VERSION ${CMAKE_MATCH_2})
+  set(VERSION_MOD ${CMAKE_MATCH_4}) # This is used in config.h
   if(CMAKE_MATCH_3)
     set(PROJECT_VERSION_MOD ${CMAKE_MATCH_2}${CMAKE_MATCH_3})
   else()
@@ -63,6 +64,7 @@ if(VERSION_CONFIG
 endif()
 
 message(STATUS "VERSION: ${VERSION}")
+message(STATUS "VERSION_MOD: ${VERSION_MOD}")
 message(STATUS "PROJECT_VERSION_MOD: ${PROJECT_VERSION_MOD}")
 message(STATUS "UPDATE_FROM_VERSION: ${UPDATE_FROM_VERSION}")
 message(STATUS "DOWNGRADE_TO_VERSION: ${DOWNGRADE_TO_VERSION}")
