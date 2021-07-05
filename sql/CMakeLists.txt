@@ -43,7 +43,7 @@ set(MOD_FILES
     updates/2.2.1--2.3.0.sql)
 
 # Files for downgrade scripts.
-set(REV_FILES)
+set(REV_FILES updates/2.3.1--2.3.0.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
@@ -78,7 +78,7 @@ else()
         TARGET_VERSION
         ${_target_version}
         INPUT_DIRECTORY
-        ${CMAKE_CURRENT_SOURCE_DIR}/updates
+        ${CMAKE_CURRENT_SOURCE_DIR}
         FILES
         ${_downgrade_file})
     else()
