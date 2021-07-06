@@ -404,6 +404,23 @@ LIMIT 1 \gset
 SELECT slices AS "SLICES"
 FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 
+-- Save the constraints info in a table for later comparison
+CREATE TABLE original_chunk_constraints AS
+SELECT "Constraint", "Type", "Columns", "Index"::text, "Expr", "Deferrable", "Deferred", "Validated"
+FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
+
+-- Save contraints metadata
+CREATE TABLE original_chunk_constraints_metadata AS
+SELECT
+    chunk_id,
+    dimension_slice_id,
+    constraint_name,
+    hypertable_constraint_name
+FROM _timescaledb_catalog.chunk_constraint con
+INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
+WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
+
+
 DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 
 SELECT attach_tablespace('tablespace1', 'chunkapi');
@@ -418,7 +435,23 @@ SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
 SELECT _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME',
 	   format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
 
+-- Compare original and new constraints
+SELECT * FROM original_chunk_constraints;
 SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
+
+-- Compare original and new chunk constraints metadata
+SELECT * FROM original_chunk_constraints_metadata;
+SELECT
+    chunk_id,
+    dimension_slice_id,
+    constraint_name,
+    hypertable_constraint_name
+FROM _timescaledb_catalog.chunk_constraint con
+INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
+WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
+
+DROP TABLE original_chunk_constraints;
+DROP TABLE original_chunk_constraints_metadata;
 
 -- The chunk should inherit the hypertable
 SELECT relname
