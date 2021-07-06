@@ -796,6 +796,20 @@ ORDER BY chunk_name DESC
 LIMIT 1 \gset
 SELECT slices AS "SLICES"
 FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
+-- Save the constraints info in a table for later comparison
+CREATE TABLE original_chunk_constraints AS
+SELECT "Constraint", "Type", "Columns", "Index"::text, "Expr", "Deferrable", "Deferred", "Validated"
+FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
+-- Save contraints metadata
+CREATE TABLE original_chunk_constraints_metadata AS
+SELECT
+    chunk_id,
+    dimension_slice_id,
+    constraint_name,
+    hypertable_constraint_name
+FROM _timescaledb_catalog.chunk_constraint con
+INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
+WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
 DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
 SELECT attach_tablespace('tablespace1', 'chunkapi');
  attach_tablespace 
@@ -830,12 +844,51 @@ SELECT _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA'
  (11,10,_timescaledb_internal,_hyper_10_10_chunk,r,"{""time"": [1514419200000000, 1515024000000000]}",t)
 (1 row)
 
-SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
-     Constraint      | Type | Columns | Index |              Expr              | Deferrable | Deferred | Validated 
----------------------+------+---------+-------+--------------------------------+------------+----------+-----------
- chunkapi_temp_check | c    | {temp}  | -     | (temp > (0)::double precision) | f          | f        | t
-(1 row)
+-- Compare original and new constraints
+SELECT * FROM original_chunk_constraints;
+        Constraint         | Type | Columns  |                   Index                    |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+---------------------------+------+----------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 10_1_chunkapi_device_fkey | f    | {device} | devices_pkey                               |                                                                                                                                                | f          | f        | t
+ 10_2_chunkapi_pkey        | p    | {time}   | _timescaledb_internal."10_2_chunkapi_pkey" |                                                                                                                                                | f          | f        | t
+ chunkapi_temp_check       | c    | {temp}   | -                                          | (temp > (0)::double precision)                                                                                                                 | f          | f        | t
+ constraint_15             | c    | {time}   | -                                          | (("time" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone)) | f          | f        | t
+(4 rows)
 
+SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
+        Constraint         | Type | Columns  |                   Index                    |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+---------------------------+------+----------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 11_3_chunkapi_device_fkey | f    | {device} | devices_pkey                               |                                                                                                                                                | f          | f        | t
+ 11_4_chunkapi_pkey        | p    | {time}   | _timescaledb_internal."11_4_chunkapi_pkey" |                                                                                                                                                | f          | f        | t
+ chunkapi_temp_check       | c    | {temp}   | -                                          | (temp > (0)::double precision)                                                                                                                 | f          | f        | t
+ constraint_16             | c    | {time}   | -                                          | (("time" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone)) | f          | f        | t
+(4 rows)
+
+-- Compare original and new chunk constraints metadata
+SELECT * FROM original_chunk_constraints_metadata;
+ chunk_id | dimension_slice_id |      constraint_name      | hypertable_constraint_name 
+----------+--------------------+---------------------------+----------------------------
+       10 |                 15 | constraint_15             | 
+       10 |                    | 10_1_chunkapi_device_fkey | chunkapi_device_fkey
+       10 |                    | 10_2_chunkapi_pkey        | chunkapi_pkey
+(3 rows)
+
+SELECT
+    chunk_id,
+    dimension_slice_id,
+    constraint_name,
+    hypertable_constraint_name
+FROM _timescaledb_catalog.chunk_constraint con
+INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
+WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
+ chunk_id | dimension_slice_id |      constraint_name      | hypertable_constraint_name 
+----------+--------------------+---------------------------+----------------------------
+       11 |                 16 | constraint_16             | 
+       11 |                    | 11_3_chunkapi_device_fkey | chunkapi_device_fkey
+       11 |                    | 11_4_chunkapi_pkey        | chunkapi_pkey
+(3 rows)
+
+DROP TABLE original_chunk_constraints;
+DROP TABLE original_chunk_constraints_metadata;
 -- The chunk should inherit the hypertable
 SELECT relname
 FROM pg_catalog.pg_inherits, pg_class 
@@ -926,10 +979,13 @@ SELECT * FROM chunkapi ORDER BY 1,2,3;
 -- are specific to the chunk.  Currently, foreign key, unique, and
 -- primary key constraints are not inherited or auto-created.
 SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
-     Constraint      | Type | Columns | Index |              Expr              | Deferrable | Deferred | Validated 
----------------------+------+---------+-------+--------------------------------+------------+----------+-----------
- chunkapi_temp_check | c    | {temp}  | -     | (temp > (0)::double precision) | f          | f        | t
-(1 row)
+        Constraint         | Type | Columns  |                   Index                    |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+---------------------------+------+----------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ 13_7_chunkapi_device_fkey | f    | {device} | devices_pkey                               |                                                                                                                                                | f          | f        | t
+ 13_8_chunkapi_pkey        | p    | {time}   | _timescaledb_internal."13_8_chunkapi_pkey" |                                                                                                                                                | f          | f        | t
+ chunkapi_temp_check       | c    | {temp}   | -                                          | (temp > (0)::double precision)                                                                                                                 | f          | f        | t
+ constraint_18             | c    | {time}   | -                                          | (("time" >= 'Wed Dec 27 16:00:00 2017 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2018 PST'::timestamp with time zone)) | f          | f        | t
+(4 rows)
 
 DROP TABLE chunkapi;
 \c :TEST_DBNAME :ROLE_SUPERUSER
