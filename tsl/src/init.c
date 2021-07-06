@@ -121,6 +121,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.move_chunk = tsl_move_chunk,
 	.move_chunk_proc = tsl_move_chunk_proc,
 	.copy_chunk_proc = tsl_copy_chunk_proc,
+	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
 	.partialize_agg = tsl_partialize_agg,
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,

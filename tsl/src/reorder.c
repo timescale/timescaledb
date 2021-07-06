@@ -202,7 +202,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
  * We use a procedure because multiple steps need to be performed via multiple
  * transactions across the access node and the two datanodes that are involved.
  * The progress of the various stages/steps are tracked in the
- * CHUNK_COPY_ACTIVITY catalog table
+ * CHUNK_COPY_OPERATION catalog table
  */
 static void
 tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
@@ -240,6 +240,27 @@ Datum
 tsl_copy_chunk_proc(PG_FUNCTION_ARGS)
 {
 	tsl_copy_or_move_chunk_proc(fcinfo, false);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+tsl_copy_chunk_cleanup_proc(PG_FUNCTION_ARGS)
+{
+	const char *operation_id = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	PreventInTransactionBlock(true, get_func_name(FC_FN_OID(fcinfo)));
+
+	/* valid input has to be provided */
+	if (operation_id == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid chunk copy operation id")));
+
+	/* perform the cleanup/repair depending on the stage */
+	chunk_copy_cleanup(operation_id);
 
 	PG_RETURN_VOID();
 }

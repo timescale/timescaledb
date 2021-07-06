@@ -4,18 +4,10 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.block_new_chunks;
 DROP FUNCTION IF EXISTS _timescaledb_internal.allow_new_chunks;
 DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk;
 
--- Use the experimental schema for ths new procedure
-CREATE OR REPLACE PROCEDURE timescaledb_experimental.move_chunk(
-    chunk REGCLASS,
-    source_node NAME = NULL,
-    destination_node NAME = NULL)
-AS '@MODULE_PATHNAME@', 'ts_move_chunk_proc' LANGUAGE C;
+CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_copy_operation_id_seq MINVALUE 1;
 
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_copy_activity_id_seq MINVALUE 1;
-
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_copy_activity (
-  id integer PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.chunk_copy_activity_id_seq'),
-  operation_id name NOT NULL UNIQUE, -- the publisher/subscriber identifier used
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_copy_operation (
+  operation_id name PRIMARY KEY, -- the publisher/subscriber identifier used
   backend_pid integer NOT NULL, -- the pid of the backend running this activity
   completed_stage name NOT NULL, -- the completed stage/step
   time_start timestamptz NOT NULL DEFAULT NOW(), -- start time of the activity
@@ -25,7 +17,5 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_copy_activity (
   delete_on_source_node bool NOT NULL -- is a move or copy activity
 );
 
-ALTER SEQUENCE _timescaledb_catalog.chunk_copy_activity_id_seq OWNED BY _timescaledb_catalog.chunk_copy_activity.id;
-
-GRANT SELECT ON _timescaledb_catalog.chunk_copy_activity_id_seq TO PUBLIC;
-GRANT SELECT ON _timescaledb_catalog.chunk_copy_activity TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.chunk_copy_operation_id_seq TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.chunk_copy_operation TO PUBLIC;

@@ -525,8 +525,11 @@ ts_create_struct_from_tuple(HeapTuple tuple, MemoryContext mctx, size_t alloc_si
 {
 	void *struct_ptr = MemoryContextAllocZero(mctx, alloc_size);
 
-	/* Make sure the function is not used when the tuple contains NULLs */
-	Assert(copy_size == tuple->t_len - tuple->t_data->t_hoff);
+	/*
+	 * Make sure the function is not used when the tuple contains NULLs.
+	 * Also compare the aligned sizes in the assert.
+	 */
+	Assert(copy_size == MAXALIGN(tuple->t_len - tuple->t_data->t_hoff));
 	memcpy(struct_ptr, GETSTRUCT(tuple), copy_size);
 
 	return struct_ptr;

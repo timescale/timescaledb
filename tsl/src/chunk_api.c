@@ -1709,7 +1709,7 @@ chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk
 		ts_dist_cmd_params_invoke_on_data_nodes(create_cmd,
 												stmt_params_create_from_values(params, 4),
 												list_make1((void *) node_name),
-												false));
+												true));
 }
 
 void

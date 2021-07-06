@@ -37,3 +37,12 @@ CREATE OR REPLACE PROCEDURE timescaledb_experimental.copy_chunk(
     source_node NAME = NULL,
     destination_node NAME = NULL)
 AS '@MODULE_PATHNAME@', 'ts_copy_chunk_proc' LANGUAGE C;
+
+-- A copy_chunk or move_chunk procedure call involves multiple nodes and
+-- depending on the data size can take a long time. Failures are possible
+-- when this long running activity is ongoing. We need to be able to recover
+-- and cleanup such failed chunk copy/move activities and it's done via this
+-- procedure
+CREATE OR REPLACE PROCEDURE timescaledb_experimental.cleanup_copy_chunk_operation(
+    operation_id NAME)
+AS '@MODULE_PATHNAME@', 'ts_copy_chunk_cleanup_proc' LANGUAGE C;
