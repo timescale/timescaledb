@@ -48,7 +48,6 @@ set(SOURCES
     subspace_store.c
     tablespace.c
     time_bucket.c
-    time_bucket_ng.c
     time_utils.c
     custom_type_cache.c
     trigger.c
