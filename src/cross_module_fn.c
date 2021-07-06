@@ -44,6 +44,7 @@ CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
 CROSSMODULE_WRAPPER(move_chunk_proc);
 CROSSMODULE_WRAPPER(copy_chunk_proc);
+CROSSMODULE_WRAPPER(copy_chunk_cleanup_proc);
 
 /* partialize/finalize aggregate */
 CROSSMODULE_WRAPPER(partialize_agg);
@@ -336,6 +337,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.move_chunk = error_no_default_fn_pg_community,
 	.move_chunk_proc = error_no_default_fn_pg_community,
 	.copy_chunk_proc = error_no_default_fn_pg_community,
+	.copy_chunk_cleanup_proc = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
 
 	.partialize_agg = error_no_default_fn_pg_community,

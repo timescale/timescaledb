@@ -103,9 +103,9 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = REMOTE_TXN_TABLE_NAME,
 	},
-	[CHUNK_COPY_ACTIVITY] = {
+	[CHUNK_COPY_OPERATION] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = CHUNK_COPY_ACTIVITY_TABLE_NAME,
+		.table_name = CHUNK_COPY_OPERATION_TABLE_NAME,
 	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
@@ -250,10 +250,10 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[REMOTE_TXN_DATA_NODE_NAME_IDX] = "remote_txn_data_node_name_idx"
 		}
 	},
-	[CHUNK_COPY_ACTIVITY] = {
-		.length = _MAX_CHUNK_COPY_ACTIVITY_INDEX,
+	[CHUNK_COPY_OPERATION] = {
+		.length = _MAX_CHUNK_COPY_OPERATION_INDEX,
 		.names = (char *[]) {
-			[CHUNK_COPY_ACTIVITY_PKEY_IDX] = "chunk_copy_activity_pkey",
+			[CHUNK_COPY_OPERATION_PKEY_IDX] = "chunk_copy_operation_pkey",
 		},
 	}
 };
@@ -276,7 +276,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[HYPERTABLE_COMPRESSION] = NULL,
 	[COMPRESSION_CHUNK_SIZE] = NULL,
 	[REMOTE_TXN] = NULL,
-	[CHUNK_COPY_ACTIVITY] = CATALOG_SCHEMA_NAME ".chunk_copy_activity_id_seq",
+	[CHUNK_COPY_OPERATION] = CATALOG_SCHEMA_NAME ".chunk_copy_operation_id_seq",
 };
 
 typedef struct InternalFunctionDef
