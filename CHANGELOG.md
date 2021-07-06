@@ -6,6 +6,13 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.3.1 (2021-07-05)
 
+This maintenance release contains bugfixes since the 2.3.0 release. We
+deem it moderate priority for upgrading. The release introduces the
+possibility of generating downgrade scripts, improves the trigger
+handling for distributed hypertables, adds some more randomness to
+chunk assignment to avoid thundering herd issues in chunk assignment,
+and fixes some issues in update handling as well as some other bugs.
+
 **Bugfixes**
 * #3279 Add some more randomness to chunk assignment
 * #3288 Fix failed update with parallel workers
