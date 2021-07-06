@@ -214,18 +214,30 @@ INSERT INTO metrics_int_dist1 VALUES
     (100,1,1,0.0),
     (100,1,2,-100.0);
 
+-- Create distributed hypertable for copy chunk test. Need to have
+-- a space-dimension to have more predictible chunk placement.
 CREATE TABLE dist_chunk_copy (
-        time timestamptz NOT NULL, 
+        time timestamptz NOT NULL,
+        device integer,
         value integer);
 
-SELECT create_distributed_hypertable('dist_chunk_copy', 'time', replication_factor => 2);
+SELECT create_distributed_hypertable('dist_chunk_copy', 'time', 'device', replication_factor => 2);
 ALTER TABLE dist_chunk_copy SET (timescaledb.compress);
 
 SELECT setseed(0);
 INSERT INTO dist_chunk_copy 
-SELECT t, random() * 20
+SELECT t, ceil(_timescaledb_internal.get_partition_hash(t)::int % 5), random() * 20
 FROM generate_series('2020-01-01'::timestamp, '2020-01-25'::timestamp, '1d') t;
 
 -- Compress a few chunks of this dist_chunk_copy hypertable
 SELECT compress_chunk('_timescaledb_internal._dist_hyper_15_68_chunk');
 SELECT compress_chunk('_timescaledb_internal._dist_hyper_15_70_chunk');
+
+CREATE TABLE mvcp_hyper (time bigint NOT NULL, value integer);
+SELECT table_name FROM create_distributed_hypertable('mvcp_hyper', 'time',
+        chunk_time_interval => 200, replication_factor => 3);
+
+-- Enable compression so that we can test dropping of compressed chunks
+ALTER TABLE mvcp_hyper  SET (timescaledb.compress, timescaledb.compress_orderby='time DESC');
+
+INSERT INTO mvcp_hyper SELECT g, g FROM generate_series(0,1000) g;
