@@ -24,10 +24,10 @@
 -- [2]: https://www.postgresql.org/docs/current/datatype-datetime.html#DATATYPE-TIMEZONES
 --
 CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE) RETURNS DATE
-	AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+	AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng_date' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
 CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE, origin DATE) RETURNS DATE
-	AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+	AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng_date' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
 -- utility functions
 CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP

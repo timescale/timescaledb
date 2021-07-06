@@ -1238,6 +1238,8 @@ SELECT timescaledb_experimental.time_bucket_ng('1 month', '2000-01-02' :: date, 
 ERROR:  origin must be before the given date
 SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, origin => '2001-01-01') AS result;
 ERROR:  origin must be before the given date
+SELECT timescaledb_experimental.time_bucket_ng('1 month 3 hours', '2021-11-22' :: timestamp) AS result;
+ERROR:  interval can't combine months with minutes or hours
 \set ON_ERROR_STOP 1
 -- infinity
 SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
@@ -1269,6 +1271,48 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timesta
             result            
 ------------------------------
  Tue Jun 01 00:00:00 2021 EDT
+(1 row)
+
+-- Make sure time_bucket_ng() supports seconds, minutes, and hours.
+-- We happen to know that the internal implementation is the same
+-- as for time_bucket(), thus there is no reason to execute all the tests
+-- we already have for time_bucket(). These two functions will most likely
+-- be merged eventually anyway.
+SELECT timescaledb_experimental.time_bucket_ng('30 seconds', '2021-07-12 12:34:56' :: timestamp) AS result;
+          result          
+--------------------------
+ Mon Jul 12 12:34:30 2021
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('15 minutes', '2021-07-12 12:34:56' :: timestamp) AS result;
+          result          
+--------------------------
+ Mon Jul 12 12:30:00 2021
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('6 hours', '2021-07-12 12:34:56' :: timestamp) AS result;
+          result          
+--------------------------
+ Mon Jul 12 12:00:00 2021
+(1 row)
+
+-- Same as above, but with provided 'origin' argument.
+SELECT timescaledb_experimental.time_bucket_ng('30 seconds', '2021-07-12 12:34:56' :: timestamp, origin => '2021-07-12 12:10:00') AS result;
+          result          
+--------------------------
+ Mon Jul 12 12:34:30 2021
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('15 minutes', '2021-07-12 12:34:56' :: timestamp, origin => '2021-07-12 12:10:00') AS result;
+          result          
+--------------------------
+ Mon Jul 12 12:25:00 2021
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('6 hours', '2021-07-12 12:34:56' :: timestamp, origin => '2021-07-12 12:10:00') AS result;
+          result          
+--------------------------
+ Mon Jul 12 12:10:00 2021
 (1 row)
 
 -- N days / weeks buckets
