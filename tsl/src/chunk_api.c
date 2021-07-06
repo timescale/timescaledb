@@ -331,6 +331,16 @@ get_hypercube_from_slices(Jsonb *slices, const Hypertable *ht)
 
 	return hc;
 }
+
+/*
+ * Create a chunk and its metadata.
+ *
+ * This function will create a chunk, either from an existing table or by
+ * creating a new table. If chunk_table_relid is InvalidOid, the chunk table
+ * will be created, otherwise the table referenced by the relid will be
+ * used. The chunk will be associated with the hypertable given by
+ * hypertable_relid.
+ */
 Datum
 chunk_create(PG_FUNCTION_ARGS)
 {
