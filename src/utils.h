@@ -82,8 +82,8 @@ typedef struct Dimension Dimension;
 
 extern TSDLLEXPORT Oid ts_get_integer_now_func(const Dimension *open_dim);
 
-extern void *ts_create_struct_from_slot(TupleTableSlot *slot, MemoryContext mctx, size_t alloc_size,
-										size_t copy_size);
+extern TSDLLEXPORT void *ts_create_struct_from_slot(TupleTableSlot *slot, MemoryContext mctx,
+													size_t alloc_size, size_t copy_size);
 
 extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti,
 													   bool missing_ok);
