@@ -305,10 +305,19 @@ chunk_copy_init(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const char
 				 errmsg("hypertable \"%s\" is not distributed",
 						get_rel_name(ht->main_table_relid))));
 
-	/* Check that src_node is a valid DN and that chunk exists on it */
 	cc->src_server = data_node_get_foreign_server(src_node, ACL_USAGE, true, false);
 	Assert(NULL != cc->src_server);
 
+	cc->dst_server = data_node_get_foreign_server(dst_node, ACL_USAGE, true, false);
+	Assert(NULL != cc->dst_server);
+
+	/* Ensure that source and destination data nodes are not the same */
+	if (cc->src_server == cc->dst_server)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("source and destination data node match")));
+
+	/* Check that src_node is a valid DN and that chunk exists on it */
 	if (!ts_chunk_has_data_node(cc->chunk, src_node))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
@@ -317,9 +326,6 @@ chunk_copy_init(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const char
 						src_node)));
 
 	/* Check that dst_node is a valid DN and that chunk does not exist on it */
-	cc->dst_server = data_node_get_foreign_server(dst_node, ACL_USAGE, true, false);
-	Assert(NULL != cc->dst_server);
-
 	if (ts_chunk_has_data_node(cc->chunk, dst_node))
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
