@@ -1,0 +1,90 @@
+ARG PG_VERSION
+ARG TS_VERSION
+ARG PREV_TS_VERSION
+################################################################
+# Build tools binaries in separate image.
+#
+# This is a little odd and it would be better to build the tools
+# version from the repository for the tools. Then we could copy the
+# binaries from that image to the release image.
+################################################################
+ARG GO_VERSION=1.15.0
+FROM golang:${GO_VERSION}-alpine AS tools
+ARG TOOLS_VERSION=0.8.1
+
+ENV TOOLS_VERSION ${TOOLS_VERSION}
+
+RUN apk update && apk add --no-cache git
+
+WORKDIR ${GOPATH}/src/github.com/timescale/
+RUN git clone https://github.com/timescale/timescaledb-tune.git
+RUN git clone https://github.com/timescale/timescaledb-parallel-copy.git
+
+WORKDIR timescaledb-tune/cmd/timescaledb-tune
+RUN git fetch && git checkout --quiet $(git describe --abbrev=0)
+RUN go get -d -v
+RUN go build -o /go/bin/timescaledb-tune
+
+WORKDIR ${GOPATH}/src/github.com/timescale/timescaledb-parallel-copy/cmd/timescaledb-parallel-copy
+RUN git fetch && git checkout --quiet $(git describe --abbrev=0)
+RUN go get -d -v
+RUN go build -o /go/bin/timescaledb-parallel-copy
+
+################################################################
+# Grab old versions from previous version.
+################################################################
+FROM timescale/timescaledb:${PREV_TS_VERSION}-pg${PG_VERSION}-bitnami AS oldversions
+# Remove update files, mock files, and all but the last 5 .so/.sql files
+USER 0
+RUN rm -f $(pg_config --sharedir)/extension/timescaledb--*--*.sql \
+    && rm -f $(pg_config --sharedir)/extension/timescaledb*mock*.sql \
+    && rm -f $(ls -1 $(pg_config --pkglibdir)/timescaledb-tsl-*.so | head -n -5) \
+    && rm -f $(ls -1 $(pg_config --pkglibdir)/timescaledb-*.so | head -n -5) \
+    && rm -f $(ls -1 $(pg_config --sharedir)/extension/timescaledb--*.sql | head -n -5)
+
+################################################################
+# Now build image and copy in tools
+################################################################
+ARG PG_VERSION
+FROM bitnami/postgresql:${PG_VERSION} AS build
+ARG PG_VERSION
+
+# We create one layer for each piece we create to avoid extensive
+# rebuilds unless the there is a change in that layer.
+#
+# We need, however, preceed each "apk add" with an "apk update" since
+# the remote source might have been updated.
+USER 0
+RUN mkdir -p /var/lib/apt/lists/partial
+RUN apt-get update \
+    && apt-get -y install build-essential libssl-dev dpkg-dev gcc libc-dev make cmake wget 
+WORKDIR /source
+COPY . .
+WORKDIR /build
+RUN cmake /source -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF -DGENERATE_DOWNGRADE_SCRIPT=ON -DWARNINGS_AS_ERRORS=OFF -DPROJECT_INSTALL_METHOD="docker-bitnami"
+RUN make
+RUN make install
+
+RUN sed -r -i "s/[#]*\s*(shared_preload_libraries)\s*=\s*'(.*)'/\1 = 'timescaledb,\2'/;s/,'/'/" /opt/bitnami/postgresql/share/postgresql.conf.sample /opt/bitnami/postgresql/conf/postgresql.conf
+
+################################################################
+# Create the actual release image by copying stuff from the other
+# images
+################################################################
+ARG PG_VERSION
+FROM bitnami/postgresql:${PG_VERSION}
+ARG TS_VERSION
+LABEL maintainer="Timescale https://www.timescale.com"
+ENV TIMESCALEDB_VERSION ${TS_VERSION}
+
+COPY docker-entrypoint-initdb.d/* /docker-entrypoint-initdb.d/
+COPY --from=tools /go/bin/* /usr/local/bin/
+COPY --from=oldversions /opt/bitnami/postgresql/lib/timescaledb-*.so /opt/bitnami/postgresql/lib/
+COPY --from=oldversions /opt/bitnami/postgresql/share/extension/timescaledb--*.sql /opt/bitnami/postgresql/share/extension/
+# Make sure we copy the timescaledb.so file as well.
+COPY --from=build /opt/bitnami/postgresql/lib/timescaledb*.so /opt/bitnami/postgresql/lib/
+COPY --from=build /opt/bitnami/postgresql/share/extension/timescaledb--*.sql /opt/bitnami/postgresql/share/extension/
+COPY --from=build /opt/bitnami/postgresql/share/extension/timescaledb.control /opt/bitnami/postgresql/share/extension/
+COPY --from=build /opt/bitnami/postgresql/share/postgresql.conf.sample /opt/bitnami/postgresql/share/
+
+USER 1001

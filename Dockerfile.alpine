@@ -1,0 +1,85 @@
+ARG PG_VERSION
+ARG TS_VERSION
+ARG PREV_TS_VERSION
+################################################################
+# Build tools binaries in separate image.
+#
+# This is a little odd and it would be better to build the tools
+# version from the repository for the tools. Then we could copy the
+# binaries from that image to the release image.
+################################################################
+ARG GO_VERSION=1.15.0
+FROM golang:${GO_VERSION}-alpine AS tools
+ARG TOOLS_VERSION=0.8.1
+
+ENV TOOLS_VERSION ${TOOLS_VERSION}
+
+RUN apk update && apk add --no-cache git
+
+WORKDIR ${GOPATH}/src/github.com/timescale/
+RUN git clone https://github.com/timescale/timescaledb-tune.git
+RUN git clone https://github.com/timescale/timescaledb-parallel-copy.git
+
+WORKDIR timescaledb-tune/cmd/timescaledb-tune
+RUN git fetch && git checkout --quiet $(git describe --abbrev=0)
+RUN go get -d -v
+RUN go build -o /go/bin/timescaledb-tune
+
+WORKDIR ${GOPATH}/src/github.com/timescale/timescaledb-parallel-copy/cmd/timescaledb-parallel-copy
+RUN git fetch && git checkout --quiet $(git describe --abbrev=0)
+RUN go get -d -v
+RUN go build -o /go/bin/timescaledb-parallel-copy
+
+################################################################
+# Grab old versions from previous version.
+################################################################
+FROM timescale/timescaledb:${PREV_TS_VERSION}-pg${PG_VERSION} AS oldversions
+# Remove update files, mock files, and all but the last 5 .so/.sql files
+RUN rm -f $(pg_config --sharedir)/extension/timescaledb--*--*.sql \
+    && rm -f $(pg_config --sharedir)/extension/timescaledb*mock*.sql \
+    && rm -f $(ls -1 $(pg_config --pkglibdir)/timescaledb-tsl-*.so | head -n -5) \
+    && rm -f $(ls -1 $(pg_config --pkglibdir)/timescaledb-*.so | head -n -5) \
+    && rm -f $(ls -1 $(pg_config --sharedir)/extension/timescaledb--*.sql | head -n -5)
+
+################################################################
+# Now build image and copy in tools
+################################################################
+ARG PG_VERSION
+FROM postgres:${PG_VERSION}-alpine AS build
+ARG OSS_ONLY
+
+# We create one layer for each piece we create to avoid extensive
+# rebuilds unless the there is a change in that layer.
+#
+# We need, however, preceed each "apk add" with an "apk update" since
+# the remote source might have been updated.
+RUN apk update && \
+    apk add --no-cache --virtual .fetch-deps ca-certificates openssl openssl-dev coreutils gcc libc-dev make cmake util-linux-dev
+WORKDIR /source
+COPY . .
+WORKDIR /build
+RUN cmake /source -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF -DGENERATE_DOWNGRADE_SCRIPT=ON -DWARNINGS_AS_ERRORS=OFF -DPROJECT_INSTALL_METHOD="docker"${OSS_ONLY}
+RUN make install
+RUN if [ "${OSS_ONLY}" != "" ]; then rm -f $(pg_config --pkglibdir)/timescaledb-tsl-*.so; fi
+RUN sed -r -i "s/[#]*\s*(shared_preload_libraries)\s*=\s*'(.*)'/\1 = 'timescaledb,\2'/;s/,'/'/" /usr/local/share/postgresql/postgresql.conf.sample
+
+################################################################
+# Create the actual release image by copying stuff from the other
+# images
+################################################################
+ARG PG_VERSION
+FROM postgres:${PG_VERSION}-alpine
+ARG TS_VERSION
+LABEL maintainer="Timescale https://www.timescale.com"
+ENV TIMESCALEDB_VERSION ${TS_VERSION}
+
+COPY docker-entrypoint-initdb.d/* /docker-entrypoint-initdb.d/
+COPY --from=tools /go/bin/* /usr/local/bin/
+# No need to copy timescaledb.so file since it will be picked from the build image.
+COPY --from=oldversions /usr/local/lib/postgresql/timescaledb-*.so /usr/local/lib/postgresql/
+COPY --from=oldversions /usr/local/share/postgresql/extension/timescaledb--*.sql /usr/local/share/postgresql/extension/
+# Make sure we copy the timescaledb.so file as well.
+COPY --from=build /usr/local/lib/postgresql/timescaledb*.so /usr/local/lib/postgresql/
+COPY --from=build /usr/local/share/postgresql/extension/timescaledb--*.sql /usr/local/share/postgresql/extension/
+COPY --from=build /usr/local/share/postgresql/extension/timescaledb.control /usr/local/share/postgresql/extension/
+COPY --from=build /usr/local/share/postgresql/postgresql.conf.sample /usr/local/share/postgresql/
