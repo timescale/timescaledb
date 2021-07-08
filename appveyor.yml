@@ -125,6 +125,8 @@ build_script:
 
     Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "timescaledb.license = 'apache'"
 
+    Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "wal_level = 'logical'"
+
     # Add-Content "C:\Program Files\postgresql\12\data\postgresql.conf" "log_min_messages='debug5'"
 
     # build timescale
