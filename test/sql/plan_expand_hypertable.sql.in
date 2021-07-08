@@ -67,4 +67,42 @@ $f$;
 -- plan output should be identical to previous session
 :PREFIX SELECT * FROM test_f(now());
 
+
+-- test hypertable expansion in nested function calls
+CREATE TABLE t1 (a int, b int NOT NULL);
+SELECT create_hypertable('t1', 'b', chunk_time_interval=>10);
+
+CREATE TABLE t2 (a int, b int NOT NULL);
+SELECT create_hypertable('t2', 'b', chunk_time_interval=>10);
+
+CREATE OR REPLACE FUNCTION f_t1(_a int, _b int)
+ RETURNS SETOF t1
+ LANGUAGE SQL
+ STABLE PARALLEL SAFE
+AS $function$
+   SELECT DISTINCT ON (a) * FROM t1 WHERE a = _a and b = _b ORDER BY a, b DESC
+$function$
+;
+
+CREATE OR REPLACE FUNCTION f_t2(_a int, _b int) RETURNS SETOF t2 LANGUAGE sql STABLE PARALLEL SAFE
+AS $function$
+   SELECT DISTINCT ON (j.a) j.*
+   FROM
+      f_t1(_a, _b) sc,
+      t2 j
+   WHERE
+      j.b = _b AND
+      j.a = _a
+   ORDER BY j.a, j.b DESC
+$function$
+;
+
+CREATE OR REPLACE FUNCTION f_t1_2(_b int) RETURNS SETOF t1 LANGUAGE SQL STABLE PARALLEL SAFE
+AS $function$
+   SELECT DISTINCT ON (j.a) jt.* FROM t1 j, f_t1(j.a, _b) jt
+$function$;
+
+:PREFIX SELECT * FROM f_t1_2(10);
+:PREFIX SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
+
 \qecho '--TEST END--'

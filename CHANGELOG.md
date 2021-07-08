@@ -4,6 +4,14 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #3401 Fix segfault for RelOptInfo without fdw_private
+
+**Thanks**
+* @fvannee for reporting an issue with hypertable expansion in functions
+
 ## 2.3.1 (2021-07-05)
 
 This maintenance release contains bugfixes since the 2.3.0 release. We
