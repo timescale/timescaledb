@@ -65,7 +65,7 @@ SHOW timescaledb.enable_2pc;
 SHOW wal_level;
  wal_level 
 -----------
- replica
+ logical
 (1 row)
 
 -- make sure not in recovery mode
