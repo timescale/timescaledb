@@ -129,6 +129,11 @@ WHERE _ts_meta_sequence_num > 0
 GROUP BY segcol, segcol2
 ORDER BY 1;
 
+SELECT  compressed_chunk_name ,  chunk_name, chunk_status
+FROM compressed_chunk_info_view 
+WHERE hypertable_name = 'test_multseg'
+ORDER BY 2; 
+
 \set TABLE_NAME test_multseg
 \ir recompress_test3.sql
 --\ir recompress_test2.sql
@@ -136,3 +141,9 @@ ORDER BY 1;
 SELECT segcol, segcol2, _ts_meta_count, _ts_meta_sequence_num, _ts_meta_min_1, _ts_meta_max_1
 FROM :COMP_CHUNK_NAME
 ORDER BY 1, 2, 3, 4, 5;
+
+--check that status is correct
+SELECT  compressed_chunk_name ,  chunk_name, chunk_status
+FROM compressed_chunk_info_view 
+WHERE hypertable_name = 'test_multseg'
+ORDER BY 2; 

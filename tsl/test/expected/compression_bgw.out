@@ -741,6 +741,11 @@ FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
      15 |     900 |  30
 (3 rows)
 
+   compressed_chunk_name    |     chunk_name     | chunk_status 
+----------------------------+--------------------+--------------
+ compress_hyper_17_62_chunk | _hyper_16_61_chunk |            3
+(1 row)
+
  before_recompress_count 
 -------------------------
                       79
@@ -781,4 +786,9 @@ FROM :COMP_CHUNK_NAME c  WHERE segcol = 11 group by segcol;
      12 |      20 |              1 |                    10 | Fri Jan 03 03:01:00 2020 PST | Fri Jan 03 03:01:00 2020 PST
      15 |     900 |             26 |                    10 | Fri Jan 03 02:00:00 2020 PST | Fri Jan 03 04:01:00 2020 PST
 (4 rows)
+
+   compressed_chunk_name    |     chunk_name     | chunk_status 
+----------------------------+--------------------+--------------
+ compress_hyper_17_62_chunk | _hyper_16_61_chunk |            1
+(1 row)
 

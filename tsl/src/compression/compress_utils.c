@@ -646,5 +646,7 @@ tsl_recompress_chunk_tuples(PG_FUNCTION_ARGS)
 	}
 	// no support for distr. hypertables here
 	recompress_chunk_tuple(uncompressed_chunk);
+    //hack for now -TODO
+    ts_chunk_set_status(uncompressed_chunk, 1);
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
