@@ -53,3 +53,89 @@ ORDER BY bucket;
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 2 other objects
+-- Make sure seconds, minutes, and hours can be used with caggs ('origin' is not
+-- currently supported in caggs).
+CREATE TABLE conditions(
+  tstamp TIMESTAMP NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+SELECT create_hypertable(
+  'conditions', 'tstamp',
+  chunk_time_interval => INTERVAL '1 day'
+);
+    create_hypertable    
+-------------------------
+ (3,public,conditions,t)
+(1 row)
+
+INSERT INTO conditions (tstamp, city, temperature) VALUES
+  ('2021-06-14 12:30:00', 'Moscow', 26),
+  ('2021-06-14 12:30:10', 'Moscow', 22),
+  ('2021-06-14 12:30:20', 'Moscow', 24),
+  ('2021-06-14 12:30:30', 'Moscow', 24),
+  ('2021-06-14 12:30:40', 'Moscow', 27),
+  ('2021-06-14 12:30:50', 'Moscow', 28),
+  ('2021-06-14 12:31:10', 'Moscow', 30),
+  ('2021-06-14 12:31:20', 'Moscow', 31),
+  ('2021-06-14 12:31:30', 'Moscow', 34),
+  ('2021-06-14 12:31:40', 'Moscow', 34),
+  ('2021-06-14 12:31:50', 'Moscow', 34),
+  ('2021-06-14 12:32:00', 'Moscow', 32),
+  ('2021-06-14 12:32:10', 'Moscow', 32),
+  ('2021-06-14 12:32:20', 'Moscow', 31);
+CREATE MATERIALIZED VIEW conditions_summary_30sec
+WITH (timescaledb.continuous) AS
+SELECT city,
+       timescaledb_experimental.time_bucket_ng('30 seconds', tstamp) AS bucket,
+       MIN(temperature),
+       MAX(temperature)
+FROM conditions
+GROUP BY city, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_30sec"
+CREATE MATERIALIZED VIEW conditions_summary_1min
+WITH (timescaledb.continuous) AS
+SELECT city,
+       timescaledb_experimental.time_bucket_ng('1 minute', tstamp) AS bucket,
+       MIN(temperature),
+       MAX(temperature)
+FROM conditions
+GROUP BY city, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_1min"
+CREATE MATERIALIZED VIEW conditions_summary_1hour
+WITH (timescaledb.continuous) AS
+SELECT city,
+       timescaledb_experimental.time_bucket_ng('1 hour', tstamp) AS bucket,
+       MIN(temperature),
+       MAX(temperature)
+FROM conditions
+GROUP BY city, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary_1hour"
+SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_summary_30sec ORDER BY bucket;
+  city  |       to_char       | min | max 
+--------+---------------------+-----+-----
+ Moscow | 2021-06-14 12:30:00 |  22 |  26
+ Moscow | 2021-06-14 12:30:30 |  24 |  28
+ Moscow | 2021-06-14 12:31:00 |  30 |  31
+ Moscow | 2021-06-14 12:31:30 |  34 |  34
+ Moscow | 2021-06-14 12:32:00 |  31 |  32
+(5 rows)
+
+SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_summary_1min ORDER BY bucket;
+  city  |       to_char       | min | max 
+--------+---------------------+-----+-----
+ Moscow | 2021-06-14 12:30:00 |  22 |  28
+ Moscow | 2021-06-14 12:31:00 |  30 |  34
+ Moscow | 2021-06-14 12:32:00 |  31 |  32
+(3 rows)
+
+SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_summary_1hour ORDER BY bucket;
+  city  |       to_char       | min | max 
+--------+---------------------+-----+-----
+ Moscow | 2021-06-14 12:00:00 |  22 |  34
+(1 row)
+
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 9 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_18_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_19_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_20_chunk

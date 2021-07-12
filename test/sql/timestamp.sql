@@ -609,6 +609,7 @@ SELECT timescaledb_experimental.time_bucket_ng('0 days', '2001-02-03' :: date) A
 SELECT timescaledb_experimental.time_bucket_ng('1 month', '2001-02-03' :: date, origin => '2000-01-02') AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 month', '2000-01-02' :: date, origin => '2001-01-01') AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, origin => '2001-01-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 month 3 hours', '2021-11-22' :: timestamp) AS result;
 \set ON_ERROR_STOP 1
 
 -- infinity
@@ -619,6 +620,20 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timesta
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz) AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp, origin => '2021-06-01') AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz, origin => '2021-06-01') AS result;
+
+-- Make sure time_bucket_ng() supports seconds, minutes, and hours.
+-- We happen to know that the internal implementation is the same
+-- as for time_bucket(), thus there is no reason to execute all the tests
+-- we already have for time_bucket(). These two functions will most likely
+-- be merged eventually anyway.
+SELECT timescaledb_experimental.time_bucket_ng('30 seconds', '2021-07-12 12:34:56' :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('15 minutes', '2021-07-12 12:34:56' :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('6 hours', '2021-07-12 12:34:56' :: timestamp) AS result;
+
+-- Same as above, but with provided 'origin' argument.
+SELECT timescaledb_experimental.time_bucket_ng('30 seconds', '2021-07-12 12:34:56' :: timestamp, origin => '2021-07-12 12:10:00') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('15 minutes', '2021-07-12 12:34:56' :: timestamp, origin => '2021-07-12 12:10:00') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('6 hours', '2021-07-12 12:34:56' :: timestamp, origin => '2021-07-12 12:10:00') AS result;
 
 -- N days / weeks buckets
 SELECT  to_char(d, 'YYYY-MM-DD') AS d,
