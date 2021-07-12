@@ -1,0 +1,83 @@
+# Patch release pipeline
+#
+# This release pipeline does a patch release with the contents of the
+# branch that you select when running the workflow. For example, to
+# release the next patch release 2.3.2, you can just trigger this
+# release pipeline and it will run the steps to get a release out and
+# published.
+#
+# This release pipeline is very basic right now. It assumes that you
+# have a release branch with all the commits that should be in it and
+# a release commit last that is tagged with the release that should be
+# published.
+#
+# A possible future enhancement is to generate the release commit
+# automatically and tag the release based on the previous release tag.
+#
+# To follow the steps of the release, messages are printed to Slack in
+# the form of a release thread. Right now the message is just the
+# commits that go into the release.
+#
+# The following secrets are used in the workflow.
+#
+# SLACK_BOT_TOKEN
+#    OAuth token for the application that will write the message.
+#
+# SLACK_CHANNEL_RELEASE
+#    Channel identifier for channel where the release thread should be
+#    created.
+name: Patch Release Pipeline
+on: workflow_dispatch
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Check release branch
+        uses: ./.github/actions/check-release-branch
+
+      # Send a message with the commits in the release, mostly for
+      # debug purposes at this point.
+      - name: Fetch list of all commits since last tag
+        id: fetch
+        shell: bash -x {0}
+        run: |
+          tag=$(git describe --tags --abbrev=0 $GITHUB_REF)
+          output=$(git log --format=":black_small_square: %s" $tag..)
+          echo "::set-output name=commits::$output"
+
+      - name: Slack
+        uses: archive/github-actions-slack@v2.0.0
+        id: notify
+        with:
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ secrets.SLACK_CHANNEL_FEED_EXPERIMENTAL }}
+          slack-text: ${{ steps.fetch.outputs.commits }}
+      - name: Result from "Send Slack Message"
+        run: echo "The result was ${{ steps.notify.outputs.slack-result }}"
+
+  # Mostly a placeholder for now. Will be replaced with the real RPM build.
+  build-rpm:
+    needs: check-release
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v2
+
+      - id: release
+        name: Get version
+        run: |
+          echo "::set-output name=release::$(git describe --tags $GITHUB_SHA)"
+
+      - name: Slack
+        uses: archive/github-actions-slack@v2.0.0
+        id: notify
+        with:
+          slack-bot-user-oauth-access-token: ${{ secrets.SLACK_BOT_TOKEN }}
+          slack-channel: ${{ secrets.SLACK_CHANNEL_FEED_EXPERIMENTAL }}
+          slack-text: RPM for version ${{ steps.release.output.release }} built
+      - name: Send result
+        run: echo "The result was ${{ steps.notify.outputs.slack-result }}"

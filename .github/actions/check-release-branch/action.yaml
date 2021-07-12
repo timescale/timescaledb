@@ -1,0 +1,26 @@
+# This does necessary checks that the release branch is ready to be
+# released and also serves as an example action that does some real
+# work for the workflow.
+#
+# For now, only one thing is checked: that the HEAD commit of the
+# branch that triggered the release is tagged with the release
+# number. This is expected to be the release commit, but no check of
+# the release commit is done.
+name: Check Release Branch
+description: Check that the release branch is correctly set up
+outputs:
+  release:
+    description: "Release"
+    value: ${{ steps.fetch.outputs.release }}
+runs:
+  using: "composite"
+  steps:
+    - id: tagged
+      name: Check if branch is tagged
+      run: |
+        if git describe --tags $GITHUB_SHA | grep -qe-; then
+          exit 1
+        else
+          echo "::set-output name=release::$(git describe --tags $GITHUB_SHA)"
+          exit 0
+        fi
