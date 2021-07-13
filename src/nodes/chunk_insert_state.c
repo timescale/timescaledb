@@ -513,6 +513,31 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
 	}
 }
 
+/* Assumption: we have acquired a lock on the chunk table. This is
+ *      important because lock acquisition order is always orignal chunk,
+ *      followed by compressed chunk to prevent deadlocks.
+ * We now try to acquire a lock on the compressed chunk, if one exists.
+ * Note that the insert could have been blocked by a recompress_chunk operation.
+ * So the compressed chunk could have moved under us. We need to refetch the chunk
+ * to get the correct compressed chunk id (github issue 3400)
+ */
+static Relation
+lock_associated_compressed_chunk(int32 chunk_id, bool *has_compressed_chunk)
+{
+	Relation compress_rel = NULL;
+	Chunk *orig_chunk = ts_chunk_get_by_id(chunk_id, true);
+	Oid compress_chunk_relid = InvalidOid;
+	*has_compressed_chunk = false;
+	if (orig_chunk->fd.compressed_chunk_id)
+		compress_chunk_relid = ts_chunk_get_relid(orig_chunk->fd.compressed_chunk_id, false);
+	if (compress_chunk_relid != InvalidOid)
+	{
+		*has_compressed_chunk = true;
+		compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+	}
+	return compress_rel;
+}
+
 /*
  * Create new insert chunk state.
  *
@@ -555,19 +580,15 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	old_mcxt = MemoryContextSwitchTo(dispatch->estate->es_query_cxt);
 
 	rel = table_open(chunk->table_id, RowExclusiveLock);
-	if (has_compressed_chunk)
+	if (has_compressed_chunk && ts_indexing_relation_has_primary_or_unique_index(rel))
 	{
-		Oid compress_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
-		if (ts_indexing_relation_has_primary_or_unique_index(rel))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg(
-						 "insert into a compressed chunk that has primary or unique constraint is "
-						 "not supported")));
-		}
-		compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+		table_close(rel, RowExclusiveLock);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("insert into a compressed chunk that has primary or unique constraint is "
+						"not supported")));
 	}
+	compress_rel = lock_associated_compressed_chunk(chunk->fd.id, &has_compressed_chunk);
 
 	MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);

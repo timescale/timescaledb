@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #3401 Fix segfault for RelOptInfo without fdw_private
+* #3411 Verify compressed chunk validity for compressed path
 
 **Thanks**
 * @fvannee for reporting an issue with hypertable expansion in functions
