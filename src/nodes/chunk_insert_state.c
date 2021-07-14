@@ -557,7 +557,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	rel = table_open(chunk->table_id, RowExclusiveLock);
 	if (has_compressed_chunk)
 	{
-		Oid compress_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
 		if (ts_indexing_relation_has_primary_or_unique_index(rel))
 		{
 			ereport(ERROR,
@@ -566,7 +565,18 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 						 "insert into a compressed chunk that has primary or unique constraint is "
 						 "not supported")));
 		}
-		compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+		/* fetch the chunk again after acquiring lock and verify if it is
+		 * still compressed. Then get the correct compressed chunk id
+		 * ( github issue 3400)
+		 */
+		Chunk *orig_chunk = ts_chunk_get_by_id(chunk->fd.id, true);
+		Oid compress_chunk_relid = InvalidOid;
+		if (orig_chunk->fd.compressed_chunk_id)
+			compress_chunk_relid = ts_chunk_get_relid(orig_chunk->fd.compressed_chunk_id, false);
+		if (compress_chunk_relid != InvalidOid)
+			compress_rel = table_open(compress_chunk_relid, RowExclusiveLock);
+		else
+			has_compressed_chunk = false;
 	}
 
 	MemoryContextSwitchTo(cis_context);

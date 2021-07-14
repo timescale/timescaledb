@@ -1,4 +1,4 @@
-Parsed test spec with 9 sessions
+Parsed test spec with 11 sessions
 
 starting permutation: LockChunk1 I1 C1 UnlockChunk Ic Cc SC1 S1
 step LockChunk1: 
@@ -282,3 +282,59 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status         
 
 3              
+
+starting permutation: CA1 CAc I1 Ic SChunkStat LockChunk1 RC1 IN1 UnlockChunk RCc INc SH
+step CA1: 
+  BEGIN;
+  SELECT
+    compress_chunk(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id;
+
+compress_chunk 
+
+_timescaledb_internal._hyper_17_32_chunk
+_timescaledb_internal._hyper_17_33_chunk
+_timescaledb_internal._hyper_17_34_chunk
+step CAc: COMMIT;
+step I1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 100);
+step Ic: COMMIT;
+step SChunkStat: SELECT status from _timescaledb_catalog.chunk 
+       WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
+status         
+
+3              
+step LockChunk1: 
+  BEGIN;
+  SELECT
+    lock_chunktable(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+
+lock_chunktable
+
+               
+step RC1: 
+  BEGIN;
+  SELECT
+    recompress_chunk(ch.schema_name || '.' || ch.table_name)
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
+  ORDER BY ch.id LIMIT 1;
+
+ <waiting ...>
+step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100); <waiting ...>
+step UnlockChunk: ROLLBACK;
+step RC1: <... completed>
+recompress_chunk
+
+_timescaledb_internal._hyper_17_32_chunk
+step RCc: COMMIT;
+step IN1: <... completed>
+step INc: COMMIT;
+step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
+total_chunks   number_compressed_chunks
+
+3              3              
