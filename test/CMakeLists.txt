@@ -125,3 +125,5 @@ endif(PG_SOURCE_DIR)
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   add_subdirectory(src)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
+add_subdirectory(perl)

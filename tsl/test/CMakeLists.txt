@@ -56,7 +56,7 @@ if(PG_REGRESS)
       provecheck
       COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
       COMMAND
-        BUILDIR=${CMAKE_BINARY_DIR} PATH="${PG_BINDIR}:$ENV{PATH}"
+        CONFDIR=${CMAKE_BINARY_DIR}/tsl/test PATH="${PG_BINDIR}:$ENV{PATH}"
         PG_REGRESS=${PG_REGRESS} SRC_DIR=${PG_SOURCE_DIR}
         CM_SRC_DIR=${CMAKE_SOURCE_DIR} PG_LIBDIR=${PG_LIBDIR}
         ${PRIMARY_TEST_DIR}/pg_prove.sh
