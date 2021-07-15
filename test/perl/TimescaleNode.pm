@@ -33,7 +33,7 @@ sub init
 	# append into postgresql.conf from Timescale
 	# template config file
 	$self->append_conf('postgresql.conf',
-		TestLib::slurp_file("$ENV{'BUILDIR'}/tsl/test/postgresql.conf"));
+		TestLib::slurp_file("$ENV{'CONFDIR'}/postgresql.conf"));
 }
 
 # helper function to check output from PSQL for a query
