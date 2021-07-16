@@ -894,3 +894,26 @@ SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
 
 DROP TABLESPACE tablespace1;
 DROP TABLESPACE tablespace2;
+
+-- Check that we can rename a column of a materialized view and still
+-- rebuild it after (#3051, #3405)
+CREATE TABLE conditions (
+       time TIMESTAMPTZ NOT NULL,
+       location TEXT NOT NULL,
+       temperature DOUBLE PRECISION NULL
+);
+
+SELECT create_hypertable('conditions', 'time');
+
+CREATE MATERIALIZED VIEW conditions_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+SELECT location,
+       time_bucket(INTERVAL '1 day', time) AS bucket,
+       AVG(temperature)
+  FROM conditions
+GROUP BY location, bucket;
+
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN bucket to "time";
+
+-- This will rebuild the materialized view and should succeed.
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false); 
