@@ -50,6 +50,12 @@ DECLARE
 BEGIN
   SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
   IF ts_version < '2.0.0' THEN
+    CREATE VIEW rename_cols
+    WITH (timescaledb.continuous, timescaledb.materialized_only = false, timescaledb.refresh_lag='14 days') AS
+    SELECT time_bucket('1 week', timec) AS bucket, location, avg(humidity)
+    FROM conditions_before
+    GROUP BY bucket, location;
+
     CREATE VIEW mat_before
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
     AS
@@ -95,6 +101,14 @@ BEGIN
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
 
   ELSE
+    CREATE MATERIALIZED VIEW rename_cols
+    WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+    SELECT time_bucket('1 week', timec) AS bucket, location, avg(humidity)
+    FROM conditions_before
+    GROUP BY bucket, location
+    WITH NO DATA;
+    PERFORM add_continuous_aggregate_policy('rename_cols', NULL, '14 days'::interval, '336 h');
+
     CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
     AS
@@ -142,13 +156,17 @@ BEGIN
   END IF;
 END $$;
 
+ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket to "time";
+
 \if :WITH_SUPERUSER
 GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
 \endif
 
 \if :has_refresh_mat_view
+REFRESH MATERIALIZED VIEW rename_cols;
 REFRESH MATERIALIZED VIEW mat_before;
 \else
+CALL refresh_continuous_aggregate('rename_cols',NULL,NULL);
 CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
 \endif
 
@@ -290,7 +308,7 @@ BEGIN
     max(temperature) as maxtemp
       FROM conditions_before
       GROUP BY bucket WITH NO DATA;
-    
+
     PERFORM add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h');
   END IF;
 END $$;
@@ -304,7 +322,7 @@ CALL refresh_continuous_aggregate('mat_ignoreinval',NULL,NULL);
 -- test new data beyond the invalidation threshold is properly handled --
 CREATE TABLE inval_test (time TIMESTAMPTZ NOT NULL, location TEXT, temperature DOUBLE PRECISION);
 SELECT create_hypertable('inval_test', 'time', chunk_time_interval => INTERVAL '1 week');
- 
+
 INSERT INTO inval_test
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timestamp, '1 day'), 'POR', generate_series(40.5, 50.0, 0.5);
 INSERT INTO inval_test
@@ -322,7 +340,7 @@ BEGIN
            timescaledb.refresh_lag='-20 days',
            timescaledb.refresh_interval='12 hours',
            timescaledb.max_interval_per_job='100000 days' )
-    AS 
+    AS
       SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
         max(temperature) as max_temp, avg(temperature) as avg_temp
       FROM inval_test
@@ -331,8 +349,8 @@ BEGIN
   ELSE
     CREATE MATERIALIZED VIEW mat_inval
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    AS 
-      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp, 
+    AS
+      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
         max(temperature) as max_temp, avg(temperature) as avg_temp
       FROM inval_test
       GROUP BY bucket, location WITH NO DATA;
@@ -375,7 +393,7 @@ BEGIN
            timescaledb.ignore_invalidation_older_than = 6,
            timescaledb.refresh_lag = 2,
            timescaledb.refresh_interval='12 hours')
-    AS 
+    AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
       FROM int_time_test
       GROUP BY 1;
@@ -384,7 +402,7 @@ BEGIN
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.refresh_lag = 2,
            timescaledb.refresh_interval='12 hours')
-    AS 
+    AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
       FROM int_time_test
       GROUP BY 1;
@@ -392,14 +410,14 @@ BEGIN
   ELSE
     CREATE MATERIALIZED VIEW mat_inttime
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    AS 
+    AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
       FROM int_time_test
       GROUP BY 1 WITH NO DATA;
 
     CREATE MATERIALIZED VIEW mat_inttime2
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    AS 
+    AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
       FROM int_time_test
       GROUP BY 1 WITH NO DATA;
@@ -435,7 +453,7 @@ BEGIN
            timescaledb.refresh_lag='1 day',
            timescaledb.ignore_invalidation_older_than = '28 days',
            timescaledb.refresh_interval='12 hours' )
-    AS 
+    AS
       SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
         max(temperature) as max_temp, avg(temperature) as avg_temp
       FROM conflict_test
@@ -445,8 +463,8 @@ BEGIN
   ELSE
     CREATE MATERIALIZED VIEW mat_conflict
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    AS 
-      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp, 
+    AS
+      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
         max(temperature) as max_temp, avg(temperature) as avg_temp
       FROM conflict_test
       GROUP BY bucket, location WITH NO DATA;
