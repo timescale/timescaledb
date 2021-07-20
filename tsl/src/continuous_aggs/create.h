@@ -16,7 +16,6 @@
 DDLResult tsl_process_continuous_agg_viewstmt(Node *stmt, const char *query_string, void *pstmt,
 											  WithClauseResult *with_clause_options);
 
-void cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
-								 WithClauseResult *with_clause_options);
+void cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_CAGG_CREATE_H */

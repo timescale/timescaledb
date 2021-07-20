@@ -1816,8 +1816,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
  * update the view definition of an existing continuous aggregate
  */
 void
-cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
-							WithClauseResult *with_clause_options)
+cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 {
 	ListCell *lc1, *lc2;
 	int sec_ctx;
@@ -1854,7 +1853,7 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 
 	Query *view_query = finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress);
 
-	if (with_clause_options[ContinuousViewOptionMaterializedOnly].parsed == BoolGetDatum(false))
+	if (!agg->data.materialized_only)
 		view_query = build_union_query(&timebucket_exprinfo,
 									   &mattblinfo,
 									   view_query,

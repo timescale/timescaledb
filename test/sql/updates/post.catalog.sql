@@ -51,4 +51,10 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY id, hypertable_id;
 SELECT * FROM _timescaledb_catalog.chunk_constraint ORDER BY chunk_id, dimension_slice_id, constraint_name;
 SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
-\d+ _timescaledb_internal._hyper*
+-- Indices can have different column names between an upgrade and a
+-- restore of a dump, so we only list the tables. This will include
+-- the indexes defined on the tables, but not the exact definition of
+-- the indexes and in particular not the column name in the index
+-- which will be different in a restored database and an updated
+-- database for columns that were renamed before the update.
+\dt+ _timescaledb_internal._hyper*

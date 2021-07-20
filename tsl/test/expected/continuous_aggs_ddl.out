@@ -377,7 +377,7 @@ SELECT * FROM truncate_partitioned;
 \set ON_ERROR_STOP 0
 -- test a variety of ALTER TABLE statements
 ALTER TABLE :drop_chunks_mat_table_u RENAME chunk_id TO bad_name;
-ERROR:  cannot rename column "chunk_id" of materialization table "_materialized_hypertable_7"
+ERROR:  renaming columns on materialization tables is not supported
 ALTER TABLE :drop_chunks_mat_table_u ADD UNIQUE(chunk_id);
 ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET UNLOGGED;
@@ -1359,14 +1359,102 @@ SELECT create_hypertable('conditions', 'time');
  (34,public,conditions,t)
 (1 row)
 
+INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
+INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
+INSERT INTO conditions VALUES ( '2018-01-02 09:20:00-08', 'SFO', 65);
+INSERT INTO conditions VALUES ( '2018-01-02 09:10:00-08', 'NYC', 65);
+INSERT INTO conditions VALUES ( '2018-11-01 09:20:00-08', 'NYC', 45);
+INSERT INTO conditions VALUES ( '2018-11-01 10:40:00-08', 'NYC', 55);
+INSERT INTO conditions VALUES ( '2018-11-01 11:50:00-08', 'NYC', 65);
+INSERT INTO conditions VALUES ( '2018-11-01 12:10:00-08', 'NYC', 75);
+INSERT INTO conditions VALUES ( '2018-11-01 13:10:00-08', 'NYC', 85);
+INSERT INTO conditions VALUES ( '2018-11-02 09:20:00-08', 'NYC', 10);
+INSERT INTO conditions VALUES ( '2018-11-02 10:30:00-08', 'NYC', 20);
 CREATE MATERIALIZED VIEW conditions_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT location,
        time_bucket(INTERVAL '1 day', time) AS bucket,
        AVG(temperature)
   FROM conditions
-GROUP BY location, bucket;
-NOTICE:  continuous aggregate "conditions_daily" is already up-to-date
+GROUP BY location, bucket
+WITH NO DATA;
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+SELECT * FROM test.show_columns('conditions_daily');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ bucket   | timestamp with time zone | f
+ avg      | double precision         | f
+(3 rows)
+
+SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ bucket   | timestamp with time zone | f
+ avg      | double precision         | f
+(3 rows)
+
+SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ bucket   | timestamp with time zone | f
+ agg_3_3  | bytea                    | f
+ chunk_id | integer                  | f
+(4 rows)
+
+SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ bucket   | timestamp with time zone | t
+ agg_3_3  | bytea                    | f
+ chunk_id | integer                  | f
+(4 rows)
+
 ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN bucket to "time";
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+SELECT * FROM test.show_columns(' conditions_daily');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | f
+ avg      | double precision         | f
+(3 rows)
+
+SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | f
+ avg      | double precision         | f
+(3 rows)
+
+SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | f
+ agg_3_3  | bytea                    | f
+ chunk_id | integer                  | f
+(4 rows)
+
+SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | t
+ agg_3_3  | bytea                    | f
+ chunk_id | integer                  | f
+(4 rows)
+
 -- This will rebuild the materialized view and should succeed.
 ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false); 
+-- Refresh the continuous aggregate to check that it works after the
+-- rename.
+\set VERBOSITY verbose
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+\set VERBOSITY terse
