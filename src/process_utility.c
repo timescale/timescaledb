@@ -20,6 +20,7 @@
 #include <commands/cluster.h>
 #include <commands/event_trigger.h>
 #include <access/htup_details.h>
+#include <commands/alter.h>
 #include <access/xact.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
@@ -1624,25 +1625,72 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 							stmt->subname,
 							get_rel_name(relid)),
 					 errhint("Rename the hypertable column instead.")));
-		return;
+
+		/* This was not a hypertable and not a chunk, but it could be a
+		 * continuous aggregate.
+		 *
+		 * If this is a continuous aggregate, the rename should be done on the
+		 * materialized table. Since the partial view and the direct view are
+		 * not referencing the materialized table, we need to handle it here,
+		 * and in addition, the dimension table contains the column name, we
+		 * need to update the name there. */
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
+		if (cagg)
+		{
+			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
+			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
+													  NameStr(cagg->data.direct_view_name),
+													  -1);
+			ExecRenameStmt(direct_view_stmt);
+
+			RenameStmt *partial_view_stmt = castNode(RenameStmt, copyObject(stmt));
+			partial_view_stmt->relation = makeRangeVar(NameStr(cagg->data.partial_view_schema),
+													   NameStr(cagg->data.partial_view_name),
+													   -1);
+			ExecRenameStmt(partial_view_stmt);
+
+			/* Fetch the main table and it's relid and use that for the
+			 * processing below. This is necessary to rebuild the view based
+			 * on the table with the renamed columns. */
+			ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+			relid = ht->main_table_relid;
+
+			RenameStmt *mat_hypertable_stmt = castNode(RenameStmt, copyObject(stmt));
+			mat_hypertable_stmt->relation =
+				makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
+			ExecRenameStmt(mat_hypertable_stmt);
+		}
+	}
+	else
+	{
+		/* Block renaming columns on the materialization table of a continuous
+		 * agg, but only if this was an explicit request for rename on a
+		 * materialization table. */
+		if ((ts_continuous_agg_hypertable_status(ht->fd.id) & HypertableIsMaterialization) != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("renaming columns on materialization tables is not supported"),
+					 errdetail("Column \"%s\" in materialization table \"%s\".",
+							   stmt->subname,
+							   get_rel_name(relid)),
+					 errhint("Rename the column on the continuous aggregate instead.")));
 	}
 
-	/* block renaming columns on the materialization table of a continuous agg*/
-	if ((ts_continuous_agg_hypertable_status(ht->fd.id) & HypertableIsMaterialization) != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot rename column \"%s\" of materialization table \"%s\"",
-						stmt->subname,
-						get_rel_name(relid))));
+	/* If there were a hypertable or a continuous aggregate, we need to rename
+	 * the dimension that we used as well as rebuilding the view. Otherwise,
+	 * we don't do anything. */
+	if (ht)
+	{
+		add_hypertable_to_process_args(args, ht);
+		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
+														  DIMENSION_TYPE_ANY,
+														  stmt->subname);
 
-	add_hypertable_to_process_args(args, ht);
-
-	dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, stmt->subname);
-
-	if (dim)
-		ts_dimension_set_name(dim, stmt->newname);
-	if (ts_cm_functions->process_rename_cmd)
-		ts_cm_functions->process_rename_cmd(ht, stmt);
+		if (dim)
+			ts_dimension_set_name(dim, stmt->newname);
+		if (ts_cm_functions->process_rename_cmd)
+			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
+	}
 }
 
 static void

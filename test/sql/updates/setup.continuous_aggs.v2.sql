@@ -100,6 +100,9 @@ BEGIN
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2;
 
+    -- ALTER VIEW cannot rename columns before PG13, but ALTER TABLE
+    -- works for views.
+    ALTER TABLE rename_cols RENAME COLUMN bucket to "time";
   ELSE
     CREATE MATERIALIZED VIEW rename_cols
     WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -153,10 +156,10 @@ BEGIN
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
     PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
+
+    ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket to "time";
   END IF;
 END $$;
-
-ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket to "time";
 
 \if :WITH_SUPERUSER
 GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
