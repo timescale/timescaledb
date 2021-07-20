@@ -310,16 +310,18 @@ ts_time_bucket_ng_timestamp(PG_FUNCTION_ARGS)
 					 errmsg("interval can't combine months with minutes or hours")));
 		}
 
+		if (TIMESTAMP_NOT_FINITE(timestamp))
+			PG_RETURN_TIMESTAMP(timestamp);
+
 		/*
 		 * Handle minutes, hours and days.
 		 */
 		Timestamp origin = (PG_NARGS() > 2 ? PG_GETARG_TIMESTAMP(2) : DEFAULT_ORIGIN);
+		if (TIMESTAMP_NOT_FINITE(origin))
+			PG_RETURN_TIMESTAMP(origin);
+
 		Timestamp result;
 		int64 period = get_interval_period_timestamp_units(interval);
-
-		if (TIMESTAMP_NOT_FINITE(timestamp))
-			PG_RETURN_TIMESTAMP(timestamp);
-
 		TIME_BUCKET_TS(period, timestamp, result, origin);
 
 		PG_RETURN_TIMESTAMP(result);
@@ -403,6 +405,9 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 	if (PG_NARGS() > 2)
 	{
 		origin_date = PG_GETARG_DATUM(2);
+		if (DATE_NOT_FINITE(origin_date))
+			PG_RETURN_DATEADT(origin_date);
+
 		j2date(origin_date + POSTGRES_EPOCH_JDATE, &origin_year, &origin_month, &origin_day);
 	}
 

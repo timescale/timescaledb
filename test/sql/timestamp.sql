@@ -612,14 +612,50 @@ SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, or
 SELECT timescaledb_experimental.time_bucket_ng('1 month 3 hours', '2021-11-22' :: timestamp) AS result;
 \set ON_ERROR_STOP 1
 
--- infinity
-SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
-
 -- wrappers
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp) AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz) AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp, origin => '2021-06-01') AS result;
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamptz, origin => '2021-06-01') AS result;
+
+-- null argument
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: date) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: date, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamp, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz, origin => '2021-06-01') AS result;
+
+-- null interval
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12' :: date) AS result;
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz) AS result;
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12' :: date, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamp, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz, origin => '2021-06-01') AS result;
+
+-- null origin
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12' :: date, origin => null) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamp, origin => null) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => null) AS result;
+
+-- infinity argument
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamp, origin => '2021-06-01') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz, origin => '2021-06-01') AS result;
+-- test for specific code path: hours/minutes/seconds interval and timestamp argument
+SELECT timescaledb_experimental.time_bucket_ng('12 hours', 'infinity' :: timestamp) AS result;
+SELECT timescaledb_experimental.time_bucket_ng('12 hours', 'infinity' :: timestamp, origin => '2021-06-01') AS result;
+
+-- infinite origin
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12' :: date, origin => 'infinity') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamp, origin => 'infinity') AS result;
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => 'infinity') AS result;
+-- test for specific code path: hours/minutes/seconds interval and timestamp argument
+SELECT timescaledb_experimental.time_bucket_ng('12 hours', '2021-07-12 12:34:56' :: timestamp, origin => 'infinity') AS result;
 
 -- Make sure time_bucket_ng() supports seconds, minutes, and hours.
 -- We happen to know that the internal implementation is the same
