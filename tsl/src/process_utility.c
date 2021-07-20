@@ -10,6 +10,8 @@
 #include <catalog/pg_trigger.h>
 
 #include "compression/create.h"
+#include "continuous_aggs/create.h"
+#include "continuous_agg.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "remote/dist_commands.h"
@@ -44,11 +46,27 @@ tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
 }
 
 void
-tsl_process_rename_cmd(Hypertable *ht, const RenameStmt *stmt)
+tsl_process_rename_cmd(Oid relid, Cache *hcache, const RenameStmt *stmt)
 {
 	if (stmt->renameType == OBJECT_COLUMN)
 	{
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
+		if (!ht)
+		{
+			ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
+			if (cagg)
+			{
+				ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+				Assert(ht);
+				cagg_update_view_definition(cagg, ht);
+			}
+		}
+
+		/* Continuous aggregates do not have compression right now, but we
+		 * check the status for the materialized hypertable anyway since it is
+		 * harmless. */
+		if (ht &&
+			(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)))
 		{
 			tsl_process_compress_table_rename_column(ht, stmt);
 		}

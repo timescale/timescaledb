@@ -2,7 +2,11 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\d+ _timescaledb_internal.*
+-- We do not dump the size of the tables here since that might differ
+-- between an updated node and a restored node. For examples, stats
+-- tables can have different sizes, and this is not relevant for an
+-- update test.
+\dt _timescaledb_internal.*
 
 CREATE OR REPLACE FUNCTION timescaledb_integrity_test()
     RETURNS VOID LANGUAGE PLPGSQL STABLE AS

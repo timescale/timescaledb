@@ -881,6 +881,7 @@ typedef struct FormData_continuous_agg
 	int64 bucket_width;
 	NameData direct_view_schema;
 	NameData direct_view_name;
+	bool materialized_only;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
