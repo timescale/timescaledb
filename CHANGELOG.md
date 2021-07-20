@@ -4,6 +4,15 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+
+**Bugfixes**
+* #3430 Fix havingqual processing for continuous aggregates
+
+**Thanks**
+* @brianbenns for reporting a segfault with continuous aggregates
+
 ## 2.4.0 (2021-07-29)
 
 This release adds new experimental features since the 2.3.1 release.
