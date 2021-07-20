@@ -1241,13 +1241,6 @@ ERROR:  origin must be before the given date
 SELECT timescaledb_experimental.time_bucket_ng('1 month 3 hours', '2021-11-22' :: timestamp) AS result;
 ERROR:  interval can't combine months with minutes or hours
 \set ON_ERROR_STOP 1
--- infinity
-SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
-  result  
-----------
- infinity
-(1 row)
-
 -- wrappers
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp) AS result;
           result          
@@ -1271,6 +1264,175 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timesta
             result            
 ------------------------------
  Tue Jun 01 00:00:00 2021 EDT
+(1 row)
+
+-- null argument
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: date) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamp) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: date, origin => '2021-06-01') AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamp, origin => '2021-06-01') AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz, origin => '2021-06-01') AS result;
+ result 
+--------
+ 
+(1 row)
+
+-- null interval
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12' :: date) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamp) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12' :: date, origin => '2021-06-01') AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamp, origin => '2021-06-01') AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz, origin => '2021-06-01') AS result;
+ result 
+--------
+ 
+(1 row)
+
+-- null origin
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12' :: date, origin => null) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamp, origin => null) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => null) AS result;
+ result 
+--------
+ 
+(1 row)
+
+-- infinity argument
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date) AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamp) AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz) AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: date, origin => '2021-06-01') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamp, origin => '2021-06-01') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz, origin => '2021-06-01') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+-- test for specific code path: hours/minutes/seconds interval and timestamp argument
+SELECT timescaledb_experimental.time_bucket_ng('12 hours', 'infinity' :: timestamp) AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('12 hours', 'infinity' :: timestamp, origin => '2021-06-01') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+-- infinite origin
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12' :: date, origin => 'infinity') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamp, origin => 'infinity') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => 'infinity') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+-- test for specific code path: hours/minutes/seconds interval and timestamp argument
+SELECT timescaledb_experimental.time_bucket_ng('12 hours', '2021-07-12 12:34:56' :: timestamp, origin => 'infinity') AS result;
+  result  
+----------
+ infinity
 (1 row)
 
 -- Make sure time_bucket_ng() supports seconds, minutes, and hours.
