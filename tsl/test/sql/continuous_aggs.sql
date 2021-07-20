@@ -1027,3 +1027,63 @@ GROUP BY sensor_id, time_bucket(INTERVAL '1 minute', timestamp)
 ORDER BY water_consumption;
 
 DROP TABLE water_consumption CASCADE;
+
+----
+--- github issue 2655 ---
+create table raw_data(time timestamptz, search_query text, cnt integer, cnt2 integer);
+select create_hypertable('raw_data','time');
+insert into raw_data select '2000-01-01','Q1';
+
+--having has exprs that appear in select 
+CREATE MATERIALIZED VIEW search_query_count_1m WITH (timescaledb.continuous) 
+AS
+ SELECT  search_query,count(search_query) as count,
+         time_bucket(INTERVAL '1 minute', time) AS bucket
+ FROM raw_data
+ WHERE search_query is not null AND LENGTH(TRIM(both from search_query))>0
+ GROUP BY search_query, bucket HAVING count(search_query) > 3 OR sum(cnt) > 1;
+
+--having has aggregates + grp by columns that appear in select
+CREATE MATERIALIZED VIEW search_query_count_2 WITH (timescaledb.continuous) 
+AS
+ SELECT  search_query,count(search_query) as count, sum(cnt),
+         time_bucket(INTERVAL '1 minute', time) AS bucket
+ FROM raw_data
+ WHERE search_query is not null AND LENGTH(TRIM(both from search_query))>0
+ GROUP BY search_query, bucket 
+HAVING count(search_query) > 3 OR sum(cnt) > 1 OR 
+       ( sum(cnt) + count(cnt)) > 1
+       AND search_query = 'Q1';
+
+CREATE MATERIALIZED VIEW search_query_count_3 WITH (timescaledb.continuous) 
+AS
+ SELECT  search_query,count(search_query) as count, sum(cnt),
+         time_bucket(INTERVAL '1 minute', time) AS bucket
+ FROM raw_data
+ WHERE search_query is not null AND LENGTH(TRIM(both from search_query))>0
+ GROUP BY cnt +cnt2 , bucket, search_query
+ HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
+
+insert into raw_data select '2000-01-01 00:00+0','Q1', 1, 100;
+insert into raw_data select '2000-01-01 00:00+0','Q1', 2, 200;
+insert into raw_data select '2000-01-01 00:00+0','Q1', 3, 300;
+insert into raw_data select '2000-01-02 00:00+0','Q2', 10, 10;
+insert into raw_data select '2000-01-02 00:00+0','Q2', 20, 20;
+
+CALL refresh_continuous_aggregate('search_query_count_1m', NULL, NULL);
+SELECT * FROM search_query_count_1m ORDER BY 1, 2;
+
+--only 1 of these should appear in the result
+insert into raw_data select '2000-01-02 00:00+0','Q3', 0, 0;
+insert into raw_data select '2000-01-03 00:00+0','Q4', 20, 20;
+
+CALL refresh_continuous_aggregate('search_query_count_1m', NULL, NULL);
+SELECT * FROM search_query_count_1m ORDER BY 1, 2;
+
+--refresh search_query_count_2---
+CALL refresh_continuous_aggregate('search_query_count_2', NULL, NULL);
+SELECT * FROM search_query_count_2 ORDER BY 1, 2;
+
+--refresh search_query_count_3---
+CALL refresh_continuous_aggregate('search_query_count_3', NULL, NULL);
+SELECT * FROM search_query_count_3 ORDER BY 1, 2, 3;
