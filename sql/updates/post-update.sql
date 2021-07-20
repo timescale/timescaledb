@@ -3,7 +3,6 @@ DO $$
 DECLARE
  vname regclass;
  materialized_only bool;
- altercmd text;
  ts_version TEXT;
 BEGIN
     SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
@@ -18,12 +17,10 @@ BEGIN
         -- to have something more generic, but right now it is just
         -- this case.
         IF ts_version < '2.0.0' THEN
-            altercmd := format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
+            EXECUTE format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
         ELSE
-            altercmd := format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
+            EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
         END IF;
-        RAISE INFO 'cmd executed: %', altercmd;
-        EXECUTE altercmd;
     END LOOP;
     EXCEPTION WHEN OTHERS THEN RAISE;
 END

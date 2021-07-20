@@ -905,15 +905,48 @@ CREATE TABLE conditions (
 
 SELECT create_hypertable('conditions', 'time');
 
+INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
+INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
+INSERT INTO conditions VALUES ( '2018-01-02 09:20:00-08', 'SFO', 65);
+INSERT INTO conditions VALUES ( '2018-01-02 09:10:00-08', 'NYC', 65);
+INSERT INTO conditions VALUES ( '2018-11-01 09:20:00-08', 'NYC', 45);
+INSERT INTO conditions VALUES ( '2018-11-01 10:40:00-08', 'NYC', 55);
+INSERT INTO conditions VALUES ( '2018-11-01 11:50:00-08', 'NYC', 65);
+INSERT INTO conditions VALUES ( '2018-11-01 12:10:00-08', 'NYC', 75);
+INSERT INTO conditions VALUES ( '2018-11-01 13:10:00-08', 'NYC', 85);
+INSERT INTO conditions VALUES ( '2018-11-02 09:20:00-08', 'NYC', 10);
+INSERT INTO conditions VALUES ( '2018-11-02 10:30:00-08', 'NYC', 20);
+
 CREATE MATERIALIZED VIEW conditions_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
 SELECT location,
        time_bucket(INTERVAL '1 day', time) AS bucket,
        AVG(temperature)
   FROM conditions
-GROUP BY location, bucket;
+GROUP BY location, bucket
+WITH NO DATA;
+
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+SELECT * FROM test.show_columns('conditions_daily');
+SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
+SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
+SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
 
 ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN bucket to "time";
 
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+SELECT * FROM test.show_columns(' conditions_daily');
+SELECT * FROM test.show_columns(' _timescaledb_internal._direct_view_35');
+SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
+SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
+
 -- This will rebuild the materialized view and should succeed.
 ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false); 
+
+-- Refresh the continuous aggregate to check that it works after the
+-- rename.
+\set VERBOSITY verbose
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+\set VERBOSITY terse

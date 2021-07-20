@@ -104,7 +104,7 @@ typedef struct CrossModuleFunctions
 	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
-	void (*process_rename_cmd)(Hypertable *ht, const RenameStmt *stmt);
+	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	PGFunction recompress_chunk;

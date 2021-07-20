@@ -73,12 +73,12 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
-		bool materialized_only =
+		agg->data.materialized_only =
 			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 		Assert(mat_ht != NULL);
 
-		cagg_update_view_definition(agg, mat_ht, with_clause_options);
-		update_materialized_only(agg, materialized_only);
+		cagg_update_view_definition(agg, mat_ht);
+		update_materialized_only(agg, agg->data.materialized_only);
 		ts_cache_release(hcache);
 	}
 

@@ -241,6 +241,7 @@ echo "Executing setup script on clean"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.databases.sql "postgres"
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/pre.testing.sql
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERSION}.sql
+docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.post-downgrade.sql
 
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.dump"
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.dump"
