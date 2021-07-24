@@ -125,14 +125,6 @@ ts_loader_extension_exists(void)
 	return extension_exists();
 }
 
-static void
-inval_cache_callback(Datum arg, Oid relid)
-{
-	if (guc_disable_load)
-		return;
-	extension_check();
-}
-
 static bool
 drop_statement_drops_extension(DropStmt *stmt)
 {
@@ -570,14 +562,10 @@ _PG_init(void)
 							 NULL);
 
 	/*
-	 * cannot check for extension here since not inside a transaction yet. Nor
-	 * do we even have an assigned database yet
-	 */
-	CacheRegisterRelcacheCallback(inval_cache_callback, PointerGetDatum(NULL));
-
-	/*
-	 * using the post_parse_analyze_hook since it's the earliest available
-	 * hook
+	 * Cannot check for extension here since not inside a transaction yet. Nor
+	 * do we even have an assigned database yet.
+	 * Using the post_parse_analyze_hook since it's the earliest available
+	 * hook.
 	 */
 	prev_post_parse_analyze_hook = post_parse_analyze_hook;
 	/* register shmem startup hook for the background worker stuff */
