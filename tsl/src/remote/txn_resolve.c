@@ -28,15 +28,22 @@ remote_txn_resolution(Oid foreign_server, const RemoteTxnId *transaction_id)
 	return REMOTE_TXN_RESOLUTION_ABORT;
 }
 
-/* Resolve any unresolved 2-pc transaction on a data node.
-   Since the remote_txn log can be long, and most txn there
-   will have been resolved, do not iterate that list.
-   Instead query the data node for the list of unresolved txns
-   via the pg_prepared_xacts view. Using that list, then check
-   remote_txn. Use this as an opportunity to clean up remote_txn
-   as well.
-*/
-#define GET_PREPARED_XACT_SQL "SELECT gid FROM pg_prepared_xacts"
+/*
+ * Resolve any unresolved 2-pc transaction on a data node.
+ * Since the remote_txn log can be long, and most txn there
+ * will have been resolved, do not iterate that list.
+ *
+ * Instead query the data node for the list of unresolved txns
+ * via the pg_prepared_xacts view. Using that list, then check
+ * remote_txn. Use this as an opportunity to clean up remote_txn
+ * as well.
+ *
+ * Note that pg_prepared_xacts shared across other databases which
+ * also could be distributed. Right now we interested only in
+ * the current one.
+ */
+#define GET_PREPARED_XACT_SQL                                                                      \
+	"SELECT gid FROM pg_prepared_xacts WHERE database = current_database()"
 
 Datum
 remote_txn_heal_data_node(PG_FUNCTION_ARGS)
