@@ -74,3 +74,21 @@ COMMIT PREPARED 'non-ts-txn';
 SELECT * FROM table_modified_by_txns;
 SELECT count(*) FROM pg_prepared_xacts;
 SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+
+-- test that healing function does not conflict with other databases
+--
+-- #3433
+
+-- create additional database and simulate remote txn activity
+CREATE DATABASE test_an2;
+\c test_an2
+BEGIN;
+CREATE TABLE unused(id int);
+PREPARE TRANSACTION 'ts-1-10-20-30';
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- should not fail
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+\c test_an2
+ROLLBACK PREPARED 'ts-1-10-20-30';
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test_an2;
