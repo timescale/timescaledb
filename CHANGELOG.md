@@ -4,14 +4,53 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.4.0 (2021-07-29)
+
+This release adds new experimental features since the 2.3.1 release.
+
+The experimental features in this release are:
+* APIs for chunk manipulation across data nodes in a distributed
+hypertable setup. This includes the ability to add a data node and move
+chunks to the new data node for cluster rebalancing.
+* The `time_bucket_ng` function, a newer version of `time_bucket`. This 
+function supports years, months, days, hours, minutes, and seconds.
+ 
+We’re committed to developing these experiments, giving the community
+ a chance to provide early feedback and influence the direction of
+TimescaleDB’s development. We’ll travel faster with your input! 
+	
+Please create your feedback as a GitHub issue (using the 
+experimental-schema label), describe what you found, and tell us the 
+steps or share the code snip to recreate it.
+
+This release also includes several bug fixes. 
+
+PostgreSQL 11 deprecation announcement
+Timescale is working hard on our next exciting features. To make that 
+possible, we require functionality that is available in Postgres 12 and 
+above. Postgres 11 is not supported with TimescaleDB 2.4.
+
+**Experimental Features**
+* #3293 Add timescaledb_experimental schema
+* #3302 Add block_new_chunks and allow_new_chunks API to experimental
+schema. Add chunk based refresh_continuous_aggregate.
+* #3211 Introduce experimental time_bucket_ng function
+* #3366 Allow use of experimental time_bucket_ng function in continuous aggregates
+* #3408 Support for seconds, minutes and hours in time_bucket_ng
+* #3446 Implement cleanup for chunk copy/move.
 
 **Bugfixes**
 * #3401 Fix segfault for RelOptInfo without fdw_private
 * #3411 Verify compressed chunk validity for compressed path
+* #3416 Fix targetlist names for continuous aggregate views
+* #3434 Remove extension check from relcache invalidation callback
+* #3440 Fix remote_tx_heal_data_node to work with only current database
 
 **Thanks**
 * @fvannee for reporting an issue with hypertable expansion in functions
+* @amalek215 for reporting an issue with cache invalidation during pg_class vacuum full
+* @hardikm10 for reporting an issue with inserting into compressed chunks
+* @dberardo-com and @iancmcc for reporting an issue with extension updates after renaming columns of continuous aggregates.
 
 ## 2.3.1 (2021-07-05)
 
