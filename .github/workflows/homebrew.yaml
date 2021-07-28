@@ -1,0 +1,49 @@
+name: Homebrew
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    tags:
+    - '*'
+    branches:
+    - release_test
+
+jobs:
+  homebrew:
+    name: Homebrew
+    runs-on: macos-latest
+
+    steps:
+
+    - name: Setup
+      run: |
+        brew tap timescale/tap
+        brew info timescaledb
+
+    - name: Install timescaledb
+      run: |
+        brew install timescaledb
+        timescaledb-tune --quiet --yes
+        timescaledb_move.sh
+        brew services restart postgresql
+
+    # checkout code to get version information
+    - uses: actions/checkout@v2
+
+    - name: Test Installation
+      run: |
+        psql -X -c "CREATE EXTENSION timescaledb;" postgres
+        psql -X -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';" postgres
+        # read expected version from version.config
+        if grep '^version = [0-9.]\+$' version.config; then
+          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
+        else
+          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+        fi
+        installed_version=$(psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" postgres | sed -e 's! !!g')
+        if [ "$version" != "$installed_version" ];then
+          echo "Installed version \"${installed_version}\" does not match expected version \"#{version}\"."
+          false
+        fi
+
