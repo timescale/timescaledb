@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE VIEW timescaledb_experimental.chunk_replication_status AS
+CREATE OR REPLACE VIEW timescaledb_experimental.chunk_replication_status AS
 SELECT
     h.schema_name AS hypertable_schema,
     h.table_name AS hypertable_name,

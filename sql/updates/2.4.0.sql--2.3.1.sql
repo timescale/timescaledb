@@ -1,0 +1,15 @@
+DROP FUNCTION IF EXISTS _timescaledb_internal.block_new_chunks;
+DROP FUNCTION IF EXISTS _timescaledb_internal.allow_new_chunks;
+DROP FUNCTION IF EXISTS _timescaledb_internal.refresh_continuous_aggregate;
+DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_table;
+DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_replica_table;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_drop_replica;
+DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk;
+DROP PROCEDURE IF EXISTS _timescaledb_internal.wait_subscription_sync;
+DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk;
+DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk;
+DROP PROCEDURE IF EXISTS timescaledb_experimental.cleanup_copy_chunk_operation;
+DROP TABLE IF EXISTS _timescaledb_catalog.chunk_copy_operation;
+DROP SEQUENCE IF EXISTS _timescaledb_catalog.chunk_copy_operation_id_seq;
+DROP VIEW IF EXISTS timescaledb_experimental.chunk_replication_status;
+DROP SCHEMA IF EXISTS timescaledb_experimental CASCADE;
