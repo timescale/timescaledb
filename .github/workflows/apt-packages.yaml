@@ -34,11 +34,10 @@ jobs:
         image_type=$(lsb_release -i -s)
         if [ "$image_type" = "Debian" ]; then
           echo "deb https://packagecloud.io/timescale/timescaledb/debian/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
         elif [ "$image_type" = "Ubuntu" ]; then
-          apt-get install -y software-properties-common
-          add-apt-repository ppa:timescale/timescaledb-ppa
+          echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list
         fi
+        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
 
     - name: Install timescaledb
       run: |
