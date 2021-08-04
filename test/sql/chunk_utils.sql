@@ -594,3 +594,8 @@ SELECT show_chunks('test3.hyperx');
 SELECT drop_chunks('hyperx', older_than => 100);
 SELECT show_chunks('test2.hyperx');
 SELECT show_chunks('test3.hyperx');
+
+-- Check CTAS behavior when internal ALTER TABLE gets fired
+CREATE TABLE PUBLIC.drop_chunk_test4(time bigint, temp float8, device_id text);
+CREATE TABLE drop_chunks_table_id AS SELECT hypertable_id
+      FROM create_hypertable('public.drop_chunk_test4', 'time', chunk_time_interval => 1);

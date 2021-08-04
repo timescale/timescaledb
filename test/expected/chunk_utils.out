@@ -1410,3 +1410,8 @@ SELECT show_chunks('test3.hyperx');
  _timescaledb_internal._hyper_15_40_chunk
 (1 row)
 
+-- Check CTAS behavior when internal ALTER TABLE gets fired
+CREATE TABLE PUBLIC.drop_chunk_test4(time bigint, temp float8, device_id text);
+CREATE TABLE drop_chunks_table_id AS SELECT hypertable_id
+      FROM create_hypertable('public.drop_chunk_test4', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
