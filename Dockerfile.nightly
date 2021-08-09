@@ -1,0 +1,21 @@
+## Build the nightly version by taking the latest released version,
+## build, and install the current code on top of it.
+ARG BASED_ON
+FROM ${BASED_ON} AS build
+
+# We need to install the build tools in this case, since they are not
+# expected in the image.
+RUN apk update && \
+    apk add --no-cache --virtual .build-deps openssl openssl-dev coreutils gcc libc-dev make cmake util-linux-dev
+WORKDIR /source
+COPY . .
+RUN cmake /source -DREGRESS_CHECKS=OFF -DGENERATE_DOWNGRADE_SCRIPT=OFF -DWARNINGS_AS_ERRORS=OFF -DPROJECT_INSTALL_METHOD=docker -DTAP_CHECKS=OFF
+RUN cmake --build .
+RUN cmake --install .
+
+## Create the actually distributed version by copying all files from the build image.
+FROM ${BASED_ON}
+COPY --from=build /usr/local/lib/postgresql/timescaledb*.so /usr/local/lib/postgresql/
+COPY --from=build /usr/local/share/postgresql/extension/timescaledb--*.sql /usr/local/share/postgresql/extension/
+COPY --from=build /usr/local/share/postgresql/extension/timescaledb.control /usr/local/share/postgresql/extension/
+COPY --from=build /usr/local/share/postgresql/postgresql.conf.sample /usr/local/share/postgresql/
