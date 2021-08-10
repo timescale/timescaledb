@@ -2,20 +2,15 @@ set(PRIMARY_TEST_DIR ${CMAKE_CURRENT_LIST_DIR})
 set(PRIMARY_TEST_DIR
     ${CMAKE_CURRENT_LIST_DIR}
     PARENT_SCOPE)
+
 set(_local_install_checks)
 set(_install_checks)
 
 # Testing support
-find_program(PG_REGRESS pg_regress
-             HINTS "${PG_BINDIR}" "${PG_PKGLIBDIR}/pgxs/src/test/regress/")
-
-find_program(
-  PG_ISOLATION_REGRESS
-  NAMES pg_isolation_regress
-  HINTS ${PG_BINDIR} ${PG_PKGLIBDIR}/pgxs/src/test/isolation
-        ${PG_SOURCE_DIR}/src/test/isolation ${BINDIR})
-
 include(test-defs.cmake)
+
+# No checks for REGRESS_CHECKS needed here since all the checks are done in the
+# parent CMakeLists.txt.
 
 if(PG_REGRESS)
   message(STATUS "Using pg_regress ${PG_REGRESS}")
@@ -41,16 +36,9 @@ if(PG_REGRESS)
 
   list(APPEND _local_install_checks regresschecklocal)
   list(APPEND _install_checks regresscheck)
-elseif(REGRESS_CHECKS)
+elseif(REQUIRE_ALL_TESTS)
   message(
-    FATAL_ERROR
-      "Program 'pg_regress' not found, but regressions checks were required.\n"
-      "Skip regression checks using -DREGRESS_CHECKS=OFF")
-else()
-  message(
-    STATUS
-      "Skipping isolation regress checks since program 'pg_regress' was not found"
-  )
+    FATAL_ERROR "All tests were required but 'pg_regress' could not be found")
 endif()
 
 if(PG_ISOLATION_REGRESS)
@@ -79,21 +67,10 @@ if(PG_ISOLATION_REGRESS)
 
   list(APPEND _local_install_checks isolationchecklocal)
   list(APPEND _install_checks isolationcheck)
-elseif(REGRESS_CHECKS)
+elseif(REQUIRE_ALL_TESTS)
   message(
     FATAL_ERROR
-      "Program 'pg_isolation_regress' not found, but regressions checks were required.\n"
-      "Skip regression checks using -DREGRESS_CHECKS=OFF")
-else()
-  message(
-    STATUS
-      "Skipping isolation regress checks since program 'pg_isolation_regress' was not found"
-  )
-endif()
-
-# installcheck starts up new temporary instances for testing code
-if(NOT APACHE_ONLY)
-  list(APPEND _install_checks installcheck-t)
+      "All tests were required but 'pg_isolation_regress' could not be found")
 endif()
 
 if(_install_checks)

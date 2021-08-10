@@ -55,7 +55,7 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/postgresql
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/postgresql -DREQUIRE_ALL_TESTS=ON
         make -C build install
         chown -R postgres:postgres .
 
