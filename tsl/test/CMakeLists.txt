@@ -5,6 +5,8 @@ add_subdirectory(ssl)
 set(_local_install_checks)
 set(_install_checks)
 
+# No checks for REGRESS_CHECKS needed here since all the checks are done in the
+# parent CMakeLists.txt.
 if(PG_REGRESS)
   add_custom_target(
     regresscheck-t
@@ -51,22 +53,29 @@ if(PG_REGRESS)
       ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
     USES_TERMINAL)
 
-  if(TAP_CHECKS)
-    add_custom_target(
-      provecheck
-      COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
-      COMMAND
-        CONFDIR=${CMAKE_BINARY_DIR}/tsl/test PATH="${PG_BINDIR}:$ENV{PATH}"
-        PG_REGRESS=${PG_REGRESS} SRC_DIR=${PG_SOURCE_DIR}
-        CM_SRC_DIR=${CMAKE_SOURCE_DIR} PG_LIBDIR=${PG_LIBDIR}
-        ${PRIMARY_TEST_DIR}/pg_prove.sh
-      USES_TERMINAL)
-    list(APPEND _install_checks provecheck)
-  endif()
-
   list(APPEND _install_checks regresscheck-shared)
   list(APPEND _local_install_checks regresschecklocal-shared)
+elseif(REQUIRE_ALL_TESTS)
+  message(
+    FATAL_ERROR "All tests were required but 'pg_regress' could not be found")
+endif()
 
+if(TAP_CHECKS)
+  add_custom_target(
+    provecheck
+    COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
+    COMMAND
+      CONFDIR=${CMAKE_BINARY_DIR}/tsl/test PATH="${PG_BINDIR}:$ENV{PATH}"
+      PG_REGRESS=${PG_REGRESS} SRC_DIR=${PG_SOURCE_DIR}
+      CM_SRC_DIR=${CMAKE_SOURCE_DIR} PG_LIBDIR=${PG_LIBDIR}
+      ${PRIMARY_TEST_DIR}/pg_prove.sh
+    USES_TERMINAL)
+  list(APPEND _install_checks provecheck)
+elseif(REQUIRE_ALL_TESTS)
+  message(
+    FATAL_ERROR
+      "All tests were required but TAP_CHECKS was off (see previous messages why)"
+  )
 endif()
 
 if(PG_ISOLATION_REGRESS)
@@ -94,6 +103,10 @@ if(PG_ISOLATION_REGRESS)
 
   list(APPEND _local_install_checks isolationchecklocal-t)
   list(APPEND _install_checks isolationcheck-t)
+elseif(REQUIRE_ALL_TESTS)
+  message(
+    FATAL_ERROR
+      "All tests were required but 'pg_isolation_regress' could not be found")
 endif()
 
 add_subdirectory(shared)
@@ -102,8 +115,15 @@ add_subdirectory(isolation)
 add_subdirectory(t)
 
 # installchecklocal tests against an existing postgres instance
-add_custom_target(installchecklocal-t DEPENDS ${_local_install_checks})
-add_custom_target(installcheck-t DEPENDS ${_install_checks})
+if(_local_install_checks)
+  add_custom_target(installchecklocal-t DEPENDS ${_local_install_checks})
+  add_dependencies(installchecklocal installchecklocal-t)
+endif()
+
+if(_install_checks)
+  add_custom_target(installcheck-t DEPENDS ${_install_checks})
+  add_dependencies(installcheck installcheck-t)
+endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   add_subdirectory(src)

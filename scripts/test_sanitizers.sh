@@ -79,7 +79,7 @@ docker exec -i -u postgres -w /tsdb_build/timescaledb timescaledb-san /bin/bash 
 export CFLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O2"
 export PG_SOURCE_DIR="/usr/src/postgresql/"
 export BUILD_FORCE_REMOVE=true
-./bootstrap -DREGRESS_CHECKS=OFF -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1
+./bootstrap -DCMAKE_BUILD_TYPE='Debug' -DTEST_GROUP_SIZE=1
 cd build
 make
 EOF

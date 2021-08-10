@@ -6,8 +6,26 @@ include(CheckCCompilerFlag)
 include(GitCommands)
 include(GenerateScripts)
 
+# This requires all tests to run. This defaults to OFF but can be enabled to
+# ensure that no tests are skipped because of missing tools.
+option(REQUIRE_ALL_TESTS "Require all tests to run." OFF)
+option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
+option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry"
+       ON)
+option(REGRESS_CHECKS "PostgreSQL regress checks through installcheck" ON)
+option(
+  ENABLE_OPTIMIZER_DEBUG
+  "Enable OPTIMIZER_DEBUG when building. Requires Postgres server to be built with OPTIMIZER_DEBUG."
+  OFF)
+
+# Option to enable assertions. Note that if we include headers from a PostgreSQL
+# build that has assertions enabled, we might inherit that setting without
+# explicitly enabling assertions via the ASSERTIONS option defined here. Thus,
+# this option is mostly useful to enable assertions when the PostgreSQL we
+# compile against has it disabled.
+option(ASSERTIONS "Compile with assertion checks (default OFF)" OFF)
+
 # Function to call pg_config and extract values.
-#
 function(GET_PG_CONFIG var)
   set(_temp)
 
@@ -420,10 +438,7 @@ endif()
 if(NOT CLANG_FORMAT)
   find_program(DOCKER docker DOC "The path to docker")
 
-  if(NOT DOCKER)
-    message(
-      WARNING "clang-format is disabled (can't find clang-format or docker)")
-  else()
+  if(DOCKER)
     message(STATUS "Using docker based clang-format")
     add_custom_target(
       clang-format
@@ -462,6 +477,29 @@ if(TARGET clang-format OR TARGET cmake-format)
   endif()
 endif()
 
+if(REGRESS_CHECKS)
+  find_program(PG_REGRESS pg_regress
+               HINTS "${PG_BINDIR}" "${PG_PKGLIBDIR}/pgxs/src/test/regress/")
+
+  if(NOT PG_REGRESS)
+    message(STATUS "Regress checks disabled: program 'pg_regress' not found")
+  endif()
+
+  find_program(
+    PG_ISOLATION_REGRESS
+    NAMES pg_isolation_regress
+    HINTS ${PG_BINDIR} ${PG_PKGLIBDIR}/pgxs/src/test/isolation
+          ${PG_SOURCE_DIR}/src/test/isolation ${BINDIR})
+
+  if(NOT PG_ISOLATION_REGRESS)
+    message(
+      STATUS
+        "Isolation regress checks disabled: 'pg_isolation_regress' not found")
+  endif()
+else()
+  message(STATUS "Regress checks and isolation checks disabled")
+endif()
+
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang")
   set(LINTER_DEFAULT ON)
 else()
@@ -487,22 +525,6 @@ if(LINTER)
   endif(CLANG_TIDY)
 endif(LINTER)
 
-option(USE_OPENSSL "Enable use of OpenSSL if available" ON)
-option(SEND_TELEMETRY_DEFAULT "The default value for whether to send telemetry"
-       ON)
-option(REGRESS_CHECKS "PostgreSQL regress checks through installcheck" ON)
-option(
-  ENABLE_OPTIMIZER_DEBUG
-  "Enable OPTIMIZER_DEBUG when building. Requires Postgres server to be built with OPTIMIZER_DEBUG."
-  OFF)
-
-# Option to enable assertions. Note that if we include headers from a PostgreSQL
-# build that has assertions enabled, we might inherit that setting without
-# explicitly enabling assertions via the ASSERTIONS option defined here. Thus,
-# this option is mostly useful to enable assertions when the PostgreSQL we
-# compile against has it disabled.
-option(ASSERTIONS "Compile with assertion checks (default OFF)" OFF)
-
 if(NOT EXISTS ${PG_INCLUDEDIR}/pg_config.h)
   message(
     FATAL_ERROR
@@ -517,8 +539,9 @@ string(REGEX MATCH "#define USE_ASSERT_CHECKING 1" PG_USE_ASSERT_CHECKING
 
 if(PG_USE_ASSERT_CHECKING AND NOT ASSERTIONS)
   message(
-    "Assertion checks are OFF although enabled in PostgreSQL build (pg_config.h). "
-    "The PostgreSQL setting for assertions will take precedence.")
+    STATUS
+      "Assertion checks are OFF although enabled in PostgreSQL build (pg_config.h). "
+      "The PostgreSQL setting for assertions will take precedence.")
 elseif(ASSERTIONS)
   message(STATUS "Assertion checks are ON")
   add_compile_definitions(USE_ASSERT_CHECKING=1)
@@ -601,10 +624,8 @@ if(TAP_CHECKS)
       PATHS "/usr/bin")
 
     if(NOT PROVE)
-      message(
-        FATAL_ERROR
-          "The prove binary was not found. Disable TAP tests with -DTAP_CHECKS=OFF."
-      )
+      message(STATUS "Not running TAP tests: 'prove' binary not found.")
+      set(TAP_CHECKS OFF)
     endif()
 
     # Check for the IPC::Run module
@@ -614,18 +635,14 @@ if(TAP_CHECKS)
       RESULT_VARIABLE PERL_MODULE_STATUS)
 
     if(PERL_MODULE_STATUS)
-      message(
-        FATAL_ERROR
-          "IPC::Run Perl module not found. Disable TAP tests with -DTAP_CHECKS=OFF."
-      )
+      message(STATUS "Not running TAP tests: IPC::Run Perl module not found.")
+      set(TAP_CHECKS OFF)
     endif()
   else()
-    message(
-      FATAL_ERROR
-        "Perl not found. Disable TAP tests with -DTAP_CHECKS=OFF or set -DPERL_EXECUTABLE=<path/to/perl>. Requires Perl 5.8 or greater (http://perlbrew.pl)."
-    )
+    message(STATUS "Not running TAP tests: Perl not found.")
+    set(TAP_CHECKS OFF)
   endif()
-endif(TAP_CHECKS)
+endif()
 
 if(UNIX)
   add_subdirectory(scripts)
