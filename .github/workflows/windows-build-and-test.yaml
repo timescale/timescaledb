@@ -47,7 +47,7 @@ jobs:
         choco feature disable --name=showDownloadProgress
         choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
     - name: Configure [${{ matrix.build_type }}]
-      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DREGRESS_CHECKS=OFF -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DTAP_CHECKS=OFF
+      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}"
       # Build step: could potentially speed things up with --parallel
       # <num_cpu> or "-- -m:<num_cpu>", but MSBuild doesn't seem to be
       # able to realize interdependencies between targets, which leads
