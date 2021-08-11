@@ -81,12 +81,6 @@ if(VERSION_CONFIG
   set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
 endif()
 
-message(STATUS "VERSION: ${VERSION}")
-message(STATUS "VERSION_MOD: ${VERSION_MOD}")
-message(STATUS "PROJECT_VERSION_MOD: ${PROJECT_VERSION_MOD}")
-message(STATUS "UPDATE_FROM_VERSION: ${UPDATE_FROM_VERSION}")
-message(STATUS "DOWNGRADE_TO_VERSION: ${DOWNGRADE_TO_VERSION}")
-
 # a hack to avoid change of SQL extschema variable
 set(extschema "@extschema@")
 
@@ -161,11 +155,9 @@ endif()
 # Option to treat warnings as errors when compiling (default on for debug
 # builds, off for all other build types)
 if(CMAKE_BUILD_TYPE STREQUAL Debug)
-  message(STATUS "CMAKE_BUILD_TYPE matches Debug")
   option(WARNINGS_AS_ERRORS "Make compiler warnings into errors (default ON)"
          ON)
 else()
-  message(STATUS "CMAKE_BUILD_TYPE does not match Debug")
   option(WARNINGS_AS_ERRORS "Make compiler warnings into errors (default ON)"
          OFF)
 endif()
@@ -329,8 +321,6 @@ if(GIT_FOUND)
   endif()
 endif()
 
-message(STATUS "Using pg_config ${PG_CONFIG}")
-
 # Check PostgreSQL version
 execute_process(
   COMMAND ${PG_CONFIG} --version
@@ -350,14 +340,14 @@ else()
 endif()
 set(PG_VERSION "${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}")
 
-message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
-
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
 if((${PG_VERSION_MAJOR} LESS "12")
    OR (${PG_VERSION_MAJOR} GREATER "13")
    AND NOT (${EXPERIMENTAL}))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 12 and 13")
+else()
+  message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 endif()
 
 # Get PostgreSQL configuration from pg_config
@@ -596,7 +586,6 @@ if(USE_OPENSSL)
     endforeach()
     set(OPENSSL_LIBRARIES ${_libraries})
   endif()
-  message(STATUS "OPENSSL_LIBRARIES: ${OPENSSL_LIBRARIES}")
   message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
 endif(USE_OPENSSL)
 
