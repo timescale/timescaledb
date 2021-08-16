@@ -8,8 +8,10 @@ step Bc: ROLLBACK;
 step CI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
+---------------------
+                73728
+(1 row)
 
-73728          
 step Sc: COMMIT;
 
 starting permutation: I1 CI Bc Ic P Sc
@@ -20,41 +22,51 @@ step Ic: COMMIT;
 step CI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
+---------------------
+                73728
+(1 row)
 
-73728          
 step Sc: COMMIT;
 
 starting permutation: S1 CI Bc Sc P Ic
 step S1: SELECT * FROM ts_index_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
 step Bc: ROLLBACK;
 step CI: <... completed>
 step Sc: COMMIT;
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
+---------------------
+                57344
+(1 row)
 
-57344          
 step Ic: COMMIT;
 
 starting permutation: F WPE CI DI Bc WPR P Ic Sc
 step F: SET client_min_messages TO 'error';
 step WPE: SELECT debug_waitpoint_enable('process_index_start_indexing_done');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
 step DI: DROP INDEX test_index; <waiting ...>
 step Bc: ROLLBACK;
 step DI: <... completed>
 step WPR: SELECT debug_waitpoint_release('process_index_start_indexing_done');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step CI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 ERROR:  relation "test_index" does not exist
@@ -69,7 +81,9 @@ step CI: <... completed>
 step RI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
+---------------------
+                57344
+(1 row)
 
-57344          
 step Ic: COMMIT;
 step Sc: COMMIT;

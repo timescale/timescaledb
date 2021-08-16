@@ -1,193 +1,271 @@
 Parsed test spec with 3 sessions
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_insert s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |t           |t               |t                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         t              t              t              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |t           |t               |t                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         t              t              t              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |t           |t               |t                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         t              t              t              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_insert: INSERT INTO disttable VALUES ('2019-08-02 10:45', 0, 0.0); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_insert: <... completed>
 
 starting permutation: s2_begin s2_insert s3_lock_enable s1_create_dist_rp s3_lock_count s2_commit s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s2_begin: BEGIN;
 step s2_insert: INSERT INTO disttable VALUES ('2019-08-02 10:45', 0, 0.0);
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               1
+(1 row)
 
-2              1              
 step s2_commit: COMMIT; <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_commit: <... completed>
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_create_dist_rp s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s2_test'); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_dist_exec s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_dist_exec: CALL distributed_exec('SELECT true;', transactional => true); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_dist_exec: <... completed>
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_create_dist_ht s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_create_dist_ht: 
 	CREATE TABLE disttable2(time timestamptz NOT NULL, device int, temp float);
@@ -197,153 +275,217 @@ step s3_lock_count:
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_create_dist_ht: <... completed>
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_drop_dist_ht s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_drop_dist_ht: DROP TABLE disttable2; <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_drop_dist_ht: <... completed>
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_add_dn s3_lock_count s3_lock_count_fs s3_lock_release s3_lock_count_fs
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_add_dn: SELECT * FROM add_data_node('data_node_4', host => 'localhost', database => 'cdrp_4'); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               1
+(1 row)
 
-2              1              
 step s3_lock_count_fs: SELECT foreign_server_locks() as foreign_server_locks;
 foreign_server_locks
+--------------------
+                   2
+(1 row)
 
-2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+(4 rows)
 
-t              
-t              
-t              
-t              
 step s2_add_dn: <... completed>
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_4|localhost|55432|cdrp_4  |t           |t               |t                
+(1 row)
 
-data_node_4    localhost      55432          cdrp_4         t              t              t              
 step s3_lock_count_fs: SELECT foreign_server_locks() as foreign_server_locks;
 foreign_server_locks
+--------------------
+                   0
+(1 row)
 
-0              
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_del_dn s3_lock_count s3_lock_release
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+(1 row)
 
-data_node_1    localhost      55432          cdrp_1         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+(1 row)
 
-data_node_2    localhost      55432          cdrp_2         f              f              f              
-node_name      host           port           database       node_created   database_createdextension_created
+node_name  |host     | port|database|node_created|database_created|extension_created
+-----------+---------+-----+--------+------------+----------------+-----------------
+data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+(1 row)
 
-data_node_3    localhost      55432          cdrp_3         f              f              f              
-created        
+created
+-------
+t      
+(1 row)
 
-t              
 step s3_lock_enable: SELECT debug_waitpoint_enable('create_distributed_restore_point_lock');
 debug_waitpoint_enable
+----------------------
+                      
+(1 row)
 
-               
 step s1_create_dist_rp: SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); <waiting ...>
 step s2_del_dn: SELECT * FROM delete_data_node('data_node_4'); <waiting ...>
 step s3_lock_count: 
 	SELECT waitpoint_locks('create_distributed_restore_point_lock') as cdrp_locks, 
 	       remote_txn_locks() as remote_txn_locks;
 
-cdrp_locks     remote_txn_locks
+cdrp_locks|remote_txn_locks
+----------+----------------
+         2|               2
+(1 row)
 
-2              2              
 step s3_lock_release: SELECT debug_waitpoint_release('create_distributed_restore_point_lock');
 debug_waitpoint_release
+-----------------------
+                       
+(1 row)
 
-               
 step s1_create_dist_rp: <... completed>
-valid_lsn      
+valid_lsn
+---------
+t        
+t        
+t        
+t        
+t        
+(5 rows)
 
-t              
-t              
-t              
-t              
-t              
 step s2_del_dn: <... completed>
 delete_data_node
+----------------
+t               
+(1 row)
 
-t              
