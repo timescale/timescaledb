@@ -24,7 +24,7 @@
 #include "hypertable.h"
 #include "scanner.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 
 /* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
 /* This avoids the problem with coord < range_end where coord and range_end is an int64 */

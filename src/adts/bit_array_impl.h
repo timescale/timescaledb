@@ -12,7 +12,7 @@
 #include <libpq/pqformat.h>
 
 #include "adts/uint64_vec.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 #define BITS_PER_BUCKET 64
 

@@ -17,7 +17,7 @@
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <extension.h>
 #include <funcapi.h>
 #include <hypertable_data_node.h>

@@ -16,7 +16,7 @@
 #include "params.h"
 #include "catalog.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 
 static char *bgw_application_name = "unset";
 

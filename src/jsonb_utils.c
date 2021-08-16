@@ -10,7 +10,7 @@
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #if PG13_LT
 #include <utils/jsonapi.h>

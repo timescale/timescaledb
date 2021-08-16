@@ -15,7 +15,7 @@
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_foreign_server.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "event_trigger.h"
 
 #define DDL_INFO_NATTS 9

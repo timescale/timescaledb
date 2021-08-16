@@ -12,7 +12,7 @@
 #include <fmgr.h>
 #include <utils/relcache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "export.h"
 
 typedef struct Chunk Chunk;

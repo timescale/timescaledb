@@ -22,7 +22,7 @@
 #include <hypertable_cache.h>
 #include <nodes/chunk_insert_state.h>
 #include <nodes/chunk_dispatch_plan.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <guc.h>
 
 #include "data_node_copy.h"

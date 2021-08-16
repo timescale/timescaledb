@@ -19,7 +19,7 @@
 #include <pgstat.h>
 
 #include "timer.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "config.h"
 
 #define MAX_TIMEOUT (5 * INT64CONST(1000))

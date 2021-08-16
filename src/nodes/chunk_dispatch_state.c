@@ -12,7 +12,7 @@
 #include <nodes/extensible.h>
 #include <executor/nodeModifyTable.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
 #include "chunk_dispatch.h"

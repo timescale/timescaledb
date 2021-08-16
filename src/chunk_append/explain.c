@@ -18,7 +18,7 @@
 
 #include "chunk_append/exec.h"
 #include "chunk_append/explain.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, ExplainState *es);
 static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,

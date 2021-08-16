@@ -12,7 +12,7 @@
 #include <utils/typcache.h>
 #include <utils/numeric.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "nodes/gapfill/interpolate.h"
 #include "nodes/gapfill/exec.h"
 

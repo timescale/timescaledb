@@ -14,7 +14,7 @@
 
 #include "annotations.h"
 #include "catalog.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "extension.h"
 #include "hypertable_cache.h"
 

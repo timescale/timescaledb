@@ -7,7 +7,7 @@
 
 #include <access/xact.h>
 #include <access/heapam.h>
-#include "../compat-msvc-enter.h"
+#include "../compat/compat-msvc-enter.h"
 #include <postmaster/bgworker.h>
 #include <commands/extension.h>
 #include <commands/user.h>
@@ -15,7 +15,7 @@
 #include <parser/analyze.h>
 #include <storage/ipc.h>
 #include <tcop/utility.h>
-#include "../compat-msvc-exit.h"
+#include "../compat/compat-msvc-exit.h"
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <nodes/print.h>
@@ -26,7 +26,7 @@
 #include "extension_utils.c"
 #include "config.h"
 #include "export.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "extension_constants.h"
 
 #include "loader/loader.h"

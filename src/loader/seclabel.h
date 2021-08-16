@@ -12,7 +12,7 @@
 #include <utils/uuid.h>
 #include <commands/seclabel.h>
 #include <catalog/pg_database_d.h>
-#include "compat.h"
+#include "compat/compat.h"
 #include "export.h"
 
 #define SECLABEL_DIST_PROVIDER "timescaledb"

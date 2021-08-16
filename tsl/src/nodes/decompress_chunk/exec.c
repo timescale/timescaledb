@@ -18,7 +18,7 @@
 #include <utils/memutils.h>
 #include <utils/typcache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"

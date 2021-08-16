@@ -35,7 +35,7 @@
 
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
-#include "compat.h"
+#include "compat/compat.h"
 
 #include <miscadmin.h>
 
@@ -46,7 +46,7 @@
 #include "chunk.h"
 #include "chunk_index.h"
 #include "chunk_data_node.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "copy.h"
 #include "errors.h"
 #include "event_trigger.h"

@@ -31,7 +31,7 @@
 #include <utils/relcache.h>
 #include <utils/syscache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "chunk.h"
 #include "utils.h"
 #include "time_utils.h"

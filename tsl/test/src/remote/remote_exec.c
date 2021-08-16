@@ -18,7 +18,7 @@
 
 #include "errors.h"
 #include "export.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "hypertable.h"
 #include "remote/async.h"
 #include "remote/dist_txn.h"

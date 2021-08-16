@@ -28,7 +28,7 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "chunk_append/chunk_append.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 #include <math.h>
 

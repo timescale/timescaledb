@@ -27,7 +27,7 @@
 
 #include <guc.h>
 #include "utils.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "remote/data_format.h"
 #include "tuplefactory.h"
 

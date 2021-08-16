@@ -9,7 +9,7 @@
 #include <fmgr.h>
 
 #include "bgw_interface.h"
-#include "../compat.h"
+#include "../compat/compat.h"
 #include "bgw_counter.h"
 #include "bgw_message_queue.h"
 #include "../extension_constants.h"

@@ -9,7 +9,7 @@
 
 #include "extension.h"
 #include "launcher_interface.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 #define MIN_LOADER_API_VERSION 3
 

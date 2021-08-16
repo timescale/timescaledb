@@ -26,7 +26,7 @@
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "constraint_aware_append.h"
 #include "chunk_append/transform.h"
 #include "guc.h"

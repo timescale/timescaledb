@@ -14,7 +14,7 @@
 #include "hypertable_data_node.h"
 #include "scanner.h"
 #include "catalog.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 static void
 hypertable_data_node_insert_relation(Relation rel, int32 hypertable_id, int32 node_hypertable_id,

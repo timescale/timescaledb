@@ -13,7 +13,7 @@
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "config.h"
 #include "version.h"
 #include "guc.h"

@@ -11,7 +11,7 @@
 #include <funcapi.h>
 
 #include <utils.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <extension.h>
 #include "export.h"
 #include "deparse.h"

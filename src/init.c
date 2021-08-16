@@ -17,7 +17,7 @@
 #include "debug_guc.h"
 #include "catalog.h"
 #include "version.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "config.h"
 #include "license_guc.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"

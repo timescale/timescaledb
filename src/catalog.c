@@ -18,7 +18,7 @@
 #include <commands/dbcommands.h>
 #include <commands/sequence.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "catalog.h"
 #include "extension.h"
 
