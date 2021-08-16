@@ -5,11 +5,15 @@ step s1a: INSERT INTO insert_dropchunks_race_t1 VALUES ('2020-01-03 10:30', 3, 3
 step s2a: SELECT COUNT(*) FROM drop_chunks('insert_dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
 step s1b: COMMIT;
 step s2a: <... completed>
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s2b: COMMIT;
 step s1c: SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint LEFT JOIN _timescaledb_catalog.dimension_slice sl ON dimension_slice_id = sl.id WHERE sl.id IS NULL;
-count          
+count
+-----
+    0
+(1 row)
 
-0              

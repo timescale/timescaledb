@@ -19,13 +19,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "12.7", "13.3" ]
+        pg: [ "12.8", "13.4" ]
         build_type: [ Debug ]
         include:
-          - pg: 12.7
+          - pg: 12.8
             ignores: append-12 chunk_adaptive continuous_aggs_bgw_drop_chunks remote_txn transparent_decompression-12 plan_skip_scan-12
             pg_major: 12
-          - pg: 13.3
+          - pg: 13.4
             ignores: append-13 chunk_adaptive remote_txn transparent_decompression-13 vacuum_parallel plan_skip_scan-13
             pg_major: 13
 
