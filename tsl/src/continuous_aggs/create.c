@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 /* This file contains the code for processing continuous aggregate
  * DDL statements which are of the form:
  *
@@ -766,11 +767,6 @@ cagg_validate_query(Query *query)
 		const Dimension *part_dimension = NULL;
 
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
-
-		if (hypertable_is_distributed(ht))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregates not supported on distributed hypertables")));
 
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
