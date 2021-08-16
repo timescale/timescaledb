@@ -9,7 +9,7 @@
 #include <fmgr.h>
 #include <utils/builtins.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "version.h"
 #include "net/conn.h"
 #include "net/http.h"

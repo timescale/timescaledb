@@ -18,7 +18,7 @@
 #include "metadata.h"
 #include "scanner.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #define TYPE_ERROR(inout, typeid)                                                                  \
 	elog(ERROR, "ts_metadata: no %s function for type %u", inout, typeid);

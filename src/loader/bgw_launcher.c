@@ -43,7 +43,7 @@
 /* for getting settings correct before loading the versioned scheduler */
 #include "catalog/pg_db_role_setting.h"
 
-#include "../compat.h"
+#include "../compat/compat.h"
 #include "../extension_constants.h"
 #include "loader.h"
 #include "bgw_counter.h"

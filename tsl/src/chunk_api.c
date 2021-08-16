@@ -26,7 +26,7 @@
 #include <utils/syscache.h>
 
 #include <catalog.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <chunk_data_node.h>
 #include <errors.h>
 #include <error_utils.h>

@@ -42,7 +42,7 @@
 #include "nodes/chunk_insert_state.h"
 #include "nodes/chunk_dispatch.h"
 #include "subspace_store.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "cross_module_fn.h"
 
 /*

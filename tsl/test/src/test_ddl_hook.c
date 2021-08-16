@@ -12,7 +12,7 @@
 #include "test_utils.h"
 #include "process_utility.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "event_trigger.h"
 #include "cross_module_fn.h"
 

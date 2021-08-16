@@ -13,7 +13,7 @@
 #include <nodes/pathnodes.h>
 #include <utils/datetime.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #define MAX(x, y) ((x) > (y) ? x : y)
 #define MIN(x, y) ((x) < (y) ? x : y)

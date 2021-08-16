@@ -15,7 +15,7 @@
 #include <utils/array.h>
 
 #include "export.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "bgw/job.h"
 #include "process_utility.h"
 #include "with_clause_parser.h"

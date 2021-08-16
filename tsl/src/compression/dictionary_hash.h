@@ -17,7 +17,7 @@
 #include <funcapi.h>
 #include <utils/typcache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 typedef struct HashMeta
 {

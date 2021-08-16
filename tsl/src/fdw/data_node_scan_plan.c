@@ -30,7 +30,7 @@
 #include <import/planner.h>
 #include <func_cache.h>
 #include <dimension.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <debug_guc.h>
 #include <debug.h>
 

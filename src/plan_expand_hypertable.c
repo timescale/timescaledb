@@ -26,7 +26,7 @@
 #include <utils/syscache.h>
 
 #include "chunk.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "extension.h"

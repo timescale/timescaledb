@@ -11,11 +11,11 @@
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
 
-#include "compat-msvc-enter.h" /* To label externs in extension.h and
+#include "compat/compat-msvc-enter.h" /* To label externs in extension.h and
 								 * miscadmin.h correctly */
 #include <commands/extension.h>
 #include <miscadmin.h>
-#include "compat-msvc-exit.h"
+#include "compat/compat-msvc-exit.h"
 
 #include <access/relscan.h>
 #include <catalog/indexing.h>
@@ -27,7 +27,7 @@
 #include "extension.h"
 #include "guc.h"
 #include "extension_utils.c"
-#include "compat.h"
+#include "compat/compat.h"
 
 #define TS_UPDATE_SCRIPT_CONFIG_VAR "timescaledb.update_script_stage"
 #define POST_UPDATE "post"

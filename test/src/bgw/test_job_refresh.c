@@ -13,7 +13,7 @@
 #include <access/htup_details.h>
 #include <utils/memutils.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "export.h"
 #include "bgw/scheduler.h"
 

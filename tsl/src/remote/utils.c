@@ -21,7 +21,7 @@
 #include <utils/float.h>
 
 #include "utils.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "guc.h"
 
 /*

@@ -16,7 +16,7 @@
 #include <utils/lsyscache.h>
 #include <parser/parse_func.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/planner.h"

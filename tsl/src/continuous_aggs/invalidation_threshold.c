@@ -17,7 +17,7 @@
 #include <catalog.h>
 #include <scanner.h>
 #include <scan_iterator.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <time_utils.h>
 #include <time_bucket.h>
 
