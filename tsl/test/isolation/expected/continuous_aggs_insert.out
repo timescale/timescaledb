@@ -12,9 +12,11 @@ step Refresh: <... completed>
 starting permutation: Ib LockCagg I1 Refresh Ic UnlockCagg
 step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg: BEGIN; SELECT lock_cagg('continuous_view');
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step Ic: COMMIT;
@@ -24,9 +26,11 @@ step Refresh: <... completed>
 starting permutation: Ib LockCagg Refresh I1 Ic UnlockCagg
 step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg: BEGIN; SELECT lock_cagg('continuous_view');
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
 step Ic: COMMIT;
@@ -36,14 +40,18 @@ step Refresh: <... completed>
 starting permutation: Sb LockCagg Refresh S1 Sc UnlockCagg
 step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg: BEGIN; SELECT lock_cagg('continuous_view');
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step S1: SELECT count(*) FROM ts_continuous_test;
-count          
+count
+-----
+   30
+(1 row)
 
-30             
 step Sc: COMMIT;
 step UnlockCagg: ROLLBACK;
 step Refresh: <... completed>
@@ -51,13 +59,17 @@ step Refresh: <... completed>
 starting permutation: Sb LockCagg S1 Refresh Sc UnlockCagg
 step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
 step LockCagg: BEGIN; SELECT lock_cagg('continuous_view');
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step S1: SELECT count(*) FROM ts_continuous_test;
-count          
+count
+-----
+   30
+(1 row)
 
-30             
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step Sc: COMMIT;
 step UnlockCagg: ROLLBACK;
@@ -124,11 +136,13 @@ step Refresh: <... completed>
 starting permutation: Refresh SV1 LockMatInval Refresh1 Ib I1 LockInvalThrEx Ic UnlockMatInval UnlockInvalThrEx SV1
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15);
 step SV1: SELECT * FROM continuous_view order by 1;
-time_bucket    count          
+time_bucket|count
+-----------+-----
+          0|    5
+          5|    5
+         10|    5
+(3 rows)
 
-0              5              
-5              5              
-10             5              
 step LockMatInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step Ib: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
@@ -142,11 +156,13 @@ step LockInvalThrEx: <... completed>
 step UnlockInvalThrEx: ROLLBACK;
 step Ic: <... completed>
 step SV1: SELECT * FROM continuous_view order by 1;
-time_bucket    count          
+time_bucket|count
+-----------+-----
+          0|    5
+          5|    5
+         10|    5
+(3 rows)
 
-0              5              
-5              5              
-10             5              
 
 starting permutation: I1 Refresh LockInval Refresh Sb S1 Sc UnlockInval
 step I1: INSERT INTO ts_continuous_test VALUES (1, 1);
@@ -155,9 +171,11 @@ step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertabl
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
 step S1: SELECT count(*) FROM ts_continuous_test;
-count          
+count
+-----
+   31
+(1 row)
 
-31             
 step Sc: COMMIT;
 step UnlockInval: ROLLBACK;
 R: NOTICE:  continuous aggregate "continuous_view" is already up-to-date
@@ -169,9 +187,11 @@ step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15);
 step LockInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
 step S1: SELECT count(*) FROM ts_continuous_test;
-count          
+count
+-----
+   31
+(1 row)
 
-31             
 step Refresh: CALL refresh_continuous_aggregate('continuous_view', NULL, 15); <waiting ...>
 step Sc: COMMIT;
 step UnlockInval: ROLLBACK;

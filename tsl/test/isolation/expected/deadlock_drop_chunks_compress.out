@@ -5,9 +5,11 @@ step s1_drop:
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
 
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s1_commit: COMMIT;
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
@@ -26,16 +28,18 @@ step s1_drop:
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
 
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
  <waiting ...>
 step s1_commit: COMMIT;
 step s2_compress_chunk_1: <... completed>
-error in steps s1_commit s2_compress_chunk_1: ERROR:  chunk deleted by other transaction
+ERROR:  chunk deleted by other transaction
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
@@ -48,9 +52,11 @@ step s1_drop:
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
 
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
@@ -70,9 +76,11 @@ step s1_drop:
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
 
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
@@ -92,9 +100,11 @@ step s2_compress_chunk_1:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s1_drop: 
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
@@ -106,9 +116,11 @@ step s2_compress_chunk_2:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s2_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s1_drop s2_compress_chunk_2 s1_commit s2_commit
@@ -116,9 +128,11 @@ step s2_compress_chunk_1:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s1_drop: 
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
@@ -127,9 +141,11 @@ step s2_compress_chunk_2:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s1_drop: <... completed>
 ERROR:  some chunks could not be read since they are being concurrently updated
 step s1_commit: COMMIT;
@@ -140,9 +156,11 @@ step s2_compress_chunk_1:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s1_drop: 
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
@@ -151,14 +169,18 @@ step s2_compress_chunk_2:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s1_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s2_compress_chunk_2 s1_drop s1_commit s2_commit
@@ -166,16 +188,20 @@ step s2_compress_chunk_1:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s1_drop: 
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
@@ -190,25 +216,31 @@ step s2_compress_chunk_1:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s1_drop: 
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
  <waiting ...>
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s1_commit: COMMIT;
 
 starting permutation: s2_compress_chunk_1 s2_compress_chunk_2 s2_commit s1_drop s1_commit
@@ -216,22 +248,28 @@ step s2_compress_chunk_1:
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 ASC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
 	FROM (SELECT chunk FROM chunks_to_compress ORDER BY 1 DESC LIMIT 1) AS chunk;
 
-count          
+count
+-----
+    1
+(1 row)
 
-1              
 step s2_commit: COMMIT;
 step s1_drop: 
 	SELECT count (*)
 	FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz);
 
-count          
+count
+-----
+    2
+(1 row)
 
-2              
 step s1_commit: COMMIT;

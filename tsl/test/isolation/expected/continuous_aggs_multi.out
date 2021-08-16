@@ -18,9 +18,11 @@ step Setup2:
 
 step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
-lock_mattable  
+lock_mattable
+-------------
+             
+(1 row)
 
-               
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
 step UnlockMat1: ROLLBACK;
@@ -46,22 +48,28 @@ step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
 step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
-lock_mattable  
+lock_mattable
+-------------
+             
+(1 row)
 
-               
 step I1: INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_series(0, 10) AS i) AS i;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
 step UnlockMat1: ROLLBACK;
 step Refresh1: <... completed>
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt            cnt            
+bkt|cnt
+---+---
+  0| 16
+(1 row)
 
-0              16             
 step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt            maxl           
+bkt|maxl
+---+----
+  0| 100
+(1 row)
 
-0              100            
 
 starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockMat1 I2 Refresh1 Refresh2 UnlockMat1 Refresh1_sel Refresh2_sel
 step Setup2: 
@@ -82,18 +90,24 @@ step Setup2:
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt            cnt            
+bkt|cnt
+---+---
+  0|  5
+(1 row)
 
-0              5              
 step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt            maxl           
+bkt|maxl
+---+----
+  0|   4
+(1 row)
 
-0              4              
 step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
-lock_mattable  
+lock_mattable
+-------------
+             
+(1 row)
 
-               
 step I2: INSERT INTO ts_continuous_test SELECT 40, 1000 ;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
@@ -101,14 +115,18 @@ step UnlockMat1: ROLLBACK;
 R1: NOTICE:  continuous aggregate "continuous_view_1" is already up-to-date
 step Refresh1: <... completed>
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt            cnt            
+bkt|cnt
+---+---
+  0|  5
+(1 row)
 
-0              5              
 step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt            maxl           
+bkt|maxl
+---+----
+  0|   4
+ 40|1000
+(2 rows)
 
-0              4              
-40             1000           
 
 starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel U1 U2 LInvRow Refresh1 Refresh2 UnlockInvRow Refresh1_sel Refresh2_sel
 step Setup2: 
@@ -129,13 +147,17 @@ step Setup2:
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt            cnt            
+bkt|cnt
+---+---
+  0|  5
+(1 row)
 
-0              5              
 step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt            maxl           
+bkt|maxl
+---+----
+  0|   4
+(1 row)
 
-0              4              
 step U1: update ts_continuous_test SET val = 5555 where time < 10;
 step U2: update ts_continuous_test SET val = 5 where time > 15 and time < 25;
 step LInvRow: BEGIN; update _timescaledb_catalog.continuous_aggs_invalidation_threshold set watermark = 20 where hypertable_id in ( select raw_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1' );
@@ -146,10 +168,14 @@ step UnlockInvRow: ROLLBACK;
 step Refresh1: <... completed>
 step Refresh2: <... completed>
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt            cnt            
+bkt|cnt
+---+---
+  0|  5
+(1 row)
 
-0              5              
 step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt            maxl           
+bkt|maxl
+---+----
+  0|5555
+(1 row)
 
-0              5555           

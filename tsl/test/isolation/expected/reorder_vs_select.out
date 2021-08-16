@@ -3,42 +3,52 @@ Parsed test spec with 3 sessions
 starting permutation: Bc S1 Sc R1 Rc
 step Bc: COMMIT;
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step Sc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 
 starting permutation: Bc S1 R1 Sc Rc
 step Bc: COMMIT;
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Sc: COMMIT;
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 
 starting permutation: Bc S1 R1 Rc Sc
 step Bc: COMMIT;
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step R1: <... completed>
 ERROR:  canceling statement due to lock timeout
@@ -49,39 +59,49 @@ starting permutation: Bc R1 Rc S1 Sc
 step Bc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step Sc: COMMIT;
 
 starting permutation: Bc R1 S1 Rc Sc
 step Bc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step S1: SELECT * FROM ts_reorder_test; <waiting ...>
 step Rc: COMMIT;
 step S1: <... completed>
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step Sc: COMMIT;
 
 starting permutation: Bc R1 S1 Sc Rc
 step Bc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step S1: SELECT * FROM ts_reorder_test; <waiting ...>
 step S1: <... completed>
 ERROR:  canceling statement due to lock timeout
@@ -91,11 +111,13 @@ step Rc: COMMIT;
 starting permutation: R1 S1 Bc Rc Sc
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step Bc: COMMIT;
 step R1: <... completed>
 ERROR:  canceling statement due to lock timeout
@@ -104,11 +126,13 @@ step Sc: COMMIT;
 
 starting permutation: S1 R1 Bc Rc Sc
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Bc: COMMIT;
 step R1: <... completed>
@@ -119,31 +143,39 @@ step Sc: COMMIT;
 starting permutation: R1 S1 Sc Bc Rc
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step Sc: COMMIT;
 step Bc: COMMIT;
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 
 starting permutation: S1 R1 Sc Bc Rc
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Sc: COMMIT;
 step Bc: COMMIT;
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;

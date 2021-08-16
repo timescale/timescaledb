@@ -2,36 +2,44 @@ Parsed test spec with 3 sessions
 
 starting permutation: S1 R1 Bc S2 Rc Sc
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Bc: ROLLBACK;
 step S2: INSERT INTO ts_reorder_test VALUES (1, 23.4, 1);
+ERROR:  deadlock detected
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
-error in steps S2 R1: ERROR:  deadlock detected
+(1 row)
+
 step Rc: COMMIT;
 step Sc: COMMIT;
 
 starting permutation: S1 R1 Bc S2 Sc Rc
 step S1: SELECT * FROM ts_reorder_test;
-time           temp           location       
+time|temp|location
+----+----+--------
+   1|23.4|       1
+  11|21.3|       2
+  21|19.5|       3
+(3 rows)
 
-1              23.4           1              
-11             21.3           2              
-21             19.5           3              
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Bc: ROLLBACK;
 step S2: INSERT INTO ts_reorder_test VALUES (1, 23.4, 1);
+ERROR:  deadlock detected
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
-error in steps S2 R1: ERROR:  deadlock detected
+(1 row)
+
 step Sc: COMMIT;
 step Rc: COMMIT;
