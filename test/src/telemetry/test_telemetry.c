@@ -14,7 +14,7 @@
 #include "net/http.h"
 #include "config.h"
 #include "export.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 #ifdef TS_DEBUG
 #include "net/conn_mock.h"

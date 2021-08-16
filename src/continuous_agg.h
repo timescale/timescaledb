@@ -13,7 +13,7 @@
 #include <chunk.h>
 
 #include "with_clause_parser.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 

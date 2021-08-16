@@ -18,7 +18,7 @@
 #include "chunk_dispatch_state.h"
 #include "hypertable.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 
 /*
  * Create a ChunkDispatchState node from this plan. This is the full execution

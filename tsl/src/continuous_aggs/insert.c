@@ -22,7 +22,7 @@
 #include <scanner.h>
 #include <continuous_agg.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #include "catalog.h"
 #include "chunk.h"

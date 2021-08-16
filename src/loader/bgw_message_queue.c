@@ -15,7 +15,7 @@
 #include <storage/spin.h>
 #include <pgstat.h>
 
-#include "../compat.h"
+#include "../compat/compat.h"
 
 #include "bgw_message_queue.h"
 

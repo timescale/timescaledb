@@ -47,7 +47,7 @@
 #include <utils/varlena.h>
 #include <nodes/extensible.h>
 
-#include <compat.h>
+#include <compat/compat.h>
 #include "fdw/relinfo.h"
 #include "fdw/fdw_utils.h"
 #include "debug.h"

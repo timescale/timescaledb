@@ -36,7 +36,7 @@
 #include "chunk.h"
 #include "chunk_index.h"
 #include "continuous_agg.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"

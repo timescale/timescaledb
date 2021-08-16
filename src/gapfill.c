@@ -8,7 +8,7 @@
 
 #include "license_guc.h"
 #include "cross_module_fn.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "export.h"
 
 /*

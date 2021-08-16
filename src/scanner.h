@@ -13,7 +13,7 @@
 #include <utils/fmgroids.h>
 
 #include "utils.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 typedef struct ScanTupLock
 {

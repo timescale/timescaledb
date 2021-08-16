@@ -13,7 +13,7 @@
 #include <utils/timestamp.h>
 
 #include "fmgr.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "annotations.h"
 #include "gitcommit.h"
 #include "version.h"

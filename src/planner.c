@@ -26,14 +26,14 @@
 #include <utils/selfuncs.h>
 #include <utils/timestamp.h>
 
-#include "compat-msvc-enter.h"
+#include "compat/compat-msvc-enter.h"
 #include <optimizer/cost.h>
 #include <tcop/tcopprot.h>
 #include <optimizer/plancat.h>
 #include <nodes/nodeFuncs.h>
 #include <parser/analyze.h>
 #include <catalog/pg_constraint.h>
-#include "compat-msvc-exit.h"
+#include "compat/compat-msvc-exit.h"
 
 #include <math.h>
 

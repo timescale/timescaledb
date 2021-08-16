@@ -25,7 +25,7 @@
 #include <nodes/chunk_dispatch_state.h>
 #include <nodes/chunk_insert_state.h>
 #include <hypertable_cache.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <guc.h>
 
 #include "data_node_dispatch.h"

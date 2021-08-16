@@ -21,7 +21,7 @@
 #include "catalog.h"
 #include "scanner.h"
 #include "tablespace.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 #define TABLESPACE_DEFAULT_CAPACITY 4
 

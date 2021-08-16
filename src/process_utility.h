@@ -10,7 +10,7 @@
 #include <nodes/plannodes.h>
 #include <tcop/utility.h>
 #include "hypertable_cache.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 typedef struct ProcessUtilityArgs
 {

@@ -11,7 +11,7 @@
 
 #include "conn_internal.h"
 #include "conn_plain.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "port.h"
 
 #define DEFAULT_TIMEOUT_MSEC 3000

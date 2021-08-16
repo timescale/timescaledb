@@ -14,7 +14,7 @@
 #include <utils/syscache.h>
 #include <miscadmin.h>
 
-#include <compat.h>
+#include <compat/compat.h>
 #include <dimension.h>
 #include <hypertable_cache.h>
 #include <jsonb_utils.h>

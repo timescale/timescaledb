@@ -7,7 +7,7 @@
 #define BGW_SCHEDULER_H
 #include <postgres.h>
 #include <fmgr.h>
-#include "compat.h"
+#include "compat/compat.h"
 #include <postmaster/bgworker.h>
 
 #include "timer.h"

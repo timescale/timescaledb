@@ -25,7 +25,7 @@
 #include <libpq-fe.h>
 
 #include <remote/dist_commands.h>
-#include "compat.h"
+#include "compat/compat.h"
 #include "cache.h"
 #include "chunk.h"
 #include "errors.h"
@@ -35,7 +35,7 @@
 #include "create.h"
 #include "compress_utils.h"
 #include "compression.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "compression_chunk_size.h"

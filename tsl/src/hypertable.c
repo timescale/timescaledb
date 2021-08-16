@@ -33,7 +33,7 @@
 #include "data_node.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "hypertable_data_node.h"
 #include "extension.h"
 

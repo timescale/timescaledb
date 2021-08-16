@@ -21,7 +21,7 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "export.h"
 #include "scan_iterator.h"
 #include "chunk_constraint.h"

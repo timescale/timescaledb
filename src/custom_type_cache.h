@@ -7,7 +7,7 @@
 #define TIMESCALEDB_TYPE_CACHE_H
 
 #include <postgres.h>
-#include "compat.h"
+#include "compat/compat.h"
 
 typedef enum CustomType
 {

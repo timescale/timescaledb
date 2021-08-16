@@ -30,16 +30,15 @@
 #include <tcop/tcopprot.h>
 #include <nodes/pg_list.h>
 
+#include "compat/compat.h"
 #include "extension.h"
 #include "guc.h"
-#include "scheduler.h"
 #include "job.h"
 #include "job_stat.h"
-#include "version.h"
-#include "compat.h"
-#include "timer.h"
 #include "launcher_interface.h"
-#include "compat.h"
+#include "scheduler.h"
+#include "timer.h"
+#include "version.h"
 
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 #define START_RETRY_MS (1 * INT64CONST(1000)) /* 1 seconds */

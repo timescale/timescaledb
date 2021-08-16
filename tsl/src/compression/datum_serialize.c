@@ -18,7 +18,7 @@
 #include <libpq/pqformat.h>
 
 #include "datum_serialize.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 typedef struct DatumSerializer
 {

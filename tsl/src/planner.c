@@ -12,7 +12,7 @@
 #include "async_append.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "chunk.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "debug_guc.h"
 #include "debug.h"
 #include "fdw/data_node_scan_plan.h"
