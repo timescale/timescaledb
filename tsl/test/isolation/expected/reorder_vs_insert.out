@@ -6,8 +6,10 @@ step I1: INSERT INTO ts_reorder_test VALUES (1, 19.5, 3);
 step Ic: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 
 starting permutation: Bc I1 R1 Ic Rc
@@ -17,8 +19,10 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 step Ic: COMMIT;
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 
 starting permutation: Bc I1 R1 Rc Ic
@@ -34,8 +38,10 @@ starting permutation: Bc R1 Rc I1 Ic
 step Bc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 step I1: INSERT INTO ts_reorder_test VALUES (1, 19.5, 3);
 step Ic: COMMIT;
@@ -44,8 +50,10 @@ starting permutation: Bc R1 I1 Rc Ic
 step Bc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step I1: INSERT INTO ts_reorder_test VALUES (1, 19.5, 3); <waiting ...>
 step Rc: COMMIT;
 step I1: <... completed>
@@ -55,8 +63,10 @@ starting permutation: Bc R1 I1 Ic Rc
 step Bc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step I1: INSERT INTO ts_reorder_test VALUES (1, 19.5, 3); <waiting ...>
 step I1: <... completed>
 ERROR:  canceling statement due to lock timeout
@@ -68,7 +78,7 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 step I1: INSERT INTO ts_reorder_test VALUES (1, 19.5, 3); <waiting ...>
 step I1: <... completed>
 step R1: <... completed>
-error in steps I1 R1: ERROR:  canceling statement due to lock timeout
+ERROR:  canceling statement due to lock timeout
 step Ic: COMMIT;
 step Bc: COMMIT;
 step Rc: COMMIT;
@@ -79,8 +89,10 @@ step I1: INSERT INTO ts_reorder_test VALUES (1, 19.5, 3); <waiting ...>
 step Bc: COMMIT;
 step R1: <... completed>
 reorder_chunk_i
-
+---------------
                
+(1 row)
+
 step Rc: COMMIT;
 step I1: <... completed>
 step Ic: COMMIT;

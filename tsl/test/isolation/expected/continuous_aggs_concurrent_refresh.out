@@ -15,21 +15,27 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+(7 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
 cagg_bucket_count
+-----------------
+                7
+(1 row)
 
-7              
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|       70
+(1 row)
 
-conditions     70             
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
 
@@ -44,24 +50,30 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+    70|            24.6
+    80|            23.6
+    90|            21.3
+(10 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
-70             24.6           
-80             23.6           
-90             21.3           
 cagg_bucket_count
+-----------------
+               10
+(1 row)
 
-10             
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|      100
+(1 row)
 
-conditions     100            
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
 
@@ -95,20 +107,26 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    70|            24.6
+    80|            23.6
+    90|            21.3
+(6 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-70             24.6           
-80             23.6           
-90             21.3           
 cagg_bucket_count
+-----------------
+                6
+(1 row)
 
-6              
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|      100
+(1 row)
 
-conditions     100            
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
@@ -142,24 +160,30 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+    70|            24.6
+    80|            23.6
+    90|            21.3
+(10 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
-70             24.6           
-80             23.6           
-90             21.3           
 cagg_bucket_count
+-----------------
+               10
+(1 row)
 
-10             
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|      100
+(1 row)
 
-conditions     100            
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
@@ -193,24 +217,30 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+    70|            24.6
+    80|            23.6
+    90|            21.3
+(10 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
-70             24.6           
-80             23.6           
-90             21.3           
 cagg_bucket_count
+-----------------
+               10
+(1 row)
 
-10             
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|      100
+(1 row)
 
-conditions     100            
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
@@ -222,9 +252,11 @@ starting permutation: L3_lock_cagg_table R1_refresh L3_unlock_cagg_table S1_sele
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
@@ -243,21 +275,27 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+(7 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
 cagg_bucket_count
+-----------------
+                7
+(1 row)
 
-7              
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|       70
+(1 row)
 
-conditions     70             
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
@@ -269,9 +307,11 @@ starting permutation: L3_lock_cagg_table R1_refresh R2_refresh L3_unlock_cagg_ta
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
@@ -295,21 +335,27 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+(7 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
 cagg_bucket_count
+-----------------
+                7
+(1 row)
 
-7              
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|       70
+(1 row)
 
-conditions     70             
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
@@ -321,9 +367,11 @@ starting permutation: L3_lock_cagg_table R1_refresh R3_refresh L3_unlock_cagg_ta
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
@@ -346,24 +394,30 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+    70|            24.6
+    80|            23.6
+    90|            21.3
+(10 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-30             18.3           
-40             16.0909090909091
-50             26.9           
-60             18.9           
-70             24.6           
-80             23.6           
-90             21.3           
 cagg_bucket_count
+-----------------
+               10
+(1 row)
 
-10             
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|      100
+(1 row)
 
-conditions     100            
 step L1_unlock_threshold_table: 
     ROLLBACK;
 
@@ -375,9 +429,11 @@ starting permutation: L3_lock_cagg_table R3_refresh R4_refresh L3_unlock_cagg_ta
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
-lock_cagg      
+lock_cagg
+---------
+         
+(1 row)
 
-               
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
@@ -399,20 +455,26 @@ step S1_select:
     _timescaledb_catalog.hypertable h
     WHERE it.hypertable_id = h.id;
 
-bucket         avg_temp       
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    70|            24.6
+    80|            23.6
+    90|            21.3
+(6 rows)
 
-0              15.8888888888889
-10             14.2           
-20             13.4           
-70             24.6           
-80             23.6           
-90             21.3           
 cagg_bucket_count
+-----------------
+                6
+(1 row)
 
-6              
-hypertable     threshold      
+hypertable|threshold
+----------+---------
+conditions|      100
+(1 row)
 
-conditions     100            
 step L1_unlock_threshold_table: 
     ROLLBACK;
 

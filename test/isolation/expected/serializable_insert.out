@@ -1,18 +1,22 @@
 Parsed test spec with 2 sessions
 
 starting permutation: s1a s1c s2a s2c
-schema_name    table_name     
+schema_name|table_name     
+-----------+---------------
+public     |ts_cluster_test
+(1 row)
 
-public         ts_cluster_test
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1);
 step s1c: COMMIT;
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:02', 0.72, 1);
 step s2c: COMMIT;
 
 starting permutation: s1a s2a s1c s2c
-schema_name    table_name     
+schema_name|table_name     
+-----------+---------------
+public     |ts_cluster_test
+(1 row)
 
-public         ts_cluster_test
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1);
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:02', 0.72, 1); <waiting ...>
 step s1c: COMMIT;
@@ -20,9 +24,11 @@ step s2a: <... completed>
 step s2c: COMMIT;
 
 starting permutation: s1a s2a s2c s1c
-schema_name    table_name     
+schema_name|table_name     
+-----------+---------------
+public     |ts_cluster_test
+(1 row)
 
-public         ts_cluster_test
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1);
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:02', 0.72, 1); <waiting ...>
 step s2a: <... completed>
@@ -31,9 +37,11 @@ step s2c: COMMIT;
 step s1c: COMMIT;
 
 starting permutation: s2a s1a s1c s2c
-schema_name    table_name     
+schema_name|table_name     
+-----------+---------------
+public     |ts_cluster_test
+(1 row)
 
-public         ts_cluster_test
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:02', 0.72, 1);
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1); <waiting ...>
 step s1a: <... completed>
@@ -42,9 +50,11 @@ step s1c: COMMIT;
 step s2c: COMMIT;
 
 starting permutation: s2a s1a s2c s1c
-schema_name    table_name     
+schema_name|table_name     
+-----------+---------------
+public     |ts_cluster_test
+(1 row)
 
-public         ts_cluster_test
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:02', 0.72, 1);
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1); <waiting ...>
 step s2c: COMMIT;
@@ -52,9 +62,11 @@ step s1a: <... completed>
 step s1c: COMMIT;
 
 starting permutation: s2a s2c s1a s1c
-schema_name    table_name     
+schema_name|table_name     
+-----------+---------------
+public     |ts_cluster_test
+(1 row)
 
-public         ts_cluster_test
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:02', 0.72, 1);
 step s2c: COMMIT;
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1);

@@ -2,9 +2,13 @@ Parsed test spec with 1 sessions
 
 starting permutation: s1a
 table_name     
-
+---------------
 ts_cluster_test
-step s1a: SELECT pg_sleep(0);
-pg_sleep       
+(1 row)
 
-               
+step s1a: SELECT pg_sleep(0);
+pg_sleep
+--------
+        
+(1 row)
+
