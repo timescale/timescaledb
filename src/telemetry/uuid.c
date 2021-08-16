@@ -7,7 +7,7 @@
 #include <utils/timestamp.h>
 #include <utils/uuid.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "telemetry/uuid.h"
 
 /*

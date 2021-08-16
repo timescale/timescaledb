@@ -54,7 +54,7 @@
 #include <executor/spi.h>
 #include <utils/snapmgr.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #if PG13_LT
 #include <access/tuptoaster.h>
 #else

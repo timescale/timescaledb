@@ -26,7 +26,7 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "extension_constants.h"
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"

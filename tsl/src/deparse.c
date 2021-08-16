@@ -32,7 +32,7 @@
 #include <extension.h>
 #include <utils.h>
 #include <export.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include <trigger.h>
 
 #include "deparse.h"

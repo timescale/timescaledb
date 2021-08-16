@@ -25,7 +25,7 @@
 #include <utils/timestamp.h>
 #include <miscadmin.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #include "bgw/job.h"
 #include "continuous_agg.h"

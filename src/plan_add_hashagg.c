@@ -14,11 +14,11 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 
-#include "compat-msvc-enter.h"
+#include "compat/compat-msvc-enter.h"
 #include <optimizer/cost.h>
-#include "compat-msvc-exit.h"
+#include "compat/compat-msvc-exit.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "plan_add_hashagg.h"
 #include "import/planner.h"
 #include "utils.h"

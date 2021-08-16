@@ -16,7 +16,7 @@
 
 #include <remote/connection.h>
 #include <cache.h>
-#include <compat.h>
+#include <compat/compat.h>
 #include "connection_cache.h"
 
 static Cache *connection_cache = NULL;

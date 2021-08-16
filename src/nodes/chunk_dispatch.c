@@ -11,7 +11,7 @@
 #include <utils/rel.h>
 #include <catalog/pg_type.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
 #include "subspace_store.h"

@@ -17,7 +17,7 @@
 #include <utils/lsyscache.h>
 #include <parser/parser.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #include "compression_with_clause.h"
 

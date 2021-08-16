@@ -15,7 +15,7 @@
 #include <adts/bit_array.h>
 
 #include <adts/uint64_vec.h>
-#include "compat.h"
+#include "compat/compat.h"
 
 /* This is defined as a header file as it is expected to be used as a primitive
  * for "real" compression algorithms, not used directly on SQL data. Also, due to inlining.

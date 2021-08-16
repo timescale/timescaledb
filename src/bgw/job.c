@@ -26,7 +26,7 @@
 #include "job.h"
 #include "scanner.h"
 #include "extension.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "job_stat.h"
 #include "license_guc.h"
 #include "utils.h"

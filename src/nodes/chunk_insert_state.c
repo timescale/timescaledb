@@ -24,7 +24,7 @@
 #include <utils/rel.h>
 #include <utils/rls.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"

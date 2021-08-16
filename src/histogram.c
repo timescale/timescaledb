@@ -12,7 +12,7 @@
 #include <netinet/in.h>
 #include <libpq/pqformat.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "utils.h"
 
 /* aggregate histogram:

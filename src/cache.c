@@ -7,7 +7,7 @@
 #include <access/xact.h>
 
 #include "cache.h"
-#include "compat.h"
+#include "compat/compat.h"
 
 /* List of pinned caches. A cache occurs once in this list for every pin
  * taken */

@@ -31,7 +31,7 @@
 #include <funcapi.h>
 #endif
 
-#include <compat.h>
+#include <compat/compat.h>
 #include <chunk_data_node.h>
 #include <extension.h>
 #include <errors.h>

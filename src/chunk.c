@@ -56,7 +56,7 @@
 #include "process_utility.h"
 #include "time_utils.h"
 #include "trigger.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "utils.h"
 #include "hypertable_cache.h"
 #include "cache.h"

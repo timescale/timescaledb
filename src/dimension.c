@@ -17,7 +17,7 @@
 #include <nodes/makefuncs.h>
 
 #include "catalog.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "dimension.h"
 #include "dimension_slice.h"

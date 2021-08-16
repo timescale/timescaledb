@@ -10,7 +10,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 
 #define PARTIALIZE_FUNC_NAME "partialize_agg"
 

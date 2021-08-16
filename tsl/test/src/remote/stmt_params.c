@@ -7,7 +7,7 @@
 #include <catalog/pg_type.h>
 
 #include "export.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "remote/data_format.h"
 #include "remote/stmt_params.h"
 #include "test_utils.h"

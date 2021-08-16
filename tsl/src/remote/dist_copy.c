@@ -14,7 +14,7 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 
-#include "compat.h"
+#include "compat/compat.h"
 #include "dist_copy.h"
 #include "copy.h"
 #include "nodes/chunk_dispatch.h"

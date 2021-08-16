@@ -13,7 +13,7 @@
 #include "utils.h"
 #include "policy.h"
 
-#include "compat.h"
+#include "compat/compat.h"
 
 static ScanTupleResult
 bgw_policy_chunk_stats_tuple_found(TupleInfo *ti, void *const data)

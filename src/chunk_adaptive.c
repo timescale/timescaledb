@@ -22,7 +22,7 @@
 
 #include "hypertable_cache.h"
 #include "errors.h"
-#include "compat.h"
+#include "compat/compat.h"
 #include "chunk_adaptive.h"
 #include "chunk.h"
 #include "hypercube.h"
