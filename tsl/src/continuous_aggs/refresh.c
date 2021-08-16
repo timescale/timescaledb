@@ -661,11 +661,19 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * allocations (and locks). */
 	PopActiveSnapshot();
 	CommitTransactionCommand();
+	/* See PG commit:84f5c2908dad81e8622b0406beea580e40bb03ac
+	 * When we manage multiple transactions in a procedure, ensure that
+	 * an active outer snapshot exists prior to executing SPI
+	 * (see EnsurePortalSnapshotExists)
+	 */
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
+	PopActiveSnapshot();
 }
 
 /*
