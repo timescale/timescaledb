@@ -4084,6 +4084,13 @@ ts_chunk_is_compressed(const Chunk *chunk)
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
 }
 
+bool
+ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk)
+{
+	return (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED_UNORDERED) ||
+			!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED));
+}
+
 Datum
 ts_chunk_show(PG_FUNCTION_ARGS)
 {

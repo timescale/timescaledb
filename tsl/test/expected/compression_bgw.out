@@ -43,10 +43,18 @@ select * from alter_job(:compressjob_id, schedule_interval=>'1s');
    1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 1, "compress_after": "@ 60 days"} | -infinity
 (1 row)
 
+--enable maxchunks to 1 so that only 1 chunk is compressed by the job
+SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
+ FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+                                                                 alter_job                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 1, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity)
+(1 row)
+
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
-  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                       config                        
-------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-----------------------------------------------------
- 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days"}
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                                     config                                      
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+---------------------------------------------------------------------------------
+ 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days", "maxchunks_to_compress": 1}
 (1 row)
 
 insert into conditions
@@ -142,7 +150,7 @@ select * from _timescaledb_config.bgw_job where id=:compressjob_id;
 (1 row)
 
 \gset
-CALL run_job(:compressjob_id);
+--will compress all chunks that need compression
 CALL run_job(:compressjob_id);
 select chunk_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
@@ -220,9 +228,41 @@ SELECT COUNT(*) AS dropped_chunks_count
                    14
 (1 row)
 
+SELECT count(*) FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions' and is_compressed = true;
+ count 
+-------
+     0
+(1 row)
+
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
+-- job compresses only 1 chunk at a time --
+SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
+ FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+                                                                  alter_job                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------
+ (1002,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 7, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
+(1 row)
+
+SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
+ FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+                                                                             alter_job                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1002,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 7, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
+(1 row)
+
+set client_min_messages TO LOG;
 CALL run_job(:job_id);
+LOG:  job 1002 completed compressing chunk _timescaledb_internal._hyper_7_26_chunk
+set client_min_messages TO NOTICE;
+SELECT count(*) FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions' and is_compressed = true;
+ count 
+-------
+     1
+(1 row)
+
 \i include/recompress_basic.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -346,6 +386,7 @@ SELECT add_compression_policy AS job_id
   FROM add_compression_policy('test2', '30d'::interval) \gset
 CALL run_job(:job_id);
 CALL run_job(:job_id);
+psql:include/recompress_basic.sql:85: NOTICE:  no chunks for hypertable public.test2 that satisfy compress chunk policy
 -- status should be compressed ---
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
@@ -479,7 +520,7 @@ SELECT delete_job(:JOB_COMPRESS);
  
 (1 row)
 
-SELECT add_job('_timescaledb_internal.policy_recompression','1w','{"hypertable_id": 12, "recompress_after": "@ 7 days"}') AS "JOB_RECOMPRESS" \gset
+SELECT add_job('_timescaledb_internal.policy_recompression','1w','{"hypertable_id": 12, "recompress_after": "@ 7 days", "maxchunks_to_compress": 1 }') AS "JOB_RECOMPRESS" \gset
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
