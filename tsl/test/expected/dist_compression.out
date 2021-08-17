@@ -662,6 +662,14 @@ select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
  1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | test_role_1 | t         |             2 | {"hypertable_id": 2, "compress_after": "@ 60 days"}
 (1 row)
 
+-- we want only 1 chunk to be compressed --
+SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
+FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+                                                                 alter_job                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 2, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity)
+(1 row)
+
 insert into conditions
 select now()::timestamp, 'TOK', 'sony', 55, 75;
 -- TEST3 --
@@ -759,6 +767,7 @@ select * from _timescaledb_config.bgw_job where id=:compressjob_id;
 \gset
 CALL run_job(:compressjob_id);
 CALL run_job(:compressjob_id);
+NOTICE:  no chunks for hypertable public.test_table_int that satisfy compress chunk policy
 select chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
        chunk_name       |       node_name       | before_compression_total_bytes | after_compression_total_bytes 

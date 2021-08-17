@@ -42,6 +42,7 @@
 #define CONFIG_KEY_COMPRESS_AFTER "compress_after"
 #define CONFIG_KEY_RECOMPRESS_AFTER "recompress_after"
 #define CONFIG_KEY_RECOMPRESS "recompress"
+#define CONFIG_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
 
 bool
 policy_compression_get_recompress(const Jsonb *config)
@@ -50,6 +51,23 @@ policy_compression_get_recompress(const Jsonb *config)
 	bool recompress = ts_jsonb_get_bool_field(config, CONFIG_KEY_RECOMPRESS, &found);
 
 	return found ? recompress : true;
+}
+
+int32
+policy_compression_get_maxchunks_per_job(const Jsonb *config)
+{
+	bool found;
+	int32 maxchunks = ts_jsonb_get_int32_field(config, CONFIG_KEY_MAXCHUNKS_TO_COMPRESS, &found);
+	return (found && maxchunks > 0) ? maxchunks : 0;
+}
+
+bool
+policy_compression_get_verbose_log(const Jsonb *config)
+{
+	bool found;
+	bool verbose_log = ts_jsonb_get_bool_field(config, CONFIG_KEY_VERBOSE_LOG, &found);
+
+	return found ? verbose_log : false;
 }
 
 int32
