@@ -128,47 +128,54 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 	}
 }
 
-static int32
+static List *
 get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 	StrategyNumber end_strategy = BTLessStrategyNumber;
 	bool recompress = policy_compression_get_recompress(config);
+	/* numchunks = 0 if the config does not specify it. This means there is no
+	 * limit.
+	 */
+	int32 numchunks = policy_compression_get_maxchunks_per_job(config);
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
 										 policy_compression_get_compress_after_int,
 										 policy_compression_get_compress_after_interval);
 
-	return ts_dimension_slice_get_chunkid_to_compress(dim->fd.id,
-													  InvalidStrategy, /*start_strategy*/
-													  -1,			   /*start_value*/
-													  end_strategy,
-													  ts_time_value_to_internal(boundary,
-																				partitioning_type),
-													  true,
-													  recompress);
+	return ts_dimension_slice_get_chunkids_to_compress(dim->fd.id,
+													   InvalidStrategy, /*start_strategy*/
+													   -1,				/*start_value*/
+													   end_strategy,
+													   ts_time_value_to_internal(boundary,
+																				 partitioning_type),
+													   true,
+													   recompress,
+													   numchunks);
 }
 
-static int32
+static List *
 get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 	StrategyNumber end_strategy = BTLessStrategyNumber;
+	int32 numchunks = policy_compression_get_maxchunks_per_job(config);
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
 										 policy_recompression_get_recompress_after_int,
 										 policy_recompression_get_recompress_after_interval);
 
-	return ts_dimension_slice_get_chunkid_to_compress(dim->fd.id,
-													  InvalidStrategy, /*start_strategy*/
-													  -1,			   /*start_value*/
-													  end_strategy,
-													  ts_time_value_to_internal(boundary,
-																				partitioning_type),
-													  false,
-													  true);
+	return ts_dimension_slice_get_chunkids_to_compress(dim->fd.id,
+													   InvalidStrategy, /*start_strategy*/
+													   -1,				/*start_value*/
+													   end_strategy,
+													   ts_time_value_to_internal(boundary,
+																				 partitioning_type),
+													   false,
+													   true,
+													   numchunks);
 }
 
 static void
@@ -514,24 +521,80 @@ policy_invoke_recompress_chunk(Chunk *chunk)
 bool
 policy_compression_execute(int32 job_id, Jsonb *config)
 {
-	int32 chunkid;
+	List *chunkid_lst;
+	ListCell *lc;
 	const Dimension *dim;
 	PolicyCompressionData policy_data;
+	bool distributed, used_portalcxt = false, verbose_log;
+	MemoryContext saved_cxt, multitxn_cxt;
 
 	policy_compression_read_and_validate_config(config, &policy_data);
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
-	chunkid = get_chunk_to_compress(dim, config);
+	distributed = hypertable_is_distributed(policy_data.hypertable);
+	verbose_log = policy_compression_get_verbose_log(config);
+	/* we want the chunk id list to survive across transactions. So alloc in
+	 * a different context
+	 */
+	if (PortalContext)
+	{
+		/*if we have a portal context use that - it will get freed automatically*/
+		multitxn_cxt = PortalContext;
+		used_portalcxt = true;
+	}
+	else
+	{
+		/* background worker job does not go via usual CALL path, so we do
+		 * not have a PortalContext */
+		multitxn_cxt =
+			AllocSetContextCreate(TopMemoryContext, "CompressionJobCxt", ALLOCSET_DEFAULT_SIZES);
+	}
+	saved_cxt = MemoryContextSwitchTo(multitxn_cxt);
+	chunkid_lst = get_chunk_to_compress(dim, config);
+	MemoryContextSwitchTo(saved_cxt);
 
-	if (chunkid == INVALID_CHUNK_ID)
+	if (!chunkid_lst)
+	{
 		elog(NOTICE,
 			 "no chunks for hypertable %s.%s that satisfy compress chunk policy",
 			 policy_data.hypertable->fd.schema_name.data,
 			 policy_data.hypertable->fd.table_name.data);
-
-	if (chunkid != INVALID_CHUNK_ID)
+		ts_cache_release(policy_data.hcache);
+		if (!used_portalcxt)
+			MemoryContextDelete(multitxn_cxt);
+		return true;
+	}
+	ts_cache_release(policy_data.hcache);
+	if (ActiveSnapshotSet())
 	{
+		/* we have atleast 1 chunk that needs processing and will commit the
+		 * current txn (below) and start a new one to process the chunk. Any
+		 * active snapshot has to be popped before we can commit
+		 */
+		PopActiveSnapshot();
+	}
+	/* process each chunk in a new transaction */
+	int total_chunks = list_length(chunkid_lst), num_chunks = 0;
+	foreach (lc, chunkid_lst)
+	{
+		CommitTransactionCommand();
+		StartTransactionCommand();
+		int32 chunkid = lfirst_int(lc);
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
-		if (hypertable_is_distributed(policy_data.hypertable))
+		num_chunks++;
+		if (!chunk || !ts_chunk_is_uncompressed_or_unordered(chunk))
+		{
+			continue;
+		}
+		StringInfo query = makeStringInfo();
+		appendStringInfo(query,
+						 "compressing chunk %s.%s() , completed %d out of %d",
+						 quote_identifier(NameStr(chunk->fd.schema_name)),
+						 quote_identifier(NameStr(chunk->fd.table_name)),
+						 (num_chunks - 1),
+						 total_chunks);
+		pgstat_report_activity(STATE_RUNNING, query->data);
+
+		if (distributed)
 		{
 			if (ts_chunk_is_unordered(chunk))
 				policy_invoke_recompress_chunk(chunk);
@@ -545,18 +608,16 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 			else
 				tsl_compress_chunk_wrapper(chunk, true);
 		}
-		elog(LOG,
-			 "completed compressing chunk %s.%s",
-			 NameStr(chunk->fd.schema_name),
-			 NameStr(chunk->fd.table_name));
+		if (verbose_log)
+			elog(LOG,
+				 "job %d completed compressing chunk %s.%s",
+				 job_id,
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name));
 	}
 
-	chunkid = get_chunk_to_compress(dim, config);
-	if (chunkid != INVALID_CHUNK_ID)
-		enable_fast_restart(job_id, "compression");
-
-	ts_cache_release(policy_data.hcache);
-
+	if (!used_portalcxt)
+		MemoryContextDelete(multitxn_cxt);
 	elog(DEBUG1, "job %d completed compressing chunk", job_id);
 	return true;
 }
@@ -593,24 +654,60 @@ policy_recompression_read_and_validate_config(Jsonb *config, PolicyCompressionDa
 bool
 policy_recompression_execute(int32 job_id, Jsonb *config)
 {
-	int32 chunkid;
+	List *chunkid_lst;
+	ListCell *lc;
 	const Dimension *dim;
 	PolicyCompressionData policy_data;
+	bool distributed, used_portalcxt = false;
+	MemoryContext saved_cxt, multitxn_cxt;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
-	chunkid = get_chunk_to_recompress(dim, config);
+	distributed = hypertable_is_distributed(policy_data.hypertable);
+	/* we want the chunk id list to survive across transactions. So alloc in
+	 * a different context
+	 */
+	if (PortalContext)
+	{
+		/*if we have a portal context use that - it will get freed automatically*/
+		multitxn_cxt = PortalContext;
+		used_portalcxt = true;
+	}
+	else
+	{
+		/* background worker job does not go via usual CALL path, so we do
+		 * not have a PortalContext */
+		multitxn_cxt =
+			AllocSetContextCreate(TopMemoryContext, "CompressionJobCxt", ALLOCSET_DEFAULT_SIZES);
+	}
+	saved_cxt = MemoryContextSwitchTo(multitxn_cxt);
+	chunkid_lst = get_chunk_to_recompress(dim, config);
+	MemoryContextSwitchTo(saved_cxt);
 
-	if (chunkid == INVALID_CHUNK_ID)
+	if (!chunkid_lst)
+	{
 		elog(NOTICE,
 			 "no chunks for hypertable \"%s.%s\" that satisfy recompress chunk policy",
 			 policy_data.hypertable->fd.schema_name.data,
 			 policy_data.hypertable->fd.table_name.data);
-
-	if (chunkid != INVALID_CHUNK_ID)
+		ts_cache_release(policy_data.hcache);
+		if (!used_portalcxt)
+			MemoryContextDelete(multitxn_cxt);
+		return true;
+	}
+	ts_cache_release(policy_data.hcache);
+	if (ActiveSnapshotSet())
+		PopActiveSnapshot();
+	/* process each chunk in a new transaction */
+	foreach (lc, chunkid_lst)
 	{
+		CommitTransactionCommand();
+		StartTransactionCommand();
+		int32 chunkid = lfirst_int(lc);
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
-		if (hypertable_is_distributed(policy_data.hypertable))
+		if (!chunk || !ts_chunk_is_unordered(chunk))
+			continue;
+		if (distributed)
 			policy_invoke_recompress_chunk(chunk);
 		else
 			tsl_recompress_chunk_wrapper(chunk);
@@ -620,12 +717,6 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 			 NameStr(chunk->fd.schema_name),
 			 NameStr(chunk->fd.table_name));
 	}
-
-	chunkid = get_chunk_to_recompress(dim, config);
-	if (chunkid != INVALID_CHUNK_ID)
-		enable_fast_restart(job_id, "recompression");
-
-	ts_cache_release(policy_data.hcache);
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
 	return true;
@@ -669,7 +760,6 @@ job_execute(BgwJob *job)
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
 	StringInfo query;
-
 	if (!IsTransactionOrTransactionBlock())
 	{
 		transaction_started = true;

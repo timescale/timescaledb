@@ -163,7 +163,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 SELECT delete_job(:JOB_COMPRESS);
 
-SELECT add_job('_timescaledb_internal.policy_recompression','1w','{"hypertable_id": 12, "recompress_after": "@ 7 days"}') AS "JOB_RECOMPRESS" \gset
+SELECT add_job('_timescaledb_internal.policy_recompression','1w','{"hypertable_id": 12, "recompress_after": "@ 7 days", "maxchunks_to_compress": 1 }') AS "JOB_RECOMPRESS" \gset
 
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';

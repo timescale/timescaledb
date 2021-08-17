@@ -920,7 +920,8 @@ ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_
 
 typedef struct CompressChunkSearch
 {
-	int32 chunk_id;
+	List *chunk_ids; /* list of chunk ids that match search */
+	int32 maxchunks; /*max number of chunks to return */
 	bool compress;
 	bool recompress;
 } CompressChunkSearch;
@@ -945,22 +946,25 @@ dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *dat
 			/* found a chunk that is not compressed or needs recompress
 			 * caller needs to check the correct chunk status
 			 */
-			d->chunk_id = chunk_id;
-			return SCAN_DONE;
+			d->chunk_ids = lappend_int(d->chunk_ids, chunk_id);
+			if (d->maxchunks > 0 && list_length(d->chunk_ids) >= d->maxchunks)
+				return SCAN_DONE;
 		}
 	}
 
 	return SCAN_CONTINUE;
 }
 
-int32
-ts_dimension_slice_get_chunkid_to_compress(int32 dimension_id, StrategyNumber start_strategy,
-										   int64 start_value, StrategyNumber end_strategy,
-										   int64 end_value, bool compress, bool recompress)
+List *
+ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber start_strategy,
+											int64 start_value, StrategyNumber end_strategy,
+											int64 end_value, bool compress, bool recompress,
+											int32 numchunks)
 {
 	CompressChunkSearch data = { .compress = compress,
 								 .recompress = recompress,
-								 .chunk_id = INVALID_CHUNK_ID };
+								 .chunk_ids = NIL,
+								 .maxchunks = numchunks > 0 ? numchunks : -1 };
 	dimension_slice_scan_with_strategies(dimension_id,
 										 start_strategy,
 										 start_value,
@@ -971,5 +975,5 @@ ts_dimension_slice_get_chunkid_to_compress(int32 dimension_id, StrategyNumber st
 										 -1,
 										 NULL);
 
-	return data.chunk_id;
+	return data.chunk_ids;
 }

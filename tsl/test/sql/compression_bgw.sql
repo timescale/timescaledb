@@ -35,6 +35,10 @@ select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
+--enable maxchunks to 1 so that only 1 chunk is compressed by the job
+SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
+ FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
 insert into conditions
 select now()::timestamp, 'TOK', 'sony', 55, 75;
@@ -83,7 +87,7 @@ select add_compression_policy('test_table_int', 2::int) AS compressjob_id
 
 select * from _timescaledb_config.bgw_job where id=:compressjob_id;
 \gset
-CALL run_job(:compressjob_id);
+--will compress all chunks that need compression
 CALL run_job(:compressjob_id);
 select chunk_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
@@ -138,8 +142,21 @@ SELECT COUNT(*) AS dropped_chunks_count
   FROM _timescaledb_catalog.chunk
  WHERE dropped = TRUE;
 
+SELECT count(*) FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions' and is_compressed = true;
+
 SELECT add_compression_policy AS job_id
   FROM add_compression_policy('conditions', INTERVAL '1 day') \gset
+-- job compresses only 1 chunk at a time --
+SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
+ FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
+ FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+set client_min_messages TO LOG;
 CALL run_job(:job_id);
+set client_min_messages TO NOTICE;
+
+SELECT count(*) FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions' and is_compressed = true;
 
 \i include/recompress_basic.sql
