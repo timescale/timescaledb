@@ -101,6 +101,19 @@ SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
+SET ROLE :ROLE_1;
+
+-- Create a distributed hypertable where no nodes can be selected
+-- because there are no data nodes with the right permissions.
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+
+RESET ROLE;
+
 -- Allow ROLE_1 to create distributed tables on these data nodes.
 -- We'll test that data_node_3 is properly filtered when ROLE_1
 -- creates a distributed hypertable without explicitly specifying
@@ -121,9 +134,6 @@ GROUP BY object_schema, object_name, object_type
 ORDER BY object_name, object_type;
 
 SET ROLE :ROLE_1;
-
--- Now create a distributed hypertable using the data nodes
-CREATE TABLE disttable(time timestamptz, device int, temp float);
 
 -- Test that all data nodes are added to a hypertable and that the
 -- slices in the device dimension equals the number of data nodes.
