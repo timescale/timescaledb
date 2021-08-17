@@ -5,18 +5,21 @@
 # Add command that will concatenate a list of files into <output> and
 # create a custom target that is dependent on the files.
 macro(add_concat_command OUTPUT_FILE)
-  list(JOIN ARGN " + " _files)
-  message(STATUS "ARGN: ${ARGN}")
-  message(STATUS "_files: ${_files}")
-  message(STATUS "WIN32: ${WIN32}")
   if(WIN32)
+    file(TO_NATIVE_PATH "${OUTPUT_FILE}" _output_file)
+    set(_input_files)
+    foreach(_file ${ARGN})
+      file(TO_NATIVE_PATH "${OUTPUT_FILE}" _fname)
+      list(APPEND _input_files "\"${_fname}\"")
+    endforeach()
     add_custom_command(
-      OUTPUT ${OUTPUT_FILE}
+      OUTPUT "${OUTPUT_FILE}"
       DEPENDS ${ARGN}
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      COMMAND copy/a/y $<$<BOOL:${ARGN}>:$<JOIN:${ARGN},;+;>> ${OUTPUT_FILE}
+      COMMAND ${CMAKE_COMMAND} -E echo $<$<BOOL:${_input_files}>:$<JOIN:${_input_files},;+;>> "${_output_file}"
+      COMMAND copy/a/y $<$<BOOL:${ARGN}>:$<JOIN:${_input_files},;+;>> "${_output_file}"
       COMMENT "Generating ${OUTPUT_FILE}"
-      VERBATIM COMMAND_EXPAND_LISTS)
+      COMMAND_EXPAND_LISTS)
   else()
     add_custom_command(
       OUTPUT ${OUTPUT_FILE}
@@ -24,7 +27,7 @@ macro(add_concat_command OUTPUT_FILE)
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       COMMAND cat ${ARGN} > ${OUTPUT_FILE}
       COMMENT "Generating ${OUTPUT_FILE}"
-      VERBATIM COMMAND_EXPAND_LISTS)
+      COMMAND_EXPAND_LISTS)
   endif()
 endmacro()
 

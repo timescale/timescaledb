@@ -116,6 +116,8 @@ add_concat_command(
   ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
   ${PRE_INSTALL_SOURCE_FILES_VERSIONED} ${SOURCE_FILES_VERSIONED}
   ${NOTICE_FILE})
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE}
+        DESTINATION "${PG_SHAREDIR}/extension")
 add_custom_target(sqlfile ALL
                   DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE})
 
@@ -189,5 +191,5 @@ endforeach(transition_mod_file)
 add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})
 
 # Install target for the extension file and update scripts
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${INSTALL_FILE} ${UPDATE_SCRIPTS}
+install(FILES ${UPDATE_SCRIPTS}
         DESTINATION "${PG_SHAREDIR}/extension")
