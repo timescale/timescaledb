@@ -172,6 +172,21 @@ SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN
  data_node_3 | localhost | 55432 | db_data_node_3 | t            | t                | t
 (1 row)
 
+SET ROLE :ROLE_1;
+-- Create a distributed hypertable where no nodes can be selected
+-- because there are no data nodes with the right permissions.
+CREATE TABLE disttable(time timestamptz, device int, temp float);
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+NOTICE:  3 of 3 data nodes not used by this hypertable due to lack of permissions
+HINT:  Grant USAGE on data nodes to attach them to a hypertable.
+ERROR:  no data nodes can be assigned to the hypertable
+DETAIL:  Data nodes exist, but none have USAGE privilege.
+HINT:  Grant USAGE on data nodes to attach them to the hypertable.
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+RESET ROLE;
 -- Allow ROLE_1 to create distributed tables on these data nodes.
 -- We'll test that data_node_3 is properly filtered when ROLE_1
 -- creates a distributed hypertable without explicitly specifying
@@ -204,8 +219,6 @@ ORDER BY object_name, object_type;
 (4 rows)
 
 SET ROLE :ROLE_1;
--- Now create a distributed hypertable using the data nodes
-CREATE TABLE disttable(time timestamptz, device int, temp float);
 -- Test that all data nodes are added to a hypertable and that the
 -- slices in the device dimension equals the number of data nodes.
 BEGIN;
