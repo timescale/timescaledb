@@ -133,8 +133,9 @@ List *
 hypertable_get_and_validate_data_nodes(ArrayType *nodearr)
 {
 	bool fail_on_aclcheck = nodearr != NULL;
-	List *data_nodes;
+	List *data_nodes = NIL;
 	int num_data_nodes;
+	List *all_data_nodes = NIL;
 
 	/* If the user explicitly specified a set of data nodes (data_node_arr is
 	 * non-NULL), we validate the given array and fail if the user doesn't
@@ -148,7 +149,7 @@ hypertable_get_and_validate_data_nodes(ArrayType *nodearr)
 		/* No explicit set of data nodes given. Check if there are any data
 		 * nodes that the user cannot use due to lack of permissions and
 		 * raise a NOTICE if some of them cannot be used. */
-		List *all_data_nodes = data_node_get_node_name_list();
+		all_data_nodes = data_node_get_node_name_list();
 		int num_nodes_not_used = list_length(all_data_nodes) - list_length(data_nodes);
 
 		if (num_nodes_not_used > 0)
@@ -160,11 +161,22 @@ hypertable_get_and_validate_data_nodes(ArrayType *nodearr)
 					 errhint("Grant USAGE on data nodes to attach them to a hypertable.")));
 	}
 
+	/*
+	 * In this case, if we couldn't find any valid data nodes to assign, it
+	 * means that they do not have the right permissions on the data nodes or
+	 * that there were no data nodes to assign. Depending on the case, we
+	 * print different error details and hints to aid the user.
+	 */
 	if (num_data_nodes == 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
 				 errmsg("no data nodes can be assigned to the hypertable"),
-				 errhint("Add data nodes to the database.")));
+				 errdetail(list_length(all_data_nodes) == 0 ?
+							   "No data nodes where available to assign to the hypertable." :
+							   "Data nodes exist, but none have USAGE privilege."),
+				 errhint(list_length(all_data_nodes) == 0 ?
+							 "Add data nodes to the database." :
+							 "Grant USAGE on data nodes to attach them to the hypertable.")));
 
 	if (num_data_nodes == 1)
 		ereport(WARNING,
@@ -172,7 +184,9 @@ hypertable_get_and_validate_data_nodes(ArrayType *nodearr)
 				 errdetail("A distributed hypertable should have at least two data nodes for best "
 						   "performance."),
 				 errhint(
-					 "Make sure the user has USAGE on enough data nodes or add additional ones.")));
+					 list_length(all_data_nodes) == 1 ?
+						 "Add more data nodes to the database and attach them to the hypertable." :
+						 "Grant USAGE on data nodes and attach them to the hypertable.")));
 
 	if (num_data_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
 		ereport(ERROR,
