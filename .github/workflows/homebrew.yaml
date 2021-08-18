@@ -13,6 +13,13 @@ jobs:
   homebrew:
     name: Homebrew
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        license: [ "TSL", "Apache"]
+        include:
+          - license: Apache
+            install_options: "--with-oss-only"
 
     steps:
 
@@ -23,7 +30,7 @@ jobs:
 
     - name: Install timescaledb
       run: |
-        brew install timescaledb
+        brew install timescaledb ${{ matrix.install_options }}
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
         brew services restart postgresql
