@@ -1240,6 +1240,9 @@ SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, or
 ERROR:  origin must be before the given date
 SELECT timescaledb_experimental.time_bucket_ng('1 month 3 hours', '2021-11-22' :: timestamp) AS result;
 ERROR:  interval can't combine months with minutes or hours
+-- timestamp is less than the default 'origin' value
+SELECT timescaledb_experimental.time_bucket_ng('1 day', '1999-01-01 12:34:56 MSK' :: timestamptz, timezone => 'MSK');
+ERROR:  origin must be before the given date
 \set ON_ERROR_STOP 1
 -- wrappers
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp) AS result;
@@ -1285,6 +1288,12 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz) AS
  
 (1 row)
 
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz, timezone => 'Europe/Moscow') AS result;
+ result 
+--------
+ 
+(1 row)
+
 SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: date, origin => '2021-06-01') AS result;
  result 
 --------
@@ -1317,6 +1326,12 @@ SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: ti
 (1 row)
 
 SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz, 'Europe/Moscow') AS result;
  result 
 --------
  
@@ -1373,6 +1388,12 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamp
 (1 row)
 
 SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz) AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz, timezone => 'Europe/Moscow') AS result;
   result  
 ----------
  infinity
@@ -1435,6 +1456,17 @@ SELECT timescaledb_experimental.time_bucket_ng('12 hours', '2021-07-12 12:34:56'
  infinity
 (1 row)
 
+-- test for invalid timezone argument
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, timezone => null) AS result;
+ result 
+--------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, timezone => 'Europe/Ololondon') AS result;
+ERROR:  time zone "Europe/Ololondon" not recognized
+\set ON_ERROR_STOP 1
 -- Make sure time_bucket_ng() supports seconds, minutes, and hours.
 -- We happen to know that the internal implementation is the same
 -- as for time_bucket(), thus there is no reason to execute all the tests
@@ -1627,6 +1659,39 @@ FROM generate_series('2015-01-01' :: date, '2020-12-01', '6 month') AS ts,
  2020-07-01 | 2020-06-01 | 2019-12-01 | 2020-06-01 | 2020-06-01 | 2018-06-01
 (12 rows)
 
+-- Test timezones support with different bucket sizes
+BEGIN;
+-- Timestamptz type is displayed in the session timezone.
+-- To get consistent results during the test we temporary set the session
+-- timezone to the known one.
+SET TIME ZONE '+00';
+-- Moscow is UTC+3 in the year 2021. Let's say you are dealing with '1 day' bucket.
+-- In order to calculate the beginning of the bucket you have to take LOCAL
+-- Moscow time and throw away the time. You will get the midnight. The new day
+-- starts 3 hours EARLIER in Moscow than in UTC+0 time zone, thus resulting
+-- timestamp will be 3 hours LESS than for UTC+0.
+SELECT bs, tz, to_char(ts_out, 'YYYY-MM-DD HH24:MI:SS TZ') as res
+FROM unnest(array['Europe/Moscow', 'UTC']) as tz,
+     unnest(array['12 hours', '1 day', '1 month', '4 months', '1 year']) as bs,
+     unnest(array['2021-07-12 12:34:56 Europe/Moscow' :: timestamptz]) as ts_in,
+     unnest(array[timescaledb_experimental.time_bucket_ng(bs :: interval, ts_in, timezone => tz)]) as ts_out
+ORDER BY tz, bs :: interval;
+    bs    |      tz       |           res           
+----------+---------------+-------------------------
+ 12 hours | Europe/Moscow | 2021-07-12 09:00:00 +00
+ 1 day    | Europe/Moscow | 2021-07-11 21:00:00 +00
+ 1 month  | Europe/Moscow | 2021-06-30 21:00:00 +00
+ 4 months | Europe/Moscow | 2021-04-30 21:00:00 +00
+ 1 year   | Europe/Moscow | 2020-12-31 21:00:00 +00
+ 12 hours | UTC           | 2021-07-12 00:00:00 +00
+ 1 day    | UTC           | 2021-07-12 00:00:00 +00
+ 1 month  | UTC           | 2021-07-01 00:00:00 +00
+ 4 months | UTC           | 2021-05-01 00:00:00 +00
+ 1 year   | UTC           | 2021-01-01 00:00:00 +00
+(10 rows)
+
+-- Restore previously used time zone.
+ROLLBACK;
 -------------------------------------
 --- Test time input functions --
 -------------------------------------
