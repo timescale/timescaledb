@@ -462,3 +462,28 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 
 	PG_RETURN_DATEADT(date);
 }
+
+TS_FUNCTION_INFO_V1(ts_time_bucket_ng_timezone);
+TSDLLEXPORT Datum
+ts_time_bucket_ng_timezone(PG_FUNCTION_ARGS)
+{
+	Timestamp result;
+	Datum timestamp;
+	Datum interval = PG_GETARG_DATUM(0);
+	Datum timestamptz = PG_GETARG_DATUM(1);
+	Datum tzname = PG_GETARG_DATUM(2);
+
+	/*
+	 * Convert 'timestamptz' to TIMESTAMP at given 'tzname'.
+	 * The code is equal to 'timestamptz AT TIME ZONE tzname'.
+	 */
+	timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamptz);
+
+	/* Then treat resulting timestamp as a regular one */
+	result =
+		DatumGetTimestamp(DirectFunctionCall2(ts_time_bucket_ng_timestamp, interval, timestamp));
+	if (TIMESTAMP_NOT_FINITE(result))
+		PG_RETURN_TIMESTAMP(result);
+
+	PG_RETURN_DATUM(DirectFunctionCall2(timestamp_zone, tzname, TimestampGetDatum(result)));
+}
