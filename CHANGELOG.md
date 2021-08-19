@@ -4,14 +4,26 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.4.1 (2021-08-19)
 
+This release contains bug fixes since the 2.4.0 release.  We deem it
+high priority to upgrade.
+
+The release fixes continous aggregate refresh for postgres 12.8 and
+13.4, a crash with ALTER TABLE commands and a crash with continuous
+aggregates with HAVING clause.
 
 **Bugfixes**
 * #3430 Fix havingqual processing for continuous aggregates
+* #3468 Disable tests by default if tools are not found
+* #3462 Fix crash while tracking alter table commands
+* #3489 Fix continuous agg bgw job failure for PG 12.8 and 13.4
+* #3494 Improve error message when adding data nodes
 
 **Thanks**
 * @brianbenns for reporting a segfault with continuous aggregates
+* @brianbenns for reporting a segfault with continuous aggregates
+* @usego for reporting an issue with continuous aggregate refresh on PG 13.4
 
 ## 2.4.0 (2021-07-29)
 
