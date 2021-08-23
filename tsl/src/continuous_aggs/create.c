@@ -73,6 +73,8 @@
 #include "utils.h"
 #include "errors.h"
 #include "refresh.h"
+#include "remote/dist_commands.h"
+#include "hypertable_data_node.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -368,6 +370,44 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
 		return;
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
+	if (hypertable_is_distributed(ht))
+	{
+		DistCmdResult *result;
+		List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
+		const char **cmds; /* same order as ht->data_nodes */
+		ListCell *cell;
+
+		int i = 0;
+		cmds = palloc(list_length(data_node_list) * sizeof(*cmds));
+		foreach (cell, ht->data_nodes)
+		{
+			HypertableDataNode *node = lfirst(cell);
+			StringInfo command = makeStringInfo();
+			appendStringInfo(command,
+							 "CREATE TRIGGER %s AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH "
+							 "ROW EXECUTE FUNCTION %s.%s(%d)",
+							 quote_identifier(CAGGINVAL_TRIGGER_NAME),
+							 quote_identifier(NameStr(ht->fd.schema_name)),
+							 quote_identifier(NameStr(ht->fd.table_name)),
+							 quote_identifier(INTERNAL_SCHEMA_NAME),
+							 quote_identifier(CAGG_INVALIDATION_TRIGGER),
+							 node->fd.node_hypertable_id);
+			cmds[i++] = command->data;
+			elog(DEBUG2,
+				 "[%s] hypertable_id=%d node_hypertable_id=%d",
+				 node->fd.node_name.data,
+				 node->fd.hypertable_id,
+				 node->fd.node_hypertable_id);
+		}
+
+		result =
+			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmds, NULL, data_node_list, true, true);
+		if (result)
+			ts_dist_cmd_close_response(result);
+
+		ts_cache_release(hcache);
+		return;
+	}
 	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
