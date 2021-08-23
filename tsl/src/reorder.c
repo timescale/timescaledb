@@ -51,6 +51,8 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
+#include <executor/spi.h>
+#include <utils/snapmgr.h>
 
 #include "compat.h"
 #if PG13_LT
@@ -210,6 +212,9 @@ tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
 	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	const char *src_node_name = PG_ARGISNULL(1) ? NULL : NameStr(*PG_GETARG_NAME(1));
 	const char *dst_node_name = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
+	int rc;
+	bool nonatomic = fcinfo->context && IsA(fcinfo->context, CallContext) &&
+					 !castNode(CallContext, fcinfo->context)->atomic;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -224,8 +229,14 @@ tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
 	if (!OidIsValid(chunk_id))
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk")));
 
+	if ((rc = SPI_connect_ext(nonatomic ? SPI_OPT_NONATOMIC : 0)) != SPI_OK_CONNECT)
+		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+
 	/* perform the actual distributed chunk move after a few sanity checks */
 	chunk_copy(chunk_id, src_node_name, dst_node_name, delete_on_src_node);
+
+	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }
 
 Datum
@@ -248,6 +259,9 @@ Datum
 tsl_copy_chunk_cleanup_proc(PG_FUNCTION_ARGS)
 {
 	const char *operation_id = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
+	int rc;
+	bool nonatomic = fcinfo->context && IsA(fcinfo->context, CallContext) &&
+					 !castNode(CallContext, fcinfo->context)->atomic;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -259,8 +273,14 @@ tsl_copy_chunk_cleanup_proc(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid chunk copy operation id")));
 
+	if ((rc = SPI_connect_ext(nonatomic ? SPI_OPT_NONATOMIC : 0)) != SPI_OK_CONNECT)
+		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+
 	/* perform the cleanup/repair depending on the stage */
 	chunk_copy_cleanup(operation_id);
+
+	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 
 	PG_RETURN_VOID();
 }
