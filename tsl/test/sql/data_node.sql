@@ -800,6 +800,36 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); 
 SELECT * FROM test.remote_exec(ARRAY['data_node_3'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_9_12_chunk; $$);
 SELECT sum(device) FROM dist_test; 
 
+-- Check that they can be called from inside a procedure without
+-- generating warnings or error messages (#3495).
+CREATE OR REPLACE PROCEDURE copy_wrapper(regclass, text, text)
+AS $$
+BEGIN
+    CALL timescaledb_experimental.copy_chunk($1, $2, $3);
+END
+$$
+LANGUAGE PLPGSQL;
+
+CREATE OR REPLACE PROCEDURE move_wrapper(regclass, text, text)
+AS $$
+BEGIN
+    CALL timescaledb_experimental.move_chunk($1, $2, $3);
+END
+$$
+LANGUAGE PLPGSQL;
+
+SELECT chunk_name, replica_nodes, non_replica_nodes
+FROM timescaledb_experimental.chunk_replication_status;
+
+CALL copy_wrapper('_timescaledb_internal._dist_hyper_9_14_chunk', 'data_node_3', 'data_node_2');
+CALL move_wrapper('_timescaledb_internal._dist_hyper_9_13_chunk', 'data_node_2', 'data_node_1');
+
+SELECT chunk_name, replica_nodes, non_replica_nodes
+FROM timescaledb_experimental.chunk_replication_status;
+
+DROP PROCEDURE copy_wrapper;
+DROP PROCEDURE move_wrapper;
+
 RESET ROLE;
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;
