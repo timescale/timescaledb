@@ -22,7 +22,6 @@ aggregates with HAVING clause.
 
 **Thanks**
 * @brianbenns for reporting a segfault with continuous aggregates
-* @brianbenns for reporting a segfault with continuous aggregates
 * @usego for reporting an issue with continuous aggregate refresh on PG 13.4
 
 ## 2.4.0 (2021-07-29)
