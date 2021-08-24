@@ -56,17 +56,35 @@ jobs:
 
     - uses: actions/checkout@v2
 
-    - name: Test Installation
+    - name: Read versions
+      id: versions
       run: |
-        pg_ctlcluster ${{ matrix.pg }} main start
-        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
         # read expected version from version.config
+        # version will only be a proper version in a release branch so we use update_from_version
+        # as fallback for master
         if grep '^version = [0-9.]\+$' version.config; then
           version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
         else
           version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
         fi
+        echo "::set-output name=version::${version}"
+
+    - name: Test Installation
+      run: |
+        pg_ctlcluster ${{ matrix.pg }} main start
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb;SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
         installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
-        if [ "$version" != "$installed_version" ];then
+        if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
           false
         fi
+
+    - name: Test Downgrade
+      run: |
+        # since this runs nightly on master we have to get the previous version from the last released version and not current branch
+        prev_version=$(wget --quiet -O - https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config | grep update_from_version | sed -e 's!update_from_version = !!')
+        sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}';SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
+        installed_version=$(sudo -u postgres psql -X -t -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        if [ "$prev_version" != "$installed_version" ];then
+          false
+        fi
+
