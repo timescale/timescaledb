@@ -140,6 +140,11 @@ if event_type != "pull_request":
   m["include"].append(build_apache_config({"pg":PG12_LATEST}))
   m["include"].append(build_apache_config({"pg":PG13_LATEST}))
 
+  # to discover issues with upcoming releases we run CI against
+  # the stable branches of supported PG releases
+  m["include"].append(build_debug_config({"pg":12,"snapshot":"snapshot"}))
+  m["include"].append(build_debug_config({"pg":13,"snapshot":"snapshot"}))
+
 # generate command to set github action variable
 print(str.format("::set-output name=matrix::{0}",json.dumps(m)))
 
