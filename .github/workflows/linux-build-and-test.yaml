@@ -19,7 +19,7 @@ jobs:
       run: python scripts/gh_matrix_builder.py ${{ github.event_name }}
 
   regress:
-    name: PG${{ matrix.pg }} ${{ matrix.name }} ${{ matrix.os }}
+    name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
     needs: matrixbuilder
     runs-on: ${{ matrix.os }}
     strategy:
@@ -58,15 +58,20 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
+      if: matrix.snapshot != 'snapshot'
       uses: actions/cache@v2
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}${{ env.CACHE_SUFFIX }}
 
-    - name: Build PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+    - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.build_type }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
+          wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
+        else
+          wget -q -O postgresql.tar.bz2 https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        fi
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
