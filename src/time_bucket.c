@@ -457,7 +457,7 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 
 		delta = date - origin_date;
 		bucket_number = delta / interval->day;
-		date = bucket_number * interval->day;
+		date = origin_date + bucket_number * interval->day;
 	}
 
 	PG_RETURN_DATEADT(date);
