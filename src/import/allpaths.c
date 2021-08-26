@@ -33,6 +33,7 @@
 #include <math.h>
 
 #include "allpaths.h"
+#include "compat/compat.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
@@ -291,16 +292,16 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	/* Set up the dummy path */
 	add_path(rel,
-			 (Path *) create_append_path(NULL,
-										 rel,
-										 NIL,
-										 NIL,
-										 NIL,
-										 rel->lateral_relids,
-										 0,
-										 false,
-										 NIL,
-										 -1));
+			 (Path *) create_append_path_compat(NULL,
+												rel,
+												NIL,
+												NIL,
+												NIL,
+												rel->lateral_relids,
+												0,
+												false,
+												NIL,
+												-1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
