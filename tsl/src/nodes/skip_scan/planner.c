@@ -266,12 +266,12 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			if (!new_paths)
 				continue;
 
-			subpath = (Path *) create_merge_append_path(root,
-														merge_path->path.parent,
-														new_paths,
-														merge_path->path.pathkeys,
-														NULL,
-														merge_path->partitioned_rels);
+			subpath = (Path *) create_merge_append_path_compat(root,
+															   merge_path->path.parent,
+															   new_paths,
+															   merge_path->path.pathkeys,
+															   NULL,
+															   merge_path->partitioned_rels);
 			subpath->pathtarget = copy_pathtarget(merge_path->path.pathtarget);
 		}
 		else if (ts_is_chunk_append_path(subpath))
