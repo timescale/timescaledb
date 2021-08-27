@@ -73,24 +73,22 @@ elseif(REQUIRE_ALL_TESTS)
       "All tests were required but 'pg_isolation_regress' could not be found")
 endif()
 
-if(_install_checks)
-  add_custom_target(installcheck DEPENDS ${_install_checks})
+# We add the installcheck target even when _install_checks is empty as tsl code
+# might add dependencies to it even when regress checks are disabled.
+add_custom_target(installcheck DEPENDS ${_install_checks})
 
-  # Define a post test hook that is invoked after the installcheck target
-  # finishes. One can use add_dependencies on post hook target to run other
-  # targets after tests complete. This is used, e.g., by code coverage.
-  add_custom_target(installcheck-post-hook COMMENT "Post test hook")
-  add_custom_command(
-    TARGET installcheck
-    POST_BUILD
-    COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target
-            installcheck-post-hook)
-endif()
+# Define a post test hook that is invoked after the installcheck target
+# finishes. One can use add_dependencies on post hook target to run other
+# targets after tests complete. This is used, e.g., by code coverage.
+add_custom_target(installcheck-post-hook COMMENT "Post test hook")
+add_custom_command(
+  TARGET installcheck
+  POST_BUILD
+  COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target
+          installcheck-post-hook)
 
 # installchecklocal tests against an existing postgres instance
-if(_local_install_checks)
-  add_custom_target(installchecklocal DEPENDS ${_local_install_checks})
-endif()
+add_custom_target(installchecklocal DEPENDS ${_local_install_checks})
 
 add_subdirectory(sql)
 add_subdirectory(isolation)
