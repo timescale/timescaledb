@@ -86,7 +86,7 @@ cache_inval_init()
 	Assert(continuous_aggs_trigger_mctx == NULL);
 
 	continuous_aggs_trigger_mctx = AllocSetContextCreate(TopTransactionContext,
-														 "ConinuousAggsTriggerCtx",
+														 "ContinuousAggsTriggerCtx",
 														 ALLOCSET_DEFAULT_SIZES);
 
 	memset(&ctl, 0, sizeof(ctl));
@@ -256,14 +256,19 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	if (!entry->value_is_set)
 		return;
 
+	Cache *ht_cache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, entry->hypertable_id);
+	bool is_distributed_member = hypertable_is_distributed_member(ht);
+	ts_cache_release(ht_cache);
+
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
-	 * new value. In order to prevent serialization errors, we always append invalidation entires in
+	 * new value. In order to prevent serialization errors, we always append invalidation entries in
 	 * the case when we're using a strong enough isolation level that we won't see the new
-	 * threshold; the materializer can handle invalidations that are beyond the threshold
-	 * gracefully.
+	 * threshold. The same applies for distributed member invalidation triggers of hypertables.
+	 * The materializer can handle invalidations that are beyond the threshold gracefully.
 	 */
-	if (IsolationUsesXactSnapshot())
+	if (IsolationUsesXactSnapshot() || is_distributed_member)
 	{
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
@@ -314,6 +319,34 @@ cache_inval_htab_write(void)
 		cache_inval_entry_write(current_entry);
 };
 
+/*
+ * We use TopTransactionContext for our cached invalidations.
+ * We need to make sure cache_inval_cleanup() is always called after cache_inval_htab_write().
+ * We need this memory context to survive the transaction lifetime so that cache_inval_cleanup()
+ * does not attempt to tear down memory that has already been freed due to a transaction ending.
+ *
+ * The order of operations in postgres can be this:
+ * CallXactCallbacks(XACT_EVENT_PRE_PREPARE);
+ * ...
+ * CallXactCallbacks(XACT_EVENT_PREPARE);
+ * ...
+ * MemoryContextDelete(TopTransactionContext);
+ *
+ * or that:
+ * CallXactCallbacks(XACT_EVENT_PRE_COMMIT);
+ * ...
+ * CallXactCallbacks(XACT_EVENT_COMMIT);
+ * ...
+ * MemoryContextDelete(TopTransactionContext);
+ *
+ * In the case of a 2PC transaction, we need to make sure to apply the invalidations at
+ * XACT_EVENT_PRE_PREPARE time, before TopTransactionContext is torn down by PREPARE TRANSACTION.
+ * Otherwise, we are unable to call cache_inval_cleanup() without corrupting the memory. For
+ * this reason, we also deallocate at XACT_EVENT_PREPARE time.
+ *
+ * For local transactions we apply the invalidations at XACT_EVENT_PRE_COMMIT time.
+ * Similar care is taken of parallel workers and aborting transactions.
+ */
 static void
 continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
@@ -323,10 +356,14 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 
 	switch (event)
 	{
+		case XACT_EVENT_PRE_PREPARE:
 		case XACT_EVENT_PRE_COMMIT:
+		case XACT_EVENT_PARALLEL_PRE_COMMIT:
 			cache_inval_htab_write();
-			cache_inval_cleanup();
 			break;
+		case XACT_EVENT_PREPARE:
+		case XACT_EVENT_COMMIT:
+		case XACT_EVENT_PARALLEL_COMMIT:
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
 			cache_inval_cleanup();
