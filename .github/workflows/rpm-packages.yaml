@@ -3,7 +3,6 @@ on:
   schedule:
     # run daily 0:00 on master branch
     - cron: '0 0 * * *'
-  pull_request:
   push:
     tags:
     - '*'
