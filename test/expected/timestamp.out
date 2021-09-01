@@ -1234,6 +1234,7 @@ SELECT timescaledb_experimental.time_bucket_ng('0 days', '2001-02-03' :: date) A
 ERROR:  interval must be at least one day
 SELECT timescaledb_experimental.time_bucket_ng('1 month', '2001-02-03' :: date, origin => '2000-01-02') AS result;
 ERROR:  origin must be the first day of the month
+HINT:  When using timestamptz-version of the function, 'origin' is converted to provided 'timezone'.
 SELECT timescaledb_experimental.time_bucket_ng('1 month', '2000-01-02' :: date, origin => '2001-01-01') AS result;
 ERROR:  origin must be before the given date
 SELECT timescaledb_experimental.time_bucket_ng('1 day', '2000-01-02' :: date, origin => '2001-01-01') AS result;
@@ -1243,6 +1244,10 @@ ERROR:  interval can't combine months with minutes or hours
 -- timestamp is less than the default 'origin' value
 SELECT timescaledb_experimental.time_bucket_ng('1 day', '1999-01-01 12:34:56 MSK' :: timestamptz, timezone => 'MSK');
 ERROR:  origin must be before the given date
+-- 'origin' in Europe/Moscow timezone is not the first day of the month at given time zone (UTC in this case)
+select timescaledb_experimental.time_bucket_ng('1 month', '2021-07-12 12:34:56 Europe/Moscow' :: timestamptz, origin => '2021-06-01 00:00:00 Europe/Moscow' :: timestamptz, timezone => 'UTC');
+ERROR:  origin must be the first day of the month
+HINT:  When using timestamptz-version of the function, 'origin' is converted to provided 'timezone'.
 \set ON_ERROR_STOP 1
 -- wrappers
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-11-22' :: timestamp) AS result;
@@ -1312,6 +1317,12 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz, or
  
 (1 row)
 
+SELECT timescaledb_experimental.time_bucket_ng('1 year', null :: timestamptz, origin => '2021-06-01', timezone => 'Europe/Moscow') AS result;
+ result 
+--------
+ 
+(1 row)
+
 -- null interval
 SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12' :: date) AS result;
  result 
@@ -1355,6 +1366,12 @@ SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: ti
  
 (1 row)
 
+SELECT timescaledb_experimental.time_bucket_ng(null, '2021-07-12 12:34:56' :: timestamptz, origin => '2021-06-01', timezone => 'Europe/Moscow') AS result;
+ result 
+--------
+ 
+(1 row)
+
 -- null origin
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12' :: date, origin => null) AS result;
  result 
@@ -1369,6 +1386,12 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :
 (1 row)
 
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => null) AS result;
+ result 
+--------
+ 
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => null, timezone => 'Europe/Moscow') AS result;
  result 
 --------
  
@@ -1417,6 +1440,12 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamp
  infinity
 (1 row)
 
+SELECT timescaledb_experimental.time_bucket_ng('1 year', 'infinity' :: timestamptz, origin => '2021-06-01', timezone => 'Europe/Moscow') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
 -- test for specific code path: hours/minutes/seconds interval and timestamp argument
 SELECT timescaledb_experimental.time_bucket_ng('12 hours', 'infinity' :: timestamp) AS result;
   result  
@@ -1444,6 +1473,12 @@ SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :
 (1 row)
 
 SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => 'infinity') AS result;
+  result  
+----------
+ infinity
+(1 row)
+
+SELECT timescaledb_experimental.time_bucket_ng('1 year', '2021-07-12 12:34:56' :: timestamptz, origin => 'infinity', timezone => 'Europe/Moscow') AS result;
   result  
 ----------
  infinity
@@ -1689,6 +1724,30 @@ ORDER BY tz, bs :: interval;
  4 months | UTC           | 2021-05-01 00:00:00 +00
  1 year   | UTC           | 2021-01-01 00:00:00 +00
 (10 rows)
+
+-- Same as above, but with 'origin'
+SELECT bs, tz, to_char(ts_out, 'YYYY-MM-DD HH24:MI:SS TZ') as res
+FROM unnest(array['Europe/Moscow']) as tz,
+     unnest(array['12 hours', '1 day', '1 month', '4 months', '1 year']) as bs,
+     unnest(array['2021-07-12 12:34:56 Europe/Moscow' :: timestamptz]) as ts_in,
+     unnest(array['2021-06-01 00:00:00 Europe/Moscow' :: timestamptz]) as origin_in,
+     unnest(array[timescaledb_experimental.time_bucket_ng(bs :: interval, ts_in, origin => origin_in, timezone => tz)]) as ts_out
+ORDER BY tz, bs :: interval;
+    bs    |      tz       |           res           
+----------+---------------+-------------------------
+ 12 hours | Europe/Moscow | 2021-07-12 09:00:00 +00
+ 1 day    | Europe/Moscow | 2021-07-11 21:00:00 +00
+ 1 month  | Europe/Moscow | 2021-06-30 21:00:00 +00
+ 4 months | Europe/Moscow | 2021-05-31 21:00:00 +00
+ 1 year   | Europe/Moscow | 2021-05-31 21:00:00 +00
+(5 rows)
+
+-- Overwritten origin allows to work with dates earlier than the default origin
+SELECT to_char(timescaledb_experimental.time_bucket_ng('1 day', '1999-01-01 12:34:56 MSK' :: timestamptz, origin => '1900-01-01 00:00:00 MSK', timezone => 'MSK'), 'YYYY-MM-DD HH24:MI:SS TZ');
+         to_char         
+-------------------------
+ 1998-12-31 21:00:00 +00
+(1 row)
 
 -- Restore previously used time zone.
 ROLLBACK;

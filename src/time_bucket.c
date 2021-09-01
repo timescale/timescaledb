@@ -415,7 +415,9 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("origin must be the first day of the month")));
+				 errmsg("origin must be the first day of the month"),
+				 errhint("When using timestamptz-version of the function, 'origin' is "
+						 "converted to provided 'timezone'.")));
 	}
 
 	if (DATE_NOT_FINITE(date))
@@ -482,6 +484,35 @@ ts_time_bucket_ng_timezone(PG_FUNCTION_ARGS)
 	/* Then treat resulting timestamp as a regular one */
 	result =
 		DatumGetTimestamp(DirectFunctionCall2(ts_time_bucket_ng_timestamp, interval, timestamp));
+	if (TIMESTAMP_NOT_FINITE(result))
+		PG_RETURN_TIMESTAMP(result);
+
+	PG_RETURN_DATUM(DirectFunctionCall2(timestamp_zone, tzname, TimestampGetDatum(result)));
+}
+
+TS_FUNCTION_INFO_V1(ts_time_bucket_ng_timezone_origin);
+TSDLLEXPORT Datum
+ts_time_bucket_ng_timezone_origin(PG_FUNCTION_ARGS)
+{
+	Timestamp result;
+	Datum timestamp, origin;
+	Datum interval = PG_GETARG_DATUM(0);
+	Datum timestamptz = PG_GETARG_DATUM(1);
+	Datum origintz = PG_GETARG_DATUM(2);
+	Datum tzname = PG_GETARG_DATUM(3);
+
+	/*
+	 * Convert 'origin' to TIMESTAMP at given 'tzname'.
+	 * The code is equal to 'origin AT TIME ZONE tzname'.
+	 */
+	origin = DirectFunctionCall2(timestamptz_zone, tzname, origintz);
+
+	/* Same for 'timestamptz' */
+	timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamptz);
+
+	/* Then treat resulting 'timestamp' and 'origin' as a regular ones */
+	result = DatumGetTimestamp(
+		DirectFunctionCall3(ts_time_bucket_ng_timestamp, interval, timestamp, origin));
 	if (TIMESTAMP_NOT_FINITE(result))
 		PG_RETURN_TIMESTAMP(result);
 

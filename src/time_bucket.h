@@ -22,5 +22,6 @@ extern TSDLLEXPORT Datum ts_time_bucket_ng_date(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_time_bucket_ng_timestamp(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_time_bucket_ng_timestamptz(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_time_bucket_ng_timezone(PG_FUNCTION_ARGS);
+extern TSDLLEXPORT Datum ts_time_bucket_ng_timezone_origin(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TIME_BUCKET_H */
