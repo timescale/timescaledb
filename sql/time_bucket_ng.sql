@@ -47,7 +47,8 @@ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width 
 CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ) RETURNS TIMESTAMPTZ
     AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng_timestamptz' LANGUAGE C STABLE PARALLEL SAFE STRICT;
 
--- TIMESTAMPTZ version of time_bucket_ng().
+-- TIMESTAMPTZ versions of time_bucket_ng().
 CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT) RETURNS TIMESTAMPTZ
     AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng_timezone' LANGUAGE C STABLE PARALLEL SAFE STRICT;
-
+CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ, timezone TEXT) RETURNS TIMESTAMPTZ
+    AS '@MODULE_PATHNAME@', 'ts_time_bucket_ng_timezone_origin' LANGUAGE C STABLE PARALLEL SAFE STRICT;
