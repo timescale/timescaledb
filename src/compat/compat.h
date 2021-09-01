@@ -64,12 +64,35 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
-#if PG13_GE
-#define ExecComputeStoredGeneratedCompat(estate, slot, cmd_type)                                   \
+#if PG12
+#define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
+	ExecComputeStoredGenerated(estate, slot)
+#elif PG13
+#define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
 	ExecComputeStoredGenerated(estate, slot, cmd_type)
 #else
-#define ExecComputeStoredGeneratedCompat(estate, slot, cmd_type)                                   \
-	ExecComputeStoredGenerated(estate, slot)
+#define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
+	ExecComputeStoredGenerated(rri, estate, slot, cmd_type)
+#endif
+
+#if PG14_LT
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes)                                                \
+	ExecInsertIndexTuples(slot, estate, noDupErr, specConflict, arbiterIndexes)
+#else
+#define ExecInsertIndexTuplesCompat(rri,                                                           \
+									slot,                                                          \
+									estate,                                                        \
+									update,                                                        \
+									noDupErr,                                                      \
+									specConflict,                                                  \
+									arbiterIndexes)                                                \
+	ExecInsertIndexTuples(rri, slot, estate, update, noDupErr, specConflict, arbiterIndexes)
 #endif
 
 /* PG14 fixes a bug in miscomputation of relids set in pull_varnos. The bugfix
@@ -78,22 +101,30 @@
  * the modified functions get added under different name in PG12 and PG13.
  * We add a compatibility macro that uses the modified functions when compiling
  * against a postgres version that has them available.
+ * PG14 also adds PlannerInfo as argument to make_restrictinfo,
+ * make_simple_restrictinfo and pull_varnos.
  *
  * https://github.com/postgres/postgres/commit/1cce024fd2
  * https://github.com/postgres/postgres/commit/73fc2e5bab
+ * https://github.com/postgres/postgres/commit/55dc86eca7
  */
 
-#if (PG12 && PG_VERSION_NUM < 120006) || (PG13 && PG_VERSION_NUM < 130002) || PG14
+#if (PG12 && PG_VERSION_NUM < 120006) || (PG13 && PG_VERSION_NUM < 130002)
 #define pull_varnos_compat(root, expr) pull_varnos(expr)
 #define make_simple_restrictinfo_compat(root, expr) make_simple_restrictinfo(expr)
 #define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
 	make_restrictinfo(a, b, c, d, e, f, g, h)
-#else
+#elif PG14_LT
 #define pull_varnos_compat(root, expr) pull_varnos_new(root, expr)
 #define make_simple_restrictinfo_compat(root, expr)                                                \
 	make_restrictinfo_new(root, expr, true, false, false, 0, NULL, NULL, NULL)
 #define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
 	make_restrictinfo_new(root, a, b, c, d, e, f, g, h)
+#else
+#define pull_varnos_compat(root, expr) pull_varnos(root, expr)
+#define make_simple_restrictinfo_compat(root, clause) make_simple_restrictinfo(root, clause)
+#define make_restrictinfo_compat(root, a, b, c, d, e, f, g, h)                                     \
+	make_restrictinfo(root, a, b, c, d, e, f, g, h)
 #endif
 
 /* PG14 renames predefined roles

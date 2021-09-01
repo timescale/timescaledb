@@ -182,7 +182,7 @@ data_node_copy_exec(CustomScanState *node)
 
 			if (NULL != rri_chunk->ri_projectReturning && rri_desc->constr &&
 				rri_desc->constr->has_generated_stored)
-				ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
+				ExecComputeStoredGeneratedCompat(rri_chunk, estate, slot, CMD_INSERT);
 
 			ResetPerTupleExprContext(estate);
 			oldmctx = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
