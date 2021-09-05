@@ -29,6 +29,9 @@ typedef struct ProcessUtilityArgs
 #else
 	char *completion_tag;
 #endif
+#if PG14_GE
+	bool readonly_tree;
+#endif
 } ProcessUtilityArgs;
 
 typedef enum

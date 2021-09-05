@@ -472,6 +472,9 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 
 static void
 loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
+#if PG14_GE
+							bool readonly_tree,
+#endif
 							ProcessUtilityContext context, ParamListInfo params,
 							QueryEnvironment *queryEnv, DestReceiver *dest,
 #if PG13_GE
@@ -516,7 +519,16 @@ loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 	else
 		process_utility = standard_ProcessUtility;
 
-	process_utility(pstmt, query_string, context, params, queryEnv, dest, completion_tag);
+	process_utility(pstmt,
+					query_string,
+#if PG14_GE
+					readonly_tree,
+#endif
+					context,
+					params,
+					queryEnv,
+					dest,
+					completion_tag);
 
 	/*
 	 * Show a NOTICE warning message in case of dropping a

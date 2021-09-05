@@ -83,28 +83,19 @@ static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable
 static void
 prev_ProcessUtility(ProcessUtilityArgs *args)
 {
-	if (prev_ProcessUtility_hook != NULL)
-	{
-		/* Call any earlier hooks */
-		(prev_ProcessUtility_hook)(args->pstmt,
-								   args->query_string,
-								   args->context,
-								   args->params,
-								   args->queryEnv,
-								   args->dest,
-								   args->completion_tag);
-	}
-	else
-	{
-		/* Call the standard */
-		standard_ProcessUtility(args->pstmt,
-								args->query_string,
-								args->context,
-								args->params,
-								args->queryEnv,
-								args->dest,
-								args->completion_tag);
-	}
+	ProcessUtility_hook_type hook =
+		prev_ProcessUtility_hook ? prev_ProcessUtility_hook : standard_ProcessUtility;
+
+	hook(args->pstmt,
+		 args->query_string,
+#if PG14_GE
+		 args->readonly_tree,
+#endif
+		 args->context,
+		 args->params,
+		 args->queryEnv,
+		 args->dest,
+		 args->completion_tag);
 }
 
 static ObjectType
@@ -3961,6 +3952,9 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
  */
 static void
 timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
+#if PG14_GE
+							  bool readonly_tree,
+#endif
 							  ProcessUtilityContext context, ParamListInfo params,
 							  QueryEnvironment *queryEnv, DestReceiver *dest,
 #if PG13_GE
@@ -3970,16 +3964,21 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 #endif
 )
 {
-	ProcessUtilityArgs args = { .query_string = query_string,
-								.context = context,
-								.params = params,
-								.dest = dest,
-								.completion_tag = completion_tag,
-								.pstmt = pstmt,
-								.parsetree = pstmt->utilityStmt,
-								.queryEnv = queryEnv,
-								.parse_state = make_parsestate(NULL),
-								.hypertable_list = NIL };
+	ProcessUtilityArgs args = {
+		.query_string = query_string,
+		.context = context,
+		.params = params,
+#if PG14_GE
+		.readonly_tree = readonly_tree,
+#endif
+		.dest = dest,
+		.completion_tag = completion_tag,
+		.pstmt = pstmt,
+		.parsetree = pstmt->utilityStmt,
+		.queryEnv = queryEnv,
+		.parse_state = make_parsestate(NULL),
+		.hypertable_list = NIL
+	};
 
 	bool altering_timescaledb = false;
 	DDLResult result;
