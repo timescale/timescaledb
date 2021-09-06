@@ -473,6 +473,9 @@ ts_catalog_get(void)
 								  def.args,
 								  NULL,
 								  false,
+#if PG14_GE
+								  false, /* include_out_arguments */
+#endif
 								  false,
 								  false);
 

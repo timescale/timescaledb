@@ -569,7 +569,15 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 		list_make2(makeString(pstrdup(schema_name)), makeString(pstrdup(funcname)));
 	FuncCandidateList func_candidates;
 
-	func_candidates = FuncnameGetCandidates(qualified_funcname, nargs, NIL, false, false, false);
+	func_candidates = FuncnameGetCandidates(qualified_funcname,
+											nargs,
+											NIL,
+											false,
+#if PG14_GE
+											false, /* include_out_arguments */
+#endif
+											false,
+											false);
 	while (func_candidates != NULL)
 	{
 		if (func_candidates->nargs == nargs &&
