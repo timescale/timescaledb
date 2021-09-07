@@ -159,11 +159,11 @@ build_script:
 
     & "C:\Program Files\PostgreSQL\12\bin\psql.exe" -a -e -p 55432 -E -v "VERBOSITY=verbose" -c 'CREATE USER super_user WITH SUPERUSER IN ROLE postgres;' -U postgres
 
-    & "C:\Program Files\PostgreSQL\12\bin\psql.exe" -a -e -p 55432 -E -v "VERBOSITY=verbose" -c 'show log_directory' -U postgres
+    & "C:\Program Files\PostgreSQL\12\bin\psql.exe" -a -e -p 55432 -E -v "VERBOSITY=verbose" -c "SELECT version(); SELECT name, setting FROM pg_settings WHERE name IN ('server_version','log_directory');" -U postgres
 
-    & "C:\Program Files\PostgreSQL\12\bin\psql.exe" -a -e -p 55432 -E -v "VERBOSITY=verbose" -c 'show log_destination;' -U postgres
+    & dir "C:\Program Files\PostgreSQL\12\bin\"
 
-    & "C:\Program Files\PostgreSQL\12\bin\psql.exe" -a -e -p 55432 -E -v "VERBOSITY=verbose" -c 'show logging_collector;' -U postgres
+    & (Get-Item "C:\Program Files\PostgreSQL\12\bin\libssl-1_1-x64.dll").VersionInfo
 
     docker-switch-linux
 
@@ -193,7 +193,7 @@ test_script:
 
     #right now we only run timescale regression tests, others will be set up later
 
-    docker exec -e IGNORES="chunk_utils cluster-12 loader" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
+    #docker exec -e IGNORES="chunk_utils cluster-12 loader" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make regresschecklocal"
 
     $TESTS1 = $?
 
@@ -205,7 +205,7 @@ test_script:
     # killer. Therefore, we need to ignore the results of the
     # remote_connection and remote_txn tests.
 
-    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw debug_notice ordered_append_join-12 remote_connection remote_txn " -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make -k regresschecklocal-t regresschecklocal-shared"
+    docker exec -e IGNORES="bgw_db_scheduler compression_algos continuous_aggs_bgw debug_notice ordered_append_join-12 remote_connection" -e SKIPS="bgw_db_scheduler" -e TEST_TABLESPACE1_PREFIX="C:\Users\$env:UserName\Documents\tablespace1\" -e TEST_TABLESPACE2_PREFIX="C:\Users\$env:UserName\Documents\tablespace2\" -e TEST_SPINWAIT_ITERS=10000 -e USER=postgres -it pgregress /bin/bash -c "cd /timescaledb/build && make -k regresschecklocal-t regresschecklocal-shared TESTS='remote_txn'"
 
     if( -not $? -or -not $TESTS1 ) { exit 1 }
 
