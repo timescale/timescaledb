@@ -244,7 +244,13 @@ truncate_relation(Oid table_oid)
 		table_close(rel, NoLock);
 	}
 
-	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, 0);
+#if PG14_LT
+	int options = 0;
+#else
+	ReindexParams params = {};
+	ReindexParams *options = &params;
+#endif
+	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
 	rel = table_open(table_oid, AccessExclusiveLock);
 	restore_pgclass_stats(table_oid, pages, visible, tuples);
 	CommandCounterIncrement();
@@ -306,7 +312,13 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
 	 * so the strong locks taken by reindex_relation shouldn't matter. */
-	reindex_relation(out_table, 0, 0);
+#if PG14_LT
+	int options = 0;
+#else
+	ReindexParams params = {};
+	ReindexParams *options = &params;
+#endif
+	reindex_relation(out_table, 0, options);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1094,7 +1106,13 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	/* Recreate all indexes on out rel, we already have an exclusive lock on it,
 	 * so the strong locks taken by reindex_relation shouldn't matter. */
-	reindex_relation(out_table, 0, 0);
+#if PG14_LT
+	int options = 0;
+#else
+	ReindexParams params = {};
+	ReindexParams *options = &params;
+#endif
+	reindex_relation(out_table, 0, options);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
