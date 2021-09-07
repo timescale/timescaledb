@@ -21,11 +21,13 @@
 #include <executor/nodeAgg.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/paramassign.h>
 #include <optimizer/paths.h>
 #include <optimizer/placeholder.h>
+#include <optimizer/planmain.h>
 #include <optimizer/planner.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
@@ -33,12 +35,19 @@
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
+#include "compat/compat.h"
 #include "planner.h"
 
-static EquivalenceMember *find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle,
-												 Relids relids);
+#if PG12
+static EquivalenceMember *find_ec_member_matching_expr(EquivalenceClass *ec, Expr *expr,
+													   Relids relids);
+static EquivalenceMember *find_computable_ec_member(PlannerInfo *root, EquivalenceClass *ec,
+													List *exprs, Relids relids,
+													bool require_parallel_safe);
+#endif
 static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
 static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
+static Plan *inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe);
 
 /* copied verbatim from prepunion.c */
 void
@@ -358,24 +367,27 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, 
 	return have_data;
 }
 
+#if PG12
 /*
- * find_ec_member_for_tle
- *		Locate an EquivalenceClass member matching the given TLE, if any
+ * find_ec_member_matching_expr
+ *		Locate an EquivalenceClass member matching the given expr, if any;
+ *		return NULL if no match.
+ *
+ * "Matching" is defined as "equal after stripping RelabelTypes".
+ * This is used for identifying sort expressions, and we need to allow
+ * binary-compatible relabeling for some cases involving binary-compatible
+ * sort operators.
  *
  * Child EC members are ignored unless they belong to given 'relids'.
- *
- * copied verbatim from createplan.c
  */
 static EquivalenceMember *
-find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle, Relids relids)
+find_ec_member_matching_expr(EquivalenceClass *ec, Expr *expr, Relids relids)
 {
-	Expr *tlexpr;
 	ListCell *lc;
 
 	/* We ignore binary-compatible relabeling on both ends */
-	tlexpr = tle->expr;
-	while (tlexpr && IsA(tlexpr, RelabelType))
-		tlexpr = ((RelabelType *) tlexpr)->arg;
+	while (expr && IsA(expr, RelabelType))
+		expr = ((RelabelType *) expr)->arg;
 
 	foreach (lc, ec->ec_members)
 	{
@@ -390,22 +402,124 @@ find_ec_member_for_tle(EquivalenceClass *ec, TargetEntry *tle, Relids relids)
 			continue;
 
 		/*
-		 * Ignore child members unless they belong to the rel being sorted.
+		 * Ignore child members unless they belong to the requested rel.
 		 */
 		if (em->em_is_child && !bms_is_subset(em->em_relids, relids))
 			continue;
 
-		/* Match if same expression (after stripping relabel) */
+		/*
+		 * Match if same expression (after stripping relabel).
+		 */
 		emexpr = em->em_expr;
 		while (emexpr && IsA(emexpr, RelabelType))
 			emexpr = ((RelabelType *) emexpr)->arg;
 
-		if (equal(emexpr, tlexpr))
+		if (equal(emexpr, expr))
 			return em;
 	}
 
 	return NULL;
 }
+
+/*
+ * is_exprlist_member
+ *	  Subroutine for find_computable_ec_member: is "node" in "exprs"?
+ *
+ * Per the requirements of that function, "exprs" might or might not have
+ * TargetEntry superstructure.
+ */
+static bool
+is_exprlist_member(Expr *node, List *exprs)
+{
+	ListCell *lc;
+
+	foreach (lc, exprs)
+	{
+		Expr *expr = (Expr *) lfirst(lc);
+
+		if (expr && IsA(expr, TargetEntry))
+			expr = ((TargetEntry *) expr)->expr;
+
+		if (equal(node, expr))
+			return true;
+	}
+	return false;
+}
+
+/*
+ * find_computable_ec_member
+ *		Locate an EquivalenceClass member that can be computed from the
+ *		expressions appearing in "exprs"; return NULL if no match.
+ *
+ * "exprs" can be either a list of bare expression trees, or a list of
+ * TargetEntry nodes.  Either way, it should contain Vars and possibly
+ * Aggrefs and WindowFuncs, which are matched to the corresponding elements
+ * of the EquivalenceClass's expressions.
+ *
+ * Unlike find_ec_member_matching_expr, there's no special provision here
+ * for binary-compatible relabeling.  This is intentional: if we have to
+ * compute an expression in this way, setrefs.c is going to insist on exact
+ * matches of Vars to the source tlist.
+ *
+ * Child EC members are ignored unless they belong to given 'relids'.
+ * Also, non-parallel-safe expressions are ignored if 'require_parallel_safe'.
+ *
+ * Note: some callers pass root == NULL for notational reasons.  This is OK
+ * when require_parallel_safe is false.
+ */
+static EquivalenceMember *
+find_computable_ec_member(PlannerInfo *root, EquivalenceClass *ec, List *exprs, Relids relids,
+						  bool require_parallel_safe)
+{
+	ListCell *lc;
+
+	foreach (lc, ec->ec_members)
+	{
+		EquivalenceMember *em = (EquivalenceMember *) lfirst(lc);
+		List *exprvars;
+		ListCell *lc2;
+
+		/*
+		 * We shouldn't be trying to sort by an equivalence class that
+		 * contains a constant, so no need to consider such cases any further.
+		 */
+		if (em->em_is_const)
+			continue;
+
+		/*
+		 * Ignore child members unless they belong to the requested rel.
+		 */
+		if (em->em_is_child && !bms_is_subset(em->em_relids, relids))
+			continue;
+
+		/*
+		 * Match if all Vars and quasi-Vars are available in "exprs".
+		 */
+		exprvars = pull_var_clause((Node *) em->em_expr,
+								   PVC_INCLUDE_AGGREGATES | PVC_INCLUDE_WINDOWFUNCS |
+									   PVC_INCLUDE_PLACEHOLDERS);
+		foreach (lc2, exprvars)
+		{
+			if (!is_exprlist_member(lfirst(lc2), exprs))
+				break;
+		}
+		list_free(exprvars);
+		if (lc2)
+			continue; /* we hit a non-available Var */
+
+		/*
+		 * If requested, reject expressions that are not parallel-safe.  We
+		 * check this last because it's a rather expensive test.
+		 */
+		if (require_parallel_safe && !is_parallel_safe(root, (Node *) em->em_expr))
+			continue;
+
+		return em; /* found usable expression */
+	}
+
+	return NULL;
+}
+#endif
 
 /*
  * make_pathkey_from_sortinfo
@@ -675,7 +789,7 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 			tle = get_tle_by_resno(tlist, reqColIdx[numsortkeys]);
 			if (tle)
 			{
-				em = find_ec_member_for_tle(ec, tle, relids);
+				em = find_ec_member_matching_expr(ec, tle->expr, relids);
 				if (em)
 				{
 					/* found expr at right place in tlist */
@@ -706,7 +820,7 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 			foreach (j, tlist)
 			{
 				tle = (TargetEntry *) lfirst(j);
-				em = find_ec_member_for_tle(ec, tle, relids);
+				em = find_ec_member_matching_expr(ec, tle->expr, relids);
 				if (em)
 				{
 					/* found expr already in tlist */
@@ -720,59 +834,30 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 		if (!tle)
 		{
 			/*
-			 * No matching tlist item; look for a computable expression. Note
-			 * that we treat Aggrefs as if they were variables; this is
-			 * necessary when attempting to sort the output from an Agg node
-			 * for use in a WindowFunc (since grouping_planner will have
-			 * treated the Aggrefs as variables, too).  Likewise, if we find a
-			 * WindowFunc in a sort expression, treat it as a variable.
+			 * No matching tlist item; look for a computable expression.
 			 */
-			Expr *sortexpr = NULL;
-
-			foreach (j, ec->ec_members)
-			{
-				EquivalenceMember *em = (EquivalenceMember *) lfirst(j);
-				List *exprvars;
-				ListCell *k;
-
-				/*
-				 * We shouldn't be trying to sort by an equivalence class that
-				 * contains a constant, so no need to consider such cases any
-				 * further.
-				 */
-				if (em->em_is_const)
-					continue;
-
-				/*
-				 * Ignore child members unless they belong to the rel being
-				 * sorted.
-				 */
-				if (em->em_is_child && !bms_is_subset(em->em_relids, relids))
-					continue;
-
-				sortexpr = em->em_expr;
-				exprvars = pull_var_clause((Node *) sortexpr,
-										   PVC_INCLUDE_AGGREGATES | PVC_INCLUDE_WINDOWFUNCS |
-											   PVC_INCLUDE_PLACEHOLDERS);
-				foreach (k, exprvars)
-				{
-					if (!tlist_member_ignore_relabel(lfirst(k), tlist))
-						break;
-				}
-				list_free(exprvars);
-				if (!k)
-				{
-					pk_datatype = em->em_datatype;
-					break; /* found usable expression */
-				}
-			}
-			if (!j)
+			em = find_computable_ec_member(NULL, ec, tlist, relids, false);
+			if (!em)
 				elog(ERROR, "could not find pathkey item to sort");
+			pk_datatype = em->em_datatype;
+
+			/*
+			 * Do we need to insert a Result node?
+			 */
+			if (!adjust_tlist_in_place && !is_projection_capable_plan(lefttree))
+			{
+				/* copy needed so we don't modify input's tlist below */
+				tlist = copyObject(tlist);
+				lefttree = inject_projection_plan(lefttree, tlist, lefttree->parallel_safe);
+			}
+
+			/* Don't bother testing is_projection_capable_plan again */
+			adjust_tlist_in_place = true;
 
 			/*
 			 * Add resjunk entry to input's tlist
 			 */
-			tle = makeTargetEntry(sortexpr, list_length(tlist) + 1, NULL, true);
+			tle = makeTargetEntry(copyObject(em->em_expr), list_length(tlist) + 1, NULL, true);
 			tlist = lappend(tlist, tle);
 			lefttree->targetlist = tlist; /* just in case NIL before */
 		}
@@ -918,4 +1003,71 @@ replace_nestloop_params_mutator(Node *node, PlannerInfo *root)
 		return (Node *) replace_nestloop_param_placeholdervar(root, phv);
 	}
 	return expression_tree_mutator(node, replace_nestloop_params_mutator, (void *) root);
+}
+
+/*
+ * make_result
+ *	  Build a Result plan node
+ */
+static Result *
+make_result(List *tlist, Node *resconstantqual, Plan *subplan)
+{
+	Result *node = makeNode(Result);
+	Plan *plan = &node->plan;
+
+	plan->targetlist = tlist;
+	plan->qual = NIL;
+	plan->lefttree = subplan;
+	plan->righttree = NULL;
+	node->resconstantqual = resconstantqual;
+
+	return node;
+}
+
+/*
+ * Copy cost and size info from a lower plan node to an inserted node.
+ * (Most callers alter the info after copying it.)
+ */
+static void
+copy_plan_costsize(Plan *dest, Plan *src)
+{
+	dest->startup_cost = src->startup_cost;
+	dest->total_cost = src->total_cost;
+	dest->plan_rows = src->plan_rows;
+	dest->plan_width = src->plan_width;
+	/* Assume the inserted node is not parallel-aware. */
+	dest->parallel_aware = false;
+	/* Assume the inserted node is parallel-safe, if child plan is. */
+	dest->parallel_safe = src->parallel_safe;
+}
+
+/*
+ * inject_projection_plan
+ *	  Insert a Result node to do a projection step.
+ *
+ * This is used in a few places where we decide on-the-fly that we need a
+ * projection step as part of the tree generated for some Path node.
+ * We should try to get rid of this in favor of doing it more honestly.
+ *
+ * One reason it's ugly is we have to be told the right parallel_safe marking
+ * to apply (since the tlist might be unsafe even if the child plan is safe).
+ */
+static Plan *
+inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe)
+{
+	Plan *plan;
+
+	plan = (Plan *) make_result(tlist, NULL, subplan);
+
+	/*
+	 * In principle, we should charge tlist eval cost plus cpu_per_tuple per
+	 * row for the Result node.  But the former has probably been factored in
+	 * already and the latter was not accounted for during Path construction,
+	 * so being formally correct might just make the EXPLAIN output look less
+	 * consistent not more so.  Hence, just copy the subplan's cost.
+	 */
+	copy_plan_costsize(plan, subplan);
+	plan->parallel_safe = parallel_safe;
+
+	return plan;
 }
