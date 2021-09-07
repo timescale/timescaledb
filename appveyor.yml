@@ -1,5 +1,5 @@
 version: 1.0.{build}
-image: Visual Studio 2019
+image: Previous Visual Studio 2019
 services:
   - postgresql12
   - docker
@@ -46,7 +46,7 @@ build_script:
 
     New-NetFirewallRule -DisplayName "Allow postgres" -Direction Inbound -Action Allow -Protocol Any -LocalPort Any
 
-    # Set user and passworkd for psql
+    # Set user and password for psql
 
     SET PGUSER=postgres
 
