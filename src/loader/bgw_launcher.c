@@ -711,14 +711,9 @@ launcher_handle_message(HTAB *db_htab)
  */
 static void launcher_sigterm(SIGNAL_ARGS)
 {
-	/*
-	 * do not use a level >= ERROR because we don't want to exit here but
-	 * rather only during CHECK_FOR_INTERRUPTS
-	 */
-	ereport(LOG,
-			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("terminating TimescaleDB background worker launcher due to administrator "
-					"command")));
+	/* Do not use anything that calls malloc() inside a signal handler since
+	 * malloc() is not signal-safe. This includes ereport() */
+	write_stderr("terminating TimescaleDB background worker launcher due to administrator command");
 	die(postgres_signal_arg);
 }
 
@@ -810,9 +805,9 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 /* Wrapper around `die()`, see note on `launcher_sigterm()` above for more info*/
 static void entrypoint_sigterm(SIGNAL_ARGS)
 {
-	ereport(LOG,
-			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("terminating TimescaleDB scheduler entrypoint due to administrator command")));
+	/* Do not use anything that calls malloc() inside a signal handler since
+	 * malloc() is not signal-safe. This includes ereport() */
+	write_stderr("terminating TimescaleDB scheduler entrypoint due to administrator command");
 	die(postgres_signal_arg);
 }
 
