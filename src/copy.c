@@ -370,7 +370,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 			/* Compute stored generated columns */
 			if (check_resultRelInfo->ri_RelationDesc->rd_att->constr &&
 				check_resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
-				ExecComputeStoredGeneratedCompat(check_resultRelInfo, estate, myslot, CMD_INSERT);
+				ExecComputeStoredGeneratedCompat(estate, myslot, CMD_INSERT);
 
 			/*
 			 * If the target is a plain table, check the constraints of
@@ -393,13 +393,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 								   ti_options,
 								   bistate);
 				if (resultRelInfo->ri_NumIndices > 0)
-					recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
-																 compress_slot,
-																 estate,
-																 false,
-																 false,
-																 NULL,
-																 NIL);
+					recheckIndexes = ExecInsertIndexTuples(compress_slot, estate, false, NULL, NIL);
 			}
 			else
 			{
@@ -411,13 +405,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 								   bistate);
 
 				if (resultRelInfo->ri_NumIndices > 0)
-					recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
-																 myslot,
-																 estate,
-																 false,
-																 false,
-																 NULL,
-																 NIL);
+					recheckIndexes = ExecInsertIndexTuples(myslot, estate, false, NULL, NIL);
 			}
 
 			/* AFTER ROW INSERT Triggers */

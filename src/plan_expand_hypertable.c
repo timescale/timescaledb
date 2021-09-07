@@ -1471,7 +1471,7 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 
 			if (new_qual)
 			{
-				Relids relids = pull_varnos_compat(ctx->root, (Node *) propagated);
+				Relids relids = pull_varnos_compat(root, (Node *) propagated);
 				RestrictInfo *restrictinfo;
 
 				restrictinfo = make_restrictinfo_compat(root,

@@ -136,10 +136,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		}
 
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
-			ExecComputeStoredGeneratedCompat(cis->orig_result_relation_info,
-											 estate,
-											 slot,
-											 CMD_INSERT);
+			ExecComputeStoredGeneratedCompat(estate, slot, CMD_INSERT);
 
 		if (cis->rel->rd_att->constr)
 			ExecConstraints(cis->orig_result_relation_info, slot, estate);
