@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <parser/parsetree.h>
+#include <optimizer/appendinfo.h>
 #include <optimizer/planmain.h>
 #include <optimizer/pathnode.h>
 #include <nodes/plannodes.h>
@@ -19,6 +20,7 @@
 #include <utils/rel.h>
 #include <fmgr.h>
 
+#include <compat/compat.h>
 #include <guc.h>
 
 #include "data_node_scan_plan.h"
@@ -228,6 +230,7 @@ end_foreign_modify(EState *estate, ResultRelInfo *rri)
 /*
  * Add resjunk column(s) needed for update/delete on a foreign table
  */
+#if PG14_LT
 static void
 add_foreign_update_targets(Query *parsetree, RangeTblEntry *target_rte, Relation target_relation)
 {
@@ -259,6 +262,23 @@ add_foreign_update_targets(Query *parsetree, RangeTblEntry *target_rte, Relation
 	/* ... and add it to the query's targetlist */
 	parsetree->targetList = lappend(parsetree->targetList, tle);
 }
+#else
+static void
+add_foreign_update_targets(PlannerInfo *root, Index rtindex, RangeTblEntry *target_rte,
+						   Relation target_relation)
+{
+	/*
+	 * In timescaledb_fdw, what we need is the ctid, same as for a regular
+	 * table.
+	 */
+
+	/* Make a Var representing the desired value */
+	Var *var = makeVar(rtindex, SelfItemPointerAttributeNumber, TIDOID, -1, InvalidOid, 0);
+
+	/* Register it as a row-identity column needed by this target rel */
+	add_row_identity_var(root, var, rtindex, "ctid");
+}
+#endif
 
 static TupleTableSlot *
 exec_foreign_insert(EState *estate, ResultRelInfo *rri, TupleTableSlot *slot,
@@ -287,7 +307,11 @@ static void
 begin_foreign_modify(ModifyTableState *mtstate, ResultRelInfo *rri, List *fdw_private,
 					 int subplan_index, int eflags)
 {
+#if PG14_LT
 	Plan *subplan = mtstate->mt_plans[subplan_index]->plan;
+#else
+	Plan *subplan = outerPlanState(mtstate)->plan;
+#endif
 
 	/*
 	 * Do nothing in EXPLAIN (no ANALYZE) case.  rri->ri_FdwState stays NULL.
