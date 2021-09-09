@@ -15,6 +15,7 @@
 #include <nodes/pg_list.h>
 #include <nodes/primnodes.h>
 #include <parser/parse_func.h>
+#include <parser/parser.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -664,8 +665,7 @@ job_execute(BgwJob *job)
 	bool pushed_snapshot = false;
 	char prokind;
 	Oid proc;
-	Oid proc_args[] = { INT4OID, JSONBOID };
-	List *name;
+	ObjectWithArgs *object;
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
 	StringInfo query;
@@ -683,9 +683,11 @@ job_execute(BgwJob *job)
 		PushActiveSnapshot(GetTransactionSnapshot());
 	}
 
-	name = list_make2(makeString(NameStr(job->fd.proc_schema)),
-					  makeString(NameStr(job->fd.proc_name)));
-	proc = LookupFuncName(name, 2, proc_args, false);
+	object = makeNode(ObjectWithArgs);
+	object->objname = list_make2(makeString(NameStr(job->fd.proc_schema)),
+								 makeString(NameStr(job->fd.proc_name)));
+	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
+	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, false);
 
 	prokind = get_func_prokind(proc);
 
