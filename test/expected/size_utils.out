@@ -289,7 +289,7 @@ SELECT * FROM approximate_row_count('approx_count_c');
 
 DROP TABLE approx_count CASCADE;
 NOTICE:  drop cascades to 3 other objects
--- Regular table with declarative partitioning
+-- table with declarative partitioning
 --
 CREATE TABLE approx_count_dp(time TIMESTAMP, value int) PARTITION BY RANGE(time);
 CREATE TABLE approx_count_dp0 PARTITION OF approx_count_dp
@@ -361,6 +361,55 @@ SELECT * FROM approximate_row_count('approx_count_dp2');
 -----------------------
                      3
 (1 row)
+
+CREATE TABLE approx_count_dp_nested(time TIMESTAMP, device_id int, value int) PARTITION BY RANGE(time);
+CREATE TABLE approx_count_dp_nested_0 PARTITION OF approx_count_dp_nested FOR VALUES FROM ('2004-01-01 00:00:00') TO ('2005-01-01 00:00:00') PARTITION BY RANGE (device_id);
+CREATE TABLE approx_count_dp_nested_0_0 PARTITION OF approx_count_dp_nested_0 FOR VALUES FROM (0) TO (10);
+CREATE TABLE approx_count_dp_nested_0_1 PARTITION OF approx_count_dp_nested_0 FOR VALUES FROM (10) TO (20);
+CREATE TABLE approx_count_dp_nested_1 PARTITION OF approx_count_dp_nested FOR VALUES FROM ('2005-01-01 00:00:00') TO ('2006-01-01 00:00:00') PARTITION BY RANGE (device_id);
+CREATE TABLE approx_count_dp_nested_1_0 PARTITION OF approx_count_dp_nested_1 FOR VALUES FROM (0) TO (10);
+CREATE TABLE approx_count_dp_nested_1_1 PARTITION OF approx_count_dp_nested_1 FOR VALUES FROM (10) TO (20);
+INSERT INTO approx_count_dp_nested VALUES('2004-01-01 10:00:00', 1, 1);
+INSERT INTO approx_count_dp_nested VALUES('2004-01-01 10:00:00', 2, 1);
+INSERT INTO approx_count_dp_nested VALUES('2004-01-01 10:00:00', 3, 1);
+INSERT INTO approx_count_dp_nested VALUES('2004-01-01 10:00:00', 11, 1);
+INSERT INTO approx_count_dp_nested VALUES('2004-01-01 10:00:00', 12, 1);
+INSERT INTO approx_count_dp_nested VALUES('2004-01-01 10:00:00', 13, 1);
+INSERT INTO approx_count_dp_nested VALUES('2005-01-01 10:00:00', 1, 1);
+INSERT INTO approx_count_dp_nested VALUES('2005-01-01 10:00:00', 2, 1);
+INSERT INTO approx_count_dp_nested VALUES('2005-01-01 10:00:00', 3, 1);
+INSERT INTO approx_count_dp_nested VALUES('2005-01-01 10:00:00', 11, 1);
+INSERT INTO approx_count_dp_nested VALUES('2005-01-01 10:00:00', 12, 1);
+INSERT INTO approx_count_dp_nested VALUES('2005-01-01 10:00:00', 13, 1);
+SELECT * FROM approximate_row_count('approx_count_dp_nested');
+ approximate_row_count 
+-----------------------
+                     0
+(1 row)
+
+ANALYZE approx_count_dp_nested;
+SELECT
+  (SELECT count(*) FROM approx_count_dp_nested) AS dp_nested,
+  (SELECT count(*) FROM approx_count_dp_nested_0) AS dp_nested_0,
+  (SELECT count(*) FROM approx_count_dp_nested_0_0) AS dp_nested_0_0,
+  (SELECT count(*) FROM approx_count_dp_nested_0_1) AS dp_nested_0_1,
+  (SELECT count(*) FROM approx_count_dp_nested_1) AS dp_nested_1,
+  (SELECT count(*) FROM approx_count_dp_nested_1_0) AS dp_nested_1_0,
+  (SELECT count(*) FROM approx_count_dp_nested_1_1) AS dp_nested_1_1
+UNION ALL
+SELECT
+  approximate_row_count('approx_count_dp_nested'),
+  approximate_row_count('approx_count_dp_nested_0'),
+  approximate_row_count('approx_count_dp_nested_0_0'),
+  approximate_row_count('approx_count_dp_nested_0_1'),
+  approximate_row_count('approx_count_dp_nested_1'),
+  approximate_row_count('approx_count_dp_nested_1_0'),
+  approximate_row_count('approx_count_dp_nested_1_1');
+ dp_nested | dp_nested_0 | dp_nested_0_0 | dp_nested_0_1 | dp_nested_1 | dp_nested_1_0 | dp_nested_1_1 
+-----------+-------------+---------------+---------------+-------------+---------------+---------------
+        12 |           6 |             3 |             3 |           6 |             3 |             3
+        12 |           6 |             3 |             3 |           6 |             3 |             3
+(2 rows)
 
 -- Hypertable
 --
