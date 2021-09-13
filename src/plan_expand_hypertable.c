@@ -91,20 +91,21 @@ is_time_bucket_function(Expr *node)
 }
 
 static void
-ts_setup_append_rel_array(PlannerInfo *root)
+ts_add_append_rel_infos(PlannerInfo *root, List *appinfos)
 {
-	/* repalloc() does not work with NULL argument */
-	if (root->append_rel_array)
-		root->append_rel_array =
-			repalloc(root->append_rel_array, root->simple_rel_array_size * sizeof(AppendRelInfo *));
-	else
-		root->append_rel_array = palloc(root->simple_rel_array_size * sizeof(AppendRelInfo *));
-
 	ListCell *lc;
-	foreach (lc, root->append_rel_list)
+
+	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
+
+	/* root->append_rel_array is required to be able to hold all the
+	 * additional entries by previous call to expand_planner_arrays */
+	Assert(root->append_rel_array);
+
+	foreach (lc, appinfos)
 	{
 		AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
 		int child_relid = appinfo->child_relid;
+		Assert(child_relid < root->simple_rel_array_size);
 
 		root->append_rel_array[child_relid] = appinfo;
 	}
@@ -1366,8 +1367,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		priv->server_relids = bms_add_member(priv->server_relids, rti);
 	}
 
-	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-	ts_setup_append_rel_array(root);
+	ts_add_append_rel_infos(root, appinfos);
 
 	/* In pg12 postgres will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
