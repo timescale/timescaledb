@@ -16,8 +16,10 @@
 #include <nodes/primnodes.h>
 #include <parser/parse_func.h>
 #include <parser/parser.h>
+#include <tcop/pquery.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/portal.h>
 #include <utils/syscache.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
@@ -32,6 +34,7 @@
 #include "bgw_policy/policy_utils.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
+#include "compat/compat.h"
 #include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
@@ -752,25 +755,30 @@ bool
 job_execute(BgwJob *job)
 {
 	Const *arg1, *arg2;
-	bool transaction_started = false;
-	bool pushed_snapshot = false;
+	bool portal_created = false;
 	char prokind;
 	Oid proc;
 	ObjectWithArgs *object;
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
 	StringInfo query;
-	if (!IsTransactionOrTransactionBlock())
-	{
-		transaction_started = true;
-		StartTransactionCommand();
-	}
+	Portal portal = ActivePortal;
 
-	/* executing sql functions requires snapshot. */
-	if (!ActiveSnapshotSet())
+	/* Create a portal if there's no active */
+	if (!PortalIsValid(portal))
 	{
-		pushed_snapshot = true;
+		portal_created = true;
+		portal = CreatePortal("", true, true);
+		portal->visible = false;
+		portal->resowner = CurrentResourceOwner;
+		ActivePortal = portal;
+
+		StartTransactionCommand();
+#if (PG12 && PG_VERSION_NUM >= 120008) || (PG13 && PG_VERSION_NUM >= 130004) || PG14_GE
+		EnsurePortalSnapshotExists();
+#else
 		PushActiveSnapshot(GetTransactionSnapshot());
+#endif
 	}
 
 	object = makeNode(ObjectWithArgs);
@@ -829,16 +837,15 @@ job_execute(BgwJob *job)
 			break;
 	}
 
-	/* Both checks are needed: if the executed procedure commit the
-	 * transaction---which `continuous_agg_refresh_internal` does, for
-	 * example---it will remove the active snapshot and start a new
-	 * transaction with no active snapshots. In that case, we should not pop a
-	 * snapshot. */
-	if (pushed_snapshot && ActiveSnapshotSet())
-		PopActiveSnapshot();
-
-	if (transaction_started)
+	/* Drop portal if it was created */
+	if (portal_created)
+	{
+		if (ActiveSnapshotSet())
+			PopActiveSnapshot();
 		CommitTransactionCommand();
+		PortalDrop(portal, false);
+		ActivePortal = NULL;
+	}
 
 	return true;
 }

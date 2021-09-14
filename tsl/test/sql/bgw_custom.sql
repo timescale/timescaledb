@@ -115,8 +115,131 @@ SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
 SELECT add_job( proc=>'custom_func',
      schedule_interval=>'1h', initial_start =>'2018-01-01 10:00:00-05');
 
-SELECT job_id, next_start, scheduled, schedule_interval 
+SELECT job_id, next_start, scheduled, schedule_interval
 FROM timescaledb_information.jobs WHERE job_id > 1000;
 \x
 SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1000;
 \x
+
+-- tests for #3545
+CREATE FUNCTION wait_for_job_to_run(job_param_id INTEGER, expected_runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR i in 1..spins
+    LOOP
+    SELECT total_successes, total_failures FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO r;
+    IF (r.total_failures > 0) THEN
+        EXIT;
+    ELSEIF (r.total_successes = expected_runs) THEN
+        RETURN true;
+    ELSEIF (r.total_successes > expected_runs) THEN
+        RAISE 'num_runs > expected';
+    ELSE
+        PERFORM pg_sleep(0.1);
+    END IF;
+    END LOOP;
+    RETURN false;
+END
+$BODY$;
+
+TRUNCATE custom_log;
+
+-- Nested procedure call
+CREATE OR REPLACE PROCEDURE custom_proc_nested(job_id int, args jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc_nested 1 COMMIT');
+  COMMIT;
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc_nested 2 ROLLBACK');
+  ROLLBACK;
+  INSERT INTO custom_log VALUES($1, $2, 'custom_proc_nested 3 COMMIT');
+  COMMIT;
+END
+$$;
+
+CREATE OR REPLACE PROCEDURE custom_proc3(job_id int, args jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    CALL custom_proc_nested(job_id, args);
+END
+$$;
+
+CREATE OR REPLACE PROCEDURE custom_proc4(job_id int, args jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    INSERT INTO custom_log VALUES($1, $2, 'custom_proc4 1 COMMIT');
+    COMMIT;
+    INSERT INTO custom_log VALUES($1, $2, 'custom_proc4 2 ROLLBACK');
+    ROLLBACK;
+    RAISE EXCEPTION 'forced exception';
+    INSERT INTO custom_log VALUES($1, $2, 'custom_proc4 3 ABORT');
+    COMMIT;
+END
+$$;
+
+-- Remove any default jobs, e.g., telemetry
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_config.bgw_job RESTART IDENTITY CASCADE;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT add_job('custom_proc2', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_1 \gset
+SELECT add_job('custom_proc3', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_2 \gset
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Start Background Workers
+SELECT _timescaledb_internal.start_background_workers();
+
+-- Wait for jobs
+SELECT wait_for_job_to_run(:job_id_1, 1);
+SELECT wait_for_job_to_run(:job_id_2, 1);
+
+-- Check results
+SELECT * FROM custom_log ORDER BY job_id, extra;
+
+-- Delete previous jobs
+SELECT delete_job(:job_id_1);
+SELECT delete_job(:job_id_2);
+TRUNCATE custom_log;
+
+-- Forced Exception
+SELECT add_job('custom_proc4', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_3 \gset
+SELECT wait_for_job_to_run(:job_id_3, 1);
+
+-- Check results
+SELECT * FROM custom_log ORDER BY job_id, extra;
+
+-- Delete previous jobs
+SELECT delete_job(:job_id_3);
+
+CREATE TABLE conditions (
+  time TIMESTAMPTZ NOT NULL,
+  location TEXT NOT NULL,
+  location2 char(10) NOT NULL,
+  temperature DOUBLE PRECISION NULL,
+  humidity DOUBLE PRECISION NULL
+);
+SELECT create_hypertable('conditions', 'time', chunk_time_interval := '15 days'::interval);
+ALTER TABLE conditions
+  SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'location',
+    timescaledb.compress_orderby = 'time'
+);
+INSERT INTO conditions
+SELECT generate_series('2021-08-01 00:00'::timestamp, '2021-08-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
+
+-- Chunk compress stats
+SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
+
+-- Compression policy
+SELECT add_compression_policy('conditions', interval '1 day') AS job_id_4 \gset
+SELECT wait_for_job_to_run(:job_id_4, 1);
+
+-- Chunk compress stats
+SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
+
+-- Stop Background Workers
+SELECT _timescaledb_internal.stop_background_workers();
