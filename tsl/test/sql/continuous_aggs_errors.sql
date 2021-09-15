@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 
 --negative tests for query validation
 create table mat_t1( a integer, b integer,c TEXT);
@@ -370,9 +371,9 @@ ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'fa
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;
 \set ON_ERROR_STOP 1
+\set VERBOSITY terse
 
 DROP TABLE conditions CASCADE;
-
 
 --test WITH using a hypertable with an integer time dimension
 CREATE TABLE conditions (
@@ -445,6 +446,7 @@ CREATE FUNCTION text_part_func(TEXT) RETURNS BIGINT
 CREATE TABLE text_time(time TEXT);
     SELECT create_hypertable('text_time', 'time', chunk_time_interval => 10, time_partitioning_func => 'text_part_func');
 
+\set VERBOSITY default
 \set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW text_view
     WITH (timescaledb.continuous)
@@ -459,6 +461,7 @@ CREATE MATERIALIZED VIEW normal_mat_view AS
 SELECT time_bucket('5', text_part_func(time)), COUNT(time)
   FROM text_time
 GROUP BY 1 WITH NO DATA;
+\set VERBOSITY terse
 
 \set ON_ERROR_STOP 0
 DROP MATERIALIZED VIEW normal_mat_view, mat_with_test;

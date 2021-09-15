@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 --negative tests for query validation
 create table mat_t1( a integer, b integer,c TEXT);
 CREATE TABLE conditions (
@@ -29,6 +30,8 @@ CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous, check_option = LO
 as
 select * from conditions , mat_t1 WITH NO DATA;
 ERROR:  unsupported combination of storage parameters
+DETAIL:  A continuous aggregate does not support standard storage parameters.
+HINT:  Use only parameters with the "timescaledb." prefix when creating a continuous aggregate.
 -- join multiple tables
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 as
@@ -60,7 +63,8 @@ ERROR:  table "mat_t1" is not a hypertable
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 as
 select count(*) from conditions  WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+HINT:  Include at least one aggregate function and a GROUP BY clause with time bucket.
 -- no time_bucket in group by
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 as
@@ -73,12 +77,14 @@ with m1 as (
 Select location, count(*) from conditions
  group by time_bucket('1week', timec) , location)
 select * from m1 WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
 --with DISTINCT ON
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 as
  select distinct on ( location ) count(*)  from conditions group by location, time_bucket('1week', timec)  WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  DISTINCT / DISTINCT ON queries are not supported by continuous aggregates.
 --aggregate with DISTINCT
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -136,6 +142,7 @@ Select max(temperature)
 from conditions
  group by time_bucket( timeinterval, timec) , location WITH NO DATA;
 ERROR:  only immutable expressions allowed in time bucket function
+HINT:  Use an immutable expression as first argument to the time bucket function.
 -- ordered set aggr
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -149,7 +156,8 @@ AS
 Select avg(temperature) over( order by humidity)
 from conditions
  WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  Window functions are not supported by continuous aggregates.
 --aggregate without combine function
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -193,7 +201,8 @@ select * from
 ( Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location )  q WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+HINT:  Include at least one aggregate function and a GROUP BY clause with time bucket.
 --using limit /limit offset
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -201,14 +210,18 @@ Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 limit 10  WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates.
+HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 offset 10 WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates.
+HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
 --using ORDER BY in view defintion
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -216,7 +229,9 @@ Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 ORDER BY 1 WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  ORDER BY is not supported in queries defining continuous aggregates.
+HINT:  Use ORDER BY clauses in SELECTS from the continuous aggregate view instead.
 --using FETCH
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -224,7 +239,9 @@ Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 fetch first 10 rows only WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates.
+HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
 --using locking clauses FOR clause
 --all should be disabled. we cannot guarntee locks on the hypertable
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
@@ -276,13 +293,17 @@ AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
  group by grouping sets(time_bucket('1week', timec) , location )  WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by continuous aggregates
+HINT:  Define multiple continuous aggregates with different grouping levels.
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
 group by rollup(time_bucket('1week', timec) , location )  WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+ERROR:  invalid continuous aggregate query
+DETAIL:  GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by continuous aggregates
+HINT:  Define multiple continuous aggregates with different grouping levels.
 --NO immutable functions -- check all clauses
 CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql'
        STABLE AS 'SELECT $1 + 10';
@@ -292,6 +313,7 @@ Select sum(humidity), max(timec + INTERVAL '1h')
 from conditions
 group by time_bucket('1week', timec) , location   WITH NO DATA;
 ERROR:  only immutable functions supported in continuous aggregate view
+HINT:  Make sure the function includes only immutable expressions, e.g., time_bucket('1 hour', time AT TIME ZONE 'GMT').
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum(humidity), min(location)
@@ -299,28 +321,33 @@ from conditions
 group by time_bucket('1week', timec)
 having  max(timec + INTERVAL '1h') > '2010-01-01 09:00:00-08' WITH NO DATA;
 ERROR:  only immutable functions supported in continuous aggregate view
+HINT:  Make sure the function includes only immutable expressions, e.g., time_bucket('1 hour', time AT TIME ZONE 'GMT').
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum( test_stablefunc(humidity::int) ), min(location)
 from conditions
 group by time_bucket('1week', timec) WITH NO DATA;
 ERROR:  only immutable functions supported in continuous aggregate view
+HINT:  Make sure the function includes only immutable expressions, e.g., time_bucket('1 hour', time AT TIME ZONE 'GMT').
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
 Select sum( temperature ), min(location)
 from conditions
 group by time_bucket('1week', timec), test_stablefunc(humidity::int) WITH NO DATA;
 ERROR:  only immutable functions supported in continuous aggregate view
+HINT:  Make sure the function includes only immutable expressions, e.g., time_bucket('1 hour', time AT TIME ZONE 'GMT').
 -- Should use CREATE MATERIALIZED VIEW to create continuous aggregates
 CREATE VIEW continuous_aggs_errors_tbl1 WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 week', timec)
   FROM conditions
 GROUP BY time_bucket('1 week', timec);
 ERROR:  cannot create continuous aggregate with CREATE VIEW
+HINT:  Use CREATE MATERIALIZED VIEW to create a continuous aggregate.
 -- row security on table
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);
 NOTICE:  adding not-null constraint to column "a"
+DETAIL:  Time dimensions cannot have NULL values.
  table_name 
 ------------
  rowsec_tab
@@ -380,6 +407,7 @@ ERROR:  cannot alter create_group_indexes option for continuous aggregates
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;
 ERROR:  cannot alter only SET options of a continuous aggregate
 \set ON_ERROR_STOP 1
+\set VERBOSITY terse
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 3 other objects
 --test WITH using a hypertable with an integer time dimension
@@ -470,6 +498,7 @@ NOTICE:  adding not-null constraint to column "time"
  (9,public,text_time,t)
 (1 row)
 
+\set VERBOSITY default
 \set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW text_view
     WITH (timescaledb.continuous)
@@ -484,6 +513,7 @@ CREATE MATERIALIZED VIEW normal_mat_view AS
 SELECT time_bucket('5', text_part_func(time)), COUNT(time)
   FROM text_time
 GROUP BY 1 WITH NO DATA;
+\set VERBOSITY terse
 \set ON_ERROR_STOP 0
 DROP MATERIALIZED VIEW normal_mat_view, mat_with_test;
 ERROR:  mixing continuous aggregates and other objects not allowed
