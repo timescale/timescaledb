@@ -720,16 +720,82 @@ cagg_validate_query(Query *query)
 				 errmsg("invalid continuous aggregate query"),
 				 errhint("Use a SELECT query in the continuous aggregate view.")));
 	}
-	if (query->hasWindowFuncs || query->hasSubLinks || query->hasDistinctOn ||
-		query->hasRecursive || query->hasModifyingCTE || query->hasForUpdate ||
-		query->hasRowSecurity || query->hasTargetSRFs || query->cteList || query->groupingSets ||
-		query->distinctClause || query->setOperations || query->limitOffset || query->limitCount ||
-		query->sortClause)
+
+	if (query->hasWindowFuncs)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid continuous aggregate view")));
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("Window functions are not supported by continuous aggregates.")));
 	}
+
+	if (query->hasDistinctOn || query->distinctClause )
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("DISTINCT / DISTINCT ON queries are not supported by continuous aggregates.")));
+	}
+
+	if (query->limitOffset || query->limitCount)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates."),
+				 errhint("Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.")));
+	}
+
+	if (query->sortClause)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("ORDER BY is not supported in queries defining continuous aggregates."),
+				 errhint("Use ORDER BY clauses in SELECTS from the continuous aggregate view instead.")));
+	}
+
+	if (query->hasRecursive  || query->hasSubLinks || query->hasTargetSRFs || query->cteList )
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("CTEs, subqueries and set-returning functions are not supported by continuous aggregates.")));
+	}
+	
+	if (query->hasForUpdate || query->hasModifyingCTE)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("Data modification is not allowed in continuous aggregate view definitions.")));
+	}
+
+	if (query->hasRowSecurity)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("Row level security is not supported by continuous aggregate views.")));
+	}
+
+	if (query->groupingSets)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by continuous aggregates"),
+				 errhint("Define multiple continuous aggregates with different grouping levels.")));
+	}
+
+	if (query->setOperations)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("UNION, EXCEPT & INTERSECT are not supported by continuous aggregates")));
+	}
+	
 	if (!query->groupClause)
 	{
 		/*query can have aggregate without group by , so look
