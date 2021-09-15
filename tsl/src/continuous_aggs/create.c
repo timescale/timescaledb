@@ -703,6 +703,115 @@ cagg_agg_validate(Node *node, void *context)
 	return expression_tree_walker(node, cagg_agg_validate, context);
 }
 
+/*
+ * Check query and extract error details and error hints.
+ *
+ * Returns:
+ *   True if the query is supported, false otherwise with hints and errors
+ *   added.
+ */
+static bool
+cagg_query_supported(Query *query, StringInfo hint, StringInfo detail)
+{
+	if (query->commandType != CMD_SELECT)
+	{
+		appendStringInfoString(hint, "Use a SELECT query in the continuous aggregate view.");
+		return false;
+	}
+
+	if (query->hasWindowFuncs)
+	{
+		appendStringInfoString(detail,
+							   "Window functions are not supported by continuous aggregates.");
+		return false;
+	}
+
+	if (query->hasDistinctOn || query->distinctClause)
+	{
+		appendStringInfoString(detail,
+							   "DISTINCT / DISTINCT ON queries are not supported by continuous "
+							   "aggregates.");
+		return false;
+	}
+
+	if (query->limitOffset || query->limitCount)
+	{
+		appendStringInfoString(detail,
+							   "LIMIT and LIMIT OFFSET are not supported in queries defining "
+							   "continuous aggregates.");
+		appendStringInfoString(hint,
+							   "Use LIMIT and LIMIT OFFSET in SELECTS from the continuous "
+							   "aggregate view instead.");
+		return false;
+	}
+
+	if (query->sortClause)
+	{
+		appendStringInfoString(detail,
+							   "ORDER BY is not supported in queries defining continuous "
+							   "aggregates.");
+		appendStringInfoString(hint,
+							   "Use ORDER BY clauses in SELECTS from the continuous aggregate view "
+							   "instead.");
+		return false;
+	}
+
+	if (query->hasRecursive || query->hasSubLinks || query->hasTargetSRFs || query->cteList)
+	{
+		appendStringInfoString(detail,
+							   "CTEs, subqueries and set-returning functions are not supported by "
+							   "continuous aggregates.");
+		return false;
+	}
+
+	if (query->hasForUpdate || query->hasModifyingCTE)
+	{
+		appendStringInfoString(detail,
+							   "Data modification is not allowed in continuous aggregate view "
+							   "definitions.");
+		return false;
+	}
+
+	if (query->hasRowSecurity)
+	{
+		appendStringInfoString(detail,
+							   "Row level security is not supported by continuous aggregate "
+							   "views.");
+		return false;
+	}
+
+	if (query->groupingSets)
+	{
+		appendStringInfoString(detail,
+							   "GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by "
+							   "continuous aggregates");
+		appendStringInfoString(hint,
+							   "Define multiple continuous aggregates with different grouping "
+							   "levels.");
+		return false;
+	}
+
+	if (query->setOperations)
+	{
+		appendStringInfoString(detail,
+							   "UNION, EXCEPT & INTERSECT are not supported by continuous "
+							   "aggregates");
+		return false;
+	}
+
+	if (!query->groupClause)
+	{
+		/*query can have aggregate without group by , so look
+		 * for groupClause*/
+		appendStringInfoString(hint,
+							   "Include at least one aggregate function"
+							   " and a GROUP BY clause with time bucket.");
+		return false;
+	}
+
+	return true; /* Query was OK and is supported */
+}
+
 static CAggTimebucketInfo
 cagg_validate_query(Query *query)
 {
@@ -712,34 +821,18 @@ cagg_validate_query(Query *query)
 	RangeTblRef *rtref = NULL;
 	RangeTblEntry *rte;
 	List *fromList;
+	StringInfo hint = makeStringInfo();
+	StringInfo detail = makeStringInfo();
 
-	if (query->commandType != CMD_SELECT)
+	if (!cagg_query_supported(query, hint, detail))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid continuous aggregate query"),
-				 errhint("Use a SELECT query in the continuous aggregate view.")));
+				 hint->len > 0 ? errhint("%s", hint->data) : 0,
+				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
-	if (query->hasWindowFuncs || query->hasSubLinks || query->hasDistinctOn ||
-		query->hasRecursive || query->hasModifyingCTE || query->hasForUpdate ||
-		query->hasRowSecurity || query->hasTargetSRFs || query->cteList || query->groupingSets ||
-		query->distinctClause || query->setOperations || query->limitOffset || query->limitCount ||
-		query->sortClause)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid continuous aggregate view")));
-	}
-	if (!query->groupClause)
-	{
-		/*query can have aggregate without group by , so look
-		 * for groupClause*/
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid continuous aggregate view"),
-				 errhint("Include at least one aggregate function"
-						 " and a GROUP BY clause with time bucket.")));
-	}
+
 	/*validate aggregates allowed */
 	cagg_agg_validate((Node *) query->targetList, NULL);
 	cagg_agg_validate((Node *) query->havingQual, NULL);
