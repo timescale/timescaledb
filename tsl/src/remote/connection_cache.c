@@ -9,6 +9,7 @@
 #include <postmaster/postmaster.h>
 #include <utils/builtins.h>
 #include <utils/syscache.h>
+#include <utils/guc.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
@@ -36,6 +37,22 @@ connection_cache_entry_free(void *gen_entry)
 
 	if (entry->conn != NULL)
 	{
+		/* Cannot directly read the Log_connections boolean since it is not
+		 * exported on Windows */
+		const char *log_conns = GetConfigOption("log_connections", true, false);
+
+		if (NULL != log_conns && strcmp(log_conns, "on") == 0)
+		{
+			/* Log the connection closing if requested. Only log the
+			 * associated user ID since cannot lookup the user name here due
+			 * to, potentially, not being in a proper transaction state where
+			 * it is possible to use the syscache. */
+			elog(LOG,
+				 "closing cached connection to \"%s\" [UserId: %d]",
+				 remote_connection_node_name(entry->conn),
+				 entry->id.user_id);
+		}
+
 		remote_connection_close(entry->conn);
 		entry->conn = NULL;
 	}
@@ -179,7 +196,6 @@ connection_cache_create(void)
 {
 	MemoryContext ctx =
 		AllocSetContextCreate(CacheMemoryContext, "Connection cache", ALLOCSET_DEFAULT_SIZES);
-
 	Cache *cache = MemoryContextAlloc(ctx, sizeof(Cache));
 
 	*cache = (Cache)

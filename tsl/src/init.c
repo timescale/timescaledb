@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <fmgr.h>
+#include <storage/ipc.h>
 
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
@@ -202,6 +203,15 @@ CrossModuleFunctions tsl_cm_functions = {
 	.update_compressed_chunk_relstats = update_compressed_chunk_relstats,
 };
 
+static void
+ts_module_cleanup_on_pg_exit(int code, Datum arg)
+{
+	_tsl_process_utility_fini();
+	_remote_dist_txn_fini();
+	_remote_connection_cache_fini();
+	_continuous_aggs_cache_inval_fini();
+}
+
 TS_FUNCTION_INFO_V1(ts_module_init);
 /*
  * Module init function, sets ts_cm_functions to point at tsl_cm_functions
@@ -217,7 +227,8 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_remote_connection_cache_init();
 	_remote_dist_txn_init();
 	_tsl_process_utility_init();
-
+	/* Register a cleanup function to be called when the backend exits */
+	on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
 	PG_RETURN_BOOL(true);
 }
 
@@ -244,5 +255,5 @@ _PG_init(void)
 PGDLLEXPORT void
 _PG_fini(void)
 {
-	_remote_connection_fini();
+	ts_module_cleanup_on_pg_exit(0, 0);
 }
