@@ -38,7 +38,7 @@
 #include "compat/compat.h"
 #include "planner.h"
 
-#if PG12
+#if PG_VERSION_NUM < 130003
 static EquivalenceMember *find_ec_member_matching_expr(EquivalenceClass *ec, Expr *expr,
 													   Relids relids);
 static EquivalenceMember *find_computable_ec_member(PlannerInfo *root, EquivalenceClass *ec,
@@ -367,7 +367,7 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, 
 	return have_data;
 }
 
-#if PG12
+#if PG_VERSION_NUM < 130003
 /*
  * find_ec_member_matching_expr
  *		Locate an EquivalenceClass member matching the given expr, if any;
