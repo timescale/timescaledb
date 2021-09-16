@@ -10,6 +10,7 @@
 #include <miscadmin.h>
 #include <utils/guc.h>
 #include <parser/analyze.h>
+#include <storage/ipc.h>
 
 #include "extension.h"
 #include "bgw/launcher_interface.h"
@@ -64,6 +65,30 @@ extern void TSDLLEXPORT _PG_fini(void);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
+/* Called when the backend exits */
+static void
+cleanup_on_pg_proc_exit(int code, Datum arg)
+{
+	/*
+	 * Order of items should be strict reverse order of _PG_init. Please
+	 * document any exceptions.
+	 */
+#ifdef TS_DEBUG
+	_conn_mock_fini();
+#endif
+#ifdef TS_USE_OPENSSL
+	_conn_ssl_fini();
+#endif
+	_conn_plain_fini();
+	_guc_fini();
+	_process_utility_fini();
+	_event_trigger_fini();
+	_planner_fini();
+	_cache_invalidate_fini();
+	_hypertable_cache_fini();
+	_cache_fini();
+}
+
 void
 _PG_init(void)
 {
@@ -92,29 +117,15 @@ _PG_init(void)
 	_conn_mock_init();
 	ts_debug_init();
 #endif
+
+	/* Register a cleanup function to be called when the backend exits */
+	on_proc_exit(cleanup_on_pg_proc_exit, 0);
 }
 
 void
 _PG_fini(void)
 {
-	/*
-	 * Order of items should be strict reverse order of _PG_init. Please
-	 * document any exceptions.
-	 */
-#ifdef TS_DEBUG
-	_conn_mock_fini();
-#endif
-#ifdef TS_USE_OPENSSL
-	_conn_ssl_fini();
-#endif
-	_conn_plain_fini();
-	_guc_fini();
-	_process_utility_fini();
-	_event_trigger_fini();
-	_planner_fini();
-	_cache_invalidate_fini();
-	_hypertable_cache_fini();
-	_cache_fini();
+	cleanup_on_pg_proc_exit(0, 0);
 }
 
 TSDLLEXPORT Datum

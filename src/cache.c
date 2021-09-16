@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <storage/ipc.h>
 
 #include "cache.h"
 #include "compat/compat.h"
@@ -369,6 +370,7 @@ _cache_init(void)
 void
 _cache_fini(void)
 {
+	release_all_pinned_caches();
 	MemoryContextDelete(pinned_caches_mctx);
 	pinned_caches_mctx = NULL;
 	pinned_caches = NIL;
