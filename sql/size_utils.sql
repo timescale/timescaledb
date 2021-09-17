@@ -370,28 +370,18 @@ CREATE OR REPLACE FUNCTION approximate_row_count(relation REGCLASS)
 RETURNS BIGINT
 LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-  WITH RECURSIVE inherited_id AS
+  WITH RECURSIVE inherited_id(oid) AS
   (
-    SELECT i.inhrelid AS oid
-    FROM pg_inherits i
-    WHERE i.inhparent = relation
-    UNION
-    SELECT i.inhrelid AS oid
+    SELECT relation
+    UNION ALL
+    SELECT i.inhrelid
     FROM pg_inherits i
     JOIN inherited_id b ON i.inhparent = b.oid
-  ),
-  parent AS
-  (
-    -- reltuples for partitioned tables is the sum of it's children in pg14 so we need to filter those out
-    SELECT CASE WHEN c.reltuples > 0 AND c.relkind <> 'p' THEN c.reltuples::bigint ELSE 0 END AS reltuples
-    FROM pg_class c
-    WHERE c.oid = relation
   )
-  SELECT
-    (SELECT reltuples FROM parent) +
-    COALESCE(sum(CASE WHEN reltuples > 0 AND relkind <> 'p' THEN reltuples ELSE 0 END)::bigint,0)
-  FROM inherited_id i
-    JOIN pg_class child ON child.oid = i.oid;
+  -- reltuples for partitioned tables is the sum of it's children in pg14 so we need to filter those out
+  SELECT COALESCE((SUM(reltuples) FILTER (WHERE reltuples > 0 AND relkind <> 'p')), 0)::BIGINT
+  FROM inherited_id
+  JOIN pg_class USING (oid);
 $BODY$;
 
 -------- stats related to compression ------
