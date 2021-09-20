@@ -28,7 +28,8 @@ set(MOD_FILES
     updates/2.2.1--2.3.0.sql
     updates/2.3.0--2.3.1.sql
     updates/2.3.1--2.4.0.sql
-    updates/2.4.0--2.4.1.sql)
+    updates/2.4.0--2.4.1.sql
+    updates/2.4.1--2.4.2.sql)
 
 # Files for downgrade scripts. This should only include files for downgrade to
 # previous version since we do not support skipping versions when downgrading
