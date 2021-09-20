@@ -28,5 +28,46 @@ SELECT _timescaledb_internal.test_remote_connection_cache();
  
 (1 row)
 
+-- Test that connection cache entries for a role gets invalidated when
+-- we rename the role
+GRANT USAGE ON FOREIGN SERVER loopback_1, loopback_2 TO :ROLE_1;
+SET ROLE :ROLE_1;
+CREATE TABLE testtable (time timestamptz, location int, temp float);
+SELECT * FROM create_distributed_hypertable('testtable', 'time', 'location');
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | testtable  | t
+(1 row)
+
+INSERT INTO testtable VALUES ('2021-09-19', 1, 13.2);
+-- Should show valid connections for ROLE_1
+SELECT node_name, user_name, invalidated
+FROM _timescaledb_internal.show_connection_cache()
+WHERE user_name=:'ROLE_1'
+ORDER BY 1,2;
+ node_name  |  user_name  | invalidated 
+------------+-------------+-------------
+ loopback_1 | test_role_1 | f
+ loopback_2 | test_role_1 | f
+(2 rows)
+
+RESET ROLE;
+BEGIN;
+-- Renaming the role should invalidate the connection cache entries
+-- for ROLE_1/bob. The connections will be recreated on next cache
+-- fetch.
+ALTER ROLE :ROLE_1 RENAME TO bob;
+SELECT node_name, user_name, invalidated
+FROM _timescaledb_internal.show_connection_cache()
+WHERE user_name='bob'
+ORDER BY 1,2;
+ node_name  | user_name | invalidated 
+------------+-----------+-------------
+ loopback_1 | bob       | t
+ loopback_2 | bob       | t
+(2 rows)
+
+ROLLBACK;
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;
