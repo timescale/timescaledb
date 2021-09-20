@@ -10,6 +10,7 @@
 #include <utils/builtins.h>
 #include <utils/syscache.h>
 #include <utils/guc.h>
+#include <utils/acl.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
@@ -26,7 +27,8 @@ typedef struct ConnectionCacheEntry
 {
 	TSConnectionId id;
 	TSConnection *conn;
-	int32 hashvalue; /* Hash of server OID for cache invalidation */
+	int32 foreign_server_hashvalue; /* Hash of server OID for cache invalidation */
+	int32 role_hashvalue;			/* Hash of role OID for cache invalidation */
 	bool invalidated;
 } ConnectionCacheEntry;
 
@@ -154,9 +156,11 @@ connection_cache_create_entry(Cache *cache, CacheQuery *query)
 	 * at the end of the transaction */
 	remote_connection_set_autoclose(entry->conn, false);
 
-	/* Set the hash value of the foreign server for cache invalidation
-	 * purposes */
-	entry->hashvalue = GetSysCacheHashValue1(FOREIGNSERVEROID, ObjectIdGetDatum(id->server_id));
+	/* Set the hash values of the foreign server and role for cache
+	 * invalidation purposes */
+	entry->foreign_server_hashvalue =
+		GetSysCacheHashValue1(FOREIGNSERVEROID, ObjectIdGetDatum(id->server_id));
+	entry->role_hashvalue = GetSysCacheHashValue1(AUTHOID, ObjectIdGetDatum(id->user_id));
 	entry->invalidated = false;
 
 	return entry;
@@ -249,14 +253,14 @@ remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashv
 	HASH_SEQ_STATUS scan;
 	ConnectionCacheEntry *entry;
 
-	Assert(cacheid == FOREIGNSERVEROID);
-
+	Assert(cacheid == FOREIGNSERVEROID || cacheid == AUTHOID);
 	hash_seq_init(&scan, connection_cache->htab);
 
 	while ((entry = hash_seq_search(&scan)) != NULL)
 	{
 		/* hashvalue == 0 means cache reset, so invalidate entire cache */
-		if (hashvalue == 0 || entry->hashvalue == hashvalue)
+		if (hashvalue == 0 || (cacheid == AUTHOID && hashvalue == entry->role_hashvalue) ||
+			(cacheid == FOREIGNSERVEROID && entry->foreign_server_hashvalue == hashvalue))
 			entry->invalidated = true;
 	}
 }
@@ -325,6 +329,30 @@ remote_connection_cache_dropped_db_callback(const char *dbname)
 }
 
 /*
+ * Remove and close connections that belong to roles that are dropped.
+ *
+ * Immediately purging such connections should be safe since the DROP command
+ * must be executed by different user than the one being dropped.
+ */
+void
+remote_connection_cache_dropped_role_callback(const char *rolename)
+{
+	HASH_SEQ_STATUS scan;
+	ConnectionCacheEntry *entry;
+	Oid roleid = get_role_oid(rolename, true);
+
+	if (!OidIsValid(roleid))
+		return;
+
+	hash_seq_init(&scan, connection_cache->htab);
+
+	while ((entry = hash_seq_search(&scan)) != NULL)
+	{
+		if (entry->id.user_id == roleid)
+			remote_connection_cache_remove(entry->id);
+	}
+}
+/*
  * Functions and data structures for printing the connection cache.
  */
 enum Anum_show_conn
@@ -375,9 +403,15 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 	bool nulls[Natts_show_conn] = { false };
 	PGconn *pgconn = remote_connection_get_pg_conn(entry->conn);
 	NameData conn_node_name, conn_user_name, conn_db;
+	const char *username = GetUserNameFromId(entry->id.user_id, true);
 
 	namestrcpy(&conn_node_name, remote_connection_node_name(entry->conn));
-	namestrcpy(&conn_user_name, GetUserNameFromId(entry->id.user_id, false));
+
+	if (NULL == username)
+		pg_snprintf(conn_user_name.data, NAMEDATALEN, "%u", entry->id.user_id);
+	else
+		namestrcpy(&conn_user_name, username);
+
 	namestrcpy(&conn_db, PQdb(pgconn));
 
 	values[AttrNumberGetAttrOffset(Anum_show_conn_node_name)] = NameGetDatum(&conn_node_name);

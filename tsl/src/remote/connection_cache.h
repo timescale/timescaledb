@@ -24,6 +24,7 @@ extern bool remote_connection_cache_remove(TSConnectionId id);
 
 extern void remote_connection_cache_invalidate_callback(Datum arg, int cacheid, uint32 hashvalue);
 extern void remote_connection_cache_dropped_db_callback(const char *dbname);
+extern void remote_connection_cache_dropped_role_callback(const char *rolename);
 extern Datum remote_connection_cache_show(PG_FUNCTION_ARGS);
 extern void _remote_connection_cache_init(void);
 extern void _remote_connection_cache_fini(void);

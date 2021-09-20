@@ -22,6 +22,7 @@
 #include "event_trigger.h"
 #include "remote/dist_commands.h"
 #include "remote/dist_ddl.h"
+#include "remote/connection_cache.h"
 #include "dist_util.h"
 
 /* DDL Query execution type */
@@ -243,14 +244,32 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 		 * For DROP TABLE and DROP SCHEMA operations hypertable_list will be
 		 * empty. Wait for sql_drop events.
 		 */
-		if (tag == T_DropStmt)
+		switch (tag)
 		{
-			DropStmt *stmt = castNode(DropStmt, args->parsetree);
+			case T_DropStmt:
+			{
+				DropStmt *stmt = castNode(DropStmt, args->parsetree);
 
-			if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
-				set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+				if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
+					set_dist_exec_type(DIST_DDL_EXEC_ON_END);
+
+				break;
+			}
+			case T_DropRoleStmt:
+			{
+				DropRoleStmt *stmt = castNode(DropRoleStmt, args->parsetree);
+				ListCell *lc;
+
+				foreach (lc, stmt->roles)
+				{
+					RoleSpec *rolspec = lfirst(lc);
+					remote_connection_cache_dropped_role_callback(rolspec->rolename);
+				}
+				break;
+			}
+			default:
+				break;
 		}
-
 		return;
 	}
 
