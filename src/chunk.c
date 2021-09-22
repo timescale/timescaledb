@@ -72,6 +72,13 @@ TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 
+static const char *
+DatumGetNameString(Datum datum)
+{
+	Name name = DatumGetName(datum);
+	return pstrdup(NameStr(*name));
+}
+
 /* Used when processing scanned chunks */
 typedef enum ChunkResult
 {
@@ -2454,7 +2461,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 
 static Chunk *
 chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mctx,
-				bool fail_if_not_found)
+				bool fail_if_not_found, const DisplayKeyData displaykey[])
 {
 	ChunkStubScanCtx stubctx = { 0 };
 	Chunk *chunk;
@@ -2478,7 +2485,23 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 	{
 		case 0:
 			if (fail_if_not_found)
-				ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+			{
+				int i = 0;
+				StringInfo info = makeStringInfo();
+				while (i < nkeys)
+				{
+					appendStringInfo(info,
+									 "%s: %s",
+									 displaykey[i].name,
+									 displaykey[i].as_string(scankey[i].sk_argument));
+					if (++i < nkeys)
+						appendStringInfoString(info, ", ");
+				}
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("chunk not found"),
+						 errdetail("%s", info->data)));
+			}
 			break;
 		case 1:
 			ASSERT_IS_VALID_CHUNK(chunk);
@@ -2496,12 +2519,21 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 {
 	NameData schema, table;
 	ScanKeyData scankey[2];
+	static const DisplayKeyData displaykey[2] = {
+		[0] = { .name = "schema_name", .as_string = DatumGetNameString },
+		[1] = { .name = "table_name", .as_string = DatumGetNameString },
+	};
 
 	/* Early check for rogue input */
 	if (schema_name == NULL || table_name == NULL)
 	{
 		if (fail_if_not_found)
-			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("chunk not found"),
+					 errdetail("schema_name: %s, table_name: %s",
+							   schema_name ? schema_name : "<null>",
+							   table_name ? table_name : "<null>")));
 		else
 			return NULL;
 	}
@@ -2523,7 +2555,12 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 				F_NAMEEQ,
 				NameGetDatum(&table));
 
-	return chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX, scankey, 2, mctx, fail_if_not_found);
+	return chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX,
+						   scankey,
+						   2,
+						   mctx,
+						   fail_if_not_found,
+						   displaykey);
 }
 
 Chunk *
@@ -2545,17 +2582,33 @@ ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found)
 	return chunk_get_by_name(schema, table, fail_if_not_found);
 }
 
+static const char *
+DatumGetInt32AsString(Datum datum)
+{
+	char *buf = (char *) palloc(12); /* sign, 10 digits, '\0' */
+	pg_ltoa(DatumGetInt32(datum), buf);
+	return buf;
+}
+
 Chunk *
 ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 {
 	ScanKeyData scankey[1];
+	static const DisplayKeyData displaykey[1] = {
+		[0] = { .name = "id", .as_string = DatumGetInt32AsString },
+	};
 
 	/*
 	 * Perform an index scan on chunk id.
 	 */
 	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, Int32GetDatum(id));
 
-	return chunk_scan_find(CHUNK_ID_INDEX, scankey, 1, CurrentMemoryContext, fail_if_not_found);
+	return chunk_scan_find(CHUNK_ID_INDEX,
+						   scankey,
+						   1,
+						   CurrentMemoryContext,
+						   fail_if_not_found,
+						   displaykey);
 }
 
 /*
@@ -2595,7 +2648,8 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
  * that, e.g., translates a chunk relid to a chunk_id, or vice versa.
  */
 static bool
-chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok)
+chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
+				  const DisplayKeyData displaykey[])
 {
 	int count = 0;
 
@@ -2611,7 +2665,20 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok)
 	Assert(count == 0 || count == 1);
 
 	if (count == 0 && !missing_ok)
+	{
+		int i = 0;
+		StringInfo info = makeStringInfo();
+		while (i < iterator->ctx.nkeys)
+		{
+			appendStringInfo(info,
+							 "%s: %s",
+							 displaykey[i].name,
+							 displaykey[i].as_string(iterator->ctx.scankey[i].sk_argument));
+			if (++i < iterator->ctx.nkeys)
+				appendStringInfoString(info, ", ");
+		}
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+	}
 
 	return count == 1;
 }
@@ -2621,6 +2688,10 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 						  bool missing_ok)
 {
 	ScanIterator iterator;
+	static const DisplayKeyData displaykey[] = {
+		[0] = { .name = "schema_name", .as_string = DatumGetNameString },
+		[1] = { .name = "table_name", .as_string = DatumGetNameString },
+	};
 
 	if (schema == NULL || table == NULL)
 		return false;
@@ -2628,7 +2699,7 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	init_scan_by_qualified_table_name(&iterator, schema, table);
 
-	return chunk_simple_scan(&iterator, form, missing_ok);
+	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
 
 static bool
@@ -2661,11 +2732,14 @@ static bool
 chunk_simple_scan_by_id(int32 chunk_id, FormData_chunk *form, bool missing_ok)
 {
 	ScanIterator iterator;
+	static const DisplayKeyData displaykey[] = {
+		[0] = { .name = "id", .as_string = DatumGetInt32AsString },
+	};
 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	init_scan_by_chunk_id(&iterator, chunk_id);
 
-	return chunk_simple_scan(&iterator, form, missing_ok);
+	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
 
 /*

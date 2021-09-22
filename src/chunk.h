@@ -118,6 +118,15 @@ typedef struct ChunkScanEntry
 	ChunkStub *stub;
 } ChunkScanEntry;
 
+/*
+ * Information to be able to display a scan key details for error messages.
+ */
+typedef struct DisplayKeyData
+{
+	const char *name;
+	const char *(*as_string)(Datum);
+} DisplayKeyData;
+
 extern Chunk *ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
 										 const char *prefix);
 
