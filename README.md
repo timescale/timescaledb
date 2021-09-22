@@ -10,13 +10,13 @@ time-series data.  It is engineered up from PostgreSQL and packaged as a
 PostgreSQL extension, providing automatic partitioning across time and space
 (partitioning key), as well as full SQL support.
 
-[Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud) is our fully managed,
-hosted version of TimescaleDB, available in the cloud of your choice
-(pay-as-you-go, with free trial credits to start).  To determine which option
-is best for you, see [Timescale
-Products](https://tsdb.co/GitHubTimescaleProducts) for more information about
-our Apache-2 version, TimescaleDB Community (self-hosted) and Timescale Cloud
-(hosted), including: feature comparisons, FAQ, documentation, and support.
+If you prefer not to install or administer your instance of TimescaleDB, 
+[hosted versions of TimescaleDB](https://tsdb.co/GitHubTimescaleCloud) are 
+available in the cloud of your choice (pay-as-you-go, with a free trial to start).
+
+To determine which option is best for you, see [Timescale Products](https://tsdb.co/GitHubTimescaleProducts)
+for more information about our Apache-2 version, TimescaleDB Community (self-hosted), and Timescale 
+Cloud (hosted), including: feature comparisons, FAQ, documentation, and support.
 
 Below is an introduction to TimescaleDB. For more information, please check out 
 these other resources:
@@ -24,11 +24,11 @@ these other resources:
 - [Slack Channel](https://slack-login.timescale.com)
 - [Timescale Release Notes & Future Plans](https://tsdb.co/GitHubTimescaleReleaseNotes)
 
+
 For reference and clarity, all code files in this repository reference
-licensing in their header (either Apache License, Version 2.0 or [Timescale
-License
-(TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE)). Apache-2
-licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
+licensing in their header (either the Apache-2-open-source license
+or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE)
+). Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
 [Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
 
@@ -126,8 +126,8 @@ TimescaleDB is available pre-packaged for several platforms:
 - [MacOS (Homebrew)](https://tsdb.co/GitHubTimescaleMacOS)
 - [Windows](https://tsdb.co/GitHubTimescaleWindows)
 
-[Timescale Cloud](https://tsdb.co/GitHubTimescaleInstallCloud)
-(database-as-a-service) is available via free trial. You create database
+[Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud)
+(cloud-hosted and maanged TimescaleDB) is available via free trial. You create database
 instances in the cloud of your choice and use TimescaleDB to power your
 queries, automating common operational tasks and reducing management overhead.
 
