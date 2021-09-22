@@ -663,10 +663,17 @@ ERROR:  "trigger_test" is a table
 -- AFTER INSERT ROW trigger not supported on compressed chunk
 CREATE TRIGGER t4_ar AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE FUNCTION stmt_trig_info();
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 INSERT INTO trigger_test SELECT '2000-01-01',1,0;
 ERROR:  after insert row trigger on compressed chunk not supported
+DETAIL:  Triggers: t4_ar
+HINT:  Decompress the chunk first before inserting into it.
 COPY trigger_test FROM STDIN DELIMITER ',';
 ERROR:  after insert row trigger on compressed chunk not supported
+DETAIL:  Triggers: t4_ar
+HINT:  Decompress the chunk first before inserting into it.
+CONTEXT:  COPY trigger_test, line 1: "2000-01-01 01:00:00-05,1,0"
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- should not insert rows. count is 1
 SELECT count(*) FROM trigger_test;
