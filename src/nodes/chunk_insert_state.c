@@ -631,7 +631,22 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 			elog(ERROR, "statement trigger on chunk table not supported");
 
 		if (has_compressed_chunk && tg->trig_insert_after_row)
-			elog(ERROR, "after insert row trigger on compressed chunk not supported");
+		{
+			StringInfo trigger_list = makeStringInfo();
+			int i = 0;
+			Assert(tg->numtriggers > 0);
+			while (i < tg->numtriggers)
+			{
+				appendStringInfoString(trigger_list, tg->triggers[i].tgname);
+				if (++i < tg->numtriggers)
+					appendStringInfoString(trigger_list, ", ");
+			}
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("after insert row trigger on compressed chunk not supported"),
+					 errdetail("Triggers: %s", trigger_list->data),
+					 errhint("Decompress the chunk first before inserting into it.")));
+		}
 	}
 
 	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
