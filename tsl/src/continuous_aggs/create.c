@@ -1603,6 +1603,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->relkind = RELKIND_RELATION;
 	rte->tablesample = NULL;
 	rte->eref->colnames = NIL;
+	rte->selectedCols = NULL;
 	/* aliases for column names for the materialization table*/
 	foreach (lc, matcollist)
 	{
