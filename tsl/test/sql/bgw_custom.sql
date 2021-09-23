@@ -70,7 +70,6 @@ CALL run_job(1004);
 
 SELECT * FROM custom_log ORDER BY job_id, extra;
 
-
 \set ON_ERROR_STOP 0
 -- test bad input
 SELECT delete_job(NULL);
@@ -131,7 +130,8 @@ BEGIN
     LOOP
     SELECT total_successes, total_failures FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO r;
     IF (r.total_failures > 0) THEN
-        EXIT;
+        RAISE INFO 'wait_for_job_to_run: job execution failed';
+        RETURN false;
     ELSEIF (r.total_successes = expected_runs) THEN
         RETURN true;
     ELSEIF (r.total_successes > expected_runs) THEN
@@ -140,6 +140,7 @@ BEGIN
         PERFORM pg_sleep(0.1);
     END IF;
     END LOOP;
+    RAISE INFO 'wait_for_job_to_run: timeout after % tries', spins;
     RETURN false;
 END
 $BODY$;
@@ -179,6 +180,13 @@ BEGIN
 END
 $$;
 
+CREATE OR REPLACE PROCEDURE custom_proc5(job_id int, args jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    CALL refresh_continuous_aggregate('conditions_summary_daily', '2021-08-01 00:00', '2021-08-31 00:00');
+END
+$$;
+
 -- Remove any default jobs, e.g., telemetry
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_config.bgw_job RESTART IDENTITY CASCADE;
@@ -215,13 +223,15 @@ SELECT * FROM custom_log ORDER BY job_id, extra;
 SELECT delete_job(:job_id_3);
 
 CREATE TABLE conditions (
-  time TIMESTAMPTZ NOT NULL,
+  time TIMESTAMP NOT NULL,
   location TEXT NOT NULL,
   location2 char(10) NOT NULL,
   temperature DOUBLE PRECISION NULL,
   humidity DOUBLE PRECISION NULL
-);
+) WITH (autovacuum_enabled = FALSE);
+
 SELECT create_hypertable('conditions', 'time', chunk_time_interval := '15 days'::interval);
+
 ALTER TABLE conditions
   SET (
     timescaledb.compress,
@@ -240,6 +250,25 @@ SELECT wait_for_job_to_run(:job_id_4, 1);
 
 -- Chunk compress stats
 SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
+
+-- Decompress chunks before create the cagg
+SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
+
+-- Continuous Aggregate
+CREATE MATERIALIZED VIEW conditions_summary_daily
+WITH (timescaledb.continuous) AS
+SELECT location,
+   time_bucket(INTERVAL '1 day', time) AS bucket,
+   AVG(temperature),
+   MAX(temperature),
+   MIN(temperature)
+FROM conditions
+GROUP BY location, bucket
+WITH NO DATA;
+
+-- Refresh Continous Aggregate by Job
+SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
+SELECT wait_for_job_to_run(:job_id_5, 1);
 
 -- Stop Background Workers
 SELECT _timescaledb_internal.stop_background_workers();

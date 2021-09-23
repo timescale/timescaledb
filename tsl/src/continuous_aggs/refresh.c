@@ -14,6 +14,7 @@
 #include <storage/lmgr.h>
 #include <miscadmin.h>
 #include <fmgr.h>
+#include <executor/spi.h>
 
 #include <catalog.h>
 #include <continuous_agg.h>
@@ -505,6 +506,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 	continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_WINDOW);
+
 	PG_RETURN_VOID();
 }
 
@@ -573,6 +575,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int64 computed_invalidation_threshold;
 	int64 invalidation_threshold;
 	int64 max_bucket_width;
+	int rc;
+
+	/* Connect to SPI manager due to the underlying SPI calls */
+	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
+		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Like regular materialized views, require owner to refresh. */
 	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
@@ -651,29 +658,26 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (refresh_window.start >= refresh_window.end)
 	{
 		emit_up_to_date_notice(cagg, callctx);
+
+		if ((rc = SPI_finish()) != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+
 		return;
 	}
 
 	/* Process invalidations in the hypertable invalidation log */
 	invalidation_process_hypertable_log(cagg, refresh_window.type);
 
-	/* Start a new transaction. Note that this invalidates previous memory
-	 * allocations (and locks). */
-	PopActiveSnapshot();
-	CommitTransactionCommand();
-	/* See PG commit:84f5c2908dad81e8622b0406beea580e40bb03ac
-	 * When we manage multiple transactions in a procedure, ensure that
-	 * an active outer snapshot exists prior to executing SPI
-	 * (see EnsurePortalSnapshotExists)
-	 */
-	StartTransactionCommand();
-	PushActiveSnapshot(GetTransactionSnapshot());
+	/* Commit and Start a new transaction */
+	SPI_commit_and_chain();
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
-	PopActiveSnapshot();
+
+	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }
 
 /*
