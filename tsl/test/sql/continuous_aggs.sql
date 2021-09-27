@@ -1031,7 +1031,7 @@ DROP TABLE water_consumption CASCADE;
 ----
 --- github issue 2655 ---
 create table raw_data(time timestamptz, search_query text, cnt integer, cnt2 integer);
-select create_hypertable('raw_data','time');
+select create_hypertable('raw_data','time', chunk_time_interval=>'15 days'::interval);
 insert into raw_data select '2000-01-01','Q1';
 
 --having has exprs that appear in select 
@@ -1087,3 +1087,113 @@ SELECT * FROM search_query_count_2 ORDER BY 1, 2;
 --refresh search_query_count_3---
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, NULL);
 SELECT * FROM search_query_count_3 ORDER BY 1, 2, 3;
+
+--- TEST enable compression on continuous aggregates
+CREATE VIEW cagg_compression_status as
+SELECT ca.mat_hypertable_id AS mat_htid,
+       ca.user_view_name AS cagg_name ,
+       h.schema_name AS mat_schema_name,
+       h.table_name AS mat_table_name,
+       ca.materialized_only
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+;
+SELECT mat_htid AS "MAT_HTID"
+     , mat_schema_name || '.' || mat_table_name AS "MAT_HTNAME"
+     , mat_table_name AS "MAT_TABLE_NAME"
+FROM cagg_compression_status 
+WHERE cagg_name = 'search_query_count_3' \gset
+
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'true');
+SELECT cagg_name, mat_table_name
+FROM cagg_compression_status where cagg_name = 'search_query_count_3';
+\x
+SELECT * FROM timescaledb_information.compression_settings 
+WHERE hypertable_name = :'MAT_TABLE_NAME';
+\x
+
+SELECT compress_chunk(ch)
+FROM show_chunks('search_query_count_3') ch;
+
+SELECT * from search_query_count_3 ORDER BY 1, 2, 3;
+
+-- insert into a new region of the hypertable and then refresh the cagg
+-- (note we still do not support refreshes into existing regions.
+-- cagg chunks do not map 1-1 to hypertabl regions. They encompass
+-- more data
+-- ).
+insert into raw_data select '2000-05-01 00:00+0','Q3', 0, 0;
+
+--this one fails now
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('search_query_count_3', NULL, '2000-06-01 00:00+0'::timestamptz);
+CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
+\set ON_ERROR_STOP 1
+
+--insert row 
+insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
+
+--this should succeed since it does not refresh any compressed regions in the cagg
+CALL refresh_continuous_aggregate('search_query_count_3', '2001-05-01 00:00+0'::timestamptz, '2001-06-01 00:00+0'::timestamptz);
+
+--verify watermark and check that chunks are compressed
+SELECT _timescaledb_internal.to_timestamp(w) FROM _timescaledb_internal.cagg_watermark(:'MAT_HTID') w;
+
+SELECT chunk_name, range_start, range_end, is_compressed
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'MAT_TABLE_NAME'
+ORDER BY 1;
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
+
+SELECT * from search_query_count_3 
+WHERE bucket > '2001-01-01'
+ORDER BY 1, 2, 3;
+
+--now disable compression , will error out --
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
+\set ON_ERROR_STOP 1
+
+SELECT decompress_chunk(schema_name || '.' || table_name)
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id = :'MAT_HTID' and status = 1;
+
+--disable compression on cagg after decompressing all chunks--
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
+SELECT cagg_name, mat_table_name
+FROM cagg_compression_status where cagg_name = 'search_query_count_3';
+SELECT view_name, materialized_only, compression_enabled
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'search_query_count_3';
+
+-- TEST caggs on table with more columns than in the cagg view defn --
+CREATE TABLE test_morecols ( time TIMESTAMPTZ NOT NULL,
+                             val1 INTEGER, val2 INTEGER, val3 INTEGER, val4 INTEGER,
+                             val5 INTEGER,  val6 INTEGER, val7 INTEGER, val8 INTEGER);
+SELECT create_hypertable('test_morecols', 'time', chunk_time_interval=> '7 days'::interval);
+INSERT INTO test_morecols 
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 55, 75, 40, 70, NULL, 100, 200, 200;
+
+CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous) 
+AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
+ FROM test_morecols GROUP BY 1;
+
+ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
+
+SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
+
+SELECT * FROM test_morecols_cagg;
+
+SELECT view_name, materialized_only, compression_enabled
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_morecols_cagg';
+
+--should keep compressed option, modify only materialized --
+ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.materialized_only='true');
+
+SELECT view_name, materialized_only, compression_enabled
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_morecols_cagg';
+

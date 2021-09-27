@@ -1614,3 +1614,180 @@ AS
  HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
 psql:include/continuous_aggs_ddl_common.sql:1106: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true');
+--TEST test with multiple settings on continuous aggregates --
+-- test for materialized_only + compress combinations (real time aggs enabled initially)
+CREATE TABLE test_setting(time timestamptz not null, val numeric);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_setting', 'time', replication_factor => 2);
+\else
+SELECT create_hypertable('test_setting', 'time');
+     create_hypertable      
+----------------------------
+ (39,public,test_setting,t)
+(1 row)
+
+\endif
+CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous) 
+AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
+psql:include/continuous_aggs_ddl_common.sql:1120: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
+INSERT INTO test_setting      
+SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
+CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    20
+(1 row)
+
+--this row is not in the materialized result ---
+INSERT INTO test_setting VALUES( '2020-11-01', 20);
+--try out 2 settings here --
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | t                   | t
+(1 row)
+
+--real time aggs is off now , should return 20 --
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    20
+(1 row)
+
+--now set it back to false --
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | t                   | f
+(1 row)
+
+--count should return additional data since we have real time aggs on
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    21
+(1 row)
+
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='false');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | f                   | t
+(1 row)
+
+--real time aggs is off now , should return 20 --
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    20
+(1 row)
+
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='false');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | f                   | f
+(1 row)
+
+--count should return additional data since we have real time aggs on
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    21
+(1 row)
+
+DELETE FROM test_setting WHERE val = 20;
+--TEST test with multiple settings on continuous aggregates with real time aggregates turned off initially --
+-- test for materialized_only + compress combinations (real time aggs enabled initially)
+DROP MATERIALIZED VIEW test_setting_cagg;
+psql:include/continuous_aggs_ddl_common.sql:1164: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
+CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only = true) 
+AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
+psql:include/continuous_aggs_ddl_common.sql:1167: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
+CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    20
+(1 row)
+
+--this row is not in the materialized result ---
+INSERT INTO test_setting VALUES( '2020-11-01', 20);
+--try out 2 settings here --
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | t                   | f
+(1 row)
+
+--count should return additional data since we have real time aggs on
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    21
+(1 row)
+
+--now set it back to false --
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | t                   | t
+(1 row)
+
+--real time aggs is off now , should return 20 --
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    20
+(1 row)
+
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='false');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | f                   | f
+(1 row)
+
+--count should return additional data since we have real time aggs on
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    21
+(1 row)
+
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='false');
+SELECT view_name, compression_enabled, materialized_only
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_setting_cagg';
+     view_name     | compression_enabled | materialized_only 
+-------------------+---------------------+-------------------
+ test_setting_cagg | f                   | t
+(1 row)
+
+--real time aggs is off now , should return 20 --
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+ count 
+-------
+    20
+(1 row)
+
+-- END TEST with multiple settings

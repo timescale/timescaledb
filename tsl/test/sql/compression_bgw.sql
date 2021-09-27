@@ -68,6 +68,12 @@ select count(*) from _timescaledb_config.bgw_job WHERE id>=1000;
 -- try to execute the policy after it has been dropped --
 \set ON_ERROR_STOP 0
 CALL run_job(:compressjob_id);
+
+--errors with bad input for add/remove compression policy
+create view dummyv1 as select * from conditions limit 1;
+select add_compression_policy( 100 , compress_after=> '1 day'::interval);
+select add_compression_policy( 'dummyv1', compress_after=> '1 day'::interval );
+select remove_compression_policy( 100 );
 \set ON_ERROR_STOP 1
 
 -- We're done with the table, so drop it.
@@ -85,6 +91,9 @@ SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
 INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
 
 ALTER TABLE test_table_smallint SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+select add_compression_policy( 'test_table_smallint', compress_after=> '1 day'::interval );
+\set ON_ERROR_STOP 1
 SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 

@@ -169,7 +169,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 	}
 }
 
-/* on continuous aggregate materialization tables we block all altercommands except for ADD INDEX */
+/* we block some ALTER commands on continuous aggregate materialization tables
+ */
 static void
 check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 {
@@ -187,6 +188,7 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 		{
 			case AT_AddIndex:
 			case AT_ReAddIndex:
+			case AT_SetRelOptions:
 				/* allowed on materialization tables */
 				continue;
 			default:
