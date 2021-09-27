@@ -15,6 +15,7 @@
 #include <utils/builtins.h>
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/policy_utils.h"
 #include "bgw/job.h"
 #include "continuous_agg.h"
 #include "continuous_aggs/materialize.h"
@@ -130,6 +131,80 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config)
 	if (end_isnull)
 		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
 	return res;
+}
+
+/* returns false if a policy could not be found */
+bool
+policy_refresh_cagg_exists(int32 materialization_id)
+{
+	Hypertable *mat_ht = ts_hypertable_get_by_id(materialization_id);
+
+	if (!mat_ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration materialization hypertable id %d not found",
+						materialization_id)));
+
+	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
+														   INTERNAL_SCHEMA_NAME,
+														   materialization_id);
+	if (jobs == NIL)
+		return false;
+
+	/* only 1 cont. aggregate policy job allowed */
+	Assert(list_length(jobs) == 1);
+	return true;
+}
+
+/* Compare passed in interval value with refresh_start parameter
+ * of cagg policy.
+ */
+bool
+policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Datum cmp_interval)
+{
+	Hypertable *mat_ht = ts_hypertable_get_by_id(materialization_id);
+	bool ret = false;
+
+	if (!mat_ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration materialization hypertable id %d not found",
+						materialization_id)));
+
+	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
+														   INTERNAL_SCHEMA_NAME,
+														   materialization_id);
+	if (jobs == NIL)
+		return false;
+
+	/* only 1 cont. aggregate policy job allowed */
+	BgwJob *cagg_job = linitial(jobs);
+	Jsonb *cagg_config = cagg_job->fd.config;
+
+	const Dimension *open_dim = get_open_dimension_for_hypertable(mat_ht);
+	Oid dim_type = ts_dimension_get_partition_type(open_dim);
+	if (IS_INTEGER_TYPE(dim_type))
+	{
+		bool found;
+		Assert(IS_INTEGER_TYPE(cmp_type));
+		int64 cmpval = ts_interval_value_to_internal(cmp_interval, cmp_type);
+		int64 refresh_start =
+			ts_jsonb_get_int64_field(cagg_config, CONFIG_KEY_START_OFFSET, &found);
+		if (!found) /*this is a null value */
+			return false;
+		ret = (refresh_start < cmpval);
+	}
+	else
+	{
+		Assert(cmp_type == INTERVALOID);
+		Interval *refresh_start = ts_jsonb_get_interval_field(cagg_config, CONFIG_KEY_START_OFFSET);
+		if (refresh_start == NULL) /* NULL refresh_start */
+			return false;
+		Datum res =
+			DirectFunctionCall2(interval_lt, IntervalPGetDatum(refresh_start), cmp_interval);
+		ret = DatumGetBool(res);
+	}
+	return ret;
 }
 
 Datum

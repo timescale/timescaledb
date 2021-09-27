@@ -57,6 +57,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(false),
 		},
+        [ContinuousViewOptionCompress] = {
+			.arg_name = "compress",
+			.type_id = BOOLOID,
+		},
 };
 
 WithClauseResult *
