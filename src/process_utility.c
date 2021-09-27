@@ -187,6 +187,7 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 		{
 			case AT_AddIndex:
 			case AT_ReAddIndex:
+			case AT_SetRelOptions:
 				/* allowed on materialization tables */
 				continue;
 			default:
