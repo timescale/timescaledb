@@ -1087,3 +1087,6 @@ SELECT * FROM search_query_count_2 ORDER BY 1, 2;
 --refresh search_query_count_3---
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, NULL);
 SELECT * FROM search_query_count_3 ORDER BY 1, 2, 3;
+
+--- enable compression on continuous aggregates
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress); 

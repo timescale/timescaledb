@@ -957,19 +957,8 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	Oid ownerid;
 	List *segmentby_cols;
 	List *orderby_cols;
-	ContinuousAggHypertableStatus caggstat;
 	List *constraint_list = NIL;
 
-	/*check this is not a special internally created hypertable
-	 * i.e. continuous agg table or compression hypertable
-	 */
-	caggstat = ts_continuous_agg_hypertable_status(ht->fd.id);
-	if (!(caggstat == HypertableIsRawTable || caggstat == HypertableIsNotContinuousAgg))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("continuous aggregates do not support compression")));
-	}
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
 		ereport(ERROR,
