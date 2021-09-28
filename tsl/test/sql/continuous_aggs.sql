@@ -1031,7 +1031,7 @@ DROP TABLE water_consumption CASCADE;
 ----
 --- github issue 2655 ---
 create table raw_data(time timestamptz, search_query text, cnt integer, cnt2 integer);
-select create_hypertable('raw_data','time');
+select create_hypertable('raw_data','time', chunk_time_interval=>'15 days'::interval);
 insert into raw_data select '2000-01-01','Q1';
 
 --having has exprs that appear in select 
@@ -1088,5 +1088,121 @@ SELECT * FROM search_query_count_2 ORDER BY 1, 2;
 CALL refresh_continuous_aggregate('search_query_count_3', NULL, NULL);
 SELECT * FROM search_query_count_3 ORDER BY 1, 2, 3;
 
---- enable compression on continuous aggregates
-ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress); 
+--- TEST enable compression on continuous aggregates
+CREATE VIEW cagg_compression_status as
+SELECT ca.mat_hypertable_id AS mat_htid,
+       ca.user_view_name AS cagg_name ,
+       h.schema_name AS mat_schema_name,
+       h.table_name AS mat_table_name,
+       CASE WHEN h.compressed_hypertable_id is null 
+            THEN 'disabled'
+            ELSE 'enabled'
+       END as compression_enabled,
+       ca.materialized_only
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
+;
+SELECT mat_htid AS "MAT_HTID"
+     , mat_schema_name || '.' || mat_table_name AS "MAT_HTNAME"
+     , mat_table_name AS "MAT_TABLE_NAME"
+FROM cagg_compression_status 
+WHERE cagg_name = 'search_query_count_3' \gset
+
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'true');
+SELECT cagg_name, mat_table_name, compression_enabled
+FROM cagg_compression_status where cagg_name = 'search_query_count_3';
+SELECT * FROM timescaledb_information.compression_settings 
+WHERE hypertable_name = :'MAT_TABLE_NAME';
+
+SELECT compress_chunk(ch)
+FROM show_chunks('search_query_count_3') ch;
+
+SELECT * from search_query_count_3 ORDER BY 1, 2, 3;
+
+-- insert into a new region of the hypertable and then refresh the cagg
+-- (note we still do not support refreshes into existing regions.
+-- cagg chunks do not map 1-1 to hypertabl regions. They encompass
+-- more data
+-- ).
+insert into raw_data select '2000-05-01 00:00+0','Q3', 0, 0;
+
+--this one fails now
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('search_query_count_3', NULL, '2000-06-01 00:00+0'::timestamptz);
+CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
+\set ON_ERROR_STOP 1
+
+--insert row 
+insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
+
+--this should succeed since it does not refresh any compressed regions in the cagg
+CALL refresh_continuous_aggregate('search_query_count_3', '2001-05-01 00:00+0'::timestamptz, '2001-06-01 00:00+0'::timestamptz);
+
+--verify watermark and check that chunks are compressed
+SELECT _timescaledb_internal.to_timestamp(w) FROM _timescaledb_internal.cagg_watermark(:'MAT_HTID') w;
+
+SELECT chunk_name, range_start, range_end, is_compressed
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = :'MAT_TABLE_NAME'
+ORDER BY 1;
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
+
+SELECT * from search_query_count_3 
+WHERE bucket > '2001-01-01'
+ORDER BY 1, 2, 3;
+
+--now disable compression , will error out --
+\set ON_ERROR_STOP 0
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
+\set ON_ERROR_STOP 1
+
+SELECT decompress_chunk(schema_name || '.' || table_name)
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id = :'MAT_HTID' and status = 1;
+
+--disable compression on cagg after decompressing all chunks--
+ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
+SELECT cagg_name, mat_table_name, compression_enabled
+FROM cagg_compression_status where cagg_name = 'search_query_count_3';
+
+--TEST test with multiple settings on continuous aggregates --
+-- test for materialized_only + compress combinations
+CREATE TABLE test_setting(time timestamptz not null, val numeric);
+SELECT created FROM create_hypertable('test_setting','time');
+
+CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous) 
+AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
+
+INSERT INTO test_setting      
+SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
+CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+
+--try out 2 settings here --
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
+SELECT cagg_name, compression_enabled, materialized_only
+FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
+INSERT INTO test_setting VALUES( '2020-11-01', 20);
+--real time aggs is off now , should return 20 --
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+
+--now set it back to false --
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
+SELECT cagg_name, compression_enabled, materialized_only
+FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
+--count should return additional data since we have real time aggs on
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='false');
+SELECT cagg_name, compression_enabled, materialized_only
+FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
+--real time aggs is off now , should return 20 --
+SELECT count(*) from test_setting_cagg ORDER BY 1;
+
+ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='false');
+SELECT cagg_name, compression_enabled, materialized_only
+FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
+--count should return additional data since we have real time aggs on
+SELECT count(*) from test_setting_cagg ORDER BY 1;
