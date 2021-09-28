@@ -43,3 +43,36 @@ DROP OWNED BY :ROLE_SUPERUSER;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE test_drop_owned;
 
+-- Test that dependencies on roles are added to chunks when creating
+-- new chunks. If that is not done, DROP OWNED BY will not revoke the
+-- privilege on the chunk.
+CREATE TABLE sensor_data(time timestamptz not null, cpu double precision null);
+
+SELECT * FROM create_hypertable('sensor_data','time');
+
+INSERT INTO sensor_data
+SELECT time + (INTERVAL '1 minute' * random()) AS time,
+       random() AS cpu
+FROM generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '10 minute') AS g1(time);
+
+\dp sensor_data
+\dp _timescaledb_internal._hyper_3*
+
+GRANT SELECT ON sensor_data TO :ROLE_DEFAULT_PERM_USER;
+
+\dp sensor_data
+\dp _timescaledb_internal._hyper_3*
+
+-- Insert more chunks after adding the user to the hypertable. These
+-- will now get the privileges of the hypertable.
+INSERT INTO sensor_data
+SELECT time + (INTERVAL '1 minute' * random()) AS time, random() AS cpu
+  FROM generate_series(now() - INTERVAL '1 week', now(), INTERVAL '10 minute') AS g1(time);
+
+\dp _timescaledb_internal._hyper_3*
+
+-- This should revoke the privileges on both the hypertable and the chunks.
+DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
+
+\dp sensor_data
+\dp _timescaledb_internal._hyper_3*

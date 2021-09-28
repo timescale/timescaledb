@@ -13,9 +13,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - uses: actions/checkout@v2
-
-    - id: set-matrix
+    - name: Checkout source code
+      uses: actions/checkout@v2
+    - name: Build matrix
+      id: set-matrix
       run: python scripts/gh_matrix_builder.py ${{ github.event_name }}
 
   regress:
@@ -43,6 +44,7 @@ jobs:
     - name: Install macOS Dependencies using Perl
       if: runner.os == 'macOS'
       run: |
+        brew install openssl
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 

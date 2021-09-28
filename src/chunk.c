@@ -717,7 +717,7 @@ get_am_name_for_rel(Oid relid)
 }
 
 static void
-copy_hypertable_acl_to_relid(const Hypertable *ht, Oid relid)
+copy_hypertable_acl_to_relid(const Hypertable *ht, Oid owner_id, Oid relid)
 {
 	HeapTuple ht_tuple;
 	bool is_null;
@@ -756,6 +756,26 @@ copy_hypertable_acl_to_relid(const Hypertable *ht, Oid relid)
 									 new_null,
 									 new_repl);
 		CatalogTupleUpdate(class_rel, &newtuple->t_self, newtuple);
+
+		/* We need to update the shared dependencies as well to indicate that
+		 * the chunk is dependent on any roles that the hypertable is
+		 * dependent on. */
+		Oid *newmembers;
+		int nnewmembers = aclmembers(acl, &newmembers);
+
+		/* The list of old members is intentionally empty since we are using
+		 * updateAclDependencies to set the ACL for the chunk. We can use NULL
+		 * because getOidListDiff, which is called from updateAclDependencies,
+		 * can handle that. */
+		updateAclDependencies(RelationRelationId,
+							  relid,
+							  0,
+							  owner_id,
+							  0,
+							  NULL,
+							  nnewmembers,
+							  newmembers);
+
 		heap_freetuple(newtuple);
 		ReleaseSysCache(chunk_tuple);
 	}
@@ -840,7 +860,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	CommandCounterIncrement();
 
 	/* Copy acl from hypertable to chunk relation record */
-	copy_hypertable_acl_to_relid(ht, objaddr.objectId);
+	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, objaddr.objectId);
 
 	if (chunk->relkind == RELKIND_RELATION)
 	{
@@ -2477,7 +2497,6 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 									ForwardScanDirection,
 									AccessShareLock,
 									mctx);
-
 	Assert(num_found == 0 || (num_found == 1 && !stubctx.is_dropped));
 	chunk = stubctx.chunk;
 
@@ -2929,7 +2948,8 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 							(errmsg("unexpected state for chunk %s.%s, dropping anyway",
 									quote_identifier(NameStr(form.schema_name)),
 									quote_identifier(NameStr(form.table_name))),
-							 errdetail("The integrity of hypertable %s.%s might be compromised "
+							 errdetail("The integrity of hypertable %s.%s might be "
+									   "compromised "
 									   "since one of its chunks lacked a dimension slice.",
 									   quote_identifier(NameStr(ht->fd.schema_name)),
 									   quote_identifier(NameStr(ht->fd.table_name)))));
@@ -2955,7 +2975,8 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 		/* The chunk may have been delete by a CASCADE */
 		if (compressed_chunk != NULL)
-			/* Plain drop without preserving catalog row because this is the compressed chunk */
+			/* Plain drop without preserving catalog row because this is the compressed
+			 * chunk */
 			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
 	}
 
@@ -3255,9 +3276,9 @@ ts_chunk_drop_fks(const Chunk *const chunk)
 }
 
 /*
- * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable as
- * a template. Currently it is used only during chunk decompression, since FK constraints are
- * dropped during compression.
+ * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable
+ * as a template. Currently it is used only during chunk decompression, since FK constraints
+ * are dropped during compression.
  */
 void
 ts_chunk_create_fks(const Chunk *const chunk)
@@ -3619,9 +3640,10 @@ chunk_cmp(const void *ch1, const void *ch2)
 }
 
 /*
- * This is a helper set returning function (SRF) that takes a set returning function context and
- * as argument and returns oids extracted from funcctx->user_fctx (which is Chunk* array). Note
- * that the caller needs to be registered as a set returning function for this to work.
+ * This is a helper set returning function (SRF) that takes a set returning function context
+ * and as argument and returns oids extracted from funcctx->user_fctx (which is Chunk*
+ * array). Note that the caller needs to be registered as a set returning function for this
+ * to work.
  */
 static Datum
 chunks_return_srf(FunctionCallInfo fcinfo)
@@ -3853,9 +3875,9 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 }
 
 /*
- * This is a helper set returning function (SRF) that takes a set returning function context and
- * as argument and returns cstrings extracted from funcctx->user_fctx (which is a List). Note
- * that the caller needs to be registered as a set returning function for this to work.
+ * This is a helper set returning function (SRF) that takes a set returning function context
+ * and as argument and returns cstrings extracted from funcctx->user_fctx (which is a List).
+ * Note that the caller needs to be registered as a set returning function for this to work.
  */
 static Datum
 list_return_srf(FunctionCallInfo fcinfo)
@@ -3954,7 +3976,8 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid)
 					(errcode(ERRCODE_TS_INTERNAL_ERROR),
 					 errmsg("no materialized table for continuous aggregate"),
 					 errdetail("Continuous aggregate \"%s\" had a materialized hypertable"
-							   " with id %d but it was not found in the hypertable catalog.",
+							   " with id %d but it was not found in the hypertable "
+							   "catalog.",
 							   rel_name,
 							   cagg->data.mat_hypertable_id)));
 	}
@@ -4073,9 +4096,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 /**
  * This function is used to explicitly specify chunks that are being scanned. It's being
- * processed in the planning phase and removed from the query tree. This means that the actual
- * function implementation will only be executed if something went wrong during explicit chunk
- * exclusion.
+ * processed in the planning phase and removed from the query tree. This means that the
+ * actual function implementation will only be executed if something went wrong during
+ * explicit chunk exclusion.
  */
 Datum
 ts_chunks_in(PG_FUNCTION_ARGS)
