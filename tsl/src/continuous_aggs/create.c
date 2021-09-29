@@ -506,7 +506,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
-	Hypertable *mat_ht = NULL;
+	Hypertable *mat_ht = NULL, *orig_ht = NULL;
 	Oid owner = GetUserId();
 
 	create = makeNode(CreateStmt);
@@ -550,8 +550,15 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 * invalid. Add an infinite invalidation for the continuous
 	 * aggregate. This is the initial state of the aggregate before any
 	 * refreshes. */
-	invalidation_cagg_log_add_entry(mat_htid, TS_TIME_NOBEGIN, TS_TIME_NOEND);
-
+	orig_ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
+	if (hypertable_is_distributed(orig_ht))
+	{
+		remote_invalidation_cagg_log_add_initial_entry(mat_htid, origquery_tblinfo->htid);
+	}
+	else
+	{
+		invalidation_cagg_log_add_entry(mat_htid, TS_TIME_NOBEGIN, TS_TIME_NOEND);
+	}
 	ts_cache_release(hcache);
 	return mat_htid;
 }
