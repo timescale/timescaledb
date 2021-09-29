@@ -17,6 +17,7 @@
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
 #include <fmgr.h>
+#include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
@@ -211,6 +212,203 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
+}
+
+TSDLLEXPORT CaggsInfo
+ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
+{
+	CaggsInfo all_caggs_info;
+
+	List *caggs = ts_continuous_aggs_find_by_raw_table_id(raw_hypertable_id);
+	ListCell *lc;
+	int64 *bucket_width;
+
+	all_caggs_info.bucket_widths = NIL;
+	all_caggs_info.max_bucket_widths = NIL;
+	all_caggs_info.mat_hypertable_ids = NIL;
+	Assert(list_length(caggs) > 0);
+	ContinuousAgg *last_cagg = llast(caggs);
+	all_caggs_info.last_mat_hypertable_id = last_cagg->data.mat_hypertable_id;
+
+	foreach (lc, caggs)
+	{
+		ContinuousAgg *cagg = lfirst(lc);
+
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = ts_continuous_agg_bucket_width(cagg);
+		all_caggs_info.bucket_widths = lappend(all_caggs_info.bucket_widths, bucket_width);
+
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = ts_continuous_agg_max_bucket_width(cagg);
+		all_caggs_info.max_bucket_widths = lappend(all_caggs_info.max_bucket_widths, bucket_width);
+
+		all_caggs_info.mat_hypertable_ids =
+			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
+	}
+	return all_caggs_info;
+}
+
+TSDLLEXPORT void
+populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
+								ArrayType *max_bucket_widths, CaggsInfo *all_caggs)
+{
+	all_caggs->mat_hypertable_ids = NIL;
+	all_caggs->bucket_widths = NIL;
+	all_caggs->max_bucket_widths = NIL;
+
+	Assert(ARR_NDIM(mat_hypertable_ids) > 0 && ARR_NDIM(bucket_widths) > 0 &&
+		   ARR_NDIM(bucket_widths) > 0);
+	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
+		   ARR_NDIM(bucket_widths) == ARR_NDIM(bucket_widths));
+
+	ArrayIterator it1, it2, it3;
+	Datum array_datum1, array_datum2, array_datum3;
+	bool isnull1, isnull2, isnull3;
+
+	it1 = array_create_iterator(mat_hypertable_ids, 0, NULL);
+	it2 = array_create_iterator(bucket_widths, 0, NULL);
+	it3 = array_create_iterator(max_bucket_widths, 0, NULL);
+	while (array_iterate(it1, &array_datum1, &isnull1) &&
+		   array_iterate(it2, &array_datum2, &isnull2) &&
+		   array_iterate(it3, &array_datum3, &isnull3))
+	{
+		Assert(!isnull1 && !isnull2 && !isnull3);
+		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
+		all_caggs->mat_hypertable_ids =
+			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
+
+		int64 *bucket_width;
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = DatumGetInt64(array_datum2);
+		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, bucket_width);
+
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = DatumGetInt64(array_datum3);
+		all_caggs->max_bucket_widths = lappend(all_caggs->max_bucket_widths, bucket_width);
+	}
+	array_free_iterator(it1);
+	array_free_iterator(it2);
+	array_free_iterator(it3);
+}
+
+TSDLLEXPORT void
+create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hypertable_ids,
+								  ArrayExpr **bucket_widths, ArrayExpr **max_bucket_widths)
+{
+	ListCell *lc1, *lc2, *lc3;
+	Const *elem;
+
+	*mat_hypertable_ids = makeNode(ArrayExpr);
+	(*mat_hypertable_ids)->array_typeid = INT4ARRAYOID;
+	(*mat_hypertable_ids)->element_typeid = INT4OID;
+	(*mat_hypertable_ids)->elements = NIL;
+	(*mat_hypertable_ids)->multidims = false;
+	(*mat_hypertable_ids)->location = -1;
+
+	*bucket_widths = makeNode(ArrayExpr);
+	(*bucket_widths)->array_typeid = INT8ARRAYOID;
+	(*bucket_widths)->element_typeid = INT8OID;
+	(*bucket_widths)->elements = NIL;
+	(*bucket_widths)->multidims = false;
+	(*bucket_widths)->location = -1;
+
+	*max_bucket_widths = makeNode(ArrayExpr);
+	(*max_bucket_widths)->array_typeid = INT8ARRAYOID;
+	(*max_bucket_widths)->element_typeid = INT8OID;
+	(*max_bucket_widths)->elements = NIL;
+	(*max_bucket_widths)->multidims = false;
+	(*max_bucket_widths)->location = -1;
+
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->max_bucket_widths)
+	{
+		int32 cagg_hyper_id = lfirst_int(lc1);
+		elem = makeConst(INT4OID,
+						 -1,
+						 InvalidOid,
+						 sizeof(int32),
+						 Int32GetDatum(cagg_hyper_id),
+						 false,
+						 false);
+		(*mat_hypertable_ids)->elements = lappend((*mat_hypertable_ids)->elements, elem);
+
+		int64 bucket_width = *(int64_t *) lfirst(lc2);
+		elem = makeConst(INT8OID,
+						 -1,
+						 InvalidOid,
+						 sizeof(int64),
+						 Int64GetDatum(bucket_width),
+						 false,
+						 FLOAT8PASSBYVAL);
+		(*bucket_widths)->elements = lappend((*bucket_widths)->elements, elem);
+
+		int64 max_bucket_width = *(int64_t *) lfirst(lc3);
+		elem = makeConst(INT8OID,
+						 -1,
+						 InvalidOid,
+						 sizeof(int64),
+						 Int64GetDatum(max_bucket_width),
+						 false,
+						 FLOAT8PASSBYVAL);
+		(*max_bucket_widths)->elements = lappend((*max_bucket_widths)->elements, elem);
+	}
+}
+
+TSDLLEXPORT void
+create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
+							  ArrayType **bucket_widths, ArrayType **max_bucket_widths)
+{
+	ListCell *lc1, *lc2, *lc3;
+	unsigned i;
+
+	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
+	Datum *widthdatums = palloc(sizeof(Datum) * list_length(all_caggs->bucket_widths));
+	Datum *maxwidthdatums = palloc(sizeof(Datum) * list_length(all_caggs->max_bucket_widths));
+
+	i = 0;
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->max_bucket_widths)
+	{
+		int32 cagg_hyper_id = lfirst_int(lc1);
+		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
+
+		int64 bucket_width = *(int64_t *) lfirst(lc2);
+		widthdatums[i] = Int64GetDatum(bucket_width);
+
+		int64 max_bucket_width = *(int64_t *) lfirst(lc3);
+		maxwidthdatums[i] = Int64GetDatum(max_bucket_width);
+
+		++i;
+	}
+
+	*mat_hypertable_ids = construct_array(matiddatums,
+										  list_length(all_caggs->mat_hypertable_ids),
+										  INT4OID,
+										  4,
+										  true,
+										  'i');
+
+	*bucket_widths = construct_array(widthdatums,
+									 list_length(all_caggs->bucket_widths),
+									 INT8OID,
+									 8,
+									 FLOAT8PASSBYVAL,
+									 'd');
+
+	*max_bucket_widths = construct_array(maxwidthdatums,
+										 list_length(all_caggs->max_bucket_widths),
+										 INT8OID,
+										 8,
+										 FLOAT8PASSBYVAL,
+										 'd');
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
