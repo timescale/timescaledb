@@ -84,6 +84,8 @@ typedef struct CrossModuleFunctions
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);
 	void (*sql_drop)(List *dropped_objects);
+
+	/* Continuous Aggregates */
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
 	PGFunction finalize_agg_ffunc;
@@ -95,6 +97,9 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_invalidate)(const Hypertable *ht, int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	PGFunction invalidation_cagg_log_add_initial_entry;
+	PGFunction invalidation_process_hypertable_log;
+	PGFunction invalidation_process_cagg_log;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;

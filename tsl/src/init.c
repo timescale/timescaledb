@@ -122,15 +122,21 @@ CrossModuleFunctions tsl_cm_functions = {
 	.move_chunk_proc = tsl_move_chunk_proc,
 	.copy_chunk_proc = tsl_copy_chunk_proc,
 	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
+
+	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
-	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_refresh_chunk = continuous_agg_refresh_chunk,
 	.continuous_agg_invalidate = invalidation_add_entry,
+	.continuous_agg_update_options = continuous_agg_update_options,
+	.invalidation_cagg_log_add_initial_entry = tsl_invalidation_cagg_log_add_initial_entry,
+	.invalidation_process_hypertable_log = tsl_invalidation_process_hypertable_log,
+	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
+
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
 	.compressed_data_send = tsl_compressed_data_send,
