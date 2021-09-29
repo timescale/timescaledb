@@ -60,6 +60,28 @@ typedef struct ContinuousAggMatOptions
 									   cover this point */
 } ContinuousAggMatOptions;
 
+typedef struct CaggsInfoData
+{
+	List *mat_hypertable_ids; /* (int32) elements */
+	List *bucket_widths;	  /* (int64 *) elements */
+	List *max_bucket_widths;  /* (int64 *) elements */
+	int32 last_mat_hypertable_id;
+} CaggsInfo;
+
+extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
+extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
+extern TSDLLEXPORT void populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
+														ArrayType *bucket_widths,
+														ArrayType *max_bucket_widths,
+														CaggsInfo *all_caggs);
+extern TSDLLEXPORT void create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs,
+														  ArrayExpr **mat_hypertable_ids,
+														  ArrayExpr **bucket_widths,
+														  ArrayExpr **max_bucket_widths);
+TSDLLEXPORT void create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
+											   ArrayType **bucket_widths,
+											   ArrayType **max_bucket_widths);
+
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
 

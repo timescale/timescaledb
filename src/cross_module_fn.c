@@ -74,6 +74,9 @@ CROSSMODULE_WRAPPER(recompress_chunk);
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_refresh_chunk);
+CROSSMODULE_WRAPPER(invalidation_cagg_log_add_initial_entry);
+CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
+CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
 
 CROSSMODULE_WRAPPER(data_node_ping);
 CROSSMODULE_WRAPPER(data_node_block_new_chunks);
@@ -349,6 +352,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_refresh_chunk = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate = continuous_agg_invalidate_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
+	.invalidation_cagg_log_add_initial_entry = error_no_default_fn_pg_community,
+	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
+	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
