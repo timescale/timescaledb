@@ -170,14 +170,22 @@ deparse_columns(StringInfo stmt, Relation rel)
 	{
 		int dim_idx;
 		Form_pg_attribute attr = TupleDescAttr(rel_desc, att_idx);
+		bits16 flags = FORMAT_TYPE_TYPEMOD_GIVEN;
 
 		if (attr->attisdropped)
 			continue;
 
+		/*
+		 * if it's not a builtin type then schema qualify the same. There's a function
+		 * deparse_type_name in fdw, but we don't want cross linking unnecessarily
+		 */
+		if (attr->atttypid >= FirstBootstrapObjectId)
+			flags |= FORMAT_TYPE_FORCE_QUALIFY;
+
 		appendStringInfo(stmt,
 						 "\"%s\" %s",
 						 NameStr(attr->attname),
-						 format_type_with_typemod(attr->atttypid, attr->atttypmod));
+						 format_type_extended(attr->atttypid, attr->atttypmod, flags));
 
 		if (attr->attnotnull)
 			appendStringInfoString(stmt, " NOT NULL");
