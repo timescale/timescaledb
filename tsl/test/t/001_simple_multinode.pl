@@ -8,10 +8,11 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 9;
+use Test::More tests => 12;
 
 #Initialize all the multi-node instances
-my $an  = AccessNode->create('an');
+my $an = AccessNode->create('an');
+
 my $dn1 = DataNode->create('dn1');
 my $dn2 = DataNode->create('dn2');
 
@@ -50,6 +51,30 @@ $dn2->psql_is(
 	'postgres', $query,
 	"_timescaledb_internal._dist_hyper_1_2_chunk",
 	'DN2 shows correct set of chunks');
+
+# Check that distributed tables in non-default schema and also containing user created types
+# in another schema are created properly
+$query = q[CREATE SCHEMA myschema];
+$an->safe_psql('postgres', "$query; CALL distributed_exec('$query');");
+$query =
+  q[CREATE TYPE public.full_address AS (city VARCHAR(90), street VARCHAR(90))];
+$an->safe_psql('postgres', "$query; CALL distributed_exec('$query');");
+
+# Create a table in the myschema schema using this unqualified UDT. Should work
+$an->safe_psql('postgres',
+	"CREATE TABLE myschema.test (time timestamp, a full_address);");
+
+# A distributed table creation followed by sample INSERT should succeed now
+$an->safe_psql('postgres',
+	"SELECT create_distributed_hypertable('myschema.test', 'time');");
+$an->safe_psql('postgres',
+	"INSERT INTO myschema.test VALUES ('2018-03-02 1:00', ('Kilimanjaro', 'Diamond St'));"
+);
+$an->psql_is(
+	'postgres',
+	"SELECT * from myschema.test",
+	q[2018-03-02 01:00:00|(Kilimanjaro,"Diamond St")],
+	'AN shows correct data with UDT from different schema');
 
 done_testing();
 
