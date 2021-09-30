@@ -1899,11 +1899,14 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
 		chunk->relkind = hypertable_chunk_relkind(ht);
+		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+		{
+			chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
+			if (!chunk->data_nodes)
+				chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
+		}
 		chunk->table_id = chunk_create_table(chunk, ht);
 		chunk_create_table_constraints(chunk);
-
-		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-			chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
@@ -2422,9 +2425,11 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 		for (j = 0; j < ccs->num_constraints; j++)
 		{
 			ChunkConstraint *cc = &ccs->constraints[j];
-			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, true);
+			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
 			MemoryContext old;
 
+			if (!chunk)
+				continue;
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
 			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, mctx);
 
