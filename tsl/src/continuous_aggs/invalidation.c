@@ -1040,10 +1040,10 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(5);
 	ArrayType *max_bucket_widths = PG_GETARG_ARRAYTYPE_P(6);
 
-	populate_caggs_info_from_arrays(mat_hypertable_ids,
-									bucket_widths,
-									max_bucket_widths,
-									&all_caggs_info);
+	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
+									   bucket_widths,
+									   max_bucket_widths,
+									   &all_caggs_info);
 
 	invalidation_process_hypertable_log(mat_hypertable_id,
 										raw_hypertable_id,
@@ -1075,10 +1075,10 @@ invoke_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	ArrayExpr *bucket_widths;
 	ArrayExpr *max_bucket_widths;
 
-	create_arrayexprs_from_caggs_info(all_caggs,
-									  &mat_hypertable_ids,
-									  &bucket_widths,
-									  &max_bucket_widths);
+	ts_create_arrayexprs_from_caggs_info(all_caggs,
+										 &mat_hypertable_ids,
+										 &bucket_widths,
+										 &max_bucket_widths);
 
 	Expr *argarr[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
 		(Expr *) makeConst(INT4OID,
@@ -1154,10 +1154,10 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	FmgrInfo flinfo;
 	unsigned int i;
 
-	create_arrays_from_caggs_info(all_caggs,
-								  &mat_hypertable_ids,
-								  &bucket_widths,
-								  &max_bucket_widths);
+	ts_create_arrays_from_caggs_info(all_caggs,
+									 &mat_hypertable_ids,
+									 &bucket_widths,
+									 &max_bucket_widths);
 
 	Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
 		INT4OID, INT4OID, OIDOID, INT4OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
@@ -1298,10 +1298,10 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 	ArrayType *max_bucket_widths = PG_GETARG_ARRAYTYPE_P(8);
 	InternalTimeRange ret_merged_refresh_window;
 
-	populate_caggs_info_from_arrays(mat_hypertable_ids,
-									bucket_widths,
-									max_bucket_widths,
-									&all_caggs_info);
+	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
+									   bucket_widths,
+									   max_bucket_widths,
+									   &all_caggs_info);
 
 	/* Force to always merge the refresh ranges since it is running in the data node
 	 * by setting (max_materializations = 0) */
@@ -1358,10 +1358,10 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 
 	*do_merged_refresh = false;
 
-	create_arrays_from_caggs_info(all_caggs,
-								  &mat_hypertable_ids,
-								  &bucket_widths,
-								  &max_bucket_widths);
+	ts_create_arrays_from_caggs_info(all_caggs,
+									 &mat_hypertable_ids,
+									 &bucket_widths,
+									 &max_bucket_widths);
 
 	Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = { INT4OID,	  INT4OID,		 OIDOID,
 														 INT8OID,	  INT8OID,		 INT4OID,
