@@ -30,7 +30,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_cagg_log_add_initi
 CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
-    dimtype REGCLASS,
+    dimtype REGTYPE,
     last_mat_hypertable_id INTEGER,
     mat_hypertable_ids INTEGER[],
     bucket_widths BIGINT[],
@@ -62,7 +62,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
-    dimtype REGCLASS,
+    dimtype REGTYPE,
     window_start BIGINT,
     window_end BIGINT,
     last_mat_hypertable_id INTEGER,
