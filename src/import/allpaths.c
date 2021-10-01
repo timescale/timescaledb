@@ -181,10 +181,12 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		if (IS_DUMMY_REL(childrel))
 			continue;
 
-		/* Bubble up childrel's partitioned children. */
+			/* Bubble up childrel's partitioned children. */
+#if PG14_LT
 		if (rel->part_scheme)
 			rel->partitioned_child_rels = list_concat(rel->partitioned_child_rels,
 													  list_copy(childrel->partitioned_child_rels));
+#endif
 
 		/*
 		 * Child is live, so add it to the live_childrels list for use below.
@@ -518,8 +520,10 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry
 	 * that when we've created Paths for all the children, the root
 	 * partitioned table's list will contain all such indexes.
 	 */
+#if PG14_LT
 	if (rte->relkind == RELKIND_PARTITIONED_TABLE)
 		rel->partitioned_child_rels = list_make1_int(rti);
+#endif
 
 	/*
 	 * If this is a partitioned baserel, set the consider_partitionwise_join
