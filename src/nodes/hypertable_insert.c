@@ -18,6 +18,7 @@
 #include <foreign/foreign.h>
 #include <catalog/pg_type.h>
 
+#include "compat/compat.h"
 #include "hypertable_insert.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
@@ -80,7 +81,6 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 	PlanState *ps;
 	List *chunk_dispatch_states = NIL;
 	ListCell *lc;
-	int i;
 
 	ps = ExecInitNode(&state->mt->plan, estate, eflags);
 	node->custom_ps = list_make1(ps);
@@ -89,13 +89,17 @@ hypertable_insert_begin(CustomScanState *node, EState *estate, int eflags)
 	/*
 	 * Find all ChunkDispatchState subnodes and set their parent
 	 * ModifyTableState node
+	 * We assert we only have 1 ModifyTable subpath when we create
+	 * the HypertableInsert path so this should not have changed here.
 	 */
-	for (i = 0; i < mtstate->mt_nplans; i++)
-	{
-		List *substates = get_chunk_dispatch_states(mtstate->mt_plans[i]);
+#if PG14_LT
+	Assert(mtstate->mt_nplans == 1);
+	PlanState *subplan = mtstate->mt_plans[0];
+#else
+	PlanState *subplan = outerPlanState(mtstate);
+#endif
 
-		chunk_dispatch_states = list_concat(chunk_dispatch_states, substates);
-	}
+	chunk_dispatch_states = get_chunk_dispatch_states(subplan);
 
 	/* Ensure that we found at least one ChunkDispatchState node */
 	Assert(list_length(chunk_dispatch_states) > 0);
@@ -443,52 +447,49 @@ Path *
 ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
 	Path *path = &mtpath->path;
+	Path *subpath;
 	Cache *hcache = ts_hypertable_cache_pin();
-	ListCell *lc_path, *lc_rel;
-	List *subpaths = NIL;
 	Bitmapset *distributed_insert_plans = NULL;
 	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
 	int i = 0;
 
+#if PG14_LT
+	/* Since it's theoretically possible for ModifyTablePath to have multiple subpaths
+	 * in PG < 14 we assert that we only get 1 subpath here. */
 	Assert(list_length(mtpath->subpaths) == list_length(mtpath->resultRelations));
+	Assert(list_length(mtpath->subpaths) == 1);
+#endif
 
-	forboth (lc_path, mtpath->subpaths, lc_rel, mtpath->resultRelations)
+	Index rti = linitial_int(mtpath->resultRelations);
+	RangeTblEntry *rte = planner_rt_fetch(rti, root);
+
+	ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+
+	if (!ht)
 	{
-		Path *subpath = lfirst(lc_path);
-		Index rti = lfirst_int(lc_rel);
-		RangeTblEntry *rte = planner_rt_fetch(rti, root);
-
-		ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-
-		if (ht != NULL)
-		{
-			if (root->parse->onConflict != NULL &&
-				root->parse->onConflict->constraint != InvalidOid)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("hypertables do not support ON CONFLICT statements that reference "
-								"constraints"),
-						 errhint("Use column names to infer indexes instead.")));
-
-			if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
-			{
-				/* Remember that this will become a data node dispatch/copy
-				 * plan. We need to know later whether or not to plan this
-				 * using the FDW API. */
-				distributed_insert_plans = bms_add_member(distributed_insert_plans, i);
-				subpath = ts_cm_functions->distributed_insert_path_create(root, mtpath, rti, i);
-			}
-			else
-				subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
-		}
-
-		i++;
-		subpaths = lappend(subpaths, subpath);
-	}
-
-	if (NULL == ht)
 		elog(ERROR, "no hypertable found in INSERT plan");
+	}
+	else
+	{
+		if (root->parse->onConflict && OidIsValid(root->parse->onConflict->constraint))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support ON CONFLICT statements that reference "
+							"constraints"),
+					 errhint("Use column names to infer indexes instead.")));
+
+		if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
+		{
+			/* Remember that this will become a data node dispatch/copy
+			 * plan. We need to know later whether or not to plan this
+			 * using the FDW API. */
+			distributed_insert_plans = bms_add_member(distributed_insert_plans, i);
+			subpath = ts_cm_functions->distributed_insert_path_create(root, mtpath, rti, i);
+		}
+		else
+			subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
+	}
 
 	hipath = palloc0(sizeof(HypertableInsertPath));
 
@@ -501,7 +502,11 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	hipath->distributed_insert_plans = distributed_insert_plans;
 	hipath->serveroids = ts_hypertable_get_available_data_node_server_oids(ht);
 	path = &hipath->cpath.path;
-	mtpath->subpaths = subpaths;
+#if PG14_LT
+	mtpath->subpaths = list_make1(subpath);
+#else
+	mtpath->subpath = subpath;
+#endif
 
 	ts_cache_release(hcache);
 

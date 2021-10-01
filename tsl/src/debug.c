@@ -474,7 +474,11 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 			break;
 		case T_ModifyTablePath:
 			ptype = "ModifyTable";
+#if PG14_LT
 			subpath_list = castNode(ModifyTablePath, path)->subpaths;
+#else
+			subpath_list = list_make1(castNode(ModifyTablePath, path)->subpath);
+#endif
 			break;
 		case T_LimitPath:
 			ptype = "Limit";
