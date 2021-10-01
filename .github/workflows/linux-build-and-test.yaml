@@ -41,9 +41,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl libtest-most-perl ${{ matrix.extra_packages }}
 
-    - name: Install macOS Dependencies using Perl
+    - name: Install macOS Dependencies
       if: runner.os == 'macOS'
       run: |
+        # This is needed because GitHub image macos-10.15 version
+        # 20210927.1 did not install OpenSSL so we install openssl
+        # explicitly.
         brew install openssl
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
