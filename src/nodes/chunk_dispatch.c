@@ -58,9 +58,13 @@ ts_chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 List *
 ts_chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 {
-	ModifyTableState *mtstate = dispatch->dispatch_state->mtstate;
-
+#if PG14_LT
+	ModifyTableState *mtstate = get_modifytable_state(dispatch);
 	return list_nth(get_modifytable(dispatch)->returningLists, mtstate->mt_whichplan);
+#else
+	Assert(list_length(get_modifytable(dispatch)->returningLists) == 1);
+	return linitial(get_modifytable(dispatch)->returningLists);
+#endif
 }
 
 List *

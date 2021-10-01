@@ -50,12 +50,14 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 static void
 on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 {
+#if PG14_LT
 	ChunkDispatchState *state = data;
 	ModifyTableState *mtstate = state->mtstate;
 
-	/* PG12 expects the current target slot to match the result relation. Thus
+	/* PG < 14 expects the current target slot to match the result relation. Thus
 	 * we need to make sure it is up-to-date with the current chunk here. */
 	mtstate->mt_scans[mtstate->mt_whichplan] = cis->slot;
+#endif
 }
 
 static TupleTableSlot *
@@ -219,7 +221,9 @@ ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *
 	ModifyTable *mt_plan = castNode(ModifyTable, mtstate->ps.plan);
 
 	/* Inserts on hypertables should always have one subplan */
+#if PG14_LT
 	Assert(mtstate->mt_nplans == 1);
+#endif
 	state->mtstate = mtstate;
 	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }
