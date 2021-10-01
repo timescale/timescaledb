@@ -249,8 +249,8 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 }
 
 TSDLLEXPORT void
-populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
-								ArrayType *max_bucket_widths, CaggsInfo *all_caggs)
+ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
+								   ArrayType *max_bucket_widths, CaggsInfo *all_caggs)
 {
 	all_caggs->mat_hypertable_ids = NIL;
 	all_caggs->bucket_widths = NIL;
@@ -292,8 +292,8 @@ populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket
 }
 
 TSDLLEXPORT void
-create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hypertable_ids,
-								  ArrayExpr **bucket_widths, ArrayExpr **max_bucket_widths)
+ts_create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hypertable_ids,
+									 ArrayExpr **bucket_widths, ArrayExpr **max_bucket_widths)
 {
 	ListCell *lc1, *lc2, *lc3;
 	Const *elem;
@@ -359,8 +359,8 @@ create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hypertab
 }
 
 TSDLLEXPORT void
-create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
-							  ArrayType **bucket_widths, ArrayType **max_bucket_widths)
+ts_create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
+								 ArrayType **bucket_widths, ArrayType **max_bucket_widths)
 {
 	ListCell *lc1, *lc2, *lc3;
 	unsigned i;
