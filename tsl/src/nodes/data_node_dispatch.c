@@ -299,7 +299,11 @@ data_node_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	DataNodeDispatchState *sds = (DataNodeDispatchState *) node;
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
+#if PG14_LT
 	ResultRelInfo *rri = estate->es_result_relation_info;
+#else
+	ResultRelInfo *rri = linitial_node(ResultRelInfo, estate->es_opened_result_relations);
+#endif
 	Relation rel = rri->ri_RelationDesc;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	Plan *subplan = linitial(cscan->custom_plans);
@@ -676,8 +680,11 @@ static int64
 handle_read(DataNodeDispatchState *sds)
 {
 	PlanState *substate = linitial(sds->cstate.custom_ps);
+	ChunkDispatchState *cds = (ChunkDispatchState *) substate;
 	EState *estate = sds->cstate.ss.ps.state;
+#if PG14_LT
 	ResultRelInfo *rri_saved = estate->es_result_relation_info;
+#endif
 	int64 num_tuples_read = 0;
 
 	Assert(sds->state == SD_READ);
@@ -699,7 +706,7 @@ handle_read(DataNodeDispatchState *sds)
 			/* The previous node should have routed the tuple to the right
 			 * chunk and set the corresponding result relation. The FdwState
 			 * should also point to the chunk's insert state. */
-			ResultRelInfo *rri = estate->es_result_relation_info;
+			ResultRelInfo *rri = cds->rri;
 			ChunkInsertState *cis = rri->ri_FdwState;
 			TriggerDesc *trigdesc = rri->ri_TrigDesc;
 			ListCell *lc;
@@ -753,7 +760,9 @@ handle_read(DataNodeDispatchState *sds)
 		}
 	}
 
+#if PG14_LT
 	estate->es_result_relation_info = rri_saved;
+#endif
 
 	return num_tuples_read;
 }
@@ -798,8 +807,8 @@ handle_flush(DataNodeDispatchState *sds)
 static TupleTableSlot *
 get_returning_tuple(DataNodeDispatchState *sds)
 {
-	EState *estate = sds->cstate.ss.ps.state;
-	ResultRelInfo *rri = estate->es_result_relation_info;
+	ChunkDispatchState *cds = (ChunkDispatchState *) linitial(sds->cstate.custom_ps);
+	ResultRelInfo *rri = cds->rri;
 	TupleTableSlot *res_slot = sds->batch_slot;
 	TupleTableSlot *slot = sds->cstate.ss.ss_ScanTupleSlot;
 	ExprContext *econtext;
@@ -883,7 +892,8 @@ static TupleTableSlot *
 handle_returning(DataNodeDispatchState *sds)
 {
 	EState *estate = sds->cstate.ss.ps.state;
-	ResultRelInfo *rri = estate->es_result_relation_info;
+	ChunkDispatchState *cds = (ChunkDispatchState *) linitial(sds->cstate.custom_ps);
+	ResultRelInfo *rri = cds->rri;
 	TupleTableSlot *slot = sds->cstate.ss.ss_ScanTupleSlot;
 	bool done = false;
 	MemoryContext oldcontext;
@@ -949,8 +959,10 @@ data_node_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *slot = NULL;
 	bool done = false;
 
+#if PG14_LT
 	/* Initially, the result relation should always match the hypertable.  */
 	Assert(node->ss.ps.state->es_result_relation_info->ri_RelationDesc->rd_id == sds->rel->rd_id);
+#endif
 
 	/* Read tuples and flush until there's either something to return or no
 	 * more tuples to read */
@@ -977,11 +989,13 @@ data_node_dispatch_exec(CustomScanState *node)
 		}
 	}
 
+#if PG14_LT
 	/* Tuple routing in the ChunkDispatchState subnode sets the result
 	 * relation to a chunk when routing, but the read handler should have
 	 * ensured the result relation is reset. */
 	Assert(node->ss.ps.state->es_result_relation_info->ri_RelationDesc->rd_id == sds->rel->rd_id);
 	Assert(node->ss.ps.state->es_result_relation_info->ri_usesFdwDirectModify);
+#endif
 
 	return slot;
 }

@@ -2218,7 +2218,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				(errmsg("migrating data to chunks"),
 				 errdetail("Migration might take a while depending on the amount of data.")));
 
-		timescaledb_move_from_table_to_chunks(ht, AccessShareLock);
+		timescaledb_move_from_table_to_chunks(ht, RowExclusiveLock);
 	}
 
 	insert_blocker_trigger_add(table_relid);

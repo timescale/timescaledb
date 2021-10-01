@@ -32,6 +32,7 @@ typedef struct ChunkDispatchState
 	 * relations) for each chunk.
 	 */
 	ChunkDispatch *dispatch;
+	ResultRelInfo *rri;
 } ChunkDispatchState;
 
 extern bool ts_chunk_dispatch_is_state(PlanState *state);
