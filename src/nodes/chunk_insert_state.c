@@ -79,21 +79,19 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
  * The ResultRelInfo holds the executor state (e.g., open relation, indexes, and
  * options) for the result relation where tuples will be stored.
  *
- * The first ResultRelInfo in the executor's array (corresponding to the main
- * table's) is used as a template for the chunk's new ResultRelInfo.
+ * The Hypertable ResultRelInfo is used as a template for the chunk's new ResultRelInfo.
  */
 static inline ResultRelInfo *
 create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 {
-	ResultRelInfo *rri, *rri_orig;
-	Index hyper_rti = dispatch->hypertable_result_rel_info->ri_RangeTableIndex;
-	rri = palloc0(sizeof(ResultRelInfo));
-	NodeSetTag(rri, T_ResultRelInfo);
+	ResultRelInfo *rri;
+	ResultRelInfo *rri_orig = dispatch->hypertable_result_rel_info;
+	Index hyper_rti = rri_orig->ri_RangeTableIndex;
+	rri = makeNode(ResultRelInfo);
 
 	InitResultRelInfo(rri, rel, hyper_rti, NULL, dispatch->estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
-	rri_orig = dispatch->hypertable_result_rel_info;
 	rri->ri_WithCheckOptions = rri_orig->ri_WithCheckOptions;
 	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
 #if PG14_LT
@@ -102,7 +100,7 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 	rri->ri_projectReturning = rri_orig->ri_projectReturning;
 
 	rri->ri_FdwState = NULL;
-	rri->ri_usesFdwDirectModify = dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify;
+	rri->ri_usesFdwDirectModify = rri_orig->ri_usesFdwDirectModify;
 
 	if (RelationGetForm(rel)->relkind == RELKIND_FOREIGN_TABLE)
 		rri->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
@@ -372,7 +370,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 	state->conflproj_tupdesc = get_default_confl_tupdesc(state, dispatch);
 	state->conflproj_slot = get_default_confl_slot(state, dispatch);
 
-	if (NULL != map)
+	if (map)
 	{
 		ExprContext *econtext = hyper_rri->ri_onConflict->oc_ProjInfo->pi_exprContext;
 		Node *onconflict_where = ts_chunk_dispatch_get_on_conflict_where(dispatch);
@@ -380,7 +378,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 
 		Assert(map->outdesc == RelationGetDescr(chunk_rel));
 
-		if (NULL == chunk_map)
+		if (!chunk_map)
 			chunk_map = convert_tuples_by_name_compat(RelationGetDescr(chunk_rel),
 													  RelationGetDescr(hyper_rel),
 													  gettext_noop("could not convert row type"));
@@ -664,6 +662,10 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 										  RelationGetDescr(rel),
 										  gettext_noop("could not convert row type"));
 
+	// relinfo->ri_RootToPartitionMap = state->hyper_to_chunk_map;
+	// relinfo->ri_PartitionTupleSlot = table_slot_create(relinfo->ri_RelationDesc,
+	// &state->estate->es_tupleTable);
+
 	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
 
 	if (has_compressed_chunk)
@@ -701,7 +703,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		RangeTblEntry *rte =
 			rt_fetch(resrelinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
 
-		Assert(NULL != rte);
+		Assert(rte != NULL);
 
 		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
 		state->chunk_data_nodes = ts_chunk_data_nodes_copy(chunk);
@@ -715,8 +717,8 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		 * to insert into. */
 		resrelinfo->ri_FdwState = state;
 	}
-	else if (NULL != resrelinfo->ri_FdwRoutine && !resrelinfo->ri_usesFdwDirectModify &&
-			 NULL != resrelinfo->ri_FdwRoutine->BeginForeignModify)
+	else if (resrelinfo->ri_FdwRoutine && !resrelinfo->ri_usesFdwDirectModify &&
+			 resrelinfo->ri_FdwRoutine->BeginForeignModify)
 	{
 		/*
 		 * If this is a chunk located one or more data nodes, setup the
@@ -757,8 +759,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
 	ResultRelInfo *rri = state->result_relation_info;
 
-	if (NULL != rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify &&
-		NULL != rri->ri_FdwRoutine->EndForeignModify)
+	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)
 		rri->ri_FdwRoutine->EndForeignModify(state->estate, rri);
 
 	destroy_on_conflict_state(state);
@@ -789,7 +790,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	}
 
 	table_close(state->rel, NoLock);
-	if (NULL != state->slot)
+	if (state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
 
 	/*
@@ -844,7 +845,7 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	 * of the CIS (if not already deleted), then the per_tuple context, followed
 	 * by the CIS again (via the callback), and thus a crash.
 	 */
-	if (state->estate->es_per_tuple_exprcontext != NULL)
+	if (state->estate->es_per_tuple_exprcontext)
 		MemoryContextSetParent(state->mctx,
 							   state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	else

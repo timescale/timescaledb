@@ -90,7 +90,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	point = ts_hyperspace_calculate_point(ht->space, slot);
 
 	/* Save the main table's (hypertable's) ResultRelInfo */
-	if (NULL == dispatch->hypertable_result_rel_info)
+	if (!dispatch->hypertable_result_rel_info)
 	{
 #if PG14_LT
 		Assert(RelationGetRelid(estate->es_result_relation_info->ri_RelationDesc) ==
