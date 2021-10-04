@@ -1,5 +1,5 @@
 version: 1.0.{build}
-image: Previous Visual Studio 2019
+image: Visual Studio 2019 Preview
 services:
   - postgresql12
   - docker
