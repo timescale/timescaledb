@@ -353,7 +353,7 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 {
 	bool isnull;
 	Datum watermark =
-		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_watermark, &isnull);
+		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_threshold, &isnull);
 
 	Assert(!isnull);
 

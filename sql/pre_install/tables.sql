@@ -282,7 +282,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg'
 
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_invalidation_threshold (
   hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
-  watermark bigint NOT NULL
+  threshold bigint NOT NULL
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_invalidation_threshold', '');

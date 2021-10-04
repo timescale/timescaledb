@@ -494,12 +494,12 @@ ORDER BY 1,2;
 -- max data value
 CALL refresh_continuous_aggregate('thresh_2', 14, NULL);
 
-SELECT watermark AS thresh_hyper_id_watermark
+SELECT threshold AS thresh_hyper_id_threshold
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id \gset
 
--- Refresh where we start from the current watermark to infinity
-CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_watermark, NULL);
+-- Refresh where we start from the current invalidation threshold to infinity
+CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_threshold, NULL);
 
 -- Now refresh with max end of the window to test that the
 -- invalidation threshold is capped at the last bucket of data

@@ -243,7 +243,7 @@ SELECT _timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(:
 
 -- The watermark should, in this case, be the same as the invalidation
 -- threshold
-SELECT _timescaledb_internal.to_timestamp(watermark)
+SELECT _timescaledb_internal.to_timestamp(threshold)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :raw_id;
 
@@ -268,7 +268,7 @@ SELECT _timescaledb_internal.to_timestamp(_timescaledb_internal.cagg_watermark(:
 
 -- Since we removed the last chunk, the invalidation threshold doesn't
 -- move back, while the watermark does.
-SELECT _timescaledb_internal.to_timestamp(watermark)
+SELECT _timescaledb_internal.to_timestamp(threshold)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :raw_id;
 

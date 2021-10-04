@@ -144,7 +144,7 @@ SELECT materialization_id AS cagg_id,
 -- set:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -162,7 +162,7 @@ SELECT * FROM cagg_invals;
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        50
 (1 row)
@@ -193,7 +193,7 @@ CALL refresh_continuous_aggregate('cond_10', 20, 49);
 NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        50
 (1 row)
@@ -213,7 +213,7 @@ SELECT * FROM cagg_invals;
 CALL refresh_continuous_aggregate('measure_10', 0, 30);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        50
              2 |        30
@@ -234,7 +234,7 @@ SELECT * FROM cagg_invals;
 CALL refresh_continuous_aggregate('cond_20', 60, 100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |       100
              2 |        30
@@ -306,7 +306,7 @@ CALL refresh_continuous_aggregate('cond_10', 20, 60);
 -- Invalidation threshold remains at 100:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |       100
              2 |        30
@@ -855,7 +855,7 @@ WHERE user_view_name = 'thresh_2' \gset
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -867,7 +867,7 @@ NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id |  watermark  
+ hypertable_id |  threshold  
 ---------------+-------------
              7 | -2147483648
 (1 row)
@@ -881,7 +881,7 @@ CALL refresh_continuous_aggregate('thresh_2', 0, 5);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              7 |         4
 (1 row)
@@ -890,11 +890,11 @@ ORDER BY 1,2;
 -- max data value
 CALL refresh_continuous_aggregate('thresh_2', 14, NULL);
 NOTICE:  continuous aggregate "thresh_2" is already up-to-date
-SELECT watermark AS thresh_hyper_id_watermark
+SELECT threshold AS thresh_hyper_id_threshold
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id \gset
--- Refresh where we start from the current watermark to infinity
-CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_watermark, NULL);
+-- Refresh where we start from the current invalidation threshold to infinity
+CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_threshold, NULL);
 NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 -- Now refresh with max end of the window to test that the
 -- invalidation threshold is capped at the last bucket of data
@@ -902,7 +902,7 @@ CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              7 |        12
 (1 row)
@@ -980,7 +980,7 @@ ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              7 |        12
 (1 row)
@@ -1010,7 +1010,7 @@ ORDER BY 1;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              7 |        16
 (1 row)

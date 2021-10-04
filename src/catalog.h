@@ -976,7 +976,7 @@ typedef enum Anum_continuous_aggs_hypertable_invalidation_log_idx
 typedef enum Anum_continuous_aggs_invalidation_threshold
 {
 	Anum_continuous_aggs_invalidation_threshold_hypertable_id = 1,
-	Anum_continuous_aggs_invalidation_threshold_watermark,
+	Anum_continuous_aggs_invalidation_threshold_threshold,
 	_Anum_continuous_aggs_invalidation_threshold_max,
 } Anum_continuous_aggs_invalidation_threshold;
 

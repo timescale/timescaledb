@@ -86,7 +86,7 @@ select * from cagg_2 order by 1,2;
 (5 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        18
 (1 row)
@@ -96,7 +96,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 INSERT INTO continuous_agg_test VALUES
     (10, -4, 10), (11, - 3, 50), (11, - 3, 70), (10, - 4, 10);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        18
 (1 row)
@@ -294,7 +294,7 @@ select * from cagg_2 order by 1;
 
 SET ROLE :ROLE_SUPERUSER;
 select * from _timescaledb_catalog.continuous_aggs_invalidation_threshold order by 1;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              4 |        18
 (1 row)

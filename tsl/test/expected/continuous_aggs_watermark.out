@@ -18,7 +18,7 @@ SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
 
 -- watermark tabels start out empty
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -30,7 +30,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 -- inserting into a table that does not have continuous_agg_insert_trigger doesn't change the watermark
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -60,7 +60,7 @@ CREATE TRIGGER continuous_agg_insert_trigger
 -- entire table anyway.
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -75,7 +75,7 @@ INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -89,7 +89,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 -- INSERTs only above the continuous_aggs_invalidation_threshold won't change the continuous_aggs_hypertable_invalidation_log
 INSERT INTO continuous_agg_test VALUES (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -103,7 +103,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 -- INSERTs only below the continuous_aggs_invalidation_threshold will change the continuous_aggs_hypertable_invalidation_log
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -118,7 +118,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 -- test INSERTing other values
 INSERT INTO continuous_agg_test VALUES (1, 7), (12, 6), (24, 5), (51, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -135,7 +135,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 ALTER TABLE continuous_agg_test DROP COLUMN data;
 INSERT INTO continuous_agg_test VALUES (-1), (-2), (-3), (-4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -151,7 +151,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 INSERT INTO continuous_agg_test VALUES (100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -169,7 +169,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 ALTER TABLE continuous_agg_test ADD COLUMN d BOOLEAN;
 INSERT INTO continuous_agg_test VALUES (-6, true), (-7, false), (-3, true), (-4, false);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -186,7 +186,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 INSERT INTO continuous_agg_test VALUES (120, false), (200, true);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              1 |        15
 (1 row)
@@ -233,7 +233,7 @@ CREATE MATERIALIZED VIEW cit_view
         GROUP BY 1 WITH NO DATA;
 INSERT INTO ca_inval_test SELECT generate_series(0, 5);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -247,7 +247,7 @@ INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO ca_inval_test SELECT generate_series(5, 15);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              3 |        15
 (1 row)
@@ -260,7 +260,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 INSERT INTO ca_inval_test SELECT generate_series(16, 20);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              3 |        15
 (1 row)
@@ -283,7 +283,7 @@ UPDATE ca_inval_test SET time = 12 WHERE time = 16;
 UPDATE ca_inval_test SET time = 19 WHERE time = 18;
 UPDATE ca_inval_test SET time = 17 WHERE time = 19;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              3 |        15
 (1 row)
@@ -328,7 +328,7 @@ CREATE MATERIALIZED VIEW continuous_view
         FROM ts_continuous_test
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
 (0 rows)
 
@@ -342,7 +342,7 @@ INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO ts_continuous_test VALUES (1, 1);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              5 |         2
 (1 row)
@@ -358,7 +358,7 @@ BEGIN;
     INSERT INTO ts_continuous_test VALUES (-20, -20);
 ABORT;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
+ hypertable_id | threshold 
 ---------------+-----------
              5 |         2
 (1 row)

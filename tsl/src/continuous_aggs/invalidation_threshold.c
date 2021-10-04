@@ -165,7 +165,7 @@ invalidation_threshold_set_or_get(int32 raw_hypertable_id, int64 invalidation_th
 
 		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_hypertable_id)] =
 			Int32GetDatum(raw_hypertable_id);
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_watermark)] =
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_invalidation_threshold_threshold)] =
 			Int64GetDatum(invalidation_threshold);
 
 		ts_catalog_insert_values(rel, desc, values, nulls);
@@ -181,7 +181,7 @@ invalidation_threshold_tuple_found(TupleInfo *ti, void *data)
 	int64 *threshold = data;
 	bool isnull;
 	Datum datum =
-		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_watermark, &isnull);
+		slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_threshold, &isnull);
 
 	Assert(!isnull);
 	*threshold = DatumGetInt64(datum);
