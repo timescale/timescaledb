@@ -316,7 +316,7 @@ SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 -------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    CTE insert_cte
-     ->  Custom Scan (HypertableInsert) (never executed)
+     ->  Custom Scan (HypertableInsert) (actual rows=0 loops=1)
            ->  Insert on one_space_test (actual rows=0 loops=1)
                  ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                        ->  Result (actual rows=1 loops=1)

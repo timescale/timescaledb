@@ -50,7 +50,7 @@ get_modifytable(const ChunkDispatch *dispatch)
 bool
 ts_chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 {
-	if (NULL == dispatch->dispatch_state)
+	if (!dispatch->dispatch_state)
 		return false;
 	return get_modifytable(dispatch)->returningLists != NIL;
 }
@@ -76,7 +76,7 @@ ts_chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
 OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
-	if (NULL == dispatch->dispatch_state)
+	if (!dispatch->dispatch_state)
 		return ONCONFLICT_NONE;
 	return get_modifytable(dispatch)->onConflictAction;
 }

@@ -145,7 +145,7 @@ UPDATE jit_test_interval SET temp = temp * 2.3 WHERE id >= 23 and id < 73;
 ------------------------------------------------------------------------------------
  Update on public.jit_test_interval
    ->  Index Scan using jit_test_interval_id_idx on public.jit_test_interval
-         Output: id, (temp * '2.3'::double precision), ctid
+         Output: (temp * '2.3'::double precision), ctid
          Index Cond: ((jit_test_interval.id >= 23) AND (jit_test_interval.id < 73))
 (4 rows)
 
