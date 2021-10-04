@@ -378,6 +378,7 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 					case AT_DropConstraint:
 					case AT_DropConstraintRecurse:
 					case AT_AddIndex:
+					case AT_AlterColumnType:
 						set_dist_exec_type(DIST_DDL_EXEC_ON_END);
 						break;
 					case AT_ReplaceRelOptions:

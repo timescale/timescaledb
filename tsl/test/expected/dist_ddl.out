@@ -39,9 +39,9 @@ CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_1;
 CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 SET ROLE :ROLE_1;
 CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_check CHECK (color > 0), temp float);
-CREATE UNIQUE INDEX disttable_pk ON disttable(time);
+CREATE UNIQUE INDEX disttable_pk ON disttable(time, temp);
 -- CREATE TABLE
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 3);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'temp', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -64,10 +64,12 @@ SELECT * FROM test.show_constraints('disttable');
 (1 row)
 
 SELECT * FROM test.show_indexes('disttable');
-    Index     | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
---------------+---------+------+--------+---------+-----------+------------
- disttable_pk | {time}  |      | t      | f       | f         | 
-(1 row)
+          Index          |   Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
+-------------------------+-------------+------+--------+---------+-----------+------------
+ disttable_pk            | {time,temp} |      | t      | f       | f         | 
+ disttable_temp_time_idx | {temp,time} |      | f      | f       | f         | 
+ disttable_time_idx      | {time}      |      | f      | f       | f         | 
+(3 rows)
 
 SELECT * FROM test.show_triggers('disttable');
       Trigger      | Type |               Function               
@@ -105,10 +107,12 @@ color_check|c   |{color}|-    |(color > 0)|f         |f       |t
 NOTICE:  [data_node_1]: 
 SELECT * FROM test.show_indexes('disttable')
 NOTICE:  [data_node_1]:
-Index       |Columns|Expr|Unique|Primary|Exclusion|Tablespace
-------------+-------+----+------+-------+---------+----------
-disttable_pk|{time} |    |t     |f      |f        |          
-(1 row)
+Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
+-----------------------+-----------+----+------+-------+---------+----------
+disttable_pk           |{time,temp}|    |t     |f      |f        |          
+disttable_temp_time_idx|{temp,time}|    |f     |f      |f        |          
+disttable_time_idx     |{time}     |    |f     |f      |f        |          
+(3 rows)
 
 
 NOTICE:  [data_node_1]: 
@@ -144,10 +148,12 @@ color_check|c   |{color}|-    |(color > 0)|f         |f       |t
 NOTICE:  [data_node_2]: 
 SELECT * FROM test.show_indexes('disttable')
 NOTICE:  [data_node_2]:
-Index       |Columns|Expr|Unique|Primary|Exclusion|Tablespace
-------------+-------+----+------+-------+---------+----------
-disttable_pk|{time} |    |t     |f      |f        |          
-(1 row)
+Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
+-----------------------+-----------+----+------+-------+---------+----------
+disttable_pk           |{time,temp}|    |t     |f      |f        |          
+disttable_temp_time_idx|{temp,time}|    |f     |f      |f        |          
+disttable_time_idx     |{time}     |    |f     |f      |f        |          
+(3 rows)
 
 
 NOTICE:  [data_node_2]: 
@@ -183,10 +189,12 @@ color_check|c   |{color}|-    |(color > 0)|f         |f       |t
 NOTICE:  [data_node_3]: 
 SELECT * FROM test.show_indexes('disttable')
 NOTICE:  [data_node_3]:
-Index       |Columns|Expr|Unique|Primary|Exclusion|Tablespace
-------------+-------+----+------+-------+---------+----------
-disttable_pk|{time} |    |t     |f      |f        |          
-(1 row)
+Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
+-----------------------+-----------+----+------+-------+---------+----------
+disttable_pk           |{time,temp}|    |t     |f      |f        |          
+disttable_temp_time_idx|{temp,time}|    |f     |f      |f        |          
+disttable_time_idx     |{time}     |    |f     |f      |f        |          
+(3 rows)
 
 
 NOTICE:  [data_node_3]: 
@@ -399,8 +407,10 @@ NOTICE:  [data_node_1]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
 -------------------------+-------------+----+------+-------+---------+----------
 disttable_description_idx|{description}|    |f     |f      |f        |          
-disttable_pk             |{time}       |    |t     |f      |f        |          
-(2 rows)
+disttable_pk             |{time,temp}  |    |t     |f      |f        |          
+disttable_temp_time_idx  |{temp,time}  |    |f     |f      |f        |          
+disttable_time_idx       |{time}       |    |f     |f      |f        |          
+(4 rows)
 
 
 NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('disttable') 
@@ -408,8 +418,10 @@ NOTICE:  [data_node_2]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
 -------------------------+-------------+----+------+-------+---------+----------
 disttable_description_idx|{description}|    |f     |f      |f        |          
-disttable_pk             |{time}       |    |t     |f      |f        |          
-(2 rows)
+disttable_pk             |{time,temp}  |    |t     |f      |f        |          
+disttable_temp_time_idx  |{temp,time}  |    |f     |f      |f        |          
+disttable_time_idx       |{time}       |    |f     |f      |f        |          
+(4 rows)
 
 
 NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('disttable') 
@@ -417,8 +429,10 @@ NOTICE:  [data_node_3]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
 -------------------------+-------------+----+------+-------+---------+----------
 disttable_description_idx|{description}|    |f     |f      |f        |          
-disttable_pk             |{time}       |    |t     |f      |f        |          
-(2 rows)
+disttable_pk             |{time,temp}  |    |t     |f      |f        |          
+disttable_temp_time_idx  |{temp,time}  |    |f     |f      |f        |          
+disttable_time_idx       |{time}       |    |f     |f      |f        |          
+(4 rows)
 
 
  remote_exec 
@@ -460,8 +474,6 @@ TRUNCATE disttable, non_disttable2;
 ERROR:  operation not supported on distributed hypertable
 CLUSTER disttable USING disttable_description_idx;
 ERROR:  operation not supported on distributed hypertable
-ALTER TABLE disttable ALTER COLUMN description TYPE INT;
-ERROR:  operation not supported on distributed hypertable
 ALTER TABLE disttable RENAME TO disttable2;
 ERROR:  operation not supported on distributed hypertable
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
@@ -475,9 +487,19 @@ ERROR:  cannot drop a hypertable along with other objects
 DROP TABLE disttable, disttable;
 ERROR:  cannot drop a hypertable along with other objects
 \set ON_ERROR_STOP 1
---------------------------------------------------------------------
--- Test renaming columns, constraints, indexes, and REINDEX command.
---------------------------------------------------------------------
+----------------------------------------------------------------------------------------
+-- Test column type change, renaming columns, constraints, indexes, and REINDEX command.
+----------------------------------------------------------------------------------------
+ALTER TABLE disttable ALTER COLUMN description TYPE VARCHAR(10);
+ALTER TABLE disttable ADD COLUMN float_col float;
+ALTER TABLE disttable ALTER COLUMN float_col TYPE INT USING float_col::int;
+\set ON_ERROR_STOP 0
+-- Changing the type of a hash-partitioned column should not be supported
+ALTER TABLE disttable ALTER COLUMN temp TYPE numeric;
+ERROR:  cannot change the type of a hash-partitioned column
+\set ON_ERROR_STOP 1
+-- Should be able to change if not hash partitioned though
+ALTER TABLE disttable ALTER COLUMN time TYPE timestamp;
 INSERT INTO disttable VALUES
 	('2017-01-01 06:01', 1, 1.2, 'test'),
 	('2017-01-01 09:11', 3, 4.3, 'test'),
@@ -492,15 +514,18 @@ SELECT * FROM show_chunks('disttable');
 ---------------------------------------------
  _timescaledb_internal._dist_hyper_1_1_chunk
  _timescaledb_internal._dist_hyper_1_2_chunk
-(2 rows)
+ _timescaledb_internal._dist_hyper_1_3_chunk
+ _timescaledb_internal._dist_hyper_1_4_chunk
+ _timescaledb_internal._dist_hyper_1_5_chunk
+(5 rows)
 
 -- Rename column
 ALTER TABLE disttable RENAME COLUMN description TO descr;
 SELECT * FROM test.show_columns('disttable')
 WHERE "Column"='descr';
- Column | Type | NotNull 
---------+------+---------
- descr  | text | f
+ Column |       Type        | NotNull 
+--------+-------------------+---------
+ descr  | character varying | f
 (1 row)
 
 SELECT * FROM test.remote_exec('{ data_node_1 }', $$
@@ -575,11 +600,13 @@ NOTICE:  [data_node_1]:
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
 
 NOTICE:  [data_node_1]:
-chunk_relid                                |Index                                                          |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
--------------------------------------------+---------------------------------------------------------------+-------------+----+------+-------+---------+----------
-_timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_1_chunk_disttable_descr_idx|{description}|    |f     |f      |f        |          
-_timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk       |{time}       |    |t     |f      |f        |          
-(2 rows)
+chunk_relid                                |Index                                                              |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
+-------------------------------------------+-------------------------------------------------------------------+-------------+----+------+-------+---------+----------
+_timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_1_chunk_disttable_descr_idx    |{description}|    |f     |f      |f        |          
+_timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk           |{time,temp}  |    |t     |f      |f        |          
+_timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_1_chunk_disttable_temp_time_idx|{temp,time}  |    |f     |f      |f        |          
+_timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_1_chunk_disttable_time_idx     |{time}       |    |f     |f      |f        |          
+(4 rows)
 
 
  remote_exec 
@@ -590,11 +617,13 @@ _timescaledb_internal._dist_hyper_1_1_chunk|_timescaledb_internal._dist_hyper_1_
 -- Test REINDEX command with distributed hypertable
 \c :MY_DB1
 SELECT * FROM test.show_indexes('_timescaledb_internal._dist_hyper_1_1_chunk');
-                              Index                              |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
------------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
- _timescaledb_internal._dist_hyper_1_1_chunk_disttable_descr_idx | {description} |      | f      | f       | f         | 
- _timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk        | {time}        |      | t      | f       | f         | 
-(2 rows)
+                                Index                                |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
+---------------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._dist_hyper_1_1_chunk_disttable_descr_idx     | {description} |      | f      | f       | f         | 
+ _timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk            | {time,temp}   |      | t      | f       | f         | 
+ _timescaledb_internal._dist_hyper_1_1_chunk_disttable_temp_time_idx | {temp,time}   |      | f      | f       | f         | 
+ _timescaledb_internal._dist_hyper_1_1_chunk_disttable_time_idx      | {time}        |      | f      | f       | f         | 
+(4 rows)
 
 SELECT pg_relation_filepath('_timescaledb_internal._dist_hyper_1_1_chunk_disttable_pk'::regclass::oid) AS oid_before_reindex \gset
 \c :TEST_DBNAME :ROLE_SUPERUSER;
@@ -634,30 +663,38 @@ ERROR:  cannot drop a hypertable index along with other objects
 DROP INDEX disttable_descr_idx;
 DROP INDEX disttable_pk;
 SELECT * FROM test.show_indexes('disttable');
- Index | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
--------+---------+------+--------+---------+-----------+------------
-(0 rows)
+          Index          |   Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
+-------------------------+-------------+------+--------+---------+-----------+------------
+ disttable_temp_time_idx | {temp,time} |      | f      | f       | f         | 
+ disttable_time_idx      | {time}      |      | f      | f       | f         | 
+(2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
 NOTICE:  [data_node_1]:  SELECT * FROM test.show_indexes('disttable') 
 NOTICE:  [data_node_1]:
-Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
------+-------+----+------+-------+---------+----------
-(0 rows)
+Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
+-----------------------+-----------+----+------+-------+---------+----------
+disttable_temp_time_idx|{temp,time}|    |f     |f      |f        |          
+disttable_time_idx     |{time}     |    |f     |f      |f        |          
+(2 rows)
 
 
 NOTICE:  [data_node_2]:  SELECT * FROM test.show_indexes('disttable') 
 NOTICE:  [data_node_2]:
-Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
------+-------+----+------+-------+---------+----------
-(0 rows)
+Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
+-----------------------+-----------+----+------+-------+---------+----------
+disttable_temp_time_idx|{temp,time}|    |f     |f      |f        |          
+disttable_time_idx     |{time}     |    |f     |f      |f        |          
+(2 rows)
 
 
 NOTICE:  [data_node_3]:  SELECT * FROM test.show_indexes('disttable') 
 NOTICE:  [data_node_3]:
-Index|Columns|Expr|Unique|Primary|Exclusion|Tablespace
------+-------+----+------+-------+---------+----------
-(0 rows)
+Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
+-----------------------+-----------+----+------+-------+---------+----------
+disttable_temp_time_idx|{temp,time}|    |f     |f      |f        |          
+disttable_time_idx     |{time}     |    |f     |f      |f        |          
+(2 rows)
 
 
  remote_exec 
@@ -1671,7 +1708,7 @@ INSERT INTO disttable VALUES ('2017-01-01 06:01', 0, 1, 0.0);
 SELECT show_chunks('disttable');
                  show_chunks                  
 ----------------------------------------------
- _timescaledb_internal._dist_hyper_17_3_chunk
+ _timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 SELECT * FROM test.show_constraints('disttable');
@@ -1685,7 +1722,7 @@ FROM show_chunks('disttable') AS chunk;
   Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 --------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  color_check  | c    | {color} | -     | (color > 0)                                                                                                                                    | f          | f        | t
- constraint_3 | c    | {time}  | -     | (("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone)) | f          | f        | t
+ constraint_6 | c    | {time}  | -     | (("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone)) | f          | f        | t
 (2 rows)
 
 ALTER TABLE disttable DROP CONSTRAINT color_check;
@@ -1698,7 +1735,7 @@ SELECT (test.show_constraints(chunk)).*
 FROM show_chunks('disttable') AS chunk;
   Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
 --------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
- constraint_3 | c    | {time}  | -     | (("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone)) | f          | f        | t
+ constraint_6 | c    | {time}  | -     | (("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone)) | f          | f        | t
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$
@@ -1712,7 +1749,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_1]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._dist_hyper_17_3_chunk
+_timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 
@@ -1730,7 +1767,7 @@ FROM show_chunks('disttable') AS chunk
 NOTICE:  [data_node_1]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
-constraint_3|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
+constraint_6|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
 (1 row)
 
 
@@ -1739,7 +1776,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_2]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._dist_hyper_17_3_chunk
+_timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 
@@ -1757,7 +1794,7 @@ FROM show_chunks('disttable') AS chunk
 NOTICE:  [data_node_2]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
-constraint_3|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
+constraint_6|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
 (1 row)
 
 
@@ -1766,7 +1803,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_3]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._dist_hyper_17_3_chunk
+_timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 
@@ -1784,7 +1821,7 @@ FROM show_chunks('disttable') AS chunk
 NOTICE:  [data_node_3]:
 Constraint  |Type|Columns|Index|Expr                                                                                                                                          |Deferrable|Deferred|Validated
 ------------+----+-------+-----+----------------------------------------------------------------------------------------------------------------------------------------------+----------+--------+---------
-constraint_3|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
+constraint_6|c   |{time} |-    |(("time" >= 'Wed Dec 28 16:00:00 2016 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 04 16:00:00 2017 PST'::timestamp with time zone))|f         |f       |t        
 (1 row)
 
 

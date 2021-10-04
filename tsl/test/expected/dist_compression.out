@@ -1002,3 +1002,8 @@ SELECT recompress_chunk(chunk)  FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
 ERROR:  call compress_chunk instead of recompress_chunk
 \set ON_ERROR_STOP 1
+-- test alter column type with distributed hypertable
+\set ON_ERROR_STOP 0
+ALTER TABLE test_table_int ALTER COLUMN val TYPE float;
+ERROR:  operation not supported on hypertables that have compression enabled
+\set ON_ERROR_STOP 1

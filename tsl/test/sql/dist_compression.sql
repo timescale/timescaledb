@@ -412,3 +412,8 @@ SELECT decompress_chunk(chunk, true) FROM
 SELECT recompress_chunk(chunk)  FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
 \set ON_ERROR_STOP 1
+
+-- test alter column type with distributed hypertable
+\set ON_ERROR_STOP 0
+ALTER TABLE test_table_int ALTER COLUMN val TYPE float;
+\set ON_ERROR_STOP 1
