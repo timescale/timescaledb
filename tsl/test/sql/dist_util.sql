@@ -278,6 +278,19 @@ SELECT * FROM chunk_compression_stats('nondisttable') ORDER BY chunk_schema, chu
 SELECT * FROM hypertable_index_size('disttable_pkey');
 SELECT * FROM hypertable_index_size('nondisttable_pkey');
 
+-- Make sure timescaledb.ssl_dir and passfile gucs can be read by a non-superuser
+\c :TEST_DBNAME :ROLE_1
+\unset ECHO
+\o /dev/null
+SHOW timescaledb.ssl_dir;
+SHOW timescaledb.passfile;
+\o
+\set ECHO all
+\set ON_ERROR_STOP 0
+SET timescaledb.ssl_dir TO 'ssldir';
+SET timescaledb.passfile TO 'passfile';
+\set ON_ERROR_STOP 1
+
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;
 DROP DATABASE backend_1_1;

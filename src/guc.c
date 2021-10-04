@@ -325,7 +325,7 @@ _guc_init(void)
 							   &ts_guc_ssl_dir,
 							   NULL,
 							   PGC_SIGHUP,
-							   GUC_SUPERUSER_ONLY,
+							   0,
 							   NULL,
 							   NULL,
 							   NULL);
@@ -337,7 +337,7 @@ _guc_init(void)
 							   &ts_guc_passfile,
 							   NULL,
 							   PGC_SIGHUP,
-							   GUC_SUPERUSER_ONLY,
+							   0,
 							   NULL,
 							   NULL,
 							   NULL);

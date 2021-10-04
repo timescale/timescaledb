@@ -843,6 +843,15 @@ SELECT * FROM hypertable_index_size('nondisttable_pkey');
                  40960
 (1 row)
 
+-- Make sure timescaledb.ssl_dir and passfile gucs can be read by a non-superuser
+\c :TEST_DBNAME :ROLE_1
+\unset ECHO
+\set ON_ERROR_STOP 0
+SET timescaledb.ssl_dir TO 'ssldir';
+ERROR:  parameter "timescaledb.ssl_dir" cannot be changed now
+SET timescaledb.passfile TO 'passfile';
+ERROR:  parameter "timescaledb.passfile" cannot be changed now
+\set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;
 DROP DATABASE backend_1_1;
