@@ -49,10 +49,10 @@ CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 SET ROLE :ROLE_1;
 
 CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_check CHECK (color > 0), temp float);
-CREATE UNIQUE INDEX disttable_pk ON disttable(time);
+CREATE UNIQUE INDEX disttable_pk ON disttable(time, temp);
 
 -- CREATE TABLE
-SELECT * FROM create_distributed_hypertable('disttable', 'time', replication_factor => 3);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'temp', replication_factor => 3);
 SELECT * FROM test.show_columns('disttable');
 SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_indexes('disttable');
@@ -119,7 +119,6 @@ TRUNCATE disttable, non_disttable2;
 
 CLUSTER disttable USING disttable_description_idx;
 
-ALTER TABLE disttable ALTER COLUMN description TYPE INT;
 ALTER TABLE disttable RENAME TO disttable2;
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
 ALTER TABLE disttable SET SCHEMA some_schema;
@@ -130,9 +129,22 @@ DROP TABLE disttable, disttable;
 
 \set ON_ERROR_STOP 1
 
---------------------------------------------------------------------
--- Test renaming columns, constraints, indexes, and REINDEX command.
---------------------------------------------------------------------
+----------------------------------------------------------------------------------------
+-- Test column type change, renaming columns, constraints, indexes, and REINDEX command.
+----------------------------------------------------------------------------------------
+ALTER TABLE disttable ALTER COLUMN description TYPE VARCHAR(10);
+
+ALTER TABLE disttable ADD COLUMN float_col float;
+ALTER TABLE disttable ALTER COLUMN float_col TYPE INT USING float_col::int;
+
+\set ON_ERROR_STOP 0
+-- Changing the type of a hash-partitioned column should not be supported
+ALTER TABLE disttable ALTER COLUMN temp TYPE numeric;
+\set ON_ERROR_STOP 1
+
+-- Should be able to change if not hash partitioned though
+ALTER TABLE disttable ALTER COLUMN time TYPE timestamp;
+
 INSERT INTO disttable VALUES
 	('2017-01-01 06:01', 1, 1.2, 'test'),
 	('2017-01-01 09:11', 3, 4.3, 'test'),
