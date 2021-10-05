@@ -15,4 +15,5 @@
 /plan_hypertable_cache-*.sql
 /plan_hypertable_inline-*.sql
 /plan_ordered_append-*.sql
+/rowsecurity-*.sql
 /update-*.sql
