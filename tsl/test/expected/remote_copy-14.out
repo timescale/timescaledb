@@ -1,0 +1,314 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+\set DN_DBNAME_3 :TEST_DBNAME _3
+-- Add data nodes using the TimescaleDB node management API
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
+-------------+-----------+-------+------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_remote_copy_1 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
+-------------+-----------+-------+------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_remote_copy_2 | t            | t                | t
+(1 row)
+
+SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+  node_name  |   host    | port  |     database     | node_created | database_created | extension_created 
+-------------+-----------+-------+------------------+--------------+------------------+-------------------
+ data_node_3 | localhost | 55432 | db_remote_copy_3 | t            | t                | t
+(1 row)
+
+GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+-- Start out testing text copy code
+SET timescaledb.enable_connection_binary_data=false;
+SET ROLE :ROLE_1;
+-- Use some horrible names to make sure the parsing code works
+CREATE TABLE "+ri(k33_')" (
+    "thyme" bigint NOT NULL,
+    "))_" double precision NOT NULL,
+    "flavor" text DEFAULT 'mint',
+    "pH" float DEFAULT 7.0,
+    optional text
+);
+SELECT create_hypertable('"+ri(k33_'')"', 'thyme', partitioning_column=>'pH', number_partitions=>4, chunk_time_interval => 100, replication_factor => 2);
+     create_hypertable     
+---------------------------
+ (1,public,"+ri(k33_')",t)
+(1 row)
+
+-- Run some successful copies
+COPY "+ri(k33_')" FROM STDIN;
+\copy public    .		"+ri(k33_')" ("pH",     "))_"   ,	thyme) fROm stdIN deLIMitER '-';
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm
+StDiN wiTH dElImITeR ','
+;
+COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FORMAT csv, NULL 'empties', FORCE_NOT_NULL ("pH", "thyme"));
+-- Run some error cases
+\set ON_ERROR_STOP 0
+-- Bad input
+COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
+ERROR:  invalid input syntax for type double precision: "grey"
+-- Missing paritioning column
+COPY "+ri(k33_')" (thYme, "))_", "flavor") FROM STDIN;
+ERROR:  unable to use default value for partitioning column "pH"
+-- Missing required column, these generate a WARNING with a transaction id in them (too flimsy to output)
+SET client_min_messages TO ERROR;
+COPY "+ri(k33_')" (thyme, flavor, "pH") FROM STDIN WITH DELIMITER ',';
+ERROR:  [data_node_3]: null value in column "))_" of relation "_dist_hyper_1_1_chunk" violates not-null constraint
+COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
+ERROR:  [data_node_2]: null value in column "))_" of relation "_dist_hyper_1_4_chunk" violates not-null constraint
+SET client_min_messages TO INFO;
+-- Invalid data after new chunk creation, data and chunks should be rolled back
+COPY "+ri(k33_')" FROM STDIN WITH DELIMITER ',';
+ERROR:  invalid input syntax for type double precision: "ten"
+\set ON_ERROR_STOP 1
+-- Now do some testing of the binary frontend/backend path.
+SET timescaledb.enable_connection_binary_data=true;
+COPY "+ri(k33_')" FROM STDIN;
+\copy public    .		"+ri(k33_')" ("pH",     "))_"   ,	thyme) fROm stdIN deLIMitER '-';
+cOpy public."+ri(k33_')" (thYme, "pH", "))_", "flavor") FrOm
+StDiN wiTH dElImITeR ','
+;
+COPY "+ri(k33_')" FROM STDIN (FORCE_NULL (flavor, "))_"), QUOTE '`', FREEZE, FORMAT csv, NULL 'empties', FORCE_NOT_NULL ("pH", "thyme"));
+SELECT * FROM "+ri(k33_')";
+  thyme  |         ))_          |         flavor         |  pH   | optional 
+---------+----------------------+------------------------+-------+----------
+     315 |                   37 | mint                   |    10 | 
+      15 |                  403 |                        |     1 | 
+      10 |                   11 | strawberry             |  12.3 | stuff
+     203 |              3.21321 | something like lemon   |     1 | 
+     333 |           2309424231 |   _''garbled*(#)@#$*)  |     1 | 
+     342 |                 4324 | "empties"              |     4 | \N
+  120321 |     4.43244243242544 |                        |     0 | 
+    4201 | 3.33333333333333e+27 | ""                     |     1 | 
+    2080 |                   40 | mint                   | 0.001 | 
+    3150 |                   37 | mint                   |   100 | 
+     150 |                  403 |                        |    10 | 
+    2030 |              3.21321 | something like lemon   |    10 | 
+    3330 |           2309424231 |   _''garbled*(#\)@#$*) |    10 | 
+ 1203210 |     4.43244243242544 |                        |     0 | 
+   42010 | 3.33333333333333e+27 | ""                     |     1 | empties
+       1 |                   11 | strawberry             |   2.3 | stuff
+     208 |                   40 | mint                   |  0.01 | 
+    3420 |                 4324 | "empties"              |    40 | \N
+(18 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |       table_name       | compressed_chunk_id | dropped | status 
+----+---------------+-----------------------+------------------------+---------------------+---------+--------
+  1 |             1 | _timescaledb_internal | _dist_hyper_1_1_chunk  |                     | f       |      0
+  2 |             1 | _timescaledb_internal | _dist_hyper_1_2_chunk  |                     | f       |      0
+  3 |             1 | _timescaledb_internal | _dist_hyper_1_3_chunk  |                     | f       |      0
+  4 |             1 | _timescaledb_internal | _dist_hyper_1_4_chunk  |                     | f       |      0
+  5 |             1 | _timescaledb_internal | _dist_hyper_1_5_chunk  |                     | f       |      0
+  6 |             1 | _timescaledb_internal | _dist_hyper_1_6_chunk  |                     | f       |      0
+  7 |             1 | _timescaledb_internal | _dist_hyper_1_7_chunk  |                     | f       |      0
+  8 |             1 | _timescaledb_internal | _dist_hyper_1_8_chunk  |                     | f       |      0
+ 12 |             1 | _timescaledb_internal | _dist_hyper_1_12_chunk |                     | f       |      0
+ 13 |             1 | _timescaledb_internal | _dist_hyper_1_13_chunk |                     | f       |      0
+ 14 |             1 | _timescaledb_internal | _dist_hyper_1_14_chunk |                     | f       |      0
+ 15 |             1 | _timescaledb_internal | _dist_hyper_1_15_chunk |                     | f       |      0
+ 16 |             1 | _timescaledb_internal | _dist_hyper_1_16_chunk |                     | f       |      0
+ 17 |             1 | _timescaledb_internal | _dist_hyper_1_17_chunk |                     | f       |      0
+ 18 |             1 | _timescaledb_internal | _dist_hyper_1_18_chunk |                     | f       |      0
+ 19 |             1 | _timescaledb_internal | _dist_hyper_1_19_chunk |                     | f       |      0
+(16 rows)
+
+SELECT * FROM _timescaledb_catalog.chunk_data_node;
+ chunk_id | node_chunk_id |  node_name  
+----------+---------------+-------------
+        1 |             1 | data_node_3
+        1 |             1 | data_node_1
+        2 |             2 | data_node_3
+        2 |             2 | data_node_1
+        3 |             3 | data_node_1
+        3 |             1 | data_node_2
+        4 |             4 | data_node_1
+        4 |             2 | data_node_2
+        5 |             5 | data_node_1
+        5 |             3 | data_node_2
+        6 |             6 | data_node_1
+        6 |             4 | data_node_2
+        7 |             7 | data_node_1
+        7 |             5 | data_node_2
+        8 |             8 | data_node_1
+        8 |             6 | data_node_2
+       12 |            11 | data_node_1
+       12 |             8 | data_node_2
+       13 |            12 | data_node_1
+       13 |             9 | data_node_2
+       14 |            13 | data_node_1
+       14 |            10 | data_node_2
+       15 |            14 | data_node_1
+       15 |            11 | data_node_2
+       16 |            15 | data_node_1
+       16 |            12 | data_node_2
+       17 |            16 | data_node_1
+       17 |            13 | data_node_2
+       18 |            17 | data_node_1
+       18 |            14 | data_node_2
+       19 |             6 | data_node_3
+       19 |            18 | data_node_1
+(32 rows)
+
+SELECT * FROM _timescaledb_catalog.hypertable_data_node;
+ hypertable_id | node_hypertable_id |  node_name  | block_chunks 
+---------------+--------------------+-------------+--------------
+             1 |                  1 | data_node_1 | f
+             1 |                  1 | data_node_2 | f
+             1 |                  1 | data_node_3 | f
+(3 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+ _timescaledb_internal._dist_hyper_1_2_chunk
+ _timescaledb_internal._dist_hyper_1_3_chunk
+ _timescaledb_internal._dist_hyper_1_4_chunk
+ _timescaledb_internal._dist_hyper_1_5_chunk
+ _timescaledb_internal._dist_hyper_1_6_chunk
+ _timescaledb_internal._dist_hyper_1_7_chunk
+ _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_12_chunk
+ _timescaledb_internal._dist_hyper_1_13_chunk
+ _timescaledb_internal._dist_hyper_1_14_chunk
+ _timescaledb_internal._dist_hyper_1_15_chunk
+ _timescaledb_internal._dist_hyper_1_16_chunk
+ _timescaledb_internal._dist_hyper_1_17_chunk
+ _timescaledb_internal._dist_hyper_1_18_chunk
+ _timescaledb_internal._dist_hyper_1_19_chunk
+(16 rows)
+
+\c :DN_DBNAME_1
+SELECT * FROM "+ri(k33_')";
+  thyme  |         ))_          |         flavor         |  pH   | optional 
+---------+----------------------+------------------------+-------+----------
+       1 |                   11 | strawberry             |   2.3 | stuff
+     208 |                   40 | mint                   |  0.01 | 
+     315 |                   37 | mint                   |    10 | 
+      15 |                  403 |                        |     1 | 
+      10 |                   11 | strawberry             |  12.3 | stuff
+     203 |              3.21321 | something like lemon   |     1 | 
+     333 |           2309424231 |   _''garbled*(#)@#$*)  |     1 | 
+     342 |                 4324 | "empties"              |     4 | \N
+  120321 |     4.43244243242544 |                        |     0 | 
+    4201 | 3.33333333333333e+27 | ""                     |     1 | 
+    2080 |                   40 | mint                   | 0.001 | 
+    3150 |                   37 | mint                   |   100 | 
+     150 |                  403 |                        |    10 | 
+    2030 |              3.21321 | something like lemon   |    10 | 
+    3330 |           2309424231 |   _''garbled*(#\)@#$*) |    10 | 
+ 1203210 |     4.43244243242544 |                        |     0 | 
+   42010 | 3.33333333333333e+27 | ""                     |     1 | empties
+    3420 |                 4324 | "empties"              |    40 | \N
+(18 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+ _timescaledb_internal._dist_hyper_1_2_chunk
+ _timescaledb_internal._dist_hyper_1_3_chunk
+ _timescaledb_internal._dist_hyper_1_4_chunk
+ _timescaledb_internal._dist_hyper_1_5_chunk
+ _timescaledb_internal._dist_hyper_1_6_chunk
+ _timescaledb_internal._dist_hyper_1_7_chunk
+ _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_12_chunk
+ _timescaledb_internal._dist_hyper_1_13_chunk
+ _timescaledb_internal._dist_hyper_1_14_chunk
+ _timescaledb_internal._dist_hyper_1_15_chunk
+ _timescaledb_internal._dist_hyper_1_16_chunk
+ _timescaledb_internal._dist_hyper_1_17_chunk
+ _timescaledb_internal._dist_hyper_1_18_chunk
+ _timescaledb_internal._dist_hyper_1_19_chunk
+(16 rows)
+
+\c :DN_DBNAME_2
+SELECT * FROM "+ri(k33_')";
+  thyme  |         ))_          |         flavor         |  pH   | optional 
+---------+----------------------+------------------------+-------+----------
+     315 |                   37 | mint                   |    10 | 
+      15 |                  403 |                        |     1 | 
+      10 |                   11 | strawberry             |  12.3 | stuff
+     203 |              3.21321 | something like lemon   |     1 | 
+     333 |           2309424231 |   _''garbled*(#)@#$*)  |     1 | 
+     342 |                 4324 | "empties"              |     4 | \N
+  120321 |     4.43244243242544 |                        |     0 | 
+    4201 | 3.33333333333333e+27 | ""                     |     1 | 
+    2080 |                   40 | mint                   | 0.001 | 
+    3150 |                   37 | mint                   |   100 | 
+     150 |                  403 |                        |    10 | 
+    2030 |              3.21321 | something like lemon   |    10 | 
+    3330 |           2309424231 |   _''garbled*(#\)@#$*) |    10 | 
+ 1203210 |     4.43244243242544 |                        |     0 | 
+   42010 | 3.33333333333333e+27 | ""                     |     1 | empties
+(15 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_1_3_chunk
+ _timescaledb_internal._dist_hyper_1_4_chunk
+ _timescaledb_internal._dist_hyper_1_5_chunk
+ _timescaledb_internal._dist_hyper_1_6_chunk
+ _timescaledb_internal._dist_hyper_1_7_chunk
+ _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_12_chunk
+ _timescaledb_internal._dist_hyper_1_13_chunk
+ _timescaledb_internal._dist_hyper_1_14_chunk
+ _timescaledb_internal._dist_hyper_1_15_chunk
+ _timescaledb_internal._dist_hyper_1_16_chunk
+ _timescaledb_internal._dist_hyper_1_17_chunk
+ _timescaledb_internal._dist_hyper_1_18_chunk
+(13 rows)
+
+\c :DN_DBNAME_3
+SELECT * FROM "+ri(k33_')";
+ thyme | ))_  |   flavor   |  pH  | optional 
+-------+------+------------+------+----------
+     1 |   11 | strawberry |  2.3 | stuff
+   208 |   40 | mint       | 0.01 | 
+  3420 | 4324 | "empties"  |   40 | \N
+(3 rows)
+
+select * from show_chunks('"+ri(k33_'')"');
+                 show_chunks                  
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+ _timescaledb_internal._dist_hyper_1_2_chunk
+ _timescaledb_internal._dist_hyper_1_19_chunk
+(3 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET ROLE :ROLE_1;
+DROP TABLE "+ri(k33_')" CASCADE;
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM delete_data_node('data_node_1');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT * FROM delete_data_node('data_node_2');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+SELECT * FROM delete_data_node('data_node_3');
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_2;
+DROP DATABASE :DN_DBNAME_3;
