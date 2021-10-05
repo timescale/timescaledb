@@ -66,10 +66,47 @@ CREATE TABLE truncate_normal (color int);
 INSERT INTO truncate_normal VALUES (1);
 SELECT * FROM truncate_normal;
 
+-- fix for bug #3580
+\set ON_ERROR_STOP 0
+TRUNCATE nonexistentrelation;
+\set ON_ERROR_STOP 1
+CREATE TABLE truncate_nested (color int);
+INSERT INTO truncate_nested VALUES (2);
+
+SELECT * FROM truncate_normal, truncate_nested;
+
+CREATE FUNCTION fn_truncate_nested()
+RETURNS trigger LANGUAGE plpgsql
+AS $$
+BEGIN
+    TRUNCATE truncate_nested;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_truncate_nested
+    BEFORE TRUNCATE ON truncate_normal
+    FOR EACH STATEMENT EXECUTE FUNCTION fn_truncate_nested();
+
+TRUNCATE truncate_normal;
+SELECT * FROM truncate_normal, truncate_nested;
+
+INSERT INTO truncate_normal VALUES (3);
+INSERT INTO truncate_nested VALUES (4);
+
+SELECT * FROM truncate_normal, truncate_nested;
+
+TRUNCATE truncate_normal;
+SELECT * FROM truncate_normal, truncate_nested;
+
+INSERT INTO truncate_normal VALUES (5);
+INSERT INTO truncate_nested VALUES (6);
+SELECT * FROM truncate_normal, truncate_nested;
+
 SELECT * FROM test.show_subtables('"two_Partitions"');
 
 TRUNCATE "two_Partitions", truncate_normal CASCADE;
 -- should be empty
 SELECT * FROM test.show_subtables('"two_Partitions"');
 SELECT * FROM "two_Partitions";
-SELECT * FROM truncate_normal;
+SELECT * FROM truncate_normal, truncate_nested;
