@@ -567,20 +567,19 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 		return true;
 	}
 	ts_cache_release(policy_data.hcache);
-	if (ActiveSnapshotSet())
+	/* process each chunk in a new transaction */
+	int total_chunks = list_length(chunkid_lst), num_chunks = 0;
+	foreach (lc, chunkid_lst)
 	{
 		/* we have atleast 1 chunk that needs processing and will commit the
 		 * current txn (below) and start a new one to process the chunk. Any
 		 * active snapshot has to be popped before we can commit
 		 */
-		PopActiveSnapshot();
-	}
-	/* process each chunk in a new transaction */
-	int total_chunks = list_length(chunkid_lst), num_chunks = 0;
-	foreach (lc, chunkid_lst)
-	{
+		if (ActiveSnapshotSet())
+			PopActiveSnapshot();
 		CommitTransactionCommand();
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 		int32 chunkid = lfirst_int(lc);
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		num_chunks++;
@@ -619,6 +618,8 @@ policy_compression_execute(int32 job_id, Jsonb *config)
 				 NameStr(chunk->fd.table_name));
 	}
 
+	if (total_chunks > 0)
+		PopActiveSnapshot();
 	if (!used_portalcxt)
 		MemoryContextDelete(multitxn_cxt);
 	elog(DEBUG1, "job %d completed compressing chunk", job_id);
@@ -699,13 +700,14 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		return true;
 	}
 	ts_cache_release(policy_data.hcache);
-	if (ActiveSnapshotSet())
-		PopActiveSnapshot();
 	/* process each chunk in a new transaction */
 	foreach (lc, chunkid_lst)
 	{
+		if (ActiveSnapshotSet())
+			PopActiveSnapshot();
 		CommitTransactionCommand();
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 		int32 chunkid = lfirst_int(lc);
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		if (!chunk || !ts_chunk_is_unordered(chunk))
@@ -720,6 +722,9 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 			 NameStr(chunk->fd.schema_name),
 			 NameStr(chunk->fd.table_name));
 	}
+
+	if (list_length(chunkid_lst) > 0)
+		PopActiveSnapshot();
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
 	return true;
