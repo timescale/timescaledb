@@ -152,6 +152,58 @@ SELECT * FROM truncate_normal;
      1
 (1 row)
 
+-- fix for bug #3580
+\set ON_ERROR_STOP 0
+TRUNCATE nonexistentrelation;
+ERROR:  relation "nonexistentrelation" does not exist
+\set ON_ERROR_STOP 1
+CREATE TABLE truncate_nested (color int);
+INSERT INTO truncate_nested VALUES (2);
+SELECT * FROM truncate_normal, truncate_nested;
+ color | color 
+-------+-------
+     1 |     2
+(1 row)
+
+CREATE FUNCTION fn_truncate_nested()
+RETURNS trigger LANGUAGE plpgsql
+AS $$
+BEGIN
+    TRUNCATE truncate_nested;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER tg_truncate_nested
+    BEFORE TRUNCATE ON truncate_normal
+    FOR EACH STATEMENT EXECUTE FUNCTION fn_truncate_nested();
+TRUNCATE truncate_normal;
+SELECT * FROM truncate_normal, truncate_nested;
+ color | color 
+-------+-------
+(0 rows)
+
+INSERT INTO truncate_normal VALUES (3);
+INSERT INTO truncate_nested VALUES (4);
+SELECT * FROM truncate_normal, truncate_nested;
+ color | color 
+-------+-------
+     3 |     4
+(1 row)
+
+TRUNCATE truncate_normal;
+SELECT * FROM truncate_normal, truncate_nested;
+ color | color 
+-------+-------
+(0 rows)
+
+INSERT INTO truncate_normal VALUES (5);
+INSERT INTO truncate_nested VALUES (6);
+SELECT * FROM truncate_normal, truncate_nested;
+ color | color 
+-------+-------
+     5 |     6
+(1 row)
+
 SELECT * FROM test.show_subtables('"two_Partitions"');
                  Child                  | Tablespace 
 ----------------------------------------+------------
@@ -174,8 +226,8 @@ SELECT * FROM "two_Partitions";
 ------------+-----------+----------+----------+----------+-------------
 (0 rows)
 
-SELECT * FROM truncate_normal;
- color 
--------
+SELECT * FROM truncate_normal, truncate_nested;
+ color | color 
+-------+-------
 (0 rows)
 

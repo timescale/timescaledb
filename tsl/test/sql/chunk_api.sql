@@ -254,7 +254,6 @@ $$);
 -- Clean up
 RESET ROLE;
 TRUNCATE disttable;
-TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
 SELECT * FROM delete_data_node('data_node_2', force => true);
 DROP DATABASE :DN_DBNAME_1;

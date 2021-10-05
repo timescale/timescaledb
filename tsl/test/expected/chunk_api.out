@@ -552,7 +552,6 @@ _timescaledb_internal._dist_hyper_2_5_chunk|        4|f         |          0|   
 -- Clean up
 RESET ROLE;
 TRUNCATE disttable;
-TRUNCATE costtable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
 NOTICE:  the number of partitions in dimension "device" was decreased to 1

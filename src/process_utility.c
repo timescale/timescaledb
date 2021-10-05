@@ -913,6 +913,8 @@ process_truncate(ProcessUtilityArgs *args)
 	ListCell *cell;
 	List *hypertables = NIL;
 	List *relations = NIL;
+	bool list_changed = false;
+	MemoryContext parsetreectx = GetMemoryChunkContext(args->parsetree);
 
 	/* For all hypertables, we drop the now empty chunks. We also propagate the
 	 * TRUNCATE call to the compressed version of the hypertable, if it exists.
@@ -922,8 +924,9 @@ process_truncate(ProcessUtilityArgs *args)
 	{
 		RangeVar *rv = lfirst(cell);
 		Oid relid;
+		bool list_append = false;
 
-		if (NULL == rv)
+		if (!rv)
 			continue;
 
 		/* Grab AccessExclusiveLock, same as regular TRUNCATE processing grabs
@@ -931,87 +934,113 @@ process_truncate(ProcessUtilityArgs *args)
 		relid = RangeVarGetRelid(rv, AccessExclusiveLock, true);
 
 		if (!OidIsValid(relid))
-			continue;
-
-		switch (get_rel_relkind(relid))
 		{
-			case RELKIND_VIEW:
+			/* We should add invalid relations to the list to raise error on the
+			 * standard_ProcessUtility when we're trying to TRUNCATE a nonexistent relation */
+			list_append = true;
+		}
+		else
+		{
+			switch (get_rel_relkind(relid))
 			{
-				ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
-
-				if (NULL != cagg)
+				case RELKIND_VIEW:
 				{
-					Hypertable *ht;
+					ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 
-					if (!relation_should_recurse(rv))
-						ereport(ERROR,
-								(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-								 errmsg("cannot truncate only a continuous aggregate")));
+					if (cagg)
+					{
+						Hypertable *ht;
+						MemoryContext oldctx;
 
-					ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-					Assert(ht != NULL);
-					rv = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
+						if (!relation_should_recurse(rv))
+							ereport(ERROR,
+									(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+									 errmsg("cannot truncate only a continuous aggregate")));
 
-					/* Invalidate the entire continuous aggregate since it no
-					 * longer has any data */
-					ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+						ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+						Assert(ht != NULL);
+
+						/* Create list item into the same context of the list */
+						oldctx = MemoryContextSwitchTo(parsetreectx);
+						rv = makeRangeVar(NameStr(ht->fd.schema_name),
+										  NameStr(ht->fd.table_name),
+										  -1);
+						MemoryContextSwitchTo(oldctx);
+
+						/* Invalidate the entire continuous aggregate since it no
+						 * longer has any data */
+						ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+
+						/* mark list as changed because we'll add the materialization hypertable */
+						list_changed = true;
+					}
+
+					list_append = true;
+					break;
 				}
-
-				relations = lappend(relations, rv);
-				break;
-			}
-			case RELKIND_RELATION:
-			{
-				Hypertable *ht =
-					ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-
-				if (ht == NULL)
-					relations = lappend(relations, rv);
-				else
+				case RELKIND_RELATION:
 				{
-					ContinuousAggHypertableStatus agg_status;
+					Hypertable *ht =
+						ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-					agg_status = ts_continuous_agg_hypertable_status(ht->fd.id);
+					if (!ht)
+						list_append = true;
+					else
+					{
+						ContinuousAggHypertableStatus agg_status;
 
-					ts_hypertable_permissions_check_by_id(ht->fd.id);
+						agg_status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-					if ((agg_status & HypertableIsMaterialization) != 0)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("cannot TRUNCATE a hypertable underlying a continuous "
-										"aggregate"),
-								 errhint("TRUNCATE the continuous aggregate instead.")));
+						ts_hypertable_permissions_check_by_id(ht->fd.id);
 
-					if (agg_status == HypertableIsRawTable)
-						/* The truncation invalidates all associated continuous aggregates */
-						ts_cm_functions->continuous_agg_invalidate(ht,
-																   TS_TIME_NOBEGIN,
-																   TS_TIME_NOEND);
+						if ((agg_status & HypertableIsMaterialization) != 0)
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg("cannot TRUNCATE a hypertable underlying a continuous "
+											"aggregate"),
+									 errhint("TRUNCATE the continuous aggregate instead.")));
 
-					if (!relation_should_recurse(rv))
-						ereport(ERROR,
-								(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-								 errmsg("cannot truncate only a hypertable"),
-								 errhint("Do not specify the ONLY keyword, or use truncate"
-										 " only on the chunks directly.")));
+						if (agg_status == HypertableIsRawTable)
+							/* The truncation invalidates all associated continuous aggregates */
+							ts_cm_functions->continuous_agg_invalidate(ht,
+																	   TS_TIME_NOBEGIN,
+																	   TS_TIME_NOEND);
 
-					hypertables = lappend(hypertables, ht);
+						if (!relation_should_recurse(rv))
+							ereport(ERROR,
+									(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+									 errmsg("cannot truncate only a hypertable"),
+									 errhint("Do not specify the ONLY keyword, or use truncate"
+											 " only on the chunks directly.")));
 
-					if (!hypertable_is_distributed(ht))
-						relations = lappend(relations, rv);
+						hypertables = lappend(hypertables, ht);
+
+						if (!hypertable_is_distributed(ht))
+							list_append = true;
+						else
+							/* mark list as changed because we'll not add the distributed hypertable
+							 */
+							list_changed = true;
+					}
+					break;
 				}
-				break;
 			}
-			default:
-				relations = lappend(relations, rv);
-				break;
+		}
+
+		/* Append the relation to the list in the same parse tree memory context */
+		if (list_append)
+		{
+			MemoryContext oldctx = MemoryContextSwitchTo(parsetreectx);
+			relations = lappend(relations, rv);
+			MemoryContextSwitchTo(oldctx);
 		}
 	}
 
-	/* Update relations list to include only tables that hold data. On an
-	 * access node, distributed hypertables hold no data and chunks are
-	 * foreign tables, so those tables are excluded. */
-	stmt->relations = relations;
+	/* Update relations list just when changed to include only tables
+	 * that hold data. On an access node, distributed hypertables hold
+	 * no data and chunks are foreign tables, so those tables are excluded. */
+	if (list_changed)
+		stmt->relations = relations;
 
 	if (stmt->relations != NIL)
 	{
