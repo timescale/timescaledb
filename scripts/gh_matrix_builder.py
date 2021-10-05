@@ -24,6 +24,7 @@ PG12_EARLIEST = "12.0"
 PG12_LATEST = "12.8"
 PG13_EARLIEST = "13.2"
 PG13_LATEST = "13.4"
+PG14_LATEST = "14.0"
 
 m = {"include": [],}
 
@@ -107,6 +108,14 @@ def macos_config(overrides):
 # always test debug build on latest of all supported pg versions
 m["include"].append(build_debug_config({"pg":PG12_LATEST}))
 m["include"].append(build_debug_config({"pg":PG13_LATEST}))
+
+pg14_debug_latest = {
+  "pg": PG14_LATEST,
+  "tsdb_build_args": "-DWARNINGS_AS_ERRORS=OFF -DEXPERIMENTAL=ON",
+  "ignore_tests": True,
+  "coverage": False,
+}
+m["include"].append(build_debug_config(pg14_debug_latest))
 
 m["include"].append(build_release_config(macos_config({})))
 

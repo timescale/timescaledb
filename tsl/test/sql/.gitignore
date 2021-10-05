@@ -4,6 +4,7 @@
 /continuous_aggs_union_view-*.sql
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
+/compression_insert-*.sql
 /compression_permissions-*.sql
 /hypertable_distributed-*.sql
 /dist_hypertable-*.sql
