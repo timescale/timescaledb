@@ -50,3 +50,43 @@ CALL run_job(:job_id);
 SELECT * FROM max_mat_view_timestamp;
 RESET client_min_messages ;
 
+-- Check that running compression job after new data has been inserted
+-- works.
+CREATE TABLE sensor_data(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
+
+SELECT * FROM create_hypertable('sensor_data','time');
+
+INSERT INTO sensor_data
+SELECT time + (INTERVAL '1 minute' * random()) AS time,
+       sensor_id,
+       random() AS cpu,
+       random()* 100 AS temperature
+FROM generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '10 minute') AS g1(time),
+     generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY time;
+
+ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+SELECT add_compression_policy('sensor_data','1 minute'::INTERVAL) as job_id \gset
+
+CALL run_job(:job_id);
+
+-- Verify that chunks are compressed
+SELECT c.chunk_name,c.range_start,c.range_end,c.is_compressed
+  FROM public.chunks_detailed_size('public.sensor_data')
+  JOIN timescaledb_information.chunks
+ USING (chunk_name)
+ ORDER BY c.range_start;
+
+INSERT INTO sensor_data
+SELECT time + (INTERVAL '1 minute' * random()) AS time,
+       sensor_id,
+       random() AS cpu,
+       random()* 100 AS temperature
+FROM generate_series('2021-09-02 00:00:00+00'::timestamptz,'2021-09-08 00:00:00+00'::timestamptz, INTERVAL '10 minute') AS g1(time),
+     generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY time;
