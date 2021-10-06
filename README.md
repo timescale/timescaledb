@@ -127,7 +127,7 @@ TimescaleDB is available pre-packaged for several platforms:
 - [Windows](https://tsdb.co/GitHubTimescaleWindows)
 
 [Timescale Cloud](https://tsdb.co/GitHubTimescaleCloud)
-(cloud-hosted and maanged TimescaleDB) is available via free trial. You create database
+(cloud-hosted and managed TimescaleDB) is available via free trial. You create database
 instances in the cloud of your choice and use TimescaleDB to power your
 queries, automating common operational tasks and reducing management overhead.
 
