@@ -18,3 +18,11 @@
 -- try one query with EXPLAIN only for coverage
 EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan;
 EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan_ht;
+
+-- #3629 skipscan with constant skipscan column in where clause
+CREATE TABLE i3629(a int, time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('i3629', 'time');
+INSERT INTO i3629 SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
+EXPLAIN (SUMMARY OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
+SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
+

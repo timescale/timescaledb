@@ -3909,3 +3909,35 @@ EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_n
                      Index Cond: (dev_name > NULL::text)
 (15 rows)
 
+-- #3629 skipscan with constant skipscan column in where clause
+CREATE TABLE i3629(a int, time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('i3629', 'time');
+ table_name 
+------------
+ i3629
+(1 row)
+
+INSERT INTO i3629 SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
+EXPLAIN (SUMMARY OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
+                   QUERY PLAN                   
+------------------------------------------------
+ Unique
+   ->  Sort
+         Sort Key: _hyper_3_6_chunk."time" DESC
+         ->  Append
+               ->  Seq Scan on _hyper_3_6_chunk
+                     Filter: (a = 2)
+               ->  Seq Scan on _hyper_3_7_chunk
+                     Filter: (a = 2)
+               ->  Seq Scan on _hyper_3_8_chunk
+                     Filter: (a = 2)
+               ->  Seq Scan on _hyper_3_9_chunk
+                     Filter: (a = 2)
+(12 rows)
+
+SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
+ a |             time             
+---+------------------------------
+ 2 | Fri Mar 20 00:00:00 2020 PDT
+(1 row)
+

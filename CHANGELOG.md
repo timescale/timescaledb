@@ -9,6 +9,10 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #3580 Fix memory context bug executing TRUNCATE
 * #3654 Fix index attnum mapping in reorder_chunk
+* #3661 Fix SkipScan path generation with constant DISTINCT column
+
+**Thanks**
+* @binakot and @sebvett for reporting an issue with DISTINCT queries
 
 **Thanks**
 * @hardikm10, @DavidPavlicek and @pafiti for reporting bugs on TRUNCATE
