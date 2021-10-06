@@ -536,7 +536,25 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 	Oid column_type = exprType((Node *) var);
 	Oid column_collation = get_typcollation(column_type);
 	TypeCacheEntry *tce = lookup_type_cache(column_type, 0);
+
+	/*
+	 * Skipscan is not applicable for the following case:
+	 * We might have a path with an index that produces the correct pathkeys for the target ordering
+	 * without actually including all the columns of the ORDER BY. If the path uses an index that
+	 * does not include the distinct column, we cannot use it for skipscan and have to discard this
+	 * path from skipscan generation. This happens, for instance, when we have an order by clause
+	 * (like ORDER BY a, b) with constraints in the WHERE clause (like WHERE a = <constant>) . "a"
+	 * can now be removed from the Pathkeys (since it is a constant) and the query can be satisfied
+	 * by using an index on just column "b".
+	 *
+	 * Example query:
+	 * SELECT DISTINCT ON (a) * FROM test WHERE a in (2) ORDER BY a ASC, time DESC;
+	 * Since a is always 2 due to the WHERE clause we can create the correct ordering for the
+	 * ORDER BY with an index that does not include the a column and only includes the time column.
+	 */
 	int idx_key = get_idx_key(info, var->varattno);
+	if (idx_key < 0)
+		return false;
 
 	skip_scan_path->distinct_attno = var->varattno;
 	skip_scan_path->distinct_by_val = tce->typbyval;
@@ -586,9 +604,7 @@ get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno)
 		if (attno == idxinfo->indexkeys[i])
 			return i;
 	}
-
-	elog(ERROR, "column not present in index: %d", attno);
-	pg_unreachable();
+	return -1;
 }
 
 /* Sort quals according to index column order.
