@@ -207,12 +207,24 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 {
 	IndexInfo *indexinfo = BuildIndexInfo(template_indexrel);
 	int32 hypertable_id;
+	bool skip_mapping = false;
+
+	/*
+	 * If the supplied template index is not on the hypertable we must not do attnum
+	 * mapping based on the hypertable. Ideally we would check for the template being
+	 * on the chunk but we cannot do that since when we rebuild a chunk the new chunk
+	 * has a different id. But the template index should always be either on the
+	 * hypertable or on a relation with the same physical layout as chunkrel.
+	 */
+	if (IndexGetRelation(template_indexrel->rd_id, false) != htrel->rd_id)
+		skip_mapping = true;
 
 	/*
 	 * Convert the IndexInfo's attnos to match the chunk instead of the
 	 * hypertable
 	 */
-	if (chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
+	if (!skip_mapping &&
+		chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
 		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, chunkrel);
 
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
