@@ -33,7 +33,7 @@
  * amplification in "hot" regions---typically the "head" of the table. The
  * presumption is that most inserts happen at recent time intervals, and those
  * intervals will be invalid until writes move out of them. Therefore, it
- * isnt't worth writing invalidations in that region since it is presumed
+ * isn't worth writing invalidations in that region since it is presumed
  * out-of-date anyway. Further, although it is possible to refresh a
  * continuous aggregate in those "hot" regions, it will lead to partially
  * filled buckets. Thus, refreshing those intervals is discouraged since the
@@ -43,7 +43,7 @@
  * the threshold but not after it.
  *
  * The invalidation threshold is moved forward (and only forward) by refreshes
- * on continuous aggregates when it covers a window that streches beyond the
+ * on continuous aggregates when it covers a window that stretches beyond the
  * current threshold. The invalidation threshold needs to be moved in its own
  * transaction, with exclusive access, before the refresh starts to
  * materialize data. This is to avoid losing any invalidations that occur
@@ -57,6 +57,11 @@
  *                                        |
  *                               invalidation threshold
  *
+ * Transactions that use an isolation level stronger than READ COMMITTED will
+ * not be able to "see" changes to the invalidation threshold that may have
+ * been made while they were running. Therefore, they always create records
+ * in the hypertable invalidation log. See the cache_inval_entry_write()
+ * implementation in tsl/src/continuous_aggs/insert.c
  */
 
 typedef struct InvalidationThresholdData
