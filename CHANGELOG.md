@@ -4,6 +4,11 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #3654 Fix index attnum mapping in reorder_chunk
+
 ## 2.4.2 (2021-09-21)
 
 This release contains bug fixes since the 2.4.1 release.
