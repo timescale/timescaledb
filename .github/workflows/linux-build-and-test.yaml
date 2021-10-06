@@ -101,7 +101,7 @@ jobs:
     - name: Test telemetry without OpenSSL
       if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
       run: |
-        BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR -DUSE_OPENSSL=false
+        BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }} -DUSE_OPENSSL=OFF
         make -j $MAKE_JOBS -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
