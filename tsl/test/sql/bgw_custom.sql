@@ -251,10 +251,29 @@ SELECT wait_for_job_to_run(:job_id_4, 1);
 -- Chunk compress stats
 SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 
+--TEST compression job after inserting data into previously compressed chunk
+INSERT INTO conditions
+SELECT generate_series('2021-08-01 00:00'::timestamp, '2021-08-31 00:00'::timestamp, '1 day'), 'NYC', 'nycity', 40, 40;
+
+SELECT id, table_name, status from _timescaledb_catalog.chunk 
+where hypertable_id = (select id from _timescaledb_catalog.hypertable 
+                       where table_name = 'conditions')
+order by id; 
+
+--running job second time, wait for it to complete 
+select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
+SELECT wait_for_job_to_run(:job_id_4, 2);
+
+SELECT id, table_name, status from _timescaledb_catalog.chunk 
+where hypertable_id = (select id from _timescaledb_catalog.hypertable 
+                       where table_name = 'conditions')
+order by id; 
+
+
 -- Decompress chunks before create the cagg
 SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
 
--- Continuous Aggregate
+-- TEST Continuous Aggregate job
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous) AS
 SELECT location,
@@ -269,6 +288,7 @@ WITH NO DATA;
 -- Refresh Continous Aggregate by Job
 SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
 SELECT wait_for_job_to_run(:job_id_5, 1);
+SELECT count(*) FROM conditions_summary_daily;
 
 -- Stop Background Workers
 SELECT _timescaledb_internal.stop_background_workers();

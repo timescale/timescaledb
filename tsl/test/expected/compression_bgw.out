@@ -254,7 +254,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
 
 set client_min_messages TO LOG;
 CALL run_job(:job_id);
-LOG:  job 1002 completed compressing chunk _timescaledb_internal._hyper_7_26_chunk
+LOG:  job 1002 completed processing chunk _timescaledb_internal._hyper_7_26_chunk
 set client_min_messages TO NOTICE;
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
@@ -386,7 +386,6 @@ SELECT add_compression_policy AS job_id
   FROM add_compression_policy('test2', '30d'::interval) \gset
 CALL run_job(:job_id);
 CALL run_job(:job_id);
-psql:include/recompress_basic.sql:85: NOTICE:  no chunks for hypertable public.test2 that satisfy compress chunk policy
 -- status should be compressed ---
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
@@ -436,7 +435,6 @@ SELECT add_job('_timescaledb_internal.policy_compression','1w','{"hypertable_id"
 CALL run_job(:JOB_COMPRESS);
 -- 2nd call should do nothing
 CALL run_job(:JOB_COMPRESS);
-psql:include/recompress_basic.sql:117: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
@@ -471,7 +469,6 @@ SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false')) FROM _time
 
 -- nothing to do
 CALL run_job(:JOB_COMPRESS);
-psql:include/recompress_basic.sql:138: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 
@@ -490,7 +487,6 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 -- still nothing to do since we disabled recompress
 CALL run_job(:JOB_COMPRESS);
-psql:include/recompress_basic.sql:150: NOTICE:  no chunks for hypertable public.metrics that satisfy compress chunk policy
 ---- status should be 3
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 

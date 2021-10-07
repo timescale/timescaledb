@@ -245,7 +245,29 @@ FROM
 GROUP BY bucket, device_id WITH NO DATA;
 
 -- policy API
-CALL _timescaledb_internal.policy_compression(1,'{}');
+-- compression policy will throw an error only if it attempts to compress
+-- atleast 1 chunk
+SET default_transaction_read_only TO off;
+CREATE TABLE test_table_int(time bigint NOT NULL, device int);
+SELECt create_hypertable('test_table_int', 'time', chunk_time_interval=>'1'::bigint);
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
+select set_integer_now_func('test_table_int', 'dummy_now');
+ALTER TABLE test_table_int SET (timescaledb.compress);
+INSERT INTO test_table_int VALUES (0, 1), (10,10);
+SELECT add_compression_policy('test_table_int', '1'::integer) as comp_job_id \gset
+SELECT config as comp_job_config 
+FROM _timescaledb_config.bgw_job WHERE id = :comp_job_id \gset
+SET default_transaction_read_only TO on;
+CALL _timescaledb_internal.policy_compression(:comp_job_id, :'comp_job_config');
+SET default_transaction_read_only TO off;
+--verify chunks are not compressed
+SELECT count(*) , count(*) FILTER ( WHERE is_compressed is true) 
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_table_int';
+--cleanup
+DROP TABLE test_table_int;
+
+SET default_transaction_read_only TO on;
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(1,'{}');
 CALL _timescaledb_internal.policy_reorder(1,'{}');
 CALL _timescaledb_internal.policy_retention(1,'{}');

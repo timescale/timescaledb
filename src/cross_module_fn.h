@@ -42,7 +42,6 @@ typedef struct CrossModuleFunctions
 	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
 
 	PGFunction policy_compression_add;
-	PGFunction policy_compression_proc;
 	PGFunction policy_compression_remove;
 	PGFunction policy_recompression_proc;
 	PGFunction policy_refresh_cagg_add;

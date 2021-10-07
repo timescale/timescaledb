@@ -767,7 +767,6 @@ select * from _timescaledb_config.bgw_job where id=:compressjob_id;
 \gset
 CALL run_job(:compressjob_id);
 CALL run_job(:compressjob_id);
-NOTICE:  no chunks for hypertable public.test_table_int that satisfy compress chunk policy
 select chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
 from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
        chunk_name       |       node_name       | before_compression_total_bytes | after_compression_total_bytes 
@@ -976,7 +975,6 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 --verify that there are no errors if the policy/recompress_chunk is executed again
 --on previously compressed chunks
 CALL run_job(:compressjob_id);
-NOTICE:  no chunks for hypertable public.test_recomp_int that satisfy compress chunk policy
 SELECT recompress_chunk(chunk, true) FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
 NOTICE:  nothing to recompress in chunk "_dist_hyper_4_14_chunk" 
