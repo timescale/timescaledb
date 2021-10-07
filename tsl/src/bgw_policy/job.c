@@ -121,7 +121,7 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 
 		Assert(now_func);
 
-		res = subtract_integer_from_now(lag, partitioning_type, now_func);
+		res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
 		return Int64GetDatum(res);
 	}
 	else
@@ -129,33 +129,6 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 		Interval *lag = interval_getter(config);
 		return subtract_interval_from_now(lag, partitioning_type);
 	}
-}
-
-static List *
-get_chunk_to_compress(const Dimension *dim, const Jsonb *config)
-{
-	Oid partitioning_type = ts_dimension_get_partition_type(dim);
-	StrategyNumber end_strategy = BTLessStrategyNumber;
-	bool recompress = policy_compression_get_recompress(config);
-	/* numchunks = 0 if the config does not specify it. This means there is no
-	 * limit.
-	 */
-	int32 numchunks = policy_compression_get_maxchunks_per_job(config);
-
-	Datum boundary = get_window_boundary(dim,
-										 config,
-										 policy_compression_get_compress_after_int,
-										 policy_compression_get_compress_after_interval);
-
-	return ts_dimension_slice_get_chunkids_to_compress(dim->fd.id,
-													   InvalidStrategy, /*start_strategy*/
-													   -1,				/*start_value*/
-													   end_strategy,
-													   ts_time_value_to_internal(boundary,
-																				 partitioning_type),
-													   true,
-													   recompress,
-													   numchunks);
 }
 
 static List *
@@ -408,63 +381,6 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 }
 
 /*
- * Invoke compress_chunk via fmgr so that the call can be deparsed and sent to
- * remote data nodes.
- */
-static void
-policy_invoke_compress_chunk(Chunk *chunk)
-{
-	EState *estate;
-	ExprContext *econtext;
-	FuncExpr *fexpr;
-	Oid relid = chunk->table_id;
-	Oid restype;
-	Oid func_oid;
-	List *args = NIL;
-	int i;
-	bool isnull;
-	Const *argarr[COMPRESS_CHUNK_NARGS] = {
-		makeConst(REGCLASSOID,
-				  -1,
-				  InvalidOid,
-				  sizeof(relid),
-				  ObjectIdGetDatum(relid),
-				  false,
-				  false),
-		castNode(Const, makeBoolConst(true, false)),
-	};
-	Oid type_id[COMPRESS_CHUNK_NARGS] = { REGCLASSOID, BOOLOID };
-	char *schema_name = ts_extension_schema_name();
-	List *fqn = list_make2(makeString(schema_name), makeString(COMPRESS_CHUNK_FUNCNAME));
-
-	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
-					 "argarr and type_id should have matching lengths");
-
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
-
-	/* Prepare the function expr with argument list */
-	get_func_result_type(func_oid, &restype, NULL);
-
-	for (i = 0; i < lengthof(argarr); i++)
-		args = lappend(args, argarr[i]);
-
-	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-	fexpr->funcretset = false;
-
-	estate = CreateExecutorState();
-	econtext = CreateExprContext(estate);
-
-	ExprState *exprstate = ExecInitExpr(&fexpr->xpr, NULL);
-
-	ExecEvalExprSwitchContext(exprstate, econtext, &isnull);
-
-	/* Cleanup */
-	FreeExprContext(econtext, false);
-	FreeExecutorState(estate);
-}
-
-/*
  * Invoke recompress_chunk via fmgr so that the call can be deparsed and sent to
  * remote data nodes.
  */
@@ -519,110 +435,6 @@ policy_invoke_recompress_chunk(Chunk *chunk)
 	/* Cleanup */
 	FreeExprContext(econtext, false);
 	FreeExecutorState(estate);
-}
-
-bool
-policy_compression_execute(int32 job_id, Jsonb *config)
-{
-	List *chunkid_lst;
-	ListCell *lc;
-	const Dimension *dim;
-	PolicyCompressionData policy_data;
-	bool distributed, used_portalcxt = false, verbose_log;
-	MemoryContext saved_cxt, multitxn_cxt;
-
-	policy_compression_read_and_validate_config(config, &policy_data);
-	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
-	distributed = hypertable_is_distributed(policy_data.hypertable);
-	verbose_log = policy_compression_get_verbose_log(config);
-	/* we want the chunk id list to survive across transactions. So alloc in
-	 * a different context
-	 */
-	if (PortalContext)
-	{
-		/*if we have a portal context use that - it will get freed automatically*/
-		multitxn_cxt = PortalContext;
-		used_portalcxt = true;
-	}
-	else
-	{
-		/* background worker job does not go via usual CALL path, so we do
-		 * not have a PortalContext */
-		multitxn_cxt =
-			AllocSetContextCreate(TopMemoryContext, "CompressionJobCxt", ALLOCSET_DEFAULT_SIZES);
-	}
-	saved_cxt = MemoryContextSwitchTo(multitxn_cxt);
-	chunkid_lst = get_chunk_to_compress(dim, config);
-	MemoryContextSwitchTo(saved_cxt);
-
-	if (!chunkid_lst)
-	{
-		elog(NOTICE,
-			 "no chunks for hypertable %s.%s that satisfy compress chunk policy",
-			 policy_data.hypertable->fd.schema_name.data,
-			 policy_data.hypertable->fd.table_name.data);
-		ts_cache_release(policy_data.hcache);
-		if (!used_portalcxt)
-			MemoryContextDelete(multitxn_cxt);
-		return true;
-	}
-	ts_cache_release(policy_data.hcache);
-	if (ActiveSnapshotSet())
-	{
-		/* we have atleast 1 chunk that needs processing and will commit the
-		 * current txn (below) and start a new one to process the chunk. Any
-		 * active snapshot has to be popped before we can commit
-		 */
-		PopActiveSnapshot();
-	}
-	/* process each chunk in a new transaction */
-	int total_chunks = list_length(chunkid_lst), num_chunks = 0;
-	foreach (lc, chunkid_lst)
-	{
-		CommitTransactionCommand();
-		StartTransactionCommand();
-		int32 chunkid = lfirst_int(lc);
-		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
-		num_chunks++;
-		if (!chunk || !ts_chunk_is_uncompressed_or_unordered(chunk))
-		{
-			continue;
-		}
-		StringInfo query = makeStringInfo();
-		appendStringInfo(query,
-						 "compressing chunk %s.%s() , completed %d out of %d",
-						 quote_identifier(NameStr(chunk->fd.schema_name)),
-						 quote_identifier(NameStr(chunk->fd.table_name)),
-						 (num_chunks - 1),
-						 total_chunks);
-		pgstat_report_activity(STATE_RUNNING, query->data);
-
-		if (distributed)
-		{
-			if (ts_chunk_is_unordered(chunk))
-				policy_invoke_recompress_chunk(chunk);
-			else
-				policy_invoke_compress_chunk(chunk);
-		}
-		else
-		{
-			if (ts_chunk_is_unordered(chunk))
-				tsl_recompress_chunk_wrapper(chunk);
-			else
-				tsl_compress_chunk_wrapper(chunk, true);
-		}
-		if (verbose_log)
-			elog(LOG,
-				 "job %d completed compressing chunk %s.%s",
-				 job_id,
-				 NameStr(chunk->fd.schema_name),
-				 NameStr(chunk->fd.table_name));
-	}
-
-	if (!used_portalcxt)
-		MemoryContextDelete(multitxn_cxt);
-	elog(DEBUG1, "job %d completed compressing chunk", job_id);
-	return true;
 }
 
 /* Read configuration for compression job from config object. */

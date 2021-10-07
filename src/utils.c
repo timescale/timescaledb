@@ -825,8 +825,15 @@ ts_get_integer_now_func(const Dimension *open_dim)
 	return now_func;
 }
 
+/* subtract passed in interval from the now.
+ * Arguments:
+ * now_func : function used to compute now.
+ * interval : integer value
+ * Returns:
+ *  now_func() - interval
+ */
 int64
-subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
+ts_sub_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
 {
 	Datum now;
 	int64 res;
@@ -882,7 +889,7 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 	if (now_func == InvalidOid)
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 	Assert(IS_INTEGER_TYPE(partitioning_type));
-	int64 res = subtract_integer_from_now(lag, partitioning_type, now_func);
+	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
 	ts_cache_release(hcache);
 	return Int64GetDatum(res);
 }

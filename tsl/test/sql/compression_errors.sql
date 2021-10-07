@@ -243,3 +243,43 @@ ALTER TABLE table_constr2 set (timescaledb.compress=false);
 SELECT decompress_chunk(:'CHUNK_NAME');
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
 
+-- TEST compression policy
+-- modify the config to trigger errors at runtime
+CREATE TABLE test_table_int(time bigint, val int);
+SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+
+CREATE OR REPLACE function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
+SELECT set_integer_now_func('test_table_int', 'dummy_now');
+INSERT INTO test_table_int SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_int set (timescaledb.compress);
+SELECT add_compression_policy('test_table_int', 2::int) AS compressjob_id
+\gset
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_config.bgw_job
+SET config = config - 'compress_after'
+WHERE id = :compressjob_id;
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+--should fail
+CALL run_job(:compressjob_id);
+
+SELECT remove_compression_policy('test_table_int');
+
+--again add a new policy that we'll tamper with
+SELECT add_compression_policy('test_table_int', 2::int) AS compressjob_id
+\gset
+UPDATE _timescaledb_config.bgw_job
+SET config = config - 'hypertable_id'
+WHERE id = :compressjob_id;
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+--should fail
+CALL run_job(:compressjob_id);
+
+UPDATE _timescaledb_config.bgw_job
+SET config = NULL
+WHERE id = :compressjob_id;
+SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+--should fail
+CALL run_job(:compressjob_id);

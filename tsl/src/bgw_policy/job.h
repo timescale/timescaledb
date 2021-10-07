@@ -51,7 +51,6 @@ typedef void (*reorder_func)(Oid tableOid, Oid indexOid, bool verbose, Oid wait_
 extern bool policy_reorder_execute(int32 job_id, Jsonb *config);
 extern bool policy_retention_execute(int32 job_id, Jsonb *config);
 extern bool policy_refresh_cagg_execute(int32 job_id, Jsonb *config);
-extern bool policy_compression_execute(int32 job_id, Jsonb *config);
 extern bool policy_recompression_execute(int32 job_id, Jsonb *config);
 extern void policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy_data);
 extern void policy_retention_read_and_validate_config(Jsonb *config,

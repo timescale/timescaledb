@@ -139,19 +139,6 @@ policy_recompression_get_recompress_after_interval(const Jsonb *config)
 }
 
 Datum
-policy_compression_proc(PG_FUNCTION_ARGS)
-{
-	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
-		PG_RETURN_VOID();
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	policy_compression_execute(PG_GETARG_INT32(0), PG_GETARG_JSONB_P(1));
-
-	PG_RETURN_VOID();
-}
-
-Datum
 policy_recompression_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
