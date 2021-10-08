@@ -12,6 +12,9 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMP
 
 SET work_mem TO '50MB';
 
+-- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+
 CREATE TABLE metrics (
     filler_1 int,
     filler_2 int,

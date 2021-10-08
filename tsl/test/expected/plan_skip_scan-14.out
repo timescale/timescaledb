@@ -704,14 +704,13 @@ DISTINCT with wholerow var
 
 -- should not use SkipScan since we only support SkipScan on single-column distinct
 :PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
-                          QUERY PLAN                           
----------------------------------------------------------------
- Unique (actual rows=10022 loops=1)
-   ->  Sort (actual rows=10022 loops=1)
-         Sort Key: skip_scan.*
-         Sort Method: quicksort 
-         ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
-(5 rows)
+                       QUERY PLAN                        
+---------------------------------------------------------
+ HashAggregate (actual rows=10022 loops=1)
+   Group Key: skip_scan.*
+   Batches: 1 
+   ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
+(4 rows)
 
 \qecho LIMIT queries on :TABLE
 LIMIT queries on skip_scan
@@ -2573,18 +2572,17 @@ DISTINCT with wholerow var
 
 -- should not use SkipScan since we only support SkipScan on single-column distinct
 :PREFIX SELECT DISTINCT :TABLE FROM :TABLE;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Unique (actual rows=10020 loops=1)
-   ->  Sort (actual rows=10020 loops=1)
-         Sort Key: ((skip_scan_ht.*)::skip_scan_ht)
-         Sort Method: quicksort 
-         ->  Append (actual rows=10020 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
-(9 rows)
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ HashAggregate (actual rows=10020 loops=1)
+   Group Key: ((skip_scan_ht.*)::skip_scan_ht)
+   Batches: 1 
+   ->  Append (actual rows=10020 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(8 rows)
 
 \qecho LIMIT queries on :TABLE
 LIMIT queries on skip_scan_ht

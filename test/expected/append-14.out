@@ -9,6 +9,13 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
+-- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+ enable_memoize 
+----------------
+ off
+(1 row)
+
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -2203,18 +2210,18 @@ FROM (
 LEFT JOIN i2661 ht ON
   (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
   AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp;
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
  Merge Left Join (actual rows=33 loops=1)
-   Merge Cond: ((date_part('epoch'::text, ts."timestamp")) = ((floor((date_part('epoch'::text, ht."timestamp") / '300'::double precision)) * '300'::double precision)))
+   Merge Cond: ((EXTRACT(epoch FROM ts."timestamp")) = ((floor((EXTRACT(epoch FROM ht."timestamp") / '300'::numeric)) * '300'::numeric)))
    ->  Sort (actual rows=13 loops=1)
-         Sort Key: (date_part('epoch'::text, ts."timestamp"))
+         Sort Key: (EXTRACT(epoch FROM ts."timestamp"))
          Sort Method: quicksort 
          ->  Subquery Scan on ts (actual rows=13 loops=1)
                ->  ProjectSet (actual rows=13 loops=1)
                      ->  Result (actual rows=1 loops=1)
    ->  Sort (actual rows=514 loops=1)
-         Sort Key: ((floor((date_part('epoch'::text, ht."timestamp") / '300'::double precision)) * '300'::double precision))
+         Sort Key: ((floor((EXTRACT(epoch FROM ht."timestamp") / '300'::numeric)) * '300'::numeric))
          Sort Method: quicksort 
          ->  Custom Scan (ChunkAppend) on i2661 ht (actual rows=7201 loops=1)
                Chunks excluded during startup: 0

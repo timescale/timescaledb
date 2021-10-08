@@ -821,6 +821,7 @@ LIMIT 10;
 (23 rows)
 
 SELECT DISTINCT RECORD works correctly
+SET enable_hashagg TO false;
 EXPLAIN (verbose, costs off)
 SELECT DISTINCT metrics_dist r
 FROM metrics_dist
@@ -855,6 +856,7 @@ LIMIT 10;
                                  Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
 (25 rows)
 
+RESET enable_hashagg;
 SELECT DISTINCT FUNCTION_EXPR not pushed down currently
 EXPLAIN (verbose, costs off)
 SELECT DISTINCT time_bucket('1h',time) col1

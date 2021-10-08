@@ -120,11 +120,13 @@ LIMIT 10;
 
 -- SELECT DISTINCT RECORD works correctly
 \qecho SELECT DISTINCT RECORD works correctly
+SET enable_hashagg TO false;
 :PREFIX
 SELECT DISTINCT :TABLE_NAME r
 FROM :TABLE_NAME
 ORDER BY r
 LIMIT 10;
+RESET enable_hashagg;
 
 -- SELECT DISTINCT function is not pushed down
 \qecho SELECT DISTINCT FUNCTION_EXPR not pushed down currently
