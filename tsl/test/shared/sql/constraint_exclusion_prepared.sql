@@ -11,6 +11,9 @@ SELECT
 SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed results" %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') as "DIFF_CMD"
 \gset
 
+-- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+
 -- get EXPLAIN output for all variations
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'

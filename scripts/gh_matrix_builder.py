@@ -113,7 +113,7 @@ pg14_debug_latest = {
   "pg": PG14_LATEST,
   "tsdb_build_args": "-DWARNINGS_AS_ERRORS=OFF -DEXPERIMENTAL=ON",
   "coverage": False,
-  "installcheck_args": "IGNORES='append-14 bgw_db_scheduler constraint_exclusion_prepared dist_distinct dist_hypertable-14 dist_partial_agg dist_query dist_triggers insert-14 partition plan_skip_scan-14 transparent_decompression_ordered_index-14 upsert vacuum vacuum_parallel'"
+  "installcheck_args": "IGNORES='dist_hypertable-14 dist_partial_agg dist_query dist_triggers insert-14 partition upsert vacuum vacuum_parallel'"
 }
 m["include"].append(build_debug_config(pg14_debug_latest))
 

@@ -9,6 +9,13 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
+-- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
+SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
+ enable_memoize 
+----------------
+ off
+(1 row)
+
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
