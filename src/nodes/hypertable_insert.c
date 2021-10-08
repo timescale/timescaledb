@@ -589,8 +589,6 @@ ExecModifyTable(PlanState *pstate)
 	TupleTableSlot *planSlot;
 	TupleTableSlot *oldSlot;
 	ItemPointer tupleid;
-	ItemPointerData tuple_ctid;
-	HeapTupleData oldtupdata;
 	HeapTuple oldtuple;
 	List *relinfos = NIL;
 	ListCell *lc;
