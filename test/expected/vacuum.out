@@ -31,27 +31,7 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 -----------+---------+------------------+------------
 (0 rows)
 
-VACUUM (VERBOSE, ANALYZE) vacuum_test;
-INFO:  vacuuming "_timescaledb_internal._hyper_1_1_chunk"
-INFO:  "_hyper_1_1_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_1_1_chunk"
-INFO:  "_hyper_1_1_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_1_2_chunk"
-INFO:  "_hyper_1_2_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_1_2_chunk"
-INFO:  "_hyper_1_2_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_1_3_chunk"
-INFO:  "_hyper_1_3_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_1_3_chunk"
-INFO:  "_hyper_1_3_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "public.vacuum_test"
-INFO:  "vacuum_test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
-INFO:  analyzing "public.vacuum_test"
-INFO:  "vacuum_test": scanned 0 of 0 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 0 estimated total rows
-INFO:  analyzing "public.vacuum_test" inheritance tree
-INFO:  "_hyper_1_1_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_1_2_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_1_3_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+VACUUM ANALYZE vacuum_test;
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
@@ -153,11 +133,7 @@ INSERT INTO vacuum_norm VALUES ('2017-01-20T09:00:01', 17.5),
                                ('2017-04-21T09:00:01', 17.1),
                                ('2017-06-20T09:00:01', 18.5),
                                ('2017-06-21T09:00:01', 11.0);
-VACUUM (VERBOSE, ANALYZE) vacuum_norm;
-INFO:  vacuuming "public.vacuum_norm"
-INFO:  "vacuum_norm": found 0 removable, 6 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "public.vacuum_norm"
-INFO:  "vacuum_norm": scanned 1 of 1 pages, containing 6 live rows and 0 dead rows; 6 rows in sample, 6 estimated total rows
+VACUUM ANALYZE vacuum_norm;
 DROP TABLE vacuum_norm;
 --Similar to normal vacuum tests, but PG11 introduced ability to vacuum multiple tables at once, we make sure that works for hypertables as well.
 CREATE TABLE vacuum_test(time timestamp, temp float);
@@ -211,51 +187,7 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 -----------+---------+------------------+------------
 (0 rows)
 
-VACUUM (VERBOSE, ANALYZE) vacuum_norm, vacuum_test, analyze_test;
-INFO:  vacuuming "_timescaledb_internal._hyper_3_7_chunk"
-INFO:  "_hyper_3_7_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_3_7_chunk"
-INFO:  "_hyper_3_7_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_3_8_chunk"
-INFO:  "_hyper_3_8_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_3_8_chunk"
-INFO:  "_hyper_3_8_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_3_9_chunk"
-INFO:  "_hyper_3_9_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_3_9_chunk"
-INFO:  "_hyper_3_9_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_4_10_chunk"
-INFO:  "_hyper_4_10_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_4_10_chunk"
-INFO:  "_hyper_4_10_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_4_11_chunk"
-INFO:  "_hyper_4_11_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_4_11_chunk"
-INFO:  "_hyper_4_11_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "_timescaledb_internal._hyper_4_12_chunk"
-INFO:  "_hyper_4_12_chunk": found 0 removable, 2 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "_timescaledb_internal._hyper_4_12_chunk"
-INFO:  "_hyper_4_12_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "public.vacuum_norm"
-INFO:  "vacuum_norm": found 0 removable, 6 nonremovable row versions in 1 out of 1 pages
-INFO:  analyzing "public.vacuum_norm"
-INFO:  "vacuum_norm": scanned 1 of 1 pages, containing 6 live rows and 0 dead rows; 6 rows in sample, 6 estimated total rows
-INFO:  vacuuming "public.vacuum_test"
-INFO:  "vacuum_test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
-INFO:  analyzing "public.vacuum_test"
-INFO:  "vacuum_test": scanned 0 of 0 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 0 estimated total rows
-INFO:  analyzing "public.vacuum_test" inheritance tree
-INFO:  "_hyper_3_7_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_3_8_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_3_9_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  vacuuming "public.analyze_test"
-INFO:  "analyze_test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
-INFO:  analyzing "public.analyze_test"
-INFO:  "analyze_test": scanned 0 of 0 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 0 estimated total rows
-INFO:  analyzing "public.analyze_test" inheritance tree
-INFO:  "_hyper_4_10_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_4_11_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_4_12_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+VACUUM ANALYZE vacuum_norm, vacuum_test, analyze_test;
 -- stats should exist for all 6 chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
