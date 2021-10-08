@@ -36,6 +36,6 @@ CREATE INDEX ON _hyper_1_3_chunk(temp2);
 UPDATE vacuum_test SET time = time + '1s'::interval, temp1 = random(), temp2 = random();
 
 -- we should see two parallel workers for each chunk
-VACUUM (PARALLEL 3, VERBOSE) vacuum_test;
+VACUUM (PARALLEL 3) vacuum_test;
 
 DROP TABLE vacuum_test;

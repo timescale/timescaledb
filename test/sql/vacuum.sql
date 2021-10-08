@@ -23,7 +23,7 @@ SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'vacuum_test'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 
-VACUUM (VERBOSE, ANALYZE) vacuum_test;
+VACUUM ANALYZE vacuum_test;
 
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
@@ -81,7 +81,7 @@ INSERT INTO vacuum_norm VALUES ('2017-01-20T09:00:01', 17.5),
                                ('2017-06-20T09:00:01', 18.5),
                                ('2017-06-21T09:00:01', 11.0);
 
-VACUUM (VERBOSE, ANALYZE) vacuum_norm;
+VACUUM ANALYZE vacuum_norm;
 DROP TABLE vacuum_norm;
 
 --Similar to normal vacuum tests, but PG11 introduced ability to vacuum multiple tables at once, we make sure that works for hypertables as well.
@@ -124,7 +124,7 @@ SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 
-VACUUM (VERBOSE, ANALYZE) vacuum_norm, vacuum_test, analyze_test;
+VACUUM ANALYZE vacuum_norm, vacuum_test, analyze_test;
 
 -- stats should exist for all 6 chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats

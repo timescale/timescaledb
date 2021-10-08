@@ -34,37 +34,5 @@ CREATE INDEX ON _hyper_1_3_chunk(temp2);
 -- INSERT only will not trigger vacuum on indexes for PG13.3+
 UPDATE vacuum_test SET time = time + '1s'::interval, temp1 = random(), temp2 = random();
 -- we should see two parallel workers for each chunk
-VACUUM (PARALLEL 3, VERBOSE) vacuum_test;
-INFO:  vacuuming "public._hyper_1_1_chunk"
-INFO:  launched 2 parallel vacuum workers for index vacuuming (planned: 2)
-INFO:  scanned index "_hyper_1_1_chunk_time_idx" to remove 41 row versions
-INFO:  scanned index "_hyper_1_1_chunk_temp1_idx" to remove 41 row versions
-INFO:  scanned index "_hyper_1_1_chunk_temp2_idx" to remove 41 row versions
-INFO:  "_hyper_1_1_chunk": removed 41 row versions in 1 pages
-INFO:  index "_hyper_1_1_chunk_time_idx" now contains 41 row versions in 2 pages
-INFO:  index "_hyper_1_1_chunk_temp1_idx" now contains 41 row versions in 2 pages
-INFO:  index "_hyper_1_1_chunk_temp2_idx" now contains 41 row versions in 2 pages
-INFO:  "_hyper_1_1_chunk": found 41 removable, 41 nonremovable row versions in 1 out of 1 pages
-INFO:  vacuuming "public._hyper_1_2_chunk"
-INFO:  launched 2 parallel vacuum workers for index vacuuming (planned: 2)
-INFO:  scanned index "_hyper_1_2_chunk_time_idx" to remove 42 row versions
-INFO:  scanned index "_hyper_1_2_chunk_temp1_idx" to remove 42 row versions
-INFO:  scanned index "_hyper_1_2_chunk_temp2_idx" to remove 42 row versions
-INFO:  "_hyper_1_2_chunk": removed 42 row versions in 1 pages
-INFO:  index "_hyper_1_2_chunk_time_idx" now contains 42 row versions in 2 pages
-INFO:  index "_hyper_1_2_chunk_temp1_idx" now contains 42 row versions in 2 pages
-INFO:  index "_hyper_1_2_chunk_temp2_idx" now contains 42 row versions in 2 pages
-INFO:  "_hyper_1_2_chunk": found 42 removable, 42 nonremovable row versions in 1 out of 1 pages
-INFO:  vacuuming "public._hyper_1_3_chunk"
-INFO:  launched 2 parallel vacuum workers for index vacuuming (planned: 2)
-INFO:  scanned index "_hyper_1_3_chunk_time_idx" to remove 17 row versions
-INFO:  scanned index "_hyper_1_3_chunk_temp1_idx" to remove 17 row versions
-INFO:  scanned index "_hyper_1_3_chunk_temp2_idx" to remove 17 row versions
-INFO:  "_hyper_1_3_chunk": removed 17 row versions in 1 pages
-INFO:  index "_hyper_1_3_chunk_time_idx" now contains 17 row versions in 2 pages
-INFO:  index "_hyper_1_3_chunk_temp1_idx" now contains 17 row versions in 2 pages
-INFO:  index "_hyper_1_3_chunk_temp2_idx" now contains 17 row versions in 2 pages
-INFO:  "_hyper_1_3_chunk": found 17 removable, 17 nonremovable row versions in 1 out of 1 pages
-INFO:  vacuuming "public.vacuum_test"
-INFO:  "vacuum_test": found 0 removable, 0 nonremovable row versions in 0 out of 0 pages
+VACUUM (PARALLEL 3) vacuum_test;
 DROP TABLE vacuum_test;
