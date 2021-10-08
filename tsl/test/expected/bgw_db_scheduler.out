@@ -85,7 +85,7 @@ CREATE TABLE public.bgw_log(
     msg TEXT
 );
 CREATE VIEW sorted_bgw_log AS
-    SELECT * FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
+    SELECT msg_no, mock_time, application_name, regexp_replace(msg, 'background worker "[^"]+"','connection') AS msg FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 CREATE TABLE public.bgw_dsm_handle_store(
     handle BIGINT
 );
@@ -606,11 +606,11 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time | application_name |                              msg                               
---------+-----------+------------------+----------------------------------------------------------------
+ msg_no | mock_time | application_name |                      msg                      
+--------+-----------+------------------+-----------------------------------------------
       0 |         0 | DB Scheduler     | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler     | [TESTING] Wait until 20000, started at 0
-      2 |     20000 | DB Scheduler     | terminating background worker "test_job_3_long" due to timeout
+      2 |     20000 | DB Scheduler     | terminating connection due to timeout
       3 |     20000 | DB Scheduler     | [TESTING] Wait until 200000, started at 20000
       4 |    200000 | DB Scheduler     | job 1002 failed
 (5 rows)
