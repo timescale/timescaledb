@@ -38,8 +38,6 @@ typedef struct ChunkInsertState
 	 * tuple descriptor on the slots when switching between chunks.
 	 */
 
-	/* Tuple descriptor for projected tuple in ON CONFLICT handling */
-	TupleDesc conflproj_tupdesc;
 	/* Pointer to slot for projected tuple in ON CONFLICT handling */
 	TupleTableSlot *conflproj_slot;
 	/* Pointer to slot for tuple replaced in ON CONFLICT DO UPDATE
