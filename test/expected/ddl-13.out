@@ -544,3 +544,14 @@ INSERT INTO i2504(time, a, c, d) VALUES
 CREATE INDEX idx2 ON i2504(a,d) WHERE c IS NOT NULL;
 DROP INDEX idx2;
 CREATE INDEX idx2 ON i2504(a,d) WITH (timescaledb.transaction_per_chunk) WHERE c IS NOT NULL;
+-- Make sure custom composite types are supported as dimensions
+CREATE TYPE TUPLE as (val1 int4, val2 int4);
+CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
+\set ON_ERROR_STOP 0
+-- should fail on PG < 14 because no partitioning function supplied and the given custom type
+-- has no default hash function
+-- on PG14 custom types are hashable
+SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
+NOTICE:  adding not-null constraint to column "time"
+ERROR:  could not find hash function for type tuple
+\set ON_ERROR_STOP 1
