@@ -33,9 +33,10 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "guc.h"
+#include "hypertable_cache.h"
 #include "utils.h"
 #include "time_utils.h"
-#include "guc.h"
 
 TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_unix_microseconds);
 
@@ -822,4 +823,66 @@ ts_get_integer_now_func(const Dimension *open_dim)
 				  errhint("return type of function does not match dimension type"))));
 
 	return now_func;
+}
+
+int64
+subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
+{
+	Datum now;
+	int64 res;
+
+	AssertArg(IS_INTEGER_TYPE(time_dim_type));
+
+	now = OidFunctionCall0(now_func);
+	switch (time_dim_type)
+	{
+		case INT2OID:
+			res = DatumGetInt16(now) - interval;
+			if (res < PG_INT16_MIN || res > PG_INT16_MAX)
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
+						 errmsg("integer time overflow")));
+			return res;
+		case INT4OID:
+			res = DatumGetInt32(now) - interval;
+			if (res < PG_INT32_MIN || res > PG_INT32_MAX)
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
+						 errmsg("integer time overflow")));
+			return res;
+		case INT8OID:
+		{
+			bool overflow = pg_sub_s64_overflow(DatumGetInt64(now), interval, &res);
+			if (overflow)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
+						 errmsg("integer time overflow")));
+			}
+			return res;
+		}
+		default:
+			pg_unreachable();
+	}
+}
+
+TS_FUNCTION_INFO_V1(ts_subtract_integer_from_now);
+Datum
+ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
+{
+	Oid ht_relid = PG_GETARG_OID(0);
+	Datum lag = PG_GETARG_INT64(1);
+	Cache *hcache;
+	Hypertable *hypertable =
+		ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
+
+	const Dimension *dim = hyperspace_get_open_dimension(hypertable->space, 0);
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+	Oid now_func = ts_get_integer_now_func(dim);
+	if (now_func == InvalidOid)
+		elog(ERROR, "could not find valid integer_now function for hypertable");
+	Assert(IS_INTEGER_TYPE(partitioning_type));
+	int64 res = subtract_integer_from_now(lag, partitioning_type, now_func);
+	ts_cache_release(hcache);
+	return Int64GetDatum(res);
 }

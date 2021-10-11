@@ -66,48 +66,6 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 	}
 }
 
-int64
-subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
-{
-	Datum now;
-	int64 res;
-
-	AssertArg(IS_INTEGER_TYPE(time_dim_type));
-
-	now = OidFunctionCall0(now_func);
-
-	switch (time_dim_type)
-	{
-		case INT2OID:
-			res = DatumGetInt16(now) - interval;
-			if (res < PG_INT16_MIN || res > PG_INT16_MAX)
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
-						 errmsg("integer time overflow")));
-			return res;
-		case INT4OID:
-			res = DatumGetInt32(now) - interval;
-			if (res < PG_INT32_MIN || res > PG_INT32_MAX)
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
-						 errmsg("integer time overflow")));
-			return res;
-		case INT8OID:
-		{
-			bool overflow = pg_sub_s64_overflow(DatumGetInt64(now), interval, &res);
-			if (overflow)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
-						 errmsg("integer time overflow")));
-			}
-			return res;
-		}
-		default:
-			pg_unreachable();
-	}
-}
-
 Datum
 subtract_interval_from_now(Interval *lag, Oid time_dim_type)
 {
