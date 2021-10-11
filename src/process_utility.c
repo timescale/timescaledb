@@ -149,6 +149,10 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_EnableRowSecurity:
 				case AT_DisableRowSecurity:
 				case AT_SetTableSpace:
+#if PG14_GE
+				case AT_ReAddStatistics:
+				case AT_SetCompression:
+#endif
 					/* allowed on chunks */
 					break;
 				default:
@@ -227,6 +231,10 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 				/* this is passed down in `process_altertable_set_tablespace_end` */
 			case AT_SetStatistics: /* should this be pushed down in some way? */
 			case AT_AddColumn:	 /* this is passed down */
+#if PG14_GE
+			case AT_ReAddStatistics:
+			case AT_SetCompression:
+#endif
 				continue;
 				/*
 				 * BLOCKED:
@@ -3389,6 +3397,10 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropOids:
 		case AT_SetOptions:
 		case AT_ResetOptions:
+#if PG14_GE
+		case AT_ReAddStatistics:
+		case AT_SetCompression:
+#endif
 			/* Avoid running this command for distributed hypertable chunks
 			 * since PostgreSQL currently does not allow to alter
 			 * storage options for a foreign table. */
@@ -3470,6 +3482,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 											* process_altertable_start_table but also
 											* here as failsafe */
 		case AT_DetachPartition:
+#if PG14_GE
+		case AT_DetachPartitionFinalize:
+#endif
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("operation not supported on hypertables %d", cmd->subtype)));
