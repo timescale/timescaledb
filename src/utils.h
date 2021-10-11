@@ -81,6 +81,7 @@ extern TSDLLEXPORT Oid ts_get_cast_func(Oid source, Oid target);
 typedef struct Dimension Dimension;
 
 extern TSDLLEXPORT Oid ts_get_integer_now_func(const Dimension *open_dim);
+extern TSDLLEXPORT int64 subtract_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func);
 
 extern TSDLLEXPORT void *ts_create_struct_from_slot(TupleTableSlot *slot, MemoryContext mctx,
 													size_t alloc_size, size_t copy_size);
