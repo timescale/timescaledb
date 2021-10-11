@@ -191,11 +191,6 @@ $BODY$;
 
 CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
 
-\set ON_ERROR_STOP 0
--- should fail because no partitioning function supplied and the given custom type
--- has no default hash function
-SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
-\set ON_ERROR_STOP 1
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'tuple_hash');
 
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));

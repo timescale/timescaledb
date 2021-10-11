@@ -325,18 +325,11 @@ BEGIN
 END
 $BODY$;
 CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
-\set ON_ERROR_STOP 0
--- should fail because no partitioning function supplied and the given custom type
--- has no default hash function
-SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
-NOTICE:  adding not-null constraint to column "time"
-ERROR:  could not find hash function for type tuple
-\set ON_ERROR_STOP 1
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'tuple_hash');
 NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
- (15,public,part_custom_dim,t)
+ (14,public,part_custom_dim,t)
 (1 row)
 
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
@@ -359,7 +352,7 @@ SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_fun
 NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
- (16,public,part_custom_dim,t)
+ (15,public,part_custom_dim,t)
 (1 row)
 
 INSERT INTO part_custom_dim(time, combo) VALUES (now(), (1,2));
@@ -409,7 +402,7 @@ SELECT create_hypertable('part_time_func', 'time', time_partitioning_func => 'ti
 NOTICE:  adding not-null constraint to column "time"
       create_hypertable       
 ------------------------------
- (17,public,part_time_func,t)
+ (16,public,part_time_func,t)
 (1 row)
 
 INSERT INTO part_time_func VALUES (1530214157.134, 23.4, 'dev1'),
@@ -441,8 +434,8 @@ NOTICE:  time value for 1533214157.8734 is Thu Aug 02 12:49:17.8734 2018
 SELECT * FROM test.show_subtables('part_time_func');
                   Child                   | Tablespace 
 ------------------------------------------+------------
- _timescaledb_internal._hyper_17_11_chunk | 
- _timescaledb_internal._hyper_17_12_chunk | 
+ _timescaledb_internal._hyper_16_11_chunk | 
+ _timescaledb_internal._hyper_16_12_chunk | 
 (2 rows)
 
 SELECT (test.show_constraints("Child")).*
@@ -457,8 +450,8 @@ SELECT (test.show_indexes("Child")).*
 FROM test.show_subtables('part_time_func');
                               Index                               | Columns |        Expr         | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------------------------------+---------+---------------------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_17_11_chunk_part_time_func_expr_idx | {expr}  | time_partfunc(expr) | f      | f       | f         | 
- _timescaledb_internal._hyper_17_12_chunk_part_time_func_expr_idx | {expr}  | time_partfunc(expr) | f      | f       | f         | 
+ _timescaledb_internal._hyper_16_11_chunk_part_time_func_expr_idx | {expr}  | time_partfunc(expr) | f      | f       | f         | 
+ _timescaledb_internal._hyper_16_12_chunk_part_time_func_expr_idx | {expr}  | time_partfunc(expr) | f      | f       | f         | 
 (2 rows)
 
 -- Check that constraint exclusion works with time partitioning
@@ -469,10 +462,10 @@ SELECT * FROM part_time_func;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Append
-   ->  Seq Scan on _timescaledb_internal._hyper_17_11_chunk
-         Output: _hyper_17_11_chunk."time", _hyper_17_11_chunk.temp, _hyper_17_11_chunk.device
-   ->  Seq Scan on _timescaledb_internal._hyper_17_12_chunk
-         Output: _hyper_17_12_chunk."time", _hyper_17_12_chunk.temp, _hyper_17_12_chunk.device
+   ->  Seq Scan on _timescaledb_internal._hyper_16_11_chunk
+         Output: _hyper_16_11_chunk."time", _hyper_16_11_chunk.temp, _hyper_16_11_chunk.device
+   ->  Seq Scan on _timescaledb_internal._hyper_16_12_chunk
+         Output: _hyper_16_12_chunk."time", _hyper_16_12_chunk.temp, _hyper_16_12_chunk.device
 (5 rows)
 
 -- Exclude using the function on time
@@ -480,9 +473,9 @@ EXPLAIN (verbose, costs off)
 SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Index Scan using _hyper_17_11_chunk_part_time_func_expr_idx on _timescaledb_internal._hyper_17_11_chunk
-   Output: _hyper_17_11_chunk."time", _hyper_17_11_chunk.temp, _hyper_17_11_chunk.device
-   Index Cond: (time_partfunc(_hyper_17_11_chunk."time") < 'Sun Jul 01 00:00:00 2018 PDT'::timestamp with time zone)
+ Index Scan using _hyper_16_11_chunk_part_time_func_expr_idx on _timescaledb_internal._hyper_16_11_chunk
+   Output: _hyper_16_11_chunk."time", _hyper_16_11_chunk.temp, _hyper_16_11_chunk.device
+   Index Cond: (time_partfunc(_hyper_16_11_chunk."time") < 'Sun Jul 01 00:00:00 2018 PDT'::timestamp with time zone)
 (3 rows)
 
 -- Exclude using the same date but as a UNIX timestamp. Won't do an
@@ -492,9 +485,9 @@ SELECT * FROM part_time_func WHERE time < 1530403200.0;
 NOTICE:  time value for 1530403200 is Sun Jul 01 00:00:00 2018
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
- Seq Scan on _timescaledb_internal._hyper_17_11_chunk
-   Output: _hyper_17_11_chunk."time", _hyper_17_11_chunk.temp, _hyper_17_11_chunk.device
-   Filter: (_hyper_17_11_chunk."time" < '1530403200'::double precision)
+ Seq Scan on _timescaledb_internal._hyper_16_11_chunk
+   Output: _hyper_16_11_chunk."time", _hyper_16_11_chunk.temp, _hyper_16_11_chunk.device
+   Filter: (_hyper_16_11_chunk."time" < '1530403200'::double precision)
 (3 rows)
 
 -- Check that inserts will fail if we use a time partitioning function
@@ -511,7 +504,7 @@ SELECT create_hypertable('part_time_func_null_ret', 'time', time_partitioning_fu
 NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
- (18,public,part_time_func_null_ret,t)
+ (17,public,part_time_func_null_ret,t)
 (1 row)
 
 \set ON_ERROR_STOP 0
