@@ -113,7 +113,7 @@ pg14_debug_latest = {
   "pg": PG14_LATEST,
   "tsdb_build_args": "-DWARNINGS_AS_ERRORS=OFF -DEXPERIMENTAL=ON",
   "coverage": False,
-  "installcheck_args": "IGNORES='dist_hypertable-14 dist_partial_agg dist_query dist_triggers insert-14 upsert'"
+  "installcheck_args": "IGNORES='dist_hypertable-14 dist_partial_agg dist_query'"
 }
 m["include"].append(build_debug_config(pg14_debug_latest))
 

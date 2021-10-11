@@ -54,8 +54,6 @@ static bool ExecOnConflictUpdate(ModifyTableState *mtstate, ResultRelInfo *resul
 								 ItemPointer conflictTid, TupleTableSlot *planSlot,
 								 TupleTableSlot *excludedSlot, EState *estate, bool canSetTag,
 								 TupleTableSlot **returning);
-static TupleTableSlot *ExecPrepareTupleRouting(ModifyTableState *mtstate, EState *estate,
-											   ResultRelInfo *targetRelInfo, TupleTableSlot *slot);
 static void ExecCheckTupleVisible(EState *estate, Relation rel, TupleTableSlot *slot);
 static void ExecCheckTIDVisible(EState *estate, ResultRelInfo *relinfo, ItemPointer tid,
 								TupleTableSlot *tempSlot);
@@ -400,13 +398,11 @@ hypertable_insert_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 {
 	HypertableInsertPath *hipath = (HypertableInsertPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
-	ModifyTable *mt = linitial(custom_plans);
+	ModifyTable *mt = linitial_node(ModifyTable, custom_plans);
 	FdwRoutine *fdwroutine = NULL;
 
-	Assert(IsA(mt, ModifyTable));
-
 	cscan->methods = &hypertable_insert_plan_methods;
-	cscan->custom_plans = list_make1(mt);
+	cscan->custom_plans = custom_plans;
 	cscan->scan.scanrelid = 0;
 
 	/* Copy costs, etc., from the original plan */
@@ -513,6 +509,18 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 		 * error here as the rest of the code assumes there is only 1 subpath.
 		 */
 		elog(ERROR, "multiple top-level subpaths found during INSERT");
+#endif
+
+#if PG14_GE
+	/* PG14 only copies child rows and width if returningLists is not
+	 * empty. Since we do not know target chunks during planning we
+	 * do not have that information when postgres creates the path.
+	 */
+	if (mtpath->returningLists == NIL)
+	{
+		mtpath->path.rows = mtpath->subpath->rows;
+		mtpath->path.pathtarget->width = mtpath->subpath->pathtarget->width;
+	}
 #endif
 
 	Index rti = linitial_int(mtpath->resultRelations);
@@ -1152,7 +1160,6 @@ exec_chunk_insert(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, Tuple
 	MemoryContext oldContext;
 
 	Assert(!mtstate->mt_partition_tuple_routing);
-	slot = ExecPrepareTupleRouting(mtstate, estate, resultRelInfo, slot);
 
 	ExecMaterializeSlot(slot);
 
@@ -2179,56 +2186,6 @@ ExecOnConflictUpdate(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo,
 	 */
 	ExecClearTuple(existing);
 	return true;
-}
-
-/*
- * ExecPrepareTupleRouting --- prepare for routing one tuple
- *
- * Determine the partition in which the tuple in slot is to be inserted,
- * and return its ResultRelInfo in *partRelInfo.  The return value is
- * a slot holding the tuple of the partition rowtype.
- *
- * This also sets the transition table information in mtstate based on the
- * selected partition.
- *
- * based on function with same name from executor/nodeModifyTable.c
- */
-static TupleTableSlot *
-ExecPrepareTupleRouting(ModifyTableState *mtstate, EState *estate, ResultRelInfo *targetRelInfo,
-						TupleTableSlot *slot)
-{
-	TupleConversionMap *map;
-
-	/*
-	 * If we're capturing transition tuples, we might need to convert from the
-	 * partition rowtype to root partitioned table's rowtype.  But if there
-	 * are no BEFORE triggers on the partition that could change the tuple, we
-	 * can just remember the original unconverted tuple to avoid a needless
-	 * round trip conversion.
-	 */
-	if (mtstate->mt_transition_capture != NULL)
-	{
-		bool has_before_insert_row_trig;
-
-		has_before_insert_row_trig =
-			(targetRelInfo->ri_TrigDesc && targetRelInfo->ri_TrigDesc->trig_insert_before_row);
-
-		mtstate->mt_transition_capture->tcs_original_insert_tuple =
-			!has_before_insert_row_trig ? slot : NULL;
-	}
-
-	/*
-	 * Convert the tuple, if necessary.
-	 */
-	map = targetRelInfo->ri_RootToPartitionMap;
-	if (map != NULL)
-	{
-		TupleTableSlot *new_slot = targetRelInfo->ri_PartitionTupleSlot;
-
-		slot = execute_attr_map_slot(map->attrMap, slot, new_slot);
-	}
-
-	return slot;
 }
 
 /*

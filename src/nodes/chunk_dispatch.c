@@ -87,12 +87,6 @@ ts_chunk_dispatch_get_on_conflict_set(const ChunkDispatch *dispatch)
 	return get_modifytable(dispatch)->onConflictSet;
 }
 
-Node *
-ts_chunk_dispatch_get_on_conflict_where(const ChunkDispatch *dispatch)
-{
-	return get_modifytable(dispatch)->onConflictWhere;
-}
-
 CmdType
 ts_chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
 {
