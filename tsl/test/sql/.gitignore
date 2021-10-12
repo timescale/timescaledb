@@ -8,6 +8,7 @@
 /compression_permissions-*.sql
 /hypertable_distributed-*.sql
 /dist_hypertable-*.sql
+/dist_partial_agg-*.sql
 /plan_skip_scan-*.sql
 /remote_copy-*.sql
 /jit-*.sql
