@@ -5220,6 +5220,33 @@ SELECT * FROM disttable ORDER BY 1;
  Fri Sep 01 06:01:00 2017 PDT |      5 |     40 |    104
 (1 row)
 
+-- Check distributed hypertable within procedure properly drops remote tables
+--
+-- #3663 
+--
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (29,public,test,t)
+(1 row)
+
+CREATE PROCEDURE test_drop() LANGUAGE PLPGSQL AS $$
+BEGIN
+    DROP TABLE test;
+END
+$$;
+CALL test_drop();
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (30,public,test,t)
+(1 row)
+
+DROP TABLE test;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;

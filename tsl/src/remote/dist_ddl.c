@@ -567,10 +567,8 @@ dist_ddl_start(ProcessUtilityArgs *args)
 	 * Do not process nested DDL operations made by external
 	 * event triggers.
 	 */
-	if (args->context != PROCESS_UTILITY_TOPLEVEL)
+	if (dist_ddl_scheduled_for_execution())
 		return;
-
-	Assert(dist_ddl_state.remote_commands == NIL);
 
 	dist_ddl_state.mctx = CurrentMemoryContext;
 

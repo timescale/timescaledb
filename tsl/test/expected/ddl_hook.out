@@ -240,6 +240,34 @@ DROP TABLE non_htable;
 NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TABLE non_htable;
 NOTICE:  test_sql_drop: table: public.non_htable
 NOTICE:  test_ddl_command_end: DROP TABLE
+-- DROP TABLE within procedure
+CREATE TABLE test (time timestamp, v int);
+NOTICE:  test_ddl_command_start: 0 hypertables, query: CREATE TABLE test (time timestamp, v int);
+NOTICE:  test_ddl_command_end: CREATE TABLE
+SELECT create_hypertable('test','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable 
+-------------------
+ (2,public,test,t)
+(1 row)
+
+CREATE PROCEDURE test_drop() LANGUAGE PLPGSQL AS $$
+BEGIN
+    DROP TABLE test;
+END
+$$;
+NOTICE:  test_ddl_command_start: 0 hypertables, query: CREATE PROCEDURE test_drop() LANGUAGE PLPGSQL AS $$
+BEGIN
+    DROP TABLE test;
+END
+$$;
+CALL test_drop();
+NOTICE:  test_ddl_command_start: 0 hypertables, query: CALL test_drop();
+NOTICE:  test_ddl_command_start: 0 hypertables, query: DROP TABLE test
+NOTICE:  test_sql_drop: index
+NOTICE:  test_sql_drop: table: public.test
+NOTICE:  test_sql_drop: trigger
+NOTICE:  test_ddl_command_end: DROP TABLE
 -- DROP CASCADE cases
 -- DROP schema
 CREATE TABLE htable_schema.non_htable (id int);
@@ -252,7 +280,7 @@ SELECT * FROM create_hypertable('htable_schema.htable', 'time');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id |  schema_name  | table_name | created 
 ---------------+---------------+------------+---------
-             2 | htable_schema | htable     | t
+             3 | htable_schema | htable     | t
 (1 row)
 
 DROP SCHEMA htable_schema CASCADE;
@@ -272,7 +300,7 @@ SELECT * FROM create_hypertable('htable', 'time');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             3 | public      | htable     | t
+             4 | public      | htable     | t
 (1 row)
 
 CREATE INDEX htable_device_idx ON htable (device);
@@ -302,7 +330,7 @@ SELECT * FROM create_hypertable('htable', 'time');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             4 | public      | htable     | t
+             5 | public      | htable     | t
 (1 row)
 
 DROP TABLE non_htable CASCADE;

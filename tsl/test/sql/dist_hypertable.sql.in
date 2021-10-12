@@ -1748,6 +1748,22 @@ INSERT INTO disttable VALUES ('2017-09-01 06:01', 5, 40.0) RETURNING *;
 -- Generated columns with SELECT
 SELECT * FROM disttable ORDER BY 1;
 
+-- Check distributed hypertable within procedure properly drops remote tables
+--
+-- #3663 
+--
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+CREATE PROCEDURE test_drop() LANGUAGE PLPGSQL AS $$
+BEGIN
+    DROP TABLE test;
+END
+$$;
+CALL test_drop();
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+DROP TABLE test;
+
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;
