@@ -97,6 +97,16 @@ DROP INDEX htable_descr_idx;
 DROP TABLE htable;
 DROP TABLE non_htable;
 
+-- DROP TABLE within procedure
+CREATE TABLE test (time timestamp, v int);
+SELECT create_hypertable('test','time');
+CREATE PROCEDURE test_drop() LANGUAGE PLPGSQL AS $$
+BEGIN
+    DROP TABLE test;
+END
+$$;
+CALL test_drop();
+
 -- DROP CASCADE cases
 
 -- DROP schema
