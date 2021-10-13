@@ -941,7 +941,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 					if (cagg)
 					{
-						Hypertable *ht;
+						Hypertable *mat_ht, *raw_ht;
 						MemoryContext oldctx;
 
 						if (!relation_should_recurse(rv))
@@ -949,19 +949,31 @@ process_truncate(ProcessUtilityArgs *args)
 									(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 									 errmsg("cannot truncate only a continuous aggregate")));
 
-						ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-						Assert(ht != NULL);
+						mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+						Assert(mat_ht != NULL);
 
 						/* Create list item into the same context of the list */
 						oldctx = MemoryContextSwitchTo(parsetreectx);
-						rv = makeRangeVar(NameStr(ht->fd.schema_name),
-										  NameStr(ht->fd.table_name),
+						rv = makeRangeVar(NameStr(mat_ht->fd.schema_name),
+										  NameStr(mat_ht->fd.table_name),
 										  -1);
 						MemoryContextSwitchTo(oldctx);
 
 						/* Invalidate the entire continuous aggregate since it no
 						 * longer has any data */
-						ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+						raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+						Assert(raw_ht != NULL);
+						if (hypertable_is_distributed(raw_ht))
+							ts_cm_functions
+								->remote_invalidation_log_add_entry(raw_ht,
+																	HypertableIsMaterialization,
+																	mat_ht->fd.id,
+																	TS_TIME_NOBEGIN,
+																	TS_TIME_NOEND);
+						else
+							ts_cm_functions->continuous_agg_invalidate(mat_ht,
+																	   TS_TIME_NOBEGIN,
+																	   TS_TIME_NOEND);
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
@@ -993,10 +1005,20 @@ process_truncate(ProcessUtilityArgs *args)
 									 errhint("TRUNCATE the continuous aggregate instead.")));
 
 						if (agg_status == HypertableIsRawTable)
+						{
 							/* The truncation invalidates all associated continuous aggregates */
-							ts_cm_functions->continuous_agg_invalidate(ht,
-																	   TS_TIME_NOBEGIN,
-																	   TS_TIME_NOEND);
+							if (hypertable_is_distributed(ht))
+								ts_cm_functions
+									->remote_invalidation_log_add_entry(ht,
+																		HypertableIsRawTable,
+																		ht->fd.id,
+																		TS_TIME_NOBEGIN,
+																		TS_TIME_NOEND);
+							else
+								ts_cm_functions->continuous_agg_invalidate(ht,
+																		   TS_TIME_NOBEGIN,
+																		   TS_TIME_NOEND);
+						}
 
 						if (!relation_should_recurse(rv))
 							ereport(ERROR,
@@ -1140,7 +1162,14 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 					   chunk->cube->slices[0]->fd.dimension_id);
-				ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+				if (hypertable_is_distributed(ht))
+					ts_cm_functions->remote_invalidation_log_add_entry(ht,
+																	   HypertableIsRawTable,
+																	   ht->fd.id,
+																	   start,
+																	   end);
+				else
+					ts_cm_functions->continuous_agg_invalidate(ht, start, end);
 			}
 		}
 	}

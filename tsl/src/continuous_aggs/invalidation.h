@@ -41,9 +41,10 @@ extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, in
 extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end);
 extern void invalidation_add_entry(const Hypertable *ht, int64 start, int64 end);
 
-extern Datum tsl_invalidation_cagg_log_add_initial_entry(PG_FUNCTION_ARGS);
-void remote_invalidation_cagg_log_add_initial_entry(int32 mat_hypertable_id,
-													int32 raw_hypertable_id);
+extern Datum tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS);
+extern Datum tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS);
+void remote_invalidation_log_add_entry(Hypertable *raw_ht, ContinuousAggHypertableStatus caggstatus,
+									   int32 entry_id, int64 start, int64 end);
 
 extern void invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 												Oid dimtype, CaggsInfo *all_caggs_info);
@@ -65,6 +66,13 @@ extern void remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 
 												 const InternalTimeRange *refresh_window,
 												 CaggsInfo *all_caggs, bool *do_merged_refresh,
 												 InternalTimeRange *ret_merged_refresh_window);
+
+extern Datum tsl_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS);
+extern void remote_hypertable_invalidation_log_delete(int32 raw_hypertable_id);
+extern Datum tsl_materialization_invalidation_log_delete(PG_FUNCTION_ARGS);
+extern void remote_materialization_invalidation_log_delete(int32 raw_hypertable_id);
+extern Datum tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS);
+extern void remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id);
 
 extern void invalidation_store_free(InvalidationStore *store);
 

@@ -16,6 +16,7 @@
 #include "compat/compat.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
+#define CAGGINVAL_DIST_HT_TRIGGER_NAME "ts_cagg_dist_ht_invalidation_trigger"
 
 typedef enum ContinuousAggViewOption
 {
@@ -68,6 +69,8 @@ typedef struct CaggsInfoData
 	int32 last_mat_hypertable_id;
 } CaggsInfo;
 
+extern TSDLLEXPORT void hypertable_invalidation_log_delete(int32 raw_hypertable_id);
+extern TSDLLEXPORT void materialization_invalidation_log_delete(int32 materialization_id);
 extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,

@@ -27,10 +27,13 @@
 #include <utils.h>
 #include <time_utils.h>
 #include <time_bucket.h>
+#include <hypertable_cache.h>
 
 #include "remote/dist_commands.h"
 #include "continuous_agg.h"
 #include "continuous_aggs/materialize.h"
+#include "data_node.h"
+#include "deparse.h"
 #include "invalidation.h"
 #include "refresh.h"
 
@@ -175,36 +178,71 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 }
 
 /**
- * Adds the initial materialization invalidation log entry to all data nodes that comprise the
- * underlying distributed hypertable when creating a CAGG. This invalidation entry and is set
- * to [-infinity, +infinity].
+ * Adds a materialization invalidation log entry to all data nodes that comprise the
+ * underlying distributed hypertable.
  *
  * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
  *                          Node.
+ * @param start_time The starting time of the materialization invalidation log entry.
+ * @param end_time The ending time of the materialization invalidation log entry.
+
  */
 Datum
-tsl_invalidation_cagg_log_add_initial_entry(PG_FUNCTION_ARGS)
+tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS)
 {
 	int32 mat_hypertable_id = PG_GETARG_INT32(0);
+	int64 start_time = PG_GETARG_INT64(1);
+	int64 end_time = PG_GETARG_INT64(2);
 
-	invalidation_cagg_log_add_entry(mat_hypertable_id, TS_TIME_NOBEGIN, TS_TIME_NOEND);
+	invalidation_cagg_log_add_entry(mat_hypertable_id, start_time, end_time);
 
 	PG_RETURN_VOID();
 }
 
-#define INVALIDATION_CAGG_LOG_ADD_INITIAL_ENTRY_NARGS 1
-#define INVALIDATION_CAGG_LOG_ADD_INITIAL_ENTRY_FUNCNAME "invalidation_cagg_log_add_initial_entry"
+/**
+ * Adds a hypertable invalidation log entry to all data nodes that comprise the
+ * underlying distributed hypertable.
+ *
+ * @param raw_hypertable_id The hypertable ID of the original distributed hypertable in the Access
+ *                          Node.
+ * @param start_time The starting time of the materialization invalidation log entry.
+ * @param end_time The ending time of the materialization invalidation log entry.
+
+ */
+Datum
+tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS)
+{
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+	int64 start_time = PG_GETARG_INT64(1);
+	int64 end_time = PG_GETARG_INT64(2);
+
+	invalidation_hyper_log_add_entry(raw_hypertable_id, start_time, end_time);
+
+	PG_RETURN_VOID();
+}
+
+#define INVALIDATION_CAGG_ADD_ENTRY_NARGS 3
+#define INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME "invalidation_cagg_log_add_entry"
+#define INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME "invalidation_hyper_log_add_entry"
 
 void
-remote_invalidation_cagg_log_add_initial_entry(int32 mat_hypertable_id, int32 raw_hypertable_id)
+remote_invalidation_log_add_entry(Hypertable *raw_ht, ContinuousAggHypertableStatus caggstatus,
+								  int32 entry_id, int64 start, int64 end)
 {
 	Oid func_oid;
-	LOCAL_FCINFO(fcinfo, INVALIDATION_CAGG_LOG_ADD_INITIAL_ENTRY_NARGS);
+	LOCAL_FCINFO(fcinfo, INVALIDATION_CAGG_ADD_ENTRY_NARGS);
 	FmgrInfo flinfo;
 
-	Oid type_id[INVALIDATION_CAGG_LOG_ADD_INITIAL_ENTRY_NARGS] = { INT4OID };
+	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
+
+	Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(INVALIDATION_CAGG_LOG_ADD_INITIAL_ENTRY_FUNCNAME));
+								 makeString((caggstatus == HypertableIsMaterialization) ?
+												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
+												INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME));
+
+	if (!hypertable_is_distributed(raw_ht))
+		elog(ERROR, "function was not provided with a valid distributed hypertable");
 
 	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
 	Assert(InvalidOid != func_oid);
@@ -212,23 +250,23 @@ remote_invalidation_cagg_log_add_initial_entry(int32 mat_hypertable_id, int32 ra
 	fmgr_info(func_oid, &flinfo);
 	InitFunctionCallInfoData(*fcinfo,
 							 &flinfo,
-							 INVALIDATION_CAGG_LOG_ADD_INITIAL_ENTRY_NARGS,
+							 INVALIDATION_CAGG_ADD_ENTRY_NARGS,
 							 InvalidOid,
 							 NULL,
 							 NULL);
 
 	FC_NULL(fcinfo, 0) = false;
-	FC_ARG(fcinfo, 0) = Int32GetDatum(mat_hypertable_id);
+	FC_ARG(fcinfo, 0) = Int32GetDatum(entry_id);
+	FC_NULL(fcinfo, 1) = false;
+	FC_ARG(fcinfo, 1) = Int64GetDatum(start);
+	FC_NULL(fcinfo, 2) = false;
+	FC_ARG(fcinfo, 2) = Int64GetDatum(end);
 	/* Check for null result, since caller is clearly not expecting one */
 	if (fcinfo->isnull)
 		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
 
-	Hypertable *ht = ts_hypertable_get_by_id(raw_hypertable_id);
-	if (!ht || !hypertable_is_distributed(ht))
-		elog(ERROR, "function was not provided with a valid distributed hypertable id");
-
 	DistCmdResult *result;
-	List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
+	List *data_node_list = ts_hypertable_get_data_node_name_list(raw_ht);
 	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_node_list);
 	if (result)
 		ts_dist_cmd_close_response(result);
@@ -256,6 +294,7 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, NoLock);
+	elog(INFO, "Hypertable LOG for hypertable %d added entry [%ld, %ld]", hyper_id, start, end);
 }
 
 /*
@@ -1267,6 +1306,8 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
  * @param raw_hypertable_id The hypertable ID of the original distributed hypertable in the Access
  *                          Node.
  * @param dimtype The OID of the type of the time dimension for this CAGG.
+ * @param window_start The starting time of the CAGG refresh window.
+ * @param window_end The ending time of the CAGG refresh window.
  * @param last_mat_hypertable_id The hypertable ID of the last CAGG materialized hypertable in the
  *                               Access Node from the 'mat_hypertable_ids' array.
  * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables in
@@ -1447,6 +1488,219 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 			*do_merged_refresh = true;
 		}
 	}
+}
+
+/**
+ * Delete hypertable invalidation log entries for all the CAGGs that belong to the
+ * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
+ *                            Access Node.
+ */
+Datum
+tsl_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
+{
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+
+	elog(INFO, "Invalidation LOG delete for hypertable %d", raw_hypertable_id);
+	hypertable_invalidation_log_delete(raw_hypertable_id);
+
+	PG_RETURN_VOID();
+}
+
+#define HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS 1
+#define HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME "hypertable_invalidation_log_delete"
+
+void
+remote_hypertable_invalidation_log_delete(int32 raw_hypertable_id)
+{
+	/* Execute on all data nodes if there are any */
+	List *data_nodes = data_node_get_node_name_list();
+	if (NIL == data_nodes)
+		return;
+
+	Oid func_oid;
+	LOCAL_FCINFO(fcinfo, HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS);
+	FmgrInfo flinfo;
+
+	Oid type_id[HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
+	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+								 makeString(HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));
+
+	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
+	Assert(InvalidOid != func_oid);
+
+	fmgr_info(func_oid, &flinfo);
+	InitFunctionCallInfoData(*fcinfo,
+							 &flinfo,
+							 HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS,
+							 InvalidOid,
+							 NULL,
+							 NULL);
+
+	FC_NULL(fcinfo, 0) = false;
+	FC_ARG(fcinfo, 0) = Int32GetDatum(raw_hypertable_id);
+	/* Check for null result, since caller is clearly not expecting one */
+	if (fcinfo->isnull)
+		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
+
+	DistCmdResult *result;
+	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
+	if (result)
+		ts_dist_cmd_close_response(result);
+}
+
+/**
+ * Delete materialization invalidation log entries for all the CAGGs that belong to the
+ * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
+ *                            Access Node.
+ */
+Datum
+tsl_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
+{
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+
+	elog(INFO, "Materialization LOG delete for hypertable %d", raw_hypertable_id);
+	materialization_invalidation_log_delete(raw_hypertable_id);
+
+	PG_RETURN_VOID();
+}
+
+#define MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS 1
+#define MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME "materialization_invalidation_log_delete"
+
+void
+remote_materialization_invalidation_log_delete(int32 raw_hypertable_id)
+{
+	/* Execute on all data nodes if there are any */
+	List *data_nodes = data_node_get_node_name_list();
+	if (NIL == data_nodes)
+		return;
+
+	Oid func_oid;
+	LOCAL_FCINFO(fcinfo, MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS);
+	FmgrInfo flinfo;
+
+	Oid type_id[MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
+	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+								 makeString(MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME));
+
+	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
+	Assert(InvalidOid != func_oid);
+
+	fmgr_info(func_oid, &flinfo);
+	InitFunctionCallInfoData(*fcinfo,
+							 &flinfo,
+							 MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS,
+							 InvalidOid,
+							 NULL,
+							 NULL);
+
+	FC_NULL(fcinfo, 0) = false;
+	FC_ARG(fcinfo, 0) = Int32GetDatum(raw_hypertable_id);
+	/* Check for null result, since caller is clearly not expecting one */
+	if (fcinfo->isnull)
+		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
+
+	DistCmdResult *result;
+	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
+	if (result)
+		ts_dist_cmd_close_response(result);
+}
+
+/**
+ * Delete invalidation trigger for distributed hypertable member with hypertable ID
+ * 'raw_hypertable_id' in the Data Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the distributed hypertable member in the
+ *                            Data Node.
+ */
+Datum
+tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS)
+{
+	Cache *hcache;
+	Hypertable *ht;
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry_by_id(hcache, raw_hypertable_id);
+	if (!ht || !hypertable_is_distributed_member(ht))
+		elog(ERROR, "function was not provided with a valid distributed hypertable id");
+
+	materialization_invalidation_log_delete(raw_hypertable_id);
+	ts_hypertable_drop_trigger(ht->main_table_relid, CAGGINVAL_DIST_HT_TRIGGER_NAME);
+
+	ts_cache_release(hcache);
+
+	PG_RETURN_VOID();
+}
+
+#define DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS 1
+#define DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME "drop_dist_ht_invalidation_trigger"
+
+void
+remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id)
+{
+	Cache *hcache;
+	Hypertable *ht;
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry_by_id(hcache, raw_hypertable_id);
+	Assert(ht);
+	if (!hypertable_is_distributed(ht))
+	{
+		ts_cache_release(hcache);
+		return;
+	}
+	List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
+	DistCmdResult *result;
+	ListCell *cell;
+	Oid func_oid;
+
+	Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
+	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+								 makeString(DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME));
+
+	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
+	Assert(InvalidOid != func_oid);
+
+	/* the below arrays have the same order as ht->data_nodes */
+	FunctionCallInfo fcinfo_array =
+		palloc(SizeForFunctionCallInfo(DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS) *
+			   list_length(data_node_list));
+	FmgrInfo *flinfo_array = palloc(sizeof(*flinfo_array) * list_length(data_node_list));
+	const char **cmds = palloc(list_length(data_node_list) * sizeof(*cmds));
+	unsigned i = 0;
+
+	foreach (cell, ht->data_nodes)
+	{
+		HypertableDataNode *node = lfirst(cell);
+
+		fmgr_info(func_oid, &flinfo_array[i]);
+		InitFunctionCallInfoData(fcinfo_array[i],
+								 &flinfo_array[i],
+								 DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS,
+								 InvalidOid,
+								 NULL,
+								 NULL);
+
+		FC_NULL(&fcinfo_array[i], 0) = false;
+		/* distributed member hypertable ID */
+		FC_ARG(&fcinfo_array[i], 0) = Int32GetDatum(node->fd.node_hypertable_id);
+		/* Check for null result, since caller is clearly not expecting one */
+		if (fcinfo_array[i].isnull)
+			elog(ERROR, "function %u returned NULL", flinfo_array[i].fn_oid);
+
+		cmds[i] = deparse_func_call(&fcinfo_array[i]);
+		++i;
+	}
+
+	result = ts_dist_multi_cmds_params_invoke_on_data_nodes(cmds, NULL, data_node_list, true, true);
+	if (result)
+		ts_dist_cmd_close_response(result);
+	ts_cache_release(hcache);
 }
 
 void
