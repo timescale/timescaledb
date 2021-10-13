@@ -1631,12 +1631,6 @@ exec_chunk_update(ModifyTableState *mtstate, ResultRelInfo *resultRelInfo, ItemP
 	TM_FailureData tmfd;
 	List *recheckIndexes = NIL;
 
-	/*
-	 * abort the operation if not running transactions
-	 */
-	if (IsBootstrapProcessingMode())
-		elog(ERROR, "cannot UPDATE during bootstrap");
-
 	ExecMaterializeSlot(slot);
 
 	/*

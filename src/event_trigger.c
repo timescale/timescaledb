@@ -4,16 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <commands/event_trigger.h>
-#include <utils/builtins.h>
-#include <executor/executor.h>
 #include <access/htup_details.h>
-#include <catalog/pg_type.h>
 #include <catalog/pg_constraint.h>
-#include <catalog/pg_class.h>
+#include <catalog/pg_foreign_server.h>
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
-#include <catalog/pg_foreign_server.h>
+#include <commands/event_trigger.h>
+#include <executor/executor.h>
+#include <utils/builtins.h>
 
 #include "compat/compat.h"
 #include "event_trigger.h"
