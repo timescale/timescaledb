@@ -476,7 +476,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	}
 	else
 	{
-		long count;
+		long count pg_attribute_unused();
 		count = continuous_agg_scan_refresh_window_ranges(refresh_window,
 														  invalidations,
 														  max_bucket_width,
@@ -573,7 +573,7 @@ continuous_agg_calculate_merged_refresh_window(const InternalTimeRange *refresh_
 											   const int64 max_bucket_width,
 											   InternalTimeRange *merged_refresh_window)
 {
-	long count;
+	long count pg_attribute_unused();
 	count = continuous_agg_scan_refresh_window_ranges(refresh_window,
 													  invalidations,
 													  max_bucket_width,
