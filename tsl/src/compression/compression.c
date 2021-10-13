@@ -247,7 +247,7 @@ truncate_relation(Oid table_oid)
 #if PG14_LT
 	int options = 0;
 #else
-	ReindexParams params = {};
+	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
 #endif
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
@@ -315,7 +315,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 #if PG14_LT
 	int options = 0;
 #else
-	ReindexParams params = {};
+	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
 #endif
 	reindex_relation(out_table, 0, options);
@@ -1109,7 +1109,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 #if PG14_LT
 	int options = 0;
 #else
-	ReindexParams params = {};
+	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
 #endif
 	reindex_relation(out_table, 0, options);
