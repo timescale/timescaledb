@@ -412,22 +412,6 @@ process_alter_foreign_server(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
-static DDLResult
-process_alter_owner(ProcessUtilityArgs *args)
-{
-	AlterOwnerStmt *stmt = (AlterOwnerStmt *) args->parsetree;
-
-	if ((stmt->objectType == OBJECT_FOREIGN_SERVER) &&
-		block_on_foreign_server(strVal(stmt->object)))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("alter owner not supported on a TimescaleDB data node")));
-	}
-
-	return DDL_CONTINUE;
-}
-
 static void
 process_altertableschema(ProcessUtilityArgs *args)
 {
@@ -3773,9 +3757,6 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_AlterForeignServerStmt:
 			handler = process_alter_foreign_server;
 			break;
-		case T_AlterOwnerStmt:
-			handler = process_alter_owner;
-			break;
 		case T_CreateForeignServerStmt:
 			handler = process_create_foreign_server_start;
 			break;
@@ -3846,7 +3827,7 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 	}
 
 	if (handler == NULL)
-		return false;
+		return DDL_CONTINUE;
 
 	if (check_read_only)
 #if PG13_GE

@@ -55,14 +55,15 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
-
 -- Test altering server command is blocked
 \set ON_ERROR_STOP 0
 ALTER SERVER data_node_1 OPTIONS (SET fdw_startup_cost '110.0');
 ALTER SERVER data_node_1 OPTIONS (DROP sslmode);
 ALTER SERVER data_node_1 RENAME TO data_node_k;
-ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 \set ON_ERROR_STOP 1
+
+-- Make sure changing server owner is allowed
+ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 
 -- List foreign data nodes
 SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
