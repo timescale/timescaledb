@@ -76,8 +76,6 @@ CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_refresh_chunk);
 CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
 CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
-CROSSMODULE_WRAPPER(hypertable_invalidation_log_delete);
-CROSSMODULE_WRAPPER(materialization_invalidation_log_delete);
 CROSSMODULE_WRAPPER(drop_dist_ht_invalidation_trigger);
 CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
 CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
@@ -367,9 +365,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
 	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
 	.remote_invalidation_log_add_entry = remote_invalidation_log_add_entry_default,
-	.hypertable_invalidation_log_delete = error_no_default_fn_pg_community,
 	.remote_hypertable_invalidation_log_delete = NULL,
-	.materialization_invalidation_log_delete = error_no_default_fn_pg_community,
 	.remote_materialization_invalidation_log_delete = NULL,
 	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
 	.remote_drop_dist_ht_invalidation_trigger = NULL,

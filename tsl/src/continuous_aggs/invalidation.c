@@ -1490,24 +1490,6 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	}
 }
 
-/**
- * Delete hypertable invalidation log entries for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
- *                            Access Node.
- */
-Datum
-tsl_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
-{
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-
-	elog(INFO, "Invalidation LOG delete for hypertable %d", raw_hypertable_id);
-	hypertable_invalidation_log_delete(raw_hypertable_id);
-
-	PG_RETURN_VOID();
-}
-
 #define HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS 1
 #define HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME "hypertable_invalidation_log_delete"
 
@@ -1548,24 +1530,6 @@ remote_hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
 	if (result)
 		ts_dist_cmd_close_response(result);
-}
-
-/**
- * Delete materialization invalidation log entries for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
- *                            Access Node.
- */
-Datum
-tsl_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
-{
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-
-	elog(INFO, "Materialization LOG delete for hypertable %d", raw_hypertable_id);
-	materialization_invalidation_log_delete(raw_hypertable_id);
-
-	PG_RETURN_VOID();
 }
 
 #define MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS 1
@@ -1629,7 +1593,7 @@ tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS)
 	if (!ht || !hypertable_is_distributed_member(ht))
 		elog(ERROR, "function was not provided with a valid distributed hypertable id");
 
-	materialization_invalidation_log_delete(raw_hypertable_id);
+	ts_materialization_invalidation_log_delete_inner(raw_hypertable_id);
 	ts_hypertable_drop_trigger(ht->main_table_relid, CAGGINVAL_DIST_HT_TRIGGER_NAME);
 
 	ts_cache_release(hcache);

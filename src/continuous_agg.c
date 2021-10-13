@@ -165,7 +165,14 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 	}
 }
 
-TSDLLEXPORT void
+/**
+ * Delete hypertable invalidation log entries for all the CAGGs that belong to the
+ * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
+ *                            Access Node.
+ */
+static void
 hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
@@ -181,14 +188,33 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	}
 }
 
-TSDLLEXPORT void
-materialization_invalidation_log_delete(int32 materialization_id)
+TS_FUNCTION_INFO_V1(ts_hypertable_invalidation_log_delete);
+Datum
+ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
+{
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+
+	elog(INFO, "Invalidation LOG delete for hypertable %d", raw_hypertable_id);
+	hypertable_invalidation_log_delete(raw_hypertable_id);
+	PG_RETURN_VOID();
+}
+
+/**
+ * Delete materialization invalidation log entries for all the CAGGs that belong to the
+ * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
+ *                            Access Node.
+ */
+void
+ts_materialization_invalidation_log_delete_inner(int32 materialization_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 								RowExclusiveLock,
 								CurrentMemoryContext);
 
+	elog(INFO, "Materialization LOG delete for hypertable %d", materialization_id);
 	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, materialization_id);
 
 	ts_scanner_foreach(&iterator)
@@ -196,6 +222,15 @@ materialization_invalidation_log_delete(int32 materialization_id)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
+}
+
+TS_FUNCTION_INFO_V1(ts_materialization_invalidation_log_delete);
+Datum
+ts_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
+{
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+	ts_materialization_invalidation_log_delete_inner(raw_hypertable_id);
+	PG_RETURN_VOID();
 }
 
 static void
@@ -786,7 +821,8 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 			if (ts_cm_functions->remote_hypertable_invalidation_log_delete)
 				ts_cm_functions->remote_hypertable_invalidation_log_delete(form->raw_hypertable_id);
 		}
-		materialization_invalidation_log_delete(form->mat_hypertable_id);
+
+		ts_materialization_invalidation_log_delete_inner(form->mat_hypertable_id);
 		if (ts_cm_functions->remote_materialization_invalidation_log_delete)
 			ts_cm_functions->remote_materialization_invalidation_log_delete(
 				form->mat_hypertable_id);
