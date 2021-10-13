@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 12, 13 ]
+        pg: [ 12, 13, 14 ]
         os: [ windows-2019 ]
         build_type: [ Debug, Release ]
         include:
@@ -20,6 +20,9 @@ jobs:
             pkg_version: 12.8.1
           - pg: 13
             pkg_version: 13.4.1
+          - pg: 14
+            pkg_version: 14.0.1
+            build_args: -DUSE_OPENSSL=OFF
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -47,7 +50,7 @@ jobs:
         choco feature disable --name=showDownloadProgress
         choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
     - name: Configure [${{ matrix.build_type }}]
-      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}"
+      run: cmake -B ${{ matrix.build_type }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" ${{ matrix.build_args}}
       # Build step: could potentially speed things up with --parallel
       # <num_cpu> or "-- -m:<num_cpu>", but MSBuild doesn't seem to be
       # able to realize interdependencies between targets, which leads

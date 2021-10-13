@@ -13,12 +13,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [12, 13]
+        pg: [12, 13, 14]
         include:
           - pg: 12
             pg_minor_compile: 0
           - pg: 13
             pg_minor_compile: 2
+          - pg: 14
+            pg_minor_compile: 0
     env:
       PG_MAJOR: ${{ matrix.pg }}
       PG_MINOR_COMPILE: ${{ matrix.pg_minor_compile }}
@@ -53,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [12, 13]
+        pg: [12, 13, 14]
     env:
       PG_MAJOR: ${{ matrix.pg }}
       PG_VERSION: ${{ matrix.pg }}

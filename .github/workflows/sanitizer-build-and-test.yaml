@@ -43,7 +43,7 @@ jobs:
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
         os: ["ubuntu-20.04"]
-        pg: ["12.8", "13.4"]
+        pg: ["12.8", "13.4", "14.0"]
     steps:
     - name: Install Linux Dependencies
       run: |
