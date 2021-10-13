@@ -93,12 +93,23 @@ typedef struct CrossModuleFunctions
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_invalidation_trigger;
+	PGFunction continuous_agg_dist_ht_invalidation_trigger;
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_refresh_chunk;
 	void (*continuous_agg_invalidate)(const Hypertable *ht, int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
-	PGFunction invalidation_cagg_log_add_initial_entry;
+	PGFunction invalidation_cagg_log_add_entry;
+	PGFunction invalidation_hyper_log_add_entry;
+	void (*remote_invalidation_log_add_entry)(Hypertable *raw_ht,
+											  ContinuousAggHypertableStatus caggstatus,
+											  int32 entry_id, int64 start, int64 end);
+	PGFunction hypertable_invalidation_log_delete;
+	void (*remote_hypertable_invalidation_log_delete)(int32 raw_hypertable_id);
+	PGFunction materialization_invalidation_log_delete;
+	void (*remote_materialization_invalidation_log_delete)(int32 raw_hypertable_id);
+	PGFunction drop_dist_ht_invalidation_trigger;
+	void (*remote_drop_dist_ht_invalidation_trigger)(int32 raw_hypertable_id);
 	PGFunction invalidation_process_hypertable_log;
 	PGFunction invalidation_process_cagg_log;
 

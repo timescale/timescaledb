@@ -30,7 +30,9 @@
 
 #include "bgw/job.h"
 #include "continuous_agg.h"
+#include "cross_module_fn.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
@@ -163,7 +165,7 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 	}
 }
 
-static void
+TSDLLEXPORT void
 hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
@@ -179,7 +181,7 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	}
 }
 
-static void
+TSDLLEXPORT void
 materialization_invalidation_log_delete(int32 materialization_id)
 {
 	ScanIterator iterator =
@@ -781,10 +783,18 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		if (!raw_hypertable_has_other_caggs)
 		{
 			hypertable_invalidation_log_delete(form->raw_hypertable_id);
+			if (ts_cm_functions->remote_hypertable_invalidation_log_delete)
+				ts_cm_functions->remote_hypertable_invalidation_log_delete(form->raw_hypertable_id);
+		}
+		materialization_invalidation_log_delete(form->mat_hypertable_id);
+		if (ts_cm_functions->remote_materialization_invalidation_log_delete)
+			ts_cm_functions->remote_materialization_invalidation_log_delete(
+				form->mat_hypertable_id);
+
+		if (!raw_hypertable_has_other_caggs)
+		{
 			invalidation_threshold_delete(form->raw_hypertable_id);
 		}
-
-		materialization_invalidation_log_delete(form->mat_hypertable_id);
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -795,7 +805,11 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		performDeletion(&user_view, DROP_RESTRICT, 0);
 
 	if (OidIsValid(raw_hypertable_trig.objectId))
+	{
 		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
+		if (ts_cm_functions->remote_drop_dist_ht_invalidation_trigger)
+			ts_cm_functions->remote_drop_dist_ht_invalidation_trigger(cadata->raw_hypertable_id);
+	}
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{

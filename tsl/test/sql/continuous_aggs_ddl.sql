@@ -6,7 +6,31 @@
 -- results are compared
 \set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../test/sql/include/query_result_test_equal.sql'
 
-\set ON_ERROR_STOP 0
+------------------------------------
+-- Set up a distributed environment
+------------------------------------
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+
+\ir include/remote_exec.sql
+
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+\set IS_DISTRIBUTED TRUE
+
+\if :IS_DISTRIBUTED
+\echo 'Running distributed hypertable tests'
+\else
+\echo 'Running local hypertable tests'
+\endif
 
 --DDL commands on continuous aggregates
 
@@ -19,11 +43,15 @@ CREATE TABLE conditions (
       timeinterval INTERVAL
 );
 
-select table_name from create_hypertable('conditions', 'timec');
+\if :IS_DISTRIBUTED
+SELECT table_name FROM create_distributed_hypertable('conditions', 'timec', replication_factor => 2);
+\else
+SELECT table_name FROM create_hypertable('conditions', 'timec');
+\endif
 
 -- schema tests
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 
@@ -33,13 +61,20 @@ GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE TABLE foo(time TIMESTAMPTZ, data INTEGER);
+
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('foo', 'time', replication_factor => 2);
+\else
 SELECT create_hypertable('foo', 'time');
+\endif
 
 CREATE MATERIALIZED VIEW rename_test
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1 WITH NO DATA;
+
+SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
@@ -141,16 +176,36 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
+\echo 'ZONG!'
 
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
 DROP TABLE foo CASCADE;
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\if :IS_DISTRIBUTED
+SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log');
+SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log');
+\endif
+\echo 'ENDZONG!'
+
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS drop_chunks_table_id
+    FROM create_distributed_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10, replication_factor => 2) \gset
+\else
 SELECT hypertable_id AS drop_chunks_table_id
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
+\endif
 
 CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+$DIST$);
+\endif
+
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
 
 CREATE MATERIALIZED VIEW drop_chunks_view
@@ -161,6 +216,8 @@ CREATE MATERIALIZED VIEW drop_chunks_view
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
+
+SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table,
         schema_name AS drop_chunks_mat_schema,
@@ -193,13 +250,35 @@ SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
+\echo 'ZONG!'
+
 -- drop chunks when the chunksize and time_bucket aren't aligned
 DROP TABLE drop_chunks_table CASCADE;
+
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\if :IS_DISTRIBUTED
+SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log');
+SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log');
+\endif
+\echo 'ENDZONG!'
+
 CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS drop_chunks_table_u_id
+    FROM create_distributed_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7, replication_factor => 2) \gset
+\else
 SELECT hypertable_id AS drop_chunks_table_u_id
     FROM create_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7) \gset
+\endif
 
 CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
 
 CREATE MATERIALIZED VIEW drop_chunks_view
@@ -210,6 +289,8 @@ CREATE MATERIALIZED VIEW drop_chunks_view
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
     GROUP BY 1 WITH NO DATA;
+
+SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table_u,
         schema_name AS drop_chunks_mat_schema,
@@ -325,19 +406,41 @@ SELECT
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 
+SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
+
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
 
+\echo 'ZONG!'
 
 --test materialization of invalidation before drop
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\if :IS_DISTRIBUTED
+SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log');
+SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log');
+\endif
+\echo 'ENDZONG!'
+
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS drop_chunks_table_nid
+    FROM create_distributed_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10, replication_factor => 2) \gset
+\else
 SELECT hypertable_id AS drop_chunks_table_nid
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
+\endif
 
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
 
 CREATE MATERIALIZED VIEW drop_chunks_view
@@ -348,6 +451,8 @@ CREATE MATERIALIZED VIEW drop_chunks_view
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
+
+SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 --dropping chunks will process the invalidations
@@ -449,7 +554,7 @@ WITH numbered_chunks AS (
      WHERE hypertable_name = 'drop_chunks_table'
      ORDER BY 1
 )
-SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk_to_drop, range_start_integer, range_end_integer
+SELECT format('%I.%I', chunk_schema, chunk_name) AS chunk_to_drop, range_start_integer, range_end_integer
 FROM numbered_chunks
 WHERE row_number = 2 \gset
 
@@ -466,7 +571,12 @@ SELECT * FROM drop_chunks_view
 ORDER BY 1;
 
 -- Drop the second chunk, to leave a gap in the data
+\if :IS_DISTRIBUTED
+CALL distributed_exec(format('DROP TABLE IF EXISTS %s', :'chunk_to_drop'));
+DROP FOREIGN TABLE :chunk_to_drop;
+\else
 DROP TABLE :chunk_to_drop;
+\endif
 
 -- Verify that the second chunk is dropped
 SELECT chunk_name, range_start_integer, range_end_integer
@@ -735,7 +845,7 @@ ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 \set ON_ERROR_STOP 1
 
 -- Superuser can always change owner 
-SET ROLE :ROLE_SUPERUSER;
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 
 \x on
@@ -752,6 +862,15 @@ CREATE OR REPLACE FUNCTION test_int_now()
 $BODY$
   SELECT 50;
 $BODY$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+  CREATE OR REPLACE FUNCTION test_int_now()
+    RETURNS INT LANGUAGE SQL STABLE AS
+  $BODY$
+    SELECT 50;
+  $BODY$;
+$DIST$);
+\endif
 
 CREATE TABLE conditionsnm(time_int INT NOT NULL, device INT, value FLOAT);
 SELECT create_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10);
@@ -916,4 +1035,4 @@ GROUP BY location, bucket;
 ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN bucket to "time";
 
 -- This will rebuild the materialized view and should succeed.
-ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false); 
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false);

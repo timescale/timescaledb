@@ -3744,7 +3744,14 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			 * modified. The invalidation will allow the refresh command on a
 			 * continuous aggregate to see that this region was dropped and
 			 * and will therefore be able to refresh accordingly.*/
-			ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+			if (hypertable_is_distributed(ht))
+				ts_cm_functions->remote_invalidation_log_add_entry(ht,
+																   HypertableIsRawTable,
+																   ht->fd.id,
+																   start,
+																   end);
+			else
+				ts_cm_functions->continuous_agg_invalidate(ht, start, end);
 		}
 	}
 
