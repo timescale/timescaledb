@@ -563,36 +563,6 @@ DROP INDEX disttable_device_idx;
 
 DROP TABLE disttable;
 
--- Ensure that continuous aggregates are not supported on
--- distributed hypertables
-CREATE TABLE disttable(
-    time timestamptz NOT NULL,
-    device int,
-    value float
-);
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
-INSERT INTO disttable VALUES
-       ('2017-01-01 06:01', 1, 1.2),
-       ('2017-01-01 09:11', 3, 4.3),
-       ('2017-01-01 08:01', 1, 7.3),
-       ('2017-01-02 08:01', 2, 0.23),
-       ('2018-07-02 08:01', 87, 0.0),
-       ('2018-07-01 06:01', 13, 3.1),
-       ('2018-07-01 09:11', 90, 10303.12),
-       ('2018-07-01 08:01', 29, 64);
-
-\set ON_ERROR_STOP 0
-SELECT id AS dimension_id FROM _timescaledb_catalog.dimension WHERE column_name = 'time' \gset
-SELECT _timescaledb_internal.calculate_chunk_interval(:dimension_id,1484250460,604800000000);
-
-CREATE MATERIALIZED VIEW disttable_cagg WITH (timescaledb.continuous)
-AS SELECT time_bucket('2 days', time), device, max(value)
-    FROM disttable
-    GROUP BY 1, 2 WITH NO DATA;
-\set ON_ERROR_STOP 1
-
-DROP TABLE disttable;
-
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP SCHEMA disttable_schema CASCADE;

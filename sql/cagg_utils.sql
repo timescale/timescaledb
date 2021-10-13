@@ -2,14 +2,44 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- Adds the initial materialization invalidation log entry to all data nodes that comprise the
--- underlying distributed hypertable when creating a CAGG. This invalidation entry and is set
--- to [-infinity, +infinity].
+-- Adds a materialization invalidation log entry to all data nodes that comprise the
+-- underlying distributed hypertable.
 --
 -- mat_hypertable_id - The hypertable ID of the CAGG materialized hypertable in the Access Node
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_cagg_log_add_initial_entry(
-    mat_hypertable_id INTEGER
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_cagg_log_add_initial_entry' LANGUAGE C STRICT VOLATILE;
+-- start_time - The starting time of the materialization invalidation log entry
+-- end_time - The ending time of the materialization invalidation log entry
+CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_cagg_log_add_entry(
+    mat_hypertable_id INTEGER,
+    start_time BIGINT,
+    end_time BIGINT
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_cagg_log_add_entry' LANGUAGE C STRICT VOLATILE;
+
+-- Adds a hypertable invalidation log entry to all data nodes that comprise the
+-- underlying distributed hypertable.
+--
+-- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
+-- start_time - The starting time of the materialization invalidation log entry
+-- end_time - The ending time of the materialization invalidation log entry
+CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_hyper_log_add_entry(
+    raw_hypertable_id INTEGER,
+    start_time BIGINT,
+    end_time BIGINT
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_hyper_log_add_entry' LANGUAGE C STRICT VOLATILE;
+
+-- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
+CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_invalidation_log_delete(
+    raw_hypertable_id INTEGER
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_hypertable_invalidation_log_delete' LANGUAGE C STRICT VOLATILE;
+
+-- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
+CREATE OR REPLACE FUNCTION _timescaledb_internal.materialization_invalidation_log_delete(
+    raw_hypertable_id INTEGER
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_materialization_invalidation_log_delete' LANGUAGE C STRICT VOLATILE;
+
+-- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
+CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigger(
+    raw_hypertable_id INTEGER
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_drop_dist_ht_invalidation_trigger' LANGUAGE C STRICT VOLATILE;
 
 -- Processes the hypertable invalidation log in a data node for all the CAGGs that belong to the
 -- distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node. The

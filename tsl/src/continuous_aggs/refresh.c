@@ -831,16 +831,29 @@ continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
 						   get_rel_name(ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id)),
 						   get_rel_name(chunk->hypertable_relid))));
 
+	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
+
 	LockRelationOid(chunk->table_id, ExclusiveLock);
 	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 					AccessExclusiveLock);
 	invalidation_threshold_set_or_get(chunk->fd.hypertable_id, refresh_window.end);
 
 	CaggsInfo all_caggs_info = ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-										cagg->data.raw_hypertable_id,
-										refresh_window.type,
-										&all_caggs_info);
+	if (is_raw_ht_distributed)
+	{
+		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
+												   cagg->data.raw_hypertable_id,
+												   refresh_window.type,
+												   &all_caggs_info);
+	}
+	else
+	{
+		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
+											cagg->data.raw_hypertable_id,
+											refresh_window.type,
+											&all_caggs_info);
+	}
 	/* Must make invalidation processing visible */
 	CommandCounterIncrement();
 	process_cagg_invalidations_and_refresh(cagg, &refresh_window, CAGG_REFRESH_CHUNK, chunk->fd.id);

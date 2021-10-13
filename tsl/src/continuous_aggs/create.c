@@ -83,6 +83,7 @@
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
+#define CAGG_INVALIDATION_DIST_HT_TRIGGER "continuous_agg_dist_ht_invalidation_trigger"
 #define BOUNDARY_FUNCTION "cagg_watermark"
 #define INTERNAL_TO_DATE_FUNCTION "to_date"
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
@@ -377,7 +378,7 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 		const char **cmds; /* same order as ht->data_nodes */
 		ListCell *cell;
 
-		int i = 0;
+		unsigned i = 0;
 		cmds = palloc(list_length(data_node_list) * sizeof(*cmds));
 		foreach (cell, ht->data_nodes)
 		{
@@ -385,13 +386,14 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 			StringInfo command = makeStringInfo();
 			appendStringInfo(command,
 							 "CREATE TRIGGER %s AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH "
-							 "ROW EXECUTE FUNCTION %s.%s(%d)",
-							 quote_identifier(CAGGINVAL_TRIGGER_NAME),
+							 "ROW EXECUTE FUNCTION %s.%s(%d, %d)",
+							 quote_identifier(CAGGINVAL_DIST_HT_TRIGGER_NAME),
 							 quote_identifier(NameStr(ht->fd.schema_name)),
 							 quote_identifier(NameStr(ht->fd.table_name)),
 							 quote_identifier(INTERNAL_SCHEMA_NAME),
-							 quote_identifier(CAGG_INVALIDATION_TRIGGER),
-							 node->fd.node_hypertable_id);
+							 quote_identifier(CAGG_INVALIDATION_DIST_HT_TRIGGER),
+							 node->fd.node_hypertable_id, /* distributed member hypertable ID */
+							 node->fd.hypertable_id /* Access Node hypertable ID */);
 			cmds[i++] = command->data;
 			elog(DEBUG2,
 				 "[%s] hypertable_id=%d node_hypertable_id=%d",
@@ -404,9 +406,12 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmds, NULL, data_node_list, true, true);
 		if (result)
 			ts_dist_cmd_close_response(result);
-
-		ts_cache_release(hcache);
-		return;
+		/*
+		 * FALL-THROUGH
+		 * We let the Access Node create a trigger as well, even though it is not used for data
+		 * modifications. We use the Access Node trigger as a check for existence of the remote
+		 * triggers.
+		 */
 	}
 	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
 	if (!OidIsValid(objaddr.objectId))
@@ -553,7 +558,11 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	orig_ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
 	if (hypertable_is_distributed(orig_ht))
 	{
-		remote_invalidation_cagg_log_add_initial_entry(mat_htid, origquery_tblinfo->htid);
+		remote_invalidation_log_add_entry(orig_ht,
+										  HypertableIsMaterialization,
+										  mat_ht->fd.id,
+										  TS_TIME_NOBEGIN,
+										  TS_TIME_NOEND);
 	}
 	else
 	{

@@ -72,9 +72,14 @@ CROSSMODULE_WRAPPER(recompress_chunk);
 
 /* continous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
+CROSSMODULE_WRAPPER(continuous_agg_dist_ht_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_refresh_chunk);
-CROSSMODULE_WRAPPER(invalidation_cagg_log_add_initial_entry);
+CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
+CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
+CROSSMODULE_WRAPPER(hypertable_invalidation_log_delete);
+CROSSMODULE_WRAPPER(materialization_invalidation_log_delete);
+CROSSMODULE_WRAPPER(drop_dist_ht_invalidation_trigger);
 CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
 CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
 
@@ -282,6 +287,14 @@ update_compressed_chunk_relstats_default(Oid uncompressed_relid, Oid compressed_
 	error_no_default_fn_community();
 }
 
+static void
+remote_invalidation_log_add_entry_default(Hypertable *raw_ht,
+										  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+										  int64 start, int64 end)
+{
+	error_no_default_fn_community();
+}
+
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -348,11 +361,20 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
+	.continuous_agg_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_refresh_chunk = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate = continuous_agg_invalidate_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
-	.invalidation_cagg_log_add_initial_entry = error_no_default_fn_pg_community,
+	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
+	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
+	.remote_invalidation_log_add_entry = remote_invalidation_log_add_entry_default,
+	.hypertable_invalidation_log_delete = error_no_default_fn_pg_community,
+	.remote_hypertable_invalidation_log_delete = NULL,
+	.materialization_invalidation_log_delete = error_no_default_fn_pg_community,
+	.remote_materialization_invalidation_log_delete = NULL,
+	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
+	.remote_drop_dist_ht_invalidation_trigger = NULL,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
 
