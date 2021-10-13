@@ -111,8 +111,6 @@ m["include"].append(build_debug_config({"pg":PG13_LATEST}))
 
 pg14_debug_latest = {
   "pg": PG14_LATEST,
-  "tsdb_build_args": "-DEXPERIMENTAL=ON",
-  "coverage": False,
   "installcheck_args": "IGNORES='dist_query'"
 }
 m["include"].append(build_debug_config(pg14_debug_latest))
