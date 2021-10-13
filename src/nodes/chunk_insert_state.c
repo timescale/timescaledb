@@ -113,13 +113,12 @@ create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
 static inline ResultRelInfo *
 create_compress_chunk_result_relation_info(ChunkDispatch *dispatch, Relation compress_rel)
 {
-	ResultRelInfo *rri, *rri_orig;
-	Index hyper_rti = dispatch->hypertable_result_rel_info->ri_RangeTableIndex;
-	rri = makeNode(ResultRelInfo);
+	ResultRelInfo *rri = makeNode(ResultRelInfo);
+	ResultRelInfo *rri_orig = dispatch->hypertable_result_rel_info;
+	Index hyper_rti = rri_orig->ri_RangeTableIndex;
 
 	InitResultRelInfo(rri, compress_rel, hyper_rti, NULL, dispatch->estate->es_instrument);
 
-	rri_orig = dispatch->hypertable_result_rel_info;
 	/* RLS policies are not supported if compression is enabled */
 	Assert(rri_orig->ri_WithCheckOptions == NULL && rri_orig->ri_WithCheckOptionExprs == NULL);
 	Assert(rri_orig->ri_projectReturning == NULL);
