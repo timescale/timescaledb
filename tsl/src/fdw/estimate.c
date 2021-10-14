@@ -9,9 +9,11 @@
 #include <optimizer/clauses.h>
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
+#include <optimizer/paths.h>
 #include <utils/selfuncs.h>
 #include <utils/rel.h>
 #include <lib/stringinfo.h>
+#include <miscadmin.h>
 
 #include <remote/connection.h>
 #include <remote/async.h>
@@ -70,14 +72,13 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 {
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
 	TsFdwRelInfo *ofpinfo = fdw_relinfo_get(fpinfo->outerrel);
-	PathTarget *ptarget = rel->reltarget;
 	AggClauseCosts aggcosts;
 	double input_rows;
 	int num_group_cols;
 	double num_groups = 1;
 
 	/* Make sure the core code set the pathtarget. */
-	Assert(ptarget != NULL);
+	Assert(rel->reltarget != NULL);
 
 	/*
 	 * This cost model is mixture of costing done for sorted and
@@ -91,25 +92,19 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	 * considering remote and local conditions for costing.
 	 */
 
-	/* Get rows and width from input rel */
+	/* Get rows from input rel */
 	input_rows = ofpinfo->rows;
-	ce->width = ofpinfo->width;
 
 	/* Collect statistics about aggregates for estimating costs. */
 	MemSet(&aggcosts, 0, sizeof(AggClauseCosts));
 
 	if (root->parse->hasAggs)
 	{
+		/* Get the aggsplit to use in order to support push-down of partial
+		 * aggregation */
 		AggSplit aggsplit = get_aggsplit(rel);
 
 		get_agg_clause_costs_compat(root, (Node *) fpinfo->grouped_tlist, aggsplit, &aggcosts);
-
-		/*
-		 * The cost of aggregates in the HAVING qual will be the same
-		 * for each child as it is for the parent, so there's no need
-		 * to use a translated version of havingQual.
-		 */
-		get_agg_clause_costs_compat(root, (Node *) root->parse->havingQual, aggsplit, &aggcosts);
 	}
 
 	/* Get number of grouping columns and possible number of groups */
@@ -122,10 +117,28 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 											NULL);
 
 	/*
-	 * Number of rows expected from data node will be same as
-	 * that of number of groups.
+	 * Get the retrieved_rows and rows estimates.  If there are HAVING
+	 * quals, account for their selectivity.
 	 */
-	ce->rows = ce->retrieved_rows = num_groups;
+	if (root->parse->havingQual)
+	{
+		/* Factor in the selectivity of the remotely-checked quals */
+		ce->retrieved_rows = clamp_row_est(
+			num_groups * clauselist_selectivity(root, fpinfo->remote_conds, 0, JOIN_INNER, NULL));
+		/* Factor in the selectivity of the locally-checked quals */
+		ce->rows = clamp_row_est(ce->retrieved_rows * fpinfo->local_conds_sel);
+	}
+	else
+	{
+		/*
+		 * Number of rows expected from data node will be same as
+		 * that of number of groups.
+		 */
+		ce->rows = ce->retrieved_rows = num_groups;
+	}
+
+	/* Use width estimate made by the core code. */
+	ce->width = rel->reltarget->width;
 
 	/*-----
 	 * Startup cost includes:
@@ -135,26 +148,41 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	 *-----
 	 */
 	ce->startup_cost = ofpinfo->rel_startup_cost;
+	ce->startup_cost += rel->reltarget->cost.startup;
 	ce->startup_cost += aggcosts.transCost.startup;
 	ce->startup_cost += aggcosts.transCost.per_tuple * input_rows;
-	ce->startup_cost += cpu_operator_cost * num_group_cols * input_rows;
-	ce->startup_cost += ptarget->cost.startup;
+	ce->startup_cost += aggcosts.finalCost.startup;
+	ce->startup_cost += (cpu_operator_cost * num_group_cols) * input_rows;
 
 	/*-----
 	 * Run time cost includes:
-	 *	  1. Run time cost of underneath input relation
+	 *	  1. Run time cost of underneath input relation, adjusted for
+	 *	     tlist replacement by apply_scanjoin_target_to_paths()
 	 *	  2. Run time cost of performing aggregation, per cost_agg()
-	 *	  3. PathTarget eval cost for each output row
 	 *-----
 	 */
 	ce->run_cost = ofpinfo->rel_total_cost - ofpinfo->rel_startup_cost;
+	ce->run_cost += rel->reltarget->cost.per_tuple * input_rows;
 	ce->run_cost += aggcosts.finalCost.per_tuple * num_groups;
 	ce->run_cost += cpu_tuple_cost * num_groups;
-	ce->run_cost += ptarget->cost.per_tuple * num_groups;
 
-	/* Update the relation's number of output rows. Needed on UPPER rels as
-	 * "cached" value when we compute costs for different pathkeys */
-	rel->rows = ce->rows;
+	/* Account for the eval cost of HAVING quals, if any */
+	if (root->parse->havingQual)
+	{
+		QualCost remote_cost;
+
+		/* Add in the eval cost of the remotely-checked quals */
+		cost_qual_eval(&remote_cost, fpinfo->remote_conds, root);
+		ce->startup_cost += remote_cost.startup;
+		ce->run_cost += remote_cost.per_tuple * num_groups;
+		/* Add in the eval cost of the locally-checked quals */
+		ce->startup_cost += fpinfo->local_conds_cost.startup;
+		ce->run_cost += fpinfo->local_conds_cost.per_tuple * ce->retrieved_rows;
+	}
+
+	/* Add in tlist eval cost for each output row */
+	ce->startup_cost += rel->reltarget->cost.startup;
+	ce->run_cost += rel->reltarget->cost.per_tuple * ce->rows;
 }
 
 static void
@@ -162,8 +190,11 @@ get_base_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 {
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
 
+	ce->rows = rel->rows;
+	ce->width = rel->reltarget->width;
+
 	/* Back into an estimate of the number of retrieved rows. */
-	ce->retrieved_rows = clamp_row_est(rel->rows / fpinfo->local_conds_sel);
+	ce->retrieved_rows = clamp_row_est(ce->rows / fpinfo->local_conds_sel);
 
 	/* Clamp retrieved rows estimates to at most rel->tuples. */
 	ce->retrieved_rows = Min(ce->retrieved_rows, rel->tuples);
@@ -180,11 +211,63 @@ get_base_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	ce->startup_cost += rel->baserestrictcost.startup;
 	ce->cpu_per_tuple = cpu_tuple_cost + rel->baserestrictcost.per_tuple;
 	ce->run_cost += ce->cpu_per_tuple * rel->tuples;
+
+	/* Add in tlist eval cost for each output row */
+	ce->startup_cost += rel->reltarget->cost.startup;
+	ce->run_cost += rel->reltarget->cost.per_tuple * ce->rows;
 }
 
 #define REL_HAS_CACHED_COSTS(fpinfo)                                                               \
 	((fpinfo)->rel_startup_cost >= 0 && (fpinfo)->rel_total_cost >= 0 &&                           \
 	 (fpinfo)->rel_retrieved_rows >= 0)
+
+/*
+ * Adjust the cost estimates of a foreign grouping path to include the cost of
+ * generating properly-sorted output.
+ */
+static void
+adjust_foreign_grouping_path_cost(PlannerInfo *root, List *pathkeys, double retrieved_rows,
+								  double width, double limit_tuples, Cost *p_startup_cost,
+								  Cost *p_run_cost)
+{
+	/*
+	 * If the GROUP BY clause isn't sort-able, the plan chosen by the remote
+	 * side is unlikely to generate properly-sorted output, so it would need
+	 * an explicit sort; adjust the given costs with cost_sort().  Likewise,
+	 * if the GROUP BY clause is sort-able but isn't a superset of the given
+	 * pathkeys, adjust the costs with that function.  Otherwise, adjust the
+	 * costs by applying the same heuristic as for the scan or join case.
+	 */
+	if (!grouping_is_sortable(root->parse->groupClause) ||
+		!pathkeys_contained_in(pathkeys, root->group_pathkeys))
+	{
+		Path sort_path; /* dummy for result of cost_sort */
+
+		cost_sort(&sort_path,
+				  root,
+				  pathkeys,
+				  *p_startup_cost + *p_run_cost,
+				  retrieved_rows,
+				  width,
+				  0.0,
+				  work_mem,
+				  limit_tuples);
+
+		*p_startup_cost = sort_path.startup_cost;
+		*p_run_cost = sort_path.total_cost - sort_path.startup_cost;
+	}
+	else
+	{
+		/*
+		 * The default extra cost seems too large for foreign-grouping cases;
+		 * add 1/4th of that default.
+		 */
+		double sort_multiplier = 1.0 + (DEFAULT_FDW_SORT_MULTIPLIER - 1.0) * 0.25;
+
+		*p_startup_cost *= sort_multiplier;
+		*p_run_cost *= sort_multiplier;
+	}
+}
 
 /*
  * fdw_estimate_path_cost_size
@@ -225,6 +308,8 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys, 
 	 */
 	if (REL_HAS_CACHED_COSTS(fpinfo))
 	{
+		ce.rows = fpinfo->rows;
+		ce.width = fpinfo->width;
 		ce.startup_cost = fpinfo->rel_startup_cost;
 		ce.run_cost = fpinfo->rel_total_cost - fpinfo->rel_startup_cost;
 		ce.retrieved_rows = fpinfo->rel_retrieved_rows;
@@ -245,9 +330,27 @@ fdw_estimate_path_cost_size(PlannerInfo *root, RelOptInfo *rel, List *pathkeys, 
 	 */
 	if (pathkeys != NIL)
 	{
-		/* TODO: check if sort covered by local index and use other sort multiplier */
-		ce.startup_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
-		ce.run_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+		if (IS_UPPER_REL(rel))
+		{
+			Assert(rel->reloptkind == RELOPT_UPPER_REL ||
+				   rel->reloptkind == RELOPT_OTHER_UPPER_REL);
+
+			/* FIXME: Currently don't have a way to pass on limit here */
+			const double limit_tuples = -1;
+
+			adjust_foreign_grouping_path_cost(root,
+											  pathkeys,
+											  ce.retrieved_rows,
+											  ce.width,
+											  limit_tuples,
+											  &ce.startup_cost,
+											  &ce.run_cost);
+		}
+		else
+		{
+			ce.startup_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+			ce.run_cost *= DEFAULT_FDW_SORT_MULTIPLIER;
+		}
 	}
 
 	ce.total_cost = ce.startup_cost + ce.run_cost;

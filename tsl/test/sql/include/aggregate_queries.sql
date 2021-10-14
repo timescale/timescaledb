@@ -40,16 +40,16 @@
    last(temperature, timec) as last_temp,
    histogram(temperature, 0, 100, 1)
   FROM :TEST_TABLE
-  GROUP BY :GROUPING
-  ORDER BY :GROUPING;
+  GROUP BY :GROUPING, timec
+  ORDER BY :GROUPING, timec;
 
 -- Aggregates on custom types are not yet pushed down
 :PREFIX SELECT :GROUPING,
    last(highlow, timec) as last_hl,
    first(highlow, timec) as first_hl
   FROM :TEST_TABLE
-  GROUP BY :GROUPING
-  ORDER BY :GROUPING;
+  GROUP BY :GROUPING, timec
+  ORDER BY :GROUPING, timec;
 
 -- Mix of aggregates that push down and those that don't
 :PREFIX SELECT :GROUPING,
@@ -65,5 +65,5 @@
    bool_or(good_life),
    first(highlow, timec) as first_hl
   FROM :TEST_TABLE
-  GROUP BY :GROUPING
-  ORDER BY :GROUPING;
+  GROUP BY :GROUPING, timec
+  ORDER BY :GROUPING, timec;

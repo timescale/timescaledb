@@ -187,32 +187,26 @@ WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
 DEBUG:  Upper rel stage GROUP_AGG:
-RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=1 width=20
+RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=0 width=20
 Path list:
-	Agg [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
-		CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_MEMBER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 Pruned paths:
-	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1
 	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 
 
 DEBUG:  Upper rel stage GROUP_AGG:
-RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=3 width=20
+RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=0 width=20
 Path list:
-	Agg [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=3 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
-		CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_MEMBER_REL, parent's base rels: hyper] rows=3 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=3 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 Pruned paths:
-	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=3
 	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=3 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 
 
 DEBUG:  Upper rel stage GROUP_AGG:
-RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=1 width=20
+RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=0 width=20
 Path list:
-	Agg [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
-		CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_MEMBER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 Pruned paths:
-	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1
 	CustomScan (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 
 

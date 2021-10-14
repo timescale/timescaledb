@@ -39,25 +39,28 @@ FROM generate_series('2019-01-01'::timestamptz, '2019-01-04'::timestamptz, '1 mi
 
 INSERT INTO hyper
 SELECT * FROM reference
-WHERE time < '2019-01-02 05:10'::timestamptz;
+WHERE time < '2019-01-02 05:10'::timestamptz
+ORDER BY time;
 SELECT * FROM set_number_partitions('hyper', 2);
 INSERT INTO hyper
 SELECT * FROM reference
 WHERE time >= '2019-01-02 05:10'::timestamptz
-AND time < '2019-01-03 01:22'::timestamptz;
+AND time < '2019-01-03 01:22'::timestamptz
+ORDER BY time;
 SELECT * FROM set_number_partitions('hyper', 5);
 INSERT INTO hyper
 SELECT * FROM reference
-WHERE time >= '2019-01-03 01:22'::timestamptz;
+WHERE time >= '2019-01-03 01:22'::timestamptz
+ORDER BY time;
 
 INSERT INTO hyper1d
-SELECT * FROM reference;
+SELECT * FROM reference ORDER BY time;
 
 SELECT d.hypertable_id, d.id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.dimension d, _timescaledb_catalog.dimension_slice ds
 WHERE num_slices IS NOT NULL
 AND d.id = ds.dimension_id
-ORDER BY 1, 2, 3;
+ORDER BY 1, 2, 3, 4;
 
 -- Set the max time we can query without hitting the repartitioned
 -- chunks. Note that this is before the given repartitioning time
