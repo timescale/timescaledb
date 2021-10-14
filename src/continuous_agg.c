@@ -373,7 +373,7 @@ ts_create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hyper
 						 false);
 		(*mat_hypertable_ids)->elements = lappend((*mat_hypertable_ids)->elements, elem);
 
-		int64 bucket_width = *(int64_t *) lfirst(lc2);
+		int64 bucket_width = *(int64 *) lfirst(lc2);
 		elem = makeConst(INT8OID,
 						 -1,
 						 InvalidOid,
@@ -383,7 +383,7 @@ ts_create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hyper
 						 FLOAT8PASSBYVAL);
 		(*bucket_widths)->elements = lappend((*bucket_widths)->elements, elem);
 
-		int64 max_bucket_width = *(int64_t *) lfirst(lc3);
+		int64 max_bucket_width = *(int64 *) lfirst(lc3);
 		elem = makeConst(INT8OID,
 						 -1,
 						 InvalidOid,
@@ -417,10 +417,10 @@ ts_create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertabl
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
 
-		int64 bucket_width = *(int64_t *) lfirst(lc2);
+		int64 bucket_width = *(int64 *) lfirst(lc2);
 		widthdatums[i] = Int64GetDatum(bucket_width);
 
-		int64 max_bucket_width = *(int64_t *) lfirst(lc3);
+		int64 max_bucket_width = *(int64 *) lfirst(lc3);
 		maxwidthdatums[i] = Int64GetDatum(max_bucket_width);
 
 		++i;
