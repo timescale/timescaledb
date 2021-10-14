@@ -2,18 +2,44 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+------------------------------------
+-- Set up a distributed environment
+------------------------------------
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+
+\ir include/remote_exec.sql
+
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+
+\set IS_DISTRIBUTED TRUE
+
 -- Disable background workers since we are testing manual refresh
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
+\endif
 
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('measurements', 'time', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
+\endif
 
 CREATE OR REPLACE FUNCTION bigint_now()
 RETURNS bigint LANGUAGE SQL STABLE AS
@@ -21,6 +47,16 @@ $$
     SELECT coalesce(max(time), 0)
     FROM conditions
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION bigint_now()
+RETURNS bigint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM conditions
+$$;
+$DIST$);
+\endif
 
 CREATE OR REPLACE FUNCTION int_now()
 RETURNS int LANGUAGE SQL STABLE AS
@@ -28,6 +64,16 @@ $$
     SELECT coalesce(max(time), 0)
     FROM measurements
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int_now()
+RETURNS int LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM measurements
+$$;
+$DIST$);
+\endif
 
 SELECT set_integer_now_func('conditions', 'bigint_now');
 SELECT set_integer_now_func('measurements', 'int_now');
@@ -37,8 +83,10 @@ SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int,
        abs(timestamp_hash(to_timestamp(t)::timestamp))%40
 FROM generate_series(1, 100, 1) t;
 
-INSERT INTO measurements
+CREATE TABLE temp AS
 SELECT * FROM conditions;
+INSERT INTO measurements
+SELECT * FROM temp;
 
 -- Show the most recent data
 SELECT * FROM conditions
@@ -449,7 +497,11 @@ ORDER BY 1,2;
 -- Test that invalidation threshold is capped
 ----------------------------------------------
 CREATE table threshold_test (time int, value int);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('threshold_test', 'time', chunk_time_interval => 4, replication_factor => 2);
+\else
 SELECT create_hypertable('threshold_test', 'time', chunk_time_interval => 4);
+\endif
 SELECT set_integer_now_func('threshold_test', 'int_now');
 
 CREATE MATERIALIZED VIEW thresh_2
