@@ -7,6 +7,10 @@ set(TEST_FILES_SHARED
     dist_insert.sql
     dist_distinct.sql)
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
+  list(APPEND TEST_FILES_SHARED memoize.sql)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED timestamp_limits.sql with_clause_parser.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
