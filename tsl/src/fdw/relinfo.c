@@ -37,7 +37,10 @@
 #define DEFAULT_FDW_STARTUP_COST 100.0
 
 /* Default CPU cost to process 1 row (above and beyond cpu_tuple_cost). */
-#define DEFAULT_FDW_TUPLE_COST 0.01
+/* Note that postgres_fdw sets this to 0.01, but we want to penalize
+ * transferring many tuples in order to make it more attractive to push down
+ * aggregates and thus transfer/process less tuples. */
+#define DEFAULT_FDW_TUPLE_COST 0.08
 
 #define DEFAULT_FDW_FETCH_SIZE 10000
 

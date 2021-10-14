@@ -726,8 +726,8 @@ EXPLAIN (verbose, costs off)
 SELECT DISTINCT device_id, device_id
 FROM metrics_dist
 ORDER BY 1;
-                                                                              QUERY PLAN                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                               QUERY PLAN                                                                                                
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: metrics_dist.device_id, metrics_dist.device_id
    Sort Key: metrics_dist.device_id
@@ -741,17 +741,17 @@ ORDER BY 1;
                            Output: metrics_dist_1.device_id, metrics_dist_1.device_id
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id, metrics_dist_2.device_id
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id, metrics_dist_3.device_id
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[1, 2, 3]) ORDER BY device_id ASC NULLS LAST
 (24 rows)
 
 SELECT DISTINCT handles whole row correctly

@@ -29,7 +29,7 @@ jobs:
             ignores: append-13 debug_notice transparent_decompression-13 pg_dump
             pg_major: 13
           - pg: "14.0"
-            ignores: append-14 chunk_api debug_notice dist_query transparent_decompression-14
+            ignores: append-14 chunk_api debug_notice transparent_decompression-14
             pg_major: 14
 
     steps:

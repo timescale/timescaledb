@@ -108,12 +108,7 @@ def macos_config(overrides):
 # always test debug build on latest of all supported pg versions
 m["include"].append(build_debug_config({"pg":PG12_LATEST}))
 m["include"].append(build_debug_config({"pg":PG13_LATEST}))
-
-pg14_debug_latest = {
-  "pg": PG14_LATEST,
-  "installcheck_args": "IGNORES='dist_query'"
-}
-m["include"].append(build_debug_config(pg14_debug_latest))
+m["include"].append(build_debug_config({"pg":PG14_LATEST}))
 
 m["include"].append(build_release_config(macos_config({})))
 
