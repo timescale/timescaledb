@@ -4,33 +4,15 @@
 
 -- Set this variable to avoid using a hard-coded path each time query
 -- results are compared
-\set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../test/sql/include/query_result_test_equal.sql'
-
-------------------------------------
--- Set up a distributed environment
-------------------------------------
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\set DATA_NODE_3 :TEST_DBNAME _3
-
-\ir include/remote_exec.sql
-
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-
-GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
-
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-
-\set IS_DISTRIBUTED TRUE
+\set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../../test/sql/include/query_result_test_equal.sql'
 
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
 \else
 \echo 'Running local hypertable tests'
 \endif
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 --DDL commands on continuous aggregates
 
