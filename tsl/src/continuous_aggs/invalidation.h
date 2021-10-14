@@ -48,9 +48,6 @@ void remote_invalidation_log_add_entry(Hypertable *raw_ht, ContinuousAggHypertab
 
 extern void invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 												Oid dimtype, CaggsInfo *all_caggs_info);
-extern void invoke_invalidation_process_hypertable_log(int32 mat_hypertable_id,
-													   int32 raw_hypertable_id, Oid dimtype,
-													   CaggsInfo *all_caggs);
 extern void remote_invalidation_process_hypertable_log(int32 mat_hypertable_id,
 													   int32 raw_hypertable_id, Oid dimtype,
 													   CaggsInfo *all_caggs);

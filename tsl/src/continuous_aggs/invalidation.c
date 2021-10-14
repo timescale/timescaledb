@@ -1094,93 +1094,6 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 #define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 7
 #define INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME "invalidation_process_hypertable_log"
 
-/*
- * Invoke tsl_invalidation_process_hypertable_log via fmgr so that the call can be deparsed and
- * sent to remote data nodes.
- */
-void
-invoke_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-										   Oid dimtype, CaggsInfo *all_caggs)
-{
-	EState *estate;
-	ExprContext *econtext;
-	FuncExpr *fexpr;
-	List *args = NIL;
-	int i;
-	Oid restype;
-	Oid func_oid;
-	bool isnull;
-	ArrayExpr *mat_hypertable_ids;
-	ArrayExpr *bucket_widths;
-	ArrayExpr *max_bucket_widths;
-
-	ts_create_arrayexprs_from_caggs_info(all_caggs,
-										 &mat_hypertable_ids,
-										 &bucket_widths,
-										 &max_bucket_widths);
-
-	Expr *argarr[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
-		(Expr *) makeConst(INT4OID,
-						   -1,
-						   InvalidOid,
-						   sizeof(int32),
-						   Int32GetDatum(mat_hypertable_id),
-						   false,
-						   false),
-		(Expr *) makeConst(INT4OID,
-						   -1,
-						   InvalidOid,
-						   sizeof(int32),
-						   Int32GetDatum(raw_hypertable_id),
-						   false,
-						   false),
-		(Expr *)
-			makeConst(OIDOID, -1, InvalidOid, sizeof(Oid), dimtype, false, get_typbyval(OIDOID)),
-		(Expr *) makeConst(INT4OID,
-						   -1,
-						   InvalidOid,
-						   sizeof(int32),
-						   Int32GetDatum(all_caggs->last_mat_hypertable_id),
-						   false,
-						   false),
-		(Expr *) mat_hypertable_ids,
-		(Expr *) bucket_widths,
-		(Expr *) max_bucket_widths
-	};
-
-	Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
-		INT4OID, INT4OID, OIDOID, INT4OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
-	};
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME));
-
-	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
-					 "argarr and type_id should have matching lengths");
-
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
-	Assert(InvalidOid != func_oid);
-
-	/* Prepare the function expr with argument list */
-	get_func_result_type(func_oid, &restype, NULL);
-
-	for (i = 0; i < lengthof(argarr); i++)
-		args = lappend(args, argarr[i]);
-
-	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-	fexpr->funcretset = false;
-
-	estate = CreateExecutorState();
-	econtext = CreateExprContext(estate);
-
-	ExprState *exprstate = ExecInitExpr(&fexpr->xpr, NULL);
-
-	ExecEvalExprSwitchContext(exprstate, econtext, &isnull);
-
-	/* Cleanup */
-	FreeExprContext(econtext, false);
-	FreeExecutorState(estate);
-}
-
 void
 remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 										   Oid dimtype, CaggsInfo *all_caggs)
@@ -1473,8 +1386,11 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 			/* TS_TIME_NOBEGIN should be handled by this conversion */
 			start_time = (int64) pg_strtouint64(PQgetvalue(result, 0, 0), NULL, 10);
 			end_time = (int64) pg_strtouint64(PQgetvalue(result, 0, 1), NULL, 10);
-			elog(DEBUG1, "merged invalidations for refresh on [%lu, %lu] from %s", start_time, end_time, node_name);
-
+			elog(DEBUG1,
+				 "merged invalidations for refresh on [%lu, %lu] from %s",
+				 start_time,
+				 end_time,
+				 node_name);
 
 			/* merge refresh windows from the data nodes */
 			if (start_time < merged_window.start)

@@ -765,7 +765,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	CaggsInfo all_caggs_info = ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	if (is_raw_ht_distributed)
 	{
-		(void) invoke_invalidation_process_hypertable_log; /* TODO: remove me? */
 		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
 												   cagg->data.raw_hypertable_id,
 												   refresh_window.type,
