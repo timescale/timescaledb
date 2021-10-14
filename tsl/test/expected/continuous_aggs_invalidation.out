@@ -1153,7 +1153,7 @@ SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 DEBUG:  refreshing continuous aggregate "cond_10" in window [ 0, 200 ]
 DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 200 200
-DEBUG:  merged 7 invalidations for refresh on "cond_10" in window [ 20, 150 ]
+DEBUG:  merged invalidations for refresh on "cond_10" in window [ 20, 150 ]
 RESET client_min_messages;
 \set VERBOSITY default
 -- Test acceptable values for materializations per refresh
