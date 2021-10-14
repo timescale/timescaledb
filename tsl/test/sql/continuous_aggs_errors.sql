@@ -542,3 +542,6 @@ select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \g
 select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
 \set ON_ERROR_STOP 1
 
+--test creating continuous aggregate with compression enabled --
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.compress)
+AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
