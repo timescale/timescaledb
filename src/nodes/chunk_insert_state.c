@@ -302,18 +302,6 @@ adjust_chunk_colnos(List *colnos, ResultRelInfo *chunk_rri)
 }
 #endif
 
-static inline ResultRelInfo *
-get_chunk_rri(ChunkInsertState *state)
-{
-	return state->result_relation_info;
-}
-
-static inline ResultRelInfo *
-get_hyper_rri(ChunkDispatch *dispatch)
-{
-	return dispatch->hypertable_result_rel_info;
-}
-
 /*
  * Setup ON CONFLICT state for a chunk.
  *
