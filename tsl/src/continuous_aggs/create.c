@@ -1875,6 +1875,13 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 							 " first or use another name.")));
 		}
 	}
+	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot enable compression while creating a continuous aggregate"),
+				 errhint("Use ALTER MATERIALIZED VIEW to enable compression.")));
+	}
 
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery);
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
