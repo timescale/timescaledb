@@ -294,7 +294,11 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, NoLock);
-	elog(DEBUG1, "hypertable log for hypertable %d added entry [%ld, %ld]", hyper_id, start, end);
+	elog(DEBUG1,
+		 "hypertable log for hypertable %d added entry [" INT64_FORMAT ", " INT64_FORMAT "]",
+		 hyper_id,
+		 start,
+		 end);
 }
 
 /*
@@ -1237,7 +1241,7 @@ Datum
 tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 {
 	bool do_merged_refresh;
-	InvalidationStore *invalidations = NULL;
+	InvalidationStore *invalidations pg_attribute_unused() = NULL;
 
 	int32 mat_hypertable_id = PG_GETARG_INT32(0);
 	int32 raw_hypertable_id = PG_GETARG_INT32(1);
@@ -1387,7 +1391,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 			start_time = (int64) pg_strtouint64(PQgetvalue(result, 0, 0), NULL, 10);
 			end_time = (int64) pg_strtouint64(PQgetvalue(result, 0, 1), NULL, 10);
 			elog(DEBUG1,
-				 "merged invalidations for refresh on [%lu, %lu] from %s",
+				 "merged invalidations for refresh on [" INT64_FORMAT ", " INT64_FORMAT "] from %s",
 				 start_time,
 				 end_time,
 				 node_name);
