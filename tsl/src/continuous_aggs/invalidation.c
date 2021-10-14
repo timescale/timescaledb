@@ -294,7 +294,7 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, NoLock);
-	elog(INFO, "Hypertable LOG for hypertable %d added entry [%ld, %ld]", hyper_id, start, end);
+	elog(DEBUG1, "hypertable log for hypertable %d added entry [%ld, %ld]", hyper_id, start, end);
 }
 
 /*

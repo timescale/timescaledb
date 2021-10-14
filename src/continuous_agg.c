@@ -194,7 +194,7 @@ ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
 {
 	int32 raw_hypertable_id = PG_GETARG_INT32(0);
 
-	elog(INFO, "Invalidation LOG delete for hypertable %d", raw_hypertable_id);
+	elog(DEBUG1, "invalidation log delete for hypertable %d", raw_hypertable_id);
 	hypertable_invalidation_log_delete(raw_hypertable_id);
 	PG_RETURN_VOID();
 }
@@ -214,7 +214,7 @@ ts_materialization_invalidation_log_delete_inner(int32 materialization_id)
 								RowExclusiveLock,
 								CurrentMemoryContext);
 
-	elog(INFO, "Materialization LOG delete for hypertable %d", materialization_id);
+	elog(DEBUG1, "materialization log delete for hypertable %d", materialization_id);
 	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, materialization_id);
 
 	ts_scanner_foreach(&iterator)
