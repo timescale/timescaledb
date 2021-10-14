@@ -1510,6 +1510,8 @@ process_drop_start(ProcessUtilityArgs *args)
 	{
 		case OBJECT_TABLE:
 			process_drop_hypertable(args, stmt);
+			/* FALL-THROUGH */
+		case OBJECT_FOREIGN_TABLE:
 			process_drop_chunk(args, stmt);
 			break;
 		case OBJECT_INDEX:

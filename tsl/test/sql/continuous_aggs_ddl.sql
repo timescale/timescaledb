@@ -74,8 +74,6 @@ AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1 WITH NO DATA;
 
-SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
-
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
@@ -176,19 +174,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
       direct_view_schema, direct_view_name
       FROM _timescaledb_catalog.continuous_agg;
 
-\echo 'ZONG!'
-
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
 DROP TABLE foo CASCADE;
-
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
-\if :IS_DISTRIBUTED
-SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log');
-SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log');
-\endif
-\echo 'ENDZONG!'
 
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 \if :IS_DISTRIBUTED
@@ -216,8 +204,6 @@ CREATE MATERIALIZED VIEW drop_chunks_view
 AS SELECT time_bucket('5', time), COUNT(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
-
-SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table,
         schema_name AS drop_chunks_mat_schema,
@@ -250,19 +236,8 @@ SELECT count(c) FROM show_chunks('drop_chunks_view') AS c;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
-\echo 'ZONG!'
-
 -- drop chunks when the chunksize and time_bucket aren't aligned
 DROP TABLE drop_chunks_table CASCADE;
-
-
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
-\if :IS_DISTRIBUTED
-SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log');
-SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log');
-\endif
-\echo 'ENDZONG!'
 
 CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
 \if :IS_DISTRIBUTED
@@ -289,8 +264,6 @@ CREATE MATERIALIZED VIEW drop_chunks_view
 AS SELECT time_bucket('3', time), COUNT(data)
     FROM drop_chunks_table_u
     GROUP BY 1 WITH NO DATA;
-
-SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_table_u,
         schema_name AS drop_chunks_mat_schema,
@@ -386,7 +359,11 @@ AS SELECT time_bucket('6', time_bucket), SUM(count)
 DROP INDEX new_name_idx;
 
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('metrics', 'time', replication_factor => 2);
+\else
 SELECT create_hypertable('metrics','time');
+\endif
 
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 
@@ -406,25 +383,12 @@ SELECT
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 
-SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
-
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
-
-
-\echo 'ZONG!'
 
 --test materialization of invalidation before drop
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
-
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
-\if :IS_DISTRIBUTED
-SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log');
-SELECT test.remote_exec(NULL, 'SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log');
-\endif
-\echo 'ENDZONG!'
 
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 \if :IS_DISTRIBUTED
@@ -451,8 +415,6 @@ CREATE MATERIALIZED VIEW drop_chunks_view
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
-
-SELECT * FROM _timescaledb_catalog.hypertable; --ZONGZ!!!!
 
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 --dropping chunks will process the invalidations
@@ -565,6 +527,13 @@ AND time < :range_end_integer
 ORDER BY 1;
 
 -- Make sure there is also data in the continuous aggregate
+-- CARE:
+-- Note that this behaviour of dropping the materialization table chunks and expecting a refresh
+-- that overlaps that time range to NOT update those chunks is undefined. Since CAGGs over
+-- distributed hypertables merge the invalidations the refresh region is updated in the distributed
+-- case, which may be different than what happens in the normal hypertable case. The command was:
+-- SELECT drop_chunks('drop_chunks_view', newer_than => -20, verbose => true);
+
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, 50);
 
 SELECT * FROM drop_chunks_view
@@ -659,9 +628,15 @@ SELECT ht.schema_name, ht.table_name, relname AS chunk_name,
 
 CREATE TABLE whatever(time BIGINT NOT NULL, data INTEGER);
 
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS whatever_nid
+  FROM create_distributed_hypertable('whatever', 'time', chunk_time_interval => 10, replication_factor => 2)
+\gset
+\else
 SELECT hypertable_id AS whatever_nid
   FROM create_hypertable('whatever', 'time', chunk_time_interval => 10)
 \gset
+\endif
 
 SELECT set_integer_now_func('whatever', 'integer_now_test');
 
@@ -725,11 +700,19 @@ CREATE TABLE metrics_int8 (
   v2 float
 );
 
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable (('metrics_' || dt)::regclass, 'time', chunk_time_interval => 10, replication_factor => 2)
+FROM (
+  VALUES ('int2'),
+    ('int4'),
+    ('int8')) v (dt);
+\else
 SELECT create_hypertable (('metrics_' || dt)::regclass, 'time', chunk_time_interval => 10)
 FROM (
   VALUES ('int2'),
     ('int4'),
     ('int8')) v (dt);
+\endif
 
 CREATE OR REPLACE FUNCTION int2_now ()
   RETURNS int2
@@ -738,6 +721,17 @@ CREATE OR REPLACE FUNCTION int2_now ()
   AS $$
   SELECT 10::int2
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int2_now ()
+  RETURNS int2
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int2
+$$;
+$DIST$);
+\endif
 
 CREATE OR REPLACE FUNCTION int4_now ()
   RETURNS int4
@@ -746,6 +740,17 @@ CREATE OR REPLACE FUNCTION int4_now ()
   AS $$
   SELECT 10::int4
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int4_now ()
+  RETURNS int4
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int4
+$$;
+$DIST$);
+\endif
 
 CREATE OR REPLACE FUNCTION int8_now ()
   RETURNS int8
@@ -754,6 +759,17 @@ CREATE OR REPLACE FUNCTION int8_now ()
   AS $$
   SELECT 10::int8
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int8_now ()
+  RETURNS int8
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int8
+$$;
+$DIST$);
+\endif
 
 SELECT set_integer_now_func (('metrics_' || dt)::regclass, (dt || '_now')::regproc)
 FROM (
@@ -873,7 +889,11 @@ $DIST$);
 \endif
 
 CREATE TABLE conditionsnm(time_int INT NOT NULL, device INT, value FLOAT);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10);
+\endif
 SELECT set_integer_now_func('conditionsnm', 'test_int_now');
 
 INSERT INTO conditionsnm
@@ -922,13 +942,26 @@ DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
 
 -- Case 1: DROP SCHEMA CASCADE
 CREATE SCHEMA test_schema;
+\if :IS_DISTRIBUTED
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\endif
 
 CREATE TABLE test_schema.telemetry_raw (
   ts        TIMESTAMP WITH TIME ZONE NOT NULL,
   value     DOUBLE PRECISION
 );
 
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_schema.telemetry_raw', 'ts', replication_factor => 2);
+\else
 SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
+\endif
 
 CREATE MATERIALIZED VIEW test_schema.telemetry_1s
   WITH (timescaledb.continuous)
@@ -957,13 +990,26 @@ SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
 
 -- Case 2: DROP SCHEMA CASCADE with multiple caggs
 CREATE SCHEMA test_schema;
+\if :IS_DISTRIBUTED
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\endif
 
 CREATE TABLE test_schema.telemetry_raw (
   ts        TIMESTAMP WITH TIME ZONE NOT NULL,
   value     DOUBLE PRECISION
 );
 
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_schema.telemetry_raw', 'ts', replication_factor => 2);
+\else
 SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
+\endif
 
 CREATE MATERIALIZED VIEW test_schema.cagg1
   WITH (timescaledb.continuous)
@@ -1022,7 +1068,11 @@ CREATE TABLE conditions (
        temperature DOUBLE PRECISION NULL
 );
 
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+\else
 SELECT create_hypertable('conditions', 'time');
+\endif
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
 INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);

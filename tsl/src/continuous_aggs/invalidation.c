@@ -1473,6 +1473,8 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 			/* TS_TIME_NOBEGIN should be handled by this conversion */
 			start_time = (int64) pg_strtouint64(PQgetvalue(result, 0, 0), NULL, 10);
 			end_time = (int64) pg_strtouint64(PQgetvalue(result, 0, 1), NULL, 10);
+			elog(DEBUG1, "merged invalidations for refresh on [%lu, %lu] from %s", start_time, end_time, node_name);
+
 
 			/* merge refresh windows from the data nodes */
 			if (start_time < merged_window.start)
