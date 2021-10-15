@@ -97,11 +97,11 @@ ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, Lis
 	switch (nodeTag(data_nodes))
 	{
 		case T_OidList:
-			data_nodes = data_node_oids_to_node_name_list(data_nodes, ACL_USAGE);
+			data_nodes = data_node_oids_to_node_name_list(data_nodes, ACL_NO_CHECK);
 			break;
 		case T_List:
-			/* Already in the format we want. Just check permissions. */
-			data_node_name_list_check_acl(data_nodes, ACL_USAGE);
+			/* Already in the format we want */
+			data_node_name_list_check_acl(data_nodes, ACL_NO_CHECK);
 			break;
 		default:
 			elog(ERROR, "invalid list type %u", nodeTag(data_nodes));
