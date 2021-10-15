@@ -1206,3 +1206,22 @@ SELECT cagg_name, compression_enabled, materialized_only
 FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
 --count should return additional data since we have real time aggs on
 SELECT count(*) from test_setting_cagg ORDER BY 1;
+
+-- TEST caggs on table with more columns than in the cagg view defn --
+CREATE TABLE test_morecols ( time TIMESTAMPTZ NOT NULL,
+                             val1 INTEGER, val2 INTEGER, val3 INTEGER, val4 INTEGER,
+                             val5 INTEGER,  val6 INTEGER, val7 INTEGER, val8 INTEGER);
+SELECT create_hypertable('test_morecols', 'time', chunk_time_interval=> '7 days'::interval);
+INSERT INTO test_morecols 
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 55, 75, 40, 70, NULL, 100, 200, 200;
+
+CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous) 
+AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
+ FROM test_morecols GROUP BY 1;
+
+ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
+
+SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
+
+SELECT * FROM test_morecols_cagg;
+
