@@ -1577,12 +1577,16 @@ data_node_name_list_check_acl(List *data_node_names, AclMode mode)
 
 	foreach (lc, data_node_names)
 	{
+		/* Validate the servers, but privilege check is optional */
 		ForeignServer *server = GetForeignServerByName(lfirst(lc), false);
 
-		/* Must have permissions on the server object */
-		aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
+		if (mode != ACL_NO_CHECK)
+		{
+			/* Must have permissions on the server object */
+			aclresult = pg_foreign_server_aclcheck(server->serverid, curuserid, mode);
 
-		if (aclresult != ACLCHECK_OK)
-			aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
+			if (aclresult != ACLCHECK_OK)
+				aclcheck_error(aclresult, OBJECT_FOREIGN_SERVER, server->servername);
+		}
 	}
 }
