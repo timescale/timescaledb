@@ -1713,3 +1713,33 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
     21
 (1 row)
 
+-- TEST caggs on table with more columns than in the cagg view defn --
+CREATE TABLE test_morecols ( time TIMESTAMPTZ NOT NULL,
+                             val1 INTEGER, val2 INTEGER, val3 INTEGER, val4 INTEGER,
+                             val5 INTEGER,  val6 INTEGER, val7 INTEGER, val8 INTEGER);
+SELECT create_hypertable('test_morecols', 'time', chunk_time_interval=> '7 days'::interval);
+      create_hypertable      
+-----------------------------
+ (47,public,test_morecols,t)
+(1 row)
+
+INSERT INTO test_morecols 
+SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 55, 75, 40, 70, NULL, 100, 200, 200;
+CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous) 
+AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
+ FROM test_morecols GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "test_morecols_cagg"
+ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
+SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_48_96_chunk
+(1 row)
+
+SELECT * FROM test_morecols_cagg;
+         time_bucket          |         avg         | count 
+------------------------------+---------------------+-------
+ Fri Nov 23 16:00:00 2018 PST | 55.0000000000000000 |    23
+ Sun Dec 23 16:00:00 2018 PST | 55.0000000000000000 |     8
+(2 rows)
+
