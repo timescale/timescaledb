@@ -1404,7 +1404,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 		}
 		ts_dist_cmd_close_response(dist_res);
 
-		if (merged_window.start < merged_window.end)
+		if (merged_window.start <= merged_window.end)
 		{
 			*ret_merged_refresh_window = merged_window;
 			*do_merged_refresh = true;

@@ -7,6 +7,8 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.subtract_integer_from_now;
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression;
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_interval;
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_integer;
+
+--changes for continuous Aggregates over distributed hypertables ---
 DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_dist_ht_invalidation_trigger;
 DROP FUNCTION IF EXISTS _timescaledb_internal.drop_dist_ht_invalidation_trigger;
 DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_invalidation_log_delete;
@@ -15,3 +17,5 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_hyper_log_add_entry;
 DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_process_cagg_log;
 DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_process_hypertable_log;
 DROP FUNCTION IF EXISTS _timescaledb_internal.materialization_invalidation_log_delete;
+
+DROP FUNCTION IF EXISTS test.remote_exec_get_result_strings;

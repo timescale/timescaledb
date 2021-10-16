@@ -134,19 +134,70 @@ ORDER BY 1 DESC, 2;
 SELECT * FROM measure_10
 ORDER BY 1 DESC, 2;
 
-CREATE VIEW hyper_invals AS
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
-       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
+\if :IS_DISTRIBUTED
+CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS TABLE(
+      "hyper_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT DISTINCT record[1]::TEXT::INT, record[2]::TEXT::BIGINT, record[3]::TEXT::BIGINT FROM test.remote_exec_get_result_strings(NULL, $DIST$
+      SELECT hypertable_id,
+            lowest_modified_value,
+            greatest_modified_value
+            FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+$DIST$)
+ORDER BY 1,2,3
+$$;
 
-CREATE VIEW cagg_invals AS
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
+CREATE OR REPLACE FUNCTION get_cagg_invals() RETURNS TABLE(
+      "cagg_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT DISTINCT record[1]::TEXT::INT, record[2]::TEXT::BIGINT, record[3]::TEXT::BIGINT FROM test.remote_exec_get_result_strings(NULL, $DIST$
+      SELECT materialization_id AS cagg_id,
+            lowest_modified_value AS start,
+            greatest_modified_value AS end
+            FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+$DIST$)
+ORDER BY 1,2,3
+$$;
+\else
+CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS  TABLE (
+      "hyper_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT hypertable_id,
+       lowest_modified_value,
+       greatest_modified_value
+       FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+       ORDER BY 1,2,3
+$$;
+
+CREATE OR REPLACE FUNCTION get_cagg_invals() RETURNS TABLE (
+      "cagg_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT materialization_id,
+       lowest_modified_value,
+       greatest_modified_value
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
+       ORDER BY 1,2,3
+$$;
+\endif
+
+CREATE VIEW hyper_invals AS SELECT * FROM get_hyper_invals();
+CREATE VIEW cagg_invals AS SELECT * FROM get_cagg_invals();
 
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, there is no threshold
@@ -644,7 +695,12 @@ SELECT * FROM conditions
 ORDER BY 1,2;
 
 -- Drop one chunk
+\if :IS_DISTRIBUTED
+CALL distributed_exec(format('DROP TABLE IF EXISTS %s', :'chunk_to_drop'));
+DROP FOREIGN TABLE :chunk_to_drop;
+\else
 DROP TABLE :chunk_to_drop;
+\endif
 
 -- The chunk's data no longer exists in the hypertable
 SELECT * FROM conditions

@@ -15,6 +15,7 @@
 #include <foreign/fdwapi.h>
 #include <miscadmin.h>
 #include <access/reloptions.h>
+#include <funcapi.h>
 
 #include "errors.h"
 #include "export.h"
@@ -27,6 +28,7 @@
 #include "data_node.h"
 
 TS_FUNCTION_INFO_V1(ts_remote_exec);
+TS_FUNCTION_INFO_V1(ts_remote_exec_get_result_strings);
 
 /*
  * Print the result of a remote call.
@@ -195,4 +197,100 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 	list_free(data_node_list);
 
 	PG_RETURN_VOID();
+}
+
+Datum
+ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
+{
+	ArrayType *data_nodes = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
+	char *sql = TextDatumGetCString(PG_GETARG_DATUM(1));
+	List *data_node_list = NIL;
+	FuncCallContext *funcctx;
+	PGresult *result;
+	unsigned node_i, nodes_tuples, num_dist_res;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		TupleDesc tupdesc;
+
+		if (data_nodes == NULL)
+			data_node_list = data_node_get_node_name_list();
+		else
+			data_node_list = data_node_array_to_node_name_list(data_nodes);
+
+		if (list_length(data_node_list) == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES), errmsg("no data nodes defined")));
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_SCALAR)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+
+		funcctx->user_fctx =
+			ts_dist_cmd_invoke_on_data_nodes(sql, data_node_list, true);
+		if (!funcctx->user_fctx)
+			ereport(ERROR, (errmsg("Cannot run distributed command")));
+
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	num_dist_res = ts_dist_cmd_response_count(funcctx->user_fctx);
+
+	for (nodes_tuples = 0, node_i = 0;
+		 node_i < num_dist_res ;
+		 ++node_i, nodes_tuples += PQntuples(result))
+	{
+		const char *node_name;
+		result = ts_dist_cmd_get_result_by_index(funcctx->user_fctx, node_i, &node_name);
+		if (PQresultStatus(result) != PGRES_TUPLES_OK)
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION),
+						errmsg("%s", PQresultErrorMessage(result))));
+
+		/* Move on to the next node if you have processed more than the tuples of the already
+		   iterated over nodes plus the tuples of the current node. */
+		if (funcctx->call_cntr >= nodes_tuples + PQntuples(result))
+			continue;
+
+		char **fields = palloc(sizeof(*fields) * PQnfields(result));
+		Datum *cstrings = palloc(sizeof(*cstrings) * PQnfields(result));
+		int i, cstrings_count, tup_num;
+		ArrayType *array = NULL;
+
+		tup_num = funcctx->call_cntr - nodes_tuples;
+		for (i = 0, cstrings_count = 0 ; i < PQnfields(result) ; ++i)
+		{
+			if (!PQgetisnull(result, tup_num, i))
+			{
+				fields[i] = PQgetvalue(result, tup_num, i);
+				if (*fields[i] == '\0')
+					continue;
+
+				cstrings[cstrings_count++] = CStringGetDatum(fields[i]);
+			}
+		}
+		if (cstrings_count)
+			array = construct_array(cstrings,
+									cstrings_count,
+									CSTRINGOID,
+									-2, /* pg_type.typlen */
+									false,
+									'c');
+		else
+			elog(INFO, "ZONG!!!");
+
+		pfree(fields);
+		SRF_RETURN_NEXT(funcctx, PointerGetDatum(array));
+	}
+
+	ts_dist_cmd_close_response(funcctx->user_fctx);
+	SRF_RETURN_DONE(funcctx);
 }
