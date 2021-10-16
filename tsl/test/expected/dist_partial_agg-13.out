@@ -276,6 +276,72 @@ SET enable_partitionwise_aggregate = ON;
                Remote SQL: SELECT timec, location, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
 (26 rows)
 
+-- Aggregates nested in expressions and no top-level aggregate #3672
+:PREFIX SELECT :GROUPING,
+  sum(temperature)+sum(humidity) as agg_sum_expr
+  FROM :TEST_TABLE
+  GROUP BY :GROUPING, timec
+  ORDER BY :GROUPING, timec;
+                                                                                                                           QUERY PLAN                                                                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: location, ((sum(temperature) + sum(humidity))), timec
+   ->  Merge Append
+         Sort Key: conditions.location, conditions.timec
+         ->  Custom Scan (DataNodeScan)
+               Output: conditions.location, ((sum(conditions.temperature) + sum(conditions.humidity))), conditions.timec
+               Relations: Aggregate on (public.conditions)
+               Data node: data_node_1
+               Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
+               Remote SQL: SELECT location, (sum(temperature) + sum(humidity)), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 3 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
+         ->  Custom Scan (DataNodeScan)
+               Output: conditions_1.location, ((sum(conditions_1.temperature) + sum(conditions_1.humidity))), conditions_1.timec
+               Relations: Aggregate on (public.conditions)
+               Data node: data_node_2
+               Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
+               Remote SQL: SELECT location, (sum(temperature) + sum(humidity)), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 3 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
+         ->  Custom Scan (DataNodeScan)
+               Output: conditions_2.location, ((sum(conditions_2.temperature) + sum(conditions_2.humidity))), conditions_2.timec
+               Relations: Aggregate on (public.conditions)
+               Data node: data_node_3
+               Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
+               Remote SQL: SELECT location, (sum(temperature) + sum(humidity)), timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 3 ORDER BY location ASC NULLS LAST, timec ASC NULLS LAST
+(22 rows)
+
+-- Aggregates with no aggregate reference in targetlist #3664
+:PREFIX SELECT :GROUPING
+  FROM :TEST_TABLE
+  GROUP BY :GROUPING, timec
+  HAVING avg(temperature) > 20
+  ORDER BY :GROUPING, timec;
+                                                                                                          QUERY PLAN                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Output: location, timec
+   Sort Key: location, timec
+   ->  Custom Scan (AsyncAppend)
+         Output: location, timec
+         ->  Append
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions.location, conditions.timec
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
+                     Remote SQL: SELECT location, timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 HAVING ((avg(temperature) > 20::double precision))
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions_1.location, conditions_1.timec
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_2
+                     Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
+                     Remote SQL: SELECT location, timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 HAVING ((avg(temperature) > 20::double precision))
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions_2.location, conditions_2.timec
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_3
+                     Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
+                     Remote SQL: SELECT location, timec FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2 HAVING ((avg(temperature) > 20::double precision))
+(24 rows)
+
 \set GROUPING 'region, temperature'
 \ir 'include/aggregate_queries.sql'
 -- This file and its contents are licensed under the Timescale License.
@@ -437,6 +503,77 @@ SET enable_partitionwise_aggregate = ON;
                      Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
                      Remote SQL: SELECT timec, region, temperature, humidity, allnull, highlow, bit_int, good_life FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
 (29 rows)
+
+-- Aggregates nested in expressions and no top-level aggregate #3672
+:PREFIX SELECT :GROUPING,
+  sum(temperature)+sum(humidity) as agg_sum_expr
+  FROM :TEST_TABLE
+  GROUP BY :GROUPING, timec
+  ORDER BY :GROUPING, timec;
+                                                                                                                                                                                      QUERY PLAN                                                                                                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Output: region, temperature, (sum(temperature) + sum(humidity)), timec
+   Group Key: region, temperature, timec
+   ->  Custom Scan (AsyncAppend)
+         Output: region, temperature, timec, (PARTIAL sum(temperature)), (PARTIAL sum(humidity))
+         ->  Merge Append
+               Sort Key: conditions.region, conditions.temperature, conditions.timec
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions.region, conditions.temperature, conditions.timec, (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity))
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
+                     Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, (PARTIAL sum(conditions_1.temperature)), (PARTIAL sum(conditions_1.humidity))
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_2
+                     Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
+                     Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, (PARTIAL sum(conditions_2.temperature)), (PARTIAL sum(conditions_2.humidity))
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_3
+                     Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
+                     Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(sum(temperature)), _timescaledb_internal.partialize_agg(sum(humidity)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
+(25 rows)
+
+-- Aggregates with no aggregate reference in targetlist #3664
+:PREFIX SELECT :GROUPING
+  FROM :TEST_TABLE
+  GROUP BY :GROUPING, timec
+  HAVING avg(temperature) > 20
+  ORDER BY :GROUPING, timec;
+                                                                                                                                                            QUERY PLAN                                                                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Output: region, temperature, timec
+   Group Key: region, temperature, timec
+   Filter: (avg(temperature) > '20'::double precision)
+   ->  Custom Scan (AsyncAppend)
+         Output: region, temperature, timec, (PARTIAL avg(temperature))
+         ->  Merge Append
+               Sort Key: conditions.region, conditions.temperature, conditions.timec
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions.region, conditions.temperature, conditions.timec, (PARTIAL avg(conditions.temperature))
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_1
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk
+                     Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(avg(temperature)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions_1.region, conditions_1.temperature, conditions_1.timec, (PARTIAL avg(conditions_1.temperature))
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_2
+                     Chunks: _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk
+                     Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(avg(temperature)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
+               ->  Custom Scan (DataNodeScan)
+                     Output: conditions_2.region, conditions_2.temperature, conditions_2.timec, (PARTIAL avg(conditions_2.temperature))
+                     Relations: Aggregate on (public.conditions)
+                     Data node: data_node_3
+                     Chunks: _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk
+                     Remote SQL: SELECT region, temperature, timec, _timescaledb_internal.partialize_agg(avg(temperature)) FROM public.conditions WHERE _timescaledb_internal.chunks_in(public.conditions.*, ARRAY[1, 2, 3, 4]) GROUP BY 1, 2, 3 ORDER BY region ASC NULLS LAST, temperature ASC NULLS LAST, timec ASC NULLS LAST
+(26 rows)
 
 -- Full aggregate pushdown correctness check, compare location grouped query results with partionwise aggregates on and off
 \set GROUPING 'location'

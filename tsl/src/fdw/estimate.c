@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <nodes/nodes.h>
+#include <nodes/nodeFuncs.h>
 #include <optimizer/cost.h>
 #include <optimizer/clauses.h>
 #include <optimizer/prep.h>
@@ -38,33 +39,46 @@ typedef struct CostEstimate
 	Cost run_cost;
 } CostEstimate;
 
+static bool
+find_first_aggref_walker(Node *node, Aggref **aggref)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Aggref))
+	{
+		*aggref = castNode(Aggref, node);
+		return true;
+	}
+
+	return expression_tree_walker(node, find_first_aggref_walker, aggref);
+}
+
 /*
  * Get the AggsSplit mode of a relation.
  *
  * The AggSplit (partial or full aggregation) affects costing.
+ * All aggregates to compute this relation must have the same
+ * mode, so we only check mode on first match.
  */
 static AggSplit
-get_aggsplit(RelOptInfo *rel)
+get_aggsplit(PlannerInfo *root, RelOptInfo *rel)
 {
-	ListCell *lc;
+	Aggref *agg;
+	Assert(root->parse->hasAggs);
 
-	foreach (lc, rel->reltarget->exprs)
-	{
-		Node *expr = lfirst(lc);
+	if (find_first_aggref_walker((Node *) rel->reltarget->exprs, &agg))
+		return agg->aggsplit;
 
-		if (IsA(expr, Aggref))
-		{
-			/* All aggregates to compute this relation must have the same
-			 * mode, so we can return here. */
-			return castNode(Aggref, expr)->aggsplit;
-		}
-	}
-	/* Assume AGGSPLIT_SIMPLE (non-partial) aggregate. We really shouldn't
-	 * get there though if this function is called on upper rel with an
-	 * aggregate. */
+	/* If the aggregate is only referenced in the HAVING clause it will
+	 * not be present in the targetlist so we have to check HAVING clause too. */
+	if (root->hasHavingQual && find_first_aggref_walker((Node *) root->parse->havingQual, &agg))
+		return agg->aggsplit;
+
+	/* Since PlannerInfo has hasAggs true (checked in caller) we should
+	 * never get here and always find an Aggref. */
+	elog(ERROR, "no aggref found in targetlist or HAVING clause");
 	pg_unreachable();
-
-	return AGGSPLIT_SIMPLE;
 }
 
 static void
@@ -102,7 +116,7 @@ get_upper_rel_estimate(PlannerInfo *root, RelOptInfo *rel, CostEstimate *ce)
 	{
 		/* Get the aggsplit to use in order to support push-down of partial
 		 * aggregation */
-		AggSplit aggsplit = get_aggsplit(rel);
+		AggSplit aggsplit = get_aggsplit(root, rel);
 
 		get_agg_clause_costs_compat(root, (Node *) fpinfo->grouped_tlist, aggsplit, &aggcosts);
 	}
