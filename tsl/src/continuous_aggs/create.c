@@ -1962,8 +1962,6 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	 * relation and update the resource name in the query target list to match
 	 * the name in the user view.
 	 */
-	Assert(list_length(view_query->targetList) == list_length(user_query->targetList));
-
 	TupleDesc desc = RelationGetDescr(user_view_rel);
 	int i = 0;
 	forboth (lc1, view_query->targetList, lc2, user_query->targetList)
@@ -1972,6 +1970,13 @@ cagg_update_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		FormData_pg_attribute *attr = TupleDescAttr(desc, i);
 		view_tle = lfirst_node(TargetEntry, lc1);
 		user_tle = lfirst_node(TargetEntry, lc2);
+		if (view_tle->resjunk && user_tle->resjunk)
+			break;
+		else if (view_tle->resjunk || user_tle->resjunk)
+			/* This should never happen but if it ever does it's safer to
+			 * error here instead of creating broken view definitions. */
+			elog(ERROR, "inconsistent view definitions");
+
 		view_tle->resname = user_tle->resname = NameStr(attr->attname);
 		++i;
 	}
