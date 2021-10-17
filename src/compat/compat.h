@@ -443,4 +443,13 @@ get_reindex_options(ReindexStmt *stmt)
 	expand_function_arguments(args, false, result_type, func_tuple)
 #endif
 
+/* find_em_expr_for_rel was in postgres_fdw in PG12 but got
+ * moved out of contrib in PG13. So we map to our own function
+ * for PG12 only and use postgres implementation when it is
+ * available.
+ */
+#if PG12
+#define find_em_expr_for_rel ts_find_em_expr_for_rel
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

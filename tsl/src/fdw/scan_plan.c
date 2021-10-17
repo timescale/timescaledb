@@ -73,8 +73,7 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 			 * is_foreign_expr would detect volatile expressions as well, but
 			 * checking ec_has_volatile here saves some cycles.
 			 */
-			if (pathkey_ec->ec_has_volatile ||
-				!(em_expr = ts_find_em_expr_for_rel(pathkey_ec, rel)) ||
+			if (pathkey_ec->ec_has_volatile || !(em_expr = find_em_expr_for_rel(pathkey_ec, rel)) ||
 				!is_foreign_expr(root, rel, em_expr))
 			{
 				query_pathkeys_ok = false;

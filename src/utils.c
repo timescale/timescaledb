@@ -718,12 +718,15 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	return NULL;
 }
 
+#if PG12
 /*
  * Find an equivalence class member expression, all of whose Vars, come from
  * the indicated relation.
  *
  * This function has been copied from find_em_expr_for_rel in
  * contrib/postgres_fdw/postgres_fdw.c in postgres source.
+ * This function was moved to postgres main in PG13 so we only need this
+ * backport for PG12 in later versions we will use the postgres implementation.
  */
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
@@ -748,6 +751,7 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	/* We didn't find any suitable equivalence class expression */
 	return NULL;
 }
+#endif
 
 bool
 ts_has_row_security(Oid relid)

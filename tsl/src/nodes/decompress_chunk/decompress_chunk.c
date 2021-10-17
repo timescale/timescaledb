@@ -181,7 +181,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 lc = lnext_compat(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
-			var = (Var *) ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+			var = (Var *) find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 			if (var == NULL || !IsA(var, Var))
 				/* this should not happen because we validated the pathkeys when creating the path
@@ -1256,7 +1256,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 		{
 			Assert(bms_num_members(segmentby_columns) <= info->num_segmentby_columns);
 			pk = lfirst(lc);
-			expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+			expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 			if (expr == NULL || !IsA(expr, Var))
 				break;
@@ -1296,7 +1296,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 	{
 		bool reverse = false;
 		pk = lfirst(lc);
-		expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+		expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 		if (expr == NULL || !IsA(expr, Var))
 			return sort_info;
