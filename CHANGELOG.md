@@ -11,6 +11,7 @@ accidentally triggering the load of a previous DB version.**
 * #3654 Fix index attnum mapping in reorder_chunk
 * #3661 Fix SkipScan path generation with constant DISTINCT column
 * #3708 Fix crash in get_aggsplit
+* #3709 Fix ordered append pathkey check
 
 **Improvements**
 * #3598 Improve evaluation of stable functions such as now() on access node
@@ -18,6 +19,7 @@ accidentally triggering the load of a previous DB version.**
 **Thanks**
 * @binakot and @sebvett for reporting an issue with DISTINCT queries
 * @hardikm10, @DavidPavlicek and @pafiti for reporting bugs on TRUNCATE
+* @mjf for reporting an issue with ordered append and JOINs
 * @phemmer for reporting the issues on multinode with aggregate queries and evaluation of now()
 
 ## 2.4.2 (2021-09-21)
