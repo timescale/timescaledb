@@ -284,9 +284,6 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 									-2, /* pg_type.typlen */
 									false,
 									'c');
-		else
-			elog(INFO, "ZONG!!!");
-
 		pfree(fields);
 		SRF_RETURN_NEXT(funcctx, PointerGetDatum(array));
 	}

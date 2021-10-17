@@ -181,7 +181,6 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 static inline void
 update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 {
-elog(INFO, "ZONG(%s) "INT64_FORMAT" !", get_database_name(MyDatabaseId), timeval);
 	cache_entry->value_is_set = true;
 	if (timeval < cache_entry->lowest_modified_value)
 		cache_entry->lowest_modified_value = timeval;
