@@ -165,13 +165,6 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 	}
 }
 
-/**
- * Delete hypertable invalidation log entries for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
- *                            Access Node.
- */
 static void
 hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 {
@@ -189,6 +182,13 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 }
 
 TS_FUNCTION_INFO_V1(ts_hypertable_invalidation_log_delete);
+/**
+ * Delete hypertable invalidation log entries for all the CAGGs that belong to the
+ * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
+ *                            Access Node.
+ */
 Datum
 ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
 {
@@ -199,23 +199,16 @@ ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-/**
- * Delete materialization invalidation log entries for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
- *                            Access Node.
- */
 void
-ts_materialization_invalidation_log_delete_inner(int32 materialization_id)
+ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 								RowExclusiveLock,
 								CurrentMemoryContext);
 
-	elog(DEBUG1, "materialization log delete for hypertable %d", materialization_id);
-	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, materialization_id);
+	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
+	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -225,11 +218,18 @@ ts_materialization_invalidation_log_delete_inner(int32 materialization_id)
 }
 
 TS_FUNCTION_INFO_V1(ts_materialization_invalidation_log_delete);
+/**
+ * Delete materialization invalidation log entries for the CAGG that belong to the
+ * materialized hypertable with ID 'mat_hypertable_id' in the Access Node.
+ *
+ * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
+ *                          Node.
+ */
 Datum
 ts_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
 {
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-	ts_materialization_invalidation_log_delete_inner(raw_hypertable_id);
+	int32 mat_hypertable_id = PG_GETARG_INT32(0);
+	ts_materialization_invalidation_log_delete_inner(mat_hypertable_id);
 	PG_RETURN_VOID();
 }
 
@@ -298,16 +298,16 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
 		   ARR_NDIM(bucket_widths) == ARR_NDIM(bucket_widths));
 
-	ArrayIterator it1, it2, it3;
+	ArrayIterator it_htids, it_widths, it_maxes;
 	Datum array_datum1, array_datum2, array_datum3;
 	bool isnull1, isnull2, isnull3;
 
-	it1 = array_create_iterator(mat_hypertable_ids, 0, NULL);
-	it2 = array_create_iterator(bucket_widths, 0, NULL);
-	it3 = array_create_iterator(max_bucket_widths, 0, NULL);
-	while (array_iterate(it1, &array_datum1, &isnull1) &&
-		   array_iterate(it2, &array_datum2, &isnull2) &&
-		   array_iterate(it3, &array_datum3, &isnull3))
+	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
+	it_widths = array_create_iterator(bucket_widths, 0, NULL);
+	it_maxes = array_create_iterator(max_bucket_widths, 0, NULL);
+	while (array_iterate(it_htids, &array_datum1, &isnull1) &&
+		   array_iterate(it_widths, &array_datum2, &isnull2) &&
+		   array_iterate(it_maxes, &array_datum3, &isnull3))
 	{
 		Assert(!isnull1 && !isnull2 && !isnull3);
 		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
@@ -323,9 +323,9 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 		*bucket_width = DatumGetInt64(array_datum3);
 		all_caggs->max_bucket_widths = lappend(all_caggs->max_bucket_widths, bucket_width);
 	}
-	array_free_iterator(it1);
-	array_free_iterator(it2);
-	array_free_iterator(it3);
+	array_free_iterator(it_htids);
+	array_free_iterator(it_widths);
+	array_free_iterator(it_maxes);
 }
 
 TSDLLEXPORT void

@@ -221,7 +221,8 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 
 		if (list_length(data_node_list) == 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES), errmsg("no data nodes defined")));
+					(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+					 errmsg("no data nodes defined")));
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
@@ -232,11 +233,9 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
 
-		funcctx->user_fctx =
-			ts_dist_cmd_invoke_on_data_nodes(sql, data_node_list, true);
+		funcctx->user_fctx = ts_dist_cmd_invoke_on_data_nodes(sql, data_node_list, true);
 		if (!funcctx->user_fctx)
 			ereport(ERROR, (errmsg("Cannot run distributed command")));
-
 
 		MemoryContextSwitchTo(oldcontext);
 	}
@@ -244,8 +243,7 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 	funcctx = SRF_PERCALL_SETUP();
 	num_dist_res = ts_dist_cmd_response_count(funcctx->user_fctx);
 
-	for (nodes_tuples = 0, node_i = 0;
-		 node_i < num_dist_res ;
+	for (nodes_tuples = 0, node_i = 0; node_i < num_dist_res;
 		 ++node_i, nodes_tuples += PQntuples(result))
 	{
 		const char *node_name;
@@ -253,7 +251,7 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 		if (PQresultStatus(result) != PGRES_TUPLES_OK)
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_EXCEPTION),
-						errmsg("%s", PQresultErrorMessage(result))));
+					 errmsg("%s", PQresultErrorMessage(result))));
 
 		/* Move on to the next node if you have processed more than the tuples of the already
 		   iterated over nodes plus the tuples of the current node. */
@@ -266,7 +264,7 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 		ArrayType *array = NULL;
 
 		tup_num = funcctx->call_cntr - nodes_tuples;
-		for (i = 0, cstrings_count = 0 ; i < PQnfields(result) ; ++i)
+		for (i = 0, cstrings_count = 0; i < PQnfields(result); ++i)
 		{
 			if (!PQgetisnull(result, tup_num, i))
 			{
