@@ -6,6 +6,7 @@ set(TEST_FILES
     compression_qualpushdown.sql
     continuous_aggs_errors.sql
     continuous_aggs_invalidation.sql
+    continuous_aggs_invalidation_dist_ht.sql
     continuous_aggs_permissions.sql
     continuous_aggs_policy.sql
     continuous_aggs_refresh.sql

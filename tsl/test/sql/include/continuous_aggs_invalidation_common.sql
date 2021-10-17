@@ -2,24 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-------------------------------------
--- Set up a distributed environment
-------------------------------------
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\set DATA_NODE_3 :TEST_DBNAME _3
-
-\ir include/remote_exec.sql
-
-SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-
-GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
-
-\set IS_DISTRIBUTED TRUE
-
 -- Disable background workers since we are testing manual refresh
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
@@ -730,7 +712,8 @@ WHERE cagg_id = :cond_1_id;
 
 ---------------------------------------------------------------------
 -- Test that single timestamp invalidations are expanded to buckets,
--- and adjacent buckets merged.
+-- and adjacent buckets merged. This merging cannot cross Data-Node
+-- chunk boundaries for the distributed hypertable case.
 ---------------------------------------------------------------------
 -- First clear invalidations in a range:
 CALL refresh_continuous_aggregate('cond_10', -20, 60);
