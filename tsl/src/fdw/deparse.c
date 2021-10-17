@@ -58,6 +58,7 @@
 #include <optimizer/appendinfo.h>
 #include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
+#include <optimizer/paths.h>
 #include <optimizer/prep.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
@@ -2843,7 +2844,7 @@ appendOrderByClause(List *pathkeys, deparse_expr_cxt *context)
 		PathKey *pathkey = lfirst(lcell);
 		Expr *em_expr;
 
-		em_expr = ts_find_em_expr_for_rel(pathkey->pk_eclass, baserel);
+		em_expr = find_em_expr_for_rel(pathkey->pk_eclass, baserel);
 		Assert(em_expr != NULL);
 
 		appendStringInfoString(buf, delim);
