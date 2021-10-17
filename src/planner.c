@@ -502,7 +502,6 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 			{
 				MergeAppendPath *merge = castNode(MergeAppendPath, path);
 				PathKey *pk;
-				ListCell *lc;
 
 				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
 					return false;
@@ -517,30 +516,25 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * Ordered Append transformation because the RelOptInfo may
 				 * be used for multiple Pathes.
 				 */
-				foreach (lc, pk->pk_eclass->ec_members)
-				{
-					EquivalenceMember *em = lfirst(lc);
-					if (!em->em_is_child)
-					{
-						if (IsA(em->em_expr, Var) &&
-							castNode(Var, em->em_expr)->varattno == order_attno)
-							return true;
-						else if (IsA(em->em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
-						{
-							FuncExpr *func = castNode(FuncExpr, em->em_expr);
-							FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
-							Expr *transformed;
+				Expr *em_expr = find_em_expr_for_rel(pk->pk_eclass, rel);
 
-							if (info != NULL)
-							{
-								transformed = info->sort_transform(func);
-								if (IsA(transformed, Var) &&
-									castNode(Var, transformed)->varattno == order_attno)
-									return true;
-							}
-						}
+				if (IsA(em_expr, Var) && castNode(Var, em_expr)->varattno == order_attno)
+					return true;
+				else if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
+				{
+					FuncExpr *func = castNode(FuncExpr, em_expr);
+					FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
+					Expr *transformed;
+
+					if (info != NULL)
+					{
+						transformed = info->sort_transform(func);
+						if (IsA(transformed, Var) &&
+							castNode(Var, transformed)->varattno == order_attno)
+							return true;
 					}
 				}
+
 				return false;
 				break;
 			}
