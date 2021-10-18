@@ -93,8 +93,7 @@ our [Style Guide](docs/StyleGuide.md).
       request, either mention them (preferably by GitHub name) in the PR's
       body or [assign them as a reviewer](https://help.github.com/articles/assigning-issues-and-pull-requests-to-other-github-users/).
 
-    * If you get a test failure in Travis CI, check them in the [Travis CI
-      build log](https://travis-ci.org/timescale/timescaledb).
+    * If you get a test failure in the CI, check them under [Github Actions](https://github.com/timescale/timescaledb/actions)
 
     * Address feedback by amending your commit(s). If your change contains
       multiple commits, address each piece of feedback by amending that
@@ -122,7 +121,7 @@ make installcheck
 ```
 
 All submitted pull requests are also automatically
-run against our test suite via [Travis CI](https://travis-ci.org/timescale/timescaledb)
+run against our test suite via [Github Actions](https://github.com/timescale/timescaledb/actions)
 (that link shows the latest build status of the repository).
 
 ## Advanced Topics
