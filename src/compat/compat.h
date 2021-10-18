@@ -435,4 +435,12 @@ get_reindex_options(ReindexStmt *stmt)
 #define raw_parser_compat(cmd) raw_parser(cmd, RAW_PARSE_DEFAULT)
 #endif
 
+#if PG14_LT
+#define expand_function_arguments_compat(args, result_type, func_tuple)                            \
+	expand_function_arguments(args, result_type, func_tuple)
+#else
+#define expand_function_arguments_compat(args, result_type, func_tuple)                            \
+	expand_function_arguments(args, false, result_type, func_tuple)
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */

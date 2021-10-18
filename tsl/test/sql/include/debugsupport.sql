@@ -3,4 +3,4 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 CREATE OR REPLACE FUNCTION test.tsl_override_current_timestamptz(new_value TIMESTAMPTZ)
-RETURNS VOID AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz' LANGUAGE C VOLATILE STRICT;
+RETURNS VOID AS :TSL_MODULE_PATHNAME, 'ts_test_override_current_timestamptz' LANGUAGE C VOLATILE;

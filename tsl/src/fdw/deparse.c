@@ -96,15 +96,13 @@ typedef struct foreign_glob_cxt
  */
 typedef struct deparse_expr_cxt
 {
-	PlannerInfo *root;		 /* global planner state */
-	RelOptInfo *foreignrel;  /* the foreign relation we are planning for */
-	RelOptInfo *scanrel;	 /* the underlying scan relation. Same as
-							  * foreignrel, when that represents a join or
-							  * a base relation. */
-	StringInfo buf;			 /* output buffer to append to */
-	List **params_list;		 /* exprs that will become remote Params */
-	List **current_time_idx; /* locations in the sql output that need to
-							  * have the current time appended */
+	PlannerInfo *root;		/* global planner state */
+	RelOptInfo *foreignrel; /* the foreign relation we are planning for */
+	RelOptInfo *scanrel;	/* the underlying scan relation. Same as
+							 * foreignrel, when that represents a join or
+							 * a base relation. */
+	StringInfo buf;			/* output buffer to append to */
+	List **params_list;		/* exprs that will become remote Params */
 	DataNodeChunkAssignment *sca;
 } deparse_expr_cxt;
 
@@ -732,8 +730,8 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
  * For a base relation fpinfo->attrs_used is used to construct SELECT clause,
  * hence the tlist is ignored for a base relation.
  *
- * remote_conds is the list of conditions to be deparsed into the WHERE clause
- * (or, in the case of upper relations, into the HAVING clause).
+ * remote_where is the list of conditions to be deparsed into the WHERE clause,
+ * and remote_having into the HAVING clause (this is useful for upper relations).
  *
  * If params_list is not NULL, it receives a list of Params and other-relation
  * Vars used in the clauses; these values must be transmitted to the data
@@ -751,13 +749,11 @@ build_tlist_to_deparse(RelOptInfo *foreignrel)
  */
 void
 deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List *tlist,
-						List *remote_conds, List *pathkeys, bool is_subquery,
-						List **retrieved_attrs, List **params_list, DataNodeChunkAssignment *sca,
-						List **current_time_idx)
+						List *remote_where, List *remote_having, List *pathkeys, bool is_subquery,
+						List **retrieved_attrs, List **params_list, DataNodeChunkAssignment *sca)
 {
 	deparse_expr_cxt context;
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
-	List *quals;
 
 	/*
 	 * We handle relations for foreign tables, joins between those and upper
@@ -771,29 +767,13 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 	context.foreignrel = rel;
 	context.scanrel = IS_UPPER_REL(rel) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
-	context.current_time_idx = current_time_idx;
 	context.sca = sca;
 
 	/* Construct SELECT clause */
 	deparseSelectSql(tlist, is_subquery, retrieved_attrs, &context);
 
-	/*
-	 * For upper relations, the WHERE clause is built from the remote
-	 * conditions of the underlying scan relation; otherwise, we can use the
-	 * supplied list of remote conditions directly.
-	 */
-	if (IS_UPPER_REL(rel))
-	{
-		TsFdwRelInfo *ofpinfo;
-
-		ofpinfo = fdw_relinfo_get(fpinfo->outerrel);
-		quals = ofpinfo->remote_conds;
-	}
-	else
-		quals = remote_conds;
-
 	/* Construct FROM and WHERE clauses */
-	deparseFromExpr(quals, &context);
+	deparseFromExpr(remote_where, &context);
 
 	if (IS_UPPER_REL(rel))
 	{
@@ -801,10 +781,10 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 		appendGroupByClause(tlist, &context);
 
 		/* Append HAVING clause */
-		if (remote_conds)
+		if (remote_having)
 		{
 			appendStringInfoString(buf, " HAVING ");
-			appendConditions(remote_conds, &context, true);
+			appendConditions(remote_having, &context, true);
 		}
 	}
 
@@ -2952,14 +2932,6 @@ appendFunctionName(Oid funcid, deparse_expr_cxt *context)
 	}
 
 	proname = NameStr(procform->proname);
-
-	/*
-	 * If the function is the 'now' function, we'll have to replace it before pushing
-	 * it down to the data node.  For now just make a note of the index at which we're
-	 * inserting it into the sql statement.
-	 */
-	if (funcid == F_NOW && context->current_time_idx)
-		*context->current_time_idx = lappend_int(*context->current_time_idx, buf->len);
 
 	/* Always print the function name */
 	appendStringInfoString(buf, quote_identifier(proname));

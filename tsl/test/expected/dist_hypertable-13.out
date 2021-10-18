@@ -5246,6 +5246,373 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 DROP TABLE test;
+-- Test that stable functions are calculated on the access node.
+--
+-- As a stable function to test, use the timestamp -> timestamptz conversion
+-- that is stable because it uses the current timezone.
+-- We have to be careful about `timestamp < timestamptz` comparison. From postgres
+-- docs:
+--  When comparing a timestamp without time zone to a timestamp with time zone,
+--  the former value is assumed to be given in the time zone specified by the
+--  TimeZone configuration parameter, and is rotated to UTC for comparison to
+--  the latter value (which is already in UTC internally).
+-- We don't want this to happen on data node, so we cast the filter value to
+-- timestamp, and check that this cast happens on the access node and uses the
+-- current timezone.
+SELECT test.tsl_override_current_timestamptz(null);
+ tsl_override_current_timestamptz 
+----------------------------------
+ 
+(1 row)
+
+CREATE TABLE test_tz (time timestamp, v int);
+SELECT create_distributed_hypertable('test_tz','time',
+	chunk_time_interval => interval '1 hour');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (31,public,test_tz,t)
+(1 row)
+
+INSERT INTO test_tz VALUES ('2018-01-02 12:00:00', 2), ('2018-01-02 11:00:00', 1),
+	('2018-01-02 13:00:00', 3), ('2018-01-02 14:00:00', 4);
+SET TIME ZONE 'Etc/GMT';
+SELECT '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+        timestamp         
+--------------------------
+ Tue Jan 02 12:00:00 2018
+(1 row)
+
+-- Normal WHERE clause on baserel
+SELECT * FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+           time           | v 
+--------------------------+---
+ Tue Jan 02 13:00:00 2018 | 3
+ Tue Jan 02 14:00:00 2018 | 4
+(2 rows)
+
+EXPLAIN (verbose, costs off)
+SELECT * FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: test_tz."time", test_tz.v
+   ->  Append
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_1
+               Output: test_tz_1."time", test_tz_1.v
+               Data node: db_dist_hypertable_1
+               Chunks: _dist_hyper_31_97_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[45]) AND (("time" > '2018-01-02 12:00:00'::timestamp without time zone))
+               Remote EXPLAIN: 
+                 Index Scan using _dist_hyper_31_97_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_97_chunk
+                   Output: _dist_hyper_31_97_chunk."time", _dist_hyper_31_97_chunk.v
+                   Index Cond: (_dist_hyper_31_97_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+ 
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_2
+               Output: test_tz_2."time", test_tz_2.v
+               Data node: db_dist_hypertable_2
+               Chunks: _dist_hyper_31_95_chunk, _dist_hyper_31_96_chunk, _dist_hyper_31_98_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[43, 44, 45]) AND (("time" > '2018-01-02 12:00:00'::timestamp without time zone))
+               Remote EXPLAIN: 
+                 Append
+                   ->  Index Scan using _dist_hyper_31_95_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_95_chunk
+                         Output: _dist_hyper_31_95_chunk."time", _dist_hyper_31_95_chunk.v
+                         Index Cond: (_dist_hyper_31_95_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+                   ->  Index Scan using _dist_hyper_31_98_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_98_chunk
+                         Output: _dist_hyper_31_98_chunk."time", _dist_hyper_31_98_chunk.v
+                         Index Cond: (_dist_hyper_31_98_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+ 
+(27 rows)
+
+-- Also test different code paths used with aggregation pushdown.
+SELECT count(*) FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+ count 
+-------
+     2
+(1 row)
+
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+                                                                                                   QUERY PLAN                                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: count(*)
+   ->  Custom Scan (AsyncAppend)
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_1
+                     Data node: db_dist_hypertable_1
+                     Chunks: _dist_hyper_31_97_chunk
+                     Remote SQL: SELECT NULL FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[45]) AND (("time" > '2018-01-02 12:00:00'::timestamp without time zone))
+                     Remote EXPLAIN: 
+                       Result
+                         Output: NULL::text
+                         ->  Index Only Scan using _dist_hyper_31_97_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_97_chunk
+                               Index Cond: (_dist_hyper_31_97_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+ 
+               ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_2
+                     Data node: db_dist_hypertable_2
+                     Chunks: _dist_hyper_31_95_chunk, _dist_hyper_31_96_chunk, _dist_hyper_31_98_chunk
+                     Remote SQL: SELECT NULL FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[43, 44, 45]) AND (("time" > '2018-01-02 12:00:00'::timestamp without time zone))
+                     Remote EXPLAIN: 
+                       Result
+                         Output: NULL::text
+                         ->  Append
+                               ->  Index Only Scan using _dist_hyper_31_95_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_95_chunk
+                                     Index Cond: (_dist_hyper_31_95_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+                               ->  Index Only Scan using _dist_hyper_31_98_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_98_chunk
+                                     Index Cond: (_dist_hyper_31_98_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+ 
+(27 rows)
+
+-- TODO: test HAVING here and in the later now() tests as well.
+-- Change the timezone and check that the conversion is applied correctly.
+SET TIME ZONE 'Etc/GMT+1';
+SELECT '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+        timestamp         
+--------------------------
+ Tue Jan 02 11:00:00 2018
+(1 row)
+
+SELECT * FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+           time           | v 
+--------------------------+---
+ Tue Jan 02 13:00:00 2018 | 3
+ Tue Jan 02 12:00:00 2018 | 2
+ Tue Jan 02 14:00:00 2018 | 4
+(3 rows)
+
+EXPLAIN (verbose, costs off)
+SELECT * FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: test_tz."time", test_tz.v
+   ->  Append
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_1
+               Output: test_tz_1."time", test_tz_1.v
+               Data node: db_dist_hypertable_1
+               Chunks: _dist_hyper_31_97_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[45]) AND (("time" > '2018-01-02 11:00:00'::timestamp without time zone))
+               Remote EXPLAIN: 
+                 Index Scan using _dist_hyper_31_97_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_97_chunk
+                   Output: _dist_hyper_31_97_chunk."time", _dist_hyper_31_97_chunk.v
+                   Index Cond: (_dist_hyper_31_97_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+ 
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_2
+               Output: test_tz_2."time", test_tz_2.v
+               Data node: db_dist_hypertable_2
+               Chunks: _dist_hyper_31_95_chunk, _dist_hyper_31_96_chunk, _dist_hyper_31_98_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[43, 44, 45]) AND (("time" > '2018-01-02 11:00:00'::timestamp without time zone))
+               Remote EXPLAIN: 
+                 Append
+                   ->  Index Scan using _dist_hyper_31_95_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_95_chunk
+                         Output: _dist_hyper_31_95_chunk."time", _dist_hyper_31_95_chunk.v
+                         Index Cond: (_dist_hyper_31_95_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+                   ->  Index Scan using _dist_hyper_31_96_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_96_chunk
+                         Output: _dist_hyper_31_96_chunk."time", _dist_hyper_31_96_chunk.v
+                         Index Cond: (_dist_hyper_31_96_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+                   ->  Index Scan using _dist_hyper_31_98_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_98_chunk
+                         Output: _dist_hyper_31_98_chunk."time", _dist_hyper_31_98_chunk.v
+                         Index Cond: (_dist_hyper_31_98_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+ 
+(30 rows)
+
+SELECT count(*) FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+ count 
+-------
+     3
+(1 row)
+
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM test_tz WHERE time > '2018-01-02 12:00:00 +00'::timestamptz::timestamp;
+                                                                                                   QUERY PLAN                                                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: count(*)
+   ->  Custom Scan (AsyncAppend)
+         ->  Append
+               ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_1
+                     Data node: db_dist_hypertable_1
+                     Chunks: _dist_hyper_31_97_chunk
+                     Remote SQL: SELECT NULL FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[45]) AND (("time" > '2018-01-02 11:00:00'::timestamp without time zone))
+                     Remote EXPLAIN: 
+                       Result
+                         Output: NULL::text
+                         ->  Index Only Scan using _dist_hyper_31_97_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_97_chunk
+                               Index Cond: (_dist_hyper_31_97_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+ 
+               ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_2
+                     Data node: db_dist_hypertable_2
+                     Chunks: _dist_hyper_31_95_chunk, _dist_hyper_31_96_chunk, _dist_hyper_31_98_chunk
+                     Remote SQL: SELECT NULL FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[43, 44, 45]) AND (("time" > '2018-01-02 11:00:00'::timestamp without time zone))
+                     Remote EXPLAIN: 
+                       Result
+                         Output: NULL::text
+                         ->  Append
+                               ->  Index Only Scan using _dist_hyper_31_95_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_95_chunk
+                                     Index Cond: (_dist_hyper_31_95_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+                               ->  Index Only Scan using _dist_hyper_31_96_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_96_chunk
+                                     Index Cond: (_dist_hyper_31_96_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+                               ->  Index Only Scan using _dist_hyper_31_98_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_98_chunk
+                                     Index Cond: (_dist_hyper_31_98_chunk."time" > '2018-01-02 11:00:00'::timestamp without time zone)
+ 
+(29 rows)
+
+-- Conversion to timestamptz cannot be evaluated at the access node, because the
+-- argument is a column reference.
+SELECT count(*) FROM test_tz WHERE time::timestamptz > now();
+ count 
+-------
+     0
+(1 row)
+
+-- According to our docs, JIT is not recommended for use on access node in
+-- multi-node environment. Turn it off so that it doesn't ruin EXPLAIN for the
+-- next query.
+SET jit = 0;
+-- Test that operators are evaluated as well. Comparison of timestamp with
+-- timestamptz is a stable operator, and comparison of two timestamps is an
+-- immutable operator. This also test that immutable functions using these
+-- operators as arguments are evaluated.
+EXPLAIN (verbose, costs off)
+WITH dummy AS (SELECT '2018-01-02 12:00:00 +00'::timestamptz::timestamp x)
+SELECT * FROM test_tz, dummy
+WHERE time > x
+	+ (x = x)::int -- stable
+		* (x = '2018-01-02 11:00:00'::timestamp)::int -- immutable
+		* INTERVAL '1 hour';
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: test_tz."time", test_tz.v, (('Tue Jan 02 11:00:00 2018 -01'::timestamp with time zone)::timestamp without time zone)
+   ->  Append
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_1
+               Output: test_tz_1."time", test_tz_1.v, ('Tue Jan 02 11:00:00 2018 -01'::timestamp with time zone)::timestamp without time zone
+               Data node: db_dist_hypertable_1
+               Chunks: _dist_hyper_31_97_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[45]) AND (("time" > '2018-01-02 12:00:00'::timestamp without time zone))
+               Remote EXPLAIN: 
+                 Index Scan using _dist_hyper_31_97_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_97_chunk
+                   Output: _dist_hyper_31_97_chunk."time", _dist_hyper_31_97_chunk.v
+                   Index Cond: (_dist_hyper_31_97_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+ 
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_2
+               Output: test_tz_2."time", test_tz_2.v, ('Tue Jan 02 11:00:00 2018 -01'::timestamp with time zone)::timestamp without time zone
+               Data node: db_dist_hypertable_2
+               Chunks: _dist_hyper_31_95_chunk, _dist_hyper_31_96_chunk, _dist_hyper_31_98_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[43, 44, 45]) AND (("time" > '2018-01-02 12:00:00'::timestamp without time zone))
+               Remote EXPLAIN: 
+                 Append
+                   ->  Index Scan using _dist_hyper_31_95_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_95_chunk
+                         Output: _dist_hyper_31_95_chunk."time", _dist_hyper_31_95_chunk.v
+                         Index Cond: (_dist_hyper_31_95_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+                   ->  Index Scan using _dist_hyper_31_98_chunk_test_tz_time_idx on _timescaledb_internal._dist_hyper_31_98_chunk
+                         Output: _dist_hyper_31_98_chunk."time", _dist_hyper_31_98_chunk.v
+                         Index Cond: (_dist_hyper_31_98_chunk."time" > '2018-01-02 12:00:00'::timestamp without time zone)
+ 
+(27 rows)
+
+-- Reference value for the above test.
+WITH dummy AS (SELECT '2018-01-02 12:00:00 +00'::timestamptz::timestamp x)
+SELECT x + (x = x)::int * (x = '2018-01-02 11:00:00'::timestamp)::int * INTERVAL '1 hour'
+FROM dummy;
+         ?column?         
+--------------------------
+ Tue Jan 02 12:00:00 2018
+(1 row)
+
+-- Check that the test function for partly overriding now() works. It's very
+-- hacky and only has effect when we estimate some costs or evaluate sTABLE
+-- functions in quals on access node, and has no effect in other cases.
+-- Consider deleting it altogether.
+SELECT test.tsl_override_current_timestamptz('2018-01-02 12:00:00 +00'::timestamptz);
+ tsl_override_current_timestamptz 
+----------------------------------
+ 
+(1 row)
+
+SELECT count(*) FROM test_tz WHERE time > now();
+ count 
+-------
+     3
+(1 row)
+
+SELECT test.tsl_override_current_timestamptz(null);
+ tsl_override_current_timestamptz 
+----------------------------------
+ 
+(1 row)
+
+RESET TIME ZONE;
+DROP TABLE test_tz;
+-- Check that now() is evaluated on the access node. Also check that it is evaluated
+-- anew on every execution of a prepared statement.
+CREATE TABLE test_now (time timestamp, v int);
+SELECT create_distributed_hypertable('test_now','time',
+	chunk_time_interval => interval '1 hour');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (32,public,test_now,t)
+(1 row)
+
+PREPARE test_query as
+SELECT count(*) FILTER (WHERE time = now()), count(*) FILTER (WHERE time < now()),
+	count(*) FILTER (WHERE time > now()) FROM test_now;
+;
+BEGIN; -- to fix the value of now();
+INSERT INTO test_now VALUES
+	(now(), 1), (now() + INTERVAL '1 hour', 1),
+	(now() + INTERVAL '2 hour', 2 ), (now() + INTERVAL '3 hour', 3);
+SELECT count(*) FILTER (WHERE time = now()), count(*) FILTER (WHERE time < now()),
+	count(*) FILTER (WHERE time > now()) FROM test_now;
+ count | count | count 
+-------+-------+-------
+     1 |     0 |     3
+(1 row)
+
+EXECUTE test_query;
+ count | count | count 
+-------+-------+-------
+     1 |     0 |     3
+(1 row)
+
+-- Also test different code paths used with aggregation pushdown.
+-- We can't run EXPLAIN here, because now() is different every time. But the
+-- strict equality should be enough to detect if now() is being erroneously
+-- evaluated on data node, where it will differ from time to time.
+SELECT count(*) FROM test_now WHERE time = now();
+ count 
+-------
+     1
+(1 row)
+
+COMMIT;
+-- now() will be different in a new transaction.
+BEGIN;
+SELECT count(*) FILTER (WHERE time = now()), count(*) FILTER (WHERE time < now()),
+	count(*) FILTER (WHERE time > now()) FROM test_now;
+ count | count | count 
+-------+-------+-------
+     0 |     1 |     3
+(1 row)
+
+EXECUTE test_query;
+ count | count | count 
+-------+-------+-------
+     0 |     1 |     3
+(1 row)
+
+SELECT count(*) FROM test_now WHERE time = now();
+ count 
+-------
+     0
+(1 row)
+
+COMMIT;
+DROP TABLE test_now;
+DEALLOCATE test_query;
+-- Cleanup
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;

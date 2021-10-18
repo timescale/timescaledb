@@ -15,6 +15,8 @@
 #include <optimizer/tlist.h>
 #include <optimizer/paths.h>
 #include <utils/builtins.h>
+#include <utils/fmgroids.h>
+#include <utils/syscache.h>
 #include <utils/lsyscache.h>
 #include <utils/selfuncs.h>
 #include <miscadmin.h>
@@ -30,6 +32,7 @@
 #include "scan_plan.h"
 #include "debug.h"
 #include "fdw_utils.h"
+#include "scan_exec.h"
 
 /*
  * get_useful_pathkeys_for_relation
@@ -173,15 +176,274 @@ fdw_add_upper_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Pa
 	add_paths_with_pathkeys_for_rel(root, rel, epq_path, NULL, create_upper_path);
 }
 
+typedef struct
+{
+	ParamListInfo boundParams;
+	PlannerInfo *root;
+	List *active_fns;
+	Node *case_val;
+	bool estimate;
+} eval_stable_functions_context;
+
+static Node *eval_stable_functions_mutator(Node *node, void *context);
+
+static Expr *
+evaluate_stable_function(Oid funcid, Oid result_type, int32 result_typmod, Oid result_collid,
+						 Oid input_collid, List *args, bool funcvariadic, Form_pg_proc funcform)
+{
+	bool has_nonconst_input = false;
+	bool has_null_input = false;
+	ListCell *arg;
+	FuncExpr *newexpr;
+
+#ifdef TS_DEBUG
+	/* Allow tests to specify the time to push down in place of now() */
+	if (funcid == F_NOW && ts_current_timestamp_override_value != -1)
+	{
+		return (Expr *) makeConst(TIMESTAMPTZOID,
+								  -1,
+								  InvalidOid,
+								  sizeof(TimestampTz),
+								  TimestampTzGetDatum(ts_current_timestamp_override_value),
+								  false,
+								  FLOAT8PASSBYVAL);
+	}
+#endif
+
+	/*
+	 * Can't simplify if it returns a set or a RECORD. See the comments for
+	 * eval_const_expressions(). We should only see the whitelisted functions
+	 * here, no sets or RECORDS among them.
+	 */
+	Assert(!funcform->proretset);
+	Assert(funcform->prorettype != RECORDOID);
+
+	/*
+	 * Check for constant inputs and especially constant-NULL inputs.
+	 */
+	foreach (arg, args)
+	{
+		if (IsA(lfirst(arg), Const))
+			has_null_input |= ((Const *) lfirst(arg))->constisnull;
+		else
+			has_nonconst_input = true;
+	}
+
+	/*
+	 * The simplification of strict functions with constant NULL inputs must
+	 * have been already performed by eval_const_expressions().
+	 */
+	Assert(!(funcform->proisstrict && has_null_input));
+
+	/*
+	 * Otherwise, can simplify only if all inputs are constants. (For a
+	 * non-strict function, constant NULL inputs are treated the same as
+	 * constant non-NULL inputs.)
+	 */
+	if (has_nonconst_input)
+		return NULL;
+
+	/*
+	 * This is called on the access node for the expressions that will be pushed
+	 * down to data nodes. These expressions can contain only whitelisted stable
+	 * functions, so we shouldn't see volatile functions here. Immutable
+	 * functions can also occur here for expressions like
+	 * `immutable(stable(....))`, after we evaluate the stable function.
+	 */
+	Assert(funcform->provolatile != PROVOLATILE_VOLATILE);
+
+	/*
+	 * OK, looks like we can simplify this operator/function.
+	 *
+	 * Build a new FuncExpr node containing the already-simplified arguments.
+	 */
+	newexpr = makeNode(FuncExpr);
+	newexpr->funcid = funcid;
+	newexpr->funcresulttype = result_type;
+	newexpr->funcretset = false;
+	newexpr->funcvariadic = funcvariadic;
+	newexpr->funcformat = COERCE_EXPLICIT_CALL; /* doesn't matter */
+	newexpr->funccollid = result_collid;		/* doesn't matter */
+	newexpr->inputcollid = input_collid;
+	newexpr->args = args;
+	newexpr->location = -1;
+
+	return evaluate_expr((Expr *) newexpr, result_type, result_typmod, result_collid);
+}
+
+/*
+ * Execute the function to deliver a constant result.
+ */
+static Expr *
+simplify_stable_function(Oid funcid, Oid result_type, int32 result_typmod, Oid result_collid,
+						 Oid input_collid, List **args_p, bool funcvariadic)
+{
+	List *args = *args_p;
+	HeapTuple func_tuple;
+	Form_pg_proc funcform;
+	Expr *newexpr;
+
+	func_tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
+	if (!HeapTupleIsValid(func_tuple))
+		elog(ERROR, "cache lookup failed for function %u", funcid);
+	funcform = (Form_pg_proc) GETSTRUCT(func_tuple);
+
+	/*
+	 * Process the function arguments. Here we must deal with named or defaulted
+	 * arguments, and then recursively apply eval_stable_functions to the whole
+	 * argument list.
+	 */
+	args = expand_function_arguments_compat(args, result_type, func_tuple);
+	args = (List *) expression_tree_mutator((Node *) args, eval_stable_functions_mutator, NULL);
+	/* Argument processing done, give it back to the caller */
+	*args_p = args;
+
+	/* Now attempt simplification of the function call proper. */
+	newexpr = evaluate_stable_function(funcid,
+									   result_type,
+									   result_typmod,
+									   result_collid,
+									   input_collid,
+									   args,
+									   funcvariadic,
+									   funcform);
+
+	ReleaseSysCache(func_tuple);
+
+	return newexpr;
+}
+
+/*
+ * Recursive guts of eval_stable_functions.
+ * We don't use 'context' here but it is required by the signature of
+ * expression_tree_mutator.
+ */
+static Node *
+eval_stable_functions_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+		return NULL;
+	switch (nodeTag(node))
+	{
+		case T_FuncExpr:
+		{
+			FuncExpr *expr = (FuncExpr *) node;
+			List *args = expr->args;
+			Expr *simple;
+			FuncExpr *newexpr;
+
+			/*
+			 * Code for op/func reduction is pretty bulky, so split it out
+			 * as a separate function.  Note: exprTypmod normally returns
+			 * -1 for a FuncExpr, but not when the node is recognizably a
+			 * length coercion; we want to preserve the typmod in the
+			 * eventual Const if so.
+			 */
+			simple = simplify_stable_function(expr->funcid,
+											  expr->funcresulttype,
+											  exprTypmod(node),
+											  expr->funccollid,
+											  expr->inputcollid,
+											  &args,
+											  expr->funcvariadic);
+			if (simple) /* successfully simplified it */
+				return (Node *) simple;
+
+			/*
+			 * The expression cannot be simplified any further, so build
+			 * and return a replacement FuncExpr node using the
+			 * possibly-simplified arguments.  Note that we have also
+			 * converted the argument list to positional notation.
+			 */
+			newexpr = makeNode(FuncExpr);
+			newexpr->funcid = expr->funcid;
+			newexpr->funcresulttype = expr->funcresulttype;
+			newexpr->funcretset = expr->funcretset;
+			newexpr->funcvariadic = expr->funcvariadic;
+			newexpr->funcformat = expr->funcformat;
+			newexpr->funccollid = expr->funccollid;
+			newexpr->inputcollid = expr->inputcollid;
+			newexpr->args = args;
+			newexpr->location = expr->location;
+			return (Node *) newexpr;
+		}
+		case T_OpExpr:
+		{
+			OpExpr *expr = (OpExpr *) node;
+			List *args = expr->args;
+			Expr *simple;
+			OpExpr *newexpr;
+
+			/*
+			 * Need to get OID of underlying function.  Okay to scribble
+			 * on input to this extent.
+			 */
+			set_opfuncid(expr);
+
+			/*
+			 * Code for op/func reduction is pretty bulky, so split it out
+			 * as a separate function.
+			 */
+			simple = simplify_stable_function(expr->opfuncid,
+											  expr->opresulttype,
+											  -1,
+											  expr->opcollid,
+											  expr->inputcollid,
+											  &args,
+											  false);
+			if (simple) /* successfully simplified it */
+				return (Node *) simple;
+
+			/*
+			 * The expression cannot be simplified any further, so build
+			 * and return a replacement OpExpr node using the
+			 * possibly-simplified arguments.
+			 */
+			newexpr = makeNode(OpExpr);
+			newexpr->opno = expr->opno;
+			newexpr->opfuncid = expr->opfuncid;
+			newexpr->opresulttype = expr->opresulttype;
+			newexpr->opretset = expr->opretset;
+			newexpr->opcollid = expr->opcollid;
+			newexpr->inputcollid = expr->inputcollid;
+			newexpr->args = args;
+			newexpr->location = expr->location;
+			return (Node *) newexpr;
+		}
+		default:
+			break;
+	}
+	/*
+	 * For any node type not handled above, copy the node unchanged but
+	 * const-simplify its subexpressions.  This is the correct thing for node
+	 * types whose behavior might change between planning and execution, such
+	 * as CurrentOfExpr.  It's also a safe default for new node types not
+	 * known to this routine.
+	 */
+	return expression_tree_mutator((Node *) node, eval_stable_functions_mutator, NULL);
+}
+
+/*
+ * Try to evaluate stable functions and operators on the access node. This
+ * function is similar to eval_const_expressions, but much simpler, because it
+ * only evaluates the functions and doesn't have to perform any additional
+ * canonicalizations.
+ */
+static Node *
+eval_stable_functions(PlannerInfo *root, Node *node)
+{
+	return eval_stable_functions_mutator(node, NULL);
+}
+
 void
 fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path *best_path,
 				   List *scan_clauses)
 {
 	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
-	List *remote_exprs = NIL;
+	List *remote_where = NIL;
+	List *remote_having = NIL;
 	List *local_exprs = NIL;
 	List *params_list = NIL;
-	List *current_time_idx = NIL;
 	List *fdw_scan_tlist = NIL;
 	List *fdw_recheck_quals = NIL;
 	List *retrieved_attrs;
@@ -225,11 +487,11 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 				continue;
 
 			if (list_member_ptr(fpinfo->remote_conds, rinfo))
-				remote_exprs = lappend(remote_exprs, rinfo->clause);
+				remote_where = lappend(remote_where, rinfo->clause);
 			else if (list_member_ptr(fpinfo->local_conds, rinfo))
 				local_exprs = lappend(local_exprs, rinfo->clause);
 			else if (is_foreign_expr(root, rel, rinfo->clause))
-				remote_exprs = lappend(remote_exprs, rinfo->clause);
+				remote_where = lappend(remote_where, rinfo->clause);
 			else
 				local_exprs = lappend(local_exprs, rinfo->clause);
 		}
@@ -238,7 +500,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 		 * For a base-relation scan, we have to support EPQ recheck, which
 		 * should recheck all the remote quals.
 		 */
-		fdw_recheck_quals = remote_exprs;
+		fdw_recheck_quals = remote_where;
 	}
 	else if (IS_JOIN_REL(rel))
 	{
@@ -263,8 +525,13 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 		/*
 		 * Instead we get the conditions to apply from the fdw_private
 		 * structure.
+		 * For upper relations, the WHERE clause is built from the remote
+		 * conditions of the underlying scan relation.
 		 */
-		remote_exprs = extract_actual_clauses(fpinfo->remote_conds, false);
+		TsFdwRelInfo *ofpinfo;
+		ofpinfo = fdw_relinfo_get(fpinfo->outerrel);
+		remote_where = extract_actual_clauses(ofpinfo->remote_conds, false);
+		remote_having = extract_actual_clauses(fpinfo->remote_conds, false);
 		local_exprs = extract_actual_clauses(fpinfo->local_conds, false);
 
 		/*
@@ -283,6 +550,19 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 	}
 
 	/*
+	 * Try to locally evaluate the stable functions such as now() before pushing
+	 * them to the remote node.
+	 * We have to do this at the execution stage as oppossed to the planning stage, because stable
+	 * functions must be recalculated with each execution of a prepared
+	 * statement.
+	 * Note that the query planner currently only pushes down to remote side
+	 * the whitelisted stable functions, see `function_is_whitelisted()`. So
+	 * this code only has to deal with such functions.
+	 */
+	remote_where = (List *) eval_stable_functions(root, (Node *) remote_where);
+	remote_having = (List *) eval_stable_functions(root, (Node *) remote_having);
+
+	/*
 	 * Build the query string to be sent for execution, and identify
 	 * expressions to be sent as parameters.
 	 */
@@ -291,16 +571,16 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 							root,
 							rel,
 							fdw_scan_tlist,
-							remote_exprs,
+							remote_where,
+							remote_having,
 							best_path->pathkeys,
 							false,
 							&retrieved_attrs,
 							&params_list,
-							fpinfo->sca,
-							&current_time_idx);
+							fpinfo->sca);
 
 	/* Remember remote_exprs for possible use by PlanDirectModify */
-	fpinfo->final_remote_exprs = remote_exprs;
+	fpinfo->final_remote_exprs = remote_where;
 
 	/*
 	 * Build the fdw_private list that will be available to the executor.
@@ -311,7 +591,6 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 							 makeInteger(fpinfo->fetch_size),
 							 makeInteger(fpinfo->server->serverid),
 							 (fpinfo->sca != NULL ? list_copy(fpinfo->sca->chunk_oids) : NIL));
-	fdw_private = lappend(fdw_private, current_time_idx);
 	Assert(!IS_JOIN_REL(rel));
 
 	if (IS_UPPER_REL(rel))
