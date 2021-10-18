@@ -70,6 +70,26 @@ make_compressed_scan_meta_targetentry(DecompressChunkPath *path, char *column_na
 	return makeTargetEntry((Expr *) scan_var, tle_index, NULL, false);
 }
 
+/*
+ * Find matching column attno for compressed chunk based on hypertable attno.
+ *
+ * Since we dont want aliasing to interfere we lookup directly in catalog
+ * instead of using RangeTblEntry.
+ */
+static AttrNumber
+get_compressed_attno(CompressionInfo *info, AttrNumber ht_attno)
+{
+	AttrNumber compressed_attno;
+	Assert(info->ht_rte);
+	char *chunk_col = get_attname(info->ht_rte->relid, ht_attno, false);
+	compressed_attno = get_attnum(info->compressed_rte->relid, chunk_col);
+
+	if (compressed_attno == InvalidAttrNumber)
+		elog(ERROR, "no matching column in compressed chunk found");
+
+	return compressed_attno;
+}
+
 static TargetEntry *
 make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno, int tle_index)
 {
