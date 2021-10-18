@@ -19,6 +19,10 @@ CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
 LANGUAGE C;
+CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], command text)
+RETURNS TABLE("record" CSTRING[])
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
+LANGUAGE C;
 SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
        node_name       |   host    | port  |       database        | node_created | database_created | extension_created 

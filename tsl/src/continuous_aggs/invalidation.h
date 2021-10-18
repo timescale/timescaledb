@@ -65,9 +65,9 @@ extern void remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 
 												 InternalTimeRange *ret_merged_refresh_window);
 
 extern Datum tsl_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS);
-extern void remote_hypertable_invalidation_log_delete(int32 raw_hypertable_id);
+extern void remote_invalidation_log_delete(int32 raw_hypertable_id,
+										   ContinuousAggHypertableStatus caggstatus);
 extern Datum tsl_materialization_invalidation_log_delete(PG_FUNCTION_ARGS);
-extern void remote_materialization_invalidation_log_delete(int32 raw_hypertable_id);
 extern Datum tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS);
 extern void remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id);
 

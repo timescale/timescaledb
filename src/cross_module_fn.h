@@ -103,8 +103,8 @@ typedef struct CrossModuleFunctions
 	void (*remote_invalidation_log_add_entry)(Hypertable *raw_ht,
 											  ContinuousAggHypertableStatus caggstatus,
 											  int32 entry_id, int64 start, int64 end);
-	void (*remote_hypertable_invalidation_log_delete)(int32 raw_hypertable_id);
-	void (*remote_materialization_invalidation_log_delete)(int32 raw_hypertable_id);
+	void (*remote_invalidation_log_delete)(int32 raw_hypertable_id,
+										   ContinuousAggHypertableStatus caggstatus);
 	PGFunction drop_dist_ht_invalidation_trigger;
 	void (*remote_drop_dist_ht_invalidation_trigger)(int32 raw_hypertable_id);
 	PGFunction invalidation_process_hypertable_log;

@@ -17,5 +17,3 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_hyper_log_add_entry;
 DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_process_cagg_log;
 DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_process_hypertable_log;
 DROP FUNCTION IF EXISTS _timescaledb_internal.materialization_invalidation_log_delete;
-
-DROP FUNCTION IF EXISTS test.remote_exec_get_result_strings;

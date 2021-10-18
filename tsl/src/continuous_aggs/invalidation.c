@@ -235,7 +235,7 @@ remote_invalidation_log_add_entry(Hypertable *raw_ht, ContinuousAggHypertableSta
 
 	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
 
-	Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
+	const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString((caggstatus == HypertableIsMaterialization) ?
 												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
@@ -1115,7 +1115,7 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 									 &bucket_widths,
 									 &max_bucket_widths);
 
-	Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
+	const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
 		INT4OID, INT4OID, OIDOID, INT4OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
 	};
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
@@ -1321,9 +1321,10 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 									 &bucket_widths,
 									 &max_bucket_widths);
 
-	Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = { INT4OID,	  INT4OID,		 OIDOID,
-														 INT8OID,	  INT8OID,		 INT4OID,
-														 INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID };
+	const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
+		INT4OID, INT4OID,	  OIDOID,		 INT8OID,	 INT8OID,
+		INT4OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
+	};
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString(INVALIDATION_PROCESS_CAGG_LOG_FUNCNAME));
 
@@ -1412,53 +1413,12 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	}
 }
 
-#define HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS 1
+#define INVALIDATION_LOG_DELETE_NARGS 1
 #define HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME "hypertable_invalidation_log_delete"
-
-void
-remote_hypertable_invalidation_log_delete(int32 raw_hypertable_id)
-{
-	/* Execute on all data nodes if there are any */
-	List *data_nodes = data_node_get_node_name_list();
-	if (NIL == data_nodes)
-		return;
-
-	Oid func_oid;
-	LOCAL_FCINFO(fcinfo, HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS);
-	FmgrInfo flinfo;
-
-	Oid type_id[HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));
-
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
-	Assert(InvalidOid != func_oid);
-
-	fmgr_info(func_oid, &flinfo);
-	InitFunctionCallInfoData(*fcinfo,
-							 &flinfo,
-							 HYPERTABLE_INVALIDATION_LOG_DELETE_NARGS,
-							 InvalidOid,
-							 NULL,
-							 NULL);
-
-	FC_NULL(fcinfo, 0) = false;
-	FC_ARG(fcinfo, 0) = Int32GetDatum(raw_hypertable_id);
-	/* Check for null result, since caller is clearly not expecting one */
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	DistCmdResult *result;
-	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
-	if (result)
-		ts_dist_cmd_close_response(result);
-}
-
-#define MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS 1
 #define MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME "materialization_invalidation_log_delete"
 
 void
-remote_materialization_invalidation_log_delete(int32 raw_hypertable_id)
+remote_invalidation_log_delete(int32 raw_hypertable_id, ContinuousAggHypertableStatus caggstatus)
 {
 	/* Execute on all data nodes if there are any */
 	List *data_nodes = data_node_get_node_name_list();
@@ -1466,12 +1426,16 @@ remote_materialization_invalidation_log_delete(int32 raw_hypertable_id)
 		return;
 
 	Oid func_oid;
-	LOCAL_FCINFO(fcinfo, MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS);
+	LOCAL_FCINFO(fcinfo, INVALIDATION_LOG_DELETE_NARGS);
 	FmgrInfo flinfo;
 
-	Oid type_id[MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
+	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
+
+	const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
-								 makeString(MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME));
+								 makeString((caggstatus == HypertableIsMaterialization) ?
+												MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
+												HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));
 
 	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
 	Assert(InvalidOid != func_oid);
@@ -1479,7 +1443,7 @@ remote_materialization_invalidation_log_delete(int32 raw_hypertable_id)
 	fmgr_info(func_oid, &flinfo);
 	InitFunctionCallInfoData(*fcinfo,
 							 &flinfo,
-							 MATERIALIZATION_INVALIDATION_LOG_DELETE_NARGS,
+							 INVALIDATION_LOG_DELETE_NARGS,
 							 InvalidOid,
 							 NULL,
 							 NULL);
@@ -1545,7 +1509,7 @@ remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id)
 	ListCell *cell;
 	Oid func_oid;
 
-	Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
+	const Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString(DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME));
 
