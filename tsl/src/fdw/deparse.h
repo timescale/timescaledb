@@ -47,9 +47,9 @@ extern void classify_conditions(PlannerInfo *root, RelOptInfo *baserel, List *in
 extern List *build_tlist_to_deparse(RelOptInfo *foreignrel);
 
 extern void deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List *tlist,
-									List *remote_conds, List *pathkeys, bool is_subquery,
-									List **retrieved_attrs, List **params_list,
-									DataNodeChunkAssignment *swa, List **current_time_idx);
+									List *remote_where, List *remote_having, List *pathkeys,
+									bool is_subquery, List **retrieved_attrs, List **params_list,
+									DataNodeChunkAssignment *swa);
 
 extern const char *get_jointype_name(JoinType jointype);
 extern void deparseStringLiteral(StringInfo buf, const char *val);

@@ -12,10 +12,13 @@ accidentally triggering the load of a previous DB version.**
 * #3661 Fix SkipScan path generation with constant DISTINCT column
 * #3708 Fix crash in get_aggsplit
 
+**Improvements**
+* #3598 Improve evaluation of stable functions such as now() on access node
+
 **Thanks**
 * @binakot and @sebvett for reporting an issue with DISTINCT queries
 * @hardikm10, @DavidPavlicek and @pafiti for reporting bugs on TRUNCATE
-* @phemmer for reporting an issue with aggregate queries on multinode
+* @phemmer for reporting the issues on multinode with aggregate queries and evaluation of now()
 
 ## 2.4.2 (2021-09-21)
 
