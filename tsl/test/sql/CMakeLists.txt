@@ -51,6 +51,7 @@ set(TEST_FILES_DEBUG
     dist_compression.sql
     dist_ddl.sql
     dist_grant.sql
+    dist_partial_agg.sql
     dist_policy.sql
     dist_query.sql
     dist_util.sql
@@ -76,7 +77,7 @@ set(TEST_TEMPLATES
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES continuous_aggs_query.sql.in
-       dist_partial_agg.sql.in dist_hypertable.sql.in remote_copy.sql.in)
+       dist_hypertable.sql.in remote_copy.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
