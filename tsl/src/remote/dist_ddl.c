@@ -15,6 +15,7 @@
 
 #include <annotations.h>
 #include <guc.h>
+#include "data_node.h"
 #include "hypertable_data_node.h"
 #include "chunk_index.h"
 #include "chunk_api.h"
@@ -23,6 +24,7 @@
 #include "remote/dist_commands.h"
 #include "remote/dist_ddl.h"
 #include "remote/connection_cache.h"
+#include "scan_iterator.h"
 #include "dist_util.h"
 
 /* DDL Query execution type */
@@ -221,11 +223,12 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	NodeTag tag = nodeTag(args->parsetree);
 	int hypertable_list_length = list_length(args->hypertable_list);
 	Cache *hcache;
-	Hypertable *ht;
+	Hypertable *ht = NULL;
 	Oid relid = InvalidOid;
 	unsigned int num_hypertables;
 	unsigned int num_dist_hypertables;
 	unsigned int num_dist_hypertable_members;
+	bool allow_dist = false;
 
 	/*
 	 * This function is executed for any Utility/DDL operation and for any
@@ -309,10 +312,86 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 				}
 				break;
 			}
+			case T_GrantStmt:
+			{
+				GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+
+				if (stmt->objtype == OBJECT_TABLE && stmt->targtype == ACL_TARGET_ALL_IN_SCHEMA)
+				{
+					bool exec_on_datanodes = false;
+					ListCell *cell;
+
+					/*
+					 * Check if there are any distributed hypertables in the schemas.
+					 * Otherwise no need to execute the query on the datanodes
+					 *
+					 * If more than one schemas are specified, then we ship the query
+					 * if any of the schemas contain distributed hypertables. It will
+					 * be the onus of the user to ensure that all schemas exist on the
+					 * datanodes as required. They can always call on an individual
+					 * schema one by one in that case.
+					 */
+					foreach (cell, stmt->objects)
+					{
+						char *nspname = strVal(lfirst(cell));
+
+						LookupExplicitNamespace(nspname, false);
+
+						/* no need to check further if any schema has distributed hypertables */
+						if (exec_on_datanodes)
+							break;
+
+						ScanIterator iterator = ts_scan_iterator_create(HYPERTABLE,
+																		AccessShareLock,
+																		CurrentMemoryContext);
+						ts_hypertable_scan_by_name(&iterator, nspname, NULL);
+						ts_scanner_foreach(&iterator)
+						{
+							FormData_hypertable fd;
+
+							TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+							ts_hypertable_formdata_fill(&fd, ti);
+
+							if (fd.replication_factor > 0)
+							{
+								exec_on_datanodes = true;
+								break;
+							}
+						}
+						ts_scan_iterator_close(&iterator);
+					}
+
+					if (exec_on_datanodes)
+					{
+						allow_dist = true;
+						set_dist_exec_type(DIST_DDL_EXEC_ON_START);
+						dist_ddl_state.data_node_list = data_node_get_node_name_list();
+					}
+				}
+
+				break;
+			}
 			/* Skip COPY here, since it has its own process path using
 			 * cross module API. */
 			case T_CopyStmt:
 				return;
+			default:
+				break;
+		}
+	}
+	else /* more than one hypertables */
+	{
+		switch (tag)
+		{
+			case T_GrantStmt:
+			{
+				GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+
+				if (stmt->objtype == OBJECT_TABLE)
+					allow_dist = true;
+
+				break;
+			}
 			default:
 				break;
 		}
@@ -345,14 +424,21 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	 * distributed. Otherwise this makes query_string unusable for remote
 	 * execution without deparsing.
 	 *
+	 * Also allow error only if "allow_dist" is not set.
+	 *
 	 * TODO: Support multiple tables inside statements.
 	 */
-	if (hypertable_list_length > 1)
+	if (hypertable_list_length > 1 && !allow_dist)
 		dist_ddl_error_raise_unsupported();
 
-	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_NONE);
-	Assert(ht != NULL);
-	Assert(hypertable_is_distributed(ht));
+	if (hypertable_list_length == 1)
+	{
+		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_NONE);
+		Assert(ht != NULL);
+		Assert(hypertable_is_distributed(ht));
+	}
+	else
+		Assert(allow_dist);
 
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
@@ -514,7 +600,12 @@ dist_ddl_preprocess(ProcessUtilityArgs *args)
 	 * during sql_drop and command_end triggers execution.
 	 */
 	if (dist_ddl_scheduled_for_execution())
-		dist_ddl_state.data_node_list = ts_hypertable_get_data_node_name_list(ht);
+	{
+		if (ht)
+			dist_ddl_state.data_node_list = ts_hypertable_get_data_node_name_list(ht);
+		else
+			dist_ddl_state.data_node_list = data_node_get_node_name_list();
+	}
 
 	ts_cache_release(hcache);
 }

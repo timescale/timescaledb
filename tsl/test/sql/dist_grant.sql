@@ -223,6 +223,82 @@ FROM generate_series('2019-01-01 00:00:00'::timestamptz, '2019-02-01 00:00:00', 
 RESET ROLE;
 SELECT current_user;
 
+-- Check that GRANT ALL IN SCHEMA adds privileges to the parent
+-- and also does so on the foreign chunks in another schema
+CREATE VIEW CHUNK_QRY1 AS SELECT n.nspname as schema, substring(c.relname for 12) as name, pg_catalog.array_to_string(c.relacl, E'\n') AS Access_privileges FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','v','m','S','f','p') AND c.relname OPERATOR(pg_catalog.~) '^(_dist.*)$' COLLATE pg_catalog.default ORDER BY 1, 2;
+CALL distributed_exec($$ CREATE VIEW CHUNK_QRY1 AS SELECT n.nspname as schema, substring(c.relname for 12) as name, pg_catalog.array_to_string(c.relacl, E'\n') AS Access_privileges FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','v','m','S','f','p') AND c.relname OPERATOR(pg_catalog.~) '^(_dist.*)$' COLLATE pg_catalog.default ORDER BY 1, 2; $$);
+GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+\z conditions
+SELECT * FROM CHUNK_QRY1;
+
+-- Check on one datanode, should be the same on others as well
+\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+\z conditions
+SELECT * FROM CHUNK_QRY1;
+
+-- Check that REVOKE ALL IN SCHEMA removes privileges of the parent
+-- and also does so on foreign chunks in another schema
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
+\z conditions
+SELECT * FROM CHUNK_QRY1;
+
+-- Check on one datanode, should be the same on others as well
+\c :DN_DBNAME_2 :ROLE_CLUSTER_SUPERUSER;
+\z conditions
+SELECT * FROM CHUNK_QRY1;
+
+-- Create chunks in the same schema as the hypertable and check that
+-- they also get the same privileges as the hypertable
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+CREATE TABLE measurements(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+
+-- Create a distributed hypertable with chunks in the same schema
+SELECT * FROM create_distributed_hypertable('public.measurements', 'time', chunk_time_interval => '5 days'::interval, associated_schema_name => 'public');
+INSERT INTO measurements
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-10 00:00'::timestamp, '1h') AS time;
+
+-- Create a local regular table
+CREATE TABLE local(g int primary key, h int);
+
+-- Create a local hypertable
+CREATE TABLE conditions_lht(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FLOAT, humidity FLOAT);
+SELECT * FROM create_hypertable('conditions_lht', 'time', chunk_time_interval => '5 days'::interval);
+INSERT INTO conditions_lht
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-10 00:00'::timestamp, '1h') AS time;
+
+-- GRANT ALL and check privileges of these mix of local table, local hypertable and distributed hypertable
+GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+\z measurements
+\z conditions
+SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
+
+-- Check on one datanode, should be the same on others as well
+\c :DN_DBNAME_3 :ROLE_CLUSTER_SUPERUSER;
+\z measurements
+\z conditions
+SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
+
+-- REVOKE ALL and check privileges
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
+\z measurements
+\z conditions
+SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
+
+-- Check on one datanode, should be the same on others as well
+\c :DN_DBNAME_4 :ROLE_CLUSTER_SUPERUSER;
+\z measurements
+\z conditions
+SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
 -- Test GRANT on foreign server and data node authentication using a
 -- user mapping
 SET ROLE :ROLE_3;

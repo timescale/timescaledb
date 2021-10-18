@@ -246,3 +246,145 @@ REVOKE INSERT ON conditions FROM PUBLIC;
                        |                  |       | =rw/super_user                |                   | 
 (1 row)
 
+-- Check that GRANT ALL IN SCHEMA adds privileges to the parent
+-- and also goes to chunks in another schema
+GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER_2;
+\z conditions
+                                          Access privileges
+ Schema |    Name    | Type  |           Access privileges            | Column privileges | Policies 
+--------+------------+-------+----------------------------------------+-------------------+----------
+ public | conditions | table | super_user=arwdDxt/super_user         +|                   | 
+        |            |       | =r/super_user                         +|                   | 
+        |            |       | default_perm_user_2=arwdDxt/super_user |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                                    Access privileges
+        Schema         |       Name       | Type  |           Access privileges            | Column privileges | Policies 
+-----------------------+------------------+-------+----------------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_1_1_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | =w/super_user                         +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_3_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | =rw/super_user                        +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_4_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | =r/super_user                         +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_5_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | =r/super_user                         +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_6_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | =r/super_user                         +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_7_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+                       |                  |       | =r/super_user                         +|                   | 
+                       |                  |       | default_perm_user_2=arwdDxt/super_user |                   | 
+(7 rows)
+
+-- Check that REVOKE ALL IN SCHEMA removes privileges of the parent
+-- and also goes to chunks in another schema
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER_2;
+\z conditions
+                                     Access privileges
+ Schema |    Name    | Type  |       Access privileges       | Column privileges | Policies 
+--------+------------+-------+-------------------------------+-------------------+----------
+ public | conditions | table | super_user=arwdDxt/super_user+|                   | 
+        |            |       | =r/super_user                 |                   | 
+(1 row)
+
+\z _timescaledb_internal.*chunk
+                                                Access privileges
+        Schema         |       Name       | Type  |       Access privileges       | Column privileges | Policies 
+-----------------------+------------------+-------+-------------------------------+-------------------+----------
+ _timescaledb_internal | _hyper_1_1_chunk | table | super_user=arwdDxt/super_user+|                   | 
+                       |                  |       | =w/super_user                 |                   | 
+ _timescaledb_internal | _hyper_1_2_chunk | table | super_user=arwdDxt/super_user |                   | 
+ _timescaledb_internal | _hyper_1_3_chunk | table | super_user=arwdDxt/super_user+|                   | 
+                       |                  |       | =rw/super_user                |                   | 
+ _timescaledb_internal | _hyper_1_4_chunk | table | super_user=arwdDxt/super_user+|                   | 
+                       |                  |       | =r/super_user                 |                   | 
+ _timescaledb_internal | _hyper_1_5_chunk | table | super_user=arwdDxt/super_user+|                   | 
+                       |                  |       | =r/super_user                 |                   | 
+ _timescaledb_internal | _hyper_1_6_chunk | table | super_user=arwdDxt/super_user+|                   | 
+                       |                  |       | =r/super_user                 |                   | 
+ _timescaledb_internal | _hyper_1_7_chunk | table | super_user=arwdDxt/super_user+|                   | 
+                       |                  |       | =r/super_user                 |                   | 
+(7 rows)
+
+-- Create chunks in the same schema as the hypertable and check that
+-- they also get the same privileges as the hypertable
+CREATE TABLE measurements(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+-- Create a hypertable with chunks in the same schema
+SELECT * FROM create_hypertable('public.measurements', 'time', chunk_time_interval => '5 days'::interval, associated_schema_name => 'public');
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+             2 | public      | measurements | t
+(1 row)
+
+INSERT INTO measurements
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-10 00:00'::timestamp, '1h') AS time;
+-- GRANT ALL and check privileges
+GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER_2;
+\z measurements
+                                           Access privileges
+ Schema |     Name     | Type  |           Access privileges            | Column privileges | Policies 
+--------+--------------+-------+----------------------------------------+-------------------+----------
+ public | measurements | table | super_user=arwdDxt/super_user         +|                   | 
+        |              |       | default_perm_user_2=arwdDxt/super_user |                   | 
+(1 row)
+
+\z conditions
+                                          Access privileges
+ Schema |    Name    | Type  |           Access privileges            | Column privileges | Policies 
+--------+------------+-------+----------------------------------------+-------------------+----------
+ public | conditions | table | super_user=arwdDxt/super_user         +|                   | 
+        |            |       | =r/super_user                         +|                   | 
+        |            |       | default_perm_user_2=arwdDxt/super_user |                   | 
+(1 row)
+
+\z public.*chunk
+                                             Access privileges
+ Schema |       Name        | Type  |           Access privileges            | Column privileges | Policies 
+--------+-------------------+-------+----------------------------------------+-------------------+----------
+ public | _hyper_2_10_chunk | table | super_user=arwdDxt/super_user         +|                   | 
+        |                   |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ public | _hyper_2_8_chunk  | table | super_user=arwdDxt/super_user         +|                   | 
+        |                   |       | default_perm_user_2=arwdDxt/super_user |                   | 
+ public | _hyper_2_9_chunk  | table | super_user=arwdDxt/super_user         +|                   | 
+        |                   |       | default_perm_user_2=arwdDxt/super_user |                   | 
+(3 rows)
+
+-- REVOKE ALL and check privileges
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER_2;
+\z measurements
+                                      Access privileges
+ Schema |     Name     | Type  |       Access privileges       | Column privileges | Policies 
+--------+--------------+-------+-------------------------------+-------------------+----------
+ public | measurements | table | super_user=arwdDxt/super_user |                   | 
+(1 row)
+
+\z conditions
+                                     Access privileges
+ Schema |    Name    | Type  |       Access privileges       | Column privileges | Policies 
+--------+------------+-------+-------------------------------+-------------------+----------
+ public | conditions | table | super_user=arwdDxt/super_user+|                   | 
+        |            |       | =r/super_user                 |                   | 
+(1 row)
+
+\z public.*chunk
+                                         Access privileges
+ Schema |       Name        | Type  |       Access privileges       | Column privileges | Policies 
+--------+-------------------+-------+-------------------------------+-------------------+----------
+ public | _hyper_2_10_chunk | table | super_user=arwdDxt/super_user |                   | 
+ public | _hyper_2_8_chunk  | table | super_user=arwdDxt/super_user |                   | 
+ public | _hyper_2_9_chunk  | table | super_user=arwdDxt/super_user |                   | 
+(3 rows)
+
