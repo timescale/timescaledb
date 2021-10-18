@@ -93,9 +93,19 @@ void
 tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						   Hypertable *ht)
 {
-	if (ts_guc_enable_transparent_decompression && ht != NULL &&
-		rel->reloptkind == RELOPT_OTHER_MEMBER_REL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) &&
-		rel->fdw_private != NULL && ((TimescaleDBPrivate *) rel->fdw_private)->compressed)
+	/* We can get here via query on hypertable in that case reloptkind
+	 * will be RELOPT_OTHER_MEMBER_REL or via direct query on chunk
+	 * in that case reloptkind will be RELOPT_BASEREL.
+	 * If we get here via SELECT * FROM <chunk>, we decompress the chunk,
+	 * unless the query was SELECT * FROM ONLY <chunk>.
+	 * We check if it is the ONLY case by calling ts_rte_is_marked_for_expansion.
+	 * Respecting ONLY here is important to not break postgres tools like pg_dump.
+	 */
+	if (ts_guc_enable_transparent_decompression && ht &&
+		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
+		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
+		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && rel->fdw_private != NULL &&
+		((TimescaleDBPrivate *) rel->fdw_private)->compressed)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true);
 

@@ -33,7 +33,7 @@ step "SChunkStat" {  SELECT status from _timescaledb_catalog.chunk
 
 session "S"
 step "S1" { SELECT count(*) from ts_device_table; }
-step "SC1" { SELECT count(*) from _timescaledb_internal._hyper_1_1_chunk; }
+step "SC1" { SELECT count(*) AS only FROM ONLY _timescaledb_internal._hyper_1_1_chunk; SELECT count(*) FROM _timescaledb_internal._hyper_1_1_chunk; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
 
 session "LCT"
@@ -43,7 +43,7 @@ step "LockChunkTuple" {
   WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table') FOR UPDATE;
   }
 step "UnlockChunkTuple"   { ROLLBACK; }
-   
+
 session "LC"
 step "LockChunk1" {
   BEGIN;

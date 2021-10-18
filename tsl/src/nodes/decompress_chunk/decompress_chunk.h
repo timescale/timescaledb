@@ -34,6 +34,8 @@ typedef struct CompressionInfo
 	/* compressed chunk attribute numbers for columns that are compressed */
 	Bitmapset *compressed_chunk_compressed_attnos;
 
+	bool single_chunk; /* query on explicit chunk */
+
 } CompressionInfo;
 
 typedef struct DecompressChunkPath
@@ -57,6 +59,5 @@ void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hype
 
 FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
 															char *column_name);
-AttrNumber get_compressed_attno(CompressionInfo *info, AttrNumber chunk_attno);
 
 #endif /* TIMESCALEDB_DECOMPRESS_CHUNK_H */

@@ -35,10 +35,15 @@ _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
 step Cc: COMMIT;
-step SC1: SELECT count(*) from _timescaledb_internal._hyper_1_1_chunk;
+step SC1: SELECT count(*) AS only FROM ONLY _timescaledb_internal._hyper_1_1_chunk; SELECT count(*) FROM _timescaledb_internal._hyper_1_1_chunk;
+only
+----
+   0
+(1 row)
+
 count
 -----
-    0
+   11
 (1 row)
 
 step S1: SELECT count(*) from ts_device_table;

@@ -94,8 +94,8 @@ rte_mark_for_expansion(RangeTblEntry *rte)
 	rte->inh = false;
 }
 
-static bool
-rte_is_marked_for_expansion(const RangeTblEntry *rte)
+bool
+ts_rte_is_marked_for_expansion(const RangeTblEntry *rte)
 {
 	if (NULL == rte->ctename)
 		return false;
@@ -240,7 +240,7 @@ preprocess_query(Node *node, Query *rootquery)
 					/* This lookup will warm the cache with all hypertables in the query */
 					ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
 
-					if (NULL != ht)
+					if (ht)
 					{
 						/* Mark hypertable RTEs we'd like to expand ourselves */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
@@ -257,6 +257,22 @@ preprocess_query(Node *node, Query *rootquery)
 							ht = ts_hypertable_cache_get_entry_by_id(hcache, compr_htid);
 							Assert(ht != NULL);
 						}
+					}
+					else
+					{
+						/* To properly keep track of SELECT FROM ONLY <chunk> we
+						 * have to mark the rte here because postgres will set
+						 * rte->inh to false (when it detects the chunk has no
+						 * children which is true for all our chunks) before it
+						 * reaches set_rel_pathlist hook. But chunks from queries
+						 * like SELECT ..  FROM ONLY <chunk> has rte->inh set to
+						 * false and other chunks have rte->inh set to true.
+						 * We want to distinguish between the two cases here by
+						 * marking the chunk when rte->inh is true.
+						 */
+						Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
+						if (chunk && rte->inh)
+							rte_mark_for_expansion(rte);
 					}
 					break;
 				default:
@@ -563,7 +579,7 @@ rte_should_expand(const RangeTblEntry *rte)
 {
 	bool is_hypertable = ts_rte_is_hypertable(rte, NULL);
 
-	return is_hypertable && !rte->inh && rte_is_marked_for_expansion(rte);
+	return is_hypertable && !rte->inh && ts_rte_is_marked_for_expansion(rte);
 }
 
 static void
@@ -770,7 +786,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	reltype = classify_relation(root, rel, &ht);
 
 	/* Check for unexpanded hypertable */
-	if (!rte->inh && rte_is_marked_for_expansion(rte))
+	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
 		reenable_inheritance(root, rel, rti, rte);
 
 	/* Call other extensions. Do it after table expansion. */
@@ -910,7 +926,7 @@ join_involves_hypertable(const PlannerInfo *root, const RelOptInfo *rel)
 			/* This might give a false positive for chunks in case of PostgreSQL
 			 * expansion since the ctename is copied from the parent hypertable
 			 * to the chunk */
-			return rte_is_marked_for_expansion(rte);
+			return ts_rte_is_marked_for_expansion(rte);
 	}
 	return false;
 }

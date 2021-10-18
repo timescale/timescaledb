@@ -348,6 +348,12 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 --run the compression policy job, it will recompress chunks that are unordered
 CALL run_job(:compressjob_id);
 SELECT count(*) from test_recomp_int;
+
+-- check with per datanode queries disabled
+SET timescaledb.enable_per_data_node_queries TO false;
+SELECT count(*) from test_recomp_int;
+RESET timescaledb.enable_per_data_node_queries;
+
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 
 ---run copy tests
@@ -387,9 +393,16 @@ COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
 \.
 
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
-SELECT time_bucket(20, time ), count(*)
+SELECT time_bucket(20, time), count(*)
 FROM test_recomp_int
-GROUP BY time_bucket( 20, time) ORDER BY 1;
+GROUP BY time_bucket(20, time) ORDER BY 1;
+
+-- check with per datanode queries disabled
+SET timescaledb.enable_per_data_node_queries TO false;
+SELECT time_bucket(20, time), count(*)
+FROM test_recomp_int
+GROUP BY time_bucket(20, time) ORDER BY 1;
+RESET timescaledb.enable_per_data_node_queries;
 
 --check compression_status afterwards--
 SELECT recompress_chunk(chunk, true) FROM

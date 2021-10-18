@@ -878,6 +878,15 @@ SELECT count(*) from test_recomp_int;
      9
 (1 row)
 
+-- check with per datanode queries disabled
+SET timescaledb.enable_per_data_node_queries TO false;
+SELECT count(*) from test_recomp_int;
+ count 
+-------
+     9
+(1 row)
+
+RESET timescaledb.enable_per_data_node_queries;
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
@@ -936,9 +945,9 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
  _dist_hyper_4_16_chunk |            3
 (3 rows)
 
-SELECT time_bucket(20, time ), count(*)
+SELECT time_bucket(20, time), count(*)
 FROM test_recomp_int
-GROUP BY time_bucket( 20, time) ORDER BY 1;
+GROUP BY time_bucket(20, time) ORDER BY 1;
  time_bucket | count 
 -------------+-------
            0 |    14
@@ -946,6 +955,19 @@ GROUP BY time_bucket( 20, time) ORDER BY 1;
          100 |     5
 (3 rows)
 
+-- check with per datanode queries disabled
+SET timescaledb.enable_per_data_node_queries TO false;
+SELECT time_bucket(20, time), count(*)
+FROM test_recomp_int
+GROUP BY time_bucket(20, time) ORDER BY 1;
+ time_bucket | count 
+-------------+-------
+           0 |    14
+          60 |     3
+         100 |     5
+(3 rows)
+
+RESET timescaledb.enable_per_data_node_queries;
 --check compression_status afterwards--
 SELECT recompress_chunk(chunk, true) FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 2)q;
