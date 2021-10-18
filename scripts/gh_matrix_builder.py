@@ -137,15 +137,18 @@ if event_type != "pull_request":
   # add release test for latest pg 12 and 13
   m["include"].append(build_release_config({"pg":PG12_LATEST}))
   m["include"].append(build_release_config({"pg":PG13_LATEST}))
+  m["include"].append(build_release_config({"pg":PG14_LATEST}))
 
-  # add apache only test for latest pg 12 and 13
+  # add apache only test for latest pg
   m["include"].append(build_apache_config({"pg":PG12_LATEST}))
   m["include"].append(build_apache_config({"pg":PG13_LATEST}))
+  m["include"].append(build_apache_config({"pg":PG14_LATEST}))
 
   # to discover issues with upcoming releases we run CI against
   # the stable branches of supported PG releases
   m["include"].append(build_debug_config({"pg":12,"snapshot":"snapshot"}))
   m["include"].append(build_debug_config({"pg":13,"snapshot":"snapshot"}))
+  m["include"].append(build_debug_config({"pg":14,"snapshot":"snapshot"}))
 
 # generate command to set github action variable
 print(str.format("::set-output name=matrix::{0}",json.dumps(m)))
