@@ -235,7 +235,7 @@ remote_invalidation_log_add_entry(Hypertable *raw_ht, ContinuousAggHypertableSta
 
 	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
 
-	const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
+	static const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString((caggstatus == HypertableIsMaterialization) ?
 												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
@@ -1115,7 +1115,7 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 									 &bucket_widths,
 									 &max_bucket_widths);
 
-	const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
+	static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
 		INT4OID, INT4OID, OIDOID, INT4OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
 	};
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
@@ -1321,7 +1321,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 									 &bucket_widths,
 									 &max_bucket_widths);
 
-	const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
+	static const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
 		INT4OID, INT4OID,	  OIDOID,		 INT8OID,	 INT8OID,
 		INT4OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
 	};
@@ -1431,7 +1431,7 @@ remote_invalidation_log_delete(int32 raw_hypertable_id, ContinuousAggHypertableS
 
 	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
 
-	const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
+	static const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString((caggstatus == HypertableIsMaterialization) ?
 												MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
@@ -1509,7 +1509,7 @@ remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id)
 	ListCell *cell;
 	Oid func_oid;
 
-	const Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
+	static const Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString(DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME));
 

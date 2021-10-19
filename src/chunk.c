@@ -1929,6 +1929,7 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 		{
 			chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
+			/* If the Data-Node replica list information has been deleted reassign them */
 			if (!chunk->data_nodes)
 				chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
 		}
@@ -2455,6 +2456,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
 			MemoryContext old;
 
+			/* Dropped chunks do not contain valid data and must not be returned */
 			if (!chunk)
 				continue;
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
