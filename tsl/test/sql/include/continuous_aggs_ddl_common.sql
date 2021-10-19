@@ -1104,7 +1104,11 @@ CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 
 -- #3696 assertion failure when referencing columns not present in result
 CREATE TABLE i3696(time timestamptz NOT NULL, search_query text, cnt integer, cnt2 integer);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('i3696', 'time', replication_factor => 2);
+\else
 SELECT table_name FROM create_hypertable('i3696','time');
+\endif
 
 CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
 AS

@@ -1650,3 +1650,28 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 \set VERBOSITY verbose
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
+-- #3696 assertion failure when referencing columns not present in result
+CREATE TABLE i3696(time timestamptz NOT NULL, search_query text, cnt integer, cnt2 integer);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('i3696', 'time', replication_factor => 2);
+ create_distributed_hypertable 
+-------------------------------
+ (36,public,i3696,t)
+(1 row)
+
+\else
+SELECT table_name FROM create_hypertable('i3696','time');
+\endif
+CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
+AS
+ SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
+ FROM i3696 GROUP BY cnt +cnt2 , bucket, search_query;
+psql:include/continuous_aggs_ddl_common.sql:1116: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
+ALTER MATERIALIZED VIEW i3696_cagg1 SET (timescaledb.materialized_only = 'true');
+CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous)
+AS
+ SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
+ FROM i3696 GROUP BY cnt + cnt2, bucket, search_query
+ HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
+psql:include/continuous_aggs_ddl_common.sql:1124: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
+ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true');
