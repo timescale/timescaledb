@@ -83,7 +83,6 @@
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
-#define CAGG_INVALIDATION_DIST_HT_TRIGGER "continuous_agg_dist_ht_invalidation_trigger"
 #define BOUNDARY_FUNCTION "cagg_watermark"
 #define INTERNAL_TO_DATE_FUNCTION "to_date"
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
@@ -387,11 +386,11 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 			appendStringInfo(command,
 							 "CREATE TRIGGER %s AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH "
 							 "ROW EXECUTE FUNCTION %s.%s(%d, %d)",
-							 quote_identifier(CAGGINVAL_DIST_HT_TRIGGER_NAME),
+							 quote_identifier(CAGGINVAL_TRIGGER_NAME),
 							 quote_identifier(NameStr(ht->fd.schema_name)),
 							 quote_identifier(NameStr(ht->fd.table_name)),
 							 quote_identifier(INTERNAL_SCHEMA_NAME),
-							 quote_identifier(CAGG_INVALIDATION_DIST_HT_TRIGGER),
+							 quote_identifier(CAGG_INVALIDATION_TRIGGER),
 							 node->fd.node_hypertable_id, /* distributed member hypertable ID */
 							 node->fd.hypertable_id /* Access Node hypertable ID */);
 			cmds[i++] = command->data;

@@ -9,7 +9,6 @@ DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_interval;
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_integer;
 
 --changes for continuous Aggregates over distributed hypertables ---
-DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_dist_ht_invalidation_trigger;
 DROP FUNCTION IF EXISTS _timescaledb_internal.drop_dist_ht_invalidation_trigger;
 DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_invalidation_log_delete;
 DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_cagg_log_add_entry;

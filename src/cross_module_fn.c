@@ -71,7 +71,6 @@ CROSSMODULE_WRAPPER(recompress_chunk);
 
 /* continous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
-CROSSMODULE_WRAPPER(continuous_agg_dist_ht_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_refresh_chunk);
 CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
@@ -357,7 +356,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
-	.continuous_agg_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_refresh_chunk = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate = continuous_agg_invalidate_all_default,

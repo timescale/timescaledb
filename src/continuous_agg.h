@@ -16,7 +16,6 @@
 #include "compat/compat.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
-#define CAGGINVAL_DIST_HT_TRIGGER_NAME "ts_cagg_dist_ht_invalidation_trigger"
 
 typedef enum ContinuousAggViewOption
 {

@@ -1480,7 +1480,7 @@ tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS)
 		elog(ERROR, "function was not provided with a valid distributed hypertable id");
 
 	ts_materialization_invalidation_log_delete_inner(raw_hypertable_id);
-	ts_hypertable_drop_trigger(ht->main_table_relid, CAGGINVAL_DIST_HT_TRIGGER_NAME);
+	ts_hypertable_drop_trigger(ht->main_table_relid, CAGGINVAL_TRIGGER_NAME);
 
 	ts_cache_release(hcache);
 
