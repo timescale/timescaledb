@@ -33,6 +33,7 @@ set(TEST_FILES_DEBUG
     compress_table.sql
     continuous_aggs_bgw_drop_chunks.sql
     continuous_aggs_bgw.sql
+    continuous_aggs_bgw_dist_ht.sql
     continuous_aggs_ddl.sql
     continuous_aggs_ddl_dist_ht.sql
     continuous_aggs_drop_chunks.sql

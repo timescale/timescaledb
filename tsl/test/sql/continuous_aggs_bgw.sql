@@ -5,7 +5,7 @@
 --
 -- Setup
 --
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
@@ -72,8 +72,17 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE test_continuous_agg_table(time int, data int);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
+\endif
 CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
 CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -313,8 +322,18 @@ SELECT ts_bgw_params_reset_time();
 -- Test creating continuous aggregate with a user that is the non-owner of the raw table
 --
 CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
+\endif
 CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
+$DIST$);
+\endif
+
 SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_test1');
 GRANT SELECT, TRIGGER ON test_continuous_agg_table_w_grant TO public;
 INSERT INTO test_continuous_agg_table_w_grant

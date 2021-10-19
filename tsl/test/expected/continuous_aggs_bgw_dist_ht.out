@@ -1,7 +1,39 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set IS_DISTRIBUTED FALSE
+------------------------------------
+-- Set up a distributed environment
+------------------------------------
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\ir include/remote_exec.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE SCHEMA IF NOT EXISTS test;
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+GRANT USAGE ON SCHEMA test TO PUBLIC;
+CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
+LANGUAGE C;
+CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], command text)
+RETURNS TABLE("record" CSTRING[])
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
+LANGUAGE C;
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+            node_name             |   host    | port  |             database             | node_created | database_created | extension_created 
+----------------------------------+-----------+-------+----------------------------------+--------------+------------------+-------------------
+ db_continuous_aggs_bgw_dist_ht_1 | localhost | 55432 | db_continuous_aggs_bgw_dist_ht_1 | t            | t                | t
+ db_continuous_aggs_bgw_dist_ht_2 | localhost | 55432 | db_continuous_aggs_bgw_dist_ht_2 | t            | t                | t
+ db_continuous_aggs_bgw_dist_ht_3 | localhost | 55432 | db_continuous_aggs_bgw_dist_ht_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+\set IS_DISTRIBUTED TRUE
 \ir include/continuous_aggs_bgw_common.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -76,14 +108,14 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 CREATE TABLE test_continuous_agg_table(time int, data int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10, replication_factor => 2);
-\else
-SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
-psql:include/continuous_aggs_bgw_common.sql:78: NOTICE:  adding not-null constraint to column "time"
-           create_hypertable            
+psql:include/continuous_aggs_bgw_common.sql:76: NOTICE:  adding not-null constraint to column "time"
+     create_distributed_hypertable      
 ----------------------------------------
  (1,public,test_continuous_agg_table,t)
 (1 row)
 
+\else
+SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
 \endif
 CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
 \if :IS_DISTRIBUTED
@@ -554,14 +586,14 @@ SELECT ts_bgw_params_reset_time();
 CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10, replication_factor => 2);
-\else
-SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
-psql:include/continuous_aggs_bgw_common.sql:328: NOTICE:  adding not-null constraint to column "time"
-               create_hypertable                
+psql:include/continuous_aggs_bgw_common.sql:326: NOTICE:  adding not-null constraint to column "time"
+         create_distributed_hypertable          
 ------------------------------------------------
  (5,public,test_continuous_agg_table_w_grant,t)
 (1 row)
 
+\else
+SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
 \endif
 CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
 \if :IS_DISTRIBUTED
