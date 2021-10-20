@@ -963,17 +963,11 @@ process_truncate(ProcessUtilityArgs *args)
 						 * longer has any data */
 						raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 						Assert(raw_ht != NULL);
-						if (hypertable_is_distributed(raw_ht))
-							ts_cm_functions
-								->remote_invalidation_log_add_entry(raw_ht,
-																	HypertableIsMaterialization,
-																	mat_ht->fd.id,
-																	TS_TIME_NOBEGIN,
-																	TS_TIME_NOEND);
-						else
-							ts_cm_functions->continuous_agg_invalidate(mat_ht,
-																	   TS_TIME_NOBEGIN,
-																	   TS_TIME_NOEND);
+						ts_cm_functions->continuous_agg_invalidate(raw_ht,
+																   HypertableIsMaterialization,
+																   mat_ht->fd.id,
+																   TS_TIME_NOBEGIN,
+																   TS_TIME_NOEND);
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
@@ -1007,17 +1001,11 @@ process_truncate(ProcessUtilityArgs *args)
 						if (agg_status == HypertableIsRawTable)
 						{
 							/* The truncation invalidates all associated continuous aggregates */
-							if (hypertable_is_distributed(ht))
-								ts_cm_functions
-									->remote_invalidation_log_add_entry(ht,
-																		HypertableIsRawTable,
-																		ht->fd.id,
-																		TS_TIME_NOBEGIN,
-																		TS_TIME_NOEND);
-							else
-								ts_cm_functions->continuous_agg_invalidate(ht,
-																		   TS_TIME_NOBEGIN,
-																		   TS_TIME_NOEND);
+							ts_cm_functions->continuous_agg_invalidate(ht,
+																	   HypertableIsRawTable,
+																	   ht->fd.id,
+																	   TS_TIME_NOBEGIN,
+																	   TS_TIME_NOEND);
 						}
 
 						if (!relation_should_recurse(rv))
@@ -1162,14 +1150,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 					   chunk->cube->slices[0]->fd.dimension_id);
-				if (hypertable_is_distributed(ht))
-					ts_cm_functions->remote_invalidation_log_add_entry(ht,
-																	   HypertableIsRawTable,
-																	   ht->fd.id,
-																	   start,
-																	   end);
-				else
-					ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+				ts_cm_functions->continuous_agg_invalidate(ht,
+														   HypertableIsRawTable,
+														   ht->fd.id,
+														   start,
+														   end);
 			}
 		}
 	}

@@ -221,7 +221,9 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 }
 
 static void
-continuous_agg_invalidate_all_default(const Hypertable *ht, int64 start, int64 end)
+continuous_agg_invalidate_all_default(const Hypertable *ht,
+									  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+									  int64 start, int64 end)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -279,14 +281,6 @@ func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
 
 static void
 update_compressed_chunk_relstats_default(Oid uncompressed_relid, Oid compressed_relid)
-{
-	error_no_default_fn_community();
-}
-
-static void
-remote_invalidation_log_add_entry_default(Hypertable *raw_ht,
-										  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
-										  int64 start, int64 end)
 {
 	error_no_default_fn_community();
 }
@@ -362,7 +356,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
 	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
-	.remote_invalidation_log_add_entry = remote_invalidation_log_add_entry_default,
 	.remote_invalidation_log_delete = NULL,
 	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
 	.remote_drop_dist_ht_invalidation_trigger = NULL,

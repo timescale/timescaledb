@@ -737,9 +737,7 @@ SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_10_id;
 
 -- should trigger two individual refreshes
-SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-RESET client_min_messages;
 
 -- Allow at most 5 individual invalidations per refreshe
 SET timescaledb.materializations_per_refresh_window=5;
@@ -753,9 +751,7 @@ INSERT INTO conditions VALUES (100, 1, 1.0);
 INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
 
-SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-RESET client_min_messages;
 
 \set VERBOSITY default
 -- Test acceptable values for materializations per refresh

@@ -135,7 +135,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.invalidation_cagg_log_add_entry = tsl_invalidation_cagg_log_add_entry,
 	.invalidation_hyper_log_add_entry = tsl_invalidation_hyper_log_add_entry,
-	.remote_invalidation_log_add_entry = remote_invalidation_log_add_entry,
 	.remote_invalidation_log_delete = remote_invalidation_log_delete,
 	.drop_dist_ht_invalidation_trigger = tsl_drop_dist_ht_invalidation_trigger,
 	.remote_drop_dist_ht_invalidation_trigger = remote_drop_dist_ht_invalidation_trigger,

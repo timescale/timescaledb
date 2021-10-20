@@ -94,14 +94,13 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_invalidation_trigger;
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_refresh_chunk;
-	void (*continuous_agg_invalidate)(const Hypertable *ht, int64 start, int64 end);
+	void (*continuous_agg_invalidate)(const Hypertable *ht,
+									  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+									  int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction invalidation_cagg_log_add_entry;
 	PGFunction invalidation_hyper_log_add_entry;
-	void (*remote_invalidation_log_add_entry)(Hypertable *raw_ht,
-											  ContinuousAggHypertableStatus caggstatus,
-											  int32 entry_id, int64 start, int64 end);
 	void (*remote_invalidation_log_delete)(int32 raw_hypertable_id,
 										   ContinuousAggHypertableStatus caggstatus);
 	PGFunction drop_dist_ht_invalidation_trigger;

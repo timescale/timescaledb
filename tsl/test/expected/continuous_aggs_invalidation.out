@@ -1226,13 +1226,7 @@ WHERE cagg_id = :cond_10_id;
 (4 rows)
 
 -- should trigger two individual refreshes
-SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/continuous_aggs_invalidation_common.sql:741: DEBUG:  refreshing continuous aggregate "cond_10" in window [ 0, 200 ]
-psql:include/continuous_aggs_invalidation_common.sql:741: DEBUG:  invalidation refresh on "cond_10" in window [ 0, 30 ]
-psql:include/continuous_aggs_invalidation_common.sql:741: DEBUG:  invalidation refresh on "cond_10" in window [ 40, 50 ]
-psql:include/continuous_aggs_invalidation_common.sql:741: DEBUG:  invalidation refresh on "cond_10" in window [ 60, 200 ]
-RESET client_min_messages;
 -- Allow at most 5 individual invalidations per refreshe
 SET timescaledb.materializations_per_refresh_window=5;
 -- Insert into every second bucket
@@ -1243,12 +1237,7 @@ INSERT INTO conditions VALUES (80, 1, 1.0);
 INSERT INTO conditions VALUES (100, 1, 1.0);
 INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
-SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/continuous_aggs_invalidation_common.sql:757: DEBUG:  refreshing continuous aggregate "cond_10" in window [ 0, 200 ]
-psql:include/continuous_aggs_invalidation_common.sql:757: DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 200 200
-psql:include/continuous_aggs_invalidation_common.sql:757: DEBUG:  merged invalidations for refresh on "cond_10" in window [ 20, 150 ]
-RESET client_min_messages;
 \set VERBOSITY default
 -- Test acceptable values for materializations per refresh
 SET timescaledb.materializations_per_refresh_window=' 5 ';
@@ -1262,16 +1251,16 @@ CALL refresh_continuous_aggregate('cond_10', 0, 200);
 SET timescaledb.materializations_per_refresh_window='foo';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/continuous_aggs_invalidation_common.sql:773: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/continuous_aggs_invalidation_common.sql:769: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "foo".
 SET timescaledb.materializations_per_refresh_window='2bar';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/continuous_aggs_invalidation_common.sql:776: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/continuous_aggs_invalidation_common.sql:772: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "2bar".
 SET timescaledb.materializations_per_refresh_window='-';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-psql:include/continuous_aggs_invalidation_common.sql:780: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/continuous_aggs_invalidation_common.sql:776: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "-".
 \set VERBOSITY terse
