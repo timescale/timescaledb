@@ -95,6 +95,9 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_invalidate)(const Hypertable *ht, int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	void (*continuous_agg_call_invalidation_trigger)(int32 hypertable_id, Relation chunk_rel,
+													 HeapTuple chunk_tuple,
+													 HeapTuple chunk_newtuple, bool update);
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;

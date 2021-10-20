@@ -197,9 +197,6 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
 	char *hypertable_id_str;
 	int32 hypertable_id;
-	ContinuousAggsCacheInvalEntry *cache_entry;
-	bool found;
-	int64 timeval;
 	if (trigdata->tg_trigger->tgnargs < 0)
 		elog(ERROR, "must supply hypertable id");
 
@@ -210,7 +207,31 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
 	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
 		elog(ERROR, "continuous agg trigger function must be called in per row after trigger");
+	execute_cagg_trigger(hypertable_id,
+						 trigdata->tg_relation,
+						 trigdata->tg_trigtuple,
+						 trigdata->tg_newtuple,
+						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
+	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
+		return PointerGetDatum(trigdata->tg_trigtuple);
+	else
+		return PointerGetDatum(trigdata->tg_newtuple);
+}
 
+/*
+ * chunk_tuple is the tuple from trigdata->tg_trigtuple
+ * i.e. the one being/inserts/deleted/updated.
+ * (for updates: this is the row before modification)
+ * chunk_newtuple is the tuple from trigdata->tg_newtuple.
+ */
+void
+execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
+					 HeapTuple chunk_newtuple, bool update)
+{
+	ContinuousAggsCacheInvalEntry *cache_entry;
+	bool found;
+	int64 timeval;
+	Oid chunk_relid = chunk_rel->rd_id;
 	/* On first call, init the mctx and hash table*/
 	if (!continuous_aggs_cache_inval_htab)
 		cache_inval_init();
@@ -222,31 +243,27 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 		cache_inval_entry_init(cache_entry, hypertable_id);
 
 	/* handle the case where we need to repopulate the cached chunk data */
-	if (cache_entry->previous_chunk_relid != trigdata->tg_relation->rd_id)
-		cache_entry_switch_to_chunk(cache_entry,
-									trigdata->tg_relation->rd_id,
-									trigdata->tg_relation);
+	if (cache_entry->previous_chunk_relid != chunk_relid)
+		cache_entry_switch_to_chunk(cache_entry, chunk_relid, chunk_rel);
 
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
-							 trigdata->tg_trigtuple,
+							 chunk_tuple,
 							 cache_entry->previous_chunk_open_dimension,
-							 RelationGetDescr(trigdata->tg_relation));
+							 RelationGetDescr(chunk_rel));
 
 	update_cache_entry(cache_entry, timeval);
 
-	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
-		return PointerGetDatum(trigdata->tg_trigtuple);
+	if (!update)
+		return;
 
 	/* on update we need to invalidate the new time value as well as the old one*/
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
-							 trigdata->tg_newtuple,
+							 chunk_newtuple,
 							 cache_entry->previous_chunk_open_dimension,
-							 RelationGetDescr(trigdata->tg_relation));
+							 RelationGetDescr(chunk_rel));
 
 	update_cache_entry(cache_entry, timeval);
-
-	return PointerGetDatum(trigdata->tg_newtuple);
-};
+}
 
 static void
 cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
