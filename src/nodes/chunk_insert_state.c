@@ -33,6 +33,8 @@
 #include "chunk_index.h"
 #include "indexing.h"
 
+#define CAGG_INVALIDATION_TRIGGER_NAME "ts_cagg_invalidation_trigger"
+
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
 prepare_constr_expr(Expr *node)
@@ -658,22 +660,33 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
 			elog(ERROR, "statement trigger on chunk table not supported");
 
+		/* AFTER ROW triggers do not work since we redirect the insert
+		 * to the compressed chunk. We still want cagg triggers to fire.
+		 * We'll call them directly. But raise an error if there are
+		 * other triggers
+		 */
 		if (has_compressed_chunk && tg->trig_insert_after_row)
 		{
 			StringInfo trigger_list = makeStringInfo();
-			int i = 0;
 			Assert(tg->numtriggers > 0);
-			while (i < tg->numtriggers)
+			for (int i = 0; i < tg->numtriggers; i++)
 			{
-				appendStringInfoString(trigger_list, tg->triggers[i].tgname);
-				if (++i < tg->numtriggers)
+				if (strncmp(tg->triggers[i].tgname,
+							CAGG_INVALIDATION_TRIGGER_NAME,
+							strlen(CAGG_INVALIDATION_TRIGGER_NAME)) == 0)
+					continue;
+				if (i > 0)
 					appendStringInfoString(trigger_list, ", ");
+				appendStringInfoString(trigger_list, tg->triggers[i].tgname);
 			}
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("after insert row trigger on compressed chunk not supported"),
-					 errdetail("Triggers: %s", trigger_list->data),
-					 errhint("Decompress the chunk first before inserting into it.")));
+			if (trigger_list->len != 0)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("after insert row trigger on compressed chunk not supported"),
+						 errdetail("Triggers: %s", trigger_list->data),
+						 errhint("Decompress the chunk first before inserting into it.")));
+			}
 		}
 	}
 

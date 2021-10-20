@@ -856,3 +856,57 @@ NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
                ->  Seq Scan on compress_hyper_14_23_chunk
 (10 rows)
 
+-- TEST cagg triggers with insert into compressed chunk
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+SELECT table_name from create_hypertable( 'conditions', 'timec');
+ table_name 
+------------
+ conditions
+(1 row)
+
+INSERT INTO conditions  
+SELECT generate_series('2010-01-01 09:00:00-08'::timestamptz, '2010-01-03 09:00:00-08'::timestamptz, '1 day'), 55 , 45;
+CREATE MATERIALIZED VIEW cagg_conditions WITH (timescaledb.continuous,
+   timescaledb.materialized_only = true)
+AS
+SELECT time_bucket( '7 days', timec) bkt, count(*) cnt, sum(temperature) sumb
+FROM conditions 
+GROUP BY time_bucket('7 days', timec);
+NOTICE:  refreshing continuous aggregate "cagg_conditions"
+SELECT * FROM cagg_conditions ORDER BY 1;
+             bkt              | cnt | sumb 
+------------------------------+-----+------
+ Sun Dec 27 16:00:00 2009 PST |   3 |  165
+(1 row)
+
+ALTER TABLE conditions SET (timescaledb.compress);
+SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_15_24_chunk
+(1 row)
+
+ 
+SELECT chunk_name, range_start, range_end, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions';
+     chunk_name     |         range_start          |          range_end           | is_compressed 
+--------------------+------------------------------+------------------------------+---------------
+ _hyper_15_24_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
+(1 row)
+
+--now insert into compressed chunk
+INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
+INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
+--refresh cagg, should have updated info
+CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
+SELECT * FROM cagg_conditions ORDER BY 1;
+             bkt              | cnt | sumb 
+------------------------------+-----+------
+ Sun Dec 27 16:00:00 2009 PST |   5 |  185
+(1 row)
+
