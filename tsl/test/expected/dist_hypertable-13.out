@@ -5521,6 +5521,20 @@ FROM dummy;
  Tue Jan 02 12:00:00 2018
 (1 row)
 
+-- A function returning a record seemingly can't get into a qual. It requires to
+-- be put into the FROM list to specify the record structure, and ends up in a
+-- Function Scan plan. Add a test for it just in case it ever changes.
+-- If you ever want to find more of such functions:
+-- select proname from pg_proc where prorettype = 'record'::regtype	and provolatile != 'v';
+SELECT count(*) FROM test_tz,
+	json_to_record('{"json_time": "2018-01-02 12:00:00 +00"}')
+		AS r(json_time timestamptz)
+	WHERE time > json_time::timestamp;
+ count 
+-------
+     3
+(1 row)
+
 -- Check that the test function for partly overriding now() works. It's very
 -- hacky and only has effect when we estimate some costs or evaluate sTABLE
 -- functions in quals on access node, and has no effect in other cases.

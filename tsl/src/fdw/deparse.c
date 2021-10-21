@@ -113,33 +113,6 @@ typedef struct deparse_expr_cxt
 #define SUBQUERY_REL_ALIAS_PREFIX "s"
 #define SUBQUERY_COL_ALIAS_PREFIX "c"
 
-/* Oids of mutable functions determined to safe to pushdown to data nodes */
-static Oid PushdownSafeFunctionOIDs[] = {
-	F_TIMESTAMPTZ_PL_INTERVAL,
-	F_TIMESTAMPTZ_MI_INTERVAL,
-	F_NOW, /* Special case, this will be evaluated prior to pushdown */
-	F_TIMESTAMPTZ_TIMESTAMP,
-	F_TIMESTAMP_TIMESTAMPTZ,
-	F_TIMESTAMP_PL_INTERVAL,
-	F_TIMESTAMP_MI_INTERVAL,
-	F_TIMESTAMP_LT_TIMESTAMPTZ,
-	F_TIMESTAMP_LE_TIMESTAMPTZ,
-	F_TIMESTAMP_EQ_TIMESTAMPTZ,
-	F_TIMESTAMP_GT_TIMESTAMPTZ,
-	F_TIMESTAMP_GE_TIMESTAMPTZ,
-	F_TIMESTAMP_NE_TIMESTAMPTZ,
-	F_TIMESTAMP_CMP_TIMESTAMPTZ,
-	F_TIMESTAMPTZ_LT_TIMESTAMP,
-	F_TIMESTAMPTZ_LE_TIMESTAMP,
-	F_TIMESTAMPTZ_EQ_TIMESTAMP,
-	F_TIMESTAMPTZ_GT_TIMESTAMP,
-	F_TIMESTAMPTZ_GE_TIMESTAMP,
-	F_TIMESTAMPTZ_NE_TIMESTAMP,
-	F_TIMESTAMPTZ_CMP_TIMESTAMP,
-};
-static const int NumPushdownSafeOIDs =
-	sizeof(PushdownSafeFunctionOIDs) / sizeof(PushdownSafeFunctionOIDs[0]);
-
 /*
  * Functions to determine whether an expression can be evaluated safely on
  * data node.
@@ -230,35 +203,6 @@ classify_conditions(PlannerInfo *root, RelOptInfo *baserel, List *input_conds, L
 	}
 }
 
-static int
-oid_comparator(const void *a, const void *b)
-{
-	if (*(Oid *) a == *(Oid *) b)
-		return 0;
-	else if (*(Oid *) a < *(Oid *) b)
-		return -1;
-	else
-		return 1;
-}
-
-static bool
-function_is_whitelisted(Oid func_id)
-{
-	static bool PushdownOIDsSorted = false;
-
-	if (!PushdownOIDsSorted)
-	{
-		qsort(PushdownSafeFunctionOIDs, NumPushdownSafeOIDs, sizeof(Oid), oid_comparator);
-		PushdownOIDsSorted = true;
-	}
-
-	return bsearch(&func_id,
-				   PushdownSafeFunctionOIDs,
-				   NumPushdownSafeOIDs,
-				   sizeof(Oid),
-				   oid_comparator) != NULL;
-}
-
 /*
  * Check for mutable functions in an expression.
  *
@@ -279,14 +223,7 @@ contain_mutable_functions_checker(Oid func_id, void *context)
 	if (NULL != finfo)
 		return false;
 
-	if (func_volatile(func_id) == PROVOLATILE_IMMUTABLE)
-		return false;
-
-	/* Certain functions are mutable but are known to safe to push down to the data node. */
-	if (function_is_whitelisted(func_id))
-		return false;
-
-	return true;
+	return func_volatile(func_id) == PROVOLATILE_VOLATILE;
 }
 
 /*

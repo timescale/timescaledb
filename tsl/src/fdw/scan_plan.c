@@ -211,8 +211,10 @@ evaluate_stable_function(Oid funcid, Oid result_type, int32 result_typmod, Oid r
 
 	/*
 	 * Can't simplify if it returns a set or a RECORD. See the comments for
-	 * eval_const_expressions(). We should only see the whitelisted functions
-	 * here, no sets or RECORDS among them.
+	 * eval_const_expressions(). We shouldn't see RECORD-returning functions
+	 * here anyway because such functions must be put into the FROM clause to
+	 * allow specifying the record structure, and end up in a Function Scan plan.
+	 * Moreso for set-returning functions which require a join.
 	 */
 	Assert(!funcform->proretset);
 	Assert(funcform->prorettype != RECORDOID);
@@ -244,10 +246,11 @@ evaluate_stable_function(Oid funcid, Oid result_type, int32 result_typmod, Oid r
 
 	/*
 	 * This is called on the access node for the expressions that will be pushed
-	 * down to data nodes. These expressions can contain only whitelisted stable
-	 * functions, so we shouldn't see volatile functions here. Immutable
-	 * functions can also occur here for expressions like
-	 * `immutable(stable(....))`, after we evaluate the stable function.
+	 * down to data nodes. The query planner must not put volatile functions
+	 * here. We might have to evaluate stable functions, and in some cases
+	 * immutable functions that were not evaluated earlier, for expressions like
+	 * `immutable(stable(....))`, where it becomes possible to evaluate after we
+	 * have evaluated the internal stable function.
 	 */
 	Assert(funcform->provolatile != PROVOLATILE_VOLATILE);
 
@@ -555,8 +558,8 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 	 * functions must be recalculated with each execution of a prepared
 	 * statement.
 	 * Note that the query planner currently only pushes down to remote side
-	 * the whitelisted stable functions, see `function_is_whitelisted()`. So
-	 * this code only has to deal with such functions.
+	 * the immutable or stable functions, so we don't have to deal with volatile
+	 * functions here.
 	 */
 	remote_where = (List *) eval_stable_functions(root, (Node *) remote_where);
 	remote_having = (List *) eval_stable_functions(root, (Node *) remote_having);
