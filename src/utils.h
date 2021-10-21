@@ -15,6 +15,19 @@
 
 #include "compat/compat.h"
 
+/*
+ * Get the function name in a PG_FUNCTION.
+ *
+ * The function name is resolved from the function Oid in the functioncall
+ * data. However, this information is not present in case of a direct function
+ * call, so fall back to the C-function name.
+ */
+#define TS_FUNCNAME()                                                                              \
+	(psprintf("%s()", fcinfo->flinfo ? get_func_name(FC_FN_OID(fcinfo)) : __func__))
+
+#define TS_PREVENT_FUNC_IF_READ_ONLY() PreventCommandIfReadOnly(TS_FUNCNAME())
+#define TS_PREVENT_IN_TRANSACTION_BLOCK(toplevel) PreventInTransactionBlock(toplevel, TS_FUNCNAME())
+
 #define MAX(x, y) ((x) > (y) ? x : y)
 #define MIN(x, y) ((x) < (y) ? x : y)
 

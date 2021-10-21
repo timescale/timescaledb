@@ -382,7 +382,7 @@ DROP DATABASE access_node;
 BEGIN;
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
-ERROR:  add_data_node cannot run inside a transaction block
+ERROR:  add_data_node() cannot run inside a transaction block
 \set ON_ERROR_STOP 1
 COMMIT;
 SELECT * FROM show_data_nodes();

@@ -10,6 +10,7 @@
 #include <export.h>
 #include <access/htup_details.h>
 
+#include <dist_commands.h>
 #include "dist_util.h"
 
 TS_FUNCTION_INFO_V1(ts_test_compatible_version);

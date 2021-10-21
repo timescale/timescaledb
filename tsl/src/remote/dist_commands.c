@@ -12,6 +12,8 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
+#include <utils.h>
+
 #include "dist_commands.h"
 #include "dist_txn.h"
 #include "connection_cache.h"
@@ -95,7 +97,10 @@ ts_dist_multi_cmds_params_invoke_on_data_nodes(const char **sql, StmtParams **pa
 	DistCmdResult *results;
 
 	if (data_nodes == NIL)
-		elog(ERROR, "target data nodes must be specified for ts_dist_cmd_invoke_on_data_nodes");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("no data nodes to execute command on"),
+				 errhint("Add data nodes before executing a distributed command.")));
 
 	switch (nodeTag(data_nodes))
 	{
@@ -400,7 +405,10 @@ ts_dist_cmd_prepare_command(const char *sql, size_t n_params, List *node_names)
 	AsyncResponseResult *async_resp;
 
 	if (node_names == NIL)
-		elog(ERROR, "target data nodes must be specified for ts_dist_cmd_prepare_command");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid data nodes list"),
+				 errdetail("Must specify a non-empty list of data nodes.")));
 
 	foreach (lc, node_names)
 	{
@@ -474,7 +482,7 @@ ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 	const char *search_path;
 
 	if (!transactional)
-		PreventInTransactionBlock(true, get_func_name(FC_FN_OID(fcinfo)));
+		TS_PREVENT_IN_TRANSACTION_BLOCK(true);
 
 	if (NULL == query)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("empty command string")));
@@ -487,8 +495,40 @@ ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 	if (data_nodes == NULL)
 		data_node_list = data_node_get_node_name_list();
 	else
-		data_node_list = data_node_array_to_node_name_list(data_nodes);
+	{
+		int ndatanodes;
 
+		if (ARR_NDIM(data_nodes) > 1)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid data nodes list"),
+					 errdetail("The array of data nodes cannot be multi-dimensional.")));
+
+		if (ARR_HASNULL(data_nodes))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid data nodes list"),
+					 errdetail("The array of data nodes cannot contain null values.")));
+
+		ndatanodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
+
+		if (ndatanodes == 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid data nodes list"),
+					 errdetail("The array of data nodes cannot be empty.")));
+
+		data_node_list = data_node_array_to_node_name_list(data_nodes);
+	}
+
+	/* Assert that the data node list is not empty. Since we checked that the
+	 * function is run on an access node above, the list of data nodes must
+	 * per definition be non-empty for the case when not specifying an
+	 * explicit list of data nodes. For the case of explicitly specifying data
+	 * nodes, we already checked for a non-empty array, and then validated all
+	 * the specified data nodes. If there was a node in the list that is not a
+	 * data node, we would already have thrown an error. */
+	Assert(data_node_list != NIL);
 	search_path = GetConfigOption("search_path", false, false);
 	result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(query,
 																search_path,
