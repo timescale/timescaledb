@@ -107,12 +107,40 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT is_frontend_session(); $$);
 
 -- Test distributed_exec()
 
+-- Test calling distributed exec via direct function call
+RESET ROLE;
+CREATE OR REPLACE PROCEDURE distributed_exec_direct_function_call(
+       query TEXT,
+       node_list name[] = NULL,
+       transactional BOOLEAN = TRUE)
+AS :TSL_MODULE_PATHNAME, 'ts_test_direct_function_call' LANGUAGE C;
+SET ROLE :ROLE_1;
+
+-- Invalid input
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+BEGIN;
+-- Not allowed in transcation block if transactional=false
+CALL distributed_exec_direct_function_call('CREATE TABLE dist_test(id int)', NULL, false);
+ROLLBACK;
+-- multi-dimensional array of data nodes
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{{data_node_1}}');
+-- Specified, but empty data node array
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{}');
+-- Specified, but contains null values
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1, NULL}');
+-- Specified, but not a data node
+CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1928}');
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+
 -- Make sure dist session is properly set
 CALL distributed_exec('DO $$ BEGIN ASSERT(SELECT is_frontend_session()) = true; END; $$;');
 
 -- Test creating and dropping a table
 CALL distributed_exec('CREATE TABLE dist_test (id int)');
 CALL distributed_exec('INSERT INTO dist_test values (7)');
+-- Test INSERTING data using empty array of data nodes (same behavior as not specifying).
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from dist_test; $$);
 CALL distributed_exec('DROP TABLE dist_test');
 \set ON_ERROR_STOP 0
@@ -148,6 +176,12 @@ SELECT * FROM delete_data_node('data_node_3');
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;
 DROP DATABASE :DN_DBNAME_3;
+
+\set ON_ERROR_STOP 0
+-- Calling distributed_exec without data nodes should fail
+CALL distributed_exec('SELECT 1');
+CALL distributed_exec('SELECT 1', '{data_node_1}');
+\set ON_ERROR_STOP 1
 
 -- Test TS execution on non-TSDB server
 CREATE EXTENSION postgres_fdw;

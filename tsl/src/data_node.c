@@ -712,7 +712,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 	 * cannot run in a transaction block, we cannot run the function in a
 	 * transaction block either.
 	 */
-	PreventInTransactionBlock(true, "add_data_node");
+	TS_PREVENT_IN_TRANSACTION_BLOCK(true);
 
 	/* Try to create the foreign server, or get the existing one in case of
 	 * if_not_exists true. */
