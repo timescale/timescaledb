@@ -6,15 +6,16 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #3598 Improve evaluation of stable functions such as now() on access node
+
 **Bugfixes**
 * #3580 Fix memory context bug executing TRUNCATE
 * #3654 Fix index attnum mapping in reorder_chunk
 * #3661 Fix SkipScan path generation with constant DISTINCT column
 * #3708 Fix crash in get_aggsplit
 * #3709 Fix ordered append pathkey check
-
-**Improvements**
-* #3598 Improve evaluation of stable functions such as now() on access node
+* #3728 Fix SkipScan with varchar column
 
 **Thanks**
 * @binakot and @sebvett for reporting an issue with DISTINCT queries
