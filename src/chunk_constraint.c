@@ -278,6 +278,7 @@ chunk_constraint_create_on_table(const ChunkConstraint *cc, Oid chunk_oid)
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	CatalogInternalCall1(DDL_ADD_CHUNK_CONSTRAINT, HeapTupleGetDatum(tuple));
 	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(tuple);
 
 	return get_relation_constraint_oid(chunk_oid, NameStr(cc->fd.constraint_name), true);
 }
