@@ -3,3 +3,4 @@
 /ordered_append-*.sql
 /ordered_append_join-*.sql
 /transparent_decompress_chunk-*.sql
+/continuous_aggs_compression-*.sql
