@@ -30,7 +30,6 @@ set(TEST_FILES
     parallel.sql
     partition.sql
     partitioning.sql
-    pg_dump.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
@@ -93,6 +92,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     metadata.sql
     multi_transaction_index.sql
     net.sql
+    pg_dump.sql
     symbol_conflict.sql
     telemetry.sql
     test_utils.sql)
