@@ -12,9 +12,11 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #3766 Fix segfault in ts_hist_sfunc
+* #3739 Fix compression policy on tables using INTEGER
 
 **Thanks**
 * @cbisnett for reporting and fixing a typo in an error message
+* @CaptainCuddleCube for reporting bug on compression policy procedure on tables using INTEGER on time dimension
 
 ## 2.5.0 (2021-10-28)
 
