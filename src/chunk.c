@@ -1926,11 +1926,15 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
 		chunk->relkind = hypertable_chunk_relkind(ht);
+		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+		{
+			chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
+			/* If the Data-Node replica list information has been deleted reassign them */
+			if (!chunk->data_nodes)
+				chunk->data_nodes = chunk_assign_data_nodes(chunk, ht);
+		}
 		chunk->table_id = chunk_create_table(chunk, ht);
 		chunk_create_table_constraints(chunk);
-
-		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-			chunk->data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk->fd.id, ti->mctx);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
@@ -2449,9 +2453,12 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 		for (j = 0; j < ccs->num_constraints; j++)
 		{
 			ChunkConstraint *cc = &ccs->constraints[j];
-			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, true);
+			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
 			MemoryContext old;
 
+			/* Dropped chunks do not contain valid data and must not be returned */
+			if (!chunk)
+				continue;
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
 			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, mctx);
 
@@ -3816,26 +3823,41 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	{
 		int i;
 
-		/* Exclusively lock all chunks, and invalidate the
-		 * continuous aggregates in the regions covered by the chunks. Locking
-		 * prevents further modification of the dropped region during this
-		 * transaction, which allows moving the invalidation threshold without
-		 * having to worry about new invalidations while refreshing. */
+		/* Exclusively lock all chunks, and invalidate the continuous
+		 * aggregates in the regions covered by the chunks. We do this in two
+		 * steps: first lock all the chunks and then invalidate the
+		 * regions. Since we are going to drop the chunks, there is no point
+		 * in allowing inserts into them.
+		 *
+		 * Locking prevents further modification of the dropped region during
+		 * this transaction, which allows moving the invalidation threshold
+		 * without having to worry about new invalidations while
+		 * refreshing. */
+		for (i = 0; i < num_chunks; i++)
+		{
+			LockRelationOid(chunks[i].table_id, ExclusiveLock);
+
+			Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
+				   chunks[i].cube->slices[0]->fd.dimension_id);
+		}
+
+		DEBUG_WAITPOINT("drop_chunks_locked");
+
+		/* Invalidate the dropped region to indicate that it was modified.
+		 *
+		 * The invalidation will allow the refresh command on a continuous
+		 * aggregate to see that this region was dropped and and will
+		 * therefore be able to refresh accordingly.*/
 		for (i = 0; i < num_chunks; i++)
 		{
 			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
 			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
-			LockRelationOid(chunks[i].table_id, ExclusiveLock);
-
-			Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
-				   chunks[i].cube->slices[0]->fd.dimension_id);
-
-			/* Invalidate the dropped region to indicate that it was
-			 * modified. The invalidation will allow the refresh command on a
-			 * continuous aggregate to see that this region was dropped and
-			 * and will therefore be able to refresh accordingly.*/
-			ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+			ts_cm_functions->continuous_agg_invalidate(ht,
+													   HypertableIsRawTable,
+													   ht->fd.id,
+													   start,
+													   end);
 		}
 	}
 

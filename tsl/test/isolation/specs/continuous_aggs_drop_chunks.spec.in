@@ -1,0 +1,68 @@
+# This file and its contents are licensed under the Timescale License.
+# Please see the included NOTICE for copyright information and
+# LICENSE-TIMESCALE for a copy of the license.
+
+setup {
+    CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
+
+    CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
+    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
+
+    CREATE TABLE conditions("time" timestamptz, temp float);
+}
+
+setup { SELECT node_name FROM add_data_node('data_node_1', host => 'localhost', database => 'cdrp_1', if_not_exists => true); }
+setup { SELECT node_name FROM add_data_node('data_node_2', host => 'localhost', database => 'cdrp_2', if_not_exists => true); }
+setup { SELECT node_name FROM add_data_node('data_node_3', host => 'localhost', database => 'cdrp_3', if_not_exists => true); }
+
+setup {
+    SELECT created FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => '1 day'::interval);
+}
+
+setup {
+    INSERT INTO conditions
+    SELECT generate_series('2018-12-01 12:00'::timestamptz, '2018-12-03 12:00','1 day'), 0;
+}
+
+setup {
+    CREATE MATERIALIZED VIEW cond_summary
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    AS SELECT time_bucket('1 day'::interval, time) AS bucket,
+              avg(temp) AS avg_temp
+    FROM conditions
+    GROUP BY 1
+    WITH NO DATA;
+}
+
+setup {
+    CALL refresh_continuous_aggregate('cond_summary', NULL, NULL);
+}
+
+teardown {
+    DROP TABLE conditions CASCADE;
+}
+
+session "L"
+step "L_enable_chunks_locked"  { SELECT debug_waitpoint_enable('drop_chunks_locked'); }
+step "L_release_chunks_locked" { SELECT debug_waitpoint_release('drop_chunks_locked'); }
+
+session "T1"
+step "T1_drop_chunks"        { SELECT count(*) FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz); }
+step "T1_refresh"            { CALL refresh_continuous_aggregate('cond_summary', NULL, NULL); }
+step "T1_select"             { SELECT * FROM cond_summary; }
+
+session "T2"
+# This insert outside the dropped chunks
+step "T2_insert_1" {
+    INSERT INTO conditions
+    SELECT generate_series('2018-12-04 12:00'::timestamptz, '2018-12-05 12:00','1 day'), 10;
+}
+
+# This insert inside the dropped chunks
+step "T2_insert_2" {
+    INSERT INTO conditions
+    SELECT generate_series('2018-12-01 12:00'::timestamptz, '2018-12-03 12:00','1 day'), 100;
+}
+
+permutation "T1_select" "L_enable_chunks_locked" "T1_drop_chunks" "T2_insert_1" "T2_insert_2" "L_release_chunks_locked" "T1_refresh" "T1_select"

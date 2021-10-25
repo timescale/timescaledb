@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 /* This file contains the code for processing continuous aggregate
  * DDL statements which are of the form:
  *
@@ -72,6 +73,8 @@
 #include "utils.h"
 #include "errors.h"
 #include "refresh.h"
+#include "remote/dist_commands.h"
+#include "hypertable_data_node.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -367,6 +370,43 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
 		return;
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
+	if (hypertable_is_distributed(ht))
+	{
+		DistCmdResult *result;
+		List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
+		const char **cmds; /* same order as ht->data_nodes */
+		ListCell *cell;
+
+		unsigned i = 0;
+		cmds = palloc(list_length(data_node_list) * sizeof(*cmds));
+		foreach (cell, ht->data_nodes)
+		{
+			HypertableDataNode *node = lfirst(cell);
+			StringInfo command = makeStringInfo();
+			appendStringInfo(command,
+							 "CREATE TRIGGER %s AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH "
+							 "ROW EXECUTE FUNCTION %s.%s(%d, %d)",
+							 quote_identifier(CAGGINVAL_TRIGGER_NAME),
+							 quote_identifier(NameStr(ht->fd.schema_name)),
+							 quote_identifier(NameStr(ht->fd.table_name)),
+							 quote_identifier(INTERNAL_SCHEMA_NAME),
+							 quote_identifier(CAGG_INVALIDATION_TRIGGER),
+							 node->fd.node_hypertable_id, /* distributed member hypertable ID */
+							 node->fd.hypertable_id /* Access Node hypertable ID */);
+			cmds[i++] = command->data;
+		}
+
+		result =
+			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmds, NULL, data_node_list, true, true);
+		if (result)
+			ts_dist_cmd_close_response(result);
+		/*
+		 * FALL-THROUGH
+		 * We let the Access Node create a trigger as well, even though it is not used for data
+		 * modifications. We use the Access Node trigger as a check for existence of the remote
+		 * triggers.
+		 */
+	}
 	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
@@ -465,7 +505,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
-	Hypertable *mat_ht = NULL;
+	Hypertable *mat_ht = NULL, *orig_ht = NULL;
 	Oid owner = GetUserId();
 
 	create = makeNode(CreateStmt);
@@ -509,8 +549,19 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 * invalid. Add an infinite invalidation for the continuous
 	 * aggregate. This is the initial state of the aggregate before any
 	 * refreshes. */
-	invalidation_cagg_log_add_entry(mat_htid, TS_TIME_NOBEGIN, TS_TIME_NOEND);
-
+	orig_ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
+	if (hypertable_is_distributed(orig_ht))
+	{
+		remote_invalidation_log_add_entry(orig_ht,
+										  HypertableIsMaterialization,
+										  mat_ht->fd.id,
+										  TS_TIME_NOBEGIN,
+										  TS_TIME_NOEND);
+	}
+	else
+	{
+		invalidation_cagg_log_add_entry(mat_htid, TS_TIME_NOBEGIN, TS_TIME_NOEND);
+	}
 	ts_cache_release(hcache);
 	return mat_htid;
 }
@@ -859,11 +910,6 @@ cagg_validate_query(Query *query)
 		const Dimension *part_dimension = NULL;
 
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
-
-		if (hypertable_is_distributed(ht))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregates not supported on distributed hypertables")));
 
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))

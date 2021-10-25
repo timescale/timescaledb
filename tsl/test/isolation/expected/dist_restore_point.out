@@ -1,19 +1,19 @@
 Parsed test spec with 3 sessions
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_insert s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |t           |t               |t                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |t           |t               |t                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |t           |t               |t                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -56,19 +56,19 @@ t
 step s2_insert: <... completed>
 
 starting permutation: s2_begin s2_insert s3_lock_enable s1_create_dist_rp s3_lock_count s2_commit s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -122,19 +122,19 @@ t
 step s2_commit: <... completed>
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_create_dist_rp s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -185,19 +185,19 @@ t
 
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_dist_exec s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -240,19 +240,19 @@ t
 step s2_dist_exec: <... completed>
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_create_dist_ht s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -303,19 +303,19 @@ t
 
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_drop_dist_ht s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -358,19 +358,19 @@ t
 step s2_drop_dist_ht: <... completed>
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_add_dn s3_lock_count s3_lock_count_fs s3_lock_release s3_lock_count_fs
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created
@@ -430,19 +430,19 @@ foreign_server_locks
 
 
 starting permutation: s3_lock_enable s1_create_dist_rp s2_del_dn s3_lock_count s3_lock_release
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_1|localhost|55432|cdrp_1  |f           |f               |f                
+node_name  
+-----------
+data_node_1
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_2|localhost|55432|cdrp_2  |f           |f               |f                
+node_name  
+-----------
+data_node_2
 (1 row)
 
-node_name  |host     | port|database|node_created|database_created|extension_created
------------+---------+-----+--------+------------+----------------+-----------------
-data_node_3|localhost|55432|cdrp_3  |f           |f               |f                
+node_name  
+-----------
+data_node_3
 (1 row)
 
 created

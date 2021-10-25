@@ -73,6 +73,11 @@ CROSSMODULE_WRAPPER(recompress_chunk);
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_refresh_chunk);
+CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
+CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
+CROSSMODULE_WRAPPER(drop_dist_ht_invalidation_trigger);
+CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
+CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
 
 CROSSMODULE_WRAPPER(data_node_ping);
 CROSSMODULE_WRAPPER(data_node_block_new_chunks);
@@ -216,7 +221,9 @@ continuous_agg_update_options_default(ContinuousAgg *cagg, WithClauseResult *wit
 }
 
 static void
-continuous_agg_invalidate_all_default(const Hypertable *ht, int64 start, int64 end)
+continuous_agg_invalidate_all_default(const Hypertable *ht,
+									  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+									  int64 start, int64 end)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -225,7 +232,9 @@ continuous_agg_invalidate_all_default(const Hypertable *ht, int64 start, int64 e
 static void
 continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
 												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update)
+												 bool update,
+												 bool is_distributed_hypertable_trigger,
+												 int32 parent_hypertable_id)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -352,11 +361,18 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
+	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_refresh_chunk = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate = continuous_agg_invalidate_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
-	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
+	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
+	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
+	.remote_invalidation_log_delete = NULL,
+	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
+	.remote_drop_dist_ht_invalidation_trigger = NULL,
+	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
+	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

@@ -32,9 +32,12 @@ set(TEST_FILES_DEBUG
     compress_table.sql
     continuous_aggs_bgw_drop_chunks.sql
     continuous_aggs_bgw.sql
+    continuous_aggs_bgw_dist_ht.sql
     continuous_aggs_ddl.sql
+    continuous_aggs_ddl_dist_ht.sql
     continuous_aggs_drop_chunks.sql
     continuous_aggs_dump.sql
+    continuous_aggs_invalidation_dist_ht.sql
     continuous_aggs_multi.sql
     continuous_aggs.sql
     continuous_aggs_tableam.sql
@@ -100,6 +103,7 @@ set(SOLO_TESTS
     compression_ddl
     continuous_aggs_bgw
     continuous_aggs_ddl
+    continuous_aggs_ddl_dist_ht
     continuous_aggs_dump
     data_fetcher
     dist_util
