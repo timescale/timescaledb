@@ -123,41 +123,116 @@ ERROR:  job 1000 not found
 DROP TABLE IF EXISTS conditions CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_2_4_chunk
 --TEST 7
---compression policy for integer based partition hypertable
-CREATE TABLE test_table_int(time bigint, val int);
-SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+--compression policy for smallint, integer or bigint based partition hypertable
+--smallint test
+CREATE TABLE test_table_smallint(time SMALLINT, val SMALLINT);
+SELECT create_hypertable('test_table_smallint', 'time', chunk_time_interval => 1);
 NOTICE:  adding not-null constraint to column "time"
-      create_hypertable      
------------------------------
- (3,public,test_table_int,t)
+        create_hypertable         
+----------------------------------
+ (3,public,test_table_smallint,t)
 (1 row)
 
-create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
-select set_integer_now_func('test_table_int', 'dummy_now');
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS SMALLINT LANGUAGE SQL IMMUTABLE AS 'SELECT 5::SMALLINT';
+SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
  set_integer_now_func 
 ----------------------
  
 (1 row)
 
-insert into test_table_int select generate_series(1,5), 10;
-alter table test_table_int set (timescaledb.compress);
-select add_compression_policy('test_table_int', 2::int) AS compressjob_id
-\gset
-select * from _timescaledb_config.bgw_job where id=:compressjob_id;
+INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_smallint SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   
 ------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------
  1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             3 | {"hypertable_id": 3, "compress_after": 2}
 (1 row)
 
-\gset
 --will compress all chunks that need compression
 CALL run_job(:compressjob_id);
-select chunk_name, before_compression_total_bytes, after_compression_total_bytes
-from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
+SELECT chunk_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_smallint')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
     chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
 ------------------+--------------------------------+-------------------------------
  _hyper_3_5_chunk |                          24576 |                         16384
  _hyper_3_6_chunk |                          24576 |                         16384
+(2 rows)
+
+--integer tests
+CREATE TABLE test_table_integer(time INTEGER, val INTEGER);
+SELECT create_hypertable('test_table_integer', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (5,public,test_table_integer,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION dummy_now_integer() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS 'SELECT 5::INTEGER';
+SELECT set_integer_now_func('test_table_integer', 'dummy_now_integer');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_integer SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_integer', 2::INTEGER) AS compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------
+ 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             5 | {"hypertable_id": 5, "compress_after": 2}
+(1 row)
+
+--will compress all chunks that need compression
+CALL run_job(:compressjob_id);
+SELECT chunk_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_integer')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
+    chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
+-------------------+--------------------------------+-------------------------------
+ _hyper_5_12_chunk |                          24576 |                         16384
+ _hyper_5_13_chunk |                          24576 |                         16384
+(2 rows)
+
+--bigint test
+CREATE TABLE test_table_bigint(time BIGINT, val BIGINT);
+SELECT create_hypertable('test_table_bigint', 'time', chunk_time_interval => 1);
+NOTICE:  adding not-null constraint to column "time"
+       create_hypertable        
+--------------------------------
+ (7,public,test_table_bigint,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION dummy_now_bigint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS 'SELECT 5::BIGINT';
+SELECT set_integer_now_func('test_table_bigint', 'dummy_now_bigint');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_bigint SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_bigint', 2::BIGINT) AS compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   
+------+---------------------------+-------------------+-------------+-------------+--------------+-----------------------+--------------------+-------------------+-----------+---------------+-------------------------------------------
+ 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user | t         |             7 | {"hypertable_id": 7, "compress_after": 2}
+(1 row)
+
+--will compress all chunks that need compression
+CALL run_job(:compressjob_id);
+SELECT chunk_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_bigint')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
+    chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
+-------------------+--------------------------------+-------------------------------
+ _hyper_7_19_chunk |                          24576 |                         16384
+ _hyper_7_20_chunk |                          24576 |                         16384
 (2 rows)
 
 --TEST 8
@@ -168,10 +243,10 @@ SELECT create_hypertable('test_table_nologin', 'time', chunk_time_interval => 1)
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
- (5,public,test_table_nologin,t)
+ (9,public,test_table_nologin,t)
 (1 row)
 
-SELECT set_integer_now_func('test_table_nologin', 'dummy_now');
+SELECT set_integer_now_func('test_table_nologin', 'dummy_now_bigint');
  set_integer_now_func 
 ----------------------
  
@@ -194,7 +269,7 @@ SELECT * FROM create_hypertable('conditions', 'time',
                                 chunk_time_interval => '1 day'::interval);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             7 | public      | conditions | t
+            11 | public      | conditions | t
 (1 row)
 
 INSERT INTO conditions
@@ -240,21 +315,21 @@ SELECT add_compression_policy AS job_id
 -- job compresses only 1 chunk at a time --
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                  alter_job                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
- (1002,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 7, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
+                                                                  alter_job                                                                   
+----------------------------------------------------------------------------------------------------------------------------------------------
+ (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
 (1 row)
 
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                             alter_job                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1002,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 7, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
+                                                                              alter_job                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
 (1 row)
 
 set client_min_messages TO LOG;
 CALL run_job(:job_id);
-LOG:  job 1002 completed processing chunk _timescaledb_internal._hyper_7_26_chunk
+LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
 set client_min_messages TO NOTICE;
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
@@ -273,7 +348,7 @@ SELECT
    h.table_name AS hypertable_name,
    c.schema_name as chunk_schema,
    c.table_name as chunk_name,
-   c.status as chunk_status, 
+   c.status as chunk_status,
    comp.schema_name as compressed_chunk_schema,
    comp.table_name as compressed_chunk_name
 FROM
@@ -291,22 +366,22 @@ SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=>
 (1 row)
 
 INSERT INTO test2 SELECT q, 10, 11, 'hello' FROM generate_series( '2020-01-03 10:00:00+00', '2020-01-03 12:00:00+00' , '5 min'::interval) q;
-ALTER TABLE test2 set (timescaledb.compress, 
-timescaledb.compress_segmentby = 'b', 
+ALTER TABLE test2 set (timescaledb.compress,
+timescaledb.compress_segmentby = 'b',
 timescaledb.compress_orderby = 'timec DESC');
 SELECT compress_chunk(c)
 FROM show_chunks('test2') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_10_48_chunk
+ _timescaledb_internal._hyper_14_62_chunk
 (1 row)
 
 ---insert into the middle of the range ---
-INSERT INTO test2 values ( '2020-01-03 10:01:00+00', 20, 11, '2row'); 
-INSERT INTO test2 values ( '2020-01-03 11:01:00+00', 20, 11, '3row'); 
-INSERT INTO test2 values ( '2020-01-03 12:01:00+00', 20, 11, '4row'); 
+INSERT INTO test2 values ( '2020-01-03 10:01:00+00', 20, 11, '2row');
+INSERT INTO test2 values ( '2020-01-03 11:01:00+00', 20, 11, '3row');
+INSERT INTO test2 values ( '2020-01-03 12:01:00+00', 20, 11, '4row');
 --- insert a new segment  by ---
-INSERT INTO test2 values ( '2020-01-03 11:01:00+00', 20, 12, '12row'); 
+INSERT INTO test2 values ( '2020-01-03 11:01:00+00', 20, 12, '12row');
 SELECT time_bucket(INTERVAL '2 hour', timec), b, count(*)
 FROM test2
 GROUP BY time_bucket(INTERVAL '2 hour', timec), b
@@ -318,20 +393,19 @@ ORDER BY 1, 2;
  Fri Jan 03 04:00:00 2020 PST | 11 |     2
 (3 rows)
 
- 
 --check status for chunk --
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
-FROM compressed_chunk_info_view 
+FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            3 | _hyper_10_48_chunk
+            3 | _hyper_14_62_chunk
 (1 row)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as "COMP_CHUNK_NAME",
         chunk_schema || '.' || chunk_name as "CHUNK_NAME"
-FROM compressed_chunk_info_view 
+FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' \gset
 SELECT count(*) from test2;
  count 
@@ -339,26 +413,26 @@ SELECT count(*) from test2;
     29
 (1 row)
 
-SELECT recompress_chunk(:'CHUNK_NAME'::regclass); 
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
              recompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_10_48_chunk
+ _timescaledb_internal._hyper_14_62_chunk
 (1 row)
 
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
-FROM compressed_chunk_info_view 
+FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_10_48_chunk
+            1 | _hyper_14_62_chunk
 (1 row)
 
 --- insert into a compressed chunk again + a new chunk--
-INSERT INTO test2 values ( '2020-01-03 11:01:03+00', 20, 11, '33row'), 
-                         ( '2020-01-03 11:01:06+00', 20, 11, '36row'), 
-                         ( '2020-01-03 11:02:00+00', 20, 12, '12row'), 
-                         ( '2020-04-03 00:02:00+00', 30, 13, '3013row'); 
+INSERT INTO test2 values ( '2020-01-03 11:01:03+00', 20, 11, '33row'),
+                         ( '2020-01-03 11:01:06+00', 20, 11, '36row'),
+                         ( '2020-01-03 11:02:00+00', 20, 12, '12row'),
+                         ( '2020-04-03 00:02:00+00', 30, 13, '3013row');
 SELECT time_bucket(INTERVAL '2 hour', timec), b, count(*)
 FROM test2
 GROUP BY time_bucket(INTERVAL '2 hour', timec), b
@@ -374,12 +448,12 @@ ORDER BY 1, 2;
 --chunk status should be unordered for the previously compressed chunk
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
-FROM compressed_chunk_info_view 
+FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            3 | _hyper_10_48_chunk
-            0 | _hyper_10_51_chunk
+            3 | _hyper_14_62_chunk
+            0 | _hyper_14_65_chunk
 (2 rows)
 
 SELECT add_compression_policy AS job_id
@@ -389,30 +463,30 @@ CALL run_job(:job_id);
 -- status should be compressed ---
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
-FROM compressed_chunk_info_view 
+FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
  chunk_status |     CHUNK_NAME     
 --------------+--------------------
-            1 | _hyper_10_48_chunk
-            1 | _hyper_10_51_chunk
+            1 | _hyper_14_62_chunk
+            1 | _hyper_14_65_chunk
 (2 rows)
 
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
-SELECT recompress_chunk(:'CHUNK_NAME'::regclass, true); 
-psql:include/recompress_basic.sql:95: NOTICE:  nothing to recompress in chunk "_hyper_10_48_chunk" 
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass, true);
+psql:include/recompress_basic.sql:95: NOTICE:  nothing to recompress in chunk "_hyper_14_62_chunk" 
  recompress_chunk 
 ------------------
  
 (1 row)
 
-SELECT recompress_chunk(:'CHUNK_NAME'::regclass, false); 
-psql:include/recompress_basic.sql:96: ERROR:  nothing to recompress in chunk "_hyper_10_48_chunk" 
---now decompress it , then try and recompress 
+SELECT recompress_chunk(:'CHUNK_NAME'::regclass, false);
+psql:include/recompress_basic.sql:96: ERROR:  nothing to recompress in chunk "_hyper_14_62_chunk" 
+--now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_10_48_chunk
+ _timescaledb_internal._hyper_14_62_chunk
 (1 row)
 
 SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
@@ -420,17 +494,12 @@ psql:include/recompress_basic.sql:100: ERROR:  call compress_chunk instead of re
 \set ON_ERROR_STOP 1
 -- test recompress policy
 CREATE TABLE metrics(time timestamptz NOT NULL);
-SELECT create_hypertable('metrics','time');
-   create_hypertable   
------------------------
- (12,public,metrics,t)
-(1 row)
-
+SELECT hypertable_id AS "HYPERTABLE_ID", schema_name, table_name, created FROM create_hypertable('metrics','time') \gset
 ALTER TABLE metrics SET (timescaledb.compress);
 -- create chunk with some data and compress
 INSERT INTO metrics SELECT '2000-01-01' FROM generate_series(1,10);
 -- create custom compression job without recompress boolean
-SELECT add_job('_timescaledb_internal.policy_compression','1w','{"hypertable_id": 12, "compress_after": "@ 7 days"}') AS "JOB_COMPRESS" \gset
+SELECT add_job('_timescaledb_internal.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb) AS "JOB_COMPRESS" \gset
 -- first call should compress
 CALL run_job(:JOB_COMPRESS);
 -- 2nd call should do nothing
@@ -464,7 +533,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false')) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
                                                               alter_job                                                               
 --------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": false, ""hypertable_id"": 12, ""compress_after"": ""@ 7 days""}",-infinity)
+ (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": false, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}",-infinity)
 (1 row)
 
 -- nothing to do
@@ -498,7 +567,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','true')) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
                                                               alter_job                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": true, ""hypertable_id"": 12, ""compress_after"": ""@ 7 days""}",-infinity)
+ (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": true, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}",-infinity)
 (1 row)
 
 -- should recompress now
@@ -516,7 +585,7 @@ SELECT delete_job(:JOB_COMPRESS);
  
 (1 row)
 
-SELECT add_job('_timescaledb_internal.policy_recompression','1w','{"hypertable_id": 12, "recompress_after": "@ 7 days", "maxchunks_to_compress": 1 }') AS "JOB_RECOMPRESS" \gset
+SELECT add_job('_timescaledb_internal.policy_recompression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "recompress_after": "@ 7 days", "maxchunks_to_compress": 1}')::jsonb) AS "JOB_RECOMPRESS" \gset
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 

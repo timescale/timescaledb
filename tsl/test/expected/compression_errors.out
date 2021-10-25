@@ -458,7 +458,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1000 config must have compress_after
-CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 41 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 30 at RAISE
 SELECT remove_compression_policy('test_table_int');
  remove_compression_policy 
 ---------------------------
