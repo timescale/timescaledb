@@ -74,30 +74,76 @@ CALL run_job(:compressjob_id);
 DROP TABLE IF EXISTS conditions CASCADE;
 
 --TEST 7
---compression policy for integer based partition hypertable
-CREATE TABLE test_table_int(time bigint, val int);
-SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
+--compression policy for smallint, integer or bigint based partition hypertable
+--smallint test
+CREATE TABLE test_table_smallint(time SMALLINT, val SMALLINT);
+SELECT create_hypertable('test_table_smallint', 'time', chunk_time_interval => 1);
 
-create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
-select set_integer_now_func('test_table_int', 'dummy_now');
-insert into test_table_int select generate_series(1,5), 10;
-alter table test_table_int set (timescaledb.compress);
-select add_compression_policy('test_table_int', 2::int) AS compressjob_id
-\gset
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS SMALLINT LANGUAGE SQL IMMUTABLE AS 'SELECT 5::SMALLINT';
+SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
 
-select * from _timescaledb_config.bgw_job where id=:compressjob_id;
-\gset
+INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
+
+ALTER TABLE test_table_smallint SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
 --will compress all chunks that need compression
 CALL run_job(:compressjob_id);
-select chunk_name, before_compression_total_bytes, after_compression_total_bytes
-from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
+
+SELECT chunk_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_smallint')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
+
+--integer tests
+CREATE TABLE test_table_integer(time INTEGER, val INTEGER);
+SELECT create_hypertable('test_table_integer', 'time', chunk_time_interval => 1);
+
+CREATE OR REPLACE FUNCTION dummy_now_integer() RETURNS INTEGER LANGUAGE SQL IMMUTABLE AS 'SELECT 5::INTEGER';
+SELECT set_integer_now_func('test_table_integer', 'dummy_now_integer');
+
+INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
+
+ALTER TABLE test_table_integer SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_integer', 2::INTEGER) AS compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+--will compress all chunks that need compression
+CALL run_job(:compressjob_id);
+
+SELECT chunk_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_integer')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
+
+--bigint test
+CREATE TABLE test_table_bigint(time BIGINT, val BIGINT);
+SELECT create_hypertable('test_table_bigint', 'time', chunk_time_interval => 1);
+
+CREATE OR REPLACE FUNCTION dummy_now_bigint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE AS 'SELECT 5::BIGINT';
+SELECT set_integer_now_func('test_table_bigint', 'dummy_now_bigint');
+
+INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
+
+ALTER TABLE test_table_bigint SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_bigint', 2::BIGINT) AS compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+--will compress all chunks that need compression
+CALL run_job(:compressjob_id);
+
+SELECT chunk_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_bigint')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
 
 --TEST 8
 --hypertable owner lacks permission to start background worker
 SET ROLE NOLOGIN_ROLE;
 CREATE TABLE test_table_nologin(time bigint, val int);
 SELECT create_hypertable('test_table_nologin', 'time', chunk_time_interval => 1);
-SELECT set_integer_now_func('test_table_nologin', 'dummy_now');
+SELECT set_integer_now_func('test_table_nologin', 'dummy_now_bigint');
 ALTER TABLE test_table_nologin set (timescaledb.compress);
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('test_table_nologin', 2::int);

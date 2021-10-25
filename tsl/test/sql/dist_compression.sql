@@ -72,7 +72,7 @@ LIMIT 1;
 -- Check that one chunk, and its replica, is compressed
 SELECT * from chunk_compression_stats( 'compressed')
 ORDER BY chunk_name, node_name;
-select * from hypertable_compression_stats('compressed'); 
+select * from hypertable_compression_stats('compressed');
 
 --- Decompress the chunk and replica
 SELECT decompress_chunk(chunk)
@@ -126,13 +126,13 @@ LIMIT 1;
 \x
 SELECT * FROM timescaledb_information.hypertables
 WHERE hypertable_name = 'compressed';
-SELECT * from timescaledb_information.chunks 
+SELECT * from timescaledb_information.chunks
 ORDER BY hypertable_name, chunk_name;
-SELECT * from timescaledb_information.dimensions 
+SELECT * from timescaledb_information.dimensions
 ORDER BY hypertable_name, dimension_number;
 \x
 
-SELECT * FROM chunks_detailed_size('compressed'::regclass) 
+SELECT * FROM chunks_detailed_size('compressed'::regclass)
 ORDER BY chunk_name, node_name;
 SELECT * FROM hypertable_detailed_size('compressed'::regclass) ORDER BY node_name;
 
@@ -169,8 +169,8 @@ ORDER BY attname;
 
 SELECT count(*) from compressed where new_coli is not null;
 
---insert data into new chunk  
-INSERT INTO compressed 
+--insert data into new chunk
+INSERT INTO compressed
 SELECT '2019-08-01 00:00',  100, 100, 1, 'newcolv' ;
 
 SELECT COUNT(*) AS count_compressed
@@ -189,14 +189,14 @@ SELECT * from compressed where new_coli is not null;
 ALTER TABLE compressed RENAME new_coli TO new_intcol  ;
 ALTER TABLE compressed RENAME device TO device_id  ;
 
-SELECT * FROM test.remote_exec( NULL, 
+SELECT * FROM test.remote_exec( NULL,
     $$ SELECT * FROM _timescaledb_catalog.hypertable_compression
-       WHERE attname = 'device_id' OR attname = 'new_intcol'  and 
+       WHERE attname = 'device_id' OR attname = 'new_intcol'  and
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
 
 -- TEST insert data into compressed chunk
-INSERT INTO compressed 
+INSERT INTO compressed
 SELECT '2019-08-01 01:00',  300, 300, 3, 'newcolv' ;
 SELECT * from compressed where new_intcol = 3;
 
@@ -272,26 +272,75 @@ CALL run_job(:compressjob_id);
 DROP TABLE IF EXISTS conditions CASCADE;
 
 --TEST 7
---compression policy for integer based partition hypertable
-CREATE TABLE test_table_int(time bigint, val int);
-SELECT create_distributed_hypertable('test_table_int', 'time', chunk_time_interval => 1, replication_factor => 2);
+--compression policy for smallint, integer or bigint based partition hypertable
+--smallint tests
+CREATE TABLE test_table_smallint(time smallint, val int);
+SELECT create_distributed_hypertable('test_table_smallint', 'time', chunk_time_interval => 1, replication_factor => 2);
 
-CREATE OR REPLACE FUNCTION dummy_now() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS SMALLINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::SMALLINT';
 CALL distributed_exec($$
-CREATE OR REPLACE FUNCTION dummy_now() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT'
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS SMALLINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::SMALLINT'
 $$);
-select set_integer_now_func('test_table_int', 'dummy_now');
-insert into test_table_int select generate_series(1,5), 10;
-alter table test_table_int set (timescaledb.compress);
-select add_compression_policy('test_table_int', 2::int) AS compressjob_id
-\gset
+SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
+INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_smallint SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_smallint', 2::int) AS compressjob_id \gset
 
-select * from _timescaledb_config.bgw_job where id=:compressjob_id;
-\gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
 CALL run_job(:compressjob_id);
 CALL run_job(:compressjob_id);
-select chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
-from chunk_compression_stats('test_table_int') where compression_status like 'Compressed' order by chunk_name;
+
+SELECT chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_smallint')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
+
+--integer tests
+CREATE TABLE test_table_integer(time int, val int);
+SELECT create_distributed_hypertable('test_table_integer', 'time', chunk_time_interval => 1, replication_factor => 2);
+
+CREATE OR REPLACE FUNCTION dummy_now_integer() RETURNS INTEGER LANGUAGE SQL IMMUTABLE as  'SELECT 5::INTEGER';
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION dummy_now_integer() RETURNS INTEGER LANGUAGE SQL IMMUTABLE as  'SELECT 5::INTEGER'
+$$);
+SELECT set_integer_now_func('test_table_integer', 'dummy_now_integer');
+INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_integer SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_integer', 2::int) AS compressjob_id \gset
+
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+CALL run_job(:compressjob_id);
+CALL run_job(:compressjob_id);
+
+SELECT chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_integer')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
+
+--bigint tests
+CREATE TABLE test_table_bigint(time bigint, val int);
+SELECT create_distributed_hypertable('test_table_bigint', 'time', chunk_time_interval => 1, replication_factor => 2);
+
+CREATE OR REPLACE FUNCTION dummy_now_bigint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
+CALL distributed_exec($$
+CREATE OR REPLACE FUNCTION dummy_now_bigint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT'
+$$);
+SELECT set_integer_now_func('test_table_bigint', 'dummy_now_bigint');
+INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
+ALTER TABLE test_table_bigint SET (timescaledb.compress);
+SELECT add_compression_policy('test_table_bigint', 2::int) AS compressjob_id \gset
+
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+
+CALL run_job(:compressjob_id);
+CALL run_job(:compressjob_id);
+
+SELECT chunk_name, node_name, before_compression_total_bytes, after_compression_total_bytes
+FROM chunk_compression_stats('test_table_bigint')
+WHERE compression_status LIKE 'Compressed'
+ORDER BY chunk_name;
 
 --TEST8 insert into compressed chunks on dist. hypertable
 CREATE TABLE test_recomp_int(time bigint, val int);
@@ -309,15 +358,15 @@ CREATE VIEW test_recomp_int_chunk_status as
 SELECT
    c.table_name as chunk_name,
    c.status as chunk_status
-FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c 
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int';
 
---compress chunks 
+--compress chunks
 SELECT compress_chunk(chunk)
 FROM show_chunks('test_recomp_int') AS chunk
 ORDER BY chunk;
 
---check the status 
+--check the status
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 
 -- insert into compressed chunks of test_recomp_int (using same value for val)--
@@ -329,7 +378,7 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 
 SELECT
 c.schema_name || '.' || c.table_name as "CHUNK_NAME"
-FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c 
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' \gset
 
 --call recompress_chunk directly on distributed chunk
@@ -359,9 +408,9 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 ---run copy tests
 --copy data into existing chunk + for a new chunk
 COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
-11, 11 
-12, 12 
-13, 13 
+11, 11
+12, 12
+13, 13
 100, 100
 101, 100
 102, 100
@@ -384,10 +433,10 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 
 --interleave copy into 3 different chunks and check status--
 COPY test_recomp_int  FROM STDIN WITH DELIMITER ',';
-14, 14 
+14, 14
 103, 100
 66, 66
-15, 15 
+15, 15
 104, 100
 70, 70
 \.
@@ -428,7 +477,9 @@ SELECT recompress_chunk(chunk)  FROM
 
 -- test alter column type with distributed hypertable
 \set ON_ERROR_STOP 0
-ALTER TABLE test_table_int ALTER COLUMN val TYPE float;
+ALTER TABLE test_table_smallint ALTER COLUMN val TYPE float;
+ALTER TABLE test_table_integer ALTER COLUMN val TYPE float;
+ALTER TABLE test_table_bigint ALTER COLUMN val TYPE float;
 \set ON_ERROR_STOP 1
 
 --create a cont agg view on the ht as well then the drop should nuke everything
