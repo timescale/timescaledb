@@ -15,13 +15,13 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- failing conditions
 \set ON_ERROR_STOP 0
 SELECT test.condition();
-ERROR:  TestFailure @ test_utils.c ts_test_utils_condition:28 | (true_value == false_value)
+ERROR:  TestFailure @ test_utils.c ts_test_utils_condition:30 | (true_value == false_value)
 SELECT test.int64_eq();
-ERROR:  TestFailure @ test_utils.c ts_test_utils_int64_eq:38 | (big == small) [32532978 == 3242234]
+ERROR:  TestFailure @ test_utils.c ts_test_utils_int64_eq:40 | (big == small) [32532978 == 3242234]
 SELECT test.ptr_eq();
-ERROR:  TestFailure @ test_utils.c ts_test_utils_ptr_eq:52 | (true_ptr == false_ptr)
+ERROR:  TestFailure @ test_utils.c ts_test_utils_ptr_eq:54 | (true_ptr == false_ptr)
 SELECT test.double_eq();
-ERROR:  TestFailure @ test_utils.c ts_test_utils_double_eq:63 | (big_double == small_double) [923423478.324200 == 324.300000]
+ERROR:  TestFailure @ test_utils.c ts_test_utils_double_eq:65 | (big_double == small_double) [923423478.324200 == 324.300000]
 \set ON_ERROR_STOP 1
 -- Test debug points
 --

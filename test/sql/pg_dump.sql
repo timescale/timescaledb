@@ -2,10 +2,18 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+\set TEST_DBNAME_EXTRA :TEST_DBNAME _extra
+
 \o /dev/null
 \ir include/insert_two_partitions.sql
 \o
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE OR REPLACE FUNCTION bgw_wait(database TEXT, timeout INT)
+RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_bgw_wait'
+LANGUAGE C VOLATILE;
+
 CREATE SCHEMA test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME
 ALTER TABLE PUBLIC."two_Partitions" SET SCHEMA "test_schema";
@@ -181,24 +189,29 @@ SELECT get_sqlstate('SELECT timescaledb_post_restore()');
 
 drop function get_sqlstate(TEXT);
 
-\c postgres :ROLE_SUPERUSER
---need to shutdown workers to use db as template
---<exclude_from_test>
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
---</exclude_from_test>
--- there should be no sessions for that database
--- columns are explicit so the output is the same on PG12 and PG13 since PG13 has extra column leader_pid
-SELECT datid,datname,pid,usesysid,usename,application_name,client_addr,client_hostname,client_port,backend_start,xact_start,query_start,state_change,wait_event_type,wait_event,state,backend_xid,backend_xmin,query,backend_type FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
-
-CREATE DATABASE db_dump_error WITH TEMPLATE :TEST_DBNAME;
-
---now test functions for permission errors
-\c  db_dump_error :ROLE_DEFAULT_PERM_USER_2
-\set ON_ERROR_STOP 0
-SELECT timescaledb_pre_restore();
-SELECT timescaledb_post_restore();
-\set ON_ERROR_STOP 1
-
---drop db
+-- Check that the extension can be copied from an existing database
+-- without explicitly installing it. Stop background workers since we
+-- cannot have any backends connected to the database when cloning it.
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE db_dump_error;
+SELECT timescaledb_pre_restore();
+SELECT bgw_wait(:'TEST_DBNAME', 60);
+
+CREATE DATABASE :TEST_DBNAME_EXTRA WITH TEMPLATE :TEST_DBNAME;
+
+-- Connect to the database and do some basic stuff to check that the
+-- extension works.
+\c :TEST_DBNAME_EXTRA :ROLE_DEFAULT_PERM_USER
+CREATE TABLE test_tz(time timestamptz not null, temp float8, device text);
+
+SELECT create_hypertable('test_tz', 'time', 'device', 2);
+
+SELECT id, schema_name, table_name FROM _timescaledb_catalog.hypertable;
+
+INSERT INTO test_tz VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
+INSERT INTO test_tz VALUES('Mon Mar 20 09:27:00.936242 2017', 22, 'dev2');
+INSERT INTO test_tz VALUES('Mon Mar 20 09:28:00.936242 2017', 21.2, 'dev1');
+INSERT INTO test_tz VALUES('Mon Mar 20 09:37:00.936242 2017', 30, 'dev3');
+SELECT * FROM test_tz ORDER BY time;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE :TEST_DBNAME_EXTRA;
