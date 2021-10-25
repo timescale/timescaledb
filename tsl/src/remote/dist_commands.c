@@ -74,18 +74,21 @@ ts_dist_cmd_collect_responses(List *requests)
 }
 
 /*
- * Invoke a SQL statement (command) on the given data nodes.
+ * Invoke multiple SQL statements (commands) on the given data nodes.
  *
  * The list of data nodes can either be a list of data node names, or foreign
  * server OIDs.
  *
  * If "transactional" is false then it means that the SQL should be executed
  * in autocommit (implicit statement level commit) mode without the need for
- * an explicit 2PC from the access node
+ * an explicit 2PC from the access node.
+ *
+ * If "multiple_cmds" is false then "sql" and "params" are not iterated over.
  */
 DistCmdResult *
-ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, List *data_nodes,
-										bool transactional)
+ts_dist_multi_cmds_params_invoke_on_data_nodes(const char **sql, StmtParams **params,
+											   List *data_nodes, bool multiple_cmds,
+											   bool transactional)
 {
 	ListCell *lc;
 	List *requests = NIL;
@@ -115,15 +118,21 @@ ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, Lis
 		TSConnection *connection =
 			data_node_get_connection(node_name, REMOTE_TXN_NO_PREP_STMT, transactional);
 
-		ereport(DEBUG2, (errmsg_internal("sending \"%s\" to data node \"%s\"", sql, node_name)));
+		ereport(DEBUG2, (errmsg_internal("sending \"%s\" to data node \"%s\"", *sql, node_name)));
 
-		if (params == NULL)
-			req = async_request_send(connection, sql);
+		if (params == NULL || *params == NULL)
+			req = async_request_send(connection, *sql);
 		else
-			req = async_request_send_with_params(connection, sql, params, FORMAT_TEXT);
+			req = async_request_send_with_params(connection, *sql, *params, FORMAT_TEXT);
 
 		async_request_attach_user_data(req, (char *) node_name);
 		requests = lappend(requests, req);
+		if (multiple_cmds)
+		{
+			++sql;
+			if (params)
+				++params;
+		}
 	}
 
 	results = ts_dist_cmd_collect_responses(requests);
@@ -131,6 +140,17 @@ ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, Lis
 	Assert(ts_dist_cmd_response_count(results) == list_length(data_nodes));
 
 	return results;
+}
+
+DistCmdResult *
+ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, List *data_nodes,
+										bool transactional)
+{
+	return ts_dist_multi_cmds_params_invoke_on_data_nodes(&sql,
+														  (NULL == params) ? NULL : &params,
+														  data_nodes,
+														  false,
+														  transactional);
 }
 
 DistCmdResult *

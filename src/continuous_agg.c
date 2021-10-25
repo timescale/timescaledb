@@ -17,6 +17,7 @@
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
 #include <fmgr.h>
+#include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
@@ -29,7 +30,9 @@
 
 #include "bgw/job.h"
 #include "continuous_agg.h"
+#include "cross_module_fn.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
@@ -178,21 +181,56 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	}
 }
 
-static void
-materialization_invalidation_log_delete(int32 materialization_id)
+TS_FUNCTION_INFO_V1(ts_hypertable_invalidation_log_delete);
+/**
+ * Delete hypertable invalidation log entries for all the CAGGs that belong to the
+ * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
+ *
+ * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
+ *                            Access Node.
+ */
+Datum
+ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
+{
+	int32 raw_hypertable_id = PG_GETARG_INT32(0);
+
+	elog(DEBUG1, "invalidation log delete for hypertable %d", raw_hypertable_id);
+	hypertable_invalidation_log_delete(raw_hypertable_id);
+	PG_RETURN_VOID();
+}
+
+void
+ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 								RowExclusiveLock,
 								CurrentMemoryContext);
 
-	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, materialization_id);
+	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
+	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
+}
+
+TS_FUNCTION_INFO_V1(ts_materialization_invalidation_log_delete);
+/**
+ * Delete materialization invalidation log entries for the CAGG that belong to the
+ * materialized hypertable with ID 'mat_hypertable_id' in the Access Node.
+ *
+ * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
+ *                          Node.
+ */
+Datum
+ts_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
+{
+	int32 mat_hypertable_id = PG_GETARG_INT32(0);
+	ts_materialization_invalidation_log_delete_inner(mat_hypertable_id);
+	PG_RETURN_VOID();
 }
 
 static void
@@ -211,6 +249,201 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
+}
+
+TSDLLEXPORT CaggsInfo
+ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
+{
+	CaggsInfo all_caggs_info;
+
+	List *caggs = ts_continuous_aggs_find_by_raw_table_id(raw_hypertable_id);
+	ListCell *lc;
+	int64 *bucket_width;
+
+	all_caggs_info.bucket_widths = NIL;
+	all_caggs_info.max_bucket_widths = NIL;
+	all_caggs_info.mat_hypertable_ids = NIL;
+	Assert(list_length(caggs) > 0);
+
+	foreach (lc, caggs)
+	{
+		ContinuousAgg *cagg = lfirst(lc);
+
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = ts_continuous_agg_bucket_width(cagg);
+		all_caggs_info.bucket_widths = lappend(all_caggs_info.bucket_widths, bucket_width);
+
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = ts_continuous_agg_max_bucket_width(cagg);
+		all_caggs_info.max_bucket_widths = lappend(all_caggs_info.max_bucket_widths, bucket_width);
+
+		all_caggs_info.mat_hypertable_ids =
+			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
+	}
+	return all_caggs_info;
+}
+
+TSDLLEXPORT void
+ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
+								   ArrayType *max_bucket_widths, CaggsInfo *all_caggs)
+{
+	all_caggs->mat_hypertable_ids = NIL;
+	all_caggs->bucket_widths = NIL;
+	all_caggs->max_bucket_widths = NIL;
+
+	Assert(ARR_NDIM(mat_hypertable_ids) > 0 && ARR_NDIM(bucket_widths) > 0 &&
+		   ARR_NDIM(bucket_widths) > 0);
+	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
+		   ARR_NDIM(bucket_widths) == ARR_NDIM(bucket_widths));
+
+	ArrayIterator it_htids, it_widths, it_maxes;
+	Datum array_datum1, array_datum2, array_datum3;
+	bool isnull1, isnull2, isnull3;
+
+	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
+	it_widths = array_create_iterator(bucket_widths, 0, NULL);
+	it_maxes = array_create_iterator(max_bucket_widths, 0, NULL);
+	while (array_iterate(it_htids, &array_datum1, &isnull1) &&
+		   array_iterate(it_widths, &array_datum2, &isnull2) &&
+		   array_iterate(it_maxes, &array_datum3, &isnull3))
+	{
+		Assert(!isnull1 && !isnull2 && !isnull3);
+		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
+		all_caggs->mat_hypertable_ids =
+			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
+
+		int64 *bucket_width;
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = DatumGetInt64(array_datum2);
+		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, bucket_width);
+
+		bucket_width = palloc(sizeof(*bucket_width));
+		*bucket_width = DatumGetInt64(array_datum3);
+		all_caggs->max_bucket_widths = lappend(all_caggs->max_bucket_widths, bucket_width);
+	}
+	array_free_iterator(it_htids);
+	array_free_iterator(it_widths);
+	array_free_iterator(it_maxes);
+}
+
+TSDLLEXPORT void
+ts_create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hypertable_ids,
+									 ArrayExpr **bucket_widths, ArrayExpr **max_bucket_widths)
+{
+	ListCell *lc1, *lc2, *lc3;
+	Const *elem;
+
+	*mat_hypertable_ids = makeNode(ArrayExpr);
+	(*mat_hypertable_ids)->array_typeid = INT4ARRAYOID;
+	(*mat_hypertable_ids)->element_typeid = INT4OID;
+	(*mat_hypertable_ids)->elements = NIL;
+	(*mat_hypertable_ids)->multidims = false;
+	(*mat_hypertable_ids)->location = -1;
+
+	*bucket_widths = makeNode(ArrayExpr);
+	(*bucket_widths)->array_typeid = INT8ARRAYOID;
+	(*bucket_widths)->element_typeid = INT8OID;
+	(*bucket_widths)->elements = NIL;
+	(*bucket_widths)->multidims = false;
+	(*bucket_widths)->location = -1;
+
+	*max_bucket_widths = makeNode(ArrayExpr);
+	(*max_bucket_widths)->array_typeid = INT8ARRAYOID;
+	(*max_bucket_widths)->element_typeid = INT8OID;
+	(*max_bucket_widths)->elements = NIL;
+	(*max_bucket_widths)->multidims = false;
+	(*max_bucket_widths)->location = -1;
+
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->max_bucket_widths)
+	{
+		int32 cagg_hyper_id = lfirst_int(lc1);
+		elem = makeConst(INT4OID,
+						 -1,
+						 InvalidOid,
+						 sizeof(int32),
+						 Int32GetDatum(cagg_hyper_id),
+						 false,
+						 false);
+		(*mat_hypertable_ids)->elements = lappend((*mat_hypertable_ids)->elements, elem);
+
+		int64 bucket_width = *(int64 *) lfirst(lc2);
+		elem = makeConst(INT8OID,
+						 -1,
+						 InvalidOid,
+						 sizeof(int64),
+						 Int64GetDatum(bucket_width),
+						 false,
+						 FLOAT8PASSBYVAL);
+		(*bucket_widths)->elements = lappend((*bucket_widths)->elements, elem);
+
+		int64 max_bucket_width = *(int64 *) lfirst(lc3);
+		elem = makeConst(INT8OID,
+						 -1,
+						 InvalidOid,
+						 sizeof(int64),
+						 Int64GetDatum(max_bucket_width),
+						 false,
+						 FLOAT8PASSBYVAL);
+		(*max_bucket_widths)->elements = lappend((*max_bucket_widths)->elements, elem);
+	}
+}
+
+TSDLLEXPORT void
+ts_create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
+								 ArrayType **bucket_widths, ArrayType **max_bucket_widths)
+{
+	ListCell *lc1, *lc2, *lc3;
+	unsigned i;
+
+	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
+	Datum *widthdatums = palloc(sizeof(Datum) * list_length(all_caggs->bucket_widths));
+	Datum *maxwidthdatums = palloc(sizeof(Datum) * list_length(all_caggs->max_bucket_widths));
+
+	i = 0;
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->max_bucket_widths)
+	{
+		int32 cagg_hyper_id = lfirst_int(lc1);
+		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
+
+		int64 bucket_width = *(int64 *) lfirst(lc2);
+		widthdatums[i] = Int64GetDatum(bucket_width);
+
+		int64 max_bucket_width = *(int64 *) lfirst(lc3);
+		maxwidthdatums[i] = Int64GetDatum(max_bucket_width);
+
+		++i;
+	}
+
+	*mat_hypertable_ids = construct_array(matiddatums,
+										  list_length(all_caggs->mat_hypertable_ids),
+										  INT4OID,
+										  4,
+										  true,
+										  'i');
+
+	*bucket_widths = construct_array(widthdatums,
+									 list_length(all_caggs->bucket_widths),
+									 INT8OID,
+									 8,
+									 FLOAT8PASSBYVAL,
+									 'd');
+
+	*max_bucket_widths = construct_array(maxwidthdatums,
+										 list_length(all_caggs->max_bucket_widths),
+										 INT8OID,
+										 8,
+										 FLOAT8PASSBYVAL,
+										 'd');
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
@@ -583,10 +816,20 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		if (!raw_hypertable_has_other_caggs)
 		{
 			hypertable_invalidation_log_delete(form->raw_hypertable_id);
-			invalidation_threshold_delete(form->raw_hypertable_id);
+			if (ts_cm_functions->remote_invalidation_log_delete)
+				ts_cm_functions->remote_invalidation_log_delete(form->raw_hypertable_id,
+																HypertableIsRawTable);
 		}
 
-		materialization_invalidation_log_delete(form->mat_hypertable_id);
+		ts_materialization_invalidation_log_delete_inner(form->mat_hypertable_id);
+		if (ts_cm_functions->remote_invalidation_log_delete)
+			ts_cm_functions->remote_invalidation_log_delete(form->mat_hypertable_id,
+															HypertableIsMaterialization);
+
+		if (!raw_hypertable_has_other_caggs)
+		{
+			invalidation_threshold_delete(form->raw_hypertable_id);
+		}
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -597,7 +840,11 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		performDeletion(&user_view, DROP_RESTRICT, 0);
 
 	if (OidIsValid(raw_hypertable_trig.objectId))
+	{
 		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
+		if (ts_cm_functions->remote_drop_dist_ht_invalidation_trigger)
+			ts_cm_functions->remote_drop_dist_ht_invalidation_trigger(cadata->raw_hypertable_id);
+	}
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{

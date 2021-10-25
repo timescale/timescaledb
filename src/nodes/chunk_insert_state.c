@@ -23,6 +23,7 @@
 #include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
+#include <continuous_agg.h>
 
 #include "compat/compat.h"
 #include "errors.h"
@@ -32,8 +33,6 @@
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
 #include "indexing.h"
-
-#define CAGG_INVALIDATION_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -672,8 +671,8 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 			for (int i = 0; i < tg->numtriggers; i++)
 			{
 				if (strncmp(tg->triggers[i].tgname,
-							CAGG_INVALIDATION_TRIGGER_NAME,
-							strlen(CAGG_INVALIDATION_TRIGGER_NAME)) == 0)
+							CAGGINVAL_TRIGGER_NAME,
+							strlen(CAGGINVAL_TRIGGER_NAME)) == 0)
 					continue;
 				if (i > 0)
 					appendStringInfoString(trigger_list, ", ");

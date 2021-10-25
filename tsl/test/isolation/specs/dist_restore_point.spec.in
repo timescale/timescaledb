@@ -32,9 +32,9 @@ setup
 
 	CREATE TABLE IF NOT EXISTS disttable(time timestamptz NOT NULL, device int, temp float);
 }
-setup { SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'cdrp_1', if_not_exists => true); }
-setup { SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'cdrp_2', if_not_exists => true); }
-setup { SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'cdrp_3', if_not_exists => true); }
+setup { SELECT node_name FROM add_data_node('data_node_1', host => 'localhost', database => 'cdrp_1', if_not_exists => true); }
+setup { SELECT node_name FROM add_data_node('data_node_2', host => 'localhost', database => 'cdrp_2', if_not_exists => true); }
+setup { SELECT node_name FROM add_data_node('data_node_3', host => 'localhost', database => 'cdrp_3', if_not_exists => true); }
 setup { SELECT created FROM create_distributed_hypertable('disttable', 'time', 'device'); }
 
 teardown

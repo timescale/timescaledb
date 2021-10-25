@@ -8,6 +8,7 @@
 #include <catalog/pg_type.h>
 #include <executor/spi.h>
 #include <fmgr.h>
+#include <commands/dbcommands.h>
 #include <commands/trigger.h>
 #include <lib/stringinfo.h>
 #include <miscadmin.h>
@@ -60,6 +61,11 @@ typedef struct ContinuousAggsCacheInvalEntry
 {
 	int32 hypertable_id;
 	Oid hypertable_relid;
+	int32 entry_id; /*
+					 * This is what actually gets written to the hypertable log. It can be the same
+					 * as the hypertable_id for normal hypertables. In the distributed case it is
+					 * the ID of the parent hypertable in the Access Node.
+					 */
 	Dimension hypertable_open_dimension;
 	Oid previous_chunk_relid;
 	AttrNumber previous_chunk_open_dimension;
@@ -86,7 +92,7 @@ cache_inval_init()
 	Assert(continuous_aggs_trigger_mctx == NULL);
 
 	continuous_aggs_trigger_mctx = AllocSetContextCreate(TopTransactionContext,
-														 "ConinuousAggsTriggerCtx",
+														 "ContinuousAggsTriggerCtx",
 														 ALLOCSET_DEFAULT_SIZES);
 
 	memset(&ctl, 0, sizeof(ctl));
@@ -130,13 +136,15 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 }
 
 static inline void
-cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id)
+cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id,
+					   int32 entry_id)
 {
 	Cache *ht_cache = ts_hypertable_cache_pin();
 	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
 	 * hypertable_relid directly from the Chunk*/
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
 	cache_entry->hypertable_id = hypertable_id;
+	cache_entry->entry_id = entry_id;
 	cache_entry->hypertable_relid = ht->main_table_relid;
 	cache_entry->hypertable_open_dimension = *hyperspace_get_open_dimension(ht->space, 0);
 	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
@@ -195,13 +203,21 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	 * rows (which act like deletes) and once with the new rows.
 	 */
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	char *hypertable_id_str;
-	int32 hypertable_id;
+	char *hypertable_id_str, *parent_hypertable_id_str;
+	int32 hypertable_id, parent_hypertable_id = 0;
+	bool is_distributed_hypertable_trigger = false;
 	if (trigdata->tg_trigger->tgnargs < 0)
 		elog(ERROR, "must supply hypertable id");
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);
+
+	if (trigdata->tg_trigger->tgnargs > 1)
+	{
+		parent_hypertable_id_str = trigdata->tg_trigger->tgargs[1];
+		parent_hypertable_id = atol(parent_hypertable_id_str);
+		is_distributed_hypertable_trigger = true;
+	}
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
 		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
@@ -211,7 +227,9 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 						 trigdata->tg_relation,
 						 trigdata->tg_trigtuple,
 						 trigdata->tg_newtuple,
-						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
+						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event),
+						 is_distributed_hypertable_trigger,
+						 parent_hypertable_id);
 	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
 		return PointerGetDatum(trigdata->tg_trigtuple);
 	else
@@ -226,13 +244,14 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
  */
 void
 execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
-					 HeapTuple chunk_newtuple, bool update)
+					 HeapTuple chunk_newtuple, bool update, bool is_distributed_hypertable_trigger,
+					 int32 parent_hypertable_id)
 {
 	ContinuousAggsCacheInvalEntry *cache_entry;
 	bool found;
 	int64 timeval;
 	Oid chunk_relid = chunk_rel->rd_id;
-	/* On first call, init the mctx and hash table*/
+	/* On first call, init the mctx and hash table */
 	if (!continuous_aggs_cache_inval_htab)
 		cache_inval_init();
 
@@ -240,7 +259,10 @@ execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tu
 		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
 
 	if (!found)
-		cache_inval_entry_init(cache_entry, hypertable_id);
+		cache_inval_entry_init(cache_entry,
+							   hypertable_id,
+							   is_distributed_hypertable_trigger ? parent_hypertable_id :
+																   hypertable_id);
 
 	/* handle the case where we need to repopulate the cached chunk data */
 	if (cache_entry->previous_chunk_relid != chunk_relid)
@@ -256,7 +278,7 @@ execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tu
 	if (!update)
 		return;
 
-	/* on update we need to invalidate the new time value as well as the old one*/
+	/* on update we need to invalidate the new time value as well as the old one */
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_newtuple,
 							 cache_entry->previous_chunk_open_dimension,
@@ -273,16 +295,21 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	if (!entry->value_is_set)
 		return;
 
+	Cache *ht_cache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, entry->hypertable_id);
+	bool is_distributed_member = hypertable_is_distributed_member(ht);
+	ts_cache_release(ht_cache);
+
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
-	 * new value. In order to prevent serialization errors, we always append invalidation entires in
+	 * new value. In order to prevent serialization errors, we always append invalidation entries in
 	 * the case when we're using a strong enough isolation level that we won't see the new
-	 * threshold; the materializer can handle invalidations that are beyond the threshold
-	 * gracefully.
+	 * threshold. The same applies for distributed member invalidation triggers of hypertables.
+	 * The materializer can handle invalidations that are beyond the threshold gracefully.
 	 */
-	if (IsolationUsesXactSnapshot())
+	if (IsolationUsesXactSnapshot() || is_distributed_member)
 	{
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
+		invalidation_hyper_log_add_entry(entry->entry_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
 		return;
@@ -291,7 +318,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
 
 	if (entry->lowest_modified_value < liv)
-		invalidation_hyper_log_add_entry(entry->hypertable_id,
+		invalidation_hyper_log_add_entry(entry->entry_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
 };
@@ -331,6 +358,34 @@ cache_inval_htab_write(void)
 		cache_inval_entry_write(current_entry);
 };
 
+/*
+ * We use TopTransactionContext for our cached invalidations.
+ * We need to make sure cache_inval_cleanup() is always called after cache_inval_htab_write().
+ * We need this memory context to survive the transaction lifetime so that cache_inval_cleanup()
+ * does not attempt to tear down memory that has already been freed due to a transaction ending.
+ *
+ * The order of operations in postgres can be this:
+ * CallXactCallbacks(XACT_EVENT_PRE_PREPARE);
+ * ...
+ * CallXactCallbacks(XACT_EVENT_PREPARE);
+ * ...
+ * MemoryContextDelete(TopTransactionContext);
+ *
+ * or that:
+ * CallXactCallbacks(XACT_EVENT_PRE_COMMIT);
+ * ...
+ * CallXactCallbacks(XACT_EVENT_COMMIT);
+ * ...
+ * MemoryContextDelete(TopTransactionContext);
+ *
+ * In the case of a 2PC transaction, we need to make sure to apply the invalidations at
+ * XACT_EVENT_PRE_PREPARE time, before TopTransactionContext is torn down by PREPARE TRANSACTION.
+ * Otherwise, we are unable to call cache_inval_cleanup() without corrupting the memory. For
+ * this reason, we also deallocate at XACT_EVENT_PREPARE time.
+ *
+ * For local transactions we apply the invalidations at XACT_EVENT_PRE_COMMIT time.
+ * Similar care is taken of parallel workers and aborting transactions.
+ */
 static void
 continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
@@ -340,10 +395,14 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 
 	switch (event)
 	{
+		case XACT_EVENT_PRE_PREPARE:
 		case XACT_EVENT_PRE_COMMIT:
+		case XACT_EVENT_PARALLEL_PRE_COMMIT:
 			cache_inval_htab_write();
-			cache_inval_cleanup();
 			break;
+		case XACT_EVENT_PREPARE:
+		case XACT_EVENT_COMMIT:
+		case XACT_EVENT_PARALLEL_COMMIT:
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
 			cache_inval_cleanup();
