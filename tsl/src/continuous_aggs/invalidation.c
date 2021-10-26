@@ -1006,6 +1006,7 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 						int32 raw_hypertable_id, Oid dimtype, CaggsInfo *all_caggs)
 {
 	ListCell *lc1, *lc2, *lc3;
+	bool PG_USED_FOR_ASSERTS_ONLY found = false;
 
 	state->mat_hypertable_id = mat_hypertable_id;
 	state->raw_hypertable_id = raw_hypertable_id;
@@ -1033,9 +1034,11 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 
 			state->bucket_width = bucket_width;
 			state->max_bucket_width = max_bucket_width;
+			found = true;
 			break;
 		}
 	}
+	Assert(found);
 }
 
 static void

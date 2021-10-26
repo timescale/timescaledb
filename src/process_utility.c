@@ -1614,7 +1614,7 @@ process_drop_start(ProcessUtilityArgs *args)
 	{
 		case OBJECT_TABLE:
 			process_drop_hypertable(args, stmt);
-			/* FALL-THROUGH */
+			TS_FALLTHROUGH;
 		case OBJECT_FOREIGN_TABLE:
 			/* Chunks can be either normal tables, or foreign tables in the case of a distributed
 			 * hypertable */
