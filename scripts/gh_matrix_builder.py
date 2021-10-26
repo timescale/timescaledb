@@ -119,10 +119,10 @@ if event_type != "pull_request":
 
   # add debug test for first supported PG12 version
   # most of the IGNORES are the isolation tests because the output format has changed between versions
-  # chunk_utils is ignored because of a use after free bug in postgres 12.0 which one of our tests hit
+  # chunk_utils is skipped because of a use after free bug in postgres 12.0 which one of our tests hit
   pg12_debug_earliest = {
     "pg": PG12_EARLIEST,
-    "installcheck_args": "IGNORES='chunk_utils cluster-12 compression_ddl continuous_aggs_concurrent_refresh continuous_aggs_concurrent_refresh_dist_ht continuous_aggs_insert continuous_aggs_multi continuous_aggs_multi_dist_ht deadlock_drop_chunks_compress deadlock_dropchunks_select dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback continuous_aggs_drop_chunks'"
+    "installcheck_args": "SKIPS='chunk_utils' IGNORES='cluster-12 compression_ddl continuous_aggs_concurrent_refresh continuous_aggs_concurrent_refresh_dist_ht continuous_aggs_insert continuous_aggs_multi continuous_aggs_multi_dist_ht deadlock_drop_chunks_compress deadlock_dropchunks_select debug_notice dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback continuous_aggs_drop_chunks'"
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
 
