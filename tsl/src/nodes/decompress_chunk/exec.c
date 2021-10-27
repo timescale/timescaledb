@@ -324,8 +324,6 @@ decompress_chunk_exec(CustomScanState *node)
 	if (node->custom_ps == NIL)
 		return NULL;
 
-	ResetExprContext(econtext);
-
 	while (true)
 	{
 		TupleTableSlot *slot = decompress_chunk_create_tuple(state);
@@ -334,6 +332,10 @@ decompress_chunk_exec(CustomScanState *node)
 			return NULL;
 
 		econtext->ecxt_scantuple = slot;
+
+		/* Reset expression memory context to clean out any cruft from
+		 * previous tuple. */
+		ResetExprContext(econtext);
 
 		if (node->ss.ps.qual && !ExecQual(node->ss.ps.qual, econtext))
 		{
