@@ -1,0 +1,38 @@
+# Release pipeline
+#
+# This release pipeline does a release with the contents of the
+# branch that you select when running the workflow. 
+
+name: Release TimescaleDB
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+      publish-artifacts:
+        description: 'Publish all artifacts'
+        required: false
+        default: false
+jobs:
+  # This is just a simple check but does not do anything sensible at
+  # this point except printing some status information about the
+  # branch.
+  check-release:
+    name: Check Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Print information
+        run: |
+          git describe --dirty --debug
+
+      - name: Fetch list of all commits since last tag
+        shell: bash -x {0}
+        run: |
+          tag=$(git describe --tags --abbrev=0 $GITHUB_REF)
+          git log $tag..
