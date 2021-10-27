@@ -5,6 +5,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 include(CheckCCompilerFlag)
 include(GitCommands)
 include(GenerateScripts)
+include(CMakeDependentOption)
 
 # This requires all tests to run. This defaults to OFF but can be enabled to
 # ensure that no tests are skipped because of missing tools.
@@ -131,6 +132,12 @@ option(EXPERIMENTAL "Skip postgres version compatibility check" OFF)
 option(GENERATE_DOWNGRADE_SCRIPT
        "Generate downgrade script. Defaults to not generate a downgrade script."
        OFF)
+cmake_dependent_option(
+  GENERATE_OLD_DOWNGRADE_SCRIPTS
+  "Generate downgrade scripts for old versions. Requires setting GENERATE_DOWNGRADE_SCRIPT to ON. Defaults to OFF."
+  OFF
+  "GENERATE_DOWNGRADE_SCRIPT"
+  ON)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of
