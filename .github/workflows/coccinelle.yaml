@@ -1,0 +1,32 @@
+name: Coccinelle
+on:
+  pull_request:
+  push:
+jobs:
+  coccinelle:
+    name: Coccinelle
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install software-properties-common
+        sudo add-apt-repository ppa:npalix/coccinelle
+        sudo apt-get update
+        sudo apt-get install coccinelle
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Run coccinelle
+      run: |
+        ./scripts/coccinelle.sh
+
+    - name: Save coccinelle.diff
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: coccinelle.diff
+        path: coccinelle.diff
+
