@@ -757,7 +757,14 @@ collect_colstat_slots(const HeapTuple tuple, const Form_pg_statistic formdata, D
 		slot_collation[i] = ObjectIdGetDatum(((Oid *) &formdata->stacoll1)[i]);
 
 		slotkind[i] = ObjectIdGetDatum(kind);
-		if (kind == InvalidOid)
+
+		/*
+		 * As per comments in pg_statistic_d.h, "kind" codes from 0 - 99 are reserved
+		 * for assignment by the core PostgreSQL project. Beyond that are for PostGIS
+		 * and other projects
+		 */
+#define PG_STATS_KINDS_MAX 99
+		if (kind == InvalidOid || kind > PG_STATS_KINDS_MAX)
 		{
 			nulls[numbers_idx] = true;
 			nulls[values_idx] = true;
@@ -1175,7 +1182,12 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 		value_arrays[i] = NULL;
 		valtype_oids[i] = InvalidOid;
 
-		if (slot_kinds[i] == InvalidOid)
+		/*
+		 * As per comments in pg_statistic_d.h, "kind" codes from 0 - 99 are reserved
+		 * for assignment by the core PostgreSQL project. Beyond that are for PostGIS
+		 * and other projects
+		 */
+		if (slot_kinds[i] == InvalidOid || slot_kinds[i] > PG_STATS_KINDS_MAX)
 			continue;
 
 		for (k = 0; k < STRINGS_PER_OP_OID; ++k)

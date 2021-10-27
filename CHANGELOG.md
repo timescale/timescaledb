@@ -16,12 +16,14 @@ accidentally triggering the load of a previous DB version.**
 * #3708 Fix crash in get_aggsplit
 * #3709 Fix ordered append pathkey check
 * #3728 Fix SkipScan with varchar column
+* #3733 Fix ANALYZE crash with custom statistics for custom types
 
 **Thanks**
 * @binakot and @sebvett for reporting an issue with DISTINCT queries
 * @hardikm10, @DavidPavlicek and @pafiti for reporting bugs on TRUNCATE
 * @mjf for reporting an issue with ordered append and JOINs
 * @phemmer for reporting the issues on multinode with aggregate queries and evaluation of now()
+* @tanglebones for reporting the ANALYZE crash with custom types on multinode
 
 ## 2.4.2 (2021-09-21)
 
