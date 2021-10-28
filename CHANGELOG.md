@@ -54,6 +54,7 @@ This release also includes several bug fixes.
 * @phemmer for reporting the issues on multinode with aggregate queries and evaluation of now()
 * @abolognino for reporting an issue with INSERTs into compressed hypertables that have cagg
 * @tanglebones for reporting the ANALYZE crash with custom types on multinode
+* @amadeubarbosa and @felipenogueirajack for reporting crash using JSONB column in compressed chunks
 
 ## 2.4.2 (2021-09-21)
 
