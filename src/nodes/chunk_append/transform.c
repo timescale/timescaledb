@@ -11,7 +11,7 @@
 #include <optimizer/optimizer.h>
 #include <utils/lsyscache.h>
 
-#include "chunk_append/transform.h"
+#include "nodes/chunk_append/transform.h"
 #include "utils.h"
 
 #define DATATYPE_PAIR(left, right, type1, type2)                                                   \

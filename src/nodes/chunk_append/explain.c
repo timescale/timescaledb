@@ -16,8 +16,8 @@
 #include <utils/ruleutils.h>
 #include <utils/typcache.h>
 
-#include "chunk_append/exec.h"
-#include "chunk_append/explain.h"
+#include "nodes/chunk_append/exec.h"
+#include "nodes/chunk_append/explain.h"
 #include "compat/compat.h"
 
 static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, ExplainState *es);
