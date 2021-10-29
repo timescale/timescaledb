@@ -48,7 +48,7 @@
 #include "nodes/chunk_dispatch_plan.h"
 #include "nodes/hypertable_insert.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "chunk_append/chunk_append.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "partitioning.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"

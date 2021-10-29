@@ -20,10 +20,10 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 
-#include "chunk_append/chunk_append.h"
-#include "chunk_append/planner.h"
-#include "chunk_append/exec.h"
-#include "chunk_append/transform.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/chunk_append/planner.h"
+#include "nodes/chunk_append/exec.h"
+#include "nodes/chunk_append/transform.h"
 #include "import/planner.h"
 #include "guc.h"
 
