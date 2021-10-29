@@ -92,7 +92,7 @@ tsl_process_utility_xact_abort(XactEvent event, void *arg)
 	{
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
-			dist_ddl_reset();
+			dist_ddl_state_reset();
 			break;
 		default:
 			break;
@@ -106,7 +106,7 @@ tsl_process_utility_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
 	switch (event)
 	{
 		case SUBXACT_EVENT_ABORT_SUB:
-			dist_ddl_reset();
+			dist_ddl_state_reset();
 			break;
 		default:
 			break;
@@ -116,7 +116,7 @@ tsl_process_utility_subxact_abort(SubXactEvent event, SubTransactionId mySubid,
 void
 _tsl_process_utility_init(void)
 {
-	dist_ddl_init();
+	dist_ddl_state_init();
 
 	RegisterXactCallback(tsl_process_utility_xact_abort, NULL);
 	RegisterSubXactCallback(tsl_process_utility_subxact_abort, NULL);
@@ -125,7 +125,7 @@ _tsl_process_utility_init(void)
 void
 _tsl_process_utility_fini(void)
 {
-	dist_ddl_reset();
+	dist_ddl_state_reset();
 
 	UnregisterXactCallback(tsl_process_utility_xact_abort, NULL);
 	UnregisterSubXactCallback(tsl_process_utility_subxact_abort, NULL);

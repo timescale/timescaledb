@@ -681,8 +681,8 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 	}
 
 	/*
-	 * Backend is assumed to not have any preexisting conflicting table or hypertable.  Any default
-	 * indices will have already been created by the frontend.
+	 * Data node is assumed to not have any preexisting conflicting table or hypertable.
+	 * Any default indices will have already been created by the access node.
 	 */
 	appendStringInfoString(hypertable_cmd, ", if_not_exists => FALSE");
 	appendStringInfoString(hypertable_cmd, ", migrate_data => FALSE");
