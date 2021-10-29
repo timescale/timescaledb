@@ -9,7 +9,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard PostgreSQL 13.2+ or 12  installation with development
+- A standard PostgreSQL 14, 13.2+ or 12 installation with development
 environment (header files) (e.g., `postgresql-server-dev-13` package
 for Linux, Postgres.app for MacOS)
 - C compiler (e.g., gcc or clang)
@@ -18,8 +18,8 @@ for Linux, Postgres.app for MacOS)
 ```bash
 git clone git@github.com:timescale/timescaledb.git
 cd timescaledb
-# Find the latest release and checkout, e.g. for 2.2.1:
-git checkout 2.2.1
+# Find the latest release and checkout, e.g. for 2.5.0:
+git checkout 2.5.0
 # Bootstrap the build system
 ./bootstrap
 # To build the extension
@@ -42,7 +42,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard [PostgreSQL 13.2+ or 12 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
+- A standard [PostgreSQL 14, 13.2+ or 12 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
 - OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.4 or greater and Git
@@ -58,8 +58,8 @@ be built in the following way:
 git clone git@github.com:timescale/timescaledb.git
 cd timescaledb
 
-# Find the latest release and checkout, e.g. for 2.2.1:
-git checkout 2.2.1
+# Find the latest release and checkout, e.g. for 2.5.0:
+git checkout 2.5.0
 # Bootstrap the build system
 bootstrap.bat
 # To build the extension from command line
