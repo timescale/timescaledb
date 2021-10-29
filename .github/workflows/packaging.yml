@@ -1,0 +1,40 @@
+# Trigger package workflows on release tagging
+name: Build packages
+on:
+  push:
+    tags:
+    - '*'
+jobs:
+  package:
+    env:
+      GITHUB_TOKEN: ${{ secrets.API_TOKEN_GITHUB_PACKAGE }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+
+      - name: Debian packages
+        if: always()
+        run: |
+          gh workflow run timescaledb-debian.yml -R timescale/release-build-scripts -r master -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
+
+      - name: Ubuntu packages
+        if: always()
+        run: |
+          gh workflow run timescaledb-ubuntu.yml -R timescale/release-build-scripts -r master -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
+
+      - name: RPM packages
+        if: always()
+        run: |
+          gh workflow run timescaledb-rpm.yml -R timescale/release-build-scripts -r master -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
+
+      - name: Homebrew formula
+        if: always()
+        run: |
+          gh workflow run timescaledb-homebrew.yml -R timescale/release-build-scripts -r master -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
+
+      - name: Docker images
+        if: always()
+        run: |
+          gh workflow run docker-image.yml -R timescale/timescaledb-docker -f version=${{ env.RELEASE_VERSION }}
+
