@@ -374,11 +374,12 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	{
 		DistCmdResult *result;
 		List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-		const char **cmds; /* same order as ht->data_nodes */
+		List *cmd_descriptors = NIL; /* same order as ht->data_nodes */
+		DistCmdDescr *cmd_descr_data = NULL;
 		ListCell *cell;
 
 		unsigned i = 0;
-		cmds = palloc(list_length(data_node_list) * sizeof(*cmds));
+		cmd_descr_data = palloc(list_length(data_node_list) * sizeof(*cmd_descr_data));
 		foreach (cell, ht->data_nodes)
 		{
 			HypertableDataNode *node = lfirst(cell);
@@ -393,11 +394,13 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 							 quote_identifier(CAGG_INVALIDATION_TRIGGER),
 							 node->fd.node_hypertable_id, /* distributed member hypertable ID */
 							 node->fd.hypertable_id /* Access Node hypertable ID */);
-			cmds[i++] = command->data;
+			cmd_descr_data[i].sql = command->data;
+			cmd_descr_data[i].params = NULL;
+			cmd_descriptors = lappend(cmd_descriptors, &cmd_descr_data[i++]);
 		}
 
 		result =
-			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmds, NULL, data_node_list, true, true);
+			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, data_node_list, true);
 		if (result)
 			ts_dist_cmd_close_response(result);
 		/*
