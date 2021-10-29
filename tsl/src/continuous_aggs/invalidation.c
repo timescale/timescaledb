@@ -1513,38 +1513,38 @@ remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id)
 	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
 	Assert(OidIsValid(func_oid));
 
-	/* the below arrays have the same order as ht->data_nodes */
-	FunctionCallInfo fcinfo_array =
-		palloc(SizeForFunctionCallInfo(DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS) *
-			   list_length(data_node_list));
-	FmgrInfo *flinfo_array = palloc(sizeof(*flinfo_array) * list_length(data_node_list));
-	const char **cmds = palloc(list_length(data_node_list) * sizeof(*cmds));
+	FunctionCallInfo fcinfo =
+		palloc(SizeForFunctionCallInfo(DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS));
+	FmgrInfo flinfo;
+	List *cmd_descriptors = NIL; /* same order as ht->data_nodes */
+	DistCmdDescr *cmd_descr_data = palloc(list_length(data_node_list) * sizeof(*cmd_descr_data));
 	unsigned i = 0;
 
 	foreach (cell, ht->data_nodes)
 	{
 		HypertableDataNode *node = lfirst(cell);
 
-		fmgr_info(func_oid, &flinfo_array[i]);
-		InitFunctionCallInfoData(fcinfo_array[i],
-								 &flinfo_array[i],
+		fmgr_info(func_oid, &flinfo);
+		InitFunctionCallInfoData(*fcinfo,
+								 &flinfo,
 								 DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS,
 								 InvalidOid,
 								 NULL,
 								 NULL);
 
-		FC_NULL(&fcinfo_array[i], 0) = false;
+		FC_NULL(fcinfo, 0) = false;
 		/* distributed member hypertable ID */
-		FC_ARG(&fcinfo_array[i], 0) = Int32GetDatum(node->fd.node_hypertable_id);
+		FC_ARG(fcinfo, 0) = Int32GetDatum(node->fd.node_hypertable_id);
 		/* Check for null result, since caller is clearly not expecting one */
-		if (fcinfo_array[i].isnull)
-			elog(ERROR, "function %u returned NULL", flinfo_array[i].fn_oid);
+		if (fcinfo->isnull)
+			elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
 
-		cmds[i] = deparse_func_call(&fcinfo_array[i]);
-		++i;
+		cmd_descr_data[i].sql = deparse_func_call(fcinfo);
+		cmd_descr_data[i].params = NULL;
+		cmd_descriptors = lappend(cmd_descriptors, &cmd_descr_data[i++]);
 	}
 
-	result = ts_dist_multi_cmds_params_invoke_on_data_nodes(cmds, NULL, data_node_list, true, true);
+	result = ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, data_node_list, true);
 	if (result)
 		ts_dist_cmd_close_response(result);
 	ts_cache_release(hcache);
