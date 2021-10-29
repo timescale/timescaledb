@@ -14,7 +14,6 @@
 /* User-facing API functions */
 extern Datum policy_compression_add(PG_FUNCTION_ARGS);
 extern Datum policy_compression_remove(PG_FUNCTION_ARGS);
-extern Datum policy_compression_proc(PG_FUNCTION_ARGS);
 
 extern Datum policy_recompression_proc(PG_FUNCTION_ARGS);
 
