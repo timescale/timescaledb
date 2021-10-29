@@ -1767,11 +1767,11 @@ ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_d
 			 * Special replication_factor case for hypertables created on remote
 			 * data nodes. Used to distinguish them from regular hypertables.
 			 *
-			 * Such argument is only allowed to be use by frontend session.
+			 * Such argument is only allowed to be use by access node session.
 			 */
 			if (replication_factor == -1)
-				valid =
-					ts_cm_functions->is_frontend_session && ts_cm_functions->is_frontend_session();
+				valid = ts_cm_functions->is_access_node_session &&
+						ts_cm_functions->is_access_node_session();
 		}
 	}
 
