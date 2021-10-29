@@ -35,7 +35,7 @@ typedef struct ChunkDispatchState
 	ResultRelInfo *rri;
 } ChunkDispatchState;
 
-extern bool ts_chunk_dispatch_is_state(PlanState *state);
+extern bool ts_is_chunk_dispatch_state(PlanState *state);
 extern ChunkDispatchState *ts_chunk_dispatch_state_create(Oid hypertable_oid, Plan *plan);
 extern void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *parent);
 

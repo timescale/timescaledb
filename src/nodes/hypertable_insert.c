@@ -70,7 +70,7 @@ get_chunk_dispatch_states(PlanState *substate)
 			ListCell *lc;
 			List *result = NIL;
 
-			if (ts_chunk_dispatch_is_state(substate))
+			if (ts_is_chunk_dispatch_state(substate))
 				return list_make1(substate);
 
 			/*
@@ -490,13 +490,12 @@ static CustomPathMethods hypertable_insert_path_methods = {
 };
 
 Path *
-ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
+ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht)
 {
 	Path *path = &mtpath->path;
 	Path *subpath;
 	Cache *hcache = ts_hypertable_cache_pin();
 	Bitmapset *distributed_insert_plans = NULL;
-	Hypertable *ht = NULL;
 	HypertableInsertPath *hipath;
 	int i = 0;
 
@@ -524,34 +523,24 @@ ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 #endif
 
 	Index rti = linitial_int(mtpath->resultRelations);
-	RangeTblEntry *rte = planner_rt_fetch(rti, root);
 
-	ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+	if (root->parse->onConflict && OidIsValid(root->parse->onConflict->constraint))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("hypertables do not support ON CONFLICT statements that reference "
+						"constraints"),
+				 errhint("Use column names to infer indexes instead.")));
 
-	if (!ht)
+	if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
 	{
-		elog(ERROR, "no hypertable found in INSERT plan");
+		/* Remember that this will become a data node dispatch/copy
+		 * plan. We need to know later whether or not to plan this
+		 * using the FDW API. */
+		distributed_insert_plans = bms_add_member(distributed_insert_plans, i);
+		subpath = ts_cm_functions->distributed_insert_path_create(root, mtpath, rti, i);
 	}
 	else
-	{
-		if (root->parse->onConflict && OidIsValid(root->parse->onConflict->constraint))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support ON CONFLICT statements that reference "
-							"constraints"),
-					 errhint("Use column names to infer indexes instead.")));
-
-		if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
-		{
-			/* Remember that this will become a data node dispatch/copy
-			 * plan. We need to know later whether or not to plan this
-			 * using the FDW API. */
-			distributed_insert_plans = bms_add_member(distributed_insert_plans, i);
-			subpath = ts_cm_functions->distributed_insert_path_create(root, mtpath, rti, i);
-		}
-		else
-			subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
-	}
+		subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 
 	hipath = palloc0(sizeof(HypertableInsertPath));
 
@@ -638,7 +627,7 @@ ExecModifyTable(PlanState *pstate)
 	resultRelInfo = node->resultRelInfo + node->mt_lastResultIndex;
 	subplanstate = outerPlanState(node);
 
-	if (ts_chunk_dispatch_is_state(subplanstate))
+	if (ts_is_chunk_dispatch_state(subplanstate))
 		cds = (ChunkDispatchState *) subplanstate;
 	else
 		cds = linitial(get_chunk_dispatch_states(subplanstate));
