@@ -263,7 +263,7 @@ dist_txn_xact_callback_1pc(XactEvent event, void *arg)
 		case XACT_EVENT_PRE_PREPARE:
 
 			/*
-			 * Cannot prepare stuff on the frontend.
+			 * Cannot prepare stuff on the access node.
 			 */
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

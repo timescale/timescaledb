@@ -168,7 +168,7 @@ typedef struct CrossModuleFunctions
 	uint64 (*distributed_copy)(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);
 	void (*set_distributed_peer_id)(Datum id);
-	bool (*is_frontend_session)(void);
+	bool (*is_access_node_session)(void);
 	bool (*remove_from_distributed_db)(void);
 	PGFunction dist_remote_hypertable_info;
 	PGFunction dist_remote_chunk_info;

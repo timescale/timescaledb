@@ -782,7 +782,7 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 		if (set_distid)
 		{
 			if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
-				dist_util_set_as_frontend();
+				dist_util_set_as_access_node();
 			add_distributed_id_to_data_node(conn);
 		}
 

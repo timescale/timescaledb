@@ -1456,6 +1456,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 			{
 				Cache *hcache;
 				ListCell *cell;
+				List *saved_schema_objects = NIL;
 				bool was_schema_op = false;
 
 				/*
@@ -1465,6 +1466,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 				 */
 				if (stmt->targtype == ACL_TARGET_ALL_IN_SCHEMA)
 				{
+					saved_schema_objects = stmt->objects;
 					process_grant_add_by_schema(stmt);
 					was_schema_op = true;
 				}
@@ -1527,6 +1529,19 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 				}
 
 				ts_cache_release(hcache);
+
+				/* Execute command right away, to check any permission errors before propagating
+				 * it to the distributed DDL */
+				result = DDL_DONE;
+				prev_ProcessUtility(args);
+
+				/* Restore ALL IN SCHEMA command type and it's objects */
+				if (was_schema_op)
+				{
+					stmt->targtype = ACL_TARGET_ALL_IN_SCHEMA;
+					stmt->objects = saved_schema_objects;
+				}
+
 				break;
 			}
 		default:

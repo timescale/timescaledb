@@ -11,29 +11,33 @@
 
 #include "connection.h"
 
-/* This is the datanode dist txn id to be used in PREPARE TRANSACTION and friends.
-   From the datanode perspective it has to be unique with regard to any concurrent
-   prepared transactions.
-
-   From the point of view of the frontend, given such an id, a frontend must be able to decide
-   whether or not the corresponding distributed txn is still in progress or has committed or
-   aborted. Therefore, an id issued by a frontend must be unique for each of its connections.
-
-   Note: a subtle point is that given this identifier we need to tell if the
-   frontend transaction is still ongoing in the resolution logic without
-   consulting the remote_txn table. This is because the
-   remote_txn table is only populated once the txn is committed.
-   Therefore this id contains the frontend's transaction_id directly.
-
-   The current format is: version;xid;server_id;user_id
-   Both parts are necessary to guarantee uniqueness from the point of view of the data node.
-	- xid is a unique identifier for the dist txn on the frontend. It is also critical to to make
-   sure the transaction has completed on the frontend node.
-	- pair of server_id and user_id dedups the connections made under different TSConnectionId
-   mappings as part of the same frontend distributed txn.
-
-	Note: When moving to multiple frontends, we'll need to add a unique prefix for each frontend.
-*/
+/*
+ * This is the data node dist txn id to be used in PREPARE TRANSACTION and friends.
+ * From the data node perspective it has to be unique with regard to any concurrent
+ * prepared transactions.
+ *
+ * From the point of view of the access node, given such an id, an access node
+ * must be able to decide whether or not the corresponding distributed txn is still
+ * in progress or has committed or aborted. Therefore, an id issued by an access node
+ * must be unique for each of its connections.
+ *
+ * Note: a subtle point is that given this identifier we need to tell if the access node's
+ * transaction is still ongoing in the resolution logic without consulting the
+ * remote_txn table. This is because the remote_txn table is only populated once the txn
+ * is committed. Therefore this id contains the acess node's transaction_id directly.
+ *
+ * The current format is: version;xid;server_id;user_id. Both parts are necessary to
+ * guarantee uniqueness from the point of view of the data node. It is also critical to
+ * make sure the transaction has completed on the access node.
+ *
+ * - xid is a unique identifier for the dist txn on the access node.
+ *
+ * - pair of server_id and user_id dedups the connections made under different
+ * TSConnectionId mappings as part of the same access node's distributed txn.
+ *
+ * Note: When moving to multiple access nodes, we'll need to add a unique prefix for
+ * each access node.
+ */
 
 typedef struct RemoteTxnId
 {
