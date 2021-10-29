@@ -14,7 +14,7 @@
 #include "scan_plan.h"
 #include "scan_exec.h"
 #include "data_node_scan_exec.h"
-#include "async_append.h"
+#include "nodes/async_append.h"
 #include "remote/data_fetcher.h"
 #include "guc.h"
 

@@ -9,7 +9,7 @@
 #include <parser/parsetree.h>
 #include <foreign/fdwapi.h>
 
-#include "async_append.h"
+#include "nodes/async_append.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "chunk.h"
 #include "compat/compat.h"
