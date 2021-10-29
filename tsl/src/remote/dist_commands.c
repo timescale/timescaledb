@@ -88,11 +88,10 @@ ts_dist_cmd_collect_responses(List *requests)
  * If "multiple_cmds" is false then "sql" and "params" are not iterated over.
  */
 DistCmdResult *
-ts_dist_multi_cmds_params_invoke_on_data_nodes(const char **sql, StmtParams **params,
-											   List *data_nodes, bool multiple_cmds,
+ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors, List *data_nodes,
 											   bool transactional)
 {
-	ListCell *lc;
+	ListCell *lc_data_node, *lc_cmd_descr;
 	List *requests = NIL;
 	DistCmdResult *results;
 
@@ -102,6 +101,7 @@ ts_dist_multi_cmds_params_invoke_on_data_nodes(const char **sql, StmtParams **pa
 				 errmsg("no data nodes to execute command on"),
 				 errhint("Add data nodes before executing a distributed command.")));
 
+	Assert(list_length(data_nodes) == list_length(cmd_descriptors));
 	switch (nodeTag(data_nodes))
 	{
 		case T_OidList:
@@ -116,28 +116,25 @@ ts_dist_multi_cmds_params_invoke_on_data_nodes(const char **sql, StmtParams **pa
 			break;
 	}
 
-	foreach (lc, data_nodes)
+	forboth (lc_data_node, data_nodes, lc_cmd_descr, cmd_descriptors)
 	{
-		const char *node_name = lfirst(lc);
+		const char *node_name = lfirst(lc_data_node);
 		AsyncRequest *req;
 		TSConnection *connection =
 			data_node_get_connection(node_name, REMOTE_TXN_NO_PREP_STMT, transactional);
+		DistCmdDescr *cmd_descr = lfirst(lc_cmd_descr);
+		const char *sql = cmd_descr->sql;
+		StmtParams *params = cmd_descr->params;
 
-		ereport(DEBUG2, (errmsg_internal("sending \"%s\" to data node \"%s\"", *sql, node_name)));
+		ereport(DEBUG2, (errmsg_internal("sending \"%s\" to data node \"%s\"", sql, node_name)));
 
-		if (params == NULL || *params == NULL)
-			req = async_request_send(connection, *sql);
+		if (params == NULL)
+			req = async_request_send(connection, sql);
 		else
-			req = async_request_send_with_params(connection, *sql, *params, FORMAT_TEXT);
+			req = async_request_send_with_params(connection, sql, params, FORMAT_TEXT);
 
 		async_request_attach_user_data(req, (char *) node_name);
 		requests = lappend(requests, req);
-		if (multiple_cmds)
-		{
-			++sql;
-			if (params)
-				++params;
-		}
 	}
 
 	results = ts_dist_cmd_collect_responses(requests);
@@ -151,11 +148,18 @@ DistCmdResult *
 ts_dist_cmd_params_invoke_on_data_nodes(const char *sql, StmtParams *params, List *data_nodes,
 										bool transactional)
 {
-	return ts_dist_multi_cmds_params_invoke_on_data_nodes(&sql,
-														  (NULL == params) ? NULL : &params,
-														  data_nodes,
-														  false,
-														  transactional);
+	List *cmd_descriptors = NIL;
+	DistCmdDescr cmd_descr = { .sql = sql, .params = params };
+	DistCmdResult *results;
+
+	for (int i = 0; i < list_length(data_nodes); ++i)
+	{
+		cmd_descriptors = lappend(cmd_descriptors, &cmd_descr);
+	}
+	results =
+		ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, data_nodes, transactional);
+	list_free(cmd_descriptors);
+	return results;
 }
 
 DistCmdResult *
