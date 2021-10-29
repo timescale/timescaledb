@@ -216,7 +216,7 @@ static CustomExecMethods chunk_dispatch_state_methods = {
  * Check whether the PlanState is a ChunkDispatchState node.
  */
 bool
-ts_chunk_dispatch_is_state(PlanState *state)
+ts_is_chunk_dispatch_state(PlanState *state)
 {
 	CustomScanState *csstate = (CustomScanState *) state;
 
