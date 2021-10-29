@@ -1,5 +1,4 @@
 set(SOURCES
-    async_append.c
     chunk_api.c
     chunk.c
     chunk_copy.c

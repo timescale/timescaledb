@@ -38,7 +38,7 @@
 #include "plan_partialize.h"
 #include "planner.h"
 #include "time_utils.h"
-#include "chunk_append/chunk_append.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "import/planner.h"
 
 typedef struct CollectQualCtx

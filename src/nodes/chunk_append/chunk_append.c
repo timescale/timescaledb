@@ -12,8 +12,8 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
-#include "chunk_append/chunk_append.h"
-#include "chunk_append/planner.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/chunk_append/planner.h"
 #include "func_cache.h"
 #include "guc.h"
 
