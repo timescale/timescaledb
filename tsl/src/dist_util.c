@@ -22,9 +22,11 @@
 #include "utils/uuid.h"
 
 /*
- * When added to a distributed database, this key in the metadata table will be set to match the
- * uuid (from ts_metadata_get_uuid()) of the frontend.  Therefore we can check if a database is the
- * frontend or not simply by comparing the results of dist_util_get_id() and ts_metadata_get_uuid().
+ * When added to a distributed database, this key in the metadata table will be set
+ * to match the uuid (from ts_metadata_get_uuid()) of the access node.
+ *
+ * Therefore we can check if a database is the access node or not simply by
+ * comparing the results of dist_util_get_id() and ts_metadata_get_uuid().
  */
 #define METADATA_DISTRIBUTED_UUID_KEY_NAME "dist_uuid"
 
@@ -92,7 +94,7 @@ seclabel_set_dist_uuid(Oid dbid, Datum dist_uuid)
 }
 
 void
-dist_util_set_as_frontend()
+dist_util_set_as_access_node()
 {
 	dist_util_set_id_with_uuid_check(ts_telemetry_metadata_get_uuid(), false);
 
@@ -186,7 +188,7 @@ dist_util_set_peer_id(Datum dist_id)
 }
 
 bool
-dist_util_is_frontend_session(void)
+dist_util_is_access_node_session_on_data_node(void)
 {
 	Datum dist_id;
 

@@ -13,14 +13,14 @@
 typedef enum DistUtilMembershipStatus
 {
 	DIST_MEMBER_NONE,		/* Database doesn't belong to a distributed database */
-	DIST_MEMBER_DATA_NODE,  /* Database is a backend node */
-	DIST_MEMBER_ACCESS_NODE /* Database is a frontend node */
+	DIST_MEMBER_DATA_NODE,  /* Database is a data node */
+	DIST_MEMBER_ACCESS_NODE /* Database is an access node */
 } DistUtilMembershipStatus;
 
 DistUtilMembershipStatus dist_util_membership(void);
 const char *dist_util_membership_str(DistUtilMembershipStatus status);
 
-void dist_util_set_as_frontend(void);
+void dist_util_set_as_access_node(void);
 bool dist_util_set_id(Datum dist_id);
 Datum dist_util_get_id(void);
 bool dist_util_remove_from_db(void);
@@ -28,7 +28,7 @@ bool dist_util_remove_from_db(void);
 const char *dist_util_internal_key_name(void);
 
 void dist_util_set_peer_id(Datum dist_id);
-bool dist_util_is_frontend_session(void);
+bool dist_util_is_access_node_session_on_data_node(void);
 
 Datum dist_util_remote_hypertable_info(PG_FUNCTION_ARGS);
 Datum dist_util_remote_chunk_info(PG_FUNCTION_ARGS);

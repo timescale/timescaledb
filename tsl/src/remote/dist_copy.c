@@ -407,8 +407,8 @@ is_supported_binary_option(const char *option)
 		   strcmp(option, "encoding") == 0;
 }
 
-/* Generate a COPY sql command for sending the data being passed in via 'stmt' to a backend data
- * node.
+/* Generate a COPY sql command for sending the data being passed in via 'stmt'
+ * to a data node.
  */
 static const char *
 deparse_copy_cmd(const CopyStmt *stmt, const Hypertable *ht, bool binary)
@@ -487,11 +487,11 @@ deparse_copy_cmd(const CopyStmt *stmt, const Hypertable *ht, bool binary)
  * This function checks the options specified for the copy command and makes
  * sure they're supported.  It also determines what delimiter and null
  * encoding are being specified and will use these values when sending data to
- * the backend as they presumably won't conflict with the values being passed.
+ * the data node as they presumably won't conflict with the values being passed.
  * Note that the CopyBegin call will have such validation as checking for
  * duplicate options, this function just checks added constraints for the
  * distributed copy. This call is only needed when sending data in text format
- * to the data backend.
+ * to the data node.
  */
 static void
 validate_options(List *copy_options, char *delimiter, char **null_string)
@@ -768,8 +768,8 @@ get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 	if (chunk == NULL)
 	{
 		/* Here we need to create a new chunk.  However, any in-progress copy operations
-		 * will be tying up the connection we need to create the chunk on a backend.  Since
-		 * the backends for the new chunk aren't yet known, just close all in progress COPYs
+		 * will be tying up the connection we need to create the chunk on a data node.  Since
+		 * the data nodes for the new chunk aren't yet known, just close all in progress COPYs
 		 * before creating the chunk. */
 		reset_copy_connection_state(state);
 		chunk = ts_hypertable_get_or_create_chunk(ht, p);
