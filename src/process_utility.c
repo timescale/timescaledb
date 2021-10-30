@@ -2587,7 +2587,7 @@ process_index_start(ProcessUtilityArgs *args)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg(
-					 "cannot use timescaledb.transaction_per_chunk with distributed hypetable")));
+					 "cannot use timescaledb.transaction_per_chunk with distributed hypertable")));
 
 	ts_indexing_verify_index(ht->space, stmt);
 

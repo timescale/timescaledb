@@ -799,7 +799,7 @@ UPDATE test_validate SET c = '';
 ALTER TABLE test_validate
 VALIDATE CONSTRAINT c_not_null;
 DROP TABLE test_validate;
--- test for hypetables constraints both using index tablespaces and not See #2604
+-- test for hypertables constraints both using index tablespaces and not See #2604
 SET client_min_messages = ERROR;
 DROP TABLESPACE IF EXISTS tablespace1;
 SET client_min_messages = NOTICE;
