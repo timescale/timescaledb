@@ -551,7 +551,7 @@ ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum((indexname))));
+				CStringGetDatum((indexname)));
 
 	chunk_index_scan(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
 					 scankey,
@@ -725,7 +725,7 @@ ts_chunk_index_delete(int32 chunk_id, const char *indexname, bool drop_index)
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(indexname)));
+				CStringGetDatum(indexname));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
 								   scankey,
@@ -801,7 +801,7 @@ ts_chunk_index_get_by_indexrelid(Chunk *chunk, Oid chunk_indexrelid, ChunkIndexM
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(indexname)));
+				CStringGetDatum(indexname));
 
 	tuples_found = chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
 									scankey,

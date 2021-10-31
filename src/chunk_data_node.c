@@ -159,7 +159,7 @@ ts_chunk_data_node_scan_by_chunk_id_and_node_internal(int32 chunk_id, const char
 					attrnum_node_name,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
-					DirectFunctionCall1(namein, CStringGetDatum(node_name)));
+					CStringGetDatum(node_name));
 
 	return chunk_data_node_scan_limit_internal(scankey,
 											   nkeys,
@@ -181,7 +181,7 @@ ts_chunk_data_node_scan_by_node_internal(const char *node_name, tuple_found_func
 				Anum_chunk_data_node_node_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(node_name)));
+				CStringGetDatum(node_name));
 
 	return chunk_data_node_scan_limit_internal(scankey,
 											   1,

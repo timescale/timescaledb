@@ -154,7 +154,7 @@ tablespace_scan_by_name(const char *tspcname, tuple_found_func tuple_found, void
 					Anum_tablespace_tablespace_name,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
-					DirectFunctionCall1(namein, CStringGetDatum(tspcname)));
+					CStringGetDatum(tspcname));
 
 	return tablespace_scan_internal(INVALID_INDEXID,
 									scankey,
@@ -384,7 +384,7 @@ ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
 					Anum_tablespace_hypertable_id_tablespace_name_idx_tablespace_name,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
-					DirectFunctionCall1(namein, CStringGetDatum(tspcname)));
+					CStringGetDatum(tspcname));
 
 	num_deleted = tablespace_scan_internal(TABLESPACE_HYPERTABLE_ID_TABLESPACE_NAME_IDX,
 										   scankey,
@@ -450,7 +450,7 @@ tablespace_delete_from_all(const char *tspcname, Oid userid, List **hypertables)
 				Anum_tablespace_tablespace_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(tspcname)));
+				CStringGetDatum(tspcname));
 
 	num_deleted = tablespace_scan_internal(INVALID_INDEXID,
 										   scankey,
