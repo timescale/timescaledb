@@ -721,13 +721,13 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 				Anum_hypertable_name_idx_table,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(table_name)));
+				CStringGetDatum(table_name));
 
 	ScanKeyInit(&scankey[1],
 				Anum_hypertable_name_idx_schema,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
+				CStringGetDatum(schema_name));
 	return hypertable_scan_limit_internal(scankey,
 										  2,
 										  HYPERTABLE_NAME_INDEX,
@@ -807,7 +807,7 @@ ts_hypertable_reset_associated_schema_name(const char *associated_schema)
 				Anum_hypertable_associated_schema_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(associated_schema)));
+				CStringGetDatum(associated_schema));
 
 	return hypertable_scan_limit_internal(scankey,
 										  1,
