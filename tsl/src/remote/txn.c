@@ -712,7 +712,7 @@ remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid)
 				Anum_remote_txn_data_node_name_idx_data_node_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(server->servername)));
+				CStringGetDatum(server->servername));
 
 	scanctx = (ScannerCtx){
 		.table = catalog->tables[REMOTE_TXN].id,

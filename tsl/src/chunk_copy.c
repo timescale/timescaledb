@@ -190,7 +190,7 @@ chunk_copy_operation_scan_update_by_id(const char *operation_id, tuple_found_fun
 				Anum_chunk_copy_operation_idx_operation_id,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(operation_id)));
+				CStringGetDatum(operation_id));
 
 	return ts_scanner_scan(&scanctx);
 }
@@ -247,7 +247,7 @@ chunk_copy_operation_delete_by_id(const char *operation_id)
 				Anum_chunk_copy_operation_idx_operation_id,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(operation_id)));
+				CStringGetDatum(operation_id));
 
 	return ts_scanner_scan(&scanctx);
 }
@@ -856,7 +856,7 @@ chunk_copy_operation_get(const char *operation_id)
 					Anum_chunk_copy_operation_idx_operation_id,
 					BTEqualStrategyNumber,
 					F_NAMEEQ,
-					DirectFunctionCall1(namein, CStringGetDatum(operation_id)));
+					CStringGetDatum(operation_id));
 		indexid = CHUNK_COPY_OPERATION_PKEY_IDX;
 	}
 	else
