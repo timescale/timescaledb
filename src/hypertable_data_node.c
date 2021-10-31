@@ -228,7 +228,7 @@ hypertable_data_node_scan_by_node_name(const char *node_name, tuple_found_func t
 				Anum_hypertable_data_node_node_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(node_name)));
+				CStringGetDatum(node_name));
 
 	return hypertable_data_node_scan_limit_internal(scankey,
 													1,
@@ -257,7 +257,7 @@ hypertable_data_node_scan_by_hypertable_id_and_node_name(int hypertable_id, cons
 				Anum_hypertable_data_node_hypertable_id_node_name_idx_node_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(node_name)));
+				CStringGetDatum(node_name));
 
 	return hypertable_data_node_scan_limit_internal(
 		scankey,

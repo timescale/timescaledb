@@ -168,7 +168,7 @@ extension_owner(void)
 				Anum_pg_extension_extname,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				DirectFunctionCall1(namein, CStringGetDatum(EXTENSION_NAME)));
+				CStringGetDatum(EXTENSION_NAME));
 
 	scandesc = systable_beginscan(rel, ExtensionNameIndexId, true, NULL, 1, entry);
 
