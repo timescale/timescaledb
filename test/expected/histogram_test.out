@@ -92,3 +92,8 @@ SELECT qualify, histogram(score, 0, 10, 5) FROM hitest2 GROUP BY qualify ORDER B
  t       | {0,0,0,0,1,0,1}
 (2 rows)
 
+-- check number of buckets is constant
+\set ON_ERROR_STOP 0
+select histogram(i,10,90,case when i=1 then 1 else 1000000 end) FROM generate_series(1,100) i;
+ERROR:  number of buckets must not change between calls
+\set ON_ERROR_STOP 1
