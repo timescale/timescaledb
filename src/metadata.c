@@ -24,22 +24,18 @@
 	elog(ERROR, "ts_metadata: no %s function for type %u", inout, typeid);
 
 static Datum
-convert_type(PGFunction func, Datum value, Oid from_type)
+convert_type_to_text(Datum value, Oid from_type)
 {
-	bool value_is_varlena;
-	Oid value_out;
+	bool is_varlena;
+	Oid outfunc;
 
-	getTypeOutputInfo(from_type, &value_out, &value_is_varlena);
+	getTypeOutputInfo(from_type, &outfunc, &is_varlena);
 
-	if (!OidIsValid(value_out))
+	if (!OidIsValid(outfunc))
 		TYPE_ERROR("output", from_type);
 
-	return DirectFunctionCall1(func, OidFunctionCall1(value_out, value));
+	return DirectFunctionCall1(textin, CStringGetDatum(OidFunctionCall1(outfunc, value)));
 }
-
-#define convert_type_to_text(value, typeid) convert_type(textin, (value), (typeid))
-
-#define convert_type_to_name(value, typeid) convert_type(namein, (value), (typeid))
 
 static Datum
 convert_text_to_type(Datum value, Oid to_type)
@@ -86,8 +82,7 @@ metadata_tuple_get_value(TupleInfo *ti, void *data)
 }
 
 static Datum
-metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid value_type, bool *isnull,
-							LOCKMODE lockmode)
+metadata_get_value_internal(const char *key, Oid value_type, bool *isnull, LOCKMODE lockmode)
 {
 	ScanKeyData scankey[1];
 	DatumValue dv = {
@@ -110,7 +105,7 @@ metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid value_type, bo
 				Anum_metadata_key,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				convert_type_to_name(metadata_key, key_type));
+				CStringGetDatum(key));
 
 	ts_scanner_scan(&scanctx);
 
@@ -121,9 +116,9 @@ metadata_get_value_internal(Datum metadata_key, Oid key_type, Oid value_type, bo
 }
 
 Datum
-ts_metadata_get_value(Datum metadata_key, Oid key_type, Oid value_type, bool *isnull)
+ts_metadata_get_value(const char *metadata_key, Oid value_type, bool *isnull)
 {
-	return metadata_get_value_internal(metadata_key, key_type, value_type, isnull, AccessShareLock);
+	return metadata_get_value_internal(metadata_key, value_type, isnull, AccessShareLock);
 }
 
 /*
@@ -135,7 +130,7 @@ ts_metadata_get_value(Datum metadata_key, Oid key_type, Oid value_type, bool *is
  *  the existing value if nothing was inserted.
  */
 Datum
-ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid value_type,
+ts_metadata_insert(const char *metadata_key, Datum metadata_value, Oid value_type,
 				   bool include_in_telemetry)
 {
 	Datum existing_value;
@@ -144,15 +139,13 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 	bool isnull = false;
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
+	char key_data[NAMEDATALEN];
 
 	rel = table_open(catalog_get_table_id(catalog, METADATA), ShareRowExclusiveLock);
 
 	/* Check for row existence while we have the lock */
-	existing_value = metadata_get_value_internal(metadata_key,
-												 key_type,
-												 value_type,
-												 &isnull,
-												 ShareRowExclusiveLock);
+	existing_value =
+		metadata_get_value_internal(metadata_key, value_type, &isnull, ShareRowExclusiveLock);
 
 	if (!isnull)
 	{
@@ -160,9 +153,12 @@ ts_metadata_insert(Datum metadata_key, Oid key_type, Datum metadata_value, Oid v
 		return existing_value;
 	}
 
+	/* We have to copy the key here because heap_form_tuple will copy NAMEDATALEN
+	 * into the tuple instead of checking length. */
+	strlcpy(key_data, metadata_key, NAMEDATALEN);
+
 	/* Insert into the catalog table for persistence */
-	values[AttrNumberGetAttrOffset(Anum_metadata_key)] =
-		convert_type_to_name(metadata_key, key_type);
+	values[AttrNumberGetAttrOffset(Anum_metadata_key)] = CStringGetDatum(key_data);
 	values[AttrNumberGetAttrOffset(Anum_metadata_value)] =
 		convert_type_to_text(metadata_value, value_type);
 	values[AttrNumberGetAttrOffset(Anum_metadata_include_in_telemetry)] =
@@ -184,7 +180,7 @@ metadata_tuple_delete(TupleInfo *ti, void *data)
 }
 
 void
-ts_metadata_drop(Datum metadata_key, Oid key_type)
+ts_metadata_drop(const char *metadata_key)
 {
 	ScanKeyData scankey[1];
 	Catalog *catalog = ts_catalog_get();
@@ -203,7 +199,7 @@ ts_metadata_drop(Datum metadata_key, Oid key_type)
 				Anum_metadata_key,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				convert_type_to_name(metadata_key, key_type));
+				CStringGetDatum(metadata_key));
 
 	ts_scanner_scan(&scanctx);
 }
