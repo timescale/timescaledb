@@ -3026,12 +3026,12 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 								   Anum_chunk_schema_name_idx_schema_name,
 								   BTEqualStrategyNumber,
 								   F_NAMEEQ,
-								   DirectFunctionCall1(namein, CStringGetDatum(schema_name)));
+								   CStringGetDatum(schema_name));
 	ts_scan_iterator_scan_key_init(iterator,
 								   Anum_chunk_schema_name_idx_table_name,
 								   BTEqualStrategyNumber,
 								   F_NAMEEQ,
-								   DirectFunctionCall1(namein, CStringGetDatum(table_name)));
+								   CStringGetDatum(table_name));
 }
 
 static int
