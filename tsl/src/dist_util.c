@@ -49,10 +49,7 @@ uuid_matches(Datum a, Datum b)
 static Datum
 local_get_dist_id(bool *isnull)
 {
-	return ts_metadata_get_value(CStringGetDatum(METADATA_DISTRIBUTED_UUID_KEY_NAME),
-								 CSTRINGOID,
-								 UUIDOID,
-								 isnull);
+	return ts_metadata_get_value(METADATA_DISTRIBUTED_UUID_KEY_NAME, UUIDOID, isnull);
 }
 
 DistUtilMembershipStatus
@@ -136,11 +133,7 @@ dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid)
 						  "instance or that the 'database' parameter refers to a "
 						  "different database."))));
 
-	ts_metadata_insert(CStringGetDatum(METADATA_DISTRIBUTED_UUID_KEY_NAME),
-					   CSTRINGOID,
-					   dist_id,
-					   UUIDOID,
-					   true);
+	ts_metadata_insert(METADATA_DISTRIBUTED_UUID_KEY_NAME, dist_id, UUIDOID, true);
 	return true;
 }
 
@@ -164,7 +157,7 @@ dist_util_remove_from_db()
 		CatalogSecurityContext sec_ctx;
 
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-		ts_metadata_drop(CStringGetDatum(METADATA_DISTRIBUTED_UUID_KEY_NAME), CSTRINGOID);
+		ts_metadata_drop(METADATA_DISTRIBUTED_UUID_KEY_NAME);
 		ts_catalog_restore_user(&sec_ctx);
 
 		return true;
