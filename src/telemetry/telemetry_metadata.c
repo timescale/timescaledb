@@ -65,14 +65,10 @@ get_uuid_by_key(const char *key)
 	bool isnull;
 	Datum uuid;
 
-	uuid = ts_metadata_get_value(CStringGetDatum(key), CSTRINGOID, UUIDOID, &isnull);
+	uuid = ts_metadata_get_value(key, UUIDOID, &isnull);
 
 	if (isnull)
-		uuid = ts_metadata_insert(CStringGetDatum(key),
-								  CSTRINGOID,
-								  UUIDPGetDatum(ts_uuid_create()),
-								  UUIDOID,
-								  true);
+		uuid = ts_metadata_insert(key, UUIDPGetDatum(ts_uuid_create()), UUIDOID, true);
 	return uuid;
 }
 
@@ -94,14 +90,10 @@ ts_telemetry_metadata_get_install_timestamp(void)
 	bool isnull;
 	Datum timestamp;
 
-	timestamp = ts_metadata_get_value(CStringGetDatum(METADATA_TIMESTAMP_KEY_NAME),
-									  CSTRINGOID,
-									  TIMESTAMPTZOID,
-									  &isnull);
+	timestamp = ts_metadata_get_value(METADATA_TIMESTAMP_KEY_NAME, TIMESTAMPTZOID, &isnull);
 
 	if (isnull)
-		timestamp = ts_metadata_insert(CStringGetDatum(METADATA_TIMESTAMP_KEY_NAME),
-									   CSTRINGOID,
+		timestamp = ts_metadata_insert(METADATA_TIMESTAMP_KEY_NAME,
 									   TimestampTzGetDatum(GetCurrentTimestamp()),
 									   TIMESTAMPTZOID,
 									   true);
