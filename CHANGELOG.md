@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Bugfixes**
+* #3766 Fix segfault in ts_hist_sfunc
+
 **Thanks**
 * @cbisnett for reporting and fixing a typo in an error message
 
