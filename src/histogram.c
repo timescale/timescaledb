@@ -52,12 +52,9 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	Datum val_datum = PG_GETARG_DATUM(1);
 	Datum min_datum = PG_GETARG_DATUM(2);
 	Datum max_datum = PG_GETARG_DATUM(3);
-	Datum nbuckets_datum = PG_GETARG_DATUM(4);
 	double min = DatumGetFloat8(min_datum);
 	double max = DatumGetFloat8(max_datum);
-	int nbuckets = DatumGetInt32(nbuckets_datum);
-	int32 bucket = DatumGetInt32(
-		DirectFunctionCall4(width_bucket_float8, val_datum, min_datum, max_datum, nbuckets_datum));
+	int nbuckets;
 
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{
@@ -73,11 +70,25 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 
 	if (state == NULL)
 	{
+		nbuckets = PG_GETARG_INT32(4) + 2;
 		/* Allocate memory to a new histogram state array */
-		nbuckets += 2;
 		state = MemoryContextAllocZero(aggcontext, HISTOGRAM_SIZE(state, nbuckets));
 		state->nbuckets = nbuckets;
 	}
+
+	/* Since the number of buckets is an argument to the calls it might differ
+	 * from the number we initialized with so we need to make sure we check
+	 * against what we actually have.
+	 */
+	nbuckets = state->nbuckets - 2;
+	if (nbuckets != PG_GETARG_INT32(4))
+		elog(ERROR, "number of buckets must not change between calls");
+
+	int32 bucket = DatumGetInt32(DirectFunctionCall4(width_bucket_float8,
+													 val_datum,
+													 min_datum,
+													 max_datum,
+													 Int32GetDatum(nbuckets)));
 
 	/* Increment the proper histogram bucket */
 	Assert(bucket < state->nbuckets);
@@ -135,7 +146,11 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 	{
 		Size i;
 
-		Assert(state1->nbuckets == state2->nbuckets);
+		/* Since number of buckets is part of the aggregation call the initialization
+		 * might be different in the partials so we error out if they are not identical. */
+		if (state1->nbuckets != state2->nbuckets)
+			elog(ERROR, "number of buckets must not change between calls");
+
 		result = copy_state(aggcontext, state1);
 
 		/* Combine values from state1 and state2 when both states are non-null */
