@@ -48,7 +48,7 @@
 #include "nodes/chunk_dispatch_plan.h"
 #include "nodes/hypertable_insert.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "chunk_append/chunk_append.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "partitioning.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -1013,8 +1013,8 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 			RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
 			Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
-			if (NULL != ht)
-				path = ts_hypertable_insert_path_create(root, mt);
+			if (ht)
+				path = ts_hypertable_insert_path_create(root, mt, ht);
 		}
 
 		new_pathlist = lappend(new_pathlist, path);

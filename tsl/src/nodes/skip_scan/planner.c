@@ -18,6 +18,7 @@
 #include <optimizer/planmain.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_coerce.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/syscache.h>
@@ -27,7 +28,7 @@
 #include "guc.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "chunk_append/chunk_append.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "compat/compat.h"
 
 #include <math.h>
@@ -536,6 +537,7 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 	Oid column_type = exprType((Node *) var);
 	Oid column_collation = get_typcollation(column_type);
 	TypeCacheEntry *tce = lookup_type_cache(column_type, 0);
+	bool need_coerce = false;
 
 	/*
 	 * Skipscan is not applicable for the following case:
@@ -568,24 +570,51 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 		strategy =
 			(strategy == BTLessStrategyNumber) ? BTGreaterStrategyNumber : BTLessStrategyNumber;
 	}
+	Oid opcintype = info->opcintype[idx_key];
 
 	Oid comparator =
 		get_opfamily_member(info->sortopfamily[idx_key], column_type, column_type, strategy);
-	if (!OidIsValid(comparator))
-		return false; /* cannot use this index */
 
-	Const *prev_val = makeNullConst(column_type, -1, column_collation);
-	Var *current_val = makeVar(info->rel->relid /*varno*/,
-							   var->varattno /*varattno*/,
-							   column_type /*vartype*/,
-							   -1 /*vartypmod*/,
-							   column_collation /*varcollid*/,
-							   0 /*varlevelsup*/);
+	/* If there is no exact operator match for the column type we have here check
+	 * if we can coerce to the type of the operator class. */
+	if (!OidIsValid(comparator))
+	{
+		if (IsBinaryCoercible(column_type, opcintype))
+		{
+			comparator =
+				get_opfamily_member(info->sortopfamily[idx_key], opcintype, opcintype, strategy);
+			if (!OidIsValid(comparator))
+				return false;
+			need_coerce = true;
+		}
+		else
+			return false; /* cannot use this index */
+	}
+
+	Const *prev_val = makeNullConst(need_coerce ? opcintype : column_type, -1, column_collation);
+	Expr *current_val = (Expr *) makeVar(info->rel->relid /*varno*/,
+										 var->varattno /*varattno*/,
+										 column_type /*vartype*/,
+										 -1 /*vartypmod*/,
+										 column_collation /*varcollid*/,
+										 0 /*varlevelsup*/);
+
+	if (need_coerce)
+	{
+		CoerceViaIO *coerce = makeNode(CoerceViaIO);
+		coerce->arg = current_val;
+		coerce->resulttype = opcintype;
+		coerce->resultcollid = column_collation;
+		coerce->coerceformat = COERCE_IMPLICIT_CAST;
+		coerce->location = -1;
+
+		current_val = &coerce->xpr;
+	}
 
 	Expr *comparison_expr = make_opclause(comparator,
 										  BOOLOID /*opresulttype*/,
 										  false /*opretset*/,
-										  &current_val->xpr /*leftop*/,
+										  current_val /*leftop*/,
 										  &prev_val->xpr /*rightop*/,
 										  InvalidOid /*opcollid*/,
 										  info->indexcollations[idx_key] /*inputcollid*/);
@@ -654,7 +683,8 @@ fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber scankey_attno
 
 	/* fix_indexqual_operand */
 	Assert(index->indexkeys[scankey_attno - 1] != 0);
-	Var *node = linitial_node(Var, op->args);
+	Var *node = linitial_node(Var, pull_var_clause(linitial(op->args), 0));
+
 	Assert(((Var *) node)->varno == index->rel->relid &&
 		   ((Var *) node)->varattno == index->indexkeys[scankey_attno - 1]);
 

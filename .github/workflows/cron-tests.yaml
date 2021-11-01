@@ -33,22 +33,6 @@ jobs:
       run: |
         ./scripts/docker-run-abi-test.sh
 
-  memory_leak:
-    name: Memory leak on insert
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-    env:
-      PG_VERSION: 12.8
-
-    steps:
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
-
-    - name: Memory test
-      run: |
-        ./scripts/docker-run-memory-test.sh
-
   backup_and_restore:
     name: Backup and restore
     runs-on: ubuntu-latest

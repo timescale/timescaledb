@@ -1,10 +1,21 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\set IS_DISTRIBUTED FALSE
+\ir include/continuous_aggs_ddl_common.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- Set this variable to avoid using a hard-coded path each time query
 -- results are compared
-\set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../test/sql/include/query_result_test_equal.sql'
-\set ON_ERROR_STOP 0
+\set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../../test/sql/include/query_result_test_equal.sql'
+\if :IS_DISTRIBUTED
+\echo 'Running distributed hypertable tests'
+\else
+\echo 'Running local hypertable tests'
+Running local hypertable tests
+\endif
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 --DDL commands on continuous aggregates
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
@@ -14,27 +25,34 @@ CREATE TABLE conditions (
       timemeasure TIMESTAMPTZ,
       timeinterval INTERVAL
 );
-select table_name from create_hypertable('conditions', 'timec');
+\if :IS_DISTRIBUTED
+SELECT table_name FROM create_distributed_hypertable('conditions', 'timec', replication_factor => 2);
+\else
+SELECT table_name FROM create_hypertable('conditions', 'timec');
  table_name 
 ------------
  conditions
 (1 row)
 
+\endif
 -- schema tests
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 CREATE SCHEMA rename_schema;
 GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-CREATE TABLE foo(time TIMESTAMPTZ, data INTEGER);
+CREATE TABLE foo(time TIMESTAMPTZ NOT NULL, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('foo', 'time', replication_factor => 2);
+\else
 SELECT create_hypertable('foo', 'time');
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (2,public,foo,t)
 (1 row)
 
+\endif
 CREATE MATERIALIZED VIEW rename_test
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
@@ -68,9 +86,9 @@ WHERE user_view_name = 'rename_test'
 \gset
 RESET ROLE;
 SELECT current_user;
- current_user 
---------------
- super_user
+    current_user    
+--------------------
+ cluster_super_user
 (1 row)
 
 ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET SCHEMA public;
@@ -92,9 +110,9 @@ SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
 
 RESET ROLE;
 SELECT current_user;
- current_user 
---------------
- super_user
+    current_user    
+--------------------
+ cluster_super_user
 (1 row)
 
 ALTER VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME" SET SCHEMA public;
@@ -109,9 +127,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
 
 RESET ROLE;
 SELECT current_user;
- current_user 
---------------
- super_user
+    current_user    
+--------------------
+ cluster_super_user
 (1 row)
 
 ALTER SCHEMA rename_schema RENAME TO new_name_schema;
@@ -136,9 +154,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
 
 RESET ROLE;
 SELECT current_user;
- current_user 
---------------
- super_user
+    current_user    
+--------------------
+ cluster_super_user
 (1 row)
 
 ALTER SCHEMA new_name_schema RENAME TO foo_name_schema;
@@ -160,9 +178,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 
 RESET ROLE;
 SELECT current_user;
- current_user 
---------------
- super_user
+    current_user    
+--------------------
+ cluster_super_user
 (1 row)
 
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
@@ -210,12 +228,21 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
 -- drop_chunks tests
 DROP TABLE conditions CASCADE;
 DROP TABLE foo CASCADE;
-NOTICE:  drop cascades to 2 other objects
-CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
+psql:include/continuous_aggs_ddl_common.sql:161: NOTICE:  drop cascades to 2 other objects
+CREATE TABLE drop_chunks_table(time BIGINT NOT NULL, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS drop_chunks_table_id
+    FROM create_distributed_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10, replication_factor => 2) \gset
+\else
 SELECT hypertable_id AS drop_chunks_table_id
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
-NOTICE:  adding not-null constraint to column "time"
+\endif
 CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test');
  set_integer_now_func 
 ----------------------
@@ -267,7 +294,7 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 SELECT drop_chunks(:'drop_chunks_mat_table',
     newer_than => -20,
     verbose => true);
-ERROR:  operation not supported on materialized hypertable
+psql:include/continuous_aggs_ddl_common.sql:213: ERROR:  operation not supported on materialized hypertable
 \set ON_ERROR_STOP 1
 SELECT count(c) FROM show_chunks('drop_chunks_table') AS c;
  count 
@@ -291,13 +318,22 @@ SELECT * FROM drop_chunks_view ORDER BY 1;
 
 -- drop chunks when the chunksize and time_bucket aren't aligned
 DROP TABLE drop_chunks_table CASCADE;
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_4_chunk
-CREATE TABLE drop_chunks_table_u(time BIGINT, data INTEGER);
+psql:include/continuous_aggs_ddl_common.sql:222: NOTICE:  drop cascades to 2 other objects
+psql:include/continuous_aggs_ddl_common.sql:222: NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_4_chunk
+CREATE TABLE drop_chunks_table_u(time BIGINT NOT NULL, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS drop_chunks_table_u_id
+    FROM create_distributed_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7, replication_factor => 2) \gset
+\else
 SELECT hypertable_id AS drop_chunks_table_u_id
     FROM create_hypertable('drop_chunks_table_u', 'time', chunk_time_interval => 7) \gset
-NOTICE:  adding not-null constraint to column "time"
+\endif
 CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test1() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table_u $$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('drop_chunks_table_u', 'integer_now_test1');
  set_integer_now_func 
 ----------------------
@@ -350,7 +386,7 @@ TRUNCATE drop_chunks_table_u;
 \set ON_ERROR_STOP 0
 -- Can't truncate materialized hypertables directly
 TRUNCATE :drop_chunks_mat_table_u;
-ERROR:  cannot TRUNCATE a hypertable underlying a continuous aggregate
+psql:include/continuous_aggs_ddl_common.sql:271: ERROR:  cannot TRUNCATE a hypertable underlying a continuous aggregate
 \set ON_ERROR_STOP 1
 -- Check that we don't interfere with TRUNCATE of normal table and
 -- partitioned table
@@ -377,31 +413,31 @@ SELECT * FROM truncate_partitioned;
 \set ON_ERROR_STOP 0
 -- test a variety of ALTER TABLE statements
 ALTER TABLE :drop_chunks_mat_table_u RENAME chunk_id TO bad_name;
-ERROR:  renaming columns on materialization tables is not supported
+psql:include/continuous_aggs_ddl_common.sql:291: ERROR:  renaming columns on materialization tables is not supported
 ALTER TABLE :drop_chunks_mat_table_u ADD UNIQUE(chunk_id);
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:292: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET UNLOGGED;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:293: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u ENABLE ROW LEVEL SECURITY;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:294: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u ADD COLUMN fizzle INTEGER;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:295: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u DROP COLUMN chunk_id;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:296: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id DROP NOT NULL;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:297: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id SET DEFAULT 1;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:298: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u ALTER COLUMN chunk_id SET STORAGE EXTERNAL;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:299: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u DISABLE TRIGGER ALL;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:300: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u SET TABLESPACE foo;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:301: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u NOT OF;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:302: ERROR:  operation not supported on materialization tables
 ALTER TABLE :drop_chunks_mat_table_u OWNER TO CURRENT_USER;
-ERROR:  operation not supported on materialization tables
+psql:include/continuous_aggs_ddl_common.sql:303: ERROR:  operation not supported on materialization tables
 \set ON_ERROR_STOP 1
 ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
@@ -440,7 +476,7 @@ CREATE MATERIALIZED VIEW new_name_view
 AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
     FROM new_name
     GROUP BY 1 WITH NO DATA;
-ERROR:  hypertable is a continuous aggregate materialization table
+psql:include/continuous_aggs_ddl_common.sql:328: ERROR:  hypertable is a continuous aggregate materialization table
 -- cannot create a continuous aggregate on a continuous aggregate view
 CREATE MATERIALIZED VIEW drop_chunks_view_view
   WITH (
@@ -450,17 +486,20 @@ CREATE MATERIALIZED VIEW drop_chunks_view_view
 AS SELECT time_bucket('6', time_bucket), SUM(count)
     FROM drop_chunks_view
     GROUP BY 1 WITH NO DATA;
-ERROR:  invalid continuous aggregate view
+psql:include/continuous_aggs_ddl_common.sql:338: ERROR:  invalid continuous aggregate view
 \set ON_ERROR_STOP 1
 DROP INDEX new_name_idx;
-CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
+CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v1 float, v2 float);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('metrics', 'time', replication_factor => 2);
+\else
 SELECT create_hypertable('metrics','time');
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (8,public,metrics,t)
 (1 row)
 
+\endif
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 -- check expressions in view definition
 CREATE MATERIALIZED VIEW cagg_expr
@@ -490,15 +529,24 @@ SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
 --test materialization of invalidation before drop
 DROP TABLE IF EXISTS drop_chunks_table CASCADE;
-NOTICE:  table "drop_chunks_table" does not exist, skipping
+psql:include/continuous_aggs_ddl_common.sql:372: NOTICE:  table "drop_chunks_table" does not exist, skipping
 DROP TABLE IF EXISTS drop_chunks_table_u CASCADE;
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_9_chunk
-CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
+psql:include/continuous_aggs_ddl_common.sql:373: NOTICE:  drop cascades to 2 other objects
+psql:include/continuous_aggs_ddl_common.sql:373: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_9_chunk
+CREATE TABLE drop_chunks_table(time BIGINT NOT NULL, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS drop_chunks_table_nid
+    FROM create_distributed_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10, replication_factor => 2) \gset
+\else
 SELECT hypertable_id AS drop_chunks_table_nid
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
-NOTICE:  adding not-null constraint to column "time"
+\endif
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), bigint '0') FROM drop_chunks_table $$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
  set_integer_now_func 
 ----------------------
@@ -687,7 +735,7 @@ SELECT format('%I.%I', schema_name, table_name) AS drop_chunks_mat_tablen,
 SELECT drop_chunks('drop_chunks_view',
     newer_than => -20,
     verbose => true);
-INFO:  dropping chunk _timescaledb_internal._hyper_11_17_chunk
+psql:include/continuous_aggs_ddl_common.sql:469: INFO:  dropping chunk _timescaledb_internal._hyper_11_17_chunk
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_11_17_chunk
@@ -708,7 +756,7 @@ WHERE hypertable_name = :'drop_chunks_mat_table_name' ORDER BY range_start_integ
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT drop_chunks(:'drop_chunks_mat_tablen', older_than => 60);
-ERROR:  operation not supported on materialized hypertable
+psql:include/continuous_aggs_ddl_common.sql:481: ERROR:  operation not supported on materialized hypertable
 DETAIL:  Hypertable "_materialized_hypertable_11" is a materialized hypertable.
 HINT:  Try the operation on the continuous aggregate instead.
 \set VERBOSITY terse
@@ -738,7 +786,7 @@ WITH numbered_chunks AS (
      WHERE hypertable_name = 'drop_chunks_table'
      ORDER BY 1
 )
-SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk_to_drop, range_start_integer, range_end_integer
+SELECT format('%I.%I', chunk_schema, chunk_name) AS chunk_to_drop, range_start_integer, range_end_integer
 FROM numbered_chunks
 WHERE row_number = 2 \gset
 -- There's data in the table for the chunk/range we will drop
@@ -761,6 +809,12 @@ ORDER BY 1;
 (10 rows)
 
 -- Make sure there is also data in the continuous aggregate
+-- CARE:
+-- Note that this behaviour of dropping the materialization table chunks and expecting a refresh
+-- that overlaps that time range to NOT update those chunks is undefined. Since CAGGs over
+-- distributed hypertables merge the invalidations the refresh region is updated in the distributed
+-- case, which may be different than what happens in the normal hypertable case. The command was:
+-- SELECT drop_chunks('drop_chunks_view', newer_than => -20, verbose => true);
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, 50);
 SELECT * FROM drop_chunks_view
 ORDER BY 1;
@@ -776,7 +830,12 @@ ORDER BY 1;
 (7 rows)
 
 -- Drop the second chunk, to leave a gap in the data
+\if :IS_DISTRIBUTED
+CALL distributed_exec(format('DROP TABLE IF EXISTS %s', :'chunk_to_drop'));
+DROP FOREIGN TABLE :chunk_to_drop;
+\else
 DROP TABLE :chunk_to_drop;
+\endif
 -- Verify that the second chunk is dropped
 SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
@@ -902,9 +961,15 @@ SELECT ht.schema_name, ht.table_name, relname AS chunk_name,
        _timescaledb_catalog.chunk ch
  WHERE ch.table_name = c.relname AND ht.id = ch.hypertable_id;
 CREATE TABLE whatever(time BIGINT NOT NULL, data INTEGER);
+\if :IS_DISTRIBUTED
+SELECT hypertable_id AS whatever_nid
+  FROM create_distributed_hypertable('whatever', 'time', chunk_time_interval => 10, replication_factor => 2)
+\gset
+\else
 SELECT hypertable_id AS whatever_nid
   FROM create_hypertable('whatever', 'time', chunk_time_interval => 10)
 \gset
+\endif
 SELECT set_integer_now_func('whatever', 'integer_now_test');
  set_integer_now_func 
 ----------------------
@@ -953,9 +1018,9 @@ SELECT user_view,
 (2 rows)
 
 DROP MATERIALIZED VIEW whatever_view_1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_24_chunk
+psql:include/continuous_aggs_ddl_common.sql:660: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_24_chunk
 DROP MATERIALIZED VIEW whatever_view_2;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_25_chunk
+psql:include/continuous_aggs_ddl_common.sql:661: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_25_chunk
 -- test bucket width expressions on integer hypertables
 CREATE TABLE metrics_int2 (
   time int2 NOT NULL,
@@ -975,6 +1040,13 @@ CREATE TABLE metrics_int8 (
   v1 float,
   v2 float
 );
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable (('metrics_' || dt)::regclass, 'time', chunk_time_interval => 10, replication_factor => 2)
+FROM (
+  VALUES ('int2'),
+    ('int4'),
+    ('int8')) v (dt);
+\else
 SELECT create_hypertable (('metrics_' || dt)::regclass, 'time', chunk_time_interval => 10)
 FROM (
   VALUES ('int2'),
@@ -987,6 +1059,7 @@ FROM (
  (17,public,metrics_int8,t)
 (3 rows)
 
+\endif
 CREATE OR REPLACE FUNCTION int2_now ()
   RETURNS int2
   LANGUAGE SQL
@@ -994,6 +1067,17 @@ CREATE OR REPLACE FUNCTION int2_now ()
   AS $$
   SELECT 10::int2
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int2_now ()
+  RETURNS int2
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int2
+$$;
+$DIST$);
+\endif
 CREATE OR REPLACE FUNCTION int4_now ()
   RETURNS int4
   LANGUAGE SQL
@@ -1001,6 +1085,17 @@ CREATE OR REPLACE FUNCTION int4_now ()
   AS $$
   SELECT 10::int4
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int4_now ()
+  RETURNS int4
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int4
+$$;
+$DIST$);
+\endif
 CREATE OR REPLACE FUNCTION int8_now ()
   RETURNS int8
   LANGUAGE SQL
@@ -1008,6 +1103,17 @@ CREATE OR REPLACE FUNCTION int8_now ()
   AS $$
   SELECT 10::int8
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int8_now ()
+  RETURNS int8
+  LANGUAGE SQL
+  STABLE
+  AS $$
+  SELECT 10::int8
+$$;
+$DIST$);
+\endif
 SELECT set_integer_now_func (('metrics_' || dt)::regclass, (dt || '_now')::regproc)
 FROM (
   VALUES ('int2'),
@@ -1025,39 +1131,39 @@ CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:766: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1::smallint + 2::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:773: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 -- width expression for int4 hypertables
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1, time)
 FROM metrics_int4
 GROUP BY 1;
-NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:781: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int4
 GROUP BY 1;
-NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:788: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 -- width expression for int8 hypertables
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1, time)
 FROM metrics_int8
 GROUP BY 1;
-NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:796: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int8
 GROUP BY 1;
-NOTICE:  continuous aggregate "width_expr" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:803: NOTICE:  continuous aggregate "width_expr" is already up-to-date
 DROP MATERIALIZED VIEW width_expr;
 \set ON_ERROR_STOP 0
 -- non-immutable expresions should be rejected
@@ -1065,17 +1171,17 @@ CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
-ERROR:  only immutable expressions allowed in time bucket function
+psql:include/continuous_aggs_ddl_common.sql:812: ERROR:  only immutable expressions allowed in time bucket function
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int4
 GROUP BY 1;
-ERROR:  only immutable expressions allowed in time bucket function
+psql:include/continuous_aggs_ddl_common.sql:817: ERROR:  only immutable expressions allowed in time bucket function
 CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int8
 GROUP BY 1;
-ERROR:  only immutable expressions allowed in time bucket function
+psql:include/continuous_aggs_ddl_common.sql:822: ERROR:  only immutable expressions allowed in time bucket function
 \set ON_ERROR_STOP 1
 -- Test various ALTER MATERIALIZED VIEW statements.
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -1102,10 +1208,10 @@ tablespace         |
 -- we test that the normal checks are done when changing the owner.
 \set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
-ERROR:  must be member of role "test_role_1"
+psql:include/continuous_aggs_ddl_common.sql:842: ERROR:  must be member of role "test_role_1"
 \set ON_ERROR_STOP 1
 -- Superuser can always change owner 
-SET ROLE :ROLE_SUPERUSER;
+SET ROLE :ROLE_CLUSTER_SUPERUSER;
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
@@ -1131,13 +1237,26 @@ CREATE OR REPLACE FUNCTION test_int_now()
 $BODY$
   SELECT 50;
 $BODY$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+  CREATE OR REPLACE FUNCTION test_int_now()
+    RETURNS INT LANGUAGE SQL STABLE AS
+  $BODY$
+    SELECT 50;
+  $BODY$;
+$DIST$);
+\endif
 CREATE TABLE conditionsnm(time_int INT NOT NULL, device INT, value FLOAT);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10);
      create_hypertable      
 ----------------------------
  (25,public,conditionsnm,t)
 (1 row)
 
+\endif
 SELECT set_integer_now_func('conditionsnm', 'test_int_now');
  set_integer_now_func 
 ----------------------
@@ -1153,9 +1272,9 @@ AS
 SELECT time_bucket(7, time_int) as bucket,
 SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
-NOTICE:  refreshing continuous aggregate "conditionsnm_4"
+psql:include/continuous_aggs_ddl_common.sql:890: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 DROP materialized view conditionsnm_4;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_37_chunk
+psql:include/continuous_aggs_ddl_common.sql:892: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_37_chunk
 -- Case 2: DROP CASCADE should have similar behaviour as DROP
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -1163,9 +1282,9 @@ AS
 SELECT time_bucket(7, time_int) as bucket,
 SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
-NOTICE:  refreshing continuous aggregate "conditionsnm_4"
+psql:include/continuous_aggs_ddl_common.sql:900: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 DROP materialized view conditionsnm_4 CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_38_chunk
+psql:include/continuous_aggs_ddl_common.sql:902: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_38_chunk
 -- Case 3: require CASCADE in case of dependent object
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -1173,32 +1292,45 @@ AS
 SELECT time_bucket(7, time_int) as bucket,
 SUM(value), COUNT(value)
 FROM conditionsnm GROUP BY bucket WITH DATA;
-NOTICE:  refreshing continuous aggregate "conditionsnm_4"
+psql:include/continuous_aggs_ddl_common.sql:910: NOTICE:  refreshing continuous aggregate "conditionsnm_4"
 CREATE VIEW see_cagg as select * from conditionsnm_4;
 \set ON_ERROR_STOP 0
 DROP MATERIALIZED VIEW conditionsnm_4;
-ERROR:  cannot drop view conditionsnm_4 because other objects depend on it
+psql:include/continuous_aggs_ddl_common.sql:914: ERROR:  cannot drop view conditionsnm_4 because other objects depend on it
 \set ON_ERROR_STOP 1
 -- Case 4: DROP CASCADE with dependency
 DROP MATERIALIZED VIEW conditionsnm_4 CASCADE;
-NOTICE:  drop cascades to view see_cagg
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_39_chunk
+psql:include/continuous_aggs_ddl_common.sql:918: NOTICE:  drop cascades to view see_cagg
+psql:include/continuous_aggs_ddl_common.sql:918: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_39_chunk
 -- Test DROP SCHEMA CASCADE with continuous aggregates
 --
 -- Issue: #2350
 --
 -- Case 1: DROP SCHEMA CASCADE
 CREATE SCHEMA test_schema;
+\if :IS_DISTRIBUTED
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\endif
 CREATE TABLE test_schema.telemetry_raw (
   ts        TIMESTAMP WITH TIME ZONE NOT NULL,
   value     DOUBLE PRECISION
 );
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_schema.telemetry_raw', 'ts', replication_factor => 2);
+\else
 SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
         create_hypertable         
 ----------------------------------
  (29,test_schema,telemetry_raw,t)
 (1 row)
 
+\endif
 CREATE MATERIALIZED VIEW test_schema.telemetry_1s
   WITH (timescaledb.continuous)
     AS
@@ -1221,7 +1353,7 @@ WHERE user_view_name = 'telemetry_1s';
 
 \gset
 DROP SCHEMA test_schema CASCADE;
-NOTICE:  drop cascades to 4 other objects
+psql:include/continuous_aggs_ddl_common.sql:966: NOTICE:  drop cascades to 4 other objects
 SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME';
  count 
 -------
@@ -1248,16 +1380,29 @@ SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
 
 -- Case 2: DROP SCHEMA CASCADE with multiple caggs
 CREATE SCHEMA test_schema;
+\if :IS_DISTRIBUTED
+\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER
+CREATE SCHEMA test_schema;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\endif
 CREATE TABLE test_schema.telemetry_raw (
   ts        TIMESTAMP WITH TIME ZONE NOT NULL,
   value     DOUBLE PRECISION
 );
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('test_schema.telemetry_raw', 'ts', replication_factor => 2);
+\else
 SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
         create_hypertable         
 ----------------------------------
  (31,test_schema,telemetry_raw,t)
 (1 row)
 
+\endif
 CREATE MATERIALIZED VIEW test_schema.cagg1
   WITH (timescaledb.continuous)
     AS
@@ -1301,7 +1446,7 @@ WHERE user_view_name = 'cagg2';
 
 \gset
 DROP SCHEMA test_schema CASCADE;
-NOTICE:  drop cascades to 7 other objects
+psql:include/continuous_aggs_ddl_common.sql:1032: NOTICE:  drop cascades to 7 other objects
 SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME1';
  count 
 -------
@@ -1353,12 +1498,16 @@ CREATE TABLE conditions (
        location TEXT NOT NULL,
        temperature DOUBLE PRECISION NULL
 );
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+\else
 SELECT create_hypertable('conditions', 'time');
     create_hypertable     
 --------------------------
  (34,public,conditions,t)
 (1 row)
 
+\endif
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
 INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
 INSERT INTO conditions VALUES ( '2018-01-02 09:20:00-08', 'SFO', 65);
@@ -1460,22 +1609,26 @@ CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
 -- #3696 assertion failure when referencing columns not present in result
 CREATE TABLE i3696(time timestamptz NOT NULL, search_query text, cnt integer, cnt2 integer);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('i3696', 'time', replication_factor => 2);
+\else
 SELECT table_name FROM create_hypertable('i3696','time');
  table_name 
 ------------
  i3696
 (1 row)
 
+\endif
 CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt +cnt2 , bucket, search_query;
-NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:1116: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg1 SET (timescaledb.materialized_only = 'true');
 CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt + cnt2, bucket, search_query
  HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
-NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:1124: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true');

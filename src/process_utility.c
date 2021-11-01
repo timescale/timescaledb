@@ -288,14 +288,39 @@ add_hypertable_to_process_args(ProcessUtilityArgs *args, const Hypertable *ht)
 	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
 }
 
+static bool
+check_table_in_rangevar_list(List *rvlist, Name schema_name, Name table_name)
+{
+	ListCell *l;
+
+	foreach (l, rvlist)
+	{
+		RangeVar *rvar = lfirst_node(RangeVar, l);
+
+		if (strcmp(rvar->relname, NameStr(*table_name)) == 0 &&
+			strcmp(rvar->schemaname, NameStr(*schema_name)) == 0)
+			return true;
+	}
+
+	return false;
+}
+
 static void
 add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 {
 	ProcessUtilityArgs *args = vargs;
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	RangeVar *rv = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
-	stmt->objects = lappend(stmt->objects, rv);
+	/*
+	 * If chunk is in the same schema as the hypertable it could already be part of
+	 * the objects list in the case of "GRANT ALL IN SCHEMA" for example
+	 */
+	if (!check_table_in_rangevar_list(stmt->objects, &chunk->fd.schema_name, &chunk->fd.table_name))
+	{
+		RangeVar *rv =
+			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+		stmt->objects = lappend(stmt->objects, rv);
+	}
 }
 
 static bool
@@ -941,7 +966,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 					if (cagg)
 					{
-						Hypertable *ht;
+						Hypertable *mat_ht, *raw_ht;
 						MemoryContext oldctx;
 
 						if (!relation_should_recurse(rv))
@@ -949,19 +974,25 @@ process_truncate(ProcessUtilityArgs *args)
 									(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 									 errmsg("cannot truncate only a continuous aggregate")));
 
-						ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-						Assert(ht != NULL);
+						mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+						Assert(mat_ht != NULL);
 
 						/* Create list item into the same context of the list */
 						oldctx = MemoryContextSwitchTo(parsetreectx);
-						rv = makeRangeVar(NameStr(ht->fd.schema_name),
-										  NameStr(ht->fd.table_name),
+						rv = makeRangeVar(NameStr(mat_ht->fd.schema_name),
+										  NameStr(mat_ht->fd.table_name),
 										  -1);
 						MemoryContextSwitchTo(oldctx);
 
 						/* Invalidate the entire continuous aggregate since it no
 						 * longer has any data */
-						ts_cm_functions->continuous_agg_invalidate(ht, PG_INT64_MIN, PG_INT64_MAX);
+						raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
+						Assert(raw_ht != NULL);
+						ts_cm_functions->continuous_agg_invalidate(raw_ht,
+																   HypertableIsMaterialization,
+																   mat_ht->fd.id,
+																   TS_TIME_NOBEGIN,
+																   TS_TIME_NOEND);
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
@@ -993,10 +1024,14 @@ process_truncate(ProcessUtilityArgs *args)
 									 errhint("TRUNCATE the continuous aggregate instead.")));
 
 						if (agg_status == HypertableIsRawTable)
+						{
 							/* The truncation invalidates all associated continuous aggregates */
 							ts_cm_functions->continuous_agg_invalidate(ht,
+																	   HypertableIsRawTable,
+																	   ht->fd.id,
 																	   TS_TIME_NOBEGIN,
 																	   TS_TIME_NOEND);
+						}
 
 						if (!relation_should_recurse(rv))
 							ereport(ERROR,
@@ -1140,7 +1175,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 					   chunk->cube->slices[0]->fd.dimension_id);
-				ts_cm_functions->continuous_agg_invalidate(ht, start, end);
+				ts_cm_functions->continuous_agg_invalidate(ht,
+														   HypertableIsRawTable,
+														   ht->fd.id,
+														   start,
+														   end);
 			}
 		}
 	}
@@ -1282,10 +1321,103 @@ process_grant_add_by_rel(GrantStmt *stmt, RangeVar *relation)
 	stmt->objects = lappend(stmt->objects, relation);
 }
 
+/*
+ * If it is a "GRANT/REVOKE ON ALL TABLES IN SCHEMA" operation then we need to check if
+ * the rangevar was already added when we added all objects inside the SCHEMA
+ *
+ * This could get a little expensive for schemas containing a lot of objects..
+ */
 static void
-process_grant_add_by_name(GrantStmt *stmt, Name schema_name, Name table_name)
+process_grant_add_by_name(GrantStmt *stmt, bool was_schema_op, Name schema_name, Name table_name)
 {
-	process_grant_add_by_rel(stmt, makeRangeVar(NameStr(*schema_name), NameStr(*table_name), -1));
+	bool already_added = false;
+
+	if (was_schema_op)
+		already_added = check_table_in_rangevar_list(stmt->objects, schema_name, table_name);
+
+	if (!already_added)
+		process_grant_add_by_rel(stmt,
+								 makeRangeVar(NameStr(*schema_name), NameStr(*table_name), -1));
+}
+
+static void
+process_relations_in_namespace(GrantStmt *stmt, Name schema_name, Oid namespaceId, char relkind)
+{
+	ScanKeyData key[2];
+	Relation rel;
+	TableScanDesc scan;
+	HeapTuple tuple;
+
+	ScanKeyInit(&key[0],
+				Anum_pg_class_relnamespace,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(namespaceId));
+	ScanKeyInit(&key[1],
+				Anum_pg_class_relkind,
+				BTEqualStrategyNumber,
+				F_CHAREQ,
+				CharGetDatum(relkind));
+
+	rel = table_open(RelationRelationId, AccessShareLock);
+	scan = table_beginscan_catalog(rel, 2, key);
+
+	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		Name relname = &((Form_pg_class) GETSTRUCT(tuple))->relname;
+
+		/* these are being added for the first time into this list */
+		process_grant_add_by_name(stmt, false, schema_name, relname);
+	}
+
+	table_endscan(scan);
+	table_close(rel, AccessShareLock);
+
+	return;
+}
+
+/*
+ * For "GRANT ALL ON ALL TABLES IN SCHEMA" GrantStmt, the targtype field is ACL_TARGET_ALL_IN_SCHEMA
+ * whereas in regular "GRANT ON TABLE table_name", the targtype field is ACL_TARGET_OBJECT. In the
+ * latter case the objects list contains a list of relation range vars whereas in the former it is
+ * the list of schema names.
+ *
+ * To make things work we change the targtype field from ACL_TARGET_ALL_IN_SCHEMA to
+ * ACL_TARGET_OBJECT and then create a new list of rangevars of all relation type entities in it and
+ * assign it to the "stmt->objects" field.
+ *
+ */
+static void
+process_grant_add_by_schema(GrantStmt *stmt)
+{
+	ListCell *cell;
+	List *nspnames = stmt->objects;
+
+	/*
+	 * We will be adding rangevars to the "stmt->objects" field in the loop below. So
+	 * we track the nspnames separately above and NIL out the objects list
+	 */
+	stmt->objects = NIL;
+	foreach (cell, nspnames)
+	{
+		char *nspname = strVal(lfirst(cell));
+		Oid namespaceId = LookupExplicitNamespace(nspname, false);
+		Name schema;
+
+		schema = (Name) palloc(NAMEDATALEN);
+
+		namestrcpy(schema, nspname);
+
+		/* Inspired from objectsInSchemaToOids PG function */
+		process_relations_in_namespace(stmt, schema, namespaceId, RELKIND_RELATION);
+		process_relations_in_namespace(stmt, schema, namespaceId, RELKIND_VIEW);
+		process_relations_in_namespace(stmt, schema, namespaceId, RELKIND_MATVIEW);
+		process_relations_in_namespace(stmt, schema, namespaceId, RELKIND_FOREIGN_TABLE);
+		process_relations_in_namespace(stmt, schema, namespaceId, RELKIND_PARTITIONED_TABLE);
+	}
+
+	/* change targtype to ACL_TARGET_OBJECT now */
+	stmt->targtype = ACL_TARGET_OBJECT;
 }
 
 /*
@@ -1300,8 +1432,8 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 	DDLResult result = DDL_CONTINUE;
 
 	/* We let the calling function handle anything that is not
-	 * ACL_TARGET_OBJECT (currently only ACL_TARGET_ALL_IN_SCHEMA) */
-	if (stmt->targtype != ACL_TARGET_OBJECT)
+	 * ACL_TARGET_OBJECT or ACL_TARGET_ALL_IN_SCHEMA */
+	if (stmt->targtype != ACL_TARGET_OBJECT && stmt->targtype != ACL_TARGET_ALL_IN_SCHEMA)
 		return DDL_CONTINUE;
 
 	switch (stmt->objtype)
@@ -1322,9 +1454,24 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 			 * consider those when sending grants to other data nodes.
 			 */
 			{
-				Cache *hcache = ts_hypertable_cache_pin();
+				Cache *hcache;
 				ListCell *cell;
+				List *saved_schema_objects = NIL;
+				bool was_schema_op = false;
 
+				/*
+				 * If it's a GRANT/REVOKE ALL IN SCHEMA then we need to collect all
+				 * objects in this schema and convert this into an ACL_TARGET_OBJECT
+				 * entry with its objects field pointing to rangevars
+				 */
+				if (stmt->targtype == ACL_TARGET_ALL_IN_SCHEMA)
+				{
+					saved_schema_objects = stmt->objects;
+					process_grant_add_by_schema(stmt);
+					was_schema_op = true;
+				}
+
+				hcache = ts_hypertable_cache_pin();
 				/* First process all continuous aggregates in the list and add
 				 * the associated hypertables and views to the list of objects
 				 * to process */
@@ -1337,12 +1484,15 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 						Hypertable *mat_hypertable =
 							ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 						process_grant_add_by_name(stmt,
+												  was_schema_op,
 												  &mat_hypertable->fd.schema_name,
 												  &mat_hypertable->fd.table_name);
 						process_grant_add_by_name(stmt,
+												  was_schema_op,
 												  &cagg->data.direct_view_schema,
 												  &cagg->data.direct_view_name);
 						process_grant_add_by_name(stmt,
+												  was_schema_op,
 												  &cagg->data.partial_view_schema,
 												  &cagg->data.partial_view_name);
 					}
@@ -1359,6 +1509,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 							ts_hypertable_get_by_id(hypertable->fd.compressed_hypertable_id);
 						Assert(compressed_hypertable);
 						process_grant_add_by_name(stmt,
+												  was_schema_op,
 												  &compressed_hypertable->fd.schema_name,
 												  &compressed_hypertable->fd.table_name);
 					}
@@ -1378,6 +1529,19 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 				}
 
 				ts_cache_release(hcache);
+
+				/* Execute command right away, to check any permission errors before propagating
+				 * it to the distributed DDL */
+				result = DDL_DONE;
+				prev_ProcessUtility(args);
+
+				/* Restore ALL IN SCHEMA command type and it's objects */
+				if (was_schema_op)
+				{
+					stmt->targtype = ACL_TARGET_ALL_IN_SCHEMA;
+					stmt->objects = saved_schema_objects;
+				}
+
 				break;
 			}
 		default:
@@ -1465,6 +1629,10 @@ process_drop_start(ProcessUtilityArgs *args)
 	{
 		case OBJECT_TABLE:
 			process_drop_hypertable(args, stmt);
+			TS_FALLTHROUGH;
+		case OBJECT_FOREIGN_TABLE:
+			/* Chunks can be either normal tables, or foreign tables in the case of a distributed
+			 * hypertable */
 			process_drop_chunk(args, stmt);
 			break;
 		case OBJECT_INDEX:
@@ -2419,7 +2587,7 @@ process_index_start(ProcessUtilityArgs *args)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg(
-					 "cannot use timescaledb.transaction_per_chunk with distributed hypetable")));
+					 "cannot use timescaledb.transaction_per_chunk with distributed hypertable")));
 
 	ts_indexing_verify_index(ht->space, stmt);
 
@@ -3472,6 +3640,8 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("operation not supported on hypertables %d", cmd->subtype)));
+			break;
+		default:
 			break;
 	}
 	if (ts_cm_functions->process_altertable_cmd)

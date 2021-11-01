@@ -841,6 +841,8 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 				0 /*=options*/,
 				row_compressor->bistate);
 
+	heap_freetuple(compressed_tuple);
+
 	/* free the compressed values now that we're done with them (the old compressor is freed in
 	 * finish()) */
 	for (col = 0; col < row_compressor->n_input_columns; col++)

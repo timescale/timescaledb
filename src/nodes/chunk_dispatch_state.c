@@ -157,7 +157,30 @@ chunk_dispatch_exec(CustomScanState *node)
 		estate->es_result_relation_info = cis->result_relation_info;
 #endif
 		Assert(ts_cm_functions->compress_row_exec != NULL);
+		TupleTableSlot *orig_slot = slot;
 		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
+		/* If we have cagg defined on the hypertable, we have to execute
+		 * the function that records invalidations directly as AFTER ROW
+		 * triggers do not work with compressed chunks.
+		 */
+		if (ts_continuous_aggs_find_by_raw_table_id(ht->fd.id))
+		{
+			Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
+			HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) orig_slot;
+			if (!hslot->tuple)
+				hslot->tuple = heap_form_tuple(orig_slot->tts_tupleDescriptor,
+											   orig_slot->tts_values,
+											   orig_slot->tts_isnull);
+
+			ts_cm_functions
+				->continuous_agg_call_invalidation_trigger(ht->fd.id,
+														   cis->rel,
+														   hslot->tuple,
+														   NULL /* chunk_newtuple */,
+														   false /* update */,
+														   false /* is_distributed_hypertable */,
+														   /* parent_hypertable_id */ 0);
+		}
 	}
 	return slot;
 }
@@ -193,7 +216,7 @@ static CustomExecMethods chunk_dispatch_state_methods = {
  * Check whether the PlanState is a ChunkDispatchState node.
  */
 bool
-ts_chunk_dispatch_is_state(PlanState *state)
+ts_is_chunk_dispatch_state(PlanState *state)
 {
 	CustomScanState *csstate = (CustomScanState *) state;
 

@@ -4801,7 +4801,7 @@ INSERT INTO disttable VALUES
        ('2018-07-01 08:01', 29, 64);
 \set ON_ERROR_STOP 0
 CREATE INDEX disttable_time_device_idx ON disttable (time, device) WITH (timescaledb.transaction_per_chunk);
-ERROR:  cannot use timescaledb.transaction_per_chunk with distributed hypetable
+ERROR:  cannot use timescaledb.transaction_per_chunk with distributed hypertable
 \set ON_ERROR_STOP 1
 -- Test using system columns with distributed hypertable
 --

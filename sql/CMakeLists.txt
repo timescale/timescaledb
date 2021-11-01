@@ -29,11 +29,17 @@ set(MOD_FILES
     updates/2.3.0--2.3.1.sql
     updates/2.3.1--2.4.0.sql
     updates/2.4.0--2.4.1.sql
-    updates/2.4.1--2.4.2.sql)
+    updates/2.4.1--2.4.2.sql
+    updates/2.4.2--2.5.0.sql)
 
-# Files for downgrade scripts. This should only include files for downgrade to
-# previous version since we do not support skipping versions when downgrading
-set(REV_FILES)
+# The downgrade file to generate a downgrade script for the current version, as
+# specified in version.config
+set(CURRENT_REV_FILE reverse-dev.sql)
+# Files for generating old downgrade scripts. This should only include files for
+# downgrade to from one version to its previous version since we do not support
+# skipping versions when downgrading.
+set(OLD_REV_FILES 2.3.1--2.3.0.sql 2.4.0--2.3.1.sql 2.4.1--2.4.0.sql
+                  2.4.2--2.4.1.sql 2.5.0--2.4.2.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
@@ -56,25 +62,27 @@ else()
     INPUT_DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/updates
     FILES
-    reverse-dev.sql)
-  foreach(_downgrade_file ${REV_FILES})
-    if(${_downgrade_file} MATCHES
-       "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
-      set(_source_version ${CMAKE_MATCH_1})
-      set(_target_version ${CMAKE_MATCH_2})
-      generate_downgrade_script(
-        SOURCE_VERSION
-        ${_source_version}
-        TARGET_VERSION
-        ${_target_version}
-        INPUT_DIRECTORY
-        ${CMAKE_CURRENT_SOURCE_DIR}/updates
-        FILES
-        ${_downgrade_file})
-    else()
-      message(FATAL_ERROR "${_downgrade_file} is not a downgrade file")
-    endif()
-  endforeach()
+    ${CURRENT_REV_FILE})
+  if(GENERATE_OLD_DOWNGRADE_SCRIPTS)
+    foreach(_downgrade_file ${OLD_REV_FILES})
+      if(${_downgrade_file} MATCHES
+         "([0-9]+\\.[0-9]+\\.*[0-9]*)--([0-9]+\\.[0-9]+\\.*[0-9]*).sql")
+        set(_source_version ${CMAKE_MATCH_1})
+        set(_target_version ${CMAKE_MATCH_2})
+        generate_downgrade_script(
+          SOURCE_VERSION
+          ${_source_version}
+          TARGET_VERSION
+          ${_target_version}
+          INPUT_DIRECTORY
+          ${CMAKE_CURRENT_SOURCE_DIR}/updates
+          FILES
+          ${_downgrade_file})
+      else()
+        message(FATAL_ERROR "${_downgrade_file} is not a downgrade file")
+      endif()
+    endforeach()
+  endif()
 endif()
 
 # Function to replace @MODULE_PATHNAME@ in source files, producing an output

@@ -38,7 +38,7 @@
 #include "plan_partialize.h"
 #include "planner.h"
 #include "time_utils.h"
-#include "chunk_append/chunk_append.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "import/planner.h"
 
 typedef struct CollectQualCtx
@@ -1349,7 +1349,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 *
 	 * Note that each per-data_node RTE reuses the relid (OID) of the parent
 	 * hypertable relation. This makes sense since each data node's
-	 * hypertable is an identical (albeit partial) version of the frontend's
+	 * hypertable is an identical (albeit partial) version of the access node's
 	 * hypertable. The upside of this is that the planner can plan remote
 	 * queries to take into account the indexes on the hypertable to produce
 	 * more efficient remote queries. In contrast, chunks are foreign tables so

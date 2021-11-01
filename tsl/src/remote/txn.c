@@ -55,15 +55,15 @@ typedef struct RemoteTxn
  *
  * We always use at least REPEATABLE READ in the remote session.
  * This is important even for cases where we use the a single connection to
- * a data node. This is because a single frontend command may cause multiple
- * remote commands to be executed (e.g. a join of two tables on one remote
+ * a data node. This is because a single command from the access node may cause
+ * multiple remote commands to be executed (e.g. a join of two tables on one remote
  * node might not be pushed down and instead two different queries are sent
  * to the remote node, one for each table in the join). Since in READ
  * COMMITED the snapshot is refreshed on each command, the semantics are off
  * when multiple commands are meant to be part of the same one.
  *
- * This isn't great but we have no alternative unless we ensure that each frontend
- * command always translates to one backend query or if we had some other way to
+ * This isn't great but we have no alternative unless we ensure that each access
+ * node command always translates to one data node query or if we had some other way to
  * control which remote queries share a snapshot or when a snapshot is refreshed.
  *
  * NOTE: this does not guarantee any kind of snapshot isolation to different connections
@@ -122,12 +122,12 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 }
 
 bool
-remote_txn_is_still_in_progress(TransactionId frontend_xid)
+remote_txn_is_still_in_progress(TransactionId access_node_xid)
 {
-	if (TransactionIdIsCurrentTransactionId(frontend_xid))
+	if (TransactionIdIsCurrentTransactionId(access_node_xid))
 		elog(ERROR, "checking if a commit is still in progress on same txn");
 
-	return XidInMVCCSnapshot(frontend_xid, GetTransactionSnapshot());
+	return XidInMVCCSnapshot(access_node_xid, GetTransactionSnapshot());
 }
 
 size_t

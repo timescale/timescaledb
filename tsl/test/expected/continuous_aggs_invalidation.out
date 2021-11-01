@@ -1,8 +1,13 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\set IS_DISTRIBUTED FALSE
+\ir include/continuous_aggs_invalidation_common.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
 -- Disable background workers since we are testing manual refresh
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT _timescaledb_internal.stop_background_workers();
  stop_background_workers 
 -------------------------
@@ -13,31 +18,59 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
 (1 row)
 
+\endif
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('measurements', 'time', chunk_time_interval => 10, replication_factor => 2);
+\else
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
      create_hypertable     
 ---------------------------
  (2,public,measurements,t)
 (1 row)
 
+\endif
 CREATE OR REPLACE FUNCTION bigint_now()
 RETURNS bigint LANGUAGE SQL STABLE AS
 $$
     SELECT coalesce(max(time), 0)
     FROM conditions
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION bigint_now()
+RETURNS bigint LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM conditions
+$$;
+$DIST$);
+\endif
 CREATE OR REPLACE FUNCTION int_now()
 RETURNS int LANGUAGE SQL STABLE AS
 $$
     SELECT coalesce(max(time), 0)
     FROM measurements
 $$;
+\if :IS_DISTRIBUTED
+CALL distributed_exec($DIST$
+CREATE OR REPLACE FUNCTION int_now()
+RETURNS int LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM measurements
+$$;
+$DIST$);
+\endif
 SELECT set_integer_now_func('conditions', 'bigint_now');
  set_integer_now_func 
 ----------------------
@@ -54,8 +87,10 @@ INSERT INTO conditions
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int,
        abs(timestamp_hash(to_timestamp(t)::timestamp))%40
 FROM generate_series(1, 100, 1) t;
-INSERT INTO measurements
+CREATE TABLE temp AS
 SELECT * FROM conditions;
+INSERT INTO measurements
+SELECT * FROM temp;
 -- Show the most recent data
 SELECT * FROM conditions
 ORDER BY time DESC, device
@@ -127,18 +162,67 @@ ORDER BY 1 DESC, 2;
 --------+--------+----------
 (0 rows)
 
-CREATE VIEW hyper_invals AS
-SELECT hypertable_id AS hyper_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
+\if :IS_DISTRIBUTED
+CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS TABLE(
+      "hyper_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT DISTINCT table_record[1]::TEXT::INT, table_record[2]::TEXT::BIGINT, table_record[3]::TEXT::BIGINT FROM test.remote_exec_get_result_strings(NULL, $DIST$
+      SELECT hypertable_id,
+            lowest_modified_value,
+            greatest_modified_value
+            FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+$DIST$)
+ORDER BY 1,2,3
+$$;
+CREATE OR REPLACE FUNCTION get_cagg_invals() RETURNS TABLE(
+      "cagg_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT DISTINCT table_record[1]::TEXT::INT, table_record[2]::TEXT::BIGINT, table_record[3]::TEXT::BIGINT FROM test.remote_exec_get_result_strings(NULL, $DIST$
+      SELECT materialization_id AS cagg_id,
+            lowest_modified_value AS start,
+            greatest_modified_value AS end
+            FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+$DIST$)
+ORDER BY 1,2,3
+$$;
+\else
+CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS  TABLE (
+      "hyper_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT hypertable_id,
+       lowest_modified_value,
+       greatest_modified_value
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3;
-CREATE VIEW cagg_invals AS
-SELECT materialization_id AS cagg_id,
-       lowest_modified_value AS start,
-       greatest_modified_value AS end
+       ORDER BY 1,2,3
+$$;
+CREATE OR REPLACE FUNCTION get_cagg_invals() RETURNS TABLE (
+      "cagg_id" INT,
+      "start" BIGINT,
+      "end" BIGINT
+)
+LANGUAGE SQL VOLATILE AS
+$$
+SELECT materialization_id,
+       lowest_modified_value,
+       greatest_modified_value
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
-       ORDER BY 1,2,3;
+       ORDER BY 1,2,3
+$$;
+\endif
+CREATE VIEW hyper_invals AS SELECT * FROM get_hyper_invals();
+CREATE VIEW cagg_invals AS SELECT * FROM get_cagg_invals();
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, there is no threshold
 -- set:
@@ -190,7 +274,7 @@ SELECT * FROM cagg_invals;
 
 -- Refreshing below the threshold does not move it:
 CALL refresh_continuous_aggregate('cond_10', 20, 49);
-NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:207: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
  hypertable_id | watermark 
@@ -458,7 +542,7 @@ SELECT * FROM cagg_invals;
 -- invalidations). Merging of overlapping entries should still happen:
 INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 90, 100);
-NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:327: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -590,7 +674,7 @@ ORDER BY 1,2;
 -- TRUNCATE ONLY
 \set ON_ERROR_STOP 0
 TRUNCATE ONLY cond_20;
-ERROR:  cannot truncate only a continuous aggregate
+psql:include/continuous_aggs_invalidation_common.sql:385: ERROR:  cannot truncate only a continuous aggregate
 \set ON_ERROR_STOP 1
 TRUNCATE cond_20;
 -- Should now be empty
@@ -828,13 +912,17 @@ ORDER BY 1,2;
 -- Test that invalidation threshold is capped
 ----------------------------------------------
 CREATE table threshold_test (time int, value int);
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('threshold_test', 'time', chunk_time_interval => 4, replication_factor => 2);
+\else
 SELECT create_hypertable('threshold_test', 'time', chunk_time_interval => 4);
-NOTICE:  adding not-null constraint to column "time"
+psql:include/continuous_aggs_invalidation_common.sql:536: NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,threshold_test,t)
 (1 row)
 
+\endif
 SELECT set_integer_now_func('threshold_test', 'int_now');
  set_integer_now_func 
 ----------------------
@@ -863,7 +951,7 @@ ORDER BY 1,2;
 -- and we specify an infinite end. Note that the min value may differ
 -- depending on time type.
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
-NOTICE:  continuous aggregate "thresh_2" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:560: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
@@ -889,13 +977,13 @@ ORDER BY 1,2;
 -- Refresh where both the start and end of the window is above the
 -- max data value
 CALL refresh_continuous_aggregate('thresh_2', 14, NULL);
-NOTICE:  continuous aggregate "thresh_2" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:580: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 SELECT watermark AS thresh_hyper_id_watermark
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id \gset
 -- Refresh where we start from the current watermark to infinity
 CALL refresh_continuous_aggregate('thresh_2', :thresh_hyper_id_watermark, NULL);
-NOTICE:  continuous aggregate "thresh_2" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:587: NOTICE:  continuous aggregate "thresh_2" is already up-to-date
 -- Now refresh with max end of the window to test that the
 -- invalidation threshold is capped at the last bucket of data
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
@@ -1056,7 +1144,12 @@ ORDER BY 1,2;
 (4 rows)
 
 -- Drop one chunk
+\if :IS_DISTRIBUTED
+CALL distributed_exec(format('DROP TABLE IF EXISTS %s', :'chunk_to_drop'));
+DROP FOREIGN TABLE :chunk_to_drop;
+\else
 DROP TABLE :chunk_to_drop;
+\endif
 -- The chunk's data no longer exists in the hypertable
 SELECT * FROM conditions
 ORDER BY 1,2;
@@ -1092,7 +1185,7 @@ INSERT INTO conditions VALUES(3, 1, 1.0);
 INSERT INTO conditions VALUES(4, 1, 1.0);
 INSERT INTO conditions VALUES(6, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_1', 10, NULL);
-NOTICE:  continuous aggregate "cond_1" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:709: NOTICE:  continuous aggregate "cond_1" is already up-to-date
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
  cagg_id | start |         end         
@@ -1104,7 +1197,8 @@ WHERE cagg_id = :cond_1_id;
 
 ---------------------------------------------------------------------
 -- Test that single timestamp invalidations are expanded to buckets,
--- and adjacent buckets merged.
+-- and adjacent buckets merged. This merging cannot cross Data-Node
+-- chunk boundaries for the distributed hypertable case.
 ---------------------------------------------------------------------
 -- First clear invalidations in a range:
 CALL refresh_continuous_aggregate('cond_10', -20, 60);
@@ -1117,7 +1211,7 @@ INSERT INTO conditions VALUES (40, 1, 1.0);
 -- Refresh to process invalidations, but outside the range of
 -- invalidations we inserted so that we don't clear them.
 CALL refresh_continuous_aggregate('cond_10', 50, 60);
-NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/continuous_aggs_invalidation_common.sql:730: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT mat_hypertable_id AS cond_10_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_10' \gset
@@ -1132,13 +1226,7 @@ WHERE cagg_id = :cond_10_id;
 (4 rows)
 
 -- should trigger two individual refreshes
-SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-DEBUG:  refreshing continuous aggregate "cond_10" in window [ 0, 200 ]
-DEBUG:  invalidation refresh on "cond_10" in window [ 0, 30 ]
-DEBUG:  invalidation refresh on "cond_10" in window [ 40, 50 ]
-DEBUG:  invalidation refresh on "cond_10" in window [ 60, 200 ]
-RESET client_min_messages;
 -- Allow at most 5 individual invalidations per refreshe
 SET timescaledb.materializations_per_refresh_window=5;
 -- Insert into every second bucket
@@ -1149,12 +1237,7 @@ INSERT INTO conditions VALUES (80, 1, 1.0);
 INSERT INTO conditions VALUES (100, 1, 1.0);
 INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
-SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-DEBUG:  refreshing continuous aggregate "cond_10" in window [ 0, 200 ]
-DEBUG:  hypertable 1 existing watermark >= new invalidation threshold 200 200
-DEBUG:  merged 7 invalidations for refresh on "cond_10" in window [ 20, 150 ]
-RESET client_min_messages;
 \set VERBOSITY default
 -- Test acceptable values for materializations per refresh
 SET timescaledb.materializations_per_refresh_window=' 5 ';
@@ -1168,16 +1251,16 @@ CALL refresh_continuous_aggregate('cond_10', 0, 200);
 SET timescaledb.materializations_per_refresh_window='foo';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/continuous_aggs_invalidation_common.sql:769: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "foo".
 SET timescaledb.materializations_per_refresh_window='2bar';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/continuous_aggs_invalidation_common.sql:772: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "2bar".
 SET timescaledb.materializations_per_refresh_window='-';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
+psql:include/continuous_aggs_invalidation_common.sql:776: WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "-".
 \set VERBOSITY terse

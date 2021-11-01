@@ -73,3 +73,41 @@ GRANT INSERT ON conditions TO PUBLIC;
 REVOKE INSERT ON conditions FROM PUBLIC;
 \z conditions
 \z _timescaledb_internal._hyper_1_3_chunk
+
+-- Check that GRANT ALL IN SCHEMA adds privileges to the parent
+-- and also goes to chunks in another schema
+GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER_2;
+\z conditions
+\z _timescaledb_internal.*chunk
+
+-- Check that REVOKE ALL IN SCHEMA removes privileges of the parent
+-- and also goes to chunks in another schema
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER_2;
+\z conditions
+\z _timescaledb_internal.*chunk
+
+-- Create chunks in the same schema as the hypertable and check that
+-- they also get the same privileges as the hypertable
+CREATE TABLE measurements(
+    time TIMESTAMPTZ NOT NULL,
+    device INTEGER,
+    temperature FLOAT
+);
+
+-- Create a hypertable with chunks in the same schema
+SELECT * FROM create_hypertable('public.measurements', 'time', chunk_time_interval => '5 days'::interval, associated_schema_name => 'public');
+INSERT INTO measurements
+SELECT time, (random()*30)::int, random()*80 - 40
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-10 00:00'::timestamp, '1h') AS time;
+
+-- GRANT ALL and check privileges
+GRANT ALL ON ALL TABLES  IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER_2;
+\z measurements
+\z conditions
+\z public.*chunk
+
+-- REVOKE ALL and check privileges
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER_2;
+\z measurements
+\z conditions
+\z public.*chunk

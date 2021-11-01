@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 12, 13 ]
+        pg: [ 12, 13, 14 ]
         os: [ windows-2019 ]
     env:
       # PostgreSQL configuration

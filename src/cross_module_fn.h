@@ -84,17 +84,34 @@ typedef struct CrossModuleFunctions
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);
 	void (*sql_drop)(List *dropped_objects);
+
+	/* Continuous Aggregates */
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
 	PGFunction finalize_agg_ffunc;
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_invalidation_trigger;
+	void (*continuous_agg_call_invalidation_trigger)(int32 hypertable_id, Relation chunk_rel,
+													 HeapTuple chunk_tuple,
+													 HeapTuple chunk_newtuple, bool update,
+													 bool is_distributed_hypertable_trigger,
+													 int32 parent_hypertable_id);
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_refresh_chunk;
-	void (*continuous_agg_invalidate)(const Hypertable *ht, int64 start, int64 end);
+	void (*continuous_agg_invalidate)(const Hypertable *ht,
+									  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
+									  int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	PGFunction invalidation_cagg_log_add_entry;
+	PGFunction invalidation_hyper_log_add_entry;
+	void (*remote_invalidation_log_delete)(int32 raw_hypertable_id,
+										   ContinuousAggHypertableStatus caggstatus);
+	PGFunction drop_dist_ht_invalidation_trigger;
+	void (*remote_drop_dist_ht_invalidation_trigger)(int32 raw_hypertable_id);
+	PGFunction invalidation_process_hypertable_log;
+	PGFunction invalidation_process_cagg_log;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;
@@ -151,7 +168,7 @@ typedef struct CrossModuleFunctions
 	uint64 (*distributed_copy)(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);
 	void (*set_distributed_peer_id)(Datum id);
-	bool (*is_frontend_session)(void);
+	bool (*is_access_node_session)(void);
 	bool (*remove_from_distributed_db)(void);
 	PGFunction dist_remote_hypertable_info;
 	PGFunction dist_remote_chunk_info;

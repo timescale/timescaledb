@@ -26,3 +26,15 @@ INSERT INTO i3629 SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i
 EXPLAIN (SUMMARY OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
 SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
 
+-- #3720 skipscan not being used on varchar column
+CREATE TABLE i3720(time timestamptz not null,data varchar);
+SELECT table_name FROM create_hypertable('i3720','time');
+
+INSERT INTO i3720
+SELECT time, (array['Yes', 'No', 'Maybe'])[floor(random() * 3 + 1)]
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time);
+
+CREATE INDEX ON i3720(data, time);
+ANALYZE i3720;
+:PREFIX SELECT DISTINCT ON(data) * FROM i3720;
+

@@ -1,0 +1,65 @@
+name: Memory tests
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+      - memory_test
+jobs:
+  memory_leak:
+    name: Memory leak on insert PG${{ matrix.pg }}
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        pg: [12, 13, 14]
+      fail-fast: false
+
+    steps:
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev python3-psutil
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt-get update
+        sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=Release
+        make -C build
+        sudo make -C build install
+
+    - name: Setup database
+      run: |
+        sudo tee -a /etc/postgresql/${{ matrix.pg }}/main/postgresql.conf <<-CONF
+          shared_preload_libraries = 'timescaledb'
+          max_worker_processes = 0
+          log_destination = syslog
+          max_wal_size = 8GB
+          max_wal_senders = 0
+          wal_level = minimal
+          checkpoint_timeout = 20min
+          log_checkpoints = on
+          bgwriter_lru_maxpages = 0
+          track_counts = off
+          fsync = off
+          port = 5432
+        CONF
+        sudo grep port /etc/postgresql/${{ matrix.pg }}/main/postgresql.conf
+        sudo systemctl start postgresql@${{ matrix.pg }}-main.service
+        sudo -u postgres psql -X -c "CREATE USER runner SUPERUSER LOGIN;"
+
+    - name: Run memory test
+      run: |
+        sudo -u postgres python ./scripts/test_memory_spikes.py & sleep 5 && psql -d postgres -v ECHO=all -X -f scripts/out_of_order_random_direct.sql
+
+    - name: Postgres log
+      if: always()
+      run: |
+        sudo journalctl -u postgresql@${{ matrix.pg }}-main.service
+

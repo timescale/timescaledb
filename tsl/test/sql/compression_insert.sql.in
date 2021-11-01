@@ -551,16 +551,36 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 
--- Create a hypertable and add a rogue inherited table to it. 
-CREATE TABLE i165 (time timestamptz PRIMARY KEY);
-SELECT create_hypertable('i165','time');
-ALTER TABLE i165 SET (timescaledb.compress);
-SELECT compress_chunk(show_chunks('i165'));
-CREATE TABLE extras (more_magic bool) INHERITS (i165);
-INSERT INTO i165 (time) VALUES
-       (generate_series(TIMESTAMP '2019-08-01', TIMESTAMP '2019-08-10', INTERVAL '10 minutes'));
-\set ON_ERROR_STOP 0
-\set VERBOSITY default
-SELECT * FROM i165;
-\set VERBOSITY terse
-\set ON_ERROR_STOP 1
+-- TEST cagg triggers with insert into compressed chunk
+CREATE TABLE conditions (
+      timec        TIMESTAMPTZ       NOT NULL,
+      temperature DOUBLE PRECISION  NULL,
+      humidity    DOUBLE PRECISION  NULL
+    );
+SELECT table_name from create_hypertable( 'conditions', 'timec');
+INSERT INTO conditions  
+SELECT generate_series('2010-01-01 09:00:00-08'::timestamptz, '2010-01-03 09:00:00-08'::timestamptz, '1 day'), 55 , 45;
+
+CREATE MATERIALIZED VIEW cagg_conditions WITH (timescaledb.continuous,
+   timescaledb.materialized_only = true)
+AS
+SELECT time_bucket( '7 days', timec) bkt, count(*) cnt, sum(temperature) sumb
+FROM conditions 
+GROUP BY time_bucket('7 days', timec);
+
+SELECT * FROM cagg_conditions ORDER BY 1;
+
+ALTER TABLE conditions SET (timescaledb.compress);
+SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
+ 
+SELECT chunk_name, range_start, range_end, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'conditions';
+
+--now insert into compressed chunk
+INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
+INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
+
+--refresh cagg, should have updated info
+CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
+SELECT * FROM cagg_conditions ORDER BY 1;

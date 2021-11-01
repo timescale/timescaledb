@@ -4,7 +4,8 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
 
 set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
-    remote_create_chunk.spec.in dist_restore_point.spec.in)
+    remote_create_chunk.spec.in dist_restore_point.spec.in
+    continuous_aggs_drop_chunks.spec.in)
 
 list(
   APPEND
@@ -13,10 +14,12 @@ list(
   continuous_aggs_insert.spec
   continuous_aggs_multi.spec
   continuous_aggs_concurrent_refresh.spec
+  continuous_aggs_concurrent_refresh_dist_ht.spec
   deadlock_drop_chunks_compress.spec)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
+  list(APPEND TEST_FILES continuous_aggs_multi_dist_ht.spec)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # need to generate MODULE name for the .spec files

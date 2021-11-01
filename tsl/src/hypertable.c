@@ -56,7 +56,7 @@ data_node_append(List *data_nodes, int32 hypertable_id, const char *node_name,
 /*  Returns the remote hypertable ids for the data_nodes (in the same order)
  */
 static List *
-hypertable_create_backend_tables(int32 hypertable_id, List *data_nodes)
+hypertable_create_data_node_tables(int32 hypertable_id, List *data_nodes)
 {
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
 	ListCell *cell;
@@ -104,7 +104,7 @@ hypertable_assign_data_nodes(int32 hypertable_id, List *nodes)
 {
 	ListCell *lc;
 	List *assigned_nodes = NIL;
-	List *remote_ids = hypertable_create_backend_tables(hypertable_id, nodes);
+	List *remote_ids = hypertable_create_data_node_tables(hypertable_id, nodes);
 	ListCell *id_cell;
 
 	Assert(nodes->length == remote_ids->length);

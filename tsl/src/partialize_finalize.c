@@ -29,8 +29,8 @@
  *
  * This is especially useful in continuous aggs, where partials are stored and
  * finalized at query time to give accurate aggregates and in the distributed
- * database in which partials are calculated by individual backend nodes and
- * then passed back to the frontend node for finalization.
+ * database in which partials are calculated by individual data nodes and
+ * then passed back to the access node for finalization.
  *
  * The partialize function is implemented as a regular function, the function
  * call itself does very little except ensure that the type returned is what the
