@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #3768 Allow ALTER TABLE ADD COLUMN with DEFAULT on compressed hypertable
+
 **Bugfixes**
 * #3766 Fix segfault in ts_hist_sfunc
 

@@ -410,7 +410,13 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 				{
 					AttrNumber attr = AttrNumberGetAttrOffset(column->attno);
 
-					if (column->compressed.iterator != NULL)
+					if (!column->compressed.iterator)
+					{
+						slot->tts_values[attr] = getmissingattr(slot->tts_tupleDescriptor,
+																attr + 1,
+																&slot->tts_isnull[attr]);
+					}
+					else
 					{
 						DecompressResult result;
 						result = column->compressed.iterator->try_next(column->compressed.iterator);
@@ -433,8 +439,6 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 						slot->tts_values[attr] = result.val;
 						slot->tts_isnull[attr] = result.is_null;
 					}
-					else
-						slot->tts_isnull[attr] = true;
 
 					break;
 				}

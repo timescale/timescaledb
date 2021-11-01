@@ -465,5 +465,3 @@ ALTER TABLE i2844 SET (timescaledb.compress = FALSE);
 -- compression alter schema tests
 \ir include/compression_alter.sql
 
-
-
