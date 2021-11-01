@@ -48,6 +48,14 @@ typedef enum DataFetcherType
 
 extern TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher;
 
+typedef enum PushdownFunctionsType
+{
+	PUSHDOWN_FUNCTIONS_WHITELISTED,
+	PUSHDOWN_FUNCTIONS_STABLE
+} PushdownFunctionsType;
+
+extern TSDLLEXPORT PushdownFunctionsType ts_pushdown_functions;
+
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;

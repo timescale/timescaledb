@@ -40,6 +40,12 @@ static const struct config_enum_entry remote_data_fetchers[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry pushdown_functions_options[] = {
+	{ "whitelisted", PUSHDOWN_FUNCTIONS_WHITELISTED, false },
+	{ "stable", PUSHDOWN_FUNCTIONS_STABLE, false },
+	{ NULL, 0, false }
+};
+
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
 bool ts_guc_enable_constraint_aware_append = true;
@@ -70,6 +76,8 @@ TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
 TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = RowByRowFetcherType;
+
+PushdownFunctionsType ts_pushdown_functions = PUSHDOWN_FUNCTIONS_WHITELISTED;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -429,6 +437,19 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+							   
+	DefineCustomEnumVariable("timescaledb.pushdown_functions",
+							 "Which functions to push down to the data nodes",
+							 "Determines which kinds of functions are pushed down to the data nodes",
+							 (int *) &ts_pushdown_functions,
+							 PUSHDOWN_FUNCTIONS_WHITELISTED,
+							 pushdown_functions_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler",
