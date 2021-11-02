@@ -437,10 +437,11 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
-							   
+
 	DefineCustomEnumVariable("timescaledb.pushdown_functions",
 							 "Which functions to push down to the data nodes",
-							 "Determines which kinds of functions are pushed down to the data nodes",
+							 "Determines which kinds of functions are pushed down to the data "
+							 "nodes",
 							 (int *) &ts_pushdown_functions,
 							 PUSHDOWN_FUNCTIONS_WHITELISTED,
 							 pushdown_functions_options,
@@ -449,7 +450,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler",
