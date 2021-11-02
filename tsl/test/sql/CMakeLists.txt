@@ -53,6 +53,7 @@ set(TEST_FILES_DEBUG
     dist_commands.sql
     dist_compression.sql
     dist_ddl.sql
+    dist_function_pushdown.sql
     dist_grant.sql
     dist_partial_agg.sql
     dist_policy.sql

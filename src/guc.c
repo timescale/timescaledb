@@ -77,7 +77,7 @@ TSDLLEXPORT char *ts_guc_passfile = NULL;
 TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = RowByRowFetcherType;
 
-PushdownFunctionsType ts_pushdown_functions = PUSHDOWN_FUNCTIONS_WHITELISTED;
+PushdownFunctionsType ts_pushdown_functions;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -443,7 +443,7 @@ _guc_init(void)
 							 "Determines which kinds of functions are pushed down to the data "
 							 "nodes",
 							 (int *) &ts_pushdown_functions,
-							 PUSHDOWN_FUNCTIONS_WHITELISTED,
+							 PUSHDOWN_FUNCTIONS_STABLE,
 							 pushdown_functions_options,
 							 PGC_USERSET,
 							 0,
