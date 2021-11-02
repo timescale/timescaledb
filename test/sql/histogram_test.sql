@@ -46,3 +46,8 @@ SELECT histogram(key, 1, 3, 1) FROM hitest1;
 SELECT qualify, histogram(score, 0, 10, 2) FROM hitest2 GROUP BY qualify ORDER BY qualify;
 -- standard multi-bucket
 SELECT qualify, histogram(score, 0, 10, 5) FROM hitest2 GROUP BY qualify ORDER BY qualify;
+
+-- check number of buckets is constant
+\set ON_ERROR_STOP 0
+select histogram(i,10,90,case when i=1 then 1 else 1000000 end) FROM generate_series(1,100) i;
+\set ON_ERROR_STOP 1

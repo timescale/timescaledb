@@ -12,11 +12,15 @@
 
 typedef struct DistCmdResult DistCmdResult;
 typedef struct List PreparedDistCmd;
+typedef struct DistCmdDescr
+{
+	const char *sql;
+	StmtParams *params;
 
-extern DistCmdResult *ts_dist_multi_cmds_params_invoke_on_data_nodes(const char **sql,
-																	 StmtParams **params,
+} DistCmdDescr;
+
+extern DistCmdResult *ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors,
 																	 List *data_nodes,
-																	 bool multiple_cmds,
 																	 bool transactional);
 extern DistCmdResult *ts_dist_cmd_invoke_on_data_nodes(const char *sql, List *node_names,
 													   bool transactional);
