@@ -12,11 +12,14 @@
 #include <chunk.h>
 
 extern TSDLLEXPORT List *ts_hypertable_compression_get(int32 htid);
+extern TSDLLEXPORT FormData_hypertable_compression *
+ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname);
 extern TSDLLEXPORT void
 ts_hypertable_compression_fill_tuple_values(FormData_hypertable_compression *fd, Datum *values,
 											bool *nulls);
 
 extern TSDLLEXPORT bool ts_hypertable_compression_delete_by_hypertable_id(int32 htid);
+extern TSDLLEXPORT bool ts_hypertable_compression_delete_by_pkey(int32 htid, const char *attname);
 extern TSDLLEXPORT void ts_hypertable_compression_rename_column(int32 htid, char *old_column_name,
 																char *new_column_name);
 

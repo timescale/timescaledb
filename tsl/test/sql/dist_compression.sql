@@ -467,3 +467,48 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 SELECT recompress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
 SELECT * FROM test_defaults ORDER BY 1,2;
 
+-- test dropping columns from compressed
+CREATE TABLE test_drop(f1 text, f2 text, f3 text, time timestamptz, device int, o1 text, o2 text);
+SELECT create_distributed_hypertable('test_drop','time');
+ALTER TABLE test_drop SET (timescaledb.compress,timescaledb.compress_segmentby='device',timescaledb.compress_orderby='o1,o2');
+
+-- switch to WARNING only to suppress compress_chunk NOTICEs
+SET client_min_messages TO WARNING;
+
+-- create some chunks each with different physical layout
+ALTER TABLE test_drop DROP COLUMN f1;
+INSERT INTO test_drop SELECT NULL,NULL,'2000-01-01',1,'o1','o2';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+
+ALTER TABLE test_drop DROP COLUMN f2;
+-- test non-existant column
+\set ON_ERROR_STOP 0
+ALTER TABLE test_drop DROP COLUMN f10;
+\set ON_ERROR_STOP 1
+ALTER TABLE test_drop DROP COLUMN IF EXISTS f10;
+
+INSERT INTO test_drop SELECT NULL,'2001-01-01',2,'o1','o2';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ALTER TABLE test_drop DROP COLUMN f3;
+INSERT INTO test_drop SELECT '2003-01-01',3,'o1','o2';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ALTER TABLE test_drop ADD COLUMN c1 TEXT;
+ALTER TABLE test_drop ADD COLUMN c2 TEXT;
+INSERT INTO test_drop SELECT '2004-01-01',4,'o1','o2','c1','c2-4';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ALTER TABLE test_drop DROP COLUMN c1;
+INSERT INTO test_drop SELECT '2005-01-01',5,'o1','o2','c2-5';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+
+RESET client_min_messages;
+SELECT * FROM test_drop ORDER BY 1;
+
+-- check dropped columns got removed from catalog
+-- only c2 should be left in metadata
+SELECT attname
+FROM _timescaledb_catalog.hypertable_compression htc
+INNER JOIN _timescaledb_catalog.hypertable ht
+  ON ht.id=htc.hypertable_id AND ht.table_name='test_drop'
+WHERE attname NOT IN ('time','device','o1','o2')
+ORDER BY 1;
+

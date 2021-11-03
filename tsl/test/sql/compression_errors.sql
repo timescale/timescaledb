@@ -90,7 +90,7 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b'
 
 --ddl on ht with compression
 ALTER TABLE foo DROP COLUMN a;
-ALTER TABLE foo DROP COLUMN t;
+ALTER TABLE foo DROP COLUMN b;
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ALTER TABLE foo RESET (timescaledb.compress);
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
