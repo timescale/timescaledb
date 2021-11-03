@@ -1146,3 +1146,87 @@ SELECT * FROM test_defaults ORDER BY 1,2;
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42
 (3 rows)
 
+-- test dropping columns from compressed
+CREATE TABLE test_drop(f1 text, f2 text, f3 text, time timestamptz, device int, o1 text, o2 text);
+SELECT create_distributed_hypertable('test_drop','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (7,public,test_drop,t)
+(1 row)
+
+ALTER TABLE test_drop SET (timescaledb.compress,timescaledb.compress_segmentby='device',timescaledb.compress_orderby='o1,o2');
+-- switch to WARNING only to suppress compress_chunk NOTICEs
+SET client_min_messages TO WARNING;
+-- create some chunks each with different physical layout
+ALTER TABLE test_drop DROP COLUMN f1;
+INSERT INTO test_drop SELECT NULL,NULL,'2000-01-01',1,'o1','o2';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ count 
+-------
+     1
+(1 row)
+
+ALTER TABLE test_drop DROP COLUMN f2;
+-- test non-existant column
+\set ON_ERROR_STOP 0
+ALTER TABLE test_drop DROP COLUMN f10;
+ERROR:  column "f10" of relation "test_drop" does not exist
+\set ON_ERROR_STOP 1
+ALTER TABLE test_drop DROP COLUMN IF EXISTS f10;
+INSERT INTO test_drop SELECT NULL,'2001-01-01',2,'o1','o2';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ count 
+-------
+     2
+(1 row)
+
+ALTER TABLE test_drop DROP COLUMN f3;
+INSERT INTO test_drop SELECT '2003-01-01',3,'o1','o2';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ count 
+-------
+     3
+(1 row)
+
+ALTER TABLE test_drop ADD COLUMN c1 TEXT;
+ALTER TABLE test_drop ADD COLUMN c2 TEXT;
+INSERT INTO test_drop SELECT '2004-01-01',4,'o1','o2','c1','c2-4';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ count 
+-------
+     4
+(1 row)
+
+ALTER TABLE test_drop DROP COLUMN c1;
+INSERT INTO test_drop SELECT '2005-01-01',5,'o1','o2','c2-5';
+SELECT count(compress_chunk(chunk,true)) FROM show_chunks('test_drop') chunk;
+ count 
+-------
+     5
+(1 row)
+
+RESET client_min_messages;
+SELECT * FROM test_drop ORDER BY 1;
+             time             | device | o1 | o2 |  c2  
+------------------------------+--------+----+----+------
+ Sat Jan 01 00:00:00 2000 PST |      1 | o1 | o2 | 
+ Mon Jan 01 00:00:00 2001 PST |      2 | o1 | o2 | 
+ Wed Jan 01 00:00:00 2003 PST |      3 | o1 | o2 | 
+ Thu Jan 01 00:00:00 2004 PST |      4 | o1 | o2 | c2-4
+ Sat Jan 01 00:00:00 2005 PST |      5 | o1 | o2 | c2-5
+(5 rows)
+
+-- check dropped columns got removed from catalog
+-- only c2 should be left in metadata
+SELECT attname
+FROM _timescaledb_catalog.hypertable_compression htc
+INNER JOIN _timescaledb_catalog.hypertable ht
+  ON ht.id=htc.hypertable_id AND ht.table_name='test_drop'
+WHERE attname NOT IN ('time','device','o1','o2')
+ORDER BY 1;
+ attname 
+---------
+ c2
+(1 row)
+

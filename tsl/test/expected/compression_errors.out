@@ -179,9 +179,10 @@ DETAIL:  Could not identify a less-than operator for the type.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
 --ddl on ht with compression
 ALTER TABLE foo DROP COLUMN a;
-ERROR:  operation not supported on hypertables that have compression enabled
-ALTER TABLE foo DROP COLUMN t;
-ERROR:  operation not supported on hypertables that have compression enabled
+ERROR:  cannot drop column named in partition key
+DETAIL:  Cannot drop column that is a hypertable partitioning (space or time) dimension.
+ALTER TABLE foo DROP COLUMN b;
+ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo RESET (timescaledb.compress);
