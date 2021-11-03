@@ -231,6 +231,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 				/* this is passed down in `process_altertable_set_tablespace_end` */
 			case AT_SetStatistics: /* should this be pushed down in some way? */
 			case AT_AddColumn:	 /* this is passed down */
+			case AT_ColumnDefault: /* this is passed down */
 #if PG14_GE
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
@@ -259,11 +260,53 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 static void
 check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 {
-	if (col->constraints || col->is_not_null == true || col->identitySequence != NULL)
+	if (col->constraints)
+	{
+		bool has_default = false;
+		bool has_notnull = col->is_not_null;
+		ListCell *lc;
+		foreach (lc, col->constraints)
+		{
+			Constraint *constraint = lfirst_node(Constraint, lc);
+			switch (constraint->contype)
+			{
+				case CONSTR_NOTNULL:
+					has_notnull = true;
+					continue;
+				case CONSTR_DEFAULT:
+					/* since default expressions might trigger a table rewrite we
+					 * only allow Const here for now */
+					if (!IsA(constraint->raw_expr, A_Const))
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("cannot add column with non-constant default expression "
+										"to a hypertable that has compression enabled")));
+
+					has_default = true;
+					continue;
+
+				default:
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot add column with constraints "
+									"to a hypertable that has compression enabled")));
+					break;
+			}
+		}
+		/* require a default for columns added with NOT NULL */
+		if (has_notnull && !has_default)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot add column with NOT NULL contraint without default "
+							"to a hypertable that has compression enabled")));
+		}
+	}
+	if (col->is_not_null || col->identitySequence != NULL)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add column with constraints or defaults to a hypertable that has "
+				 errmsg("cannot add column with constraints to a hypertable that has "
 						"compression enabled")));
 	}
 	/* not possible to get non-null value here this is set when

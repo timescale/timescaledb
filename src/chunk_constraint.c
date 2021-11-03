@@ -395,7 +395,7 @@ init_scan_by_chunk_id_constraint_name(ScanIterator *iterator, int32 chunk_id,
 		Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
 		BTEqualStrategyNumber,
 		F_NAMEEQ,
-		DirectFunctionCall1(namein, CStringGetDatum(constraint_name)));
+		CStringGetDatum(constraint_name));
 }
 
 /*

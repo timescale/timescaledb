@@ -147,3 +147,27 @@ TO bigintcol;
 
 SELECT * from timescaledb_information.compression_settings 
 WHERE hypertable_name = 'test1' and attname = 'bigintcol' ;
+
+-- test compression default handling
+CREATE TABLE test_defaults(time timestamptz NOT NULL, device_id int);
+SELECT create_hypertable('test_defaults','time');
+ALTER TABLE test_defaults SET (timescaledb.compress,timescaledb.compress_segmentby='device_id');
+
+-- create 2 chunks
+INSERT INTO test_defaults SELECT '2000-01-01', 1;
+INSERT INTO test_defaults SELECT '2001-01-01', 1;
+
+-- compress first chunk
+SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
+
+SELECT * FROM test_defaults ORDER BY 1;
+ALTER TABLE test_defaults ADD COLUMN c1 int;
+ALTER TABLE test_defaults ADD COLUMN c2 int NOT NULL DEFAULT 42;
+SELECT * FROM test_defaults ORDER BY 1,2;
+
+-- try insert into compressed and recompress
+INSERT INTO test_defaults SELECT '2000-01-01', 2;
+SELECT * FROM test_defaults ORDER BY 1,2;
+SELECT recompress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
+SELECT * FROM test_defaults ORDER BY 1,2;
+
