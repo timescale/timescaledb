@@ -6,6 +6,17 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Backwards-incompatible changes**
+* When a WHERE condition on a distributed hypertable includes only stable
+functions, evaluate such condition on data nodes. The previous behavior was to
+evaluate only the closed list of timestamp-related functions such as now(). This
+change might break the queries that contain stable functions dependent on the
+settings, such as `to_tsvector()` that depends on `default_text_search_config`.
+For these queries to work correctly, the relevant settings must be the same on
+the access and data nodes. Currently we do not check or ensure this. To return
+to the old behavior of only evaluating the approved timestamp-related functions,
+set `timescaledb.pushdown_functions = 'whitelisted'` on the access node.
+
 **Features**
 * #3768 Allow ALTER TABLE ADD COLUMN with DEFAULT on compressed hypertable
 

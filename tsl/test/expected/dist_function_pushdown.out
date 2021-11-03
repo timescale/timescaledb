@@ -34,3 +34,114 @@ NOTICE:  adding not-null constraint to column "ts"
  (1,public,words,t)
 (1 row)
 
+insert into words values ('2021-01-01 01:01:01', 'testing'),
+	('2022-02-02 02:02:02', 'some other words');
+	
+-- The normal stuff, to_tsvector is evaluated on the access node. We'll check
+-- different text search configurations and make sure that they give different
+-- results.
+set timescaledb.pushdown_functions = 'whitelisted';
+set default_text_search_config = 'english';
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+ to_tsvector | to_tsvector 
+-------------+-------------
+ 'word':3    | 'test':1
+(1 row)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=1 loops=1)
+   Output: (to_tsvector(words.text)), (to_tsvector('testing'::text))
+   ->  Append (actual rows=1 loops=1)
+         ->  Custom Scan (DataNodeScan) on public.words words_1 (actual rows=0 loops=1)
+               Output: to_tsvector(words_1.text), to_tsvector('testing'::text)
+               Filter: (to_tsvector(words_1.text) <> to_tsvector('testing'::text))
+               Rows Removed by Filter: 1
+               Data node: db_dist_function_pushdown_2
+               Chunks: _dist_hyper_1_1_chunk
+               Remote SQL: SELECT text FROM public.words WHERE _timescaledb_internal.chunks_in(public.words.*, ARRAY[1])
+         ->  Custom Scan (DataNodeScan) on public.words words_2 (actual rows=1 loops=1)
+               Output: to_tsvector(words_2.text), to_tsvector('testing'::text)
+               Filter: (to_tsvector(words_2.text) <> to_tsvector('testing'::text))
+               Data node: db_dist_function_pushdown_3
+               Chunks: _dist_hyper_1_2_chunk
+               Remote SQL: SELECT text FROM public.words WHERE _timescaledb_internal.chunks_in(public.words.*, ARRAY[1])
+(16 rows)
+
+-- A different stemming configuration.
+set default_text_search_config = 'simple';
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+         to_tsvector          | to_tsvector 
+------------------------------+-------------
+ 'other':2 'some':1 'words':3 | 'testing':1
+(1 row)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=1 loops=1)
+   Output: (to_tsvector(words.text)), (to_tsvector('testing'::text))
+   ->  Append (actual rows=1 loops=1)
+         ->  Custom Scan (DataNodeScan) on public.words words_1 (actual rows=0 loops=1)
+               Output: to_tsvector(words_1.text), to_tsvector('testing'::text)
+               Filter: (to_tsvector(words_1.text) <> to_tsvector('testing'::text))
+               Rows Removed by Filter: 1
+               Data node: db_dist_function_pushdown_2
+               Chunks: _dist_hyper_1_1_chunk
+               Remote SQL: SELECT text FROM public.words WHERE _timescaledb_internal.chunks_in(public.words.*, ARRAY[1])
+         ->  Custom Scan (DataNodeScan) on public.words words_2 (actual rows=1 loops=1)
+               Output: to_tsvector(words_2.text), to_tsvector('testing'::text)
+               Filter: (to_tsvector(words_2.text) <> to_tsvector('testing'::text))
+               Data node: db_dist_function_pushdown_3
+               Chunks: _dist_hyper_1_2_chunk
+               Remote SQL: SELECT text FROM public.words WHERE _timescaledb_internal.chunks_in(public.words.*, ARRAY[1])
+(16 rows)
+
+-- Time for the weirdly broken stuff. This configuration will evaluate the
+-- to_tsvector('testing') on the access node, giving 'testing':1,
+-- and to_tsvector(text) on the data nodes, giving 'test':1. So this row will
+-- be returned from the data node. The access node won't check the filter again.
+-- To fix, we should start shipping the changed settings to the data nodes.
+-- For the time being, either configure the data nodes manually or limit the
+-- pushdown of functions to the whitelist (timezone stuff).
+set default_text_search_config = 'simple';
+set timescaledb.pushdown_functions = 'stable';
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+         to_tsvector          | to_tsvector 
+------------------------------+-------------
+ 'testing':1                  | 'testing':1
+ 'other':2 'some':1 'words':3 | 'testing':1
+(2 rows)
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+                                                                                   QUERY PLAN                                                                                   
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=2 loops=1)
+   Output: (to_tsvector(words.text)), (to_tsvector('testing'::text))
+   ->  Append (actual rows=2 loops=1)
+         ->  Custom Scan (DataNodeScan) on public.words words_1 (actual rows=1 loops=1)
+               Output: to_tsvector(words_1.text), to_tsvector('testing'::text)
+               Data node: db_dist_function_pushdown_2
+               Chunks: _dist_hyper_1_1_chunk
+               Remote SQL: SELECT text FROM public.words WHERE _timescaledb_internal.chunks_in(public.words.*, ARRAY[1]) AND ((to_tsvector(text) <> '''testing'':1'::tsvector))
+         ->  Custom Scan (DataNodeScan) on public.words words_2 (actual rows=1 loops=1)
+               Output: to_tsvector(words_2.text), to_tsvector('testing'::text)
+               Data node: db_dist_function_pushdown_3
+               Chunks: _dist_hyper_1_2_chunk
+               Remote SQL: SELECT text FROM public.words WHERE _timescaledb_internal.chunks_in(public.words.*, ARRAY[1]) AND ((to_tsvector(text) <> '''testing'':1'::tsvector))
+(13 rows)
+
+-- Clean up.
+reset default_text_search_config;
+reset timescaledb.pushdown_functions;
+drop table words;
