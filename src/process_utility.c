@@ -235,6 +235,10 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_AddColumn:	 /* this is passed down */
 			case AT_ColumnDefault: /* this is passed down */
 			case AT_DropColumn:	/* this is passed down */
+
+			case AT_DropConstraint:
+			case AT_AddConstraint:
+			case AT_AlterConstraint:
 #if PG14_GE
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
