@@ -251,7 +251,7 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Assert(OidIsValid(cagg->partition_type));
 }
 
-TSDLLEXPORT CaggsInfo
+TSDLLEXPORT const CaggsInfo
 ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 {
 	CaggsInfo all_caggs_info;
@@ -327,7 +327,7 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 }
 
 TSDLLEXPORT void
-ts_create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
+ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
 								 ArrayType **bucket_widths, ArrayType **max_bucket_widths)
 {
 	ListCell *lc1, *lc2, *lc3;
