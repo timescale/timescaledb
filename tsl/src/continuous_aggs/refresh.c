@@ -605,7 +605,8 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	LockRelationOid(hyper_relid, ExclusiveLock);
 	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
 	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
-	CaggsInfo all_caggs_info = ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
+	const CaggsInfo all_caggs_info =
+		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	max_materializations = materialization_per_refresh_window();
 	if (is_raw_ht_distributed)
 	{
@@ -765,7 +766,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	/* Process invalidations in the hypertable invalidation log */
-	CaggsInfo all_caggs_info = ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
+	const CaggsInfo all_caggs_info =
+		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	if (is_raw_ht_distributed)
 	{
 		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
@@ -841,7 +843,8 @@ continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
 					AccessExclusiveLock);
 	invalidation_threshold_set_or_get(chunk->fd.hypertable_id, refresh_window.end);
 
-	CaggsInfo all_caggs_info = ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
+	const CaggsInfo all_caggs_info =
+		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	if (is_raw_ht_distributed)
 	{
 		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
