@@ -72,10 +72,6 @@ extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypert
 														   ArrayType *bucket_widths,
 														   ArrayType *max_bucket_widths,
 														   CaggsInfo *all_caggs);
-extern TSDLLEXPORT void ts_create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs,
-															 ArrayExpr **mat_hypertable_ids,
-															 ArrayExpr **bucket_widths,
-															 ArrayExpr **max_bucket_widths);
 TSDLLEXPORT void ts_create_arrays_from_caggs_info(CaggsInfo *all_caggs,
 												  ArrayType **mat_hypertable_ids,
 												  ArrayType **bucket_widths,
@@ -108,7 +104,6 @@ extern void ts_continuous_agg_rename_view(const char *old_schema, const char *na
 
 extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
 
-extern Oid ts_continuous_agg_get_user_view_oid(ContinuousAgg *agg);
 extern TSDLLEXPORT const Dimension *
 ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid);
 extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, const char *name);
