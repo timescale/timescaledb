@@ -327,73 +327,6 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 }
 
 TSDLLEXPORT void
-ts_create_arrayexprs_from_caggs_info(CaggsInfo *all_caggs, ArrayExpr **mat_hypertable_ids,
-									 ArrayExpr **bucket_widths, ArrayExpr **max_bucket_widths)
-{
-	ListCell *lc1, *lc2, *lc3;
-	Const *elem;
-
-	*mat_hypertable_ids = makeNode(ArrayExpr);
-	(*mat_hypertable_ids)->array_typeid = INT4ARRAYOID;
-	(*mat_hypertable_ids)->element_typeid = INT4OID;
-	(*mat_hypertable_ids)->elements = NIL;
-	(*mat_hypertable_ids)->multidims = false;
-	(*mat_hypertable_ids)->location = -1;
-
-	*bucket_widths = makeNode(ArrayExpr);
-	(*bucket_widths)->array_typeid = INT8ARRAYOID;
-	(*bucket_widths)->element_typeid = INT8OID;
-	(*bucket_widths)->elements = NIL;
-	(*bucket_widths)->multidims = false;
-	(*bucket_widths)->location = -1;
-
-	*max_bucket_widths = makeNode(ArrayExpr);
-	(*max_bucket_widths)->array_typeid = INT8ARRAYOID;
-	(*max_bucket_widths)->element_typeid = INT8OID;
-	(*max_bucket_widths)->elements = NIL;
-	(*max_bucket_widths)->multidims = false;
-	(*max_bucket_widths)->location = -1;
-
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->max_bucket_widths)
-	{
-		int32 cagg_hyper_id = lfirst_int(lc1);
-		elem = makeConst(INT4OID,
-						 -1,
-						 InvalidOid,
-						 sizeof(int32),
-						 Int32GetDatum(cagg_hyper_id),
-						 false,
-						 false);
-		(*mat_hypertable_ids)->elements = lappend((*mat_hypertable_ids)->elements, elem);
-
-		int64 bucket_width = *(int64 *) lfirst(lc2);
-		elem = makeConst(INT8OID,
-						 -1,
-						 InvalidOid,
-						 sizeof(int64),
-						 Int64GetDatum(bucket_width),
-						 false,
-						 FLOAT8PASSBYVAL);
-		(*bucket_widths)->elements = lappend((*bucket_widths)->elements, elem);
-
-		int64 max_bucket_width = *(int64 *) lfirst(lc3);
-		elem = makeConst(INT8OID,
-						 -1,
-						 InvalidOid,
-						 sizeof(int64),
-						 Int64GetDatum(max_bucket_width),
-						 false,
-						 FLOAT8PASSBYVAL);
-		(*max_bucket_widths)->elements = lappend((*max_bucket_widths)->elements, elem);
-	}
-}
-
-TSDLLEXPORT void
 ts_create_arrays_from_caggs_info(CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
 								 ArrayType **bucket_widths, ArrayType **max_bucket_widths)
 {
@@ -1113,17 +1046,6 @@ ts_number_of_continuous_aggs()
 	ts_scanner_foreach(&iterator) { count++; }
 
 	return count;
-}
-
-Oid
-ts_continuous_agg_get_user_view_oid(ContinuousAgg *agg)
-{
-	Oid view_relid =
-		get_relname_relid(NameStr(agg->data.user_view_name),
-						  get_namespace_oid(NameStr(agg->data.user_view_schema), false));
-	if (!OidIsValid(view_relid))
-		elog(ERROR, "could not find user view for continuous agg");
-	return view_relid;
 }
 
 static int32
