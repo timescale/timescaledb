@@ -77,6 +77,29 @@ explain (analyze, verbose, costs off, timing off, summary off)
 select to_tsvector(text), to_tsvector('testing')
 from words where to_tsvector(text) != to_tsvector('testing');
 
+-- The default text search settings for data nodes should be the same as on the
+-- access node, so evaluating to_tsvector on data nodes should work.
+reset default_text_search_config;
+set timescaledb.pushdown_functions = 'stable';
+
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing');
+
+-- A more complex test case -- add a volatile function that is not pushed down,
+-- to highlight the difference.
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing')
+	and to_tsvector(text) != to_tsvector('testing' || random()::text);
+	
+explain (analyze, verbose, costs off, timing off, summary off)
+select to_tsvector(text), to_tsvector('testing')
+from words where to_tsvector(text) != to_tsvector('testing')
+	and to_tsvector(text) != to_tsvector('testing' || random()::text);
+
 -- Time for the weirdly broken stuff. This configuration will evaluate the
 -- to_tsvector('testing') on the access node, giving 'testing':1,
 -- and to_tsvector(text) on the data nodes, giving 'test':1. So this row will
