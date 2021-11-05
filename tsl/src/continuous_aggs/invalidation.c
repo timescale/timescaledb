@@ -99,7 +99,7 @@ typedef struct CaggInvalidationState
 	Relation cagg_log_rel;
 	Snapshot snapshot;
 	Tuplestorestate *invalidations;
-	CaggsInfo *all_caggs;
+	const CaggsInfo *all_caggs;
 	int64 bucket_width;
 	int64 max_bucket_width;
 } CaggInvalidationState;
@@ -754,7 +754,7 @@ cut_and_insert_new_cagg_invalidation(const CaggInvalidationState *state, const I
 static void
 move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 {
-	CaggsInfo *all_caggs = state->all_caggs;
+	const CaggsInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->raw_hypertable_id;
 	int32 last_cagg_hyper_id;
 	ListCell *lc1, *lc2;
@@ -1003,7 +1003,7 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 
 static void
 invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
-						int32 raw_hypertable_id, Oid dimtype, CaggsInfo *all_caggs)
+						int32 raw_hypertable_id, Oid dimtype, const CaggsInfo *all_caggs)
 {
 	ListCell *lc1, *lc2, *lc3;
 	bool PG_USED_FOR_ASSERTS_ONLY found = false;
@@ -1051,7 +1051,7 @@ invalidation_state_cleanup(const CaggInvalidationState *state)
 
 void
 invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id, Oid dimtype,
-									CaggsInfo *all_caggs)
+									const CaggsInfo *all_caggs)
 {
 	CaggInvalidationState state;
 
@@ -1105,7 +1105,7 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 
 void
 remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-										   Oid dimtype, CaggsInfo *all_caggs)
+										   Oid dimtype, const CaggsInfo *all_caggs)
 {
 	Oid func_oid;
 	ArrayType *mat_hypertable_ids;
@@ -1164,9 +1164,9 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 
 InvalidationStore *
 invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-							  const InternalTimeRange *refresh_window, CaggsInfo *all_caggs_info,
-							  const long max_materializations, bool *do_merged_refresh,
-							  InternalTimeRange *ret_merged_refresh_window)
+							  const InternalTimeRange *refresh_window,
+							  const CaggsInfo *all_caggs_info, const long max_materializations,
+							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window)
 {
 	CaggInvalidationState state;
 	InvalidationStore *store = NULL;
@@ -1302,8 +1302,8 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 
 void
 remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-									 const InternalTimeRange *refresh_window, CaggsInfo *all_caggs,
-									 bool *do_merged_refresh,
+									 const InternalTimeRange *refresh_window,
+									 const CaggsInfo *all_caggs, bool *do_merged_refresh,
 									 InternalTimeRange *ret_merged_refresh_window)
 {
 	Oid func_oid;

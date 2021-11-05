@@ -934,6 +934,24 @@ add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compre
 	modify_compressed_toast_table_storage(compress_cols, compress_relid);
 }
 
+/* Drop column from internal compression table */
+static void
+drop_column_from_compression_table(Hypertable *compress_ht, char *name)
+{
+	Oid compress_relid = compress_ht->main_table_relid;
+	AlterTableCmd *cmd;
+
+	/* create altertable stmt to drop column from the compressed hypertable */
+	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
+	cmd = makeNode(AlterTableCmd);
+	cmd->subtype = AT_DropColumn;
+	cmd->name = name;
+	cmd->missing_ok = true;
+
+	/* alter the table and drop column */
+	AlterTableInternal(compress_relid, list_make1(cmd), true);
+}
+
 /*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
@@ -1063,6 +1081,38 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	}
 	/* add catalog entries for the new column for the hypertable */
 	compresscolinfo_add_catalog_entries(&compress_cols, orig_htid);
+}
+
+/* Drop a column from a table that has compression enabled
+ * This function specifically removes it from the internal compression table
+ * and removes it from metadata.
+ * Removing orderby or segmentby columns is not supported.
+ */
+void
+tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
+{
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+	FormData_hypertable_compression *ht_comp =
+		ts_hypertable_compression_get_by_pkey(ht->fd.id, name);
+
+	/* With DROP COLUMN IF EXISTS we might end up being called
+	 * for non-existant columns. */
+	if (!ht_comp)
+		return;
+
+	if (ht_comp->segmentby_column_index > 0 || ht_comp->orderby_column_index > 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
+						"compression enabled")));
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
+		Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		drop_column_from_compression_table(compress_ht, name);
+	}
+
+	ts_hypertable_compression_delete_by_pkey(ht->fd.id, name);
 }
 
 /* Rename a column on a hypertable that has compression enabled.

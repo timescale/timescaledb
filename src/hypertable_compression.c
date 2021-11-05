@@ -137,6 +137,37 @@ ts_hypertable_compression_get(int32 htid)
 	return fdlist;
 }
 
+TSDLLEXPORT FormData_hypertable_compression *
+ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname)
+{
+	FormData_hypertable_compression *colfd = NULL;
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE_COMPRESSION, AccessShareLock, CurrentMemoryContext);
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), HYPERTABLE_COMPRESSION, HYPERTABLE_COMPRESSION_PKEY);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_compression_pkey_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(htid));
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_compression_pkey_attname,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(attname));
+
+	ts_scanner_start_scan(&iterator.ctx, &iterator.ictx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx, &iterator.ictx);
+	if (!ti)
+		return NULL;
+
+	colfd = palloc0(sizeof(FormData_hypertable_compression));
+	hypertable_compression_fill_from_tuple(colfd, ti);
+	ts_scan_iterator_close(&iterator);
+
+	return colfd;
+}
+
 TSDLLEXPORT bool
 ts_hypertable_compression_delete_by_hypertable_id(int32 htid)
 {
@@ -158,6 +189,35 @@ ts_hypertable_compression_delete_by_hypertable_id(int32 htid)
 		count++;
 	}
 	return count > 0;
+}
+
+TSDLLEXPORT bool
+ts_hypertable_compression_delete_by_pkey(int32 htid, const char *attname)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE_COMPRESSION, RowExclusiveLock, CurrentMemoryContext);
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), HYPERTABLE_COMPRESSION, HYPERTABLE_COMPRESSION_PKEY);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_compression_pkey_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(htid));
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_compression_pkey_attname,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   CStringGetDatum(attname));
+
+	ts_scanner_start_scan(&iterator.ctx, &iterator.ictx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx, &iterator.ictx);
+	if (!ti)
+		return false;
+
+	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	ts_scan_iterator_close(&iterator);
+
+	return true;
 }
 
 TSDLLEXPORT void

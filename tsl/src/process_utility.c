@@ -35,13 +35,27 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 void
 tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd)
 {
-	if (cmd->subtype == AT_AddColumn || cmd->subtype == AT_AddColumnRecurse)
+	switch (cmd->subtype)
 	{
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		{
-			ColumnDef *orig_coldef = castNode(ColumnDef, cmd->def);
-			tsl_process_compress_table_add_column(ht, orig_coldef);
-		}
+		case AT_AddColumn:
+		case AT_AddColumnRecurse:
+			if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ||
+				TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+			{
+				ColumnDef *orig_coldef = castNode(ColumnDef, cmd->def);
+				tsl_process_compress_table_add_column(ht, orig_coldef);
+			}
+			break;
+		case AT_DropColumn:
+		case AT_DropColumnRecurse:
+			if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) ||
+				TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+			{
+				tsl_process_compress_table_drop_column(ht, cmd->name);
+			}
+			break;
+		default:
+			break;
 	}
 }
 
