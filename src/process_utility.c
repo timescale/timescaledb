@@ -55,6 +55,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "hypertable_compression.h"
 #include "hypertable_data_node.h"
 #include "dimension_vector.h"
 #include "indexing.h"
@@ -237,13 +238,49 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_DropColumn:	/* this is passed down */
 
 			case AT_DropConstraint:
-			case AT_AddConstraint:
 			case AT_AlterConstraint:
 #if PG14_GE
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
 #endif
 				continue;
+
+			/*
+			 * Conditionally allowed command. Adding a unique constraint
+			 * including non-segmentby column is not supported.
+			 */
+			case AT_AddConstraint:
+			{
+				Constraint *constraint = (Constraint *) cmd->def;
+
+				if (constraint->contype == CONSTR_UNIQUE)
+				{
+					List *segmentby = NIL, *info = NIL;
+					ListCell *lc;
+
+					info = ts_hypertable_compression_get(ht->fd.id);
+					foreach (lc, info)
+					{
+						FormData_hypertable_compression *fd = lfirst(lc);
+						if (fd->segmentby_column_index > 0 ||
+							fd->orderby_column_index > 0)
+							segmentby = lappend(segmentby,
+									makeString(fd->attname.data));
+					}
+
+					if(list_difference(constraint->keys, segmentby) != NIL)
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("operation not supported on hypertables "
+										"that have compression enabled")));
+
+				}
+				else
+					continue;
+
+				break;
+			}
+
 				/*
 				 * BLOCKED:
 				 *
