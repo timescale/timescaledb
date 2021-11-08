@@ -87,8 +87,8 @@ ts_bgw_wait(PG_FUNCTION_ARGS)
 
 	/* This function contains a timeout of 5 seconds, so we iterate a few
 	 * times to make sure that it really has terminated. */
-	int notherbackends;
-	int npreparedxacts;
+	int notherbackends = 0;
+	int npreparedxacts = 0;
 	while (iterations-- > 0)
 	{
 		if (!CountOtherDBBackends(dboid, &notherbackends, &npreparedxacts))
