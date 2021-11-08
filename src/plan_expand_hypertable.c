@@ -318,8 +318,8 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 	TypeCacheEntry *tce;
 	int strategy;
 
-	/* caller must ensure time_bucket only has 2 arguments */
-	Assert(list_length(time_bucket->args) == 2);
+	if (list_length(time_bucket->args) != 2 || !IsA(value, Const) || !IsA(width, Const))
+		return op;
 
 	/*
 	 * if time_bucket call is on wrong side we switch operator
@@ -358,11 +358,6 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		Expr *subst;
 		Datum datum;
 		int64 integralValue, integralWidth;
-
-		/*
-		 * caller should make sure value and width are Const
-		 */
-		Assert(IsA(value, Const) && IsA(width, Const));
 
 		if (castNode(Const, value)->constisnull || width->constisnull)
 			return op;
