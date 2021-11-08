@@ -11,8 +11,9 @@ accidentally triggering the load of a previous DB version.**
 * #3769 Allow ALTER TABLE DROP COLUMN on compressed hypertable
 
 **Bugfixes**
-* #3766 Fix segfault in ts_hist_sfunc
 * #3739 Fix compression policy on tables using INTEGER
+* #3766 Fix segfault in ts_hist_sfunc
+* #3789 Fix time_bucket comparison transformation
 
 **Thanks**
 * @cbisnett for reporting and fixing a typo in an error message

@@ -202,6 +202,9 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('1d',time) <= '2000-01-10' ORDER BY time;
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
 
+\qecho no transformation
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10 + floor(random())::int, time) > 10 AND time_bucket(10 + floor(random())::int, time) < 100 AND time < 150 ORDER BY time;
+
 \qecho exclude chunks based on time column with partitioning function. This
 \qecho transparently applies the time partitioning function on the time
 \qecho value to be able to exclude chunks (similar to a closed dimension).
