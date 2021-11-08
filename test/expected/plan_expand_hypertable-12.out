@@ -1391,6 +1391,47 @@ time_bucket exclusion with timestamptz and day interval
          Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 (11 rows)
 
+\qecho no transformation
+no transformation
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10 + floor(random())::int, time) > 10 AND time_bucket(10 + floor(random())::int, time) < 100 AND time < 150 ORDER BY time;
+                                                                                           QUERY PLAN                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: hyper."time"
+   ->  Custom Scan (ChunkAppend) on hyper
+         Chunks excluded during startup: 0
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_4_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_5_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_6_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_7_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_8_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_9_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_10_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_11_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_12_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_13_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_14_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+         ->  Seq Scan on _hyper_1_15_chunk
+               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+(34 rows)
+
 \qecho exclude chunks based on time column with partitioning function. This
 exclude chunks based on time column with partitioning function. This
 \qecho transparently applies the time partitioning function on the time
