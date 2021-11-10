@@ -21,10 +21,11 @@ import sys
 event_type = sys.argv[1]
 
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.8"
+PG12_LATEST = "12.9"
 PG13_EARLIEST = "13.2"
-PG13_LATEST = "13.4"
-PG14_LATEST = "14.0"
+PG13_LATEST = "13.5"
+PG14_EARLIEST = "14.0"
+PG14_LATEST = "14.1"
 
 m = {"include": [],}
 
@@ -132,6 +133,9 @@ if event_type != "pull_request":
     "installcheck_args": "IGNORES='compression_ddl continuous_aggs_concurrent_refresh continuous_aggs_concurrent_refresh_dist_ht continuous_aggs_insert continuous_aggs_multi continuous_aggs_multi_dist_ht deadlock_drop_chunks_compress deadlock_dropchunks_select dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback continuous_aggs_drop_chunks'"
   }
   m["include"].append(build_debug_config(pg13_debug_earliest))
+
+  # add debug test for first supported PG14 version
+  m["include"].append(build_debug_config({"pg": PG14_EARLIEST}))
 
   # add debug test for MacOS
   m["include"].append(build_debug_config(macos_config({})))
