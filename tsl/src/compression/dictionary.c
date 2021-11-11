@@ -326,6 +326,8 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 	if (sizes.is_all_null)
 		return NULL;
 
+	Assert(0 != sizes.num_distinct);
+
 	/* calculate what the expected size would have be if we recompressed this as
 	 * an array, if this is smaller than the current size, recompress as an array.
 	 */

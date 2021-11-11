@@ -230,6 +230,7 @@ simple8brle_serialized_recv(StringInfo buffer)
 static void
 simple8brle_serialized_send(StringInfo buffer, const Simple8bRleSerialized *data)
 {
+	Assert(NULL != data);
 	uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(data->num_blocks);
 	uint32 i;
 	pq_sendint32(buffer, data->num_elements);
@@ -601,6 +602,8 @@ simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator
 	bit_array_iterator_init_rev(&iter->selectors, &iter->selector_data);
 	skipped_in_last = simple8brle_decompression_iterator_max_elements(iter, compressed) -
 					  compressed->num_elements;
+
+	Assert(NULL != iter->compressed_data);
 
 	iter->current_block =
 		simple8brle_block_create(bit_array_iter_next_rev(&iter->selectors,
