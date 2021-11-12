@@ -8,7 +8,7 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 12;
+use Test::More tests => 17;
 
 #Initialize all the multi-node instances
 my $an = AccessNode->create('an');
@@ -75,6 +75,23 @@ $an->psql_is(
 	"SELECT * from myschema.test",
 	q[2018-03-02 01:00:00|(Kilimanjaro,"Diamond St")],
 	'AN shows correct data with UDT from different schema');
+
+
+# Test behavior of size utillities when a data node is not responding
+$an->psql_is(
+	'postgres', "SELECT * FROM hypertable_size('myschema.test')",
+	q[81920],   'AN hypertable_size() returns correct size');
+
+$dn1->stop('fast');
+my ($cmdret, $stdout, $stderr) =
+  $an->psql('postgres', "SELECT * FROM hypertable_size('myschema.test')");
+
+# Check that hypertable_size() returns error when dn1 is down
+is($cmdret, 3);
+like(
+	$stderr,
+	qr/ERROR:  could not connect to "dn1"/,
+	'failure when connecting to dn1');
 
 done_testing();
 
