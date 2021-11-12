@@ -358,11 +358,59 @@ SELECT substr(label, 0, 10) || ':uuid'
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
--- Check that timescaledb security label cannot be used directly
-\set ON_ERROR_STOP 0
+-- Check that timescaledb security label cannot be used directly. To
+-- support pg_dump, we do not print an error when a proper label is
+-- used, but print an error if something that doesn't look like a
+-- distributed uuid is used.
 SECURITY LABEL FOR timescaledb
     ON DATABASE drop_db_test
-    IS 'dist_uuid:00000000-0000-0000-0000-00000000000';
+    IS 'dist_uuid:4ab3b1bc-438f-11ec-8919-23804e22321a';
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- No colon
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'bad_label';
+-- Bad tag, but still an UUID
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'uuid:4ab3b1bc-438f-11ec-8919-23804e22321a';
+-- Length is not correct
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bcd-438f-11ec-8919-23804e2232';
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bcd-438f-11ec-8919-23804e223215';
+-- Length is correct, but it contains something that is not a
+-- hexadecimal digit.
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bcd-4x8f-11ec-8919-23804e22321';
+-- Total length is correct, but not the right number of hyphens.
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3-1bcd-438f-11ec-8919-23804e22321';
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bcd438f-11ec-8919-23804e223213';
+-- Total length is correct, but length of groups is not
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bcd-438f-11ec-8919-23804e22321';
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bc-438f-11ec-891-23804e22321ab';
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bc-438f-11e-8919-23804e22321ab';
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bc-438-11ec-8919-23804e22321ab';
+SECURITY LABEL FOR timescaledb
+    ON DATABASE drop_db_test
+    IS 'dist_uuid:4ab3b1bca-438f-11ec-8919-23804e22321';
+\set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
 -- Check that security label functionality is working

@@ -470,6 +470,42 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 	}
 }
 
+/*
+ * Check if a string is an UUID and error out otherwise.
+ */
+static void
+check_uuid(const char *label)
+{
+	const MemoryContext oldcontext = CurrentMemoryContext;
+	const char *uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
+	if (!uuid || strncmp(label, SECLABEL_DIST_TAG, uuid - label) != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
+				 errmsg("TimescaleDB label is for internal use only"),
+				 errdetail("Security label is \"%s\".", label),
+				 errhint("Security label has to be of format \"dist_uuid:<UUID>\".")));
+
+	PG_TRY();
+	{
+		DirectFunctionCall1(uuid_in, CStringGetDatum(&uuid[1]));
+	}
+	PG_CATCH();
+	{
+		ErrorData *edata;
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		if (edata->sqlerrcode == ERRCODE_INVALID_TEXT_REPRESENTATION)
+		{
+			FlushErrorState();
+			edata->detail = edata->message;
+			edata->hint = psprintf("Security label has to be of format \"dist_uuid:<UUID>\".");
+			edata->message = psprintf("TimescaleDB label is for internal use only");
+		}
+		ReThrowError(edata);
+	}
+	PG_END_TRY();
+}
+
 static void
 loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 #if PG14_GE
@@ -505,8 +541,13 @@ loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 		{
 			SecLabelStmt *stmt = castNode(SecLabelStmt, pstmt->utilityStmt);
 
+			/*
+			 * Since this statement can be in a dump output, we only print an
+			 * error on anything that doesn't looks like a sane distributed
+			 * UUID.
+			 */
 			if (stmt->provider && strcmp(stmt->provider, SECLABEL_DIST_PROVIDER) == 0)
-				ereport(ERROR, (errmsg("TimescaleDB label is for internal use only")));
+				check_uuid(stmt->label);
 			break;
 		}
 		default:
