@@ -1,6 +1,5 @@
 DROP FUNCTION IF EXISTS recompress_chunk;
 
-
 -- Also see the comments for ContinuousAggsBucketFunction structure.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(
   mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
