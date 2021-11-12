@@ -1464,7 +1464,7 @@ ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *sch
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_INTERNAL_ERROR),
 					 errmsg("distributed hypertable member cannot create chunk on its own"),
-					 errhint("chunk creation should only happen through an access node")));
+					 errhint("Chunk creation should only happen through an access node.")));
 
 		chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
 	}
