@@ -8,3 +8,6 @@ source ${SCRIPT_DIR}/test_functions.inc
 
 run_tests -v7 \
           2.5.0-pg14
+run_tests -v8 \
+          2.5.0-pg14
+

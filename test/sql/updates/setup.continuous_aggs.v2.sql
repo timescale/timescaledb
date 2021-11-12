@@ -104,6 +104,11 @@ BEGIN
     -- works for views.
     ALTER TABLE rename_cols RENAME COLUMN bucket to "time";
   ELSE
+    -- rename_cols cagg view is also used for another test: if we can enable
+    -- compression on a cagg after an upgrade
+    -- This view has 3 cols which is fewer than the number of cols on the table
+    -- we had a bug related to that and need to verify if compression can be
+    -- enabled on such a view
     CREATE MATERIALIZED VIEW rename_cols
     WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
     SELECT time_bucket('1 week', timec) AS bucket, location, avg(humidity)
