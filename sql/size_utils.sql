@@ -122,8 +122,7 @@ $BODY$
         srv.node_name
     FROM (
         SELECT
-            s.node_name,
-            _timescaledb_internal.ping_data_node (s.node_name) AS node_up
+            s.node_name
         FROM
             _timescaledb_catalog.hypertable AS ht,
             _timescaledb_catalog.hypertable_data_node AS s
@@ -133,11 +132,7 @@ $BODY$
             AND s.hypertable_id = ht.id
          ) AS srv
     LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_hypertable_info(
-    CASE WHEN srv.node_up THEN
-        srv.node_name
-    ELSE
-        NULL
-    END, schema_name_in, table_name_in) entry ON TRUE
+        srv.node_name, schema_name_in, table_name_in) entry ON TRUE
     GROUP BY srv.node_name;
 $BODY$;
 
@@ -258,8 +253,7 @@ $BODY$
         srv.node_name
     FROM (
         SELECT
-            s.node_name,
-            _timescaledb_internal.ping_data_node (s.node_name) AS node_up
+            s.node_name
         FROM
             _timescaledb_catalog.hypertable AS ht,
             _timescaledb_catalog.hypertable_data_node AS s
@@ -269,11 +263,7 @@ $BODY$
             AND s.hypertable_id = ht.id
          ) AS srv
     LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_chunk_info(
-    CASE WHEN srv.node_up THEN
-        srv.node_name
-    ELSE
-        NULL
-    END , schema_name_in, table_name_in) entry ON TRUE
+        srv.node_name, schema_name_in, table_name_in) entry ON TRUE
 	WHERE
 	    entry.chunk_name IS NOT NULL;
 $BODY$;
@@ -488,8 +478,7 @@ $BODY$
         srv.node_name
     FROM (
         SELECT
-            s.node_name,
-            _timescaledb_internal.ping_data_node (s.node_name) AS node_up
+            s.node_name
         FROM
             _timescaledb_catalog.hypertable AS ht,
             _timescaledb_catalog.hypertable_data_node AS s
@@ -498,11 +487,7 @@ $BODY$
             AND ht.table_name = table_name_in
             AND s.hypertable_id = ht.id) AS srv
     LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_compressed_chunk_stats (
-    CASE WHEN srv.node_up THEN
-        srv.node_name
-    ELSE
-        NULL
-    END, schema_name_in, table_name_in) ch ON TRUE
+        srv.node_name, schema_name_in, table_name_in) ch ON TRUE
 	WHERE ch.chunk_name IS NOT NULL;
 $BODY$;
 
@@ -662,8 +647,7 @@ $BODY$
         sum(entry.total_bytes)::bigint AS total_bytes
     FROM (
         SELECT
-            s.node_name,
-            _timescaledb_internal.ping_data_node (s.node_name) AS node_up
+            s.node_name
         FROM
             _timescaledb_catalog.hypertable AS ht,
             _timescaledb_catalog.hypertable_data_node AS s
@@ -673,11 +657,7 @@ $BODY$
             AND s.hypertable_id = ht.id
          ) AS srv
     JOIN LATERAL _timescaledb_internal.data_node_index_size(
-    CASE WHEN srv.node_up THEN
-        srv.node_name
-    ELSE
-        NULL
-    END, schema_name_in, index_name_in) entry ON TRUE;
+        srv.node_name, schema_name_in, index_name_in) entry ON TRUE;
 $BODY$;
 
 -- Get sizes of indexes on a hypertable
