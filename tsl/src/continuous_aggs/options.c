@@ -88,12 +88,28 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 
 	Query *cagg_view_query = copyObject(linitial(rule->actions));
 	table_close(cagg_view_rel, NoLock); // lock with be released at end of txn
-	List *tlist = cagg_view_query->targetList;
 	Oid mat_relid = mat_ht->main_table_relid;
-	foreach (lc, cagg_view_query->groupClause)
+	Query *orig_query;
+	/* the view rule has dummy old and new range table entries as the 1st and 2nd entries
+	 */
+	Assert(list_length(cagg_view_query->rtable) >= 2);
+	if (cagg_view_query->setOperations)
+	{
+		/* This corresponds to the union view.
+		 * the 3rd RTE entry has the SELECT 1 query from the union view. */
+		RangeTblEntry *orig_query_rte = lthird(cagg_view_query->rtable);
+		if (orig_query_rte->rtekind != RTE_SUBQUERY)
+			elog(ERROR, "unexpected view rule action ");
+		orig_query = orig_query_rte->subquery;
+	}
+	else
+	{
+		orig_query = cagg_view_query;
+	}
+	foreach (lc, orig_query->groupClause)
 	{
 		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
-		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, tlist);
+		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, orig_query->targetList);
 		/* groupby clauses are columns from the mat hypertable */
 		Assert(IsA(cagg_tle->expr, Var));
 		Var *mat_var = castNode(Var, cagg_tle->expr);
@@ -131,14 +147,28 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 			/* skip time dimension col if it appears in group-by list */
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
 				continue;
-			int collen = strlen(grpcol);
-			if (segidx > 0)
+			int collen = 1;
+			if (segidx > 0 && (seglen - segidx) > collen)
 			{
-				segmentby = strncat(segmentby + segidx, ",", seglen - collen);
-				collen = collen + 1;
+				strlcpy(segmentby + segidx, ",", collen + 1);
+				segidx = segidx + 1;
 			}
-			segmentby = strncat(segmentby + segidx, grpcol, seglen - collen);
-			segidx = segidx + collen;
+			collen = strlen(grpcol);
+			if (seglen - segidx > collen)
+			{
+				strlcpy(segmentby + segidx, grpcol, collen + 1);
+				segidx = segidx + collen;
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("%s not enough space to copy segment by column (%d %d %d)",
+								__func__,
+								seglen,
+								segidx,
+								collen)));
+			}
 		}
 		if (segidx != 0)
 		{
@@ -189,22 +219,22 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 	if (!with_clause_options[ContinuousEnabled].is_default)
 		elog(ERROR, "cannot disable continuous aggregates");
 
+	/* whenever materialized_only is specified, we force a view defintion rewrite
+	 * Do not optimize. post-update.sql often relies on this behavior to update
+	 * cagg view defintions
+	 */
 	if (!with_clause_options[ContinuousViewOptionMaterializedOnly].is_default)
 	{
-		bool materialized_only =
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+		agg->data.materialized_only =
 			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
-		if (agg->data.materialized_only != materialized_only)
-		{
-			Cache *hcache = ts_hypertable_cache_pin();
-			Hypertable *mat_ht =
-				ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
-			agg->data.materialized_only = materialized_only;
-			Assert(mat_ht != NULL);
+		Assert(mat_ht != NULL);
 
-			cagg_update_view_definition(agg, mat_ht);
-			update_materialized_only(agg, agg->data.materialized_only);
-			ts_cache_release(hcache);
-		}
+		cagg_update_view_definition(agg, mat_ht);
+		update_materialized_only(agg, agg->data.materialized_only);
+		ts_cache_release(hcache);
 	}
 	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
 	{
