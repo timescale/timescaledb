@@ -188,11 +188,9 @@ ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo RESET (timescaledb.compress);
 ERROR:  compression options cannot be reset
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
-ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
-ERROR:  operation not supported on hypertables that have compression enabled
+ERROR:  cannot create a unique index without the column "a" (used in partitioning)
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
-ERROR:  operation not supported on hypertables that have compression enabled
 --can add index , but not unique index
 CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
 ERROR:  operation not supported on hypertables that have compression enabled
@@ -319,7 +317,6 @@ alter table table_constr drop constraint table_constr_exclu ;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
 --can't add fks after compression enabled
 alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
-ERROR:  operation not supported on hypertables that have compression enabled
 -- ddl ADD column variants that are not supported
 ALTER TABLE table_constr ADD COLUMN newcol integer CHECK ( newcol < 10 );
 ERROR:  cannot add column with constraints to a hypertable that has compression enabled
