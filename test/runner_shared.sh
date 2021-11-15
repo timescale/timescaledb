@@ -26,7 +26,7 @@ if [[ ${TEST_BASE_NAME} == *-1[0-9] ]]; then
 fi
 
 #docker doesn't set user
-USER=${USER:-`whoami`}
+USER=${USER:-$(whoami)}
 
 TEST_ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER:-super_user}
 TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER:-default_perm_user}
@@ -38,7 +38,7 @@ shift
 # we use mkdir here because it is an atomic operation unlike existance of a lockfile
 # where creating and checking are 2 separate operations
 if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
-  ${PSQL} $@ -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
+  ${PSQL} "$@" -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
   ${PSQL} -U ${USER} \
      -v TEST_BASE_NAME=${TEST_BASE_NAME} \
      -v TEST_INPUT_DIR=${TEST_INPUT_DIR} \
@@ -48,7 +48,7 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
-     $@ -d ${TEST_DBNAME} < ${TEST_INPUT_DIR}/shared/sql/include/shared_setup.sql >/dev/null
+     "$@" -d ${TEST_DBNAME} < ${TEST_INPUT_DIR}/shared/sql/include/shared_setup.sql >/dev/null
   touch ${TEST_OUTPUT_DIR}/.pg_init/done
 fi
 
@@ -73,4 +73,4 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
-     $@ -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d'  -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!' -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!'
+     "$@" -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d'  -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!' -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!'

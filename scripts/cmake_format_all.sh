@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPTDIR=$(cd $(dirname $0); pwd)
+SCRIPTDIR=$(cd "$(dirname $0)" || exit; pwd)
 BASEDIR=$(dirname $SCRIPTDIR)
 
 find $BASEDIR -name CMakeLists.txt  -exec cmake-format -i {} +
