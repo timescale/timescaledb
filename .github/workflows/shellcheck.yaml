@@ -1,0 +1,22 @@
+name: Shellcheck
+on:
+  pull_request:
+  push:
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install shellcheck
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Run shellcheck
+      run: scripts/shellcheck-ci.sh

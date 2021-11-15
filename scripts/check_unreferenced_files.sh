@@ -6,11 +6,11 @@ BASE_DIR=$(pwd)/$SCRIPT_DIR/..
 unreferenced=0
 
 function get_filenames {
-  echo *.$2 *.$2.in | xargs git ls-files | xargs -IFILE basename FILE
+  echo ./*.$2 ./*.$2.in | xargs git ls-files | xargs -IFILE basename FILE
 }
 
 function check_directory {
-  cd $BASE_DIR/$1
+  cd $BASE_DIR/$1 || exit
   test_files=$(get_filenames $1 $2)
 
   for file in $test_files; do

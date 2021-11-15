@@ -37,6 +37,10 @@ do
             KEEP_TEMP_DIRS=true
             TEST_UPDATE_FROM_TAGS_EXTRA_ARGS="-d"
             ;;
+    	*)
+    		echo "Unknown flag '$opt'"
+    		exit 1
+    		;;
     esac
 done
 
@@ -44,7 +48,7 @@ kill_all_tests() {
     local exit_code="$?"
     set +e # do not exit immediately on failure
     echo "Killing all tests"
-    kill ${!tests[@]} 2>/dev/null
+    kill "${!tests[@]}" 2>/dev/null
     return $exit_code
 }
 
@@ -67,7 +71,7 @@ IMAGE_NAME=${UPDATE_TO_IMAGE} TAG_NAME=${UPDATE_TO_TAG} PG_VERSION=${PG_VERSION}
 # Run update tests in parallel
 for tag in ${TAGS};
 do
-    UPDATE_FROM_TAG=${tag} TEST_VERSION=${TEST_VERSION} $(dirname $0)/test_update_from_tag.sh ${TEST_UPDATE_FROM_TAGS_EXTRA_ARGS} > ${TEST_TMPDIR}/${tag}.log 2>&1 &
+    UPDATE_FROM_TAG=${tag} TEST_VERSION=${TEST_VERSION} "$(dirname $0)/test_update_from_tag.sh" ${TEST_UPDATE_FROM_TAGS_EXTRA_ARGS} > ${TEST_TMPDIR}/${tag}.log 2>&1 &
 
     tests[$!]=${tag}
     echo "Launched test ${tag} with pid $!"
@@ -77,7 +81,7 @@ done
 
 # Since we are iterating a hash table, the tests are not going to be
 # in order started. But it doesn't matter.
-for pid in ${!tests[@]};
+for pid in "${!tests[@]}"
 do
     echo "Waiting for test pid $pid"
     wait $pid

@@ -6,11 +6,11 @@
 # This script replaces PG_FUNCTION_ARGS with "PG_FUNCTION_ARGS fake_var_for_clang" to
 # make it look like a proper function for clang and then converts it back after clang runs.
 
-SCRIPT_DIR=$(cd $(dirname $0); pwd)
+SCRIPT_DIR=$(cd "$(dirname $0)"; pwd)
 BASE_DIR=$(dirname $SCRIPT_DIR)
 TEMP_DIR="/tmp/timescaledb_format"
 
-OPTIONS="${@}"
+OPTIONS=("${@}")
 
 if [ -e ${TEMP_DIR} ]
 then
@@ -26,8 +26,7 @@ cleanup() {
 
 trap cleanup EXIT SIGINT SIGTERM
 
-mkdir ${TEMP_DIR}
-if [[ $? != 0 ]]
+if ! mkdir ${TEMP_DIR}
 then
     echo "error: could not create temporary directory ${TEMP_DIR}"
     exit 1
@@ -39,7 +38,7 @@ set -e
 CLANG_FORMAT_FLAGS=""
 FILE_NAMES=""
 
-for opt in ${OPTIONS}
+for opt in "${OPTIONS[@]}"
 do
     if [[ "${opt:0:1}" != "-" ]]
     then
@@ -55,7 +54,7 @@ echo "copying to ${TEMP_DIR}"
 for name in ${FILE_NAMES}
 do
     # sed -i have different semantics on mac and linux, don't use
-    mkdir -p $(dirname ${TEMP_DIR}/${name})
+    mkdir -p "$(dirname "${TEMP_DIR}/${name}")"
     sed -e 's/(PG_FUNCTION_ARGS)/(PG_FUNCTION_ARGS fake_var_for_clang)/' ${BASE_DIR}/${name} > ${TEMP_DIR}/${name}
 done
 
