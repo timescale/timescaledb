@@ -4,8 +4,8 @@
 set -u
 set -e
 
-PWD=`pwd`
-DIR=`dirname $0`
+PWD=$(pwd)
+DIR=$(dirname $0)
 
 export PGUSER=${PGUSER:-postgres}
 export PGHOST=${PGHOST:-localhost}

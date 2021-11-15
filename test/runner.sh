@@ -26,7 +26,7 @@ read -r VERSION < ${CURRENT_DIR}/../version.config
 EXT_VERSION=${VERSION##version = }
 
 #docker doesn't set user
-USER=${USER:-`whoami`}
+USER=${USER:-$(whoami)}
 
 TEST_SPINWAIT_ITERS=${TEST_SPINWAIT_ITERS:-1000}
 
@@ -47,7 +47,7 @@ shift
 # Drop test database and make it less verbose in case of dropping a
 # distributed database
 function cleanup {
-    cat <<EOF | ${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none >/dev/null 2>&1
+    cat <<EOF | ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none >/dev/null 2>&1
     SET client_min_messages=ERROR;
     DROP DATABASE "${TEST_DBNAME}";
 EOF
@@ -59,7 +59,7 @@ trap cleanup EXIT
 # we use mkdir here because it is an atomic operation unlike existance of a lockfile
 # where creating and checking are 2 separate operations
 if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
-  cat <<EOF | ${PSQL} $@ -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1
+  cat <<EOF | ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1
     SET client_min_messages=ERROR;
     ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_CLUSTER_SUPERUSER} WITH SUPERUSER;
@@ -67,7 +67,7 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
     ALTER USER ${TEST_ROLE_2} WITH CREATEDB PASSWORD '${TEST_ROLE_2_PASS}';
     ALTER USER ${TEST_ROLE_3} WITH CREATEDB PASSWORD '${TEST_ROLE_3_PASS}';
 EOF
-  ${PSQL} $@ -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
+  ${PSQL} "$@" -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
   touch ${TEST_OUTPUT_DIR}/.pg_init/done
 fi
 
@@ -78,9 +78,9 @@ while [ ! -f ${TEST_OUTPUT_DIR}/.pg_init/done ]; do sleep 0.2; done
 cd ${EXE_DIR}/sql
 
 # create database and install timescaledb
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "SET client_min_messages=error; CREATE EXTENSION timescaledb; GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO ${TEST_ROLE_1};"
-${PSQL} $@ -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" < ${TEST_SUPPORT_FILE} >/dev/null 2>&1
+${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
+${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "SET client_min_messages=error; CREATE EXTENSION timescaledb; GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO ${TEST_ROLE_1};"
+${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" < ${TEST_SUPPORT_FILE} >/dev/null 2>&1
 export TEST_DBNAME
 
 # we strip out any output between <exclude_from_test></exclude_from_test>
@@ -111,4 +111,4 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
-     $@ -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!' -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!'
+     "$@" -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!' -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!'

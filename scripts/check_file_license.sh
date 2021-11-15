@@ -11,8 +11,8 @@ get_sql_license() {
 check_file() {
     FLAG=${1}
     FILE=${2}
-    SCRIPTPATH="$( cd "$(dirname "${0}")" ; pwd -P )"
-    TIMESCALE_LOCATION=`dirname ${SCRIPTPATH}`
+    SCRIPTPATH="$( cd "$(dirname "${0}")" || exit ; pwd -P )"
+    TIMESCALE_LOCATION=$(dirname ${SCRIPTPATH})
 
     LICENSE_FILE=
     LICENSE_STRING=
@@ -21,38 +21,38 @@ check_file() {
     case ${FLAG} in
         ('-c')
             LICENSE_FILE="${SCRIPTPATH}/c_license_header-apache.h"
-            LICENSE_STRING=`get_c_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_c_license ${FILE}`
+            LICENSE_STRING=$(get_c_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_c_license ${FILE})
             ;;
         ('-e')
             LICENSE_FILE="${SCRIPTPATH}/c_license_header-timescale.h"
-            LICENSE_STRING=`get_c_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_c_license ${FILE}`
+            LICENSE_STRING=$(get_c_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_c_license ${FILE})
             ;;
         ('-i')
             LICENSE_FILE="${SCRIPTPATH}/license_apache.spec"
-            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_sql_license ${FILE}`
+            LICENSE_STRING=$(get_sql_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_sql_license ${FILE})
             ;;
         ('-j')
             LICENSE_FILE="${SCRIPTPATH}/license_tsl.spec"
-            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_sql_license ${FILE}`
+            LICENSE_STRING=$(get_sql_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_sql_license ${FILE})
             ;;
         ('-s')
             LICENSE_FILE="${SCRIPTPATH}/sql_license_apache.sql"
-            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_sql_license ${FILE}`
+            LICENSE_STRING=$(get_sql_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_sql_license ${FILE})
             ;;
         ('-t')
             LICENSE_FILE="${SCRIPTPATH}/sql_license_tsl.sql"
-            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_sql_license ${FILE}`
+            LICENSE_STRING=$(get_sql_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_sql_license ${FILE})
             ;;
         ('-p')
             LICENSE_FILE="${SCRIPTPATH}/license_tsl.spec"
-            LICENSE_STRING=`get_sql_license ${LICENSE_FILE}`
-            FIRST_COMMENT=`get_sql_license ${FILE}`
+            LICENSE_STRING=$(get_sql_license ${LICENSE_FILE})
+            FIRST_COMMENT=$(get_sql_license ${FILE})
             ;;
         ("--")
             return 0;
@@ -72,7 +72,7 @@ check_file() {
     fi
 }
 
-args=`getopt "c:e:i:j:p:s:t:" $*`; errcode=$?; set -- $args
+args=$(getopt "c:e:i:j:p:s:t:" "$@"); errcode=$?; set -- $args
 
 if [[ ${errcode} != 0 ]]; then
         echo 'Usage: check_file_license ((-c|-e|-i|-j|-s|-t) <filename> ...)'
@@ -88,7 +88,7 @@ while [[ ${1} ]]; do
     fi
     check_file ${1} ${2}
     FILE_ERR=${?}
-    ERRORCODE=$((${FILE_ERR} | ${ERRORCODE}));
+    ERRORCODE=$((FILE_ERR | ERRORCODE));
     shift; shift;
 done
 

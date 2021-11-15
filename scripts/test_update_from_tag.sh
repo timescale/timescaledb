@@ -78,8 +78,8 @@ docker_pgcmd() {
     local database=${3:-single}
     echo "executing pgcmd on database $database"
     set +e
-    docker_exec $1 "psql -h localhost -U postgres -d $database $PGOPTS -v VERBOSITY=verbose -c \"$2\""
-    if [ $? -ne 0 ]; then
+    if ! docker_exec $1 "psql -h localhost -U postgres -d $database $PGOPTS -v VERBOSITY=verbose -c \"$2\""
+    then
       docker_logs $1
       exit 1
     fi
@@ -95,8 +95,8 @@ docker_pgtest() {
     local database=${3:-single}
     set +e
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database -f $2 > ${TEST_TMPDIR}/$1.out
-    if [ $? -ne 0 ]; then
+    if ! docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database -f $2 > ${TEST_TMPDIR}/$1.out
+    then
       docker_logs $1
       exit 1
     fi
@@ -134,12 +134,11 @@ docker_run_vol() {
 
 wait_for_pg() {
     set +e
-    for i in {1..20}; do
+    for _ in {1..20}; do
         sleep 0.5
 
-        docker_exec $1 "pg_isready -U postgres"
-
-        if [[ $? == 0 ]] ; then
+        if docker_exec $1 "pg_isready -U postgres"
+        then
             # this makes the test less flaky, although not
             # ideal. Apperently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
@@ -154,7 +153,9 @@ wait_for_pg() {
     exit 1
 }
 
-VERSION=`echo ${UPDATE_FROM_TAG} | sed 's/\([0-9]\{0,\}\.[0-9]\{0,\}\.[0-9]\{0,\}\).*/\1/g'`
+# shellcheck disable=SC2001
+# SC2001: See if you can use ${variable//search/replace} instead.
+VERSION=$(echo ${UPDATE_FROM_TAG} | sed 's/\([0-9]\{0,\}\.[0-9]\{0,\}\.[0-9]\{0,\}\).*/\1/g')
 echo "Testing from version ${VERSION} (test version ${TEST_VERSION})"
 echo "Using temporary directory ${TEST_TMPDIR}"
 
