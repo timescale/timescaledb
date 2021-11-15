@@ -51,11 +51,15 @@ WHERE
 
 ALTER MATERIALIZED VIEW metrics_compressed_summary SET (timescaledb.compress);
 CALL refresh_continuous_aggregate('metrics_compressed_summary', NULL, '2000-01-15 23:55:00+0');
-SELECT compress_chunk(show_chunks('metrics_compressed_summary'));
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_X_X_chunk
- _timescaledb_internal._hyper_X_X_chunk
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'compressed'
+       END as comp
+FROM
+( SELECT compress_chunk(show_chunks('metrics_compressed_summary')) res ) q;
+    comp    
+------------
+ compressed
+ compressed
 (2 rows)
 
 -- Check for realtime caggs
@@ -110,11 +114,15 @@ WHERE
 
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.compress);
 CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-15 23:55:00+0');
-SELECT compress_chunk(show_chunks('metrics_summary'));
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_X_X_chunk
- _timescaledb_internal._hyper_X_X_chunk
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'compressed'
+       END as comp
+FROM
+( SELECT compress_chunk(show_chunks('metrics_summary')) res ) q;
+    comp    
+------------
+ compressed
+ compressed
 (2 rows)
 
 -- Check for realtime caggs
@@ -255,10 +263,13 @@ SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.
 -- Compare results between CAggs and Original View (to check PG and TSDB machinery)
 :DIFF_CMD
 -- Decompres 1 chunk from cagg
-SELECT decompress_chunk(ch) FROM show_chunks('metrics_compressed_summary') ch ORDER BY ch LIMIT 1;
-             decompress_chunk             
-------------------------------------------
- _timescaledb_internal._hyper_X_X_chunk
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'decompress'
+       END as dec
+FROM ( SELECT decompress_chunk(ch) res FROM show_chunks('metrics_compressed_summary') ch ORDER BY ch LIMIT 1) q;
+    dec     
+------------
+ decompress
 (1 row)
 
 -- Run tests and compare results
