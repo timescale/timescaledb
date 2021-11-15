@@ -61,7 +61,10 @@ SELECT format('\! diff -u --label "Source results" --label "Target results" %s %
 :DIFF_CMD
 
 -- Decompres 1 chunk from cagg
-SELECT decompress_chunk(ch) FROM show_chunks('metrics_compressed_summary') ch ORDER BY ch LIMIT 1;
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'decompress'
+       END as dec
+FROM ( SELECT decompress_chunk(ch) res FROM show_chunks('metrics_compressed_summary') ch ORDER BY ch LIMIT 1) q;
 
 -- Run tests and compare results
 \o :TEST_RESULTS_SOURCE
