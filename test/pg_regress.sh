@@ -80,6 +80,8 @@ else
   for t in ${TESTS}; do
     if ! contains "${SKIPS}" "${t}"; then
       for t2 in ${ALL_TESTS}; do
+        # shellcheck disable=SC2053
+        # We do want to match globs in $t here.
         if [[ $t2 == $t ]]; then
           current_tests="${current_tests} ${t2}"
         fi
@@ -151,4 +153,4 @@ mkdir -p ${EXE_DIR}/sql/dump
 export PG_REGRESS_DIFF_OPTS
 
 PG_REGRESS_OPTS="${PG_REGRESS_OPTS}  --schedule=${SCHEDULE}"
-${PG_REGRESS} $@ ${PG_REGRESS_OPTS}
+${PG_REGRESS} "$@" ${PG_REGRESS_OPTS}

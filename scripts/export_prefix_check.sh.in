@@ -69,7 +69,7 @@ exports=$(find @CMAKE_BINARY_DIR@ -not -path '*/\.*' -name '*.so' -print0 \
         -e '^_\?backtrace_uncompress_zdebug$' \
 )
 
-num_exports=$(echo "${exports}" | grep -v '^$' | wc -l)
+num_exports=$(echo "${exports}" | grep -v '^$' -c)
 echo "${exports}"
 
 if [ ${num_exports} -gt 0 ];

@@ -10,8 +10,6 @@ PG_IMAGE_TAG=${PG_IMAGE_TAG:-${PG_VERSION}-alpine}
 BUILD_CONTAINER_NAME=${BUILD_CONTAINER_NAME:-pgbuild}
 BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME:-$USER/pgbuild}
 IMAGE_NAME=${IMAGE_NAME:-$USER/timescaledb}
-GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD ${BASE_DIR} | awk '{print $1; exit}' | sed -e "s|/|_|g")
-GIT_TAG=$(git -C ${BASE_DIR} rev-parse --short --verify HEAD)
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 TAG_NAME=${TAG_NAME:-$GIT_ID}
 BUILD_TYPE=${BUILD_TYPE:-Debug}
@@ -39,7 +37,7 @@ timescaledb_image_exists() {
 
 remove_build_container() {
     local container=${1:-${BUILD_CONTAINER_NAME}}
-    docker rm -vf $(docker ps -a -q -f name=${container} 2>/dev/null) 2>/dev/null
+    docker rm -vf "$(docker ps -a -q -f name=${container} 2>/dev/null)" 2>/dev/null
 }
 
 fetch_postgres_build_image() {
@@ -78,8 +76,14 @@ build_timescaledb()
 
     # Build and install the extension with debug symbols and assertions
     tar -c -C ${BASE_DIR} {cmake,src,sql,test,scripts,tsl,version.config,CMakeLists.txt,timescaledb.control.in} | docker cp - ${BUILD_CONTAINER_NAME}:/build/
-    docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c "cd /build/debug && cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src && make && make install && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample && cd / && rm -rf /build"
-    if [ $? -ne 0 ]; then
+    if ! docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c " \
+    	cd /build/debug \
+    	&& cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src \
+    	&& make && make install \
+    	&& echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample \
+    	&& echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample \
+    	&& cd / && rm -rf /build"
+    then
       echo "Building timescaledb failed"
       return 1
     fi
@@ -101,8 +105,8 @@ fi
 
 
 if ! postgres_build_image_exists; then
-    if ! fetch_postgres_build_image; then
-        create_postgres_build_image || exit 1
+    if ! fetch_postgres_build_image "$@"; then
+        create_postgres_build_image "$@" || exit 1
     fi
 fi
 
