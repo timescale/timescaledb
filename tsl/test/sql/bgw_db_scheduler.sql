@@ -24,7 +24,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION insert_job(application_name NAME,job_type NAME, schedule_interval INTERVAL, max_runtime INTERVAL, retry_period INTERVAL, owner NAME DEFAULT CURRENT_ROLE, scheduled BOOL DEFAULT true) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
-  INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,retry_period,proc_name,proc_schema,owner,scheduled) VALUES($1,$3,$4,3,$5,$2,'public',$6,$7) RETURNING id;
+  INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,retry_period,proc_name,proc_schema,owner,scheduled) VALUES($1,$3,$4,5,$5,$2,'public',$6,$7) RETURNING id;
 $$;
 
 CREATE OR REPLACE FUNCTION test_toggle_scheduled(job_id INTEGER) RETURNS VOID LANGUAGE SQL SECURITY DEFINER AS
@@ -241,6 +241,21 @@ SELECT * FROM sorted_bgw_log;
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
+SELECT * FROM sorted_bgw_log;
+
+-- Get status of failing job `test_job_2` to check it reached `max_retries` and
+-- the new `job_status` now is `Paused`
+SELECT job_id, last_run_status, job_status, total_runs, total_successes, total_failures
+FROM timescaledb_information.job_stats WHERE job_id = 1001;
+
+-- Alter job to be rescheduled and run it again
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT alter_job(1001, scheduled => true);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
+SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 1001;
 SELECT * FROM sorted_bgw_log;
 
 --

@@ -205,6 +205,7 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	float8 multiplier = (consecutive_failures > MAX_FAILURES_MULTIPLIER ? MAX_FAILURES_MULTIPLIER :
 																		  consecutive_failures);
 	MemoryContext oldctx;
+
 	if (!IS_VALID_TIMESTAMP(finish_time))
 	{
 		elog(LOG, "%s: invalid finish time", __func__);

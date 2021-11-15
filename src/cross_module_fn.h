@@ -59,6 +59,7 @@ typedef struct CrossModuleFunctions
 	PGFunction job_delete;
 	PGFunction job_run;
 	bool (*job_execute)(BgwJob *job);
+	void (*job_config_check)(Name proc_schema, Name proc_name, Jsonb *config);
 
 	void (*create_upper_paths_hook)(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 									TsRelType input_reltype, Hypertable *ht, void *extra);

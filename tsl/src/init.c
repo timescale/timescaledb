@@ -107,6 +107,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.job_delete = job_delete,
 	.job_run = job_run,
 	.job_execute = job_execute,
+	.job_config_check = job_config_check,
 
 	/* gapfill */
 	.gapfill_marker = gapfill_marker,
