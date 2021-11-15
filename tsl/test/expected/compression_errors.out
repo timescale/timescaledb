@@ -189,7 +189,7 @@ ALTER TABLE foo RESET (timescaledb.compress);
 ERROR:  compression options cannot be reset
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
-ERROR:  cannot create a unique index without the column "a" (used in partitioning)
+ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 --can add index , but not unique index
 CREATE UNIQUE INDEX foo_idx ON foo ( a, c );

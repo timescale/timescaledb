@@ -255,20 +255,33 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 
 				if (constraint->contype == CONSTR_UNIQUE)
 				{
-					List *segmentby = NIL, *info = NIL;
+					List *allowed = NIL, *info = NIL;
 					ListCell *lc;
+					int i;
 
 					info = ts_hypertable_compression_get(ht->fd.id);
+
+					/* Unique constraints on segmentby columns are supported */
 					foreach (lc, info)
 					{
 						FormData_hypertable_compression *fd = lfirst(lc);
-						if (fd->segmentby_column_index > 0 ||
-							fd->orderby_column_index > 0)
-							segmentby = lappend(segmentby,
-									makeString(fd->attname.data));
+						if (fd->segmentby_column_index > 0)
+							allowed = lappend(allowed,
+											  makeString(NameStr(fd->attname)));
 					}
 
-					if(list_difference(constraint->keys, segmentby) != NIL)
+					/*
+					 * A unique constraint has to include dimention columns,
+					 * otherwise index creation is not possible.
+					 */
+					for (i = 0; i < ht->space->num_dimensions; i++)
+					{
+						Dimension *dim = &ht->space->dimensions[i];
+						allowed = lappend(allowed,
+										  makeString(NameStr(dim->fd.column_name)));
+					}
+
+					if(list_difference(constraint->keys, allowed) != NIL)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("operation not supported on hypertables "
