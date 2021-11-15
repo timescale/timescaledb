@@ -20,8 +20,8 @@ CONTAINER_NAME_RUN=${CONTAINER_NAME_RUN:-pgtest_run}
 COMPILE_VOLUME=${COMPILE_VOLUME:-pgtest_compile}
 
 set +e
-docker rm -f $(docker ps -a -q -f name=${CONTAINER_NAME_COMPILE} 2>/dev/null) 2>/dev/null
-docker rm -f $(docker ps -a -q -f name=${CONTAINER_NAME_RUN} 2>/dev/null) 2>/dev/null
+docker rm -f "$(docker ps -a -q -f name=${CONTAINER_NAME_COMPILE} 2>/dev/null)" 2>/dev/null
+docker rm -f "$(docker ps -a -q -f name=${CONTAINER_NAME_RUN} 2>/dev/null)" 2>/dev/null
 docker volume rm $COMPILE_VOLUME
 set -e
 

@@ -15,6 +15,10 @@ do
             echo "!!Debug mode: Containers and temporary directory will be left on disk"
             echo
             ;;
+    	*)
+    		echo "Unknown flag '$opt'"
+    		exit 1
+    		;;
     esac
 done
 

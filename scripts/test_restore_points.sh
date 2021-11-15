@@ -24,7 +24,7 @@ DN1_PORT=${DN1_PORT:-5443}
 DN2_PORT=${DN2_PORT:-5444}
 DN3_PORT=${DN3_PORT:-5445}
 
-TEST_DIR=${TEST_DIR:-`pwd`}
+TEST_DIR=${TEST_DIR:-$(pwd)}
 WAL_DIR=${TEST_DIR}/wal
 BASEBACKUP_DIR=${TEST_DIR}/basebackup
 STORAGE_DIR=${TEST_DIR}/storage
@@ -34,8 +34,8 @@ TEST_RESTORE_POINT_1=${TEST_RESTORE_POINT_1:-rp1}
 TEST_RESTORE_POINT_2=${TEST_RESTORE_POINT_2:-rp2}
 TEST_RESTORE_POINT_3=${TEST_RESTORE_POINT_3:-rp3}
 
-PG_BINDIR=${PG_BINDIR:-`pg_config --bindir`}
-PG_VERSION_MAJOR=`${PG_BINDIR}/postgres -V | awk '{print $3}' | sed 's/\./ /g' | awk '{print $1}'`
+PG_BINDIR=${PG_BINDIR:-$(pg_config --bindir)}
+PG_VERSION_MAJOR=$(${PG_BINDIR}/postgres -V | awk '{print $3}' | sed 's/\./ /g' | awk '{print $1}')
 PG_USER=${PG_USER:-postgres}
 
 function instance_configure()
@@ -63,10 +63,10 @@ function instance_start()
 	HOST=$2
 	PORT=$3
 	${PG_BINDIR}/pg_ctl start -U ${PG_USER} -D "${STORAGE_DIR}/${NAME}"
-	for i in {1..20}; do
+	for _ in {1..20}; do
 		sleep 0.5
-		${PG_BINDIR}/pg_isready -q -U ${PG_USER} -h ${HOST} -p ${PORT} -d postgres
-		if [[ $? == 0 ]] ; then
+		if ${PG_BINDIR}/pg_isready -q -U ${PG_USER} -h ${HOST} -p ${PORT} -d postgres
+		then
 			sleep 0.2
 			return 0
 		fi
@@ -122,15 +122,15 @@ function instance_basebackup()
 function instance_cleanup_storage()
 {
 	NAME=$1
-	rm -rf "${STORAGE_DIR}/${NAME}"
+	rm -rf "${STORAGE_DIR:?}/${NAME}"
 }
 
 function instance_cleanup()
 {
 	NAME=$1
-	rm -rf "${STORAGE_DIR}/${NAME}"
-	rm -rf "${WAL_DIR}/${NAME}"
-	rm -rf "${BASEBACKUP_DIR}/${NAME}"
+	rm -rf "${STORAGE_DIR:?}/${NAME}"
+	rm -rf "${WAL_DIR:?}/${NAME}"
+	rm -rf "${BASEBACKUP_DIR:?}/${NAME}"
 }
 
 function instance_cleanup_dirs()

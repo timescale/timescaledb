@@ -28,8 +28,8 @@ echo "Unarchiving tarball..."
 tar xvzf $TARFILE
 
 echo "Restoring hypertable's schema..."
-psql -q -v "ON_ERROR_STOP=1" $@ < $PREFIX-schema.sql
-if [ $? -ne 0 ]; then
+if ! psql -q -v "ON_ERROR_STOP=1" "$@" < $PREFIX-schema.sql
+then
     echo "Restoring schema failed, exiting."
     rm $PREFIX-data.csv
     rm $PREFIX-schema.sql
@@ -37,8 +37,8 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Restoring hypertable's data..."
-psql $@ -v "ON_ERROR_STOP=1" -c "\COPY $HYPERTABLE FROM $PREFIX-data.csv DELIMITER ',' CSV"
-if [ $? -ne 0 ]; then
+if ! psql "$@" -v "ON_ERROR_STOP=1" -c "\COPY $HYPERTABLE FROM $PREFIX-data.csv DELIMITER ',' CSV"
+then
     echo "Restoring data failed, exiting."
 fi
 

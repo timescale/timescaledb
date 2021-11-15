@@ -21,7 +21,7 @@ PROVE=${PROVE:-prove}
 if [ -z "$PROVE_TESTS" ]
 then
     # Exit early if we are running with TESTS=expr
-    if [ ! -z "$TESTS" ]
+    if [ -n "$TESTS" ]
     then
         exit 0
     fi
