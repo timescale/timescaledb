@@ -38,7 +38,12 @@ WHERE
 
 ALTER MATERIALIZED VIEW metrics_compressed_summary SET (timescaledb.compress);
 CALL refresh_continuous_aggregate('metrics_compressed_summary', NULL, '2000-01-15 23:55:00+0');
-SELECT compress_chunk(show_chunks('metrics_compressed_summary'));
+
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'compressed'
+       END as comp
+FROM
+( SELECT compress_chunk(show_chunks('metrics_compressed_summary')) res ) q;
 
 -- Check for realtime caggs
 SELECT
@@ -85,7 +90,11 @@ WHERE
 
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.compress);
 CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-15 23:55:00+0');
-SELECT compress_chunk(show_chunks('metrics_summary'));
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'compressed'
+       END as comp
+FROM
+( SELECT compress_chunk(show_chunks('metrics_summary')) res ) q;
 
 -- Check for realtime caggs
 SELECT
