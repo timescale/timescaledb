@@ -661,3 +661,26 @@ job_execute(BgwJob *job)
 
 	return true;
 }
+
+/*
+ * Check configuration for a job type.
+ */
+void
+job_config_check(Name proc_schema, Name proc_name, Jsonb *config)
+{
+	if (namestrcmp(proc_schema, INTERNAL_SCHEMA_NAME) == 0)
+	{
+		if (namestrcmp(proc_name, "policy_retention") == 0)
+			policy_retention_read_and_validate_config(config, NULL);
+		else if (namestrcmp(proc_name, "policy_reorder") == 0)
+			policy_reorder_read_and_validate_config(config, NULL);
+		else if (namestrcmp(proc_name, "policy_compression") == 0)
+		{
+			PolicyCompressionData policy_data;
+			policy_compression_read_and_validate_config(config, &policy_data);
+			ts_cache_release(policy_data.hcache);
+		}
+		else if (namestrcmp(proc_name, "policy_refresh_continuous_aggregate") == 0)
+			policy_refresh_cagg_read_and_validate_config(config, NULL);
+	}
+}

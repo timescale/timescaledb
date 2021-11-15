@@ -567,6 +567,150 @@ ts_bgw_job_delete_by_id(int32 job_id)
 	return bgw_job_delete_scan(scankey, job_id);
 }
 
+/* This function only updates the fields modifiable with alter_job. */
+static ScanTupleResult
+bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
+{
+	BgwJob *updated_job = (BgwJob *) data;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	HeapTuple new_tuple;
+
+	Datum values[Natts_bgw_job] = { 0 };
+	bool isnull[Natts_bgw_job] = { 0 };
+	bool repl[Natts_bgw_job] = { 0 };
+
+	Datum old_schedule_interval =
+		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
+	Assert(!isnull[0]);
+
+	/* when we update the schedule interval, modify the next start time as well*/
+	if (!DatumGetBool(DirectFunctionCall2(interval_eq,
+										  old_schedule_interval,
+										  IntervalPGetDatum(&updated_job->fd.schedule_interval))))
+	{
+		BgwJobStat *stat = ts_bgw_job_stat_find(updated_job->fd.id);
+
+		if (stat != NULL)
+		{
+			TimestampTz next_start = DatumGetTimestampTz(
+				DirectFunctionCall2(timestamptz_pl_interval,
+									TimestampTzGetDatum(stat->fd.last_finish),
+									IntervalPGetDatum(&updated_job->fd.schedule_interval)));
+			/* allow DT_NOBEGIN for next_start here through allow_unset=true in the case that
+			 * last_finish is DT_NOBEGIN,
+			 * This means the value is counted as unset which is what we want */
+			ts_bgw_job_stat_update_next_start(updated_job->fd.id, next_start, true);
+		}
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] =
+			IntervalPGetDatum(&updated_job->fd.schedule_interval);
+		repl[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)] = true;
+	}
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] =
+		IntervalPGetDatum(&updated_job->fd.max_runtime);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] =
+		Int32GetDatum(updated_job->fd.max_retries);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] =
+		IntervalPGetDatum(&updated_job->fd.retry_period);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] =
+		BoolGetDatum(updated_job->fd.scheduled);
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = true;
+
+	repl[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+	if (updated_job->fd.config)
+	{
+		ts_cm_functions->job_config_check(&updated_job->fd.proc_schema,
+										  &updated_job->fd.proc_name,
+										  updated_job->fd.config);
+		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] =
+			JsonbPGetDatum(updated_job->fd.config);
+	}
+	else
+		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+
+	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, repl);
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+
+	heap_freetuple(new_tuple);
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return SCAN_DONE;
+}
+
+/*
+ * Overwrite job with specified job_id with the given fields
+ *
+ * This function only updates the fields modifiable with alter_job.
+ */
+bool
+ts_bgw_job_update_by_id(int32 job_id, BgwJob *job)
+{
+	ScanKeyData scankey[1];
+	Catalog *catalog = ts_catalog_get();
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScannerCtx scanctx = { .table = catalog_get_table_id(catalog, BGW_JOB),
+						   .index = catalog_get_index(catalog, BGW_JOB, BGW_JOB_PKEY_IDX),
+						   .nkeys = 1,
+						   .scankey = scankey,
+						   .data = job,
+						   .limit = 1,
+						   .tuple_found = bgw_job_tuple_update_by_id,
+						   .lockmode = RowExclusiveLock,
+						   .scandirection = ForwardScanDirection,
+						   .result_mctx = CurrentMemoryContext,
+						   .tuplock = &scantuplock };
+
+	ScanKeyInit(&scankey[0],
+				Anum_bgw_job_pkey_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(job_id));
+
+	return ts_scanner_scan(&scanctx);
+}
+
+static void
+ts_bgw_job_check_max_retries(BgwJob *job)
+{
+	BgwJobStat *job_stat;
+
+	job_stat = ts_bgw_job_stat_find(job->fd.id);
+
+	/* stop to execute failing jobs after reached the "max_retries" option */
+	if (job->fd.max_retries > 0 && job_stat->fd.consecutive_failures >= job->fd.max_retries)
+	{
+		ereport(WARNING,
+				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+				 errmsg("job %d reached max_retries after %d consecutive failures",
+						job->fd.id,
+						job_stat->fd.consecutive_failures),
+				 errdetail("Job %d unscheduled as max_retries reached %d, consecutive failures %d.",
+						   job->fd.id,
+						   job->fd.max_retries,
+						   job_stat->fd.consecutive_failures),
+				 errhint("Use alter_job(%d, scheduled => TRUE) SQL function to reschedule.",
+						 job->fd.id)));
+
+		if (job->fd.scheduled)
+		{
+			job->fd.scheduled = false;
+			ts_bgw_job_update_by_id(job->fd.id, job);
+		}
+	}
+}
+
 void
 ts_bgw_job_permission_check(BgwJob *job)
 {
@@ -773,6 +917,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		if (job != NULL)
 		{
 			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
+			ts_bgw_job_check_max_retries(job);
 			pfree(job);
 			job = NULL;
 		}
@@ -796,6 +941,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * is launched
 	 */
 	ts_bgw_job_stat_mark_end(job, res);
+
 	CommitTransactionCommand();
 
 	if (job != NULL)
