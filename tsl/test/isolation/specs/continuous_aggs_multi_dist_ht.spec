@@ -33,8 +33,8 @@ step "Setup2"
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_mattable(schema_name TEXT, table_name TEXT) RETURNS void AS $$
+    BEGIN EXECUTE format('LOCK TABLE %I.%I', schema_name, table_name);
     END; $$ LANGUAGE plpgsql;
 }
 
@@ -42,7 +42,7 @@ step "Setup2"
 session "TearDownMultiTransaction"
 step "TearD1"
 {
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_mattable(TEXT, TEXT);
 }
 step "TearD2"
 {
@@ -69,7 +69,7 @@ step "Refresh2_sel"	{ select * from continuous_view_2 where bkt = 0 or bkt > 30 
 
 #locking the materialized table will block refresh1
 session "LM1"
-step "LockMat1" { BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step "LockMat1" { BEGIN; select lock_mattable(materialization_hypertable_schema, materialization_hypertable_name) FROM ( SELECT materialization_hypertable_schema, materialization_hypertable_name from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 }
 step "UnlockMat1" { ROLLBACK; }
 
