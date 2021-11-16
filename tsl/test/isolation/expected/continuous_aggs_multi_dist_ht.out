@@ -27,11 +27,11 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_mattable(schema_name TEXT, table_name TEXT) RETURNS void AS $$
+    BEGIN EXECUTE format('LOCK TABLE %I.%I', schema_name, table_name);
     END; $$ LANGUAGE plpgsql;
 
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step LockMat1: BEGIN; select lock_mattable(materialization_hypertable_schema, materialization_hypertable_name) FROM ( SELECT materialization_hypertable_schema, materialization_hypertable_name from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
 lock_mattable
 -------------
@@ -43,7 +43,7 @@ step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL
 step UnlockMat1: ROLLBACK;
 step Refresh1: <... completed>
 step TearD1: 
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_mattable(TEXT, TEXT);
 
 TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to view _timescaledb_internal._partial_view_110
@@ -83,13 +83,13 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_mattable(schema_name TEXT, table_name TEXT) RETURNS void AS $$
+    BEGIN EXECUTE format('LOCK TABLE %I.%I', schema_name, table_name);
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step LockMat1: BEGIN; select lock_mattable(materialization_hypertable_schema, materialization_hypertable_name) FROM ( SELECT materialization_hypertable_schema, materialization_hypertable_name from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
 lock_mattable
 -------------
@@ -114,7 +114,7 @@ bkt|maxl
 (1 row)
 
 step TearD1: 
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_mattable(TEXT, TEXT);
 
 TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to view _timescaledb_internal._partial_view_113
@@ -154,8 +154,8 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_mattable(schema_name TEXT, table_name TEXT) RETURNS void AS $$
+    BEGIN EXECUTE format('LOCK TABLE %I.%I', schema_name, table_name);
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
@@ -172,7 +172,7 @@ bkt|maxl
   0|   4
 (1 row)
 
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step LockMat1: BEGIN; select lock_mattable(materialization_hypertable_schema, materialization_hypertable_name) FROM ( SELECT materialization_hypertable_schema, materialization_hypertable_name from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 
 lock_mattable
 -------------
@@ -199,7 +199,7 @@ bkt|maxl
 (2 rows)
 
 step TearD1: 
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_mattable(TEXT, TEXT);
 
 TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to view _timescaledb_internal._partial_view_116
@@ -239,8 +239,8 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_mattable(schema_name TEXT, table_name TEXT) RETURNS void AS $$
+    BEGIN EXECUTE format('LOCK TABLE %I.%I', schema_name, table_name);
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
@@ -279,7 +279,7 @@ bkt|maxl
 (1 row)
 
 step TearD1: 
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_mattable(TEXT, TEXT);
 
 TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
 DETAIL:  drop cascades to view _timescaledb_internal._partial_view_119
