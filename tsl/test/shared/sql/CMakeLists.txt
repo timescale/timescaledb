@@ -5,7 +5,8 @@ set(TEST_FILES_SHARED
     dist_chunk.sql
     dist_gapfill.sql
     dist_insert.sql
-    dist_distinct.sql)
+    dist_distinct.sql
+    dist_distinct_pushdown.sql)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED memoize.sql)

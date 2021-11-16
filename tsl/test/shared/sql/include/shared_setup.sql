@@ -241,3 +241,16 @@ SELECT table_name FROM create_distributed_hypertable('mvcp_hyper', 'time',
 ALTER TABLE mvcp_hyper  SET (timescaledb.compress, timescaledb.compress_orderby='time DESC');
 
 INSERT INTO mvcp_hyper SELECT g, g FROM generate_series(0,1000) g;
+
+
+-- Tables for the DISTINCT ON pushdown test
+create table distinct_on_hypertable(ts timestamp, id int, val numeric);
+select create_hypertable('distinct_on_hypertable', 'ts');
+insert into distinct_on_hypertable select '2021-01-01 01:01:01'::timestamp + x * interval '1 second' ts,
+	mod(x, 4) id, r val
+from (select random() r, x from generate_series(1, 10000) x) tt
+order by r;
+
+create table distinct_on_distributed(ts timestamp, id int, val numeric);
+select create_distributed_hypertable('distinct_on_distributed', 'ts');
+insert into distinct_on_distributed select * from distinct_on_hypertable;

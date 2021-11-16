@@ -179,7 +179,7 @@ static void printRemoteParam(int paramindex, Oid paramtype, int32 paramtypmod,
 							 deparse_expr_cxt *context);
 static void printRemotePlaceholder(Oid paramtype, int32 paramtypmod, deparse_expr_cxt *context);
 static void deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs,
-							 deparse_expr_cxt *context);
+							 deparse_expr_cxt *context, List *pathkeys);
 static void deparseLockingClause(deparse_expr_cxt *context);
 static void appendOrderByClause(List *pathkeys, deparse_expr_cxt *context);
 static void appendLimit(deparse_expr_cxt *context, List *pathkeys);
@@ -771,7 +771,7 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 	context.sca = sca;
 
 	/* Construct SELECT clause */
-	deparseSelectSql(tlist, is_subquery, retrieved_attrs, &context);
+	deparseSelectSql(tlist, is_subquery, retrieved_attrs, &context, pathkeys);
 
 	/* Construct FROM and WHERE clauses */
 	deparseFromExpr(remote_where, &context);
@@ -822,7 +822,7 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
  * deparsing which happens later is good enough
  */
 static void
-deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
+deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 {
 	PlannerInfo *root = context->root;
 	Query *query = root->parse;
@@ -865,6 +865,60 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
 		/* We only allow constants apart from vars, but we ignore them */
 		else if (!IsA(tle->expr, Const))
 			return;
+	}
+
+	if (query->hasDistinctOn)
+	{
+		/*
+		 * Pushing down DISTINCT ON is more complex than plain DISTINCT.
+		 * The DISTINCT ON columns must be a prefix of the ORDER BY columns.
+		 * Without this, the DISTINCT ON would return an unpredictable row
+		 * each time. There is a diagnostic for the case where the ORDER BY
+		 * clause doesn't match the DISTINCT ON clause, so in this case we
+		 * would get an error on the data node. There is no diagnostic for
+		 * the case where the ORDER BY is absent, so in this case we would
+		 * get a wrong result.
+		 * The remote ORDER BY clause is created from the pathkeys of the
+		 * corresponding relation. If the DISTINCT ON columns are not a prefix
+		 * of these pathkeys, we cannot push it down.
+		 */
+		ListCell *distinct_cell, *pathkey_cell;
+		forboth (distinct_cell, query->distinctClause, pathkey_cell, pathkeys)
+		{
+			SortGroupClause *sgc = lfirst_node(SortGroupClause, distinct_cell);
+			TargetEntry *tle = get_sortgroupclause_tle(sgc, query->targetList);
+
+			PathKey *pk = lfirst_node(PathKey, pathkey_cell);
+			EquivalenceClass *ec = pk->pk_eclass;
+
+			/*
+			 * The find_ec_member_matching_expr() has many checks that don't seem
+			 * to be relevant here. Enumerate the pathkey EquivalenceMembers by
+			 * hand and find the one that matches the DISTINCT ON expression.
+			 */
+			ListCell *ec_member_cell;
+			foreach (ec_member_cell, ec->ec_members)
+			{
+				EquivalenceMember *ec_member = lfirst_node(EquivalenceMember, ec_member_cell);
+				if (equal(ec_member->em_expr, tle->expr))
+					break;
+			}
+
+			if (ec_member_cell == NULL)
+			{
+				/*
+				 * Went through all the equivalence class members and didn't
+				 * find a match.
+				 */
+				return;
+			}
+		}
+
+		if (pathkey_cell == NULL && distinct_cell != NULL)
+		{
+			/* Ran out of pathkeys before we matched all the DISTINCT ON columns. */
+			return;
+		}
 	}
 
 	/* If there are no varno entries in the distinctClause, we are done */
@@ -937,7 +991,8 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context)
  * Read prologue of deparseSelectStmtForRel() for details.
  */
 static void
-deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_expr_cxt *context)
+deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_expr_cxt *context,
+				 List *pathkeys)
 {
 	StringInfo buf = context->buf;
 	RelOptInfo *foreignrel = context->foreignrel;
@@ -981,7 +1036,7 @@ deparseSelectSql(List *tlist, bool is_subquery, List **retrieved_attrs, deparse_
 		Relation rel = table_open(rte->relid, NoLock);
 
 		if (root->parse->distinctClause != NIL)
-			deparseDistinctClause(buf, context);
+			deparseDistinctClause(buf, context, pathkeys);
 
 		deparseTargetList(buf,
 						  rte,
