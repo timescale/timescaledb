@@ -131,14 +131,28 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 			/* skip time dimension col if it appears in group-by list */
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
 				continue;
-			int collen = strlen(grpcol);
-			if (segidx > 0)
+			int collen = 1;
+			if (segidx > 0 && (seglen - segidx) > collen )
 			{
-				segmentby = strncat(segmentby + segidx, ",", seglen - collen);
-				collen = collen + 1;
+				strlcpy(segmentby + segidx, ",", collen + 1);
+				segidx = segidx + 1;
 			}
-			segmentby = strncat(segmentby + segidx, grpcol, seglen - collen);
-			segidx = segidx + collen;
+			collen = strlen(grpcol);
+			if (seglen - segidx > collen )
+			{
+				strlcpy(segmentby + segidx, grpcol, collen + 1);
+				segidx = segidx + collen;
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("%s not enough space to copy segment by column (%d %d %d)",
+								__func__,
+								seglen,
+								segidx,
+								collen)));
+			}
 		}
 		if (segidx != 0)
 		{
