@@ -5017,6 +5017,73 @@ SELECT count(*) FROM disttable;
     16
 (1 row)
 
+-- Show that DataNodeCopy is NOT used when source hypertable and target hypertable
+-- of the SELECT are both distributed. Try subselects with LIMIT, RETURNING and
+-- different distributed hypertable as source
+EXPLAIN (COSTS OFF)
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+ Insert on distributed hypertable disttable
+   ->  Insert on disttable
+         ->  Custom Scan (DataNodeDispatch)
+               Batch size: 1000
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Append
+                           ->  Custom Scan (DataNodeScan) on disttable disttable_2
+                           ->  Custom Scan (DataNodeScan) on disttable disttable_3
+                           ->  Custom Scan (DataNodeScan) on disttable disttable_4
+(10 rows)
+
+EXPLAIN (COSTS OFF)
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable LIMIT 1;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+ Insert on distributed hypertable disttable
+   ->  Insert on disttable
+         ->  Custom Scan (DataNodeDispatch)
+               Batch size: 1000
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Subquery Scan on "*SELECT*"
+                           ->  Limit
+                                 ->  Custom Scan (AsyncAppend)
+                                       ->  Append
+                                             ->  Custom Scan (DataNodeScan) on disttable disttable_2
+                                             ->  Custom Scan (DataNodeScan) on disttable disttable_3
+                                             ->  Custom Scan (DataNodeScan) on disttable disttable_4
+(13 rows)
+
+EXPLAIN (COSTS OFF)
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable RETURNING *;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Custom Scan (HypertableInsert)
+ Insert on distributed hypertable disttable
+   ->  Insert on disttable
+         ->  Custom Scan (DataNodeDispatch)
+               Batch size: 1000
+               ->  Custom Scan (ChunkDispatch)
+                     ->  Append
+                           ->  Custom Scan (DataNodeScan) on disttable disttable_2
+                           ->  Custom Scan (DataNodeScan) on disttable disttable_3
+                           ->  Custom Scan (DataNodeScan) on disttable disttable_4
+(10 rows)
+
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable;
+INSERT INTO disttable (time, device, temp_c)
+SELECT * FROM hyper_estimate LIMIT 2;
+SELECT count(*) FROM disttable;
+ count 
+-------
+    34
+(1 row)
+
 -- REMOVE a column on data nodes to check how errors are handled:
 CALL distributed_exec($$ ALTER TABLE disttable DROP COLUMN minmaxes $$);
 \set ON_ERROR_STOP 0
