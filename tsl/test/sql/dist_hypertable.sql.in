@@ -1673,6 +1673,24 @@ SET timescaledb.enable_connection_binary_data=false;
 SELECT * FROM disttable ORDER BY 1;
 SELECT count(*) FROM disttable;
 
+-- Show that DataNodeCopy is NOT used when source hypertable and target hypertable
+-- of the SELECT are both distributed. Try subselects with LIMIT, RETURNING and
+-- different distributed hypertable as source
+EXPLAIN (COSTS OFF)
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable;
+EXPLAIN (COSTS OFF)
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable LIMIT 1;
+EXPLAIN (COSTS OFF)
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable RETURNING *;
+INSERT INTO disttable (time, device, temp_c)
+SELECT time, device, temp_c FROM disttable;
+INSERT INTO disttable (time, device, temp_c)
+SELECT * FROM hyper_estimate LIMIT 2;
+SELECT count(*) FROM disttable;
+
 -- REMOVE a column on data nodes to check how errors are handled:
 CALL distributed_exec($$ ALTER TABLE disttable DROP COLUMN minmaxes $$);
 

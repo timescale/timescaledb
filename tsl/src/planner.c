@@ -8,6 +8,7 @@
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 #include <foreign/fdwapi.h>
+#include <nodes/nodeFuncs.h>
 
 #include "nodes/async_append.h"
 #include "nodes/skip_scan/skip_scan.h"
@@ -180,6 +181,37 @@ copy_mode_enabled(void)
 }
 
 /*
+ * Query tree walker to examine RTE contents for a distributed hypertable.
+ * Return "true" if we have identified a distributed hypertable. This short-circuits
+ * the tree traversal because we have found what we were looking for.
+ */
+static bool
+distributed_rtes_walker(Node *node, bool *isdistributed)
+{
+	if (node == NULL)
+		return false;
+	if (IsA(node, RangeTblEntry))
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) node;
+
+		if (rte->rtekind == RTE_RELATION)
+			ts_rte_is_hypertable(rte, isdistributed);
+
+		/* if isdistributed is already set, then no need to walk further */
+		return *isdistributed;
+	}
+	if (IsA(node, Query))
+	{
+		/* Recurse into range tables */
+		return range_table_walker(((Query *) node)->rtable,
+								  distributed_rtes_walker,
+								  isdistributed,
+								  QTW_EXAMINE_RTES_BEFORE);
+	}
+	return expression_tree_walker(node, distributed_rtes_walker, isdistributed);
+}
+
+/*
  * Decide on a plan to use for distributed inserts.
  */
 Path *
@@ -190,12 +222,24 @@ tsl_create_distributed_insert_path(PlannerInfo *root, ModifyTablePath *mtpath, I
 
 	/* Check if it is possible to use COPY in the backend.
 	 *
-	 * There are two cases where we cannot use COPY:
+	 * There are three cases where we cannot use COPY:
 	 *
 	 * 1. ON CONFLICT clause exists
 	 *
 	 * 2. RETURNING clause exists and tuples are expected to be modified on
 	 *    INSERT by a trigger.
+	 *
+	 * 3. INSERT.. SELECT case. If the relation being inserted into and the
+	 *    relation in the SELECT are both distributed hypertables then do not
+	 *    use COPY. This is because only one connection is maintained to data
+	 *    nodes in order to maintain a single snapshot. Normally, it is possible to
+	 *    multiplex multiple queries on a connection using a CURSOR, but with
+	 *    COPY the connection is switched into a COPY_IN state, making
+	 *    multiplexing impossible. It might be possible to use two connections to
+	 *    the same data node (one to ingest data into src table using COPY and
+	 *    one to SELECT from dst table), but that requires coordinating on a single
+	 *    snapshot to use on both connections. This is a potential future
+	 *    optimization.
 	 *
 	 * For case (2), we assume that we can return the original tuples if there
 	 * are no triggers on the root hypertable (we also assume that chunks on
@@ -230,6 +274,46 @@ tsl_create_distributed_insert_path(PlannerInfo *root, ModifyTablePath *mtpath, I
 			}
 
 			table_close(rel, AccessShareLock);
+		}
+
+		/* check if it's a INSERT .. SELECT case involving dist hypertables */
+		if (copy_possible)
+		{
+			ListCell *l;
+			RangeTblEntry *rte = planner_rt_fetch(hypertable_rti, root);
+			bool distributed = false;
+
+			/* if src hypertable is distributed then only further checks are needed */
+			if (ts_rte_is_hypertable(rte, &distributed) && distributed)
+			{
+				/* check if it's indeed INSERT .. SELECT */
+				foreach (l, root->parse->rtable)
+				{
+					rte = (RangeTblEntry *) lfirst(l);
+
+					/*
+					 * check if the subquery SELECT is referring to a distributed hypertable.
+					 * Note that if the target distributed hypertable and the distributed
+					 * hypertables that are part of the SELECT query are disjoint datanodes sets
+					 * then we can allow the existing COPY optimization. However, this is not a very
+					 * common case and not sure if it's worth optimizing for now.
+					 *
+					 * Note that the SELECT could be a complicated one using joins, further
+					 * subqueries etc. So we do a query tree walk to examine rtes
+					 * to check for existence of a distributed hypertable
+					 */
+					if (rte->rtekind == RTE_SUBQUERY)
+					{
+						distributed = false;
+						if (distributed_rtes_walker((Node *) rte->subquery, &distributed) &&
+							distributed)
+						{
+							copy_possible = false;
+							break;
+						}
+					}
+				}
+			}
 		}
 	}
 
