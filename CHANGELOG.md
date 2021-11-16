@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #3739 Fix compression policy on tables using INTEGER
 * #3766 Fix segfault in ts_hist_sfunc
 * #3789 Fix time_bucket comparison transformation
+* #3784 Fix DISTINCT ON queries returning incorrect results on distributed hypertables
 * #3801 Fail size utility functions when data nodes do not respond
 
 **Thanks**

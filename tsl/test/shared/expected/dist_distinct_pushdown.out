@@ -1,0 +1,178 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test DISTINCT ON pushdown.
+-- The case with LIMIT serves as a reference.
+select ts, id from distinct_on_hypertable order by id, ts desc limit 1;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+(1 row)
+
+select ts, id from distinct_on_distributed order by id, ts desc limit 1;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+(1 row)
+
+-- DISTINCT ON should match the above LIMIT for the first id.
+select distinct on (id) ts, id from distinct_on_hypertable order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+ Fri Jan 01 03:47:38 2021 |  1
+ Fri Jan 01 03:47:39 2021 |  2
+ Fri Jan 01 03:47:40 2021 |  3
+(4 rows)
+
+select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+ Fri Jan 01 03:47:38 2021 |  1
+ Fri Jan 01 03:47:39 2021 |  2
+ Fri Jan 01 03:47:40 2021 |  3
+(4 rows)
+
+explain (costs off, verbose)
+select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Data node: data_node_1
+         Chunks: _dist_hyper_X_X_chunk
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+(7 rows)
+
+-- A case where we have a filter on the DISTINCT ON column.
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+ Fri Jan 01 03:47:38 2021 |  1
+(2 rows)
+
+explain (costs off, verbose)
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
+                                                                                                                           QUERY PLAN                                                                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Data node: data_node_1
+         Chunks: _dist_hyper_X_X_chunk
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+(7 rows)
+
+-- A somewhat dumb case where the DISTINCT ON column is deduced to be constant
+-- and not added to pathkeys.
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+(1 row)
+
+explain (costs off, verbose)
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Sort
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Sort Key: distinct_on_distributed.ts DESC
+         ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+               Output: distinct_on_distributed.ts, distinct_on_distributed.id
+               Data node: data_node_1
+               Chunks: _dist_hyper_X_X_chunk
+               Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = 0))
+(10 rows)
+
+-- All above but with disabled local sort, to try to force more interesting plans where the sort
+-- is pushed down.
+set enable_sort = 0;
+select ts, id from distinct_on_distributed order by id, ts desc limit 1;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+(1 row)
+
+explain (costs off, verbose)
+select ts, id from distinct_on_distributed order by id, ts desc limit 1;
+                                                                                                    QUERY PLAN                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Data node: data_node_1
+         Chunks: _dist_hyper_X_X_chunk
+         Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST LIMIT 1
+(7 rows)
+
+select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+ Fri Jan 01 03:47:38 2021 |  1
+ Fri Jan 01 03:47:39 2021 |  2
+ Fri Jan 01 03:47:40 2021 |  3
+(4 rows)
+
+explain (costs off, verbose)
+select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Data node: data_node_1
+         Chunks: _dist_hyper_X_X_chunk
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+(7 rows)
+
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+ Fri Jan 01 03:47:38 2021 |  1
+(2 rows)
+
+explain (costs off, verbose)
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
+                                                                                                                           QUERY PLAN                                                                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Data node: data_node_1
+         Chunks: _dist_hyper_X_X_chunk
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+(7 rows)
+
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
+            ts            | id 
+--------------------------+----
+ Fri Jan 01 03:47:41 2021 |  0
+(1 row)
+
+explain (costs off, verbose)
+select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
+                                                                                              QUERY PLAN                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   Output: distinct_on_distributed.ts, distinct_on_distributed.id
+   ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
+         Output: distinct_on_distributed.ts, distinct_on_distributed.id
+         Data node: data_node_1
+         Chunks: _dist_hyper_X_X_chunk
+         Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = 0)) ORDER BY ts DESC NULLS FIRST
+(7 rows)
+
+reset enable_sort;
