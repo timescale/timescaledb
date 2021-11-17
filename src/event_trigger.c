@@ -93,7 +93,7 @@ extract_addrnames(ArrayType *arr)
 	List *list = NIL;
 	int i;
 
-	deconstruct_array(arr, TEXTOID, -1, false, 'i', &elems, &nulls, &nelems);
+	deconstruct_array(arr, TEXTOID, -1, false, TYPALIGN_INT, &elems, &nulls, &nelems);
 
 	for (i = 0; i < nelems; i++)
 	{
