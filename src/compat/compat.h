@@ -449,4 +449,15 @@ get_reindex_options(ReindexStmt *stmt)
 #define find_em_expr_for_rel ts_find_em_expr_for_rel
 #endif
 
+/* PG13 added macros for typalign and typstorage constants
+ *
+ * https://github.com/postgres/postgres/commit/3ed2005ff59
+ */
+#if PG12
+#define TYPALIGN_CHAR 'c'   /* char alignment (i.e. unaligned) */
+#define TYPALIGN_SHORT 's'  /* short alignment (typically 2 bytes) */
+#define TYPALIGN_INT 'i'	/* int alignment (typically 4 bytes) */
+#define TYPALIGN_DOUBLE 'd' /* double alignment (often 8 bytes) */
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
