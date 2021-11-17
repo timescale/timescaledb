@@ -12,10 +12,12 @@ accidentally triggering the load of a previous DB version.**
 * #3789 Fix time_bucket comparison transformation
 * #3784 Fix DISTINCT ON queries returning incorrect results on distributed hypertables
 * #3801 Fail size utility functions when data nodes do not respond
+* #3781 Segfault in fill_result_error()
 
 **Thanks**
 * @cbisnett for reporting and fixing a typo in an error message
 * @CaptainCuddleCube for reporting bug on compression policy procedure on tables using INTEGER on time dimension
+* @phemmer for continuously reporting bugs on multi-node
 
 ## 2.5.0 (2021-10-28)
 
