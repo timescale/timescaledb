@@ -132,13 +132,13 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
 				continue;
 			int collen = 1;
-			if (segidx > 0 && (seglen - segidx) > collen )
+			if (segidx > 0 && (seglen - segidx) > collen)
 			{
 				strlcpy(segmentby + segidx, ",", collen + 1);
 				segidx = segidx + 1;
 			}
 			collen = strlen(grpcol);
-			if (seglen - segidx > collen )
+			if (seglen - segidx > collen)
 			{
 				strlcpy(segmentby + segidx, grpcol, collen + 1);
 				segidx = segidx + collen;
@@ -203,22 +203,22 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 	if (!with_clause_options[ContinuousEnabled].is_default)
 		elog(ERROR, "cannot disable continuous aggregates");
 
+	/* whenever materialized_only is specified, we force a view defintion rewrite
+	 * Do not optimize. post-update.sql often relies on this behavior to update
+	 * cagg view defintions
+	 */
 	if (!with_clause_options[ContinuousViewOptionMaterializedOnly].is_default)
 	{
-		bool materialized_only =
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+		agg->data.materialized_only =
 			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
-		if (agg->data.materialized_only != materialized_only)
-		{
-			Cache *hcache = ts_hypertable_cache_pin();
-			Hypertable *mat_ht =
-				ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
-			agg->data.materialized_only = materialized_only;
-			Assert(mat_ht != NULL);
+		Assert(mat_ht != NULL);
 
-			cagg_update_view_definition(agg, mat_ht);
-			update_materialized_only(agg, agg->data.materialized_only);
-			ts_cache_release(hcache);
-		}
+		cagg_update_view_definition(agg, mat_ht);
+		update_materialized_only(agg, agg->data.materialized_only);
+		ts_cache_release(hcache);
 	}
 	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
 	{
