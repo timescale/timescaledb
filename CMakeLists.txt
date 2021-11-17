@@ -507,6 +507,9 @@ endif()
 option(LINTER "Enable linter support using clang-tidy (ON when using clang)"
        ${LINTER_DEFAULT})
 
+set(LINTER_STRICT_DEFAULT OFF)
+option(LINTER_STRICT "Treat linter warnings as errors" ${LINTER_STRICT_DEFAULT})
+
 if(LINTER)
   find_program(
     CLANG_TIDY clang-tidy
@@ -516,7 +519,13 @@ if(LINTER)
 
   if(CLANG_TIDY)
     message(STATUS "Linter support (clang-tidy) enabled")
-    set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY};--quiet")
+    if(LINTER_STRICT)
+      set(CMAKE_C_CLANG_TIDY
+          "${CLANG_TIDY};--warnings-as-errors=clang-diagnostic-*,clang-analyzer-*,-*,clang-analyzer-core.*,clang-diagnostic-*"
+      )
+    else()
+      set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY};--quiet")
+    endif(LINTER_STRICT)
   else()
     message(STATUS "Install clang-tidy to enable code linting")
   endif(CLANG_TIDY)
