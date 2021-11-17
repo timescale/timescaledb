@@ -5591,6 +5591,45 @@ FROM dummy;
  Tue Jan 02 12:00:00 2018
 (1 row)
 
+-- Exercise some more stable timestamp-related functions.
+EXPLAIN (COSTS OFF, VERBOSE)
+SELECT * FROM test_tz WHERE date_trunc('month', time) > date_in('2021-01-01')
+	AND time::time > '00:00:00'::time
+		+ (INTERVAL '1 hour') * date_part('hour', INTERVAL '1 hour');
+                                                                                                                                      QUERY PLAN                                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend)
+   Output: test_tz."time", test_tz.v
+   ->  Append
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_1
+               Output: test_tz_1."time", test_tz_1.v
+               Data node: db_dist_hypertable_1
+               Chunks: _dist_hyper_31_97_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[45]) AND (("time"::time without time zone > '01:00:00'::time without time zone)) AND ((date_trunc('month'::text, "time") > '2021-01-01'::date))
+               Remote EXPLAIN: 
+                 Seq Scan on _timescaledb_internal._dist_hyper_31_97_chunk
+                   Output: _dist_hyper_31_97_chunk."time", _dist_hyper_31_97_chunk.v
+                   Filter: (((_dist_hyper_31_97_chunk."time")::time without time zone > '01:00:00'::time without time zone) AND (date_trunc('month'::text, _dist_hyper_31_97_chunk."time") > '2021-01-01'::date))
+ 
+         ->  Custom Scan (DataNodeScan) on public.test_tz test_tz_2
+               Output: test_tz_2."time", test_tz_2.v
+               Data node: db_dist_hypertable_2
+               Chunks: _dist_hyper_31_95_chunk, _dist_hyper_31_96_chunk, _dist_hyper_31_98_chunk
+               Remote SQL: SELECT "time", v FROM public.test_tz WHERE _timescaledb_internal.chunks_in(public.test_tz.*, ARRAY[43, 44, 45]) AND (("time"::time without time zone > '01:00:00'::time without time zone)) AND ((date_trunc('month'::text, "time") > '2021-01-01'::date))
+               Remote EXPLAIN: 
+                 Append
+                   ->  Seq Scan on _timescaledb_internal._dist_hyper_31_95_chunk
+                         Output: _dist_hyper_31_95_chunk."time", _dist_hyper_31_95_chunk.v
+                         Filter: (((_dist_hyper_31_95_chunk."time")::time without time zone > '01:00:00'::time without time zone) AND (date_trunc('month'::text, _dist_hyper_31_95_chunk."time") > '2021-01-01'::date))
+                   ->  Seq Scan on _timescaledb_internal._dist_hyper_31_96_chunk
+                         Output: _dist_hyper_31_96_chunk."time", _dist_hyper_31_96_chunk.v
+                         Filter: (((_dist_hyper_31_96_chunk."time")::time without time zone > '01:00:00'::time without time zone) AND (date_trunc('month'::text, _dist_hyper_31_96_chunk."time") > '2021-01-01'::date))
+                   ->  Seq Scan on _timescaledb_internal._dist_hyper_31_98_chunk
+                         Output: _dist_hyper_31_98_chunk."time", _dist_hyper_31_98_chunk.v
+                         Filter: (((_dist_hyper_31_98_chunk."time")::time without time zone > '01:00:00'::time without time zone) AND (date_trunc('month'::text, _dist_hyper_31_98_chunk."time") > '2021-01-01'::date))
+ 
+(30 rows)
+
 -- Check that the test function for partly overriding now() works. It's very
 -- hacky and only has effect when we estimate some costs or evaluate sTABLE
 -- functions in quals on access node, and has no effect in other cases.

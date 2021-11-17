@@ -1862,6 +1862,12 @@ WITH dummy AS (SELECT '2018-01-02 12:00:00 +00'::timestamptz::timestamp x)
 SELECT x + (x = x)::int * (x = '2018-01-02 11:00:00'::timestamp)::int * INTERVAL '1 hour'
 FROM dummy;
 
+-- Exercise some more stable timestamp-related functions.
+EXPLAIN (COSTS OFF, VERBOSE)
+SELECT * FROM test_tz WHERE date_trunc('month', time) > date_in('2021-01-01')
+	AND time::time > '00:00:00'::time
+		+ (INTERVAL '1 hour') * date_part('hour', INTERVAL '1 hour');
+
 
 -- Check that the test function for partly overriding now() works. It's very
 -- hacky and only has effect when we estimate some costs or evaluate sTABLE
