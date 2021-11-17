@@ -281,7 +281,7 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 									CSTRINGOID,
 									-2, /* pg_type.typlen */
 									false,
-									'c');
+									TYPALIGN_CHAR);
 		pfree(fields);
 		SRF_RETURN_NEXT(funcctx, PointerGetDatum(array));
 	}

@@ -362,21 +362,21 @@ ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hyp
 										  INT4OID,
 										  4,
 										  true,
-										  'i');
+										  TYPALIGN_INT);
 
 	*bucket_widths = construct_array(widthdatums,
 									 list_length(all_caggs->bucket_widths),
 									 INT8OID,
 									 8,
 									 FLOAT8PASSBYVAL,
-									 'd');
+									 TYPALIGN_DOUBLE);
 
 	*max_bucket_widths = construct_array(maxwidthdatums,
 										 list_length(all_caggs->max_bucket_widths),
 										 INT8OID,
 										 8,
 										 FLOAT8PASSBYVAL,
-										 'd');
+										 TYPALIGN_DOUBLE);
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
