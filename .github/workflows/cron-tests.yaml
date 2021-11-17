@@ -7,32 +7,6 @@ on:
     branches:
       - prerelease_test
 jobs:
-  abi_breakage:
-    name: ABI Breakage PG${{ matrix.pg }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        pg: [12, 13, 14]
-        include:
-          - pg: 12
-            pg_minor_compile: 0
-          - pg: 13
-            pg_minor_compile: 2
-          - pg: 14
-            pg_minor_compile: 0
-    env:
-      PG_MAJOR: ${{ matrix.pg }}
-      PG_MINOR_COMPILE: ${{ matrix.pg_minor_compile }}
-
-    steps:
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v2
-
-    - name: ABI Test
-      run: |
-        ./scripts/docker-run-abi-test.sh
-
   backup_and_restore:
     name: Backup and restore
     runs-on: ubuntu-latest

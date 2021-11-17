@@ -1,0 +1,98 @@
+# Test minimum and maximum ABI compatible postgres version
+#
+# Build timescaledb against specific postgres version and then run our
+# tests with that library loaded in a different postgres version.
+# This is to detect changes in required minimum/maximum postgres versions
+# for our built packages.
+# This test is expected to fail when upstream does ABI incompatible changes
+# in a new minor postgresql version.
+name: ABI Test
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+jobs:
+  abi_test:
+    name: ABI Test ${{ matrix.type}} PG${{ matrix.pg }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ["12.8","13.4","14.0"]
+        type: ["min","max"]
+
+    steps:
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Build extension
+      run: |
+
+        if [[ "${{ matrix.type }}" == "min" ]]; then
+          PG_MAJOR=$(echo "${{matrix.pg}}" | cut -c 1-2 )
+          # this will be latest released version
+          BUILDER_IMAGE="postgres:${PG_MAJOR}-alpine"
+        else
+          BUILDER_IMAGE="postgres:${{matrix.pg}}-alpine"
+        fi
+
+        docker run -i --rm -v $(pwd):/mnt ${BUILDER_IMAGE} bash <<"EOF"
+          apk add cmake gcc make build-base krb5-dev openssl-dev > /dev/null
+          cd /mnt
+          BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
+          make -C build_abi install
+          mkdir -p build_abi/install_ext build_abi/install_lib
+          cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build_abi/install_ext
+          cp `pg_config --pkglibdir`/timescaledb*.so build_abi/install_lib
+        EOF
+
+    - name: Run tests
+      run: |
+
+        if [[ "${{ matrix.type }}" == "min" ]]; then
+          TEST_IMAGE="postgres:${{matrix.pg}}-alpine"
+        else
+          PG_MAJOR=$(echo "${{matrix.pg}}" | cut -c 1-2 )
+          # this will be latest released version
+          TEST_IMAGE="postgres:${PG_MAJOR}-alpine"
+        fi
+
+        docker run -i --rm -v $(pwd):/mnt ${TEST_IMAGE} bash <<"EOF"
+          apk add cmake gcc make build-base krb5-dev openssl-dev sudo > /dev/null
+          cd /mnt
+          cp build_abi/install_ext/* `pg_config --sharedir`/extension/
+          cp build_abi/install_lib/* `pg_config --pkglibdir`
+          chown -R postgres /mnt
+          set -o pipefail
+          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t regresscheck-shared | tee installcheck.log
+        EOF
+
+    - name: Show regression diffs
+      if: always()
+      id: collectlogs
+      run: |
+        sudo chmod a+rw .
+        sudo find . -name regression.diffs -exec cat {} + > regression.log
+        sudo find . -name postmaster.log -exec cat {} + > postgres.log
+        if [[ -s regression.log ]]; then echo "::set-output name=regression_diff::true"; fi
+        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        cat regression.log
+
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v2
+      with:
+        name: Regression diff ABI Breakage ${{ matrix.type }} PG${{ matrix.pg }}
+        path: regression.log
+
+    - name: Save postmaster.log
+      if: always()
+      uses: actions/upload-artifact@v2
+      with:
+        name: PostgreSQL log ABI Breakage ${{ matrix.type }} PG${{ matrix.pg }}
+        path: postgres.log
+
