@@ -288,7 +288,7 @@ fill_result_error(TSConnectionError *err, int errcode, const char *errmsg, const
 	const ResultEntry *entry = PQresultInstanceData(res, eventproc);
 	const char *sqlstate;
 
-	if (NULL == err || NULL == res)
+	if (NULL == err || NULL == res || NULL == entry)
 		return false;
 
 	Assert(entry->conn);
