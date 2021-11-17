@@ -1846,6 +1846,8 @@ remote_connection_cancel_query(TSConnection *conn)
 	if (!conn)
 		return true;
 
+	memset(&err, 0, sizeof(TSConnectionError));
+
 	/*
 	 * Catch exceptions so that we can ensure the status is IDLE after the
 	 * cancel operation even in case of errors being thrown. Note that we
