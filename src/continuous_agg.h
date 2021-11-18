@@ -62,9 +62,9 @@ typedef struct ContinuousAggMatOptions
 
 typedef struct CaggsInfoData
 {
-	List *mat_hypertable_ids; /* (int32) elements */
-	List *bucket_widths;	  /* (int64 *) elements */
-	List *max_bucket_widths;  /* (int64 *) elements */
+	List *mat_hypertable_ids; /* (int32) element */
+	List *bucket_widths;	  /* (int64) Datum */
+	List *max_bucket_widths;  /* (int64) Datum */
 } CaggsInfo;
 
 extern TSDLLEXPORT const CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);

@@ -775,7 +775,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	forboth (lc1, all_caggs->mat_hypertable_ids, lc2, all_caggs->bucket_widths)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
-		int64 bucket_width = *(int64 *) lfirst(lc2);
+		int64 bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
 		Invalidation mergedentry;
 		ScanIterator iterator;
 
@@ -1029,8 +1029,8 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 
 		if (cagg_hyper_id == mat_hypertable_id)
 		{
-			int64 bucket_width = *(int64 *) lfirst(lc2);
-			int64 max_bucket_width = *(int64 *) lfirst(lc3);
+			int64 bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
+			int64 max_bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc3)));
 
 			state->bucket_width = bucket_width;
 			state->max_bucket_width = max_bucket_width;
