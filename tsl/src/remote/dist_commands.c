@@ -84,8 +84,6 @@ ts_dist_cmd_collect_responses(List *requests)
  * If "transactional" is false then it means that the SQL should be executed
  * in autocommit (implicit statement level commit) mode without the need for
  * an explicit 2PC from the access node.
- *
- * If "multiple_cmds" is false then "sql" and "params" are not iterated over.
  */
 DistCmdResult *
 ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors, List *data_nodes,
@@ -188,6 +186,41 @@ ts_dist_cmd_invoke_on_data_nodes_using_search_path(const char *sql, const char *
 	}
 
 	results = ts_dist_cmd_invoke_on_data_nodes(sql, node_names, transactional);
+
+	if (set_search_path)
+	{
+		set_result = ts_dist_cmd_invoke_on_data_nodes("SET search_path = pg_catalog",
+													  node_names,
+													  transactional);
+		if (set_result)
+			ts_dist_cmd_close_response(set_result);
+	}
+
+	return results;
+}
+
+DistCmdResult *
+ts_dist_multi_cmds_invoke_on_data_nodes_using_search_path(List *cmd_descriptors,
+														  const char *search_path, List *node_names,
+														  bool transactional)
+{
+	DistCmdResult *set_result;
+	DistCmdResult *results;
+	bool set_search_path = search_path != NULL;
+
+	if (set_search_path)
+	{
+		char *set_request = psprintf("SET search_path = %s, pg_catalog", search_path);
+
+		set_result = ts_dist_cmd_invoke_on_data_nodes(set_request, node_names, transactional);
+		if (set_result)
+			ts_dist_cmd_close_response(set_result);
+
+		pfree(set_request);
+	}
+
+	results =
+		ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, node_names, transactional);
 
 	if (set_search_path)
 	{

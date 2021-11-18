@@ -4,9 +4,11 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <miscadmin.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/namespace.h>
 #include <commands/event_trigger.h>
+#include <commands/dbcommands.h>
 #include <nodes/parsenodes.h>
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
@@ -15,6 +17,7 @@
 
 #include <annotations.h>
 #include <guc.h>
+#include "compat/compat.h"
 #include "data_node.h"
 #include "hypertable_data_node.h"
 #include "chunk_index.h"
@@ -26,6 +29,7 @@
 #include "remote/connection_cache.h"
 #include "scan_iterator.h"
 #include "dist_util.h"
+#include "deparse.h"
 
 /* DDL Query execution type */
 typedef enum
@@ -111,6 +115,23 @@ dist_ddl_error_if_not_allowed_data_node_session(void)
 	dist_ddl_error_raise_blocked();
 }
 
+static void
+dist_ddl_state_add_remote_command(const char *cmd)
+{
+	MemoryContext mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
+	dist_ddl_state.remote_commands =
+		lappend(dist_ddl_state.remote_commands, makeString(pstrdup(cmd)));
+	MemoryContextSwitchTo(mctx);
+}
+
+static void
+dist_ddl_state_add_remote_command_list(List *list)
+{
+	MemoryContext mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
+	dist_ddl_state.remote_commands = lappend(dist_ddl_state.remote_commands, list);
+	MemoryContextSwitchTo(mctx);
+}
+
 /*
  * Set the exec type for a distributed command, i.e., whether to forward the
  * DDL statement before or after PostgreSQL has processed it locally.
@@ -126,12 +147,17 @@ dist_ddl_state_set_exec_type(DistDDLExecType type)
 	dist_ddl_state.exec_type = type;
 }
 
-static void
-dist_ddl_state_add_remote_command(const char *cmd)
+/*
+ * Set an execution type and add current query string as the command for
+ * execution on data nodes.
+ */
+static inline void
+dist_ddl_state_schedule(DistDDLExecType type, ProcessUtilityArgs *args)
 {
-	MemoryContext mctx = MemoryContextSwitchTo(dist_ddl_state.mctx);
-	dist_ddl_state.remote_commands = lappend(dist_ddl_state.remote_commands, pstrdup(cmd));
-	MemoryContextSwitchTo(mctx);
+	Assert(dist_ddl_state.exec_type == DIST_DDL_EXEC_NONE);
+	Assert(type != DIST_DDL_EXEC_NONE);
+	dist_ddl_state.exec_type = type;
+	dist_ddl_state_add_remote_command(args->query_string);
 }
 
 static bool
@@ -346,7 +372,7 @@ dist_ddl_process_drop(ProcessUtilityArgs *args)
 		 * empty. Wait for sql_drop events.
 		 */
 		if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
-			dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_END);
+			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
 
 		return;
 	}
@@ -364,11 +390,11 @@ dist_ddl_process_drop(ProcessUtilityArgs *args)
 			 * drop to be handled in combination with table or schema
 			 * drop.
 			 */
-			dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_END);
+			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
 			break;
 
 		case OBJECT_TRIGGER:
-			dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 			break;
 
 		default:
@@ -399,7 +425,7 @@ dist_ddl_process_alter_object_schema(ProcessUtilityArgs *args)
 		 * Save oid for dist_ddl_end execution.
 		 */
 		dist_ddl_state.relid = linitial_oid(args->hypertable_list);
-		dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_END);
+		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
 	}
 }
 
@@ -421,20 +447,97 @@ dist_ddl_process_rename(ProcessUtilityArgs *args)
 		 * Save oid for dist_ddl_end execution.
 		 */
 		dist_ddl_state.relid = linitial_oid(args->hypertable_list);
-		dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_END);
+		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
 		return;
 	}
 
 	/* Only handles other renamings here (e.g., triggers) */
 	if (dist_ddl_state_set_hypertable(args))
-		dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 }
 
 static void
 dist_ddl_process_grant_on_database(ProcessUtilityArgs *args)
 {
-	(void) args;
-	/* TBD */
+	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+	const char *dbname;
+	bool dbmatch;
+	List *cmd_descriptors = NIL;
+	ListCell *i, *j;
+
+	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
+		return;
+
+	/*
+	 * Check if the GRANT statement targets the current database.
+	 *
+	 * If the current database being used and it is distributed we
+	 * rewrite and execute GRANT ON DATABASE statement for each data
+	 * node specifically.
+	 *
+	 * If there are multiple databases in the list, we can't determine
+	 * whether they are disributed or not, so we prevent this
+	 * operation.
+	 */
+	dbname = get_database_name(MyDatabaseId);
+	dbmatch = false;
+	foreach (i, stmt->objects)
+	{
+		Value *value = lfirst(i);
+
+		if (!strcmp(dbname, strVal(value)))
+		{
+			dbmatch = true;
+			break;
+		}
+	}
+
+	if (!dbmatch)
+		return;
+
+	/* Prevent using and mixing several databases in the statement */
+	if (list_length(stmt->objects) > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot change privileges on multiple databases"),
+				 errdetail("It is not possible to grant privileges on multiple "
+						   "databases in a single statement when one of them is a distributed "
+						   "database.")));
+
+	/* Rewrite GRANT/REVOKE ON DATABASE query per each data node, since
+	 * each data node might have different database name */
+	dist_ddl_state_add_current_data_node_list();
+
+	foreach (i, dist_ddl_state.data_node_list)
+	{
+		const char *data_node_name = lfirst(i);
+		const char *data_node_dbname = NULL;
+		ForeignServer *server;
+		DistCmdDescr *cmd_desc;
+
+		/* Get data node database name from foreign server options */
+		server = GetForeignServerByName(data_node_name, false);
+		foreach (j, server->options)
+		{
+			DefElem *opt = (DefElem *) lfirst(j);
+			if (!strcmp(opt->defname, "dbname"))
+			{
+				data_node_dbname = defGetString(opt);
+				break;
+			}
+		}
+
+		/* Create a query using data node's database name */
+		Assert(data_node_dbname != NULL);
+		cmd_desc = palloc0(sizeof(DistCmdDescr));
+		cmd_desc->sql = deparse_grant_revoke_on_database(args->parsetree, data_node_dbname);
+		cmd_descriptors = lappend(cmd_descriptors, cmd_desc);
+
+		elog(DEBUG1, "[%s]: %s", data_node_name, cmd_desc->sql);
+	}
+
+	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+	dist_ddl_state_add_remote_command_list(cmd_descriptors);
 }
 
 static void
@@ -485,7 +588,7 @@ dist_ddl_process_grant_on_schema(ProcessUtilityArgs *args)
 
 	if (exec_on_datanodes)
 	{
-		dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 		dist_ddl_state_add_current_data_node_list();
 	}
 }
@@ -496,7 +599,7 @@ dist_ddl_process_grant_on_table(ProcessUtilityArgs *args)
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
 
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 }
 
 static void
@@ -591,7 +694,7 @@ dist_ddl_process_alter_table(ProcessUtilityArgs *args)
 		}
 	}
 
-	dist_ddl_state_set_exec_type(exec_type);
+	dist_ddl_state_schedule(exec_type, args);
 }
 
 static void
@@ -602,7 +705,7 @@ dist_ddl_process_index(ProcessUtilityArgs *args)
 
 	/* Since we have custom CREATE INDEX implementation, currently it
 	 * does not support ddl_command_end trigger. */
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 }
 
 static void
@@ -611,7 +714,7 @@ dist_ddl_process_reindex(ProcessUtilityArgs *args)
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
 
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 }
 
 static void
@@ -619,7 +722,7 @@ dist_ddl_process_copy(ProcessUtilityArgs *args)
 {
 	/* Skip COPY here, since it has its own process path using
 	 * cross module API. */
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_NONE);
+	(void) args;
 }
 
 static void
@@ -644,7 +747,7 @@ dist_ddl_process_create_trigger(ProcessUtilityArgs *args)
 		dist_ddl_state_add_remote_command(TextDatumGetCString(datum));
 	}
 
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 }
 
 static void
@@ -660,7 +763,7 @@ dist_ddl_process_vacuum(ProcessUtilityArgs *args)
 	if (get_vacuum_options(stmt) & VACOPT_VERBOSE)
 		dist_ddl_error_raise_unsupported();
 
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START_NO_2PC);
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START_NO_2PC, args);
 }
 
 static void
@@ -683,7 +786,7 @@ dist_ddl_process_truncate(ProcessUtilityArgs *args)
 	if (list_length(stmt->relations) != 0)
 		dist_ddl_error_raise_unsupported();
 
-	dist_ddl_state_set_exec_type(DIST_DDL_EXEC_ON_START);
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 }
 
 static void
@@ -771,32 +874,66 @@ dist_ddl_process(ProcessUtilityArgs *args)
 			dist_ddl_process_unsupported(args);
 			break;
 	}
-
-	if (dist_ddl_scheduled_for_execution())
-		dist_ddl_state_add_remote_command(args->query_string);
 }
 
 static void
 dist_ddl_execute(bool transactional)
 {
-	DistCmdResult *result;
+	const char *search_path;
+	ListCell *lc;
 
 	/* Execute command on data nodes using local search_path. */
-	if (list_length(dist_ddl_state.data_node_list) > 0)
+	if (list_length(dist_ddl_state.data_node_list) == 0)
 	{
-		const char *search_path = GetConfigOption("search_path", false, false);
-		ListCell *lc;
+		dist_ddl_state_reset();
+		return;
+	}
 
-		foreach (lc, dist_ddl_state.remote_commands)
+	search_path = GetConfigOption("search_path", false, false);
+
+	foreach (lc, dist_ddl_state.remote_commands)
+	{
+		void *command = lfirst(lc);
+		NodeTag command_tag = nodeTag(command);
+		DistCmdResult *result = NULL;
+
+		switch (command_tag)
 		{
-			result =
-				ts_dist_cmd_invoke_on_data_nodes_using_search_path(lfirst(lc),
-																   search_path,
-																   dist_ddl_state.data_node_list,
-																   transactional);
+			case T_String:
+			{
+				/* Execute single SQL command on each data node from the list */
+				const char *sql = strVal(command);
 
-			if (result)
-				ts_dist_cmd_close_response(result);
+				result = ts_dist_cmd_invoke_on_data_nodes_using_search_path(sql,
+																			search_path,
+																			dist_ddl_state
+																				.data_node_list,
+																			transactional);
+				break;
+			}
+			case T_List:
+			{
+				/* Execute separate SQL command on each data node from the list */
+				List *cmd_descriptors = command;
+				Assert(list_length(dist_ddl_state.data_node_list) == list_length(cmd_descriptors));
+
+				result =
+					ts_dist_multi_cmds_invoke_on_data_nodes_using_search_path(cmd_descriptors,
+																			  search_path,
+																			  dist_ddl_state
+																				  .data_node_list,
+																			  transactional);
+				break;
+			}
+			default:
+				pg_unreachable();
+				break;
+		}
+
+		if (result)
+		{
+			ts_dist_cmd_close_response(result);
+			result = NULL;
 		}
 	}
 
