@@ -1,0 +1,43 @@
+---
+name: Feature request
+description: Suggest a new feature for TimescaleDB
+title: "[Feature]: <Feature name>"
+labels: [ "feature-request" ]
+body:
+  - type: markdown
+    id: info
+    attributes:
+      value: |
+        Only use this template to suggest a new feature that doesn't already exist in TimescaleDB.
+        For enhancements to existing features, use the "Enhancement" issue template. For bugs,
+        use the bug report template.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What problem does the new feature solve?
+      description: |
+        Describe the problem and why it is important to solve. Did you consider alternative
+        solutions, perhaps outside the database? Why is it better to add the feature to
+        TimescaleDB?
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: What does the feature do?
+      description: |
+        Give a high-level overview of what the feature does and how it would work.
+    validations:
+     required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation challenges
+      description: |
+        If you have ideas of how to implement the feature, and any particularly
+        challenging issues to overcome, then provide them here.
+    validations:
+      required: false
