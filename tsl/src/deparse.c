@@ -922,3 +922,84 @@ deparse_oid_function_call_coll(Oid funcid, Oid collation, unsigned int num_args,
 
 	return result;
 }
+
+const char *
+deparse_grant_revoke_on_database(Node *node, const char *dbname)
+{
+	GrantStmt *stmt = castNode(GrantStmt, node);
+	ListCell *lc;
+
+	/*
+	   GRANT { { CREATE | CONNECT | TEMPORARY | TEMP } [, ...] | ALL [ PRIVILEGES ] }
+	   ON DATABASE database_name [, ...]
+	   TO role_specification [, ...] [ WITH GRANT OPTION ]
+	   [ GRANTED BY role_specification ]
+
+	   REVOKE [ GRANT OPTION FOR ]
+	   { { CREATE | CONNECT | TEMPORARY | TEMP } [, ...] | ALL [ PRIVILEGES ] }
+	   ON DATABASE database_name [, ...]
+	   FROM role_specification [, ...]
+	   [ GRANTED BY role_specification ]
+	   [ CASCADE | RESTRICT ]
+	*/
+	StringInfo command = makeStringInfo();
+
+	/* GRANT/REVOKE */
+	if (stmt->is_grant)
+		appendStringInfoString(command, "GRANT ");
+	else
+		appendStringInfoString(command, "REVOKE ");
+
+	/* privileges [, ...] | ALL */
+	if (stmt->privileges == NULL)
+	{
+		/* ALL */
+		appendStringInfoString(command, "ALL ");
+	}
+	else
+	{
+		foreach (lc, stmt->privileges)
+		{
+			AccessPriv *priv = lfirst(lc);
+
+			appendStringInfo(command,
+							 "%s%s ",
+							 priv->priv_name,
+							 lnext_compat(stmt->privileges, lc) != NULL ? "," : "");
+		}
+	}
+
+	/* Set database name of the data node */
+	appendStringInfo(command, "ON DATABASE %s ", quote_identifier(dbname));
+
+	/* TO/FROM role_spec [, ...] */
+	if (stmt->is_grant)
+		appendStringInfoString(command, "TO ");
+	else
+		appendStringInfoString(command, "FROM ");
+
+	foreach (lc, stmt->grantees)
+	{
+		RoleSpec *role_spec = lfirst(lc);
+
+		appendStringInfo(command,
+						 "%s%s ",
+						 role_spec->rolename,
+						 lnext_compat(stmt->grantees, lc) != NULL ? "," : "");
+	}
+
+	if (stmt->grant_option)
+		appendStringInfoString(command, "WITH GRANT OPTION ");
+
+#if PG14
+	/* [ GRANTED BY role_specification ] */
+	if (stmt->grantor)
+		appendStringInfo(command, "GRANTED BY %s ", quote_identifier(stmt->grantor->rolename));
+#endif
+
+	/* CASCADE | RESTRICT */
+	if (!stmt->is_grant && stmt->behavior == DROP_CASCADE)
+		appendStringInfoString(command, "CASCADE");
+
+	return command->data;
+}

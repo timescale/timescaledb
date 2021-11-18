@@ -1033,6 +1033,64 @@ SELECT * FROM CHUNK_QRY1 WHERE schema = 'public';
 (1 row)
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+-- Test GRANT/REVOKE on DATABASE
+SET client_min_messages TO DEBUG1;
+-- Test GRANT/REVOKE command being deparsed with the database name and
+-- being propagated to the data nodes
+GRANT ALL ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  [data1]: GRANT ALL ON DATABASE db_dist_grant_1 TO cluster_super_user 
+DEBUG:  [data2]: GRANT ALL ON DATABASE db_dist_grant_2 TO cluster_super_user 
+DEBUG:  [data3]: GRANT ALL ON DATABASE db_dist_grant_3 TO cluster_super_user 
+DEBUG:  [data4]: GRANT ALL ON DATABASE db_dist_grant_4 TO cluster_super_user 
+DEBUG:  rehashing catalog cache id 78 for pg_user_mapping; 5 tups, 2 buckets
+GRANT TEMP ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  [data1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user 
+DEBUG:  [data2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user 
+DEBUG:  [data3]: GRANT temp ON DATABASE db_dist_grant_3 TO cluster_super_user 
+DEBUG:  [data4]: GRANT temp ON DATABASE db_dist_grant_4 TO cluster_super_user 
+GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO cluster_super_user 
+DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO cluster_super_user 
+DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO cluster_super_user 
+DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO cluster_super_user 
+GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER, :ROLE_DEFAULT_PERM_USER;
+DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO cluster_super_user, default_perm_user 
+DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO cluster_super_user, default_perm_user 
+DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO cluster_super_user, default_perm_user 
+DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO cluster_super_user, default_perm_user 
+GRANT TEMP ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER WITH GRANT OPTION;
+DEBUG:  [data1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user WITH GRANT OPTION 
+DEBUG:  [data2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user WITH GRANT OPTION 
+DEBUG:  [data3]: GRANT temp ON DATABASE db_dist_grant_3 TO cluster_super_user WITH GRANT OPTION 
+DEBUG:  [data4]: GRANT temp ON DATABASE db_dist_grant_4 TO cluster_super_user WITH GRANT OPTION 
+REVOKE TEMP ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  [data1]: REVOKE temp ON DATABASE db_dist_grant_1 FROM cluster_super_user 
+DEBUG:  [data2]: REVOKE temp ON DATABASE db_dist_grant_2 FROM cluster_super_user 
+DEBUG:  [data3]: REVOKE temp ON DATABASE db_dist_grant_3 FROM cluster_super_user 
+DEBUG:  [data4]: REVOKE temp ON DATABASE db_dist_grant_4 FROM cluster_super_user 
+REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user 
+DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
+DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
+DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user 
+REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER CASCADE;
+DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user CASCADE
+DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user CASCADE
+DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user CASCADE
+DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user CASCADE
+REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER RESTRICT;
+DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user 
+DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
+DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
+DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user 
+-- Grant on other database should not be propagated
+GRANT CREATE ON DATABASE :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
+-- Prevent mixing databases
+\set ON_ERROR_STOP 0
+GRANT CREATE ON DATABASE :TEST_DBNAME, :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
+ERROR:  cannot change privileges on multiple databases
+\set ON_ERROR_STOP 1
+RESET client_min_messages;
 -- Test GRANT on foreign server and data node authentication using a
 -- user mapping
 SET ROLE :ROLE_3;
