@@ -1,2 +1,1 @@
---- rewrite cagg to ensure selectedCols is set correctly in the view rules --
---- we do this in post-update.sql
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;

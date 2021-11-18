@@ -113,6 +113,10 @@ SELECT ht.schema_name AS hypertable_schema,
   cagg.user_view_name AS view_name,
   viewinfo.viewowner AS view_owner,
   cagg.materialized_only,
+  CASE WHEN mat_ht.compressed_hypertable_id is NOT NULL 
+       THEN TRUE 
+       ELSE FALSE 
+  END as compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition
@@ -134,7 +138,7 @@ FROM _timescaledb_catalog.continuous_agg cagg,
     AND C.relname = cagg.direct_view_name
     AND N.nspname = cagg.direct_view_schema) directview,
   LATERAL (
-    SELECT schema_name, table_name
+    SELECT schema_name, table_name, compressed_hypertable_id 
     FROM _timescaledb_catalog.hypertable
     WHERE cagg.mat_hypertable_id = id) mat_ht
 WHERE cagg.raw_hypertable_id = ht.id;
