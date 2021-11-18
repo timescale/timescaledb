@@ -2,5 +2,6 @@
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_interval(INTEGER, INTEGER, INTERVAL, INTEGER, BOOLEAN, BOOLEAN);
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_integer(INTEGER, INTEGER, BIGINT, INTEGER, BOOLEAN, BOOLEAN);
 
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 --- rewrite cagg to ensure selectedCols is set correctly in the view rules --
 --- we do this in post-update.sql
