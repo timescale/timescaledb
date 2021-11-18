@@ -13,6 +13,7 @@ accidentally triggering the load of a previous DB version.**
 * #3784 Fix DISTINCT ON queries returning incorrect results on distributed hypertables
 * #3801 Fail size utility functions when data nodes do not respond
 * #3781 Segfault in fill_result_error()
+* #3779 Support GRANT/REVOKE on distributed database
 
 **Thanks**
 * @cbisnett for reporting and fixing a typo in an error message
