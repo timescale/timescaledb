@@ -1,0 +1,158 @@
+---
+name: Bug report
+description: Is something not working? Help us fix it!
+title: "[Bug]: <Title>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: What type of bug is this?
+      multiple: true
+      options:
+        - Crash
+        - Performance issue
+        - Incorrect result
+        - Data corruption
+        - Locking issue
+        - Unexpected error
+        - Configuration
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: What subsystems and features are affected?
+      description: You can pick multiple subsystems and features.
+      multiple: true
+      options:
+        - Query planner
+        - Query executor
+        - Command processing
+        - Continuous aggregate
+        - Background worker
+        - Policy
+        - User-Defined Action (UDA)
+        - Data ingestion
+        - Compression
+        - Configuration
+        - Multi-node
+        - Distributed hypertable
+        - Access node
+        - Data node
+        - Node management
+        - Replication
+        - Gapfill
+        - SkipScan
+        - Partitioning
+        - Adaptive chunking
+        - Telemetry
+        - Build system
+        - Platform/OS
+        - Backup
+        - Restore
+        - Packaging
+        - Other
+    validations:
+      required: true
+        
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: |
+        Tell us what happened and also what you would have expected to
+        happen instead.
+      placeholder: "Describe the bug"
+    validations:
+      required: true
+      
+  - type: input
+    id: timescaledb-version
+    attributes:
+      label: TimescaleDB version affected
+      description: Let us know what version of TimescaleDB you are running.
+      placeholder: "2.5.0"
+    validations:
+      required: true
+      
+  - type: input
+    id: postgresql-version
+    attributes:
+      label: PostgreSQL version used
+      description: Let us know what version of PostgreSQL you are running.
+      placeholder: "14.1"
+    validations:
+      required: true
+      
+  - type: input
+    id: os
+    attributes:
+      label: What operating system did you use?
+      description: |
+        Please provide OS, version, and architecture. For example:
+        Windows 10 x64, Ubuntu 21.04 x64, Mac OS X 10.5 ARM, Rasperry
+        Pi i386, etc.
+      placeholder: "Ubuntu 21.04 x64"
+    validations:
+      required: true
+      
+  - type: dropdown
+    id: installation
+    attributes:
+      label: What installation method did you use?
+      multiple: true
+      options:
+        - Source
+        - Docker
+        - Deb/Apt
+        - RPM
+        - Homebrew
+        - Other
+        - Not applicable
+    validations:
+      required: true
+      
+  - type: dropdown
+    id: platform
+    attributes:
+      label: What platform did you run on?
+      multiple: true
+      options:
+        - Timescale Cloud
+        - Managed Service for TimescaleDB (MST/Aiven)
+        - Amazon Web Services (AWS)
+        - Google Cloud Platform (GCP)
+        - Microsoft Azure Cloud
+        - On prem/Self-hosted
+        - Other
+        - Not applicable
+    validations:
+      required: true
+      
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output and stack trace
+      description: |
+        Please copy and paste any relevant log output or a stack
+        trace. This will be automatically formatted into code, so no
+        need for backticks.
+      render: bash
+      
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce the bug?
+      description: |
+        Please try to provide step-by-step instructions how to
+        reproduce the issue. If possible, provide scripts that we can
+        run to trigger the bug.
+      render: bash
