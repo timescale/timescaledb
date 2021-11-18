@@ -258,7 +258,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 
 	List *caggs = ts_continuous_aggs_find_by_raw_table_id(raw_hypertable_id);
 	ListCell *lc;
-	int64 *bucket_width;
+	Datum bucket_width;
 
 	all_caggs_info.bucket_widths = NIL;
 	all_caggs_info.max_bucket_widths = NIL;
@@ -269,13 +269,13 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	{
 		ContinuousAgg *cagg = lfirst(lc);
 
-		bucket_width = palloc(sizeof(*bucket_width));
-		*bucket_width = ts_continuous_agg_bucket_width(cagg);
-		all_caggs_info.bucket_widths = lappend(all_caggs_info.bucket_widths, bucket_width);
+		bucket_width = Int64GetDatum(ts_continuous_agg_bucket_width(cagg));
+		all_caggs_info.bucket_widths =
+			lappend(all_caggs_info.bucket_widths, DatumGetPointer(bucket_width));
 
-		bucket_width = palloc(sizeof(*bucket_width));
-		*bucket_width = ts_continuous_agg_max_bucket_width(cagg);
-		all_caggs_info.max_bucket_widths = lappend(all_caggs_info.max_bucket_widths, bucket_width);
+		bucket_width = Int64GetDatum(ts_continuous_agg_max_bucket_width(cagg));
+		all_caggs_info.max_bucket_widths =
+			lappend(all_caggs_info.max_bucket_widths, DatumGetPointer(bucket_width));
 
 		all_caggs_info.mat_hypertable_ids =
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
@@ -283,6 +283,10 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	return all_caggs_info;
 }
 
+/*
+ * Does not do deep copy of Datums For performance reasons. Make sure the arrays are not deallocated
+ * before CaggsInfo.
+ */
 TSDLLEXPORT void
 ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
 								   ArrayType *max_bucket_widths, CaggsInfo *all_caggs)
@@ -312,20 +316,23 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 		all_caggs->mat_hypertable_ids =
 			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
 
-		int64 *bucket_width;
-		bucket_width = palloc(sizeof(*bucket_width));
-		*bucket_width = DatumGetInt64(array_datum2);
-		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, bucket_width);
+		Datum bucket_width;
+		bucket_width = array_datum2;
+		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, DatumGetPointer(bucket_width));
 
-		bucket_width = palloc(sizeof(*bucket_width));
-		*bucket_width = DatumGetInt64(array_datum3);
-		all_caggs->max_bucket_widths = lappend(all_caggs->max_bucket_widths, bucket_width);
+		bucket_width = array_datum3;
+		all_caggs->max_bucket_widths =
+			lappend(all_caggs->max_bucket_widths, DatumGetPointer(bucket_width));
 	}
 	array_free_iterator(it_htids);
 	array_free_iterator(it_widths);
 	array_free_iterator(it_maxes);
 }
 
+/*
+ * Does not do deep copy of Datums For performance reasons. Make sure the Caggsinfo is not
+ * deallocated before the arrays.
+ */
 TSDLLEXPORT void
 ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
 								 ArrayType **bucket_widths, ArrayType **max_bucket_widths)
@@ -348,11 +355,8 @@ ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hyp
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
 
-		int64 bucket_width = *(int64 *) lfirst(lc2);
-		widthdatums[i] = Int64GetDatum(bucket_width);
-
-		int64 max_bucket_width = *(int64 *) lfirst(lc3);
-		maxwidthdatums[i] = Int64GetDatum(max_bucket_width);
+		widthdatums[i] = PointerGetDatum(lfirst(lc2));
+		maxwidthdatums[i] = PointerGetDatum(lfirst(lc3));
 
 		++i;
 	}
