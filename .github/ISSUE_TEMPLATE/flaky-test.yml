@@ -1,0 +1,43 @@
+---
+name: Flaky test
+description: Report a flaky test that sometimes fails
+title: "[Flaky test] <Title>"
+labels: [ "flaky-test" ]
+body:
+  - type: input
+    id: tests
+    attributes:
+      label: Which test is flaky?
+      description: Use this template to submit reports about flaky tests (pass or fail with no underlying change in code) in TimescaleDB CI.
+    validations:
+      required: true
+
+  - type: input
+    id: since
+    attributes:
+      label: Since when has the test been flaky?
+      placeholder: November 5th, 2021
+    validations:
+      required: true
+
+  - type: input
+    id: link
+    attributes:
+      description: |
+        If possible, provide a link to the failed test run.
+      label: Link to the failed test run
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log output
+      description: |
+        Provide any log output related to the failed/flaky test.
+      render: bash
+      
+  - type: textarea
+    id: reason
+    attributes:
+      label: Reason for flakiness
+      description: |
+        If you have an idea of why the test is flaky, please explain here.
