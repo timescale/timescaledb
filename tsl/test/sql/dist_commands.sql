@@ -67,43 +67,43 @@ SELECT * from disttable2;
 \o
 \set ECHO all
 
--- Register is_frontend_session() function and test that it returns false for
+-- Register_is_access_node_session_on_data_node() function and test that it returns false for
 -- connections openned by test suite. This simualates behaviour expected
 -- with a client connections.
-CREATE OR REPLACE FUNCTION is_frontend_session()
+CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
+AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
 
 \c :DN_DBNAME_1
-CREATE OR REPLACE FUNCTION is_frontend_session()
+CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
-SELECT is_frontend_session();
+AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
+SELECT is_access_node_session_on_data_node();
 
 \c :DN_DBNAME_2
-CREATE OR REPLACE FUNCTION is_frontend_session()
+CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
-SELECT is_frontend_session();
+AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
+SELECT is_access_node_session_on_data_node();
 
 \c :DN_DBNAME_3
-CREATE OR REPLACE FUNCTION is_frontend_session()
+CREATE OR REPLACE FUNCTION is_access_node_session_on_data_node()
 RETURNS BOOL
-AS :TSL_MODULE_PATHNAME, 'ts_test_is_frontend_session' LANGUAGE C;
-SELECT is_frontend_session();
+AS :TSL_MODULE_PATHNAME, 'ts_test_dist_util_is_access_node_session_on_data_node' LANGUAGE C;
+SELECT is_access_node_session_on_data_node();
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_1;
-SELECT is_frontend_session();
+SELECT is_access_node_session_on_data_node();
 
 -- Ensure peer dist id is already set and can be set only once
 \set ON_ERROR_STOP 0
 SELECT * FROM test.remote_exec('{data_node_1}', $$ SELECT * FROM _timescaledb_internal.set_peer_dist_id('77348176-09da-4a80-bc78-e31bdf5e63ec'); $$);
 \set ON_ERROR_STOP 1
 
--- Repeat is_frontend_session() test again, but this time using connections openned from frontend
--- to backend nodes. Must return true.
-SELECT * FROM test.remote_exec(NULL, $$ SELECT is_frontend_session(); $$);
+-- Repeat is_access_node_session_on_data_node() test again, but this time using connections openned from
+-- access node to data nodes. Must return true.
+SELECT * FROM test.remote_exec(NULL, $$ SELECT is_access_node_session_on_data_node(); $$);
 
 -- Test distributed_exec()
 
@@ -135,7 +135,7 @@ CALL distributed_exec('CREATE TABLE dist_test(id int)', '{data_node_1928}');
 \set ON_ERROR_STOP 1
 
 -- Make sure dist session is properly set
-CALL distributed_exec('DO $$ BEGIN ASSERT(SELECT is_frontend_session()) = true; END; $$;');
+CALL distributed_exec('DO $$ BEGIN ASSERT(SELECT is_access_node_session_on_data_node()) = true; END; $$;');
 
 -- Test creating and dropping a table
 CALL distributed_exec('CREATE TABLE dist_test (id int)');

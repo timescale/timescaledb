@@ -8,8 +8,8 @@
 
 #include <process_utility.h>
 
-extern void dist_ddl_init(void);
-extern void dist_ddl_reset(void);
+extern void dist_ddl_state_init(void);
+extern void dist_ddl_state_reset(void);
 extern void dist_ddl_start(ProcessUtilityArgs *args);
 extern void dist_ddl_end(EventTriggerData *command);
 extern void dist_ddl_drop(List *dropped_objects);
