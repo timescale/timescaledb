@@ -1,0 +1,75 @@
+---
+name: Enhancement
+description: Suggest an enhancement to existing functionality
+title: "[Enhancement]: <Title>"
+labels: [ "enhancement" ]
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: What type of enhancement is this?
+      multiple: true
+      options:
+        - Performance
+        - User experience
+        - API improvement
+        - Configuration
+        - Refactor
+        - Tech debt reduction
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: What subsystems and features will be improved?
+      description: You can pick multiple subsystems and features.
+      multiple: true
+      options:
+        - Query planner
+        - Query executor
+        - Command processing
+        - Continuous aggregate
+        - Background worker
+        - Policy
+        - User-Defined Action (UDA)
+        - Data ingestion
+        - Compression
+        - Configuration
+        - Multi-node
+        - Distributed hypertable
+        - Access node
+        - Data node
+        - Node management
+        - Replication
+        - Gapfill
+        - SkipScan
+        - Partitioning
+        - Adaptive chunking
+        - Telemetry
+        - Build system
+        - Platform/OS
+        - Packaging
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What does the enhancement do?
+      description: |
+        Give a high-level overview of how you suggest to improve an
+        existing feature or functionality.
+    validations:
+     required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation challenges
+      description: |
+        Share any ideas of how to implement the enhancement.
+    validations:
+      required: false
