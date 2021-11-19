@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support Request
+    url: https://www.timescale.com/support
+    about: Support request or question relating to TimescaleDB
+  - name: Question?
+    url: https://slack.timescale.com/
+    about: Get free help from the TimescaleDB community
+  - name: Documentation request
+    url: https://github.com/timescale/docs/issues/new/choose
+    about: Request a change to our documentation
