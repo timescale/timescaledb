@@ -24,7 +24,8 @@ set(PG_IGNORE_TESTS
     rolenames
     rules
     sanity_check
-    security_label)
+    security_label
+    type_sanity)
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
