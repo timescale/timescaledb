@@ -5718,6 +5718,61 @@ SELECT count(*) FROM test_now WHERE time = now();
 COMMIT;
 DROP TABLE test_now;
 DEALLOCATE test_query;
+-- Check enabling distributed compression within a
+-- procedure/function works
+--
+-- #3705
+--
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (33,public,test,t)
+(1 row)
+
+CREATE PROCEDURE test_set_compression() LANGUAGE PLPGSQL AS $$
+BEGIN
+	ALTER TABLE test SET (timescaledb.compress);
+END
+$$;
+CALL test_set_compression();
+INSERT INTO test VALUES (now(), 0);
+SELECT compress_chunk(show_chunks) FROM show_chunks('test');
+                 compress_chunk                 
+------------------------------------------------
+ _timescaledb_internal._dist_hyper_33_103_chunk
+(1 row)
+
+DROP TABLE test;
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (34,public,test,t)
+(1 row)
+
+CREATE FUNCTION test_set_compression_func() RETURNS BOOL LANGUAGE PLPGSQL AS $$
+BEGIN
+	ALTER TABLE test SET (timescaledb.compress);
+	RETURN TRUE;
+END
+$$;
+SELECT test_set_compression_func();
+ test_set_compression_func 
+---------------------------
+ t
+(1 row)
+
+INSERT INTO test VALUES (now(), 0);
+SELECT compress_chunk(show_chunks) FROM show_chunks('test');
+                 compress_chunk                 
+------------------------------------------------
+ _timescaledb_internal._dist_hyper_34_104_chunk
+(1 row)
+
+DROP TABLE test;
 -- Cleanup
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
