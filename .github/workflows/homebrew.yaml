@@ -33,7 +33,7 @@ jobs:
         brew install timescaledb ${{ matrix.install_options }}
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
-        brew services restart postgresql
+        brew services start postgresql
 
     # checkout code to get version information
     - uses: actions/checkout@v2
