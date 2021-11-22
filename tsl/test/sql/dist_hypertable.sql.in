@@ -1921,6 +1921,35 @@ DROP TABLE test_now;
 
 DEALLOCATE test_query;
 
+-- Check enabling distributed compression within a
+-- procedure/function works
+--
+-- #3705
+--
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+CREATE PROCEDURE test_set_compression() LANGUAGE PLPGSQL AS $$
+BEGIN
+	ALTER TABLE test SET (timescaledb.compress);
+END
+$$;
+CALL test_set_compression();
+INSERT INTO test VALUES (now(), 0);
+SELECT compress_chunk(show_chunks) FROM show_chunks('test');
+DROP TABLE test;
+
+CREATE TABLE test (time timestamp, v int);
+SELECT create_distributed_hypertable('test','time');
+CREATE FUNCTION test_set_compression_func() RETURNS BOOL LANGUAGE PLPGSQL AS $$
+BEGIN
+	ALTER TABLE test SET (timescaledb.compress);
+	RETURN TRUE;
+END
+$$;
+SELECT test_set_compression_func();
+INSERT INTO test VALUES (now(), 0);
+SELECT compress_chunk(show_chunks) FROM show_chunks('test');
+DROP TABLE test;
 
 -- Cleanup
 DROP DATABASE :DATA_NODE_1;
