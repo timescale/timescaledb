@@ -88,12 +88,28 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 
 	Query *cagg_view_query = copyObject(linitial(rule->actions));
 	table_close(cagg_view_rel, NoLock); // lock with be released at end of txn
-	List *tlist = cagg_view_query->targetList;
 	Oid mat_relid = mat_ht->main_table_relid;
-	foreach (lc, cagg_view_query->groupClause)
+	Query *orig_query;
+	/* the view rule has dummy old and new range table entries as the 1st and 2nd entries
+	 */
+	Assert(list_length(cagg_view_query->rtable) >= 2);
+	if (cagg_view_query->setOperations)
+	{
+		/* This corresponds to the union view.
+		 * the 3rd RTE entry has the SELECT 1 query from the union view. */
+		RangeTblEntry *orig_query_rte = lthird(cagg_view_query->rtable);
+		if (orig_query_rte->rtekind != RTE_SUBQUERY)
+			elog(ERROR, "unexpected view rule action ");
+		orig_query = orig_query_rte->subquery;
+	}
+	else
+	{
+		orig_query = cagg_view_query;
+	}
+	foreach (lc, orig_query->groupClause)
 	{
 		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
-		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, tlist);
+		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, orig_query->targetList);
 		/* groupby clauses are columns from the mat hypertable */
 		Assert(IsA(cagg_tle->expr, Var));
 		Var *mat_var = castNode(Var, cagg_tle->expr);
