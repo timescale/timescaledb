@@ -255,7 +255,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 
 				if (constraint->contype == CONSTR_UNIQUE)
 				{
-					List *allowed = NIL, *info = NIL;
+					List *allowed = NIL, *info = NIL, *diff = NIL;
 					ListCell *lc;
 					int i;
 
@@ -281,15 +281,27 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 										  makeString(NameStr(dim->fd.column_name)));
 					}
 
-					if(list_difference(constraint->keys, allowed) != NIL)
+					diff = list_difference(constraint->keys, allowed);
+					if(diff != NIL)
+					{
+						StringInfo not_allowed = makeStringInfo();
+						foreach(lc, diff)
+						{
+							outNode(not_allowed, lfirst(lc));
+							if (foreach_current_index(lc) < list_length(diff) - 1)
+								appendStringInfoString(not_allowed, ", ");
+						}
+
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("operation not supported on hypertables "
-										"that have compression enabled")));
+								 errmsg("UNIQUE constraints on columns not "
+										"included in compress_segmentby "
+										"are not supported"),
+								 errhint("Not allowed columns: %s",
+									 	 not_allowed->data)));
+					}
 
 				}
-				else
-					continue;
 
 				break;
 			}

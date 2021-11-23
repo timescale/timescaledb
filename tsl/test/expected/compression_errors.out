@@ -189,7 +189,18 @@ ALTER TABLE foo RESET (timescaledb.compress);
 ERROR:  compression options cannot be reset
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
-ERROR:  operation not supported on hypertables that have compression enabled
+ERROR:  UNIQUE constraints on columns not included in compress_segmentby are not supported
+HINT:  Not allowed columns: "b"
+-- segment by column b should allow making a unique constraint on it
+ALTER TABLE foo set (timescaledb.compress,
+                     timescaledb.compress_segmentby = 'b',
+                     timescaledb.compress_orderby = 'c');
+ALTER TABLE foo ADD CONSTRAINT unique_chk UNIQUE(b);
+ERROR:  cannot create a unique index without the column "a" (used in partitioning)
+ALTER TABLE foo ADD CONSTRAINT unique_chk UNIQUE(b, c, t);
+ERROR:  UNIQUE constraints on columns not included in compress_segmentby are not supported
+HINT:  Not allowed columns: "c", "t"
+ALTER TABLE foo ADD CONSTRAINT unique_chk UNIQUE(a, b);
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 --can add index , but not unique index
 CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
@@ -199,9 +210,9 @@ CREATE INDEX foo_idx ON foo ( a, c );
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
  hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 ---------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            11 | a       |                        4 |                        |                    1 | t           | f
-            11 | b       |                        4 |                        |                    2 | t           | f
-            11 | c       |                        4 |                        |                      |             | 
+            11 | a       |                        4 |                        |                    2 | f           | t
+            11 | b       |                        0 |                      1 |                      |             | 
+            11 | c       |                        4 |                        |                    1 | t           | f
             11 | p       |                        1 |                        |                      |             | 
             11 | t       |                        2 |                        |                      |             | 
 (5 rows)
@@ -279,7 +290,7 @@ FROM _timescaledb_catalog.hypertable comp_hyper
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
 select add_retention_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
-ERROR:  cannot add retention policy to compressed hypertable "_compressed_hypertable_14"
+ERROR:  cannot add retention policy to compressed hypertable "_compressed_hypertable_15"
 HINT:  Please add the policy to the corresponding uncompressed hypertable instead.
 --Constraint checking for compression
 create table fortable(col integer primary key);
@@ -350,7 +361,7 @@ CREATE TABLE table_fk (
 SELECT create_hypertable('table_fk', 'time');
    create_hypertable    
 ------------------------
- (17,public,table_fk,t)
+ (18,public,table_fk,t)
 (1 row)
 
 ALTER TABLE table_fk DROP COLUMN id1;
@@ -369,7 +380,7 @@ ORDER BY ch1.id limit 1 \gset
 select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_15_7_chunk
+ _timescaledb_internal._hyper_16_7_chunk
 (1 row)
 
 SELECT  total_chunks , number_compressed_chunks
@@ -406,7 +417,7 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
 SELECT compress_chunk(:'CHUNK_NAME');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_20_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
@@ -416,7 +427,7 @@ DETAIL:  There are compressed chunks that prevent changing the existing compress
 SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_19_10_chunk
+ _timescaledb_internal._hyper_20_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
@@ -428,7 +439,7 @@ NOTICE:  adding not-null constraint to column "time"
 DETAIL:  Time dimensions cannot have NULL values.
       create_hypertable       
 ------------------------------
- (21,public,test_table_int,t)
+ (22,public,test_table_int,t)
 (1 row)
 
 CREATE OR REPLACE function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
@@ -449,7 +460,7 @@ WHERE id = :compressjob_id;
 SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
         config         
 -----------------------
- {"hypertable_id": 21}
+ {"hypertable_id": 22}
 (1 row)
 
 --should fail
@@ -496,7 +507,7 @@ CREATE TABLE i165 (time timestamptz PRIMARY KEY);
 SELECT create_hypertable('i165','time');
  create_hypertable  
 --------------------
- (23,public,i165,t)
+ (24,public,i165,t)
 (1 row)
 
 ALTER TABLE i165 SET (timescaledb.compress);

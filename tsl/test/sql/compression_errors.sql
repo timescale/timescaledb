@@ -95,6 +95,13 @@ ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ALTER TABLE foo RESET (timescaledb.compress);
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
+-- segment by column b should allow making a unique constraint on it
+ALTER TABLE foo set (timescaledb.compress,
+                     timescaledb.compress_segmentby = 'b',
+                     timescaledb.compress_orderby = 'c');
+ALTER TABLE foo ADD CONSTRAINT unique_chk UNIQUE(b);
+ALTER TABLE foo ADD CONSTRAINT unique_chk UNIQUE(b, c, t);
+ALTER TABLE foo ADD CONSTRAINT unique_chk UNIQUE(a, b);
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 --can add index , but not unique index
 CREATE UNIQUE INDEX foo_idx ON foo ( a, c );
