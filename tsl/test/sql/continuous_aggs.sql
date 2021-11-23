@@ -1094,10 +1094,6 @@ SELECT ca.mat_hypertable_id AS mat_htid,
        ca.user_view_name AS cagg_name ,
        h.schema_name AS mat_schema_name,
        h.table_name AS mat_table_name,
-       CASE WHEN h.compressed_hypertable_id is null 
-            THEN 'disabled'
-            ELSE 'enabled'
-       END as compression_enabled,
        ca.materialized_only
 FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
@@ -1109,10 +1105,12 @@ FROM cagg_compression_status
 WHERE cagg_name = 'search_query_count_3' \gset
 
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'true');
-SELECT cagg_name, mat_table_name, compression_enabled
+SELECT cagg_name, mat_table_name
 FROM cagg_compression_status where cagg_name = 'search_query_count_3';
+\x
 SELECT * FROM timescaledb_information.compression_settings 
 WHERE hypertable_name = :'MAT_TABLE_NAME';
+\x
 
 SELECT compress_chunk(ch)
 FROM show_chunks('search_query_count_3') ch;
@@ -1164,48 +1162,11 @@ WHERE hypertable_id = :'MAT_HTID' and status = 1;
 
 --disable compression on cagg after decompressing all chunks--
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
-SELECT cagg_name, mat_table_name, compression_enabled
+SELECT cagg_name, mat_table_name
 FROM cagg_compression_status where cagg_name = 'search_query_count_3';
-
---TEST test with multiple settings on continuous aggregates --
--- test for materialized_only + compress combinations
-CREATE TABLE test_setting(time timestamptz not null, val numeric);
-SELECT created FROM create_hypertable('test_setting','time');
-
-CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous) 
-AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-
-INSERT INTO test_setting      
-SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
-CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
-SELECT count(*) from test_setting_cagg ORDER BY 1;
-
---try out 2 settings here --
-ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
-SELECT cagg_name, compression_enabled, materialized_only
-FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
-INSERT INTO test_setting VALUES( '2020-11-01', 20);
---real time aggs is off now , should return 20 --
-SELECT count(*) from test_setting_cagg ORDER BY 1;
-
---now set it back to false --
-ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
-SELECT cagg_name, compression_enabled, materialized_only
-FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
---count should return additional data since we have real time aggs on
-SELECT count(*) from test_setting_cagg ORDER BY 1;
-
-ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='false');
-SELECT cagg_name, compression_enabled, materialized_only
-FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
---real time aggs is off now , should return 20 --
-SELECT count(*) from test_setting_cagg ORDER BY 1;
-
-ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='false');
-SELECT cagg_name, compression_enabled, materialized_only
-FROM cagg_compression_status where cagg_name = 'test_setting_cagg';
---count should return additional data since we have real time aggs on
-SELECT count(*) from test_setting_cagg ORDER BY 1;
+SELECT view_name, materialized_only, compression_enabled
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'search_query_count_3';
 
 -- TEST caggs on table with more columns than in the cagg view defn --
 CREATE TABLE test_morecols ( time TIMESTAMPTZ NOT NULL,
@@ -1224,4 +1185,15 @@ ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
 SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
 
 SELECT * FROM test_morecols_cagg;
+
+SELECT view_name, materialized_only, compression_enabled
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_morecols_cagg';
+
+--should keep compressed option, modify only materialized --
+ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.materialized_only='true');
+
+SELECT view_name, materialized_only, compression_enabled
+FROM timescaledb_information.continuous_aggregates 
+where view_name = 'test_morecols_cagg';
 
