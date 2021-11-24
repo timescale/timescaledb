@@ -1,0 +1,99 @@
+# This file and its contents are licensed under the Timescale License.
+# Please see the included NOTICE for copyright information and
+# LICENSE-TIMESCALE for a copy of the license.
+
+# Test that concurrent queries and recompress_chunk cannot
+# deadlock.
+#
+# This can occur if recompressing since a recompress will first do a
+# decompression of the compressed chunk into the uncompressed chunk.
+#
+# We should only have a single chunk here, otherwise we cannot lock
+# the right chunk.
+#
+# We have fetched the actual recompress procedure from the policy and
+# re-implement it here to be able to test that it works as
+# expected. Please check policy_internal.sql to see the code it is
+# based on.
+setup {
+    CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT)
+    RETURNS VOID LANGUAGE C VOLATILE STRICT
+    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
+
+    CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT)
+    RETURNS VOID LANGUAGE C VOLATILE STRICT
+    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
+
+    CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT)
+    RETURNS BIGINT LANGUAGE C VOLATILE STRICT
+    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_id';
+
+    CREATE OR REPLACE PROCEDURE recompress_chunk_procedure(regclass) AS $$
+    BEGIN
+      PERFORM decompress_chunk($1, if_compressed => true);
+      PERFORM pg_advisory_lock(debug_waitpoint_id('recompress_after_decompress'));
+      PERFORM pg_advisory_unlock(debug_waitpoint_id('recompress_after_decompress'));
+      COMMIT;
+      PERFORM compress_chunk($1);
+    END $$
+    LANGUAGE plpgsql;
+}
+
+setup {
+    CREATE TABLE hyper (time TIMESTAMP NOT NULL, a DOUBLE PRECISION NULL, b DOUBLE PRECISION NULL);
+
+    CREATE INDEX "time_plain" ON hyper(time DESC, a);
+
+    SELECT * FROM create_hypertable('hyper', 'time');
+
+    INSERT INTO hyper
+    SELECT to_timestamp(ser), ser, ser+10000 FROM generate_series(0,1000) ser;
+
+    ALTER TABLE hyper SET (timescaledb.compress = true);
+
+    SELECT compress_chunk(show_chunks('hyper'));
+}
+
+teardown {
+    DROP TABLE hyper;
+}
+
+session "locks"
+step "lock_after_decompress"     {
+    SELECT debug_waitpoint_enable('recompress_after_decompress');
+}
+step "unlock_after_decompress" {
+    SELECT debug_waitpoint_release('recompress_after_decompress');
+}
+
+# When building a simple relation for the query (using
+# `build_simple_rel`), it first takes a lock on the relation, and then
+# on any indexes for the relation, if they exist (inside
+# `get_relation_info`, to get statistics for the relation).
+session "query"
+step "query_start" {
+    SELECT count(*) FROM hyper;
+}
+
+# This session will compress all chunks. We should only have a single
+# one in this case, so that we block just before reindexing the chunk.
+session "recompress"
+step "recompress_insert_rows" {
+    INSERT INTO hyper
+    SELECT to_timestamp(ser), ser, ser+100 FROM generate_series(0,100) ser;
+}
+step "recompress_chunks_start" {
+    DO $$
+    DECLARE
+      chunk regclass;
+    BEGIN
+      SELECT show_chunks('hyper') INTO chunk;
+      CALL recompress_chunk_procedure(chunk);
+    END;
+    $$;
+}
+		      
+# Since the locking order is different, we locking before reindex we should one one lock on the index and
+# one lock on the chunk from different processes.
+permutation recompress_insert_rows lock_after_decompress recompress_chunks_start query_start(recompress_chunks_start) unlock_after_decompress
+
