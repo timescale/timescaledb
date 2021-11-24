@@ -8,6 +8,7 @@
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
+#include <nodes/parsenodes.h>
 
 typedef struct TableInfo
 {
@@ -49,7 +50,7 @@ DeparsedHypertableCommands *deparse_get_distributed_hypertable_create_command(Hy
 
 const char *deparse_func_call(FunctionCallInfo finfo);
 const char *deparse_oid_function_call_coll(Oid funcid, Oid collation, unsigned int num_args, ...);
-const char *deparse_grant_revoke_on_database(Node *node, const char *dbname);
+const char *deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname);
 const char *deparse_create_trigger(CreateTrigStmt *stmt);
 
 #endif

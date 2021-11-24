@@ -152,7 +152,7 @@ dist_ddl_state_set_exec_type(DistDDLExecType type)
  * execution on data nodes.
  */
 static inline void
-dist_ddl_state_schedule(DistDDLExecType type, ProcessUtilityArgs *args)
+dist_ddl_state_schedule(DistDDLExecType type, const ProcessUtilityArgs *args)
 {
 	Assert(dist_ddl_state.exec_type == DIST_DDL_EXEC_NONE);
 	Assert(type != DIST_DDL_EXEC_NONE);
@@ -232,7 +232,7 @@ dist_ddl_state_add_current_data_node_list(void)
 }
 
 static void
-dist_ddl_inspect_hypertable_list(ProcessUtilityArgs *args, Cache *hcache,
+dist_ddl_inspect_hypertable_list(const ProcessUtilityArgs *args, Cache *hcache,
 								 unsigned int *num_hypertables, unsigned int *num_dist_hypertables,
 								 unsigned int *num_dist_hypertable_members)
 {
@@ -278,7 +278,7 @@ dist_ddl_inspect_hypertable_list(ProcessUtilityArgs *args, Cache *hcache,
  * Return false, if no distributed hypertables found.
  */
 static bool
-dist_ddl_state_set_hypertable(ProcessUtilityArgs *args)
+dist_ddl_state_set_hypertable(const ProcessUtilityArgs *args)
 {
 	unsigned int num_hypertables = list_length(args->hypertable_list);
 	unsigned int num_dist_hypertables;
@@ -457,9 +457,8 @@ dist_ddl_process_rename(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_grant_on_database(ProcessUtilityArgs *args)
+dist_ddl_process_grant_on_database(const GrantStmt *stmt)
 {
-	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
 	const char *dbname;
 	bool dbmatch;
 	List *cmd_descriptors = NIL;
@@ -530,7 +529,7 @@ dist_ddl_process_grant_on_database(ProcessUtilityArgs *args)
 		/* Create a query using data node's database name */
 		Assert(data_node_dbname != NULL);
 		cmd_desc = palloc0(sizeof(DistCmdDescr));
-		cmd_desc->sql = deparse_grant_revoke_on_database(args->parsetree, data_node_dbname);
+		cmd_desc->sql = deparse_grant_revoke_on_database(stmt, data_node_dbname);
 		cmd_descriptors = lappend(cmd_descriptors, cmd_desc);
 
 		elog(DEBUG1, "[%s]: %s", data_node_name, cmd_desc->sql);
@@ -541,10 +540,9 @@ dist_ddl_process_grant_on_database(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_grant_on_schema(ProcessUtilityArgs *args)
+dist_ddl_process_grant_on_schema(const ProcessUtilityArgs *args)
 {
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
-
 	bool exec_on_datanodes = false;
 	ListCell *cell;
 
@@ -594,7 +592,7 @@ dist_ddl_process_grant_on_schema(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_grant_on_table(ProcessUtilityArgs *args)
+dist_ddl_process_grant_on_table(const ProcessUtilityArgs *args)
 {
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
@@ -603,18 +601,55 @@ dist_ddl_process_grant_on_table(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_grant(ProcessUtilityArgs *args)
+dist_ddl_process_grant_object(const ProcessUtilityArgs *args)
 {
-	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+	const GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
 
-	if (stmt->objtype == OBJECT_DATABASE)
-		dist_ddl_process_grant_on_database(args);
-	else if (stmt->objtype == OBJECT_TABLE)
+	switch (stmt->objtype)
 	{
-		if (stmt->targtype == ACL_TARGET_ALL_IN_SCHEMA)
-			dist_ddl_process_grant_on_schema(args);
-		else
+		case OBJECT_DATABASE:
+			dist_ddl_process_grant_on_database(stmt);
+			break;
+		case OBJECT_TABLE:
 			dist_ddl_process_grant_on_table(args);
+			break;
+		default:
+			break;
+	}
+}
+
+static void
+dist_ddl_process_grant_all_in_schema(const ProcessUtilityArgs *args)
+{
+	const GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+
+	switch (stmt->objtype)
+	{
+		case OBJECT_TABLE:
+			dist_ddl_process_grant_on_schema(args);
+			break;
+		default:
+			break;
+	}
+}
+
+static void
+dist_ddl_process_grant(const ProcessUtilityArgs *args)
+{
+	const GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+
+	switch (stmt->targtype)
+	{
+		case ACL_TARGET_OBJECT:
+			dist_ddl_process_grant_object(args);
+			break;
+		case ACL_TARGET_ALL_IN_SCHEMA:
+			dist_ddl_process_grant_all_in_schema(args);
+			break;
+		case ACL_TARGET_DEFAULTS:
+			/* Not handled on a per-grant statement. The entire ALTER DEFAULT
+			 * PRIVILEGES is forwarded and handled below. */
+			break;
 	}
 }
 
@@ -624,6 +659,19 @@ dist_ddl_process_grant(ProcessUtilityArgs *args)
  */
 static void
 dist_ddl_process_drop_reassign(ProcessUtilityArgs *args)
+{
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+	dist_ddl_state_add_current_data_node_list();
+}
+
+/*
+ * Alter default privileges.
+ *
+ * Commands for altering default privileges are sent as is to data nodes. It
+ * is assumed that any roles or schemas involved exist also on the data nodes.
+ */
+static void
+dist_ddl_process_alter_default_privileges(const ProcessUtilityArgs *args)
 {
 	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 	dist_ddl_state_add_current_data_node_list();
@@ -828,6 +876,9 @@ dist_ddl_process(ProcessUtilityArgs *args)
 {
 	NodeTag tag = nodeTag(args->parsetree);
 
+	if (tag == T_CopyStmt)
+		return;
+
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
 	switch (tag)
@@ -859,6 +910,10 @@ dist_ddl_process(ProcessUtilityArgs *args)
 
 		case T_AlterTableStmt:
 			dist_ddl_process_alter_table(args);
+			break;
+
+		case T_AlterDefaultPrivilegesStmt:
+			dist_ddl_process_alter_default_privileges(args);
 			break;
 
 		case T_IndexStmt:
@@ -974,6 +1029,16 @@ dist_ddl_get_analyze_stats(ProcessUtilityArgs *args)
 void
 dist_ddl_start(ProcessUtilityArgs *args)
 {
+	switch (nodeTag(args->parsetree))
+	{
+			/* Certain utility commands we know to not process here */
+		case T_CopyStmt:
+		case T_CallStmt:
+			return;
+		default:
+			break;
+	}
+
 	/* Do not process nested DDL operations */
 	if (dist_ddl_scheduled_for_execution())
 		return;
