@@ -924,9 +924,8 @@ deparse_oid_function_call_coll(Oid funcid, Oid collation, unsigned int num_args,
 }
 
 const char *
-deparse_grant_revoke_on_database(Node *node, const char *dbname)
+deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname)
 {
-	GrantStmt *stmt = castNode(GrantStmt, node);
 	ListCell *lc;
 
 	/*

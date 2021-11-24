@@ -383,6 +383,42 @@ SELECT * FROM disttable_role_3;
 DROP USER MAPPING FOR :ROLE_3 SERVER data1;
 DROP USER MAPPING FOR :ROLE_3 SERVER data2;
 
+-- Test altering default privileges
+RESET ROLE;
+-- Should be superuser
+SELECT current_user;
+
+CALL distributed_exec($$ CREATE TABLE nodefprivs (time timestamptz, value int) $$);
+SET ROLE :ROLE_1;
+
+\set ON_ERROR_STOP 0
+-- Should fail due to lack of privileges (only insert on one data node
+-- to make error reporting deterministic)
+CALL distributed_exec($$ INSERT INTO nodefprivs VALUES ('2019-01-01 00:00:00', 1) $$, '{ "data1" }');
+\set ON_ERROR_STOP 1
+
+-- Reset to super user
+RESET ROLE;
+-- Now alter default privileges and create table
+ALTER DEFAULT PRIVILEGES GRANT INSERT ON TABLES TO :ROLE_1;
+SELECT FROM test.remote_exec('{ "data1" }', $$
+	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
+$$);
+CALL distributed_exec($$ CREATE TABLE defprivs (time timestamptz, value int) $$);
+
+-- Switch to the role that was granted default privileges
+SET ROLE :ROLE_1;
+-- Should succeed since user will have insert privileges by default
+CALL distributed_exec($$ INSERT INTO defprivs VALUES ('2019-01-01 00:00:00', 1) $$);
+
+RESET ROLE;
+ALTER DEFAULT PRIVILEGES REVOKE INSERT ON TABLES FROM :ROLE_1;
+-- No default privileges remain
+SELECT FROM test.remote_exec('{ "data1" }', $$
+	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
+$$);
+CALL distributed_exec($$ DROP TABLE defprivs $$);
+
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :DN_DBNAME_1;
 DROP DATABASE :DN_DBNAME_2;
