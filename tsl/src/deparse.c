@@ -1003,3 +1003,88 @@ deparse_grant_revoke_on_database(Node *node, const char *dbname)
 
 	return command->data;
 }
+
+/* Deparse user-defined trigger */
+const char *
+deparse_create_trigger(CreateTrigStmt *stmt)
+{
+	ListCell *lc;
+	bool found_event = false;
+	bool found_first_arg = false;
+
+	/*
+	CREATE [ CONSTRAINT ] TRIGGER name { BEFORE | AFTER | INSTEAD OF } { event [ OR ... ] }
+		ON table_name
+		[ FROM referenced_table_name ]
+		[ NOT DEFERRABLE | [ DEFERRABLE ] [ INITIALLY IMMEDIATE | INITIALLY DEFERRED ] ]
+		[ REFERENCING { { OLD | NEW } TABLE [ AS ] transition_relation_name } [ ... ] ]
+		[ FOR [ EACH ] { ROW | STATEMENT } ]
+		[ WHEN ( condition ) ]
+		EXECUTE { FUNCTION | PROCEDURE } function_name ( arguments )
+	*/
+	if (stmt->isconstraint)
+		elog(ERROR, "deparsing constraint triggers is not supported");
+
+	StringInfo command = makeStringInfo();
+	appendStringInfo(command, "CREATE TRIGGER %s ", quote_identifier(stmt->trigname));
+
+	if (TRIGGER_FOR_BEFORE(stmt->timing))
+		appendStringInfoString(command, "BEFORE");
+	else if (TRIGGER_FOR_AFTER(stmt->timing))
+		appendStringInfoString(command, "AFTER");
+	else if (TRIGGER_FOR_INSTEAD(stmt->timing))
+		appendStringInfoString(command, "INSTEAD OF");
+	else
+		elog(ERROR, "unexpected timing value: %d", stmt->timing);
+
+	if (TRIGGER_FOR_INSERT(stmt->events))
+	{
+		appendStringInfoString(command, " INSERT");
+		found_event = true;
+	}
+	if (TRIGGER_FOR_DELETE(stmt->events))
+	{
+		if (found_event)
+			appendStringInfoString(command, " OR");
+		appendStringInfoString(command, " DELETE");
+		found_event = true;
+	}
+	if (TRIGGER_FOR_UPDATE(stmt->events))
+	{
+		if (found_event)
+			appendStringInfoString(command, " OR");
+		appendStringInfoString(command, " UPDATE");
+		found_event = true;
+	}
+	if (TRIGGER_FOR_TRUNCATE(stmt->events))
+	{
+		if (found_event)
+			appendStringInfoString(command, " OR");
+		appendStringInfoString(command, " TRUNCATE");
+	}
+	appendStringInfo(command,
+					 " ON %s.%s",
+					 quote_identifier(stmt->relation->schemaname),
+					 quote_identifier(stmt->relation->relname));
+
+	if (stmt->row)
+		appendStringInfoString(command, " FOR EACH ROW");
+	else
+		appendStringInfoString(command, " FOR EACH STATEMENT");
+
+	if (stmt->whenClause)
+		elog(ERROR, "deparsing trigger WHEN clause is not supported");
+
+	appendStringInfo(command, " EXECUTE FUNCTION %s(", NameListToQuotedString(stmt->funcname));
+	foreach (lc, stmt->args)
+	{
+		if (found_first_arg)
+			appendStringInfoString(command, ", ");
+		else
+			found_first_arg = true;
+		appendStringInfoString(command, strVal(lfirst(lc)));
+	}
+	appendStringInfoString(command, ")");
+
+	return command->data;
+}
