@@ -58,7 +58,9 @@ BEGIN
     IF chunk_rec.status = 0 THEN
        PERFORM compress_chunk( chunk_rec.oid );
     ELSIF chunk_rec.status = 3 AND recompress_enabled IS TRUE THEN
-       PERFORM recompress_chunk( chunk_rec.oid );
+       PERFORM decompress_chunk(chunk_rec.oid, if_compressed => true);
+       COMMIT;
+       PERFORM compress_chunk(chunk_rec.oid);
     END IF;
     COMMIT;
     IF verbose_log THEN

@@ -1,0 +1,48 @@
+Parsed test spec with 3 sessions
+
+starting permutation: recompress_insert_rows lock_after_decompress recompress_chunks_start query_start unlock_after_decompress
+compress_chunk                            
+------------------------------------------
+_timescaledb_internal._hyper_141_300_chunk
+(1 row)
+
+step recompress_insert_rows: 
+    INSERT INTO hyper
+    SELECT to_timestamp(ser), ser, ser+100 FROM generate_series(0,100) ser;
+
+step lock_after_decompress: 
+    SELECT debug_waitpoint_enable('recompress_after_decompress');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step recompress_chunks_start: 
+    DO $$
+    DECLARE
+      chunk regclass;
+    BEGIN
+      SELECT show_chunks('hyper') INTO chunk;
+      CALL recompress_chunk_procedure(chunk);
+    END;
+    $$;
+ <waiting ...>
+step query_start: 
+    SELECT count(*) FROM hyper;
+ <waiting ...>
+step unlock_after_decompress: 
+    SELECT debug_waitpoint_release('recompress_after_decompress');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step recompress_chunks_start: <... completed>
+step query_start: <... completed>
+count
+-----
+ 1102
+(1 row)
+

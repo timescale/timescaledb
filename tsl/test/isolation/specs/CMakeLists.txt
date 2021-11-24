@@ -3,9 +3,9 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
                           reorder_vs_insert_other_chunk.spec.in)
 
 set(TEST_TEMPLATES_MODULE_DEBUG
-    reorder_vs_insert.spec.in reorder_vs_select.spec.in
-    remote_create_chunk.spec.in dist_restore_point.spec.in
-    continuous_aggs_drop_chunks.spec.in)
+    deadlock_recompress_chunk.spec.in reorder_vs_insert.spec.in
+    reorder_vs_select.spec.in remote_create_chunk.spec.in
+    dist_restore_point.spec.in continuous_aggs_drop_chunks.spec.in)
 
 list(
   APPEND
