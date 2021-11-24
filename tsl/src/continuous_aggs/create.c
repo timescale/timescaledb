@@ -75,6 +75,7 @@
 #include "refresh.h"
 #include "remote/dist_commands.h"
 #include "hypertable_data_node.h"
+#include "deparse.h"
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
@@ -344,11 +345,12 @@ check_trigger_exists_hypertable(Oid relid, char *trigname)
 
 /* add continuous agg invalidation trigger to hypertable
  * relid - oid of hypertable
- * trigarg - argument to pass to trigger (the hypertable id from timescaledb catalog as a string)
+ * hypertableid - argument to pass to trigger (the hypertable id from timescaledb catalog)
  */
 static void
-cagg_add_trigger_hypertable(Oid relid, char *trigarg)
+cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 {
+	char hypertable_id_str[12];
 	ObjectAddress objaddr;
 	char *relname = get_rel_name(relid);
 	Oid schemaid = get_rel_namespace(relid);
@@ -356,7 +358,7 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 	Cache *hcache;
 	Hypertable *ht;
 
-	CreateTrigStmt stmt = {
+	CreateTrigStmt stmt_template = {
 		.type = T_CreateTrigStmt,
 		.row = true,
 		.timing = TRIGGER_TYPE_AFTER,
@@ -364,7 +366,7 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 		.relation = makeRangeVar(schema, relname, -1),
 		.funcname =
 			list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
-		.args = list_make1(makeString(trigarg)),
+		.args = NIL, /* to be filled in later */
 		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};
 	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
@@ -383,18 +385,15 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 		foreach (cell, ht->data_nodes)
 		{
 			HypertableDataNode *node = lfirst(cell);
-			StringInfo command = makeStringInfo();
-			appendStringInfo(command,
-							 "CREATE TRIGGER %s AFTER INSERT OR UPDATE OR DELETE ON %s.%s FOR EACH "
-							 "ROW EXECUTE FUNCTION %s.%s(%d, %d)",
-							 quote_identifier(CAGGINVAL_TRIGGER_NAME),
-							 quote_identifier(NameStr(ht->fd.schema_name)),
-							 quote_identifier(NameStr(ht->fd.table_name)),
-							 quote_identifier(INTERNAL_SCHEMA_NAME),
-							 quote_identifier(CAGG_INVALIDATION_TRIGGER),
-							 node->fd.node_hypertable_id, /* distributed member hypertable ID */
-							 node->fd.hypertable_id /* Access Node hypertable ID */);
-			cmd_descr_data[i].sql = command->data;
+			char node_hypertable_id_str[12];
+			CreateTrigStmt remote_stmt = stmt_template;
+
+			pg_ltoa(node->fd.node_hypertable_id, node_hypertable_id_str);
+			pg_ltoa(node->fd.hypertable_id, hypertable_id_str);
+
+			remote_stmt.args =
+				list_make2(makeString(node_hypertable_id_str), makeString(hypertable_id_str));
+			cmd_descr_data[i].sql = deparse_create_trigger(&remote_stmt);
 			cmd_descr_data[i].params = NULL;
 			cmd_descriptors = lappend(cmd_descriptors, &cmd_descr_data[i++]);
 		}
@@ -410,7 +409,10 @@ cagg_add_trigger_hypertable(Oid relid, char *trigarg)
 		 * triggers.
 		 */
 	}
-	objaddr = ts_hypertable_create_trigger(ht, &stmt, NULL);
+	CreateTrigStmt local_stmt = stmt_template;
+	pg_ltoa(hypertable_id, hypertable_id_str);
+	local_stmt.args = list_make1(makeString(hypertable_id_str));
+	objaddr = ts_hypertable_create_trigger(ht, &local_stmt, NULL);
 	if (!OidIsValid(objaddr.objectId))
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -1796,8 +1798,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	Oid nspid;
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 materialize_hypertable_id;
-	char trigarg[NAMEDATALEN];
-	int ret;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 
@@ -1878,12 +1878,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  dum_rel->relname);
 
 	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
-	ret = snprintf(trigarg, NAMEDATALEN, "%d", origquery_ht->htid);
-	if (ret < 0 || ret >= NAMEDATALEN)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("bad argument to continuous aggregate trigger")));
-	cagg_add_trigger_hypertable(origquery_ht->htoid, trigarg);
+	cagg_add_trigger_hypertable(origquery_ht->htoid, origquery_ht->htid);
 
 	return;
 }
