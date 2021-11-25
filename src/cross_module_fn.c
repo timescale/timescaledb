@@ -12,6 +12,9 @@
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "bgw/job.h"
+#ifdef USE_TELEMETRY
+#include "telemetry/telemetry.h"
+#endif
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
@@ -151,11 +154,13 @@ error_no_default_fn_bool_void_community(void)
 	pg_unreachable();
 }
 
+#ifdef USE_TELEMETRY
 static void
 add_tsl_telemetry_info_default(JsonbParseState **parse_state)
 {
 	error_no_default_fn_community();
 }
+#endif
 
 static bool
 job_execute_default_fn(BgwJob *job)
@@ -322,7 +327,9 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
  * exception.
  */
 TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
+#ifdef USE_TELEMETRY
 	.add_tsl_telemetry_info = add_tsl_telemetry_info_default,
+#endif
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,

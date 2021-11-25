@@ -156,7 +156,6 @@ select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
-SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
 
 DROP TABLE test_table;
 

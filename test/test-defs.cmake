@@ -42,8 +42,14 @@ set(TEST_PASSFILE ${TEST_OUTPUT_DIR}/pgpass.conf)
 configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
 set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
 
+if(USE_TELEMETRY)
+  set(TELEMETRY_DEFAULT_SETTING "timescaledb.telemetry_level=off")
+else()
+  set(TELEMETRY_DEFAULT_SETTING)
+endif()
 configure_file(postgresql.conf.in postgresql.conf)
 configure_file(max_bgw_8.conf.in max_bgw_8.conf)
+configure_file(${PRIMARY_TEST_DIR}/pgtest.conf.in pgtest.conf)
 
 # pgpass file requires chmod 0600
 configure_file(${PRIMARY_TEST_DIR}/pgpass.conf.in
@@ -88,7 +94,7 @@ set(PG_REGRESS_OPTS_TEMP_INSTANCE
 
 set(PG_REGRESS_OPTS_TEMP_INSTANCE_PGTEST
     --port=${TEST_PGPORT_TEMP_INSTANCE} --temp-instance=${TEST_CLUSTER}
-    --temp-config=${TEST_INPUT_DIR}/pgtest.conf)
+    --temp-config=${TEST_OUTPUT_DIR}/pgtest.conf)
 
 set(PG_REGRESS_OPTS_LOCAL_INSTANCE --port=${TEST_PGPORT_LOCAL})
 

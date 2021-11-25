@@ -24,6 +24,16 @@
 
 #define MAX_VERSION_STR_LEN 128
 
+typedef struct BgwJobTypeCount
+{
+	int32 policy_cagg;
+	int32 policy_compression;
+	int32 policy_reorder;
+	int32 policy_retention;
+	int32 policy_telemetry;
+	int32 user_defined_action;
+} BgwJobTypeCount;
+
 typedef struct VersionResult
 {
 	const char *versionstr;
@@ -42,5 +52,6 @@ extern void ts_check_version_response(const char *json);
  */
 extern bool ts_telemetry_main(const char *host, const char *path, const char *service);
 extern bool ts_telemetry_main_wrapper(void);
+extern TSDLLEXPORT Datum ts_telemetry_get_report_jsonb(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TELEMETRY_TELEMETRY_H */

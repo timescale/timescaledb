@@ -1,4 +1,5 @@
 set(SOURCES
+    uuid.c
     agg_bookend.c
     func_cache.c
     cache.c
@@ -68,10 +69,12 @@ else()
   add_library(${PROJECT_NAME} MODULE ${SOURCES} ${GITCOMMIT_H})
 endif()
 
-if(SEND_TELEMETRY_DEFAULT)
-  set(TELEMETRY_DEFAULT TELEMETRY_BASIC)
-else()
-  set(TELEMETRY_DEFAULT TELEMETRY_OFF)
+if(USE_TELEMETRY)
+  if(SEND_TELEMETRY_DEFAULT)
+    set(TELEMETRY_DEFAULT TELEMETRY_BASIC)
+  else()
+    set(TELEMETRY_DEFAULT TELEMETRY_OFF)
+  endif()
 endif()
 
 set_target_properties(
@@ -92,7 +95,9 @@ configure_file(config.h.in config.h)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 add_subdirectory(bgw)
 add_subdirectory(net)
-add_subdirectory(telemetry)
+if(USE_TELEMETRY)
+  add_subdirectory(telemetry)
+endif()
 add_subdirectory(loader)
 add_subdirectory(bgw_policy)
 add_subdirectory(compat)

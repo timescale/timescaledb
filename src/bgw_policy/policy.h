@@ -10,21 +10,10 @@
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
 #include "export.h"
-
-typedef struct BgwJobTypeCount
-{
-	int32 policy_cagg;
-	int32 policy_compression;
-	int32 policy_reorder;
-	int32 policy_retention;
-	int32 policy_telemetry;
-	int32 user_defined_action;
-} BgwJobTypeCount;
+#include "config.h"
 
 extern ScanTupleResult ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, void *const data);
 
 extern void ts_bgw_policy_delete_by_hypertable_id(int32 hypertable_id);
-
-extern BgwJobTypeCount ts_bgw_job_type_counts(void);
 
 #endif /* TIMESCALEDB_BGW_POLICY_POLICY_H */

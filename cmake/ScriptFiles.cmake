@@ -58,9 +58,17 @@ set(SOURCE_FILES
     job_api.sql
     policy_api.sql
     policy_internal.sql
-    cagg_utils.sql
-	  telemetry.sql
-    bgw_startup.sql)
+    cagg_utils.sql)
+
+if(USE_TELEMETRY)
+  list(APPEND SOURCE_FILES with_telemetry.sql)
+else()
+  list(APPEND SOURCE_FILES without_telemetry.sql)
+endif()
+
+# These files need to be last in the scripts.
+list(APPEND SOURCE_FILES 
+  bgw_startup.sql)
 
 # These files should be pre-pended to update scripts so that they are executed
 # before anything else during updates

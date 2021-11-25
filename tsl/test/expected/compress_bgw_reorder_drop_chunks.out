@@ -67,17 +67,17 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
      5
 (1 row)
 
-SELECT get_telemetry_report() -> 'num_retention_policies';
- ?column? 
-----------
- 0
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_internal' AND proc_name = 'policy_retention';
+ count 
+-------
+     0
 (1 row)
 
 SELECT add_retention_policy('test_retention_table', INTERVAL '4 months') as retention_job_id \gset
-SELECT get_telemetry_report() -> 'num_retention_policies';
- ?column? 
-----------
- 1
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_internal' AND proc_name = 'policy_retention';
+ count 
+-------
+     1
 (1 row)
 
 SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');

@@ -16,6 +16,7 @@ WHERE oid IN (
         AND deptype = 'e'
         AND classid = 'pg_catalog.pg_proc'::regclass)
     AND pronamespace = 'public'::regnamespace
+    AND proname NOT LIKE '%telemetry%'
   ORDER BY proname;
               proname               
 ------------------------------------
@@ -45,7 +46,6 @@ WHERE oid IN (
  distributed_exec
  drop_chunks
  first
- get_telemetry_report
  histogram
  hypertable_compression_stats
  hypertable_detailed_size
@@ -76,5 +76,5 @@ WHERE oid IN (
  timescaledb_fdw_validator
  timescaledb_post_restore
  timescaledb_pre_restore
-(57 rows)
+(56 rows)
 

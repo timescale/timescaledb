@@ -77,6 +77,16 @@ def build_release_config(overrides):
   base_config.update(overrides)
   return base_config
 
+def build_without_telemetry(overrides):
+  config = build_release_config({})
+  config.update({
+    'name': 'ReleaseWithoutTelemetry',
+    "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DUSE_TELEMETRY=OFF",
+    "coverage": False,
+  })
+  config.update(overrides)
+  return config
+
 def build_apache_config(overrides):
   base_config = build_debug_config({})
   apache_config = dict({
@@ -113,6 +123,8 @@ m["include"].append(build_debug_config({"pg":PG13_LATEST}))
 m["include"].append(build_debug_config({"pg":PG14_LATEST}))
 
 m["include"].append(build_release_config(macos_config({})))
+
+m["include"].append(build_without_telemetry({"pg":PG14_LATEST}))
 
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional

@@ -35,11 +35,15 @@
 #include <errors.h>
 #include <extension_constants.h>
 #include <guc.h>
+#ifdef USE_TELEMETRY
 #include <telemetry/telemetry_metadata.h>
+#endif
 #include "connection.h"
 #include "data_node.h"
 #include "debug_point.h"
 #include "utils.h"
+#include "ts_catalog/metadata.h"
+#include "config.h"
 
 /*
  * Connection library for TimescaleDB.
@@ -1085,7 +1089,9 @@ remote_connection_check_extension(TSConnection *conn)
 static bool
 remote_connection_set_peer_dist_id(TSConnection *conn)
 {
-	Datum id_string = DirectFunctionCall1(uuid_out, ts_telemetry_metadata_get_uuid());
+	bool isnull;
+	Datum uuid = ts_metadata_get_value(METADATA_UUID_KEY_NAME, UUIDOID, &isnull);
+	Datum id_string = DirectFunctionCall1(uuid_out, uuid);
 	PGresult *res;
 	bool success = true;
 

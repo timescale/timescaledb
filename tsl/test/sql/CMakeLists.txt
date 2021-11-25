@@ -80,11 +80,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     remote_txn_id.sql
     remote_txn_resolve.sql
     remote_txn.sql
-    telemetry_stats.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
     license.sql)
-
+  if(USE_TELEMETRY)
+    list(APPEND TEST_FILES_postgresql telemetry_stats.sql)
+  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(SOLO_TESTS_postgresql

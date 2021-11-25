@@ -73,22 +73,20 @@ SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb
     1004
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs ORDER BY 1;
- job_id |      application_name      | schedule_interval |   max_runtime   | max_retries | retry_period |      proc_schema      |      proc_name      |       owner       | scheduled |        config         | next_start | hypertable_schema | hypertable_name 
---------+----------------------------+-------------------+-----------------+-------------+--------------+-----------------------+---------------------+-------------------+-----------+-----------------------+------------+-------------------+-----------------
-      1 | Telemetry Reporter [1]     | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry    | super_user        | t         |                       |            |                   | 
-   1000 | User-Defined Action [1000] | @ 1 hour          | @ 0             |          -1 | @ 5 mins     | public                | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   | 
-   1001 | User-Defined Action [1001] | @ 1 hour          | @ 0             |          -1 | @ 5 mins     | public                | custom_proc         | default_perm_user | t         | {"type": "procedure"} |            |                   | 
-   1002 | User-Defined Action [1002] | @ 1 hour          | @ 0             |          -1 | @ 5 mins     | public                | custom_proc2        | default_perm_user | t         | {"type": "procedure"} |            |                   | 
-   1003 | User-Defined Action [1003] | @ 1 hour          | @ 0             |          -1 | @ 5 mins     | public                | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   | 
-   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0             |          -1 | @ 5 mins     | public                | custom_func_definer | default_perm_user | t         | {"type": "function"}  |            |                   | 
-(6 rows)
+SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
+ job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |      proc_name      |       owner       | scheduled |        config         | next_start | hypertable_schema | hypertable_name 
+--------+----------------------------+-------------------+-------------+-------------+--------------+-------------+---------------------+-------------------+-----------+-----------------------+------------+-------------------+-----------------
+   1000 | User-Defined Action [1000] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   | 
+   1001 | User-Defined Action [1001] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc         | default_perm_user | t         | {"type": "procedure"} |            |                   | 
+   1002 | User-Defined Action [1002] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | {"type": "procedure"} |            |                   | 
+   1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | {"type": "function"}  |            |                   | 
+   1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | {"type": "function"}  |            |                   | 
+(5 rows)
 
--- check for corrects counts in telemetry
-SELECT get_telemetry_report() -> 'num_user_defined_actions';
- ?column? 
-----------
- 5
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
+ count 
+-------
+     5
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -125,12 +123,7 @@ SELECT delete_job(NULL);
 SELECT delete_job(-1);
 ERROR:  job -1 not found
 \set ON_ERROR_STOP 1
-SELECT delete_job(1000);
- delete_job 
-------------
- 
-(1 row)
-
+-- We keep job 1000 for some additional checks.
 SELECT delete_job(1001);
  delete_job 
 ------------
@@ -156,7 +149,7 @@ SELECT delete_job(1004);
 (1 row)
 
 -- check jobs got removed
-SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1000;
+SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1001;
  count 
 -------
      0
@@ -186,53 +179,60 @@ NOTICE:  job -1 not found, skipping
 (1 row)
 
 -- test altering job with NULL config
-SELECT job_id FROM alter_job(1,scheduled:=false);
+SELECT job_id FROM alter_job(1000,scheduled:=false);
  job_id 
 --------
-      1
+   1000
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
- job_id |    application_name    | schedule_interval |   max_runtime   | max_retries | retry_period |      proc_schema      |    proc_name     |   owner    | scheduled | config | next_start | hypertable_schema | hypertable_name 
---------+------------------------+-------------------+-----------------+-------------+--------------+-----------------------+------------------+------------+-----------+--------+------------+-------------------+-----------------
-      1 | Telemetry Reporter [1] | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry | super_user | f         |        |            |                   | 
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+ scheduled |        config        
+-----------+----------------------
+ f         | {"type": "function"}
 (1 row)
 
 -- test updating job settings
-SELECT job_id FROM alter_job(1,config:='{"test":"test"}');
+SELECT job_id FROM alter_job(1000,config:='{"test":"test"}');
  job_id 
 --------
-      1
+   1000
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
- job_id |    application_name    | schedule_interval |   max_runtime   | max_retries | retry_period |      proc_schema      |    proc_name     |   owner    | scheduled |      config      | next_start | hypertable_schema | hypertable_name 
---------+------------------------+-------------------+-----------------+-------------+--------------+-----------------------+------------------+------------+-----------+------------------+------------+-------------------+-----------------
-      1 | Telemetry Reporter [1] | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry | super_user | f         | {"test": "test"} |            |                   | 
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+ scheduled |      config      
+-----------+------------------
+ f         | {"test": "test"}
 (1 row)
 
-SELECT job_id FROM alter_job(1,scheduled:=true);
+SELECT job_id FROM alter_job(1000,scheduled:=true);
  job_id 
 --------
-      1
+   1000
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
- job_id |    application_name    | schedule_interval |   max_runtime   | max_retries | retry_period |      proc_schema      |    proc_name     |   owner    | scheduled |      config      | next_start | hypertable_schema | hypertable_name 
---------+------------------------+-------------------+-----------------+-------------+--------------+-----------------------+------------------+------------+-----------+------------------+------------+-------------------+-----------------
-      1 | Telemetry Reporter [1] | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry | super_user | t         | {"test": "test"} |            |                   | 
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+ scheduled |      config      
+-----------+------------------
+ t         | {"test": "test"}
 (1 row)
 
-SELECT job_id FROM alter_job(1,scheduled:=false);
+SELECT job_id FROM alter_job(1000,scheduled:=false);
  job_id 
 --------
-      1
+   1000
 (1 row)
 
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
- job_id |    application_name    | schedule_interval |   max_runtime   | max_retries | retry_period |      proc_schema      |    proc_name     |   owner    | scheduled |      config      | next_start | hypertable_schema | hypertable_name 
---------+------------------------+-------------------+-----------------+-------------+--------------+-----------------------+------------------+------------+-----------+------------------+------------+-------------------+-----------------
-      1 | Telemetry Reporter [1] | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry | super_user | f         | {"test": "test"} |            |                   | 
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+ scheduled |      config      
+-----------+------------------
+ f         | {"test": "test"}
+(1 row)
+
+-- Done with job 1000 now, so remove it.
+SELECT delete_job(1000);
+ delete_job 
+------------
+ 
 (1 row)
 
 --test for #2793

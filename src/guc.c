@@ -11,8 +11,11 @@
 #include "license_guc.h"
 #include "config.h"
 #include "hypertable_cache.h"
+#ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
+#endif
 
+#ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
 {
 	TELEMETRY_OFF,
@@ -33,6 +36,7 @@ ts_telemetry_on()
 static const struct config_enum_entry telemetry_level_options[] = {
 	{ "off", TELEMETRY_OFF, false }, { "basic", TELEMETRY_BASIC, false }, { NULL, 0, false }
 };
+#endif
 
 static const struct config_enum_entry remote_data_fetchers[] = {
 	{ "rowbyrow", RowByRowFetcherType, false },
@@ -57,12 +61,14 @@ bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 int ts_guc_max_open_chunks_per_insert = 10;
 int ts_guc_max_cached_chunks_per_hypertable = 10;
+#ifdef USE_TELEMETRY
 int ts_guc_telemetry_level = TELEMETRY_DEFAULT;
+char *ts_telemetry_cloud = NULL;
+#endif
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
-char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT bool ts_guc_enable_2pc;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
@@ -375,6 +381,7 @@ _guc_init(void)
 							NULL,
 							assign_max_cached_chunks_per_hypertable_hook,
 							NULL);
+#ifdef USE_TELEMETRY
 	DefineCustomEnumVariable("timescaledb.telemetry_level",
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
@@ -386,6 +393,7 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#endif
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.license",
 							   /* short_dec= */ "TimescaleDB license type",
@@ -420,6 +428,7 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
+#ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_dec= */ "cloud provider",
 							   /* long_dec= */ "cloud provider used for this instance",
@@ -430,6 +439,7 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+#endif
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler",

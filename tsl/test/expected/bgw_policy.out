@@ -609,13 +609,15 @@ ERROR:  must be owner of hypertable "test_table_perm"
 select remove_retention_policy('test_table');
 ERROR:  must be owner of hypertable "test_table"
 \set ON_ERROR_STOP 1
-SELECT * FROM jsonb_each(get_telemetry_report()) WHERE KEY ~ '(policies|actions)$' ORDER BY 1;
-             key              | value 
-------------------------------+-------
- num_compression_policies     | 0
- num_continuous_aggs_policies | 0
- num_reorder_policies         | 1
- num_retention_policies       | 2
- num_user_defined_actions     | 0
-(5 rows)
+-- Check the number of non-telemetry policies. We check for telemetry
+-- policy in telemetry_community.sql
+SELECT proc_name, count(*)
+FROM _timescaledb_config.bgw_job
+WHERE proc_name NOT LIKE '%telemetry%'
+GROUP BY proc_name;
+    proc_name     | count 
+------------------+-------
+ policy_reorder   |     1
+ policy_retention |     2
+(2 rows)
 

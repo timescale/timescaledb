@@ -11,8 +11,10 @@ set(SOURCES
     partialize_finalize.c
     planner.c
     process_utility.c
-    reorder.c
-    telemetry.c)
+    reorder.c)
+if(USE_TELEMETRY)
+  list(APPEND SOURCES telemetry.c)
+endif()
 
 # Add test source code in Debug builds
 if(CMAKE_BUILD_TYPE MATCHES Debug)

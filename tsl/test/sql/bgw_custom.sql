@@ -51,10 +51,9 @@ SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb);
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb);
 SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb);
 
-SELECT * FROM timescaledb_information.jobs ORDER BY 1;
+SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
 
--- check for corrects counts in telemetry
-SELECT get_telemetry_report() -> 'num_user_defined_actions';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
 
 \set ON_ERROR_STOP 0
 -- test bad input
@@ -76,14 +75,14 @@ SELECT delete_job(NULL);
 SELECT delete_job(-1);
 \set ON_ERROR_STOP 1
 
-SELECT delete_job(1000);
+-- We keep job 1000 for some additional checks.
 SELECT delete_job(1001);
 SELECT delete_job(1002);
 SELECT delete_job(1003);
 SELECT delete_job(1004);
 
 -- check jobs got removed
-SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1000;
+SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1001;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
@@ -97,16 +96,19 @@ SELECT alter_job(NULL, if_exists => true);
 SELECT alter_job(-1, if_exists => true);
 
 -- test altering job with NULL config
-SELECT job_id FROM alter_job(1,scheduled:=false);
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
+SELECT job_id FROM alter_job(1000,scheduled:=false);
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
 
 -- test updating job settings
-SELECT job_id FROM alter_job(1,config:='{"test":"test"}');
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
-SELECT job_id FROM alter_job(1,scheduled:=true);
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
-SELECT job_id FROM alter_job(1,scheduled:=false);
-SELECT * FROM timescaledb_information.jobs WHERE job_id = 1;
+SELECT job_id FROM alter_job(1000,config:='{"test":"test"}');
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+SELECT job_id FROM alter_job(1000,scheduled:=true);
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+SELECT job_id FROM alter_job(1000,scheduled:=false);
+SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1000;
+
+-- Done with job 1000 now, so remove it.
+SELECT delete_job(1000);
 
 --test for #2793
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
