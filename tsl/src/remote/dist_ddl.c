@@ -619,6 +619,17 @@ dist_ddl_process_grant(ProcessUtilityArgs *args)
 }
 
 /*
+ * "DROP OWNED BY" and "REASSIGN OWNED BY" commands need to be shipped to the
+ * datanodes as is.
+ */
+static void
+dist_ddl_process_drop_reassign(ProcessUtilityArgs *args)
+{
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+	dist_ddl_state_add_current_data_node_list();
+}
+
+/*
  * In multi-command statements (e.g., ALTER), it should not be possible to
  * have a mix of sub-commands that require both START and END processing.
  * Such mixing would require splitting the original ALTER across both START and END
@@ -839,6 +850,11 @@ dist_ddl_process(ProcessUtilityArgs *args)
 
 		case T_GrantStmt:
 			dist_ddl_process_grant(args);
+			break;
+
+		case T_DropOwnedStmt:
+		case T_ReassignOwnedStmt:
+			dist_ddl_process_drop_reassign(args);
 			break;
 
 		case T_AlterTableStmt:

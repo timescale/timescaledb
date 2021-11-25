@@ -1,4 +1,4 @@
-set(PROVE_TEST_FILES 001_simple_multinode.pl 003_connections.pl)
+set(PROVE_TEST_FILES 001_simple_multinode.pl 003_connections_privs.pl)
 set(PROVE_DEBUG_TEST_FILES 002_chunk_copy_move.pl 004_multinode_rdwr_1pc.pl)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
