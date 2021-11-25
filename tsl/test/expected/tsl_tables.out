@@ -382,14 +382,6 @@ select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
      1
 (1 row)
 
-SELECT * FROM _timescaledb_config.bgw_job ORDER BY id;
-  id  |    application_name     | schedule_interval |   max_runtime   | max_retries | retry_period |      proc_schema      |    proc_name     |       owner       | scheduled | hypertable_id |                      config                       
-------+-------------------------+-------------------+-----------------+-------------+--------------+-----------------------+------------------+-------------------+-----------+---------------+---------------------------------------------------
-    1 | Telemetry Reporter [1]  | @ 24 hours        | @ 1 min 40 secs |          -1 | @ 1 hour     | _timescaledb_internal | policy_telemetry | super_user        | t         |               | 
- 1007 | Retention Policy [1007] | @ 1 day           | @ 5 mins        |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention | default_perm_user | t         |             1 | {"drop_after": "@ 2 mons", "hypertable_id": 1}
- 1008 | Reorder Policy [1008]   | @ 84 hours        | @ 0             |          -1 | @ 5 mins     | _timescaledb_internal | policy_reorder   | default_perm_user | t         |             1 | {"index_name": "third_index", "hypertable_id": 1}
-(3 rows)
-
 DROP TABLE test_table;
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 

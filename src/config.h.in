@@ -40,6 +40,10 @@
 #cmakedefine TS_DEBUG
 #endif
 
+#ifndef USE_TELEMETRY
+#cmakedefine USE_TELEMETRY
+#endif
+
 #ifndef TELEMETRY_DEFAULT
 #cmakedefine TELEMETRY_DEFAULT @TELEMETRY_DEFAULT@
 #endif

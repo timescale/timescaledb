@@ -8,8 +8,11 @@
 
 #include <postgres.h>
 #include "export.h"
+#include "config.h"
 
+#ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);
+#endif
 
 extern bool ts_guc_enable_optimizations;
 extern bool ts_guc_enable_constraint_aware_append;
@@ -27,11 +30,13 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
+#ifdef USE_TELEMETRY
 extern int ts_guc_telemetry_level;
+extern char *ts_telemetry_cloud;
+#endif
 extern TSDLLEXPORT char *ts_guc_license;
 extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;
-extern char *ts_telemetry_cloud;
 extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT int ts_guc_max_insert_batch_size;
 extern TSDLLEXPORT bool ts_guc_enable_connection_binary_data;

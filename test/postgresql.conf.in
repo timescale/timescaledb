@@ -7,7 +7,7 @@ max_worker_processes=24
 autovacuum=false
 random_page_cost=1.0
 timescaledb.license='apache'
-timescaledb.telemetry_level=off
+@TELEMETRY_DEFAULT_SETTING@
 timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'
 timescaledb.last_tuned_version='0.0.1'
 timescaledb_telemetry.cloud='ci'

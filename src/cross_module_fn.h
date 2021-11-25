@@ -58,6 +58,7 @@ typedef struct CrossModuleFunctions
 	PGFunction job_alter;
 	PGFunction job_delete;
 	PGFunction job_run;
+
 	bool (*job_execute)(BgwJob *job);
 	void (*job_config_check)(Name proc_schema, Name proc_name, Jsonb *config);
 

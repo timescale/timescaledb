@@ -24,13 +24,16 @@
 #include <utils/jsonb.h>
 
 #include "job.h"
+#include "config.h"
 #include "scanner.h"
 #include "extension.h"
 #include "compat/compat.h"
 #include "job_stat.h"
 #include "license_guc.h"
 #include "utils.h"
+#ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
+#endif
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/policy.h"
 #include "scan_iterator.h"
@@ -42,7 +45,9 @@
 
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
+#ifdef USE_TELEMETRY
 static bool is_telemetry_job(BgwJob *job);
+#endif
 
 typedef enum JobLockLifetime
 {
@@ -169,12 +174,14 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		if (should_free)
 			heap_freetuple(tuple);
 
+#ifdef USE_TELEMETRY
 		/* ignore telemetry jobs if telemetry is disabled */
 		if (!ts_telemetry_on() && is_telemetry_job(job))
 		{
 			pfree(job);
 			continue;
 		}
+#endif
 
 		/* handle NULL columns */
 		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
@@ -740,16 +747,19 @@ ts_bgw_job_validate_job_owner(Oid owner)
 	ReleaseSysCache(role_tup);
 }
 
+#ifdef USE_TELEMETRY
 static bool
 is_telemetry_job(BgwJob *job)
 {
 	return namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0 &&
 		   namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0;
 }
+#endif
 
 bool
 ts_bgw_job_execute(BgwJob *job)
 {
+#ifdef USE_TELEMETRY
 	if (is_telemetry_job(job))
 	{
 		/*
@@ -763,6 +773,7 @@ ts_bgw_job_execute(BgwJob *job)
 												 TELEMETRY_INITIAL_NUM_RUNS,
 												 &one_hour);
 	}
+#endif
 
 #ifdef TS_DEBUG
 	if (scheduler_test_hook != NULL)

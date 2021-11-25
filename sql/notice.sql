@@ -5,13 +5,17 @@
 DO language plpgsql $$
 DECLARE
   telemetry_string TEXT;
+  telemetry_level text;
 BEGIN
-  IF current_setting('timescaledb.telemetry_level') = 'off'
-  THEN
+  telemetry_level := current_setting('timescaledb.telemetry_level', true);
+  CASE telemetry_level
+  WHEN 'off' THEN
     telemetry_string = E'Note: Please enable telemetry to help us improve our product by running: ALTER DATABASE "' || current_database() || E'" SET timescaledb.telemetry_level = ''basic'';';
-  ELSE
+  WHEN 'basic' THEN
     telemetry_string = E'Note: TimescaleDB collects anonymous reports to better understand and assist our users.\nFor more information and how to disable, please see our docs https://docs.timescale.com/timescaledb/latest/how-to-guides/configuration/telemetry.';
-  END IF;
+  ELSE
+    telemetry_string = E'';
+  END CASE;
 
   RAISE WARNING E'%\n%\n',
     E'\nWELCOME TO\n' ||

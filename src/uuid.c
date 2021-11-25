@@ -8,7 +8,7 @@
 #include <utils/uuid.h>
 
 #include "compat/compat.h"
-#include "telemetry/uuid.h"
+#include "uuid.h"
 
 /*
  * Generates a v4 UUID. Based on function pg_random_uuid() in the pgcrypto contrib module.

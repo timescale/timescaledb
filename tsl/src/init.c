@@ -23,6 +23,7 @@
 #include "compression/dictionary.h"
 #include "compression/gorilla.h"
 #include "compression/segment_meta.h"
+#include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/options.h"
@@ -51,7 +52,9 @@
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "reorder.h"
+#ifdef USE_TELEMETRY
 #include "telemetry.h"
+#endif
 #include "dist_backup.h"
 
 #ifdef PG_MODULE_MAGIC
@@ -82,7 +85,9 @@ cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
  * Apache codebase.
  */
 CrossModuleFunctions tsl_cm_functions = {
+#ifdef USE_TELEMETRY
 	.add_tsl_telemetry_info = tsl_telemetry_add_info,
+#endif
 
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,

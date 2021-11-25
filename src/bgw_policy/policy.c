@@ -36,37 +36,3 @@ ts_bgw_policy_delete_row_only_tuple_found(TupleInfo *ti, void *const data)
 
 	return SCAN_CONTINUE;
 }
-
-/* This function counts background worker jobs by type. */
-BgwJobTypeCount
-ts_bgw_job_type_counts()
-{
-	ListCell *lc;
-	List *jobs = ts_bgw_job_get_all(sizeof(BgwJob), CurrentMemoryContext);
-	BgwJobTypeCount counts = { 0 };
-
-	foreach (lc, jobs)
-	{
-		BgwJob *job = lfirst(lc);
-
-		if (namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0)
-		{
-			if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
-				counts.policy_cagg++;
-			else if (namestrcmp(&job->fd.proc_name, "policy_compression") == 0)
-				counts.policy_compression++;
-			else if (namestrcmp(&job->fd.proc_name, "policy_reorder") == 0)
-				counts.policy_reorder++;
-			else if (namestrcmp(&job->fd.proc_name, "policy_retention") == 0)
-				counts.policy_retention++;
-			else if (namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0)
-				counts.policy_telemetry++;
-		}
-		else
-		{
-			counts.user_defined_action++;
-		}
-	}
-
-	return counts;
-}

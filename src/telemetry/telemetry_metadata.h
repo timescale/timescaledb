@@ -12,8 +12,5 @@
 #include <export.h>
 
 extern void ts_telemetry_metadata_add_values(JsonbParseState *state);
-extern TSDLLEXPORT Datum ts_telemetry_metadata_get_uuid(void);
-extern Datum ts_telemetry_metadata_get_exported_uuid(void);
-extern Datum ts_telemetry_metadata_get_install_timestamp(void);
 
 #endif /* TIMESCALEDB_TELEMETRY_TELEMETRY_METADATA_H */

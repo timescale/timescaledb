@@ -13,10 +13,12 @@
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
 #include <utils/datum.h>
+#include <utils/uuid.h>
 
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
 #include "scanner.h"
+#include "uuid.h"
 
 #include "compat/compat.h"
 
@@ -202,4 +204,46 @@ ts_metadata_drop(const char *metadata_key)
 				CStringGetDatum(metadata_key));
 
 	ts_scanner_scan(&scanctx);
+}
+
+static Datum
+get_uuid_by_key(const char *key)
+{
+	bool isnull;
+	Datum uuid;
+
+	uuid = ts_metadata_get_value(key, UUIDOID, &isnull);
+
+	if (isnull)
+		uuid = ts_metadata_insert(key, UUIDPGetDatum(ts_uuid_create()), UUIDOID, true);
+	return uuid;
+}
+
+Datum
+ts_metadata_get_uuid(void)
+{
+	return get_uuid_by_key(METADATA_UUID_KEY_NAME);
+}
+
+Datum
+ts_metadata_get_exported_uuid(void)
+{
+	return get_uuid_by_key(METADATA_EXPORTED_UUID_KEY_NAME);
+}
+
+Datum
+ts_metadata_get_install_timestamp(void)
+{
+	bool isnull;
+	Datum timestamp;
+
+	timestamp = ts_metadata_get_value(METADATA_TIMESTAMP_KEY_NAME, TIMESTAMPTZOID, &isnull);
+
+	if (isnull)
+		timestamp = ts_metadata_insert(METADATA_TIMESTAMP_KEY_NAME,
+									   TimestampTzGetDatum(GetCurrentTimestamp()),
+									   TIMESTAMPTZOID,
+									   true);
+
+	return timestamp;
 }

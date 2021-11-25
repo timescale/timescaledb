@@ -39,11 +39,6 @@ DROP SCHEMA timescaledb_information;
 -- test that installation script errors when any of the function in public schema already exists
 -- we don't test every public function but just a few common ones
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE FUNCTION get_telemetry_report() RETURNS JSONB LANGUAGE SQL AS $$ SELECT NULL::jsonb; $$;
-CREATE EXTENSION timescaledb;
-DROP FUNCTION get_telemetry_report;
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE FUNCTION time_bucket(int,int) RETURNS int LANGUAGE SQL AS $$ SELECT 1::int; $$;
 CREATE EXTENSION timescaledb;
 DROP FUNCTION time_bucket;

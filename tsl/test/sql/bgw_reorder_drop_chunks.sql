@@ -82,9 +82,9 @@ INSERT INTO test_reorder_table VALUES (5, 5);
 
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_reorder_table';
 
-SELECT get_telemetry_report() -> 'num_reorder_policies';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_internal' AND proc_name = 'policy_reorder';
 select add_reorder_policy('test_reorder_table', 'test_reorder_table_time_idx') as reorder_job_id \gset
-SELECT get_telemetry_report() -> 'num_reorder_policies';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_internal' AND proc_name = 'policy_reorder';
 
 -- job was created
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:reorder_job_id;
@@ -219,9 +219,9 @@ INSERT INTO test_drop_chunks_table VALUES (now() - INTERVAL '8 months', 1);
 SELECT show_chunks('test_drop_chunks_table');
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_drop_chunks_table';
 
-SELECT get_telemetry_report() -> 'num_retention_policies';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_internal' AND proc_name = 'policy_retention';
 SELECT add_retention_policy('test_drop_chunks_table', INTERVAL '4 months') as drop_chunks_job_id \gset
-SELECT get_telemetry_report() -> 'num_retention_policies';
+SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_internal' AND proc_name = 'policy_retention';
 
 SELECT alter_job(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
 

@@ -17,5 +17,6 @@ WHERE oid IN (
         AND deptype = 'e'
         AND classid = 'pg_catalog.pg_proc'::regclass)
     AND pronamespace = 'public'::regnamespace
+    AND proname NOT LIKE '%telemetry%'
   ORDER BY proname;
 

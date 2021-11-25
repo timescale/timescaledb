@@ -388,6 +388,7 @@ SELECT * FROM test_continuous_agg_view_user_2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT * from sorted_bgw_log;
 
--- check for correct counts in telemetry
-SELECT get_telemetry_report() -> 'num_continuous_aggs_policies';
-
+-- Count the number of continuous aggregate policies
+SELECT count(*) FROM _timescaledb_config.bgw_job
+ WHERE proc_schema = '_timescaledb_internal'
+   AND proc_name = 'policy_refresh_continuous_aggregate';
