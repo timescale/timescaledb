@@ -405,8 +405,7 @@ process_drop_foreign_server_start(DropStmt *stmt)
 
 	foreach (lc, stmt->objects)
 	{
-		Value *value = lfirst(lc);
-		const char *servername = strVal(value);
+		const char *servername = strVal(lfirst(lc));
 
 		if (block_on_foreign_server(servername))
 			ereport(ERROR,
@@ -2987,9 +2986,7 @@ process_create_table_end(Node *parsetree)
 static inline const char *
 typename_get_unqual_name(TypeName *tn)
 {
-	Value *name = llast(tn->names);
-
-	return name->val.str;
+	return strVal(llast(tn->names));
 }
 
 static void
