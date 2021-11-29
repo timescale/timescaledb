@@ -460,4 +460,14 @@ get_reindex_options(ReindexStmt *stmt)
 #define TYPALIGN_DOUBLE 'd' /* double alignment (often 8 bytes) */
 #endif
 
+/*
+ * erand48.c is gone as of 3804539e, so pg_*rand48() family is not available
+ * in PostgreSQL >= 15. Since we rely on pg_erand48() return value in our tests
+ * we choose to copy erand48.c to the project.
+ */
+double ts_erand48(unsigned short xseed[3]);
+long ts_lrand48(void);
+long ts_jrand48(unsigned short xseed[3]);
+void ts_srand48(long seed);
+
 #endif /* TIMESCALEDB_COMPAT_H */
