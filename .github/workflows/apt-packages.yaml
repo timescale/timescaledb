@@ -21,8 +21,8 @@ jobs:
       fail-fast: false
       matrix:
         # Debian images:  9 (stretch), 10 (buster), 11 (bullseye)
-        # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal), 21.04 (hirsute)
-        image: [ "debian:9-slim", "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:hirsute"]
+        # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal), 21.04 (hirsute), 21.10 (impish)
+        image: [ "debian:9-slim", "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:hirsute", "ubuntu:impish"]
         pg: [ 12, 13, 14 ]
         license: [ "TSL", "Apache"]
         include:
@@ -79,7 +79,7 @@ jobs:
         fi
 
     - name: Test Downgrade
-      if: matrix.pg != 14
+      if: matrix.pg != 14 && matrix.image != 'ubuntu:impish'
       run: |
         # since this runs nightly on master we have to get the previous version from the last released version and not current branch
         prev_version=$(wget --quiet -O - https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config | grep update_from_version | sed -e 's!update_from_version = !!')
