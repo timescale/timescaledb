@@ -39,7 +39,8 @@
  * on the access node:
  *
  * Case 1 - The transaction is ongoing:
- *   In this case the state of the remote transaction is unknown (REMOTE_TXN_RESOLVE_UNKNOWN)
+ *   In this case the state of the remote transaction is in progress
+ *(REMOTE_TXN_RESOLVE_IN_PROGRESS)
  *
  * Case 2 - The transaction is committed:
  *  The remote transaction MUST BE be committed (REMOTE_TXN_RESOLVE_COMMT)
@@ -74,9 +75,9 @@
 
 typedef enum RemoteTxnResolution
 {
-	REMOTE_TXN_RESOLUTION_UNKNOWN = 0,
+	REMOTE_TXN_RESOLUTION_IN_PROGRESS = 0,
 	REMOTE_TXN_RESOLUTION_ABORT,
-	REMOTE_TXN_RESOLUTION_COMMT
+	REMOTE_TXN_RESOLUTION_COMMIT
 } RemoteTxnResolution;
 
 extern RemoteTxnResolution remote_txn_resolution(Oid foreign_server,
