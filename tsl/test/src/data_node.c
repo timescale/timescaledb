@@ -66,25 +66,23 @@ ts_test_data_node_show(PG_FUNCTION_ARGS)
 		foreach (lc, server->options)
 		{
 			DefElem *elem = lfirst(lc);
-			Value *v = (Value *) elem->arg;
-
-			Assert(v->type == T_String);
+			Assert(IsA(elem->arg, String));
 
 			if (strcmp("host", elem->defname) == 0)
 			{
-				values[1] = CStringGetTextDatum(v->val.str);
+				values[1] = CStringGetTextDatum(defGetString(elem));
 				nulls[1] = false;
 			}
 			else if (strcmp("port", elem->defname) == 0)
 			{
-				int32 port = strtoul(v->val.str, NULL, 10) & 0xFFFFFFFF;
+				int32 port = strtoul(defGetString(elem), NULL, 10) & 0xFFFFFFFF;
 
 				values[2] = Int32GetDatum(port);
 				nulls[2] = false;
 			}
 			else if (strcmp("dbname", elem->defname) == 0)
 			{
-				values[3] = CStringGetDatum(v->val.str);
+				values[3] = CStringGetDatum(defGetString(elem));
 				nulls[3] = false;
 			}
 		}
