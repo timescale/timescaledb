@@ -36,7 +36,7 @@ extern void remote_txn_set_will_prep_statement(RemoteTxn *entry,
 											   RemoteTxnPrepStmtOption prep_stmt_option);
 extern TSConnection *remote_txn_get_connection(RemoteTxn *txn);
 extern TSConnectionId remote_txn_get_connection_id(RemoteTxn *txn);
-extern bool remote_txn_is_still_in_progress(TransactionId access_node_xid);
+extern bool remote_txn_is_still_in_progress_on_access_node(TransactionId access_node_xid);
 extern size_t remote_txn_size(void);
 extern bool remote_txn_is_at_sub_txn_level(RemoteTxn *entry, int curlevel);
 extern bool remote_txn_is_ongoing(RemoteTxn *entry);
@@ -50,7 +50,8 @@ extern void remote_txn_report_prepare_transaction_result(RemoteTxn *txn, bool su
 /* Persitent record */
 extern RemoteTxnId *remote_txn_persistent_record_write(TSConnectionId id);
 extern bool remote_txn_persistent_record_exists(const RemoteTxnId *gid);
-extern int remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid);
+extern int remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid,
+															 const char *gid);
 
 #ifdef DEBUG
 /* Debugging functions used in testing */

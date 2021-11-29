@@ -17,14 +17,15 @@
 
 #define GID_SEP "-"
 
-#define GID_PREFIX "ts"
+/* The separator is part of the GID prefix */
+#define GID_PREFIX "ts-"
 /* This is the maximum size of the literal accepted by PREPARE TRANSACTION, etc. */
 #define GID_MAX_SIZE 200
 
 #define REMOTE_TXN_ID_VERSION ((uint8) 1)
 
 /* current_pattern: ts-version-xid-server_id-user_id */
-#define FMT_PATTERN GID_PREFIX GID_SEP "%hhu" GID_SEP "%u" GID_SEP "%u" GID_SEP "%u"
+#define FMT_PATTERN GID_PREFIX "%hhu" GID_SEP "%u" GID_SEP "%u" GID_SEP "%u"
 
 static char *
 remote_txn_id_get_sql(const char *command, RemoteTxnId *id)

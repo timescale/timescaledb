@@ -23,10 +23,17 @@ test_basic_persistent_record(TSConnectionId cid)
 	RemoteTxnId *id = remote_txn_id_create(GetTopTransactionId(), cid);
 
 	TestAssertTrue(!remote_txn_persistent_record_exists(id));
+
 	remote_txn_persistent_record_write(cid);
 	TestAssertTrue(remote_txn_persistent_record_exists(id));
+	/* delete by just specifying the data node */
+	remote_txn_persistent_record_delete_for_data_node(cid.server_id, NULL);
+	TestAssertTrue(!remote_txn_persistent_record_exists(id));
 
-	remote_txn_persistent_record_delete_for_data_node(cid.server_id);
+	remote_txn_persistent_record_write(cid);
+	TestAssertTrue(remote_txn_persistent_record_exists(id));
+	/* delete by specifying the exact GID */
+	remote_txn_persistent_record_delete_for_data_node(cid.server_id, remote_txn_id_out(id));
 	TestAssertTrue(!remote_txn_persistent_record_exists(id));
 }
 
