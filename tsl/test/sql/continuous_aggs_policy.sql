@@ -258,8 +258,6 @@ SELECT add_continuous_aggregate_policy('mat_smallint', '15', 10, '1h'::interval,
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interval, if_not_exists=>true);
 \set ON_ERROR_STOP 1
 
-DROP MATERIALIZED VIEW mat_smallint;
-DROP TABLE smallint_tab CASCADE;
 
 --bigint table
 CREATE TABLE bigint_tab (a bigint);
@@ -290,4 +288,93 @@ INSERT INTO bigint_tab VALUES(500);
 CALL run_job(:job_id);
 SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 
+ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
+ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('mat_smallint', 0::smallint); 
+SELECT add_compression_policy('mat_smallint', -4::smallint); 
+SELECT add_compression_policy('mat_bigint', 0::bigint); 
+\set ON_ERROR_STOP 1
+SELECT add_compression_policy('mat_smallint', 5::smallint); 
+SELECT add_compression_policy('mat_bigint', 20::bigint); 
+
 -- end of coverage tests
+
+--TEST continuous aggregate + compression policy on caggs
+CREATE TABLE metrics (
+    time timestamptz NOT NULL,
+    device_id int,
+    device_id_peer int,
+    v0 int,
+    v1 int,
+    v2 float,
+    v3 float
+);
+
+SELECT create_hypertable('metrics', 'time');
+
+INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
+SELECT time,
+    device_id,
+    0,
+    device_id + 1,
+    device_id + 2,
+    0.5,
+    NULL
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-02 23:55:00+0', '20m') gtime (time), 
+    generate_series(1, 2, 1) gdevice (device_id);
+
+ALTER TABLE metrics SET ( timescaledb.compress );
+SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
+
+CREATE MATERIALIZED VIEW metrics_cagg WITH (timescaledb.continuous,
+  timescaledb.materialized_only = true)
+AS
+SELECT time_bucket('1 day', time) as dayb, device_id,
+       sum(v0), avg(v3)
+FROM metrics
+GROUP BY 1, 2
+WITH NO DATA;
+
+ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
+
+--can set compression policy only after setting up refresh policy --
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
+\set ON_ERROR_STOP 1
+
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
+SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset 
+
+--verify that jobs were added for the policies ---
+SELECT materialization_hypertable_schema AS "MAT_SCHEMA_NAME",
+       materialization_hypertable_name AS "MAT_TABLE_NAME",
+       materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_NAME"
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'metrics_cagg' \gset
+
+SELECT count(*) FROM timescaledb_information.jobs
+WHERE hypertable_name = :'MAT_TABLE_NAME';
+
+--exec the cagg compression job --
+CALL refresh_continuous_aggregate('metrics_cagg', NULL, '2001-02-01 00:00:00+0');
+CALL run_job(:COMP_JOB);
+SELECT count(*), count(*) FILTER ( WHERE is_compressed is TRUE  )
+FROM timescaledb_information.chunks
+WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
+
+--add some new data into metrics_cagg so that cagg policy job has something to do
+INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
+SELECT now() - '5 day'::interval, 102, 0, 10, 10, 10, 10;
+CALL run_job(:REFRESH_JOB);
+--now we have a new chunk and it is not compressed
+SELECT count(*), count(*) FILTER ( WHERE is_compressed is TRUE  )
+FROM timescaledb_information.chunks
+WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
+
+--verify that both jobs are dropped when view is dropped
+DROP MATERIALIZED VIEW metrics_cagg;
+
+SELECT count(*) FROM timescaledb_information.jobs
+WHERE hypertable_name = :'MAT_TABLE_NAME';
+
