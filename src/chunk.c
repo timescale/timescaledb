@@ -123,7 +123,7 @@ static int chunk_cmp(const void *ch1, const void *ch2);
 static Chunk *chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slices);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
 											  const char *table_name);
-static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid);
+static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht);
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
@@ -2226,7 +2226,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		Oid time_type;
 
 		hcache = ts_hypertable_cache_pin();
-		ht = find_hypertable_from_table_or_cagg(hcache, relid);
+		ht = find_hypertable_from_table_or_cagg(hcache, relid, true);
 		Assert(ht != NULL);
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 		Assert(time_dim != NULL);
@@ -3946,9 +3946,10 @@ list_return_srf(FunctionCallInfo fcinfo)
  *
  * Will error if relid is not a hypertable or view (or cannot be found) or if
  * it is a materialized hypertable.
+ * allow_matht permits materialized hypertables and will not error out
  */
 static Hypertable *
-find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid)
+find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 {
 	const char *rel_name;
 	Hypertable *ht;
@@ -3969,11 +3970,15 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid)
 		{
 			case HypertableIsMaterialization:
 			case HypertableIsMaterializationAndRaw:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on materialized hypertable"),
-						 errhint("Try the operation on the continuous aggregate instead."),
-						 errdetail("Hypertable \"%s\" is a materialized hypertable.", rel_name)));
+				if (!allow_matht)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("operation not supported on materialized hypertable"),
+							 errhint("Try the operation on the continuous aggregate instead."),
+							 errdetail("Hypertable \"%s\" is a materialized hypertable.",
+									   rel_name)));
+				}
 				break;
 
 			default:
@@ -4053,7 +4058,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	 * that does not refer to a hypertable or a continuous aggregate, or a
 	 * relid that does not refer to anything at all. */
 	hcache = ts_hypertable_cache_pin();
-	ht = find_hypertable_from_table_or_cagg(hcache, relid);
+	ht = find_hypertable_from_table_or_cagg(hcache, relid, false);
 	Assert(ht != NULL);
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Assert(time_dim != NULL);
