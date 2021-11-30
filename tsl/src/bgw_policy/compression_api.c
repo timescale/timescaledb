@@ -9,7 +9,6 @@
 #include <miscadmin.h>
 #include <utils/builtins.h>
 
-#include "bgw/job.h"
 #include "compression_api.h"
 #include "errors.h"
 #include "hypertable.h"
@@ -17,7 +16,9 @@
 #include "policy_utils.h"
 #include "utils.h"
 #include "jsonb_utils.h"
+#include "bgw/job.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/continuous_aggregate_api.h"
 
 /*
  * Default scheduled interval for compress jobs = default chunk length.
@@ -43,6 +44,9 @@
 #define CONFIG_KEY_RECOMPRESS_AFTER "recompress_after"
 #define CONFIG_KEY_RECOMPRESS "recompress"
 #define CONFIG_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
+
+static Hypertable *validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid,
+													   bool *is_cagg);
 
 bool
 policy_compression_get_recompress(const Jsonb *config)
@@ -151,13 +155,35 @@ policy_recompression_proc(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
+static void
+validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
+{
+	Oid expected_type = InvalidOid;
+	if (IS_INTEGER_TYPE(partitioning_type))
+	{
+       if ( !IS_INTEGER_TYPE(compress_after_type))
+		  expected_type = partitioning_type;
+	}
+	else if (compress_after_type != INTERVALOID)
+	{
+		expected_type = INTERVALOID;
+	}
+	if (expected_type != InvalidOid)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("unsupported compress_after argument type, expected type : %s",
+						format_type_be(expected_type))));
+	}
+}
+
 Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
-	Oid ht_oid = PG_GETARG_OID(0);
+	Oid user_oid = PG_GETARG_OID(0);
 	Datum compress_after_datum = PG_GETARG_DATUM(1);
 	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
@@ -166,22 +192,14 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	const Dimension *dim;
 	Oid owner_id;
+	bool is_cagg = false;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	/* check if this is a table with compression enabled */
-	hypertable = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
+	hcache = ts_hypertable_cache_pin();
+	hypertable = validate_compress_chunks_hypertable(hcache, user_oid, &is_cagg);
 
-	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(hypertable))
-	{
-		ts_cache_release(hcache);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression not enabled on hypertable \"%s\"", get_rel_name(ht_oid)),
-				 errhint("Enable compression before adding a compression policy.")));
-	}
-
-	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
+	owner_id = ts_hypertable_permissions_check(user_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
@@ -199,8 +217,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("compression policy already exists for hypertable \"%s\"",
-							get_rel_name(ht_oid)),
+					 errmsg("compression policy already exists for hypertable or continuous "
+							"aggregate \"%s\"",
+							get_rel_name(user_oid)),
 					 errhint("Set option \"if_not_exists\" to true to avoid error.")));
 		}
 		Assert(list_length(jobs) == 1);
@@ -215,7 +234,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			ts_cache_release(hcache);
 			ereport(NOTICE,
 					(errmsg("compression policy already exists for hypertable \"%s\", skipping",
-							get_rel_name(ht_oid))));
+							get_rel_name(user_oid))));
 			PG_RETURN_INT32(-1);
 		}
 		else
@@ -223,7 +242,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			ts_cache_release(hcache);
 			ereport(WARNING,
 					(errmsg("compression policy already exists for hypertable \"%s\"",
-							get_rel_name(ht_oid)),
+							get_rel_name(user_oid)),
 					 errdetail("A policy already exists with different arguments."),
 					 errhint("Remove the existing policy before adding a new one.")));
 			PG_RETURN_INT32(-1);
@@ -246,7 +265,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
-
+	validate_compress_after_type(partitioning_type, compress_after_type);
 	switch (compress_after_type)
 	{
 		case INTERVALOID:
@@ -275,6 +294,20 @@ policy_compression_add(PG_FUNCTION_ARGS)
 					 errmsg("unsupported datatype for %s: %s",
 							CONFIG_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
+	}
+	/* If this is a compression policy for a cagg, verify that
+	 * compress_after > refresh_start of cagg policy. We do not want
+	 * to compress regions that can eb refreshed by the cagg policy.
+	 */
+	if (is_cagg && !policy_refresh_cagg_refresh_start_lt(hypertable->fd.id,
+														 compress_after_type,
+														 compress_after_datum))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compress_after value for compression policy should be greater than the "
+						"start of the refresh window of continuous aggregate policy for %s",
+						get_rel_name(user_oid))));
 	}
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
@@ -339,4 +372,76 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 	ts_bgw_job_delete_by_id(job->fd.id);
 
 	PG_RETURN_BOOL(true);
+}
+
+/* compare cagg job config  with compression job config. If there is an overlap, then
+ * throw an error. We do this since we cannot refresh compressed
+ * regions. We do not want cont. aggregate jobs to fail
+ */
+
+/* If this is a cagg, then mark it as a cagg */
+static Hypertable *
+validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg)
+{
+	ContinuousAggHypertableStatus status;
+	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, user_htoid, true /* missing_ok */);
+	*is_cagg = false;
+
+	if (ht != NULL)
+	{
+		if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("compression not enabled on hypertable \"%s\"",
+							get_rel_name(user_htoid)),
+					 errhint("Enable compression before adding a compression policy.")));
+		}
+		status = ts_continuous_agg_hypertable_status(ht->fd.id);
+		if ((status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw))
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot add compression policy to materialized hypertable \"%s\" ",
+							get_rel_name(user_htoid)),
+					 errhint("Please add the policy to the corresponding continuous aggregate "
+							 "instead.")));
+		}
+	}
+	else
+	{
+		/*check if this is a cont aggregate view */
+		int32 mat_id;
+		bool found;
+
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(user_htoid);
+
+		if (cagg == NULL)
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("\"%s\" is not a hypertable or a continuous aggregate",
+							get_rel_name(user_htoid))));
+		}
+		*is_cagg = true;
+		mat_id = cagg->data.mat_hypertable_id;
+		ht = ts_hypertable_get_by_id(mat_id);
+
+		found = policy_refresh_cagg_exists(mat_id);
+		if (!found)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("continuous aggregate policy does not exist for \"%s\"",
+							get_rel_name(user_htoid)),
+					 errmsg("setup a refresh policy for \"%s\" before setting up a compression "
+							"policy",
+							get_rel_name(user_htoid))));
+		}
+	}
+	Assert(ht != NULL);
+	return ht;
 }

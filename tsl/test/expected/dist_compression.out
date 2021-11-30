@@ -707,7 +707,7 @@ NOTICE:  compression policy already exists for hypertable "conditions", skipping
 (1 row)
 
 select add_compression_policy('conditions', '60d'::interval);
-ERROR:  compression policy already exists for hypertable "conditions"
+ERROR:  compression policy already exists for hypertable or continuous aggregate "conditions"
 select add_compression_policy('conditions', '30d'::interval, if_not_exists=>true);
 WARNING:  compression policy already exists for hypertable "conditions"
  add_compression_policy 
