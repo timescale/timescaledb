@@ -6,8 +6,10 @@
 
 #include <postgres.h>
 #include <utils/builtins.h>
+#include "continuous_agg.h"
 #include "dimension.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "jsonb_utils.h"
 #include "policy_utils.h"
 #include "time_utils.h"
@@ -99,4 +101,28 @@ subtract_interval_from_now(Interval *lag, Oid time_dim_type)
 					 errmsg("unsupported time type %s", format_type_be(time_dim_type))));
 			pg_unreachable();
 	}
+}
+
+const Dimension *
+get_open_dimension_for_hypertable(const Hypertable *ht)
+{
+	int32 mat_id = ht->fd.id;
+	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);
+	if (IS_INTEGER_TYPE(partitioning_type))
+	{
+		/* if this a materialization hypertable related to cont agg
+		 * then need to get the right dimension which has
+		 * integer_now function
+		 */
+
+		open_dim = ts_continuous_agg_find_integer_now_func_by_materialization_id(mat_id);
+		if (open_dim == NULL)
+		{
+			elog(ERROR,
+				 "missing integer_now function for hypertable \"%s\" ",
+				 get_rel_name(ht->main_table_relid));
+		}
+	}
+	return open_dim;
 }
