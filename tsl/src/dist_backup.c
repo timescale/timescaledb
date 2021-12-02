@@ -40,6 +40,7 @@ create_restore_point_datum(TupleDesc tupdesc, const char *node_name, XLogRecPtr 
 	Datum values[_Anum_restore_point_max] = { 0 };
 	bool nulls[_Anum_restore_point_max] = { false };
 	HeapTuple tuple;
+	NameData node_name_nd;
 
 	tupdesc = BlessTupleDesc(tupdesc);
 	if (node_name == NULL)
@@ -50,7 +51,8 @@ create_restore_point_datum(TupleDesc tupdesc, const char *node_name, XLogRecPtr 
 	}
 	else
 	{
-		values[AttrNumberGetAttrOffset(Anum_restore_point_node_name)] = CStringGetDatum(node_name);
+		namestrcpy(&node_name_nd, node_name);
+		values[AttrNumberGetAttrOffset(Anum_restore_point_node_name)] = NameGetDatum(&node_name_nd);
 		values[AttrNumberGetAttrOffset(Anum_restore_point_node_type)] =
 			CStringGetTextDatum(TS_DATA_NODE_TYPE);
 	}
