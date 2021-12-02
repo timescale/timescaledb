@@ -211,11 +211,21 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			break;
 		}
 	}
+
 	/* no UniquePath found so this query might not be
 	 * elegible for sort-based DISTINCT and therefore
 	 * not elegible for SkipScan either */
 	if (!unique)
 		return;
+
+	/* Need to make a copy of the unique path here because add_path() in the
+	 * pathlist loop below might prune it if the new unique path
+	 * (SkipScanPath) dominates the old one. When the unique path is pruned,
+	 * the pointer will no longer be valid in the next iteration of the
+	 * pathlist loop. Fortunately, the Path object is not deeply freed, so a
+	 * shallow copy is enough. */
+	unique = makeNode(UpperUniquePath);
+	memcpy(unique, lfirst_node(UpperUniquePath, lc), sizeof(UpperUniquePath));
 
 	foreach (lc, input_rel->pathlist)
 	{
