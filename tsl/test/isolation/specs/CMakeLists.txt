@@ -3,9 +3,18 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
                           reorder_vs_insert_other_chunk.spec.in)
 
 set(TEST_TEMPLATES_MODULE_DEBUG
-    deadlock_recompress_chunk.spec.in reorder_vs_insert.spec.in
-    reorder_vs_select.spec.in remote_create_chunk.spec.in
-    dist_restore_point.spec.in continuous_aggs_drop_chunks.spec.in)
+    reorder_vs_insert.spec.in reorder_vs_select.spec.in
+    remote_create_chunk.spec.in dist_restore_point.spec.in
+    continuous_aggs_drop_chunks.spec.in)
+
+# These tests are using markers for the isolation tests (to avoid race
+# conditions causing differing output), which were added after 12.7, 13.3, and
+# 14.0.
+if(PG_VERSION VERSION_GREATER "12.7"
+   OR PG_VERSION VERSION_GREATER "13.3"
+   OR PG_VERSION VERSION_GREATER_EQUAL "14.0")
+  list(APPEND TEST_TEMPLATES_MODULE_DEBUG deadlock_recompress_chunk.spec.in)
+endif()
 
 list(
   APPEND
