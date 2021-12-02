@@ -4,21 +4,34 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.5.1 (2021-12-02)
+
+This release contains bug fixes since the 2.5.0 release.
+We deem it medium priority to upgrade.
 
 **Bugfixes**
+* #3706 Test enabling dist compression within a procedure
+* #3734 Rework distributed DDL processing logic
+* #3737 Fix flaky pg_dump
 * #3739 Fix compression policy on tables using INTEGER
 * #3766 Fix segfault in ts_hist_sfunc
-* #3789 Fix time_bucket comparison transformation
-* #3784 Fix DISTINCT ON queries returning incorrect results on distributed hypertables
-* #3801 Fail size utility functions when data nodes do not respond
-* #3781 Segfault in fill_result_error()
 * #3779 Support GRANT/REVOKE on distributed database
+* #3789 Fix time_bucket comparison transformation
+* #3797 Fix DISTINCT ON queries for distributed hyperatbles
+* #3799 Fix error printout on correct security label
+* #3801 Fail size utility functions when data nodes do not respond
+* #3809 Fix NULL pointer evaluation in fill_result_error()
+* #3811 Fix INSERT..SELECT involving dist hypertables
+* #3819 Fix reading garbage value from TSConnectionError
+* #3824 Remove pointers from CAGG lists for 64-bit archs
+* #3846 Eliminate deadlock in recompress chunk policy
+* #3881 Fix SkipScan crash due to pruned unique path
+* #3884 Fix create_distributed_restore_point memory issue
 
 **Thanks**
 * @cbisnett for reporting and fixing a typo in an error message
 * @CaptainCuddleCube for reporting bug on compression policy procedure on tables using INTEGER on time dimension
-* @phemmer for continuously reporting bugs on multi-node
+* @phemmer for reporting bugs on multi-node
 
 ## 2.5.0 (2021-10-28)
 
