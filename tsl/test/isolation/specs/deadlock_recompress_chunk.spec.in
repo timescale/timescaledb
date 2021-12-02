@@ -95,5 +95,5 @@ step "recompress_chunks_start" {
 		      
 # Since the locking order is different, we locking before reindex we should one one lock on the index and
 # one lock on the chunk from different processes.
-permutation "recompress_insert_rows" "lock_after_decompress" "recompress_chunks_start" "query_start" "unlock_after_decompress"
+permutation recompress_insert_rows lock_after_decompress recompress_chunks_start query_start(recompress_chunks_start) unlock_after_decompress
 
