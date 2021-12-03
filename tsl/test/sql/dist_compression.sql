@@ -12,6 +12,7 @@
 \set DATA_NODE_3 :TEST_DBNAME _3
 
 \ir include/remote_exec.sql
+\ir include/compression_utils.sql
 
 SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
@@ -382,7 +383,7 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' \gset
 
 --call recompress_chunk directly on distributed chunk
-SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
 
 --check chunk status now, should be compressed
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
@@ -454,8 +455,7 @@ GROUP BY time_bucket(20, time) ORDER BY 1;
 RESET timescaledb.enable_per_data_node_queries;
 
 --check compression_status afterwards--
-SELECT recompress_chunk(chunk, true) FROM
-( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 2)q;
+CALL recompress_all_chunks('test_recomp_int', 2, true);
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 
 CALL run_job(:compressjob_id);
@@ -464,15 +464,13 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 --verify that there are no errors if the policy/recompress_chunk is executed again
 --on previously compressed chunks
 CALL run_job(:compressjob_id);
-SELECT recompress_chunk(chunk, true) FROM
-( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
+CALL recompress_all_chunks('test_recomp_int', true);
 
 --decompress and recompress chunk
 \set ON_ERROR_STOP 0
 SELECT decompress_chunk(chunk, true) FROM
 ( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
-SELECT recompress_chunk(chunk)  FROM
-( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+CALL recompress_all_chunks('test_recomp_int', 1, false);
 \set ON_ERROR_STOP 1
 
 -- test alter column type with distributed hypertable
@@ -515,7 +513,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 -- try insert into compressed and recompress
 INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
-SELECT recompress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
+CALL recompress_all_chunks('test_defaults', 1, false);
 SELECT * FROM test_defaults ORDER BY 1,2;
 
 -- test dropping columns from compressed

@@ -15,30 +15,7 @@
 # re-implement it here to be able to test that it works as
 # expected. Please check policy_internal.sql to see the code it is
 # based on.
-setup {
-    CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT)
-    RETURNS VOID LANGUAGE C VOLATILE STRICT
-    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-    CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT)
-    RETURNS VOID LANGUAGE C VOLATILE STRICT
-    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_release';
-
-    CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT)
-    RETURNS BIGINT LANGUAGE C VOLATILE STRICT
-    AS '@TS_MODULE_PATHNAME@', 'ts_debug_point_id';
-
-    CREATE OR REPLACE PROCEDURE recompress_chunk_procedure(regclass) AS $$
-    BEGIN
-      PERFORM decompress_chunk($1, if_compressed => true);
-      PERFORM pg_advisory_lock(debug_waitpoint_id('recompress_after_decompress'));
-      PERFORM pg_advisory_unlock(debug_waitpoint_id('recompress_after_decompress'));
-      COMMIT;
-      PERFORM compress_chunk($1);
-    END $$
-    LANGUAGE plpgsql;
-}
-
+#
 setup {
     CREATE TABLE hyper (time TIMESTAMP NOT NULL, a DOUBLE PRECISION NULL, b DOUBLE PRECISION NULL);
 
@@ -58,12 +35,31 @@ teardown {
     DROP TABLE hyper;
 }
 
+# We are not using a debug point when locking inside recompress_chunk
+# after decompress since it is an PL/SQL procedure. Instead we lock
+# the compressed chunk, which will block the actual drop in the
+# recompress procedure at the right point (before the commit), and we
+# can then start the query, which will queue after the others.
 session "locks"
-step "lock_after_decompress"     {
-    SELECT debug_waitpoint_enable('recompress_after_decompress');
+setup {
+  BEGIN;
+}
+step "lock_after_decompress" {
+    SELECT count(*) FROM show_chunks('hyper');
+    DO $$
+    DECLARE
+      chunk regclass;
+    BEGIN
+      SELECT format('%I.%I', c.schema_name, c.table_name)::regclass INTO chunk
+      FROM show_chunks('hyper'), _timescaledb_catalog.chunk p, _timescaledb_catalog.chunk c
+      WHERE p.compressed_chunk_id = c.id
+      AND format('%I.%I', p.schema_name, p.table_name)::regclass = show_chunks;
+      EXECUTE format('LOCK TABLE %s IN EXCLUSIVE MODE', chunk);
+    END;
+    $$;
 }
 step "unlock_after_decompress" {
-    SELECT debug_waitpoint_release('recompress_after_decompress');
+    ROLLBACK;
 }
 
 # When building a simple relation for the query (using
@@ -88,7 +84,7 @@ step "recompress_chunks_start" {
       chunk regclass;
     BEGIN
       SELECT show_chunks('hyper') INTO chunk;
-      CALL recompress_chunk_procedure(chunk);
+      CALL recompress_chunk(chunk);
     END;
     $$;
 }

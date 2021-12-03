@@ -104,4 +104,36 @@ CREATE AGGREGATE _timescaledb_internal.compress_array(ANYELEMENT) (
     FINALFUNC = _timescaledb_internal.array_compressor_finish
 );
 
+-- Helper functions to recompress all chunks of a hypertable
+-- Parameters:
+--   hypertable: The hypertable to recompress all chunks on
+--   lim: number of chunks to compress
+--   if_not_compressed: notice instead of error if chunk already compressed
+CREATE OR REPLACE PROCEDURE recompress_all_chunks(
+    hypertable REGCLASS,
+    lim INT,
+    if_not_compressed BOOLEAN
+) AS $$
+DECLARE
+  chunk regclass;
+BEGIN
+  FOR chunk IN SELECT show_chunks(hypertable) ORDER BY 1 LIMIT lim
+  LOOP
+    CALL recompress_chunk(chunk, if_not_compressed);
+  END LOOP;
+END $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE recompress_all_chunks(
+    hypertable REGCLASS,
+    if_not_compressed BOOLEAN
+) AS $$
+DECLARE
+  chunk regclass;
+BEGIN
+  FOR chunk IN SELECT show_chunks(hypertable) ORDER BY 1
+  LOOP
+    CALL recompress_chunk(chunk, if_not_compressed);
+  END LOOP;
+END $$ LANGUAGE plpgsql;
+
 \set ECHO all

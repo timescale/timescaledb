@@ -29,7 +29,42 @@ CREATE OR REPLACE FUNCTION decompress_chunk(
     if_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
 
-CREATE OR REPLACE FUNCTION recompress_chunk(
-    chunk REGCLASS,
-    if_not_compressed BOOLEAN = false
-) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk' LANGUAGE C STRICT VOLATILE;
+-- Recompress a chunk
+--
+-- Will give an error if the chunk was not already compressed. In this
+-- case, the user should use compress_chunk instead. Note that this
+-- function cannot be executed in an explicit transaction since it
+-- contains transaction control commands.
+--
+-- Parameters:
+--   chunk: Chunk to recompress.
+--   if_not_compressed: Print notice instead of error if chunk is already compressed.
+CREATE OR REPLACE PROCEDURE recompress_chunk(chunk REGCLASS,
+                                             if_not_compressed BOOLEAN = false)
+AS $$
+DECLARE
+  status INT;
+  chunk_name TEXT[];
+BEGIN
+    status := _timescaledb_internal.chunk_status(chunk);
+
+    -- Chunk names are in the internal catalog, but we only care about
+    -- the chunk name here.
+    chunk_name := parse_ident(chunk::text);
+    CASE status
+    WHEN 0 THEN
+        RAISE EXCEPTION 'call compress_chunk instead of recompress_chunk';
+    WHEN 1 THEN
+        IF if_not_compressed THEN
+            RAISE NOTICE 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
+            RETURN;
+        ELSE
+            RAISE EXCEPTION 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
+        END IF;
+    WHEN 3 THEN
+        PERFORM decompress_chunk(chunk);
+        COMMIT;
+    END CASE;
+    PERFORM compress_chunk(chunk, if_not_compressed);
+END
+$$ LANGUAGE plpgsql;
