@@ -23,6 +23,11 @@ CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], 
 RETURNS TABLE("table_record" CSTRING[])
 AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
 LANGUAGE C;
+\ir include/compression_utils.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
 SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
        node_name       |   host    | port  |       database        | node_created | database_created | extension_created 
@@ -929,12 +934,7 @@ c.schema_name || '.' || c.table_name as "CHUNK_NAME"
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' \gset
 --call recompress_chunk directly on distributed chunk
-SELECT recompress_chunk(:'CHUNK_NAME'::regclass);
-               recompress_chunk               
-----------------------------------------------
- _timescaledb_internal._dist_hyper_6_24_chunk
-(1 row)
-
+CALL recompress_chunk(:'CHUNK_NAME'::regclass);
 --check chunk status now, should be compressed
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
@@ -1058,14 +1058,7 @@ GROUP BY time_bucket(20, time) ORDER BY 1;
 
 RESET timescaledb.enable_per_data_node_queries;
 --check compression_status afterwards--
-SELECT recompress_chunk(chunk, true) FROM
-( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 2)q;
-               recompress_chunk               
-----------------------------------------------
- _timescaledb_internal._dist_hyper_6_24_chunk
- _timescaledb_internal._dist_hyper_6_25_chunk
-(2 rows)
-
+CALL recompress_all_chunks('test_recomp_int', 2, true);
 SELECT * from test_recomp_int_chunk_status ORDER BY 1;
        chunk_name       | chunk_status 
 ------------------------+--------------
@@ -1086,18 +1079,10 @@ SELECT * from test_recomp_int_chunk_status ORDER BY 1;
 --verify that there are no errors if the policy/recompress_chunk is executed again
 --on previously compressed chunks
 CALL run_job(:compressjob_id);
-SELECT recompress_chunk(chunk, true) FROM
-( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
-NOTICE:  nothing to recompress in chunk "_dist_hyper_6_24_chunk" 
-NOTICE:  nothing to recompress in chunk "_dist_hyper_6_25_chunk" 
-NOTICE:  nothing to recompress in chunk "_dist_hyper_6_26_chunk" 
- recompress_chunk 
-------------------
- 
- 
- 
-(3 rows)
-
+CALL recompress_all_chunks('test_recomp_int', true);
+NOTICE:  nothing to recompress in chunk "_dist_hyper_6_24_chunk"
+NOTICE:  nothing to recompress in chunk "_dist_hyper_6_25_chunk"
+NOTICE:  nothing to recompress in chunk "_dist_hyper_6_26_chunk"
 --decompress and recompress chunk
 \set ON_ERROR_STOP 0
 SELECT decompress_chunk(chunk, true) FROM
@@ -1107,8 +1092,7 @@ SELECT decompress_chunk(chunk, true) FROM
  _timescaledb_internal._dist_hyper_6_24_chunk
 (1 row)
 
-SELECT recompress_chunk(chunk)  FROM
-( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+CALL recompress_all_chunks('test_recomp_int', 1, false);
 ERROR:  call compress_chunk instead of recompress_chunk
 \set ON_ERROR_STOP 1
 -- test alter column type with distributed hypertable
@@ -1221,12 +1205,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42
 (3 rows)
 
-SELECT recompress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
-               compressed_chunk               
-----------------------------------------------
- _timescaledb_internal._dist_hyper_8_28_chunk
-(1 row)
-
+CALL recompress_all_chunks('test_defaults', 1, false);
 SELECT * FROM test_defaults ORDER BY 1,2;
              time             | device_id | c1 | c2 
 ------------------------------+-----------+----+----

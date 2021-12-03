@@ -332,7 +332,7 @@ status
 (1 row)
 
 
-starting permutation: CA1 CAc I1 Ic SChunkStat LockChunk1 RC1 IN1 UnlockChunk RCc INc SH
+starting permutation: CA1 CAc I1 Ic SChunkStat LockChunk1 RC1 IN1 UnlockChunk INc SH
 step CA1: 
   BEGIN;
   SELECT
@@ -372,25 +372,28 @@ lock_chunktable
 (1 row)
 
 step RC1: 
-  BEGIN;
-  SELECT
-    recompress_chunk(ch.schema_name || '.' || ch.table_name)
-  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
-  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
-  ORDER BY ch.id LIMIT 1;
-
+  DO $$
+  DECLARE
+    chunk_name text;
+  BEGIN
+  FOR chunk_name IN
+      SELECT ch.schema_name || '.' || ch.table_name
+        FROM _timescaledb_catalog.hypertable ht,
+             _timescaledb_catalog.chunk ch
+       WHERE ch.hypertable_id = ht.id
+         AND ht.table_name like 'ts_device_table'
+       ORDER BY ch.id LIMIT 1
+     LOOP
+         CALL recompress_chunk(chunk_name);
+     END LOOP;
+  END;
+  $$;
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100); <waiting ...>
 step UnlockChunk: ROLLBACK;
-step RC1: <... completed>
-recompress_chunk                        
-----------------------------------------
-_timescaledb_internal._hyper_17_32_chunk
-(1 row)
-
-step RCc: COMMIT;
 step IN1: <... completed>
 step INc: COMMIT;
+step RC1: <... completed>
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------

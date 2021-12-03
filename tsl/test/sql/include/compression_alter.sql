@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\ir compression_utils.sql
+
 CREATE TABLE test1 ("Time" timestamptz, intcol integer, bntcol bigint, txtcol text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
 
@@ -168,7 +170,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 -- try insert into compressed and recompress
 INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
-SELECT recompress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1;
+CALL recompress_all_chunks('test_defaults', 1, false);
 SELECT * FROM test_defaults ORDER BY 1,2;
 
 -- test dropping columns from compressed
