@@ -49,7 +49,7 @@ jobs:
 
     - name: Install TimescaleDB
       run: |
-        wget --quiet -O timescaledb.zip 'https://timescalereleases.blob.core.windows.net/windows/timescaledb-postgresql-${{ matrix.pg }}_${{ steps.version.outputs.version }}-windows-amd64.zip'
+        wget --quiet -O timescaledb.zip 'https://timescalereleases.blob.core.windows.net/windows/timescaledb-postgresql-${{ matrix.pg }}_latest-windows-amd64.zip'
         tar -xf timescaledb.zip
         cd timescaledb
         ./setup.exe -yes-tune -pgconfig "$HOME/PostgreSQL/${{ matrix.pg }}/bin/pg_config"
