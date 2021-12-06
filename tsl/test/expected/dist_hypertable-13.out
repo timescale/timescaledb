@@ -1852,24 +1852,6 @@ ORDER BY hypertable_schema, hypertable_name;
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters
-\c :DATA_NODE_1
-CREATE SCHEMA "T3sTSch";
-CREATE SCHEMA "Table\\Schema";
-CREATE SCHEMA "single'schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-GRANT ALL ON SCHEMA "single'schema" TO :ROLE_1;
-\c :DATA_NODE_2
-CREATE SCHEMA "T3sTSch";
-CREATE SCHEMA "Table\\Schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-\c :DATA_NODE_3
-CREATE SCHEMA "T3sTSch";
-CREATE SCHEMA "Table\\Schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-SET ROLE :ROLE_1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 --Ensure INSERTs use DataNodeDispatch.
 SET timescaledb.enable_distributed_insert_with_copy=false;

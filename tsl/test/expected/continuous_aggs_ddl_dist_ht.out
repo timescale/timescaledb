@@ -1346,15 +1346,6 @@ psql:include/continuous_aggs_ddl_common.sql:918: NOTICE:  drop cascades to table
 --
 -- Case 1: DROP SCHEMA CASCADE
 CREATE SCHEMA test_schema;
-\if :IS_DISTRIBUTED
-\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER
-CREATE SCHEMA test_schema;
-\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER
-CREATE SCHEMA test_schema;
-\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER
-CREATE SCHEMA test_schema;
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-\endif
 CREATE TABLE test_schema.telemetry_raw (
   ts        TIMESTAMP WITH TIME ZONE NOT NULL,
   value     DOUBLE PRECISION
@@ -1391,7 +1382,7 @@ WHERE user_view_name = 'telemetry_1s';
 
 \gset
 DROP SCHEMA test_schema CASCADE;
-psql:include/continuous_aggs_ddl_common.sql:966: NOTICE:  drop cascades to 4 other objects
+psql:include/continuous_aggs_ddl_common.sql:957: NOTICE:  drop cascades to 4 other objects
 SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME';
  count 
 -------
@@ -1418,15 +1409,6 @@ SELECT count(*) FROM pg_namespace WHERE nspname = 'test_schema';
 
 -- Case 2: DROP SCHEMA CASCADE with multiple caggs
 CREATE SCHEMA test_schema;
-\if :IS_DISTRIBUTED
-\c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER
-CREATE SCHEMA test_schema;
-\c :DATA_NODE_2 :ROLE_CLUSTER_SUPERUSER
-CREATE SCHEMA test_schema;
-\c :DATA_NODE_3 :ROLE_CLUSTER_SUPERUSER
-CREATE SCHEMA test_schema;
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-\endif
 CREATE TABLE test_schema.telemetry_raw (
   ts        TIMESTAMP WITH TIME ZONE NOT NULL,
   value     DOUBLE PRECISION
@@ -1484,7 +1466,7 @@ WHERE user_view_name = 'cagg2';
 
 \gset
 DROP SCHEMA test_schema CASCADE;
-psql:include/continuous_aggs_ddl_common.sql:1032: NOTICE:  drop cascades to 7 other objects
+psql:include/continuous_aggs_ddl_common.sql:1014: NOTICE:  drop cascades to 7 other objects
 SELECT count(*) FROM pg_class WHERE relname = :'MAT_TABLE_NAME1';
  count 
 -------
@@ -1661,14 +1643,14 @@ CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt +cnt2 , bucket, search_query;
-psql:include/continuous_aggs_ddl_common.sql:1116: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:1098: NOTICE:  continuous aggregate "i3696_cagg1" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg1 SET (timescaledb.materialized_only = 'true');
 CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt + cnt2, bucket, search_query
  HAVING cnt + cnt2 + sum(cnt) > 2 or count(cnt2) > 10;
-psql:include/continuous_aggs_ddl_common.sql:1124: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:1106: NOTICE:  continuous aggregate "i3696_cagg2" is already up-to-date
 ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true');
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
