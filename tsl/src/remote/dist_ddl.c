@@ -794,14 +794,6 @@ dist_ddl_process_reindex(const ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_copy(const ProcessUtilityArgs *args)
-{
-	/* Skip COPY here, since it has its own process path using
-	 * cross module API. */
-	(void) args;
-}
-
-static void
 dist_ddl_process_create_trigger(const ProcessUtilityArgs *args)
 {
 	CreateTrigStmt *stmt = castNode(CreateTrigStmt, args->parsetree);
@@ -893,9 +885,6 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 {
 	NodeTag tag = nodeTag(args->parsetree);
 
-	if (tag == T_CopyStmt)
-		return;
-
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
 	switch (tag)
@@ -945,10 +934,6 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 			dist_ddl_process_reindex(args);
 			break;
 
-		case T_CopyStmt:
-			dist_ddl_process_copy(args);
-			break;
-
 		case T_CreateTrigStmt:
 			dist_ddl_process_create_trigger(args);
 			break;
@@ -959,6 +944,10 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 
 		case T_TruncateStmt:
 			dist_ddl_process_truncate(args);
+			break;
+
+		case T_CopyStmt:
+			/* Nothing to do for COPY. */
 			break;
 
 		default:
