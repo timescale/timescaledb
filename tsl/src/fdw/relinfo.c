@@ -185,8 +185,6 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	const Dimension *time_dim = hyperspace_get_open_dimension(space, 0);
 	const DimensionSlice *time_slice = get_chunk_time_slice(chunk, space);
 	Oid time_dim_type = ts_dimension_get_partition_type(time_dim);
-	int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
-	int total_slices = get_total_number_of_slices(space);
 
 	if (IS_TIMESTAMP_TYPE(time_dim_type))
 	{
@@ -204,6 +202,9 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 		/* if we are beyond end range then chunk can possibly be totally filled */
 		if (time_slice->fd.range_end <= now_internal_time)
 		{
+			int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
+			int total_slices = get_total_number_of_slices(space);
+
 			/* If there are less newly created chunks then the number of slices then this is current
 			 * chunk. This also works better when writing historical data */
 			return num_created_after < total_slices ? FILL_FACTOR_CURRENT_CHUNK :
@@ -224,6 +225,9 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	}
 	else
 	{
+		int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
+		int total_slices = get_total_number_of_slices(space);
+
 		/* if current chunk is the last created we assume it has 0.5 fill factor */
 		return num_created_after < total_slices ? FILL_FACTOR_CURRENT_CHUNK :
 												  FILL_FACTOR_HISTORICAL_CHUNK;
@@ -499,28 +503,38 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 		{
 			RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
 			TsFdwRelInfo *p = fdw_relinfo_get(parent_info);
+			RangeTblEntry *parent_rte = planner_rt_fetch(parent_relid, root);
+			Cache *hcache = ts_hypertable_cache_pin();
+			Hypertable *ht = ts_hypertable_cache_get_entry(hcache,
+				parent_rte->relid, CACHE_FLAG_NONE);
+			Hyperspace *hyperspace = ht->space;
+			RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
+			Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
+			double fillfactor = estimate_chunk_fillfactor(chunk, hyperspace);
 
 			if (rel->pages == 0 && rel->tuples <= 0)
 			{
 				if (p->average_chunk_pages > 0 && p->average_chunk_tuples > 0)
 				{
-					rel->pages = p->average_chunk_pages;
-					rel->tuples = p->average_chunk_tuples;
+					rel->pages = p->average_chunk_pages * fillfactor;
+					rel->tuples = p->average_chunk_tuples * fillfactor;
 				}
 				else
 				{
 					estimate_tuples_and_pages(root, rel);
 
-					p->average_chunk_pages = rel->pages;
-					p->average_chunk_tuples = rel->tuples;
+					p->average_chunk_pages = rel->pages / fillfactor;
+					p->average_chunk_tuples = rel->tuples / fillfactor;
 				}
 			}
 			else
 			{
 				const double f = 0.1;
-				p->average_chunk_pages = (1 - f) * p->average_chunk_pages + f * rel->pages;
-				p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples + f * rel->tuples;
+				p->average_chunk_pages = (1 - f) * p->average_chunk_pages + f * rel->pages / fillfactor;
+				p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples + f * rel->tuples / fillfactor;
 			}
+
+			ts_cache_release(hcache);
 		}
 	}
 
