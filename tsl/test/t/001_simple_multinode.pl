@@ -55,7 +55,7 @@ $dn2->psql_is(
 # Check that distributed tables in non-default schema and also containing user created types
 # in another schema are created properly
 $query = q[CREATE SCHEMA myschema];
-$an->safe_psql('postgres', "$query; CALL distributed_exec('$query');");
+$an->safe_psql('postgres', "$query");
 $query =
   q[CREATE TYPE public.full_address AS (city VARCHAR(90), street VARCHAR(90))];
 $an->safe_psql('postgres', "$query; CALL distributed_exec('$query');");
