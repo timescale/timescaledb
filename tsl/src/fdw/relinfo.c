@@ -505,8 +505,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			TsFdwRelInfo *p = fdw_relinfo_get(parent_info);
 			RangeTblEntry *parent_rte = planner_rt_fetch(parent_relid, root);
 			Cache *hcache = ts_hypertable_cache_pin();
-			Hypertable *ht = ts_hypertable_cache_get_entry(hcache,
-				parent_rte->relid, CACHE_FLAG_NONE);
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, parent_rte->relid, CACHE_FLAG_NONE);
 			Hyperspace *hyperspace = ht->space;
 			RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
 			Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
@@ -530,8 +530,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			else
 			{
 				const double f = 0.1;
-				p->average_chunk_pages = (1 - f) * p->average_chunk_pages + f * rel->pages / fillfactor;
-				p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples + f * rel->tuples / fillfactor;
+				p->average_chunk_pages =
+					(1 - f) * p->average_chunk_pages + f * rel->pages / fillfactor;
+				p->average_chunk_tuples =
+					(1 - f) * p->average_chunk_tuples + f * rel->tuples / fillfactor;
 			}
 
 			ts_cache_release(hcache);

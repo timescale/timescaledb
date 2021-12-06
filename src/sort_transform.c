@@ -195,7 +195,6 @@ ts_sort_transform_expr(Expr *orig_expr)
 	if (IsA(orig_expr, FuncExpr))
 	{
 		FuncExpr *func = (FuncExpr *) orig_expr;
-		char *func_name = get_func_name(func->funcid);
 		FuncInfo *finfo = ts_func_cache_get_bucketing_func(func->funcid);
 
 		if (NULL != finfo)
@@ -206,6 +205,7 @@ ts_sort_transform_expr(Expr *orig_expr)
 			return finfo->sort_transform(func);
 		}
 
+		char *func_name = get_func_name(func->funcid);
 		if (strncmp(func_name, "timestamp", NAMEDATALEN) == 0)
 			return transform_timestamp_cast(func);
 		if (strncmp(func_name, "timestamptz", NAMEDATALEN) == 0)
