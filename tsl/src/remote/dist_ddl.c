@@ -718,14 +718,6 @@ dist_ddl_process_reindex(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_copy(ProcessUtilityArgs *args)
-{
-	/* Skip COPY here, since it has its own process path using
-	 * cross module API. */
-	(void) args;
-}
-
-static void
 dist_ddl_process_create_trigger(ProcessUtilityArgs *args)
 {
 	CreateTrigStmt *stmt = castNode(CreateTrigStmt, args->parsetree);
@@ -853,10 +845,6 @@ dist_ddl_process(ProcessUtilityArgs *args)
 			dist_ddl_process_reindex(args);
 			break;
 
-		case T_CopyStmt:
-			dist_ddl_process_copy(args);
-			break;
-
 		case T_CreateTrigStmt:
 			dist_ddl_process_create_trigger(args);
 			break;
@@ -867,6 +855,10 @@ dist_ddl_process(ProcessUtilityArgs *args)
 
 		case T_TruncateStmt:
 			dist_ddl_process_truncate(args);
+			break;
+
+		case T_CopyStmt:
+			/* Nothing to do for COPY. */
 			break;
 
 		default:
