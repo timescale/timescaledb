@@ -490,7 +490,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 		const int parent_relid = bms_next_member(rel->top_parent_relids, -1);
 		if (parent_relid < 0)
 		{
-			estimate_tuples_and_pages(root, rel);
+			if (rel->pages == 0 && rel->tuples <= 0)
+			{
+				estimate_tuples_and_pages(root, rel);
+			}
 		}
 		else
 		{
