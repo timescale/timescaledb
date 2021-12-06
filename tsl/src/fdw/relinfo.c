@@ -487,29 +487,36 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 */
 	if (type == TS_FDW_RELINFO_FOREIGN_TABLE)
 	{
-		int parent_relid = bms_next_member(rel->top_parent_relids, -1);
-		RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
-		TimescaleDBPrivate *p = (TimescaleDBPrivate *) parent_info->fdw_private;
-
-		if (rel->pages == 0 && rel->tuples <= 0)
+		const int parent_relid = bms_next_member(rel->top_parent_relids, -1);
+		if (parent_relid == -1)
 		{
-			if (p->average_chunk_pages > 0 && p->average_chunk_tuples > 0)
-			{
-				rel->pages = p->average_chunk_pages;
-				rel->tuples = p->average_chunk_tuples;
-			}
-			else
-			{
-				estimate_tuples_and_pages(root, rel);
-			}
+			estimate_tuples_and_pages(root, rel);
 		}
 		else
 		{
-			const double f = 0.1;
-			p->average_chunk_pages = (1 - f) * p->average_chunk_pages
-				+ f * rel->pages;
-			p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples
-				+ f * rel->tuples;
+			RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
+			TsFdwRelInfo *p = fdw_relinfo_get(parent_info);
+
+			if (rel->pages == 0 && rel->tuples <= 0)
+			{
+				if (p->average_chunk_pages > 0 && p->average_chunk_tuples > 0)
+				{
+					rel->pages = p->average_chunk_pages;
+					rel->tuples = p->average_chunk_tuples;
+				}
+				else
+				{
+					estimate_tuples_and_pages(root, rel);
+				}
+			}
+			else
+			{
+				const double f = 0.1;
+				p->average_chunk_pages = (1 - f) * p->average_chunk_pages
+						+ f * rel->pages;
+				p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples
+						+ f * rel->tuples;
+			}
 		}
 	}
 

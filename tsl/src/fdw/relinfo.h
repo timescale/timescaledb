@@ -130,6 +130,9 @@ typedef struct TsFdwRelInfo
 							   to be only used for printing cost debug
 							   output */
 #endif
+
+	double average_chunk_pages;
+	double average_chunk_tuples;
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
