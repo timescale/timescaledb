@@ -180,7 +180,8 @@ typedef struct CAggTimebucketInfo
 							/* This should also be the column used by time_bucket */
 	Oid htpartcoltype;
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
-	int64 bucket_width;			  /*bucket_width of time_bucket */
+	int64 bucket_width;			  /* bucket_width of time_bucket */
+	bool bucket_width_months;	 /* if true, bucket_width stores the amount of months */
 } CAggTimebucketInfo;
 
 typedef struct AggPartCxt
@@ -265,6 +266,42 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, desc, values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+	table_close(rel, RowExclusiveLock);
+}
+
+/* create a entry for the materialization table in table CONTINUOUS_AGGS_BUCKET_FUNCTION */
+static void
+create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const char *name,
+									 const char *bucket_width, const char *origin,
+									 const char *timezone)
+{
+	Catalog *catalog = ts_catalog_get();
+	Relation rel;
+	TupleDesc desc;
+	Datum values[Natts_continuous_aggs_bucket_function];
+	bool nulls[Natts_continuous_aggs_bucket_function] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_BUCKET_FUNCTION),
+					 RowExclusiveLock);
+	desc = RelationGetDescr(rel);
+
+	memset(values, 0, sizeof(values));
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)] = matht_id;
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_experimental)] =
+		BoolGetDatum(experimental);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_name)] =
+		CStringGetTextDatum(name);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
+		CStringGetTextDatum(bucket_width);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_origin)] =
+		CStringGetTextDatum(origin);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_timezone)] =
+		CStringGetTextDatum(timezone);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -700,7 +737,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				Const *width = castNode(Const, width_arg);
 
 				tbinfo->bucket_width =
-					ts_interval_value_to_internal(width->constvalue, width->consttype);
+					ts_interval_value_to_internal_or_months(width->constvalue,
+															width->consttype,
+															&tbinfo->bucket_width_months);
 			}
 			else
 				ereport(ERROR,
@@ -1871,10 +1910,50 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  stmt->view->relname,
 							  part_rel->schemaname,
 							  part_rel->relname,
-							  origquery_ht->bucket_width,
+							  origquery_ht->bucket_width_months ? BUCKET_WIDTH_VARIABLE :
+																  origquery_ht->bucket_width,
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname);
+
+	if (origquery_ht->bucket_width_months)
+	{
+		char bucket_width[32];
+		/* PostgreSQL's Interval type stores the number of months as int32 */
+		if (!(origquery_ht->bucket_width <= PG_INT32_MAX))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("number of months exceeds PG_INT32_MAX (%d)", PG_INT32_MAX)));
+		}
+
+		/*
+		 * The definition of int64 (and PRId64) differ across the platforms.
+		 * We have to implicitly cast it to long long to make %lld always work.
+		 * pg_snprintf and port.h don't seem to have a solution for this.
+		 */
+		snprintf(bucket_width,
+				 sizeof(bucket_width),
+				 "%lld months",
+				 (long long int) origquery_ht->bucket_width);
+
+		/*
+		 * `experimental` = true and `name` = "time_bucket_ng" are hardcoded
+		 * rather than extracted from the query. We happen to know that
+		 * monthly buckets can currently be created only with time_bucket_ng(),
+		 * thus these values are correct. Besides, they are not used for
+		 * anything except Assert's yet for the same reasons. Once the design
+		 * of variable-sized buckets is finalized we will have a better idea
+		 * of what schema is needed exactly. Until then the choice was made
+		 * in favor of the most generic schema that can be optimized later.
+		 */
+		create_bucket_function_catalog_entry(materialize_hypertable_id,
+											 true,
+											 "time_bucket_ng",
+											 bucket_width,
+											 "",
+											 "");
+	}
 
 	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
 	cagg_add_trigger_hypertable(origquery_ht->htoid, origquery_ht->htid);
@@ -1940,7 +2019,22 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		cagg = ts_continuous_agg_find_by_relid(relid);
 		Assert(cagg != NULL);
 		refresh_window.type = cagg->partition_type;
-		refresh_window.start = ts_time_get_min(refresh_window.type);
+		/*
+		 * To determine inscribed/circumscribed refresh window for variable-sized
+		 * buckets we should be able to calculate time_bucket(window.begin) and
+		 * time_bucket(window.end). This, however, is not possible in general case.
+		 * As an example, the minimum date is 4714-11-24 BC, which is before any
+		 * reasonable default `origin` value. Thus for variable-sized buckets
+		 * instead of minimum date we use -infinity since time_bucket(-infinity)
+		 * is well-defined as -infinity.
+		 *
+		 * For more details see refresh.c, particularly:
+		 * - compute_inscribed_bucketed_refresh_window_for_months()
+		 * - compute_circumscribed_bucketed_refresh_window_for_months()
+		 */
+		refresh_window.start = ts_continuous_agg_bucket_width_variable(cagg) ?
+								   ts_time_get_nobegin(refresh_window.type) :
+								   ts_time_get_min(refresh_window.type);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION);

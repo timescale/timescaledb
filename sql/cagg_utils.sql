@@ -53,6 +53,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigg
 --                 'raw_hypertable_id'
 -- max_bucket_widths - The array of the maximum time bucket widths for all the CAGGs that belong
 --                     to 'raw_hypertable_id'
+-- bucket_functions - (Optional) The array of serialized information about bucket functions
 CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
@@ -60,6 +61,16 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
     mat_hypertable_ids INTEGER[],
     bucket_widths BIGINT[],
     max_bucket_widths BIGINT[]
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_process_hypertable_log' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
+    mat_hypertable_id INTEGER,
+    raw_hypertable_id INTEGER,
+    dimtype REGTYPE,
+    mat_hypertable_ids INTEGER[],
+    bucket_widths BIGINT[],
+    max_bucket_widths BIGINT[],
+    bucket_functions TEXT[]
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_process_hypertable_log' LANGUAGE C STRICT VOLATILE;
 
 -- Processes the materialization invalidation log in a data node for the CAGG being refreshed that
@@ -78,6 +89,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
 --                 'raw_hypertable_id'
 -- max_bucket_widths - The array of the maximum time bucket widths for all the CAGGs that belong
 --                     to 'raw_hypertable_id'
+-- bucket_functions - (Optional) The array of serialized information about bucket functions
 --
 -- Returns a tuple of:
 -- ret_window_start - The merged refresh window starting time
@@ -91,6 +103,20 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
     mat_hypertable_ids INTEGER[],
     bucket_widths BIGINT[],
     max_bucket_widths BIGINT[],
+    OUT ret_window_start BIGINT,
+    OUT ret_window_end BIGINT
+) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_invalidation_process_cagg_log' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
+    mat_hypertable_id INTEGER,
+    raw_hypertable_id INTEGER,
+    dimtype REGTYPE,
+    window_start BIGINT,
+    window_end BIGINT,
+    mat_hypertable_ids INTEGER[],
+    bucket_widths BIGINT[],
+    max_bucket_widths BIGINT[],
+    bucket_functions TEXT[],
     OUT ret_window_start BIGINT,
     OUT ret_window_end BIGINT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_invalidation_process_cagg_log' LANGUAGE C STRICT VOLATILE;

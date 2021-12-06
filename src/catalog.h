@@ -54,6 +54,8 @@ typedef enum CatalogTable
 	COMPRESSION_CHUNK_SIZE,
 	REMOTE_TXN,
 	CHUNK_COPY_OPERATION,
+	CONTINUOUS_AGGS_BUCKET_FUNCTION,
+	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
 
@@ -873,10 +875,17 @@ typedef struct FormData_continuous_agg
 	NameData partial_view_schema;
 	NameData partial_view_name;
 	/*
-	 * Don't access bucket_width directly to determine the width of the bucket.
-	 * Use corresponding procedures instead:
+	 * bucket_width is BUCKET_WIDTH_VARIABLE (see continuous_agg.h) for buckets
+	 * with variable size - monthly buckets, buckets with timezone, etc. For such
+	 * buckets the information about the bucketing function is stored in
+	 * _timescaledb_catalog.continuous_aggs_bucket_function.
+	 *
+	 * When possible, don't access bucket_width directly. Use corresponding
+	 * procedures instead, such as:
+	 * - ts_continuous_agg_bucket_width_variable
 	 * - ts_continuous_agg_bucket_width
 	 * - ts_continuous_agg_max_bucket_width
+	 * - ts_bucket_function_to_bucket_width_in_months
 	 */
 	int64 bucket_width;
 	NameData direct_view_schema;
@@ -931,6 +940,37 @@ typedef enum Anum_continuous_agg_raw_hypertable_id_idx
 
 #define Natts_continuous_agg_raw_hypertable_id_idx                                                 \
 	(_Anum_continuous_agg_raw_hypertable_id_idx_max - 1)
+
+/*** continuous_aggs_bucket_function table definitions ***/
+
+#define CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME "continuous_aggs_bucket_function"
+typedef enum Anum_continuous_aggs_bucket_function
+{
+	Anum_continuous_aggs_bucket_function_mat_hypertable_id = 1,
+	Anum_continuous_aggs_bucket_function_experimental,
+	Anum_continuous_aggs_bucket_function_name,
+	Anum_continuous_aggs_bucket_function_bucket_width,
+	Anum_continuous_aggs_bucket_function_origin,
+	Anum_continuous_aggs_bucket_function_timezone,
+	_Anum_continuous_aggs_bucket_function_max,
+} Anum_continuous_aggs_bucket_function;
+
+#define Natts_continuous_aggs_bucket_function (_Anum_continuous_aggs_bucket_function_max - 1)
+
+enum
+{
+	CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_BUCKET_FUNCTION_INDEX,
+};
+
+typedef enum Anum_continuous_aggs_bucket_function_pkey
+{
+	Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id = 1,
+	_Anum_continuous_aggs_bucket_function_pkey_max,
+} Anum_continuous_aggs_bucket_function_pkey;
+
+#define Natts_continuous_aggs_bucket_function_pkey                                                 \
+	(_Anum_continuous_aggs_bucket_function_pkey_max - 1)
 
 /****** CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions*/
 #define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \

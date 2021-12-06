@@ -304,8 +304,16 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		}
 		else
 		{
-			int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
 			int64 maxval = ts_time_value_to_internal(maxdat, refresh_window->type);
+
+			if (ts_continuous_agg_bucket_width_variable(cagg))
+			{
+				return ts_time_bucket_and_add_months(maxval,
+													 ts_bucket_function_to_bucket_width_in_months(
+														 cagg->bucket_function));
+			}
+
+			int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
 			int64 bucket_start = ts_time_bucket_by_type(bucket_width, maxval, refresh_window->type);
 			/* Add one bucket to get to the end of the last bucket */
 			return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);

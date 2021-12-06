@@ -145,6 +145,90 @@ compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh
 }
 
 /*
+ * Same as compute_inscribed_bucketed_refresh_window() but for months.
+ *
+ * The algorithm is simple:
+ *
+ * end = time_bucket("N months", end)
+ *
+ * if(start != time_bucket("N months", start))
+ *     start = time_bucket("N months", start) + interval "N months"
+ *
+ */
+static InternalTimeRange
+compute_inscribed_bucketed_refresh_window_for_months(const InternalTimeRange *const refresh_window,
+													 const int32 bucket_width_months)
+{
+	InternalTimeRange result = *refresh_window;
+	Datum start_old, end_old, start_new, end_new;
+	Interval interval;
+
+	memset(&interval, 0, sizeof(interval));
+	interval.month = bucket_width_months;
+
+	start_old = ts_internal_to_time_value(refresh_window->start, DATEOID);
+	end_old = ts_internal_to_time_value(refresh_window->end, DATEOID);
+	end_new = DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), end_old);
+	start_new =
+		DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), start_old);
+
+	if (start_new != start_old)
+	{
+		start_new = DirectFunctionCall1(timestamp_date,
+										DirectFunctionCall2(date_pl_interval,
+															start_new,
+															IntervalPGetDatum(&interval)));
+	}
+
+	result.start = ts_time_value_to_internal(start_new, DATEOID);
+	result.end = ts_time_value_to_internal(end_new, DATEOID);
+	return result;
+}
+
+/*
+ * Same as compute_circumscribed_bucketed_refresh_window(), but for months.
+ *
+ * The algorithm is simple:
+ *
+ * start = time_bucket("N months", start)
+ *
+ * if(end != time_bucket("N months", end))
+ *     end = time_bucket("N months", end) + interval "N months"
+ *
+ * This procedure is re-used for invalidation and thus is public.
+ * See invalidation_expand_to_bucket_boundaries_for_months().
+ */
+InternalTimeRange
+compute_circumscribed_bucketed_refresh_window_for_months(
+	const InternalTimeRange *const refresh_window, const int32 bucket_width_months)
+{
+	InternalTimeRange result = *refresh_window;
+	Datum start_old, end_old, start_new, end_new;
+	Interval interval;
+
+	memset(&interval, 0, sizeof(interval));
+	interval.month = bucket_width_months;
+
+	start_old = ts_internal_to_time_value(refresh_window->start, DATEOID);
+	end_old = ts_internal_to_time_value(refresh_window->end, DATEOID);
+	start_new =
+		DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), start_old);
+	end_new = DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), end_old);
+
+	if (end_new != end_old)
+	{
+		end_new = DirectFunctionCall1(timestamp_date,
+									  DirectFunctionCall2(date_pl_interval,
+														  end_new,
+														  IntervalPGetDatum(&interval)));
+	}
+
+	result.start = ts_time_value_to_internal(start_new, DATEOID);
+	result.end = ts_time_value_to_internal(end_new, DATEOID);
+	return result;
+}
+
+/*
  * Adjust the refresh window to align with circumscribed buckets, so it includes buckets, which
  * fully cover the refresh window.
  *
@@ -173,8 +257,15 @@ compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh
  */
 static InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
-											  const int64 bucket_width)
+											  const int64 bucket_width,
+											  const ContinuousAggsBucketFunction *bucket_function)
 {
+	if (bucket_width == BUCKET_WIDTH_VARIABLE)
+	{
+		return compute_circumscribed_bucketed_refresh_window_for_months(
+			refresh_window, ts_bucket_function_to_bucket_width_in_months(bucket_function));
+	}
+
 	InternalTimeRange result = *refresh_window;
 	InternalTimeRange largest_bucketed_window =
 		get_largest_bucketed_window(refresh_window->type, bucket_width);
@@ -376,6 +467,7 @@ static long
 continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_window,
 										  const InvalidationStore *invalidations,
 										  const int64 max_bucket_width,
+										  const ContinuousAggsBucketFunction *bucket_function,
 										  scan_refresh_ranges_funct_t exec_func, void *func_arg1,
 										  void *func_arg2)
 {
@@ -407,7 +499,9 @@ continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_windo
 		};
 
 		InternalTimeRange bucketed_refresh_window =
-			compute_circumscribed_bucketed_refresh_window(&invalidation, max_bucket_width);
+			compute_circumscribed_bucketed_refresh_window(&invalidation,
+														  max_bucket_width,
+														  bucket_function);
 
 		(*exec_func)(&bucketed_refresh_window, count, func_arg1, func_arg2);
 
@@ -466,7 +560,8 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	{
 		Assert(merged_refresh_window.type == refresh_window->type);
 		Assert(merged_refresh_window.start >= refresh_window->start);
-		Assert(merged_refresh_window.end - max_bucket_width <= refresh_window->end);
+		Assert((max_bucket_width == BUCKET_WIDTH_VARIABLE) ||
+			   (merged_refresh_window.end - max_bucket_width <= refresh_window->end));
 
 		log_refresh_window(DEBUG1,
 						   cagg,
@@ -480,6 +575,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 		count = continuous_agg_scan_refresh_window_ranges(refresh_window,
 														  invalidations,
 														  max_bucket_width,
+														  cagg->bucket_function,
 														  continuous_agg_refresh_execute_wrapper,
 														  (void *) &refresh /* arg1 */,
 														  (void *) &chunk_id /* arg2 */);
@@ -571,12 +667,14 @@ void
 continuous_agg_calculate_merged_refresh_window(const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   const int64 max_bucket_width,
+											   const ContinuousAggsBucketFunction *bucket_function,
 											   InternalTimeRange *merged_refresh_window)
 {
 	long count pg_attribute_unused();
 	count = continuous_agg_scan_refresh_window_ranges(refresh_window,
 													  invalidations,
 													  max_bucket_width,
+													  bucket_function,
 													  update_merged_refresh_window,
 													  (void *) merged_refresh_window,
 													  NULL /* arg2 */);
@@ -644,10 +742,14 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 					 errhint("Use WITH NO DATA if you do not want to refresh the continuous "
 							 "aggregate on creation.")));
 		}
+
+		int64 max_bucket_width = ts_continuous_agg_bucket_width_variable(cagg) ?
+									 BUCKET_WIDTH_VARIABLE :
+									 ts_continuous_agg_max_bucket_width(cagg);
 		continuous_agg_refresh_with_window(cagg,
 										   refresh_window,
 										   invalidations,
-										   ts_continuous_agg_max_bucket_width(cagg),
+										   max_bucket_width,
 										   chunk_id,
 										   is_raw_ht_distributed,
 										   do_merged_refresh,
@@ -670,7 +772,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	InternalTimeRange refresh_window;
 	int64 computed_invalidation_threshold;
 	int64 invalidation_threshold;
-	int64 max_bucket_width;
 	bool is_raw_ht_distributed;
 	int rc;
 
@@ -698,9 +799,18 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
 	is_raw_ht_distributed = hypertable_is_distributed(ht);
 
-	max_bucket_width = ts_continuous_agg_max_bucket_width(cagg);
-	refresh_window =
-		compute_inscribed_bucketed_refresh_window(refresh_window_arg, max_bucket_width);
+	if (ts_continuous_agg_bucket_width_variable(cagg))
+	{
+		refresh_window = compute_inscribed_bucketed_refresh_window_for_months(
+			refresh_window_arg,
+			ts_bucket_function_to_bucket_width_in_months(cagg->bucket_function));
+	}
+	else
+	{
+		refresh_window =
+			compute_inscribed_bucketed_refresh_window(refresh_window_arg,
+													  ts_continuous_agg_max_bucket_width(cagg));
+	}
 
 	if (refresh_window.start >= refresh_window.end)
 		ereport(ERROR,
