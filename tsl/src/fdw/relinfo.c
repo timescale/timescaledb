@@ -488,7 +488,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	if (type == TS_FDW_RELINFO_FOREIGN_TABLE)
 	{
 		const int parent_relid = bms_next_member(rel->top_parent_relids, -1);
-		if (parent_relid == -1)
+		if (parent_relid < 0)
 		{
 			estimate_tuples_and_pages(root, rel);
 		}
@@ -507,19 +507,19 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 				else
 				{
 					estimate_tuples_and_pages(root, rel);
+
+					p->average_chunk_pages = rel->pages;
+					p->average_chunk_tuples = rel->tuples;
 				}
 			}
 			else
 			{
 				const double f = 0.1;
-				p->average_chunk_pages = (1 - f) * p->average_chunk_pages
-						+ f * rel->pages;
-				p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples
-						+ f * rel->tuples;
+				p->average_chunk_pages = (1 - f) * p->average_chunk_pages + f * rel->pages;
+				p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples + f * rel->tuples;
 			}
 		}
 	}
-
 
 	/* Estimate rel size as best we can with local statistics. There are
 	 * no local statistics for data node rels since they aren't real base
