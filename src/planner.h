@@ -25,6 +25,8 @@ typedef struct TimescaleDBPrivate
 	List *serverids;
 	Relids server_relids;
 	TsFdwRelationInfo *fdw_relation_info;
+	double average_chunk_tuples;
+	double average_chunk_pages;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);

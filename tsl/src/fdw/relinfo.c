@@ -32,6 +32,7 @@
 #include "hypercube.h"
 #include "errors.h"
 #include "scan_exec.h"
+#include "planner.h"
 
 /* Default CPU cost to start up a foreign query. */
 #define DEFAULT_FDW_STARTUP_COST 100.0
@@ -484,8 +485,34 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * with reality. Starting with PG14 it will have reltuples < 0, meaning
 	 * "unknown". The best we can do is estimate number of tuples/pages.
 	 */
-	if (rel->pages == 0 && rel->tuples <= 0 && type == TS_FDW_RELINFO_FOREIGN_TABLE)
-		estimate_tuples_and_pages(root, rel);
+	if (type == TS_FDW_RELINFO_FOREIGN_TABLE)
+	{
+		int parent_relid = bms_next_member(rel->top_parent_relids, -1);
+		RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
+		TimescaleDBPrivate *p = (TimescaleDBPrivate *) parent_info->fdw_private;
+
+		if (rel->pages == 0 && rel->tuples <= 0)
+		{
+			if (p->average_chunk_pages > 0 && p->average_chunk_tuples > 0)
+			{
+				rel->pages = p->average_chunk_pages;
+				rel->tuples = p->average_chunk_tuples;
+			}
+			else
+			{
+				estimate_tuples_and_pages(root, rel);
+			}
+		}
+		else
+		{
+			const double f = 0.1;
+			p->average_chunk_pages = (1 - f) * p->average_chunk_pages
+				+ f * rel->pages;
+			p->average_chunk_tuples = (1 - f) * p->average_chunk_tuples
+				+ f * rel->tuples;
+		}
+	}
+
 
 	/* Estimate rel size as best we can with local statistics. There are
 	 * no local statistics for data node rels since they aren't real base
