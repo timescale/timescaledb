@@ -25,9 +25,13 @@ extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern Datum continuous_agg_refresh_chunk(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
 	const InternalTimeRange *refresh_window, const InvalidationStore *invalidations,
-	const int64 max_bucket_width, InternalTimeRange *merged_refresh_window);
+	const int64 max_bucket_width, const ContinuousAggsBucketFunction *bucket_function,
+	InternalTimeRange *merged_refresh_window);
 extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const CaggRefreshCallContext callctx);
+
+extern InternalTimeRange compute_circumscribed_bucketed_refresh_window_for_months(
+	const InternalTimeRange *const refresh_window, const int32 bucket_width_months);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_REFRESH_H */
