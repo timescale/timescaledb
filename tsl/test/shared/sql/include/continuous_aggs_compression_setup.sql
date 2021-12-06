@@ -4,6 +4,9 @@
 
 CREATE TABLE extra_devices(device_id INT, name TEXT);
 INSERT INTO extra_devices VALUES (4,'Device 4'),(5,'Device 5');
+--add a device id that is not in metrics or metrics_compressed
+-- need this for outer joins
+INSERT INTO extra_devices VALUES ( 333,'Device New 333');
 
 CREATE VIEW all_devices AS
 SELECT * FROM devices
