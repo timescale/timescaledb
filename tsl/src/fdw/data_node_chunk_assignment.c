@@ -17,11 +17,11 @@
 #include "hypercube.h"
 #include "chunk.h"
 #include "chunk_data_node.h"
+#include "relinfo.h"
 
 static int
-get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
+get_remote_chunk_id_from_chunk(Oid server_oid, Chunk *chunk)
 {
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	ForeignServer *fs = GetForeignServer(server_oid);
 	ChunkDataNode *cdn;
 
@@ -32,6 +32,14 @@ get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
 	Assert(cdn != NULL);
 
 	return cdn->fd.node_chunk_id;
+}
+
+static int
+get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
+{
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+
+	return get_remote_chunk_id_from_chunk(server_oid, chunk);
 }
 
 /*
@@ -76,6 +84,12 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 {
 	DataNodeChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
 	RangeTblEntry *rte = planner_rt_fetch(chunkrel->relid, scas->root);
+	TsFdwRelInfo *p = fdw_relinfo_get(chunkrel);
+	if (!p->chunk)
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true /* fail_if_not_found */);
+		p->chunk = chunk;
+	}
 	MemoryContext old;
 
 	/* Should never assign the same chunk twice */
@@ -92,7 +106,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	sca->chunk_oids = lappend_oid(sca->chunk_oids, rte->relid);
 	sca->remote_chunk_ids =
 		lappend_int(sca->remote_chunk_ids,
-					get_remote_chunk_id_from_relid(chunkrel->serverid, rte->relid));
+					get_remote_chunk_id_from_chunk(chunkrel->serverid, p->chunk));
 	sca->pages += chunkrel->pages;
 	sca->rows += chunkrel->rows;
 	sca->tuples += chunkrel->tuples;

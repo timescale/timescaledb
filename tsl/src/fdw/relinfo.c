@@ -509,8 +509,13 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 				ts_hypertable_cache_get_entry(hcache, parent_rte->relid, CACHE_FLAG_NONE);
 			Hyperspace *hyperspace = ht->space;
 			RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
-			Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
-			double fillfactor = estimate_chunk_fillfactor(chunk, hyperspace);
+			if (!p->chunk)
+			{
+				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
+				p->chunk = chunk;
+			}
+			//Chunk *chunk = p->chunk;
+			double fillfactor = estimate_chunk_fillfactor(p->chunk, hyperspace);
 
 			if (rel->pages == 0 && rel->tuples <= 0)
 			{
