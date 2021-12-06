@@ -161,8 +161,8 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 	Oid expected_type = InvalidOid;
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-       if ( !IS_INTEGER_TYPE(compress_after_type))
-		  expected_type = partitioning_type;
+		if (!IS_INTEGER_TYPE(compress_after_type))
+			expected_type = partitioning_type;
 	}
 	else if (compress_after_type != INTERVALOID)
 	{
@@ -433,6 +433,7 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		found = policy_refresh_cagg_exists(mat_id);
 		if (!found)
 		{
+			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("continuous aggregate policy does not exist for \"%s\"",

@@ -190,24 +190,22 @@ policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Dat
 		int64 cmpval = ts_interval_value_to_internal(cmp_interval, cmp_type);
 		int64 refresh_start =
 			ts_jsonb_get_int64_field(cagg_config, CONFIG_KEY_START_OFFSET, &found);
-		if (!found) /*this is a null value. NULL compares to false */
+		if (!found) /*this is a null value */
 			return false;
 		Datum res =
 			DirectFunctionCall2(int8lt, Int64GetDatum(refresh_start), Int64GetDatum(cmpval));
 		ret = DatumGetBool(res);
 	}
-	else if
-		IS_TIMESTAMP_TYPE(dim_type)
-		{
-			Assert(cmp_type == INTERVALOID);
-			Interval *refresh_start =
-				ts_jsonb_get_interval_field(cagg_config, CONFIG_KEY_START_OFFSET);
-			if (refresh_start == NULL) /* NULL compares to false */
-				return false;
-			Datum res =
-				DirectFunctionCall2(interval_lt, IntervalPGetDatum(refresh_start), cmp_interval);
-			ret = DatumGetBool(res);
-		}
+	else
+	{
+		Assert(cmp_type == INTERVALOID);
+		Interval *refresh_start = ts_jsonb_get_interval_field(cagg_config, CONFIG_KEY_START_OFFSET);
+		if (refresh_start == NULL) /* NULL refresh_start */
+			return false;
+		Datum res =
+			DirectFunctionCall2(interval_lt, IntervalPGetDatum(refresh_start), cmp_interval);
+		ret = DatumGetBool(res);
+	}
 	return ret;
 }
 

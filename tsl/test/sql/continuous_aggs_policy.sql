@@ -258,8 +258,6 @@ SELECT add_continuous_aggregate_policy('mat_smallint', '15', 10, '1h'::interval,
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interval, if_not_exists=>true);
 \set ON_ERROR_STOP 1
 
-DROP MATERIALIZED VIEW mat_smallint;
-DROP TABLE smallint_tab CASCADE;
 
 --bigint table
 CREATE TABLE bigint_tab (a bigint);
@@ -289,6 +287,16 @@ SELECT add_continuous_aggregate_policy('mat_bigint', 1::smallint, NULL , '1 h'::
 INSERT INTO bigint_tab VALUES(500);
 CALL run_job(:job_id);
 SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
+
+ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
+ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('mat_smallint', 0::smallint); 
+SELECT add_compression_policy('mat_smallint', -4::smallint); 
+SELECT add_compression_policy('mat_bigint', 0::bigint); 
+\set ON_ERROR_STOP 1
+SELECT add_compression_policy('mat_smallint', 5::smallint); 
+SELECT add_compression_policy('mat_bigint', 20::bigint); 
 
 -- end of coverage tests
 

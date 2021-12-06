@@ -450,9 +450,6 @@ WARNING:  continuous aggregate policy already exists for "mat_smallint"
 (1 row)
 
 \set ON_ERROR_STOP 1
-DROP MATERIALIZED VIEW mat_smallint;
-NOTICE:  drop cascades to 3 other objects
-DROP TABLE smallint_tab CASCADE;
 --bigint table
 CREATE TABLE bigint_tab (a bigint);
 SELECT table_name FROM create_hypertable('bigint_tab', 'a', chunk_time_interval=> 10);
@@ -507,6 +504,28 @@ SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
  500 |      1
 (1 row)
 
+ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
+ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('mat_smallint', 0::smallint); 
+ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_smallint
+SELECT add_compression_policy('mat_smallint', -4::smallint); 
+ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_smallint
+SELECT add_compression_policy('mat_bigint', 0::bigint); 
+ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_bigint
+\set ON_ERROR_STOP 1
+SELECT add_compression_policy('mat_smallint', 5::smallint); 
+ add_compression_policy 
+------------------------
+                   1012
+(1 row)
+
+SELECT add_compression_policy('mat_bigint', 20::bigint); 
+ add_compression_policy 
+------------------------
+                   1013
+(1 row)
+
 -- end of coverage tests
 --TEST continuous aggregate + compression policy on caggs
 CREATE TABLE metrics (
@@ -521,7 +540,7 @@ CREATE TABLE metrics (
 SELECT create_hypertable('metrics', 'time');
    create_hypertable   
 -----------------------
- (11,public,metrics,t)
+ (13,public,metrics,t)
 (1 row)
 
 INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
@@ -538,7 +557,7 @@ ALTER TABLE metrics SET ( timescaledb.compress );
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_11_19_chunk
+ _timescaledb_internal._hyper_13_19_chunk
 (1 row)
 
 CREATE MATERIALIZED VIEW metrics_cagg WITH (timescaledb.continuous,
