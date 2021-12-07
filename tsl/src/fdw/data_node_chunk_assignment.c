@@ -262,7 +262,6 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 		foreach (lc, sca->chunks)
 		{
 			Chunk *chunk = (Chunk *) lfirst(lc);
-			Oid chunk_oid = chunk->table_id;
 			const DimensionSlice *slice;
 			DataNodeSlice *ss;
 			bool found;

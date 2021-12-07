@@ -202,8 +202,8 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 		/* if we are beyond end range then chunk can possibly be totally filled */
 		if (time_slice->fd.range_end <= now_internal_time)
 		{
-			int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
 			int total_slices = get_total_number_of_slices(space);
+			int num_created_after = ts_chunk_num_of_chunks_created_after(chunk, total_slices);
 
 			/* If there are less newly created chunks then the number of slices then this is current
 			 * chunk. This also works better when writing historical data */
@@ -225,8 +225,8 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	}
 	else
 	{
-		int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
 		int total_slices = get_total_number_of_slices(space);
+		int num_created_after = ts_chunk_num_of_chunks_created_after(chunk, total_slices);
 
 		/* if current chunk is the last created we assume it has 0.5 fill factor */
 		return num_created_after < total_slices ? FILL_FACTOR_CURRENT_CHUNK :
