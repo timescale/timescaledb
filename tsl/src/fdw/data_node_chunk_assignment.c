@@ -34,14 +34,6 @@ get_remote_chunk_id_from_chunk(Oid server_oid, Chunk *chunk)
 	return cdn->fd.node_chunk_id;
 }
 
-static int
-get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
-{
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-
-	return get_remote_chunk_id_from_chunk(server_oid, chunk);
-}
-
 /*
  * Find an existing data node chunk assignment or initialize a new one.
  */
