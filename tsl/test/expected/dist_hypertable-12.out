@@ -1853,24 +1853,6 @@ ORDER BY hypertable_schema, hypertable_name;
 (2 rows)
 
 -- Test distributed hypertable creation with many parameters
-\c :DATA_NODE_1
-CREATE SCHEMA "T3sTSch";
-CREATE SCHEMA "Table\\Schema";
-CREATE SCHEMA "single'schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-GRANT ALL ON SCHEMA "single'schema" TO :ROLE_1;
-\c :DATA_NODE_2
-CREATE SCHEMA "T3sTSch";
-CREATE SCHEMA "Table\\Schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-\c :DATA_NODE_3
-CREATE SCHEMA "T3sTSch";
-CREATE SCHEMA "Table\\Schema";
-GRANT ALL ON SCHEMA "T3sTSch" TO :ROLE_1;
-GRANT ALL ON SCHEMA "Table\\Schema" TO :ROLE_1;
-SET ROLE :ROLE_1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 --Ensure INSERTs use DataNodeDispatch.
 SET timescaledb.enable_distributed_insert_with_copy=false;
@@ -5773,6 +5755,30 @@ SELECT compress_chunk(show_chunks) FROM show_chunks('test');
  _timescaledb_internal._dist_hyper_34_104_chunk
 (1 row)
 
+DROP TABLE test;
+-- Fix ALTER SET/DROP NULL contstraint on distributed hypertable
+--
+-- #3860
+--
+CREATE TABLE test (time timestamp NOT NULL, my_column int NOT NULL);
+SELECT create_distributed_hypertable('test','time');
+ create_distributed_hypertable 
+-------------------------------
+ (35,public,test,t)
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO test VALUES (now(), NULL);
+ERROR:  [db_dist_hypertable_3]: null value in column "my_column" violates not-null constraint
+\set ON_ERROR_STOP 1
+ALTER TABLE test ALTER COLUMN my_column DROP NOT NULL;
+INSERT INTO test VALUES (now(), NULL);
+\set ON_ERROR_STOP 0
+ALTER TABLE test ALTER COLUMN my_column SET NOT NULL;
+ERROR:  [db_dist_hypertable_3]: column "my_column" contains null values
+\set ON_ERROR_STOP 1
+DELETE FROM test;
+ALTER TABLE test ALTER COLUMN my_column SET NOT NULL;
 DROP TABLE test;
 -- Cleanup
 DROP DATABASE :DATA_NODE_1;

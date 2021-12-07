@@ -344,7 +344,14 @@ dist_ddl_state_get_hypertable_type(void)
 }
 
 static void
-dist_ddl_process_drop_role(ProcessUtilityArgs *args)
+dist_ddl_process_create_schema(const ProcessUtilityArgs *args)
+{
+	dist_ddl_state_add_current_data_node_list();
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+}
+
+static void
+dist_ddl_process_drop_role(const ProcessUtilityArgs *args)
 {
 	DropRoleStmt *stmt = castNode(DropRoleStmt, args->parsetree);
 	ListCell *lc;
@@ -357,7 +364,7 @@ dist_ddl_process_drop_role(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_drop(ProcessUtilityArgs *args)
+dist_ddl_process_drop(const ProcessUtilityArgs *args)
 {
 	DropStmt *stmt = castNode(DropStmt, args->parsetree);
 
@@ -407,7 +414,7 @@ dist_ddl_process_drop(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_alter_object_schema(ProcessUtilityArgs *args)
+dist_ddl_process_alter_object_schema(const ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *stmt = castNode(AlterObjectSchemaStmt, args->parsetree);
 
@@ -430,7 +437,7 @@ dist_ddl_process_alter_object_schema(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_rename(ProcessUtilityArgs *args)
+dist_ddl_process_rename(const ProcessUtilityArgs *args)
 {
 	RenameStmt *stmt = castNode(RenameStmt, args->parsetree);
 
@@ -540,7 +547,7 @@ dist_ddl_process_grant_on_database(const GrantStmt *stmt)
 }
 
 static void
-dist_ddl_process_grant_on_schema(const ProcessUtilityArgs *args)
+dist_ddl_process_grant_on_tables_in_schema(const ProcessUtilityArgs *args)
 {
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
 	bool exec_on_datanodes = false;
@@ -601,6 +608,13 @@ dist_ddl_process_grant_on_table(const ProcessUtilityArgs *args)
 }
 
 static void
+dist_ddl_process_grant_on_schema(const ProcessUtilityArgs *args)
+{
+	dist_ddl_state_add_current_data_node_list();
+	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+}
+
+static void
 dist_ddl_process_grant_object(const ProcessUtilityArgs *args)
 {
 	const GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
@@ -612,6 +626,9 @@ dist_ddl_process_grant_object(const ProcessUtilityArgs *args)
 			break;
 		case OBJECT_TABLE:
 			dist_ddl_process_grant_on_table(args);
+			break;
+		case OBJECT_SCHEMA:
+			dist_ddl_process_grant_on_schema(args);
 			break;
 		default:
 			break;
@@ -626,7 +643,7 @@ dist_ddl_process_grant_all_in_schema(const ProcessUtilityArgs *args)
 	switch (stmt->objtype)
 	{
 		case OBJECT_TABLE:
-			dist_ddl_process_grant_on_schema(args);
+			dist_ddl_process_grant_on_tables_in_schema(args);
 			break;
 		default:
 			break;
@@ -658,7 +675,7 @@ dist_ddl_process_grant(const ProcessUtilityArgs *args)
  * datanodes as is.
  */
 static void
-dist_ddl_process_drop_reassign(ProcessUtilityArgs *args)
+dist_ddl_process_drop_reassign(const ProcessUtilityArgs *args)
 {
 	dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
 	dist_ddl_state_add_current_data_node_list();
@@ -706,7 +723,7 @@ set_alter_table_exec_type(DistDDLExecType prev_type, DistDDLExecType type)
 }
 
 static void
-dist_ddl_process_alter_table(ProcessUtilityArgs *args)
+dist_ddl_process_alter_table(const ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = castNode(AlterTableStmt, args->parsetree);
 	DistDDLExecType exec_type = DIST_DDL_EXEC_NONE;
@@ -729,6 +746,8 @@ dist_ddl_process_alter_table(ProcessUtilityArgs *args)
 			case AT_AddConstraintRecurse:
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:
+			case AT_SetNotNull:
+			case AT_DropNotNull:
 			case AT_AddIndex:
 			case AT_AlterColumnType:
 				exec_type = set_alter_table_exec_type(exec_type, DIST_DDL_EXEC_ON_END);
@@ -757,7 +776,7 @@ dist_ddl_process_alter_table(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_index(ProcessUtilityArgs *args)
+dist_ddl_process_index(const ProcessUtilityArgs *args)
 {
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
@@ -768,7 +787,7 @@ dist_ddl_process_index(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_reindex(ProcessUtilityArgs *args)
+dist_ddl_process_reindex(const ProcessUtilityArgs *args)
 {
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
@@ -777,15 +796,7 @@ dist_ddl_process_reindex(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_copy(ProcessUtilityArgs *args)
-{
-	/* Skip COPY here, since it has its own process path using
-	 * cross module API. */
-	(void) args;
-}
-
-static void
-dist_ddl_process_create_trigger(ProcessUtilityArgs *args)
+dist_ddl_process_create_trigger(const ProcessUtilityArgs *args)
 {
 	CreateTrigStmt *stmt = castNode(CreateTrigStmt, args->parsetree);
 
@@ -810,7 +821,7 @@ dist_ddl_process_create_trigger(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_vacuum(ProcessUtilityArgs *args)
+dist_ddl_process_vacuum(const ProcessUtilityArgs *args)
 {
 	VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
 
@@ -826,7 +837,7 @@ dist_ddl_process_vacuum(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_truncate(ProcessUtilityArgs *args)
+dist_ddl_process_truncate(const ProcessUtilityArgs *args)
 {
 	TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
 
@@ -849,7 +860,7 @@ dist_ddl_process_truncate(ProcessUtilityArgs *args)
 }
 
 static void
-dist_ddl_process_unsupported(ProcessUtilityArgs *args)
+dist_ddl_process_unsupported(const ProcessUtilityArgs *args)
 {
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
@@ -872,17 +883,18 @@ dist_ddl_process_unsupported(ProcessUtilityArgs *args)
  *
  */
 static void
-dist_ddl_process(ProcessUtilityArgs *args)
+dist_ddl_process(const ProcessUtilityArgs *args)
 {
 	NodeTag tag = nodeTag(args->parsetree);
-
-	if (tag == T_CopyStmt)
-		return;
 
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
 	switch (tag)
 	{
+		case T_CreateSchemaStmt:
+			dist_ddl_process_create_schema(args);
+			break;
+
 		case T_DropRoleStmt:
 			dist_ddl_process_drop_role(args);
 			break;
@@ -924,10 +936,6 @@ dist_ddl_process(ProcessUtilityArgs *args)
 			dist_ddl_process_reindex(args);
 			break;
 
-		case T_CopyStmt:
-			dist_ddl_process_copy(args);
-			break;
-
 		case T_CreateTrigStmt:
 			dist_ddl_process_create_trigger(args);
 			break;
@@ -938,6 +946,10 @@ dist_ddl_process(ProcessUtilityArgs *args)
 
 		case T_TruncateStmt:
 			dist_ddl_process_truncate(args);
+			break;
+
+		case T_CopyStmt:
+			/* Nothing to do for COPY. */
 			break;
 
 		default:
@@ -1013,7 +1025,7 @@ dist_ddl_execute(bool transactional)
 
 /* Update stats after ANALYZE execution */
 static void
-dist_ddl_get_analyze_stats(ProcessUtilityArgs *args)
+dist_ddl_get_analyze_stats(const ProcessUtilityArgs *args)
 {
 	VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
 	Oid relid = linitial_oid(args->hypertable_list);
@@ -1029,9 +1041,9 @@ dist_ddl_get_analyze_stats(ProcessUtilityArgs *args)
 void
 dist_ddl_start(ProcessUtilityArgs *args)
 {
+	/* Certain utility commands we know to not process here */
 	switch (nodeTag(args->parsetree))
 	{
-			/* Certain utility commands we know to not process here */
 		case T_CopyStmt:
 		case T_CallStmt:
 			return;
@@ -1041,6 +1053,17 @@ dist_ddl_start(ProcessUtilityArgs *args)
 
 	/* Do not process nested DDL operations */
 	if (dist_ddl_scheduled_for_execution())
+		return;
+
+	/* Process remote DDL only on the distributed database
+	 *
+	 * Since the dist ddl code executed after being already executed from main process
+	 * utility hook in src/process_utility.c we could end in state, when transaction
+	 * is already completed by ROLLBACK statement. Since dist_util_membership() function
+	 * reads meta data catalog, it is required to have an active transaction there
+	 * otherwise it will hit an assert.
+	 */
+	if (!IsTransactionState() || dist_util_membership() == DIST_MEMBER_NONE)
 		return;
 
 	/* Save origin query and memory context used to save information in

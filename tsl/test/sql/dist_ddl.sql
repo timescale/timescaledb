@@ -17,6 +17,8 @@
 \set MY_DB2 :TEST_DBNAME _2
 \set MY_DB3 :TEST_DBNAME _3
 
+CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
+
 SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'MY_DB1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'MY_DB2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'MY_DB3');
@@ -38,16 +40,13 @@ SET client_min_messages TO ERROR;
 \c :MY_DB3
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+--\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 \o
 SET client_min_messages TO NOTICE;
 \set ECHO all
 
--- This SCHEMA will not be created on data nodes
-CREATE SCHEMA disttable_schema AUTHORIZATION :ROLE_1;
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
 SET ROLE :ROLE_1;
-
 CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_check CHECK (color > 0), temp float);
 CREATE UNIQUE INDEX disttable_pk ON disttable(time, temp);
 
@@ -242,29 +241,14 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT 1 FROM pg_tables WHERE tablename 
 DROP TABLE non_disttable1;
 DROP TABLE non_disttable2;
 
--- Test current SCHEMA limitations
--- CREATE TABLE should fail, since remote data nodes has no schema
-\set ON_ERROR_STOP 0
-CREATE TABLE disttable_schema.disttable(time timestamptz, device int, color int, temp float);
-SELECT test.execute_sql_and_filter_data_node_name_on_error($$
-SELECT * FROM create_hypertable('disttable_schema.disttable', 'time', replication_factor => 3)
-$$);
-SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'disttable' $$);
+-- CREATE and DROP SCHEMA on each node
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+CREATE SCHEMA dist_schema AUTHORIZATION :ROLE_1;
 
--- CREATE and DROP SCHEMA CASCADE
-\c :MY_DB1
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
-\c :MY_DB2
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
-\c :MY_DB3
-CREATE SCHEMA some_schema AUTHORIZATION :ROLE_1;
-\c :TEST_DBNAME :ROLE_SUPERUSER;
-SET ROLE :ROLE_1;
-
-CREATE TABLE some_schema.some_dist_table(time timestamptz, device int, color int, temp float);
-SELECT * FROM create_hypertable('some_schema.some_dist_table', 'time', replication_factor => 3);
+CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
+SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
-DROP SCHEMA some_schema CASCADE;
+DROP SCHEMA dist_schema CASCADE;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
 
 -- DROP column cascades to index drop
@@ -565,7 +549,6 @@ DROP TABLE disttable;
 
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP SCHEMA disttable_schema CASCADE;
 DROP DATABASE :MY_DB1;
 DROP DATABASE :MY_DB2;
 DROP DATABASE :MY_DB3;
