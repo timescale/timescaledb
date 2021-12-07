@@ -515,6 +515,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 				chunk_private->chunk = chunk;
 			}
+			else
+			{
+				// FIXME figure out when this happens
+			}
 			double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
 
 			if (rel->pages == 0 && rel->tuples <= 0)

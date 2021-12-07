@@ -58,10 +58,8 @@ get_or_create_sca(DataNodeChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
 }
 
 static const DimensionSlice *
-get_slice_for_dimension(Oid chunk_relid, int32 dimension_id)
+get_slice_for_dimension(Chunk *chunk, int32 dimension_id)
 {
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-
 	return ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
 }
 
@@ -82,6 +80,12 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	/* Should never assign the same chunk twice */
 	Assert(!bms_is_member(chunkrel->relid, sca->chunk_relids));
 
+	if (!p->chunk)
+	{
+		// FIXME figure out when this happens
+		p->chunk = ts_chunk_get_by_relid(rte->relid, true /* fail_if_not_found */);
+	}
+
 	old = MemoryContextSwitchTo(scas->mctx);
 
 	/* If this is the first chunk we assign to this data node, increment the
@@ -91,6 +95,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 
 	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
 	sca->chunk_oids = lappend_oid(sca->chunk_oids, rte->relid);
+	sca->chunks = lappend(sca->chunks, p->chunk);
 	sca->remote_chunk_ids =
 		lappend_int(sca->remote_chunk_ids,
 					get_remote_chunk_id_from_chunk(chunkrel->serverid, p->chunk));
@@ -253,14 +258,16 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 
 		/* Check each slice on the data node against the slices on other
 		 * data nodes */
-		foreach (lc, sca->chunk_oids)
+		Assert(list_length(sca->chunk_oids) == list_length(sca->chunks));
+		foreach (lc, sca->chunks)
 		{
-			Oid chunk_oid = lfirst_oid(lc);
+			Chunk *chunk = (Chunk *) lfirst(lc);
+			Oid chunk_oid = chunk->table_id;
 			const DimensionSlice *slice;
 			DataNodeSlice *ss;
 			bool found;
 
-			slice = get_slice_for_dimension(chunk_oid, partitioning_dimension_id);
+			slice = get_slice_for_dimension(chunk, partitioning_dimension_id);
 
 			Assert(NULL != slice);
 
