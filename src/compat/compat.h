@@ -485,4 +485,15 @@ get_reindex_options(ReindexStmt *stmt)
 	shm_mq_send(shm_mq_handle, nbytes, data, nowait)
 #endif
 
+/*
+ * The macro FirstBootstrapObjectId was renamed in PG15.
+ *
+ * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=a49d0812
+ */
+#if PG15
+#define FirstBootstrapObjectIdCompat FirstUnpinnedObjectId
+#else
+#define FirstBootstrapObjectIdCompat FirstBootstrapObjectId
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
