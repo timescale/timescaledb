@@ -85,11 +85,6 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	DataNodeChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
 	RangeTblEntry *rte = planner_rt_fetch(chunkrel->relid, scas->root);
 	TsFdwRelInfo *p = fdw_relinfo_get(chunkrel);
-	if (!p->chunk)
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true /* fail_if_not_found */);
-		p->chunk = chunk;
-	}
 	MemoryContext old;
 
 	/* Should never assign the same chunk twice */
