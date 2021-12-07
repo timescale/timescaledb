@@ -746,6 +746,8 @@ dist_ddl_process_alter_table(const ProcessUtilityArgs *args)
 			case AT_AddConstraintRecurse:
 			case AT_DropConstraint:
 			case AT_DropConstraintRecurse:
+			case AT_SetNotNull:
+			case AT_DropNotNull:
 			case AT_AddIndex:
 			case AT_AlterColumnType:
 				exec_type = set_alter_table_exec_type(exec_type, DIST_DDL_EXEC_ON_END);
