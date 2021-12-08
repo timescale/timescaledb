@@ -512,7 +512,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			TsFdwRelInfo *chunk_private = fdw_relinfo_get(rel);
 			if (!chunk_private->chunk)
 			{
-				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
+				Chunk *chunk =
+					ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 				chunk_private->chunk = chunk;
 			}
 			else
