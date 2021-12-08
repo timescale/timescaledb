@@ -1629,7 +1629,7 @@ SELECT create_hypertable('test_setting', 'time');
 \endif
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous) 
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-psql:include/continuous_aggs_ddl_common.sql:1138: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
+psql:include/continuous_aggs_ddl_common.sql:1120: NOTICE:  continuous aggregate "test_setting_cagg" is already up-to-date
 INSERT INTO test_setting      
 SELECT generate_series( '2020-01-10 8:00'::timestamp, '2020-01-30 10:00+00'::timestamptz, '1 day'::interval), 10.0;
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
@@ -1711,10 +1711,10 @@ DELETE FROM test_setting WHERE val = 20;
 --TEST test with multiple settings on continuous aggregates with real time aggregates turned off initially --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
 DROP MATERIALIZED VIEW test_setting_cagg;
-psql:include/continuous_aggs_ddl_common.sql:1182: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
+psql:include/continuous_aggs_ddl_common.sql:1164: NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_47_chunk
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only = true) 
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
-psql:include/continuous_aggs_ddl_common.sql:1185: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
+psql:include/continuous_aggs_ddl_common.sql:1167: NOTICE:  refreshing continuous aggregate "test_setting_cagg"
 CALL refresh_continuous_aggregate('test_setting_cagg', NULL, '2020-05-30 10:00+00'::timestamptz);
 SELECT count(*) from test_setting_cagg ORDER BY 1;
  count 
