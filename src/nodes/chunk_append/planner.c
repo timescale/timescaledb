@@ -40,7 +40,7 @@ static CustomScanMethods chunk_append_plan_methods = {
 void
 _chunk_append_init(void)
 {
-	RegisterCustomScanMethods(&chunk_append_plan_methods);
+	TryRegisterCustomScanMethods(&chunk_append_plan_methods);
 }
 
 static Plan *
