@@ -477,7 +477,7 @@ get_reindex_options(ReindexStmt *stmt)
  *
  * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=46846433
  */
-#if PG15
+#if PG15_GE
 #define shm_mq_send_compat(shm_mq_handle, nbytes, data, nowait)                                    \
 	shm_mq_send(shm_mq_handle, nbytes, data, nowait, true)
 #else
@@ -490,10 +490,25 @@ get_reindex_options(ReindexStmt *stmt)
  *
  * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=a49d0812
  */
-#if PG15
+#if PG15_GE
 #define FirstBootstrapObjectIdCompat FirstUnpinnedObjectId
 #else
 #define FirstBootstrapObjectIdCompat FirstBootstrapObjectId
+#endif
+
+/*
+ * The number of arguments of make_new_heap() has changed in PG15. Note that
+ * on PostgreSQL <= 14 our _compat() version ignores the NewAccessMethod
+ * argument and uses the default access method.
+ *
+ * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=b0483263
+ */
+#if PG15_GE
+#define make_new_heap_compat(tableOid, tableSpace, NewAccessMethod, relpersistence, ExclusiveLock) \
+	make_new_heap(tableOid, tableSpace, NewAccessMethod, relpersistence, ExclusiveLock)
+#else
+#define make_new_heap_compat(tableOid, tableSpace, _ignored, relpersistence, ExclusiveLock)        \
+	make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock)
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */
