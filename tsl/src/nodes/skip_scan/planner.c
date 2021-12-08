@@ -73,14 +73,7 @@ static CustomScanMethods skip_scan_plan_methods = {
 void
 _skip_scan_init(void)
 {
-	/*
-	 * Because we reinitialize the tsl stuff when the license
-	 * changes the init function may be called multiple times
-	 * per session so we check if the SkipScan node has been
-	 * registered already here to prevent registering it twice.
-	 */
-	if (GetCustomScanMethods(skip_scan_plan_methods.CustomName, true) == NULL)
-		RegisterCustomScanMethods(&skip_scan_plan_methods);
+	TryRegisterCustomScanMethods(&skip_scan_plan_methods);
 }
 
 static Plan *
