@@ -83,6 +83,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	if (!p->chunk)
 	{
 		// FIXME figure out when this happens
+		Assert(false);
 		p->chunk = ts_chunk_get_by_relid(rte->relid, true /* fail_if_not_found */);
 	}
 
