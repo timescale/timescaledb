@@ -1089,15 +1089,9 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	for (varattno = 0; varattno < r->rd_att->natts; varattno++)
 	{
 		Form_pg_attribute attr = TupleDescAttr(r->rd_att, varattno);
-		Value *attrname;
-
-		if (attr->attisdropped)
-			/* Always insert an empty string for a dropped column */
-			attrname = makeString(pstrdup(""));
-		else
-			attrname = makeString(pstrdup(NameStr(attr->attname)));
-
-		rte->eref->colnames = lappend(rte->eref->colnames, attrname);
+		/* Always insert an empty string for a dropped column */
+		const char *attrname = attr->attisdropped ? "" : NameStr(attr->attname);
+		rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(attrname)));
 	}
 
 	/*
