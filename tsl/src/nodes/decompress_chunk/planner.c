@@ -179,13 +179,13 @@ build_scan_tlist(DecompressChunkPath *path)
 
 		foreach (lc, path->info->ht_rte->eref->colnames)
 		{
-			Value *chunk_col = (Value *) lfirst(lc);
+			const char *chunk_col = strVal(lfirst(lc));
 			ht_attno++;
 
 			/*
 			 * dropped columns have empty string
 			 */
-			if (IsA(lfirst(lc), String) && strlen(chunk_col->val.str) > 0)
+			if (IsA(lfirst(lc), String) && strlen(chunk_col) > 0)
 			{
 				tle = make_compressed_scan_targetentry(path, ht_attno, list_length(scan_tlist) + 1);
 				scan_tlist = lappend(scan_tlist, tle);
