@@ -179,7 +179,7 @@ deparse_columns(StringInfo stmt, Relation rel)
 		 * if it's not a builtin type then schema qualify the same. There's a function
 		 * deparse_type_name in fdw, but we don't want cross linking unnecessarily
 		 */
-		if (attr->atttypid >= FirstBootstrapObjectId)
+		if (attr->atttypid >= FirstBootstrapObjectIdCompat)
 			flags |= FORMAT_TYPE_FORCE_QUALIFY;
 
 		appendStringInfo(stmt,

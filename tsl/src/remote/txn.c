@@ -6,6 +6,7 @@
 #include "libpq-fe.h"
 #include <postgres.h>
 #include <access/xact.h>
+#include <storage/procarray.h>
 #include <utils/builtins.h>
 #include <utils/snapmgr.h>
 #include <libpq-fe.h>
@@ -152,13 +153,17 @@ remote_txn_begin(RemoteTxn *entry, int curlevel)
 	}
 }
 
+/*
+ * Check if the access node transaction which is driving the 2PC on the datanodes is
+ * still in progress.
+ */
 bool
-remote_txn_is_still_in_progress(TransactionId access_node_xid)
+remote_txn_is_still_in_progress_on_access_node(TransactionId access_node_xid)
 {
 	if (TransactionIdIsCurrentTransactionId(access_node_xid))
 		elog(ERROR, "checking if a commit is still in progress on same txn");
 
-	return XidInMVCCSnapshot(access_node_xid, GetTransactionSnapshot());
+	return TransactionIdIsInProgress(access_node_xid);
 }
 
 size_t
@@ -731,27 +736,43 @@ persistent_record_tuple_delete(TupleInfo *ti, void *data)
 	return SCAN_CONTINUE;
 }
 
+/* If gid is NULL, then delete all entries belonging to the provided datanode.  */
 int
-remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid)
+remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_oid, const char *gid)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScanKeyData scankey[1];
 	ScannerCtx scanctx;
+	int scanidx;
 	ForeignServer *server = GetForeignServer(foreign_server_oid);
 
-	ScanKeyInit(&scankey[0],
-				Anum_remote_txn_data_node_name_idx_data_node_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum(server->servername));
+	if (gid == NULL)
+	{
+		ScanKeyInit(&scankey[0],
+					Anum_remote_txn_data_node_name_idx_data_node_name,
+					BTEqualStrategyNumber,
+					F_NAMEEQ,
+					CStringGetDatum(server->servername));
+		scanidx = REMOTE_TXN_DATA_NODE_NAME_IDX;
+	}
+	else
+	{
+		ScanKeyInit(&scankey[0],
+					Anum_remote_txn_pkey_idx_remote_transaction_id,
+					BTEqualStrategyNumber,
+					F_TEXTEQ,
+					CStringGetTextDatum(gid));
+		scanidx = REMOTE_TXN_PKEY_IDX;
+	}
 
 	scanctx = (ScannerCtx){
 		.table = catalog->tables[REMOTE_TXN].id,
-		.index = catalog_get_index(catalog, REMOTE_TXN, REMOTE_TXN_DATA_NODE_NAME_IDX),
+		.index = catalog_get_index(catalog, REMOTE_TXN, scanidx),
 		.nkeys = 1,
 		.scankey = scankey,
 		.tuple_found = persistent_record_tuple_delete,
 		.lockmode = RowExclusiveLock,
+		.snapshot = GetTransactionSnapshot(),
 		.scandirection = ForwardScanDirection,
 	};
 

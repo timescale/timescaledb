@@ -1658,8 +1658,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	foreach (lc, matcollist)
 	{
 		ColumnDef *cdef = (ColumnDef *) lfirst(lc);
-		Value *attrname = makeString(cdef->colname);
-		rte->eref->colnames = lappend(rte->eref->colnames, attrname);
+		rte->eref->colnames = lappend(rte->eref->colnames, makeString(cdef->colname));
 		rte->selectedCols =
 			bms_add_member(rte->selectedCols,
 						   list_length(rte->eref->colnames) - FirstLowInvalidHeapAttributeNumber);

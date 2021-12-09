@@ -13,6 +13,7 @@
 #include "test_utils.h"
 
 TS_FUNCTION_INFO_V1(ts_test_remote_txn_resolve_create_records);
+TS_FUNCTION_INFO_V1(ts_test_remote_txn_resolve_create_prepared_record);
 TS_FUNCTION_INFO_V1(ts_test_remote_txn_resolve_create_records_with_concurrent_heal);
 
 static RemoteTxn *
@@ -64,6 +65,18 @@ ts_test_remote_txn_resolve_create_records(PG_FUNCTION_ARGS)
 
 	id.server_id = GetForeignServerByName("loopback3", false)->serverid;
 	create_rollback_prepared_txn(&id);
+
+	PG_RETURN_VOID();
+}
+
+/* create an additional prepared gid in a separate transaction */
+Datum
+ts_test_remote_txn_resolve_create_prepared_record(PG_FUNCTION_ARGS)
+{
+	TSConnectionId id;
+
+	id.server_id = GetForeignServerByName("loopback", false)->serverid;
+	create_prepared_txn(&id);
 
 	PG_RETURN_VOID();
 }

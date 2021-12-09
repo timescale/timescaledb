@@ -21,6 +21,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.calculate_chunk_interval(
         chunk_target_size BIGINT
 ) RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_calculate_chunk_interval' LANGUAGE C;
 
+-- Get the status of the chunk
+CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_status(REGCLASS) RETURNS INT
+AS '@MODULE_PATHNAME@', 'ts_chunk_status' LANGUAGE C;
+
 -- Function for explicit chunk exclusion. Supply a record and an array
 -- of chunk ids as input.
 -- Intended to be used in WHERE clause.

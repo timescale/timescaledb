@@ -71,6 +71,7 @@ TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
+TS_FUNCTION_INFO_V1(ts_chunk_status);
 
 static const char *
 DatumGetNameString(Datum datum)
@@ -4220,4 +4221,21 @@ Datum
 ts_chunk_create(PG_FUNCTION_ARGS)
 {
 	return ts_cm_functions->create_chunk(fcinfo);
+}
+
+/**
+ * Get the chunk status.
+ *
+ * Values returned are documented above and is a bitwise or of the values.
+ *
+ * @see CHUNK_STATUS_DEFAULT
+ * @see CHUNK_STATUS_COMPRESSED
+ * @see CHUNK_STATUS_COMPRESSED_UNORDERED
+ */
+Datum
+ts_chunk_status(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_GETARG_OID(0);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, /* fail_if_not_found */ true);
+	PG_RETURN_INT32(chunk->fd.status);
 }

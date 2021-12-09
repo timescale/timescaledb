@@ -24,19 +24,28 @@
 #define is_supported_pg_version_12(version) ((version >= 120000) && (version < 130000))
 #define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
 #define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
+#define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
 
+/*
+ * PG15 is in fact not yet supported, but we are working on this. The user will
+ * be unable to compile aginst this version unless he/she explicitly uses
+ * -DEXPERIMENTAL=ON. This is checked by our CMakeLists.txt.
+ */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_12(version) || is_supported_pg_version_13(version) ||                 \
-	 is_supported_pg_version_14(version))
+	 is_supported_pg_version_14(version) || is_supported_pg_version_15(version))
 
 #define PG12 is_supported_pg_version_12(PG_VERSION_NUM)
 #define PG13 is_supported_pg_version_13(PG_VERSION_NUM)
 #define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
+#define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 
 #define PG13_LT (PG_VERSION_NUM < 130000)
 #define PG13_GE (PG_VERSION_NUM >= 130000)
 #define PG14_LT (PG_VERSION_NUM < 140000)
 #define PG14_GE (PG_VERSION_NUM >= 140000)
+#define PG15_LT (PG_VERSION_NUM < 150000)
+#define PG15_GE (PG_VERSION_NUM >= 150000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -458,6 +467,48 @@ get_reindex_options(ReindexStmt *stmt)
 #define TYPALIGN_SHORT 's'  /* short alignment (typically 2 bytes) */
 #define TYPALIGN_INT 'i'	/* int alignment (typically 4 bytes) */
 #define TYPALIGN_DOUBLE 'd' /* double alignment (often 8 bytes) */
+#endif
+
+/*
+ * PG15 added additional `force_flush` argument to shm_mq_send().
+ *
+ * Our _compat() version currently uses force_flush = true on PG15 to preseve
+ * the same behaviour on all supported PostgreSQL versions.
+ *
+ * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=46846433
+ */
+#if PG15_GE
+#define shm_mq_send_compat(shm_mq_handle, nbytes, data, nowait)                                    \
+	shm_mq_send(shm_mq_handle, nbytes, data, nowait, true)
+#else
+#define shm_mq_send_compat(shm_mq_handle, nbytes, data, nowait)                                    \
+	shm_mq_send(shm_mq_handle, nbytes, data, nowait)
+#endif
+
+/*
+ * The macro FirstBootstrapObjectId was renamed in PG15.
+ *
+ * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=a49d0812
+ */
+#if PG15_GE
+#define FirstBootstrapObjectIdCompat FirstUnpinnedObjectId
+#else
+#define FirstBootstrapObjectIdCompat FirstBootstrapObjectId
+#endif
+
+/*
+ * The number of arguments of make_new_heap() has changed in PG15. Note that
+ * on PostgreSQL <= 14 our _compat() version ignores the NewAccessMethod
+ * argument and uses the default access method.
+ *
+ * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=b0483263
+ */
+#if PG15_GE
+#define make_new_heap_compat(tableOid, tableSpace, NewAccessMethod, relpersistence, ExclusiveLock) \
+	make_new_heap(tableOid, tableSpace, NewAccessMethod, relpersistence, ExclusiveLock)
+#else
+#define make_new_heap_compat(tableOid, tableSpace, _ignored, relpersistence, ExclusiveLock)        \
+	make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock)
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */

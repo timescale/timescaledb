@@ -96,15 +96,23 @@ step "CAc" { COMMIT; }
 
 session "RecompressChunk"
 step "RC1" {
-  BEGIN;
-  SELECT
-    recompress_chunk(ch.schema_name || '.' || ch.table_name)
-  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
-  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
-  ORDER BY ch.id LIMIT 1;
-
+  DO $$
+  DECLARE
+    chunk_name text;
+  BEGIN
+  FOR chunk_name IN
+      SELECT ch.schema_name || '.' || ch.table_name
+        FROM _timescaledb_catalog.hypertable ht,
+             _timescaledb_catalog.chunk ch
+       WHERE ch.hypertable_id = ht.id
+         AND ht.table_name like 'ts_device_table'
+       ORDER BY ch.id LIMIT 1
+     LOOP
+         CALL recompress_chunk(chunk_name);
+     END LOOP;
+  END;
+  $$;
 }
-step "RCc" { COMMIT; }
 #if insert in progress, compress  is blocked
 permutation "LockChunk1" "I1" "C1" "UnlockChunk" "Ic" "Cc" "SC1" "S1" 
 
@@ -126,8 +134,11 @@ permutation "LockChunk1" "C1" "S1" "UnlockChunk" "SH" "Cc"
 # and not error out.
 permutation "C1" "Cc" "LockChunkTuple" "I1" "IN1"  "UnlockChunkTuple" "Ic" "INc" "SChunkStat"
 
-#concurrent recompress and insert. insert will succeed after recompress
-# completes
-#first compress chunk and insert into chunk, then start concurrent processes
-#both recompress_chunk and insert wait for lock on the chunk 
-permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "RCc" "INc" "SH"
+# Testing concurrent recompress and insert.
+#
+# Insert will succeed after first phase of recompress completes.
+#
+# - First compress chunk and insert into chunk
+# - Then start concurrent processes both recompress_chunk and insert
+# - Wait for lock on the chunk.
+permutation "CA1" "CAc" "I1" "Ic" "SChunkStat" "LockChunk1" "RC1" "IN1"  "UnlockChunk" "INc" "SH"

@@ -9,6 +9,11 @@ RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_records'
 LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION create_prepared_record()
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_prepared_record'
+LANGUAGE C;
+
 CREATE OR REPLACE FUNCTION create_records_with_concurrent_heal()
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_records_with_concurrent_heal'
@@ -57,6 +62,51 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn;
 --insert one record where the heal function is run concurrently during different steps of the process
 --this tests safety when, for example, the heal function is run while the frontend txn is still ongoing.
 SELECT create_records_with_concurrent_heal();
+SELECT * FROM table_modified_by_txns;
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+
+SELECT create_records();
+-- create an additional prepared entry. This will allow us to test heal behavior when one
+-- attempt errors out and when the other should succeed. The debug_inject_gid_error logic
+-- only induces one error for now. This can be modified later as desired via another
+-- session variable.
+SELECT create_prepared_record();
+--inject errors in the GID and test "commit" resolution for it
+SET timescaledb.debug_inject_gid_error TO 'commit';
+--heal should error out and the prepared transaction should still be visible
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT * FROM table_modified_by_txns;
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+
+-- Again process 2 records where one errors out and other succeeds
+SELECT create_prepared_record();
+--inject errors in the GID and test "abort" resolution for it
+SET timescaledb.debug_inject_gid_error TO 'abort';
+--heal should error out and the prepared transaction should still be visible
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT * FROM table_modified_by_txns;
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+
+-- Again process 2 records where one errors out and other succeeds
+SELECT create_prepared_record();
+--test "inprogress" resolution for the prepared 2PC
+SET timescaledb.debug_inject_gid_error TO 'inprogress';
+--heal will not error out but the prepared transaction should still be visible
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT * FROM table_modified_by_txns;
+SELECT count(*) FROM pg_prepared_xacts;
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+
+-- Again process 2 records where one errors out and other succeeds
+SELECT create_prepared_record();
+--set to any random value so that it does not have any effect and allows healing
+SET timescaledb.debug_inject_gid_error TO 'ignored';
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
 SELECT * FROM table_modified_by_txns;
 SELECT count(*) FROM pg_prepared_xacts;
 SELECT count(*) FROM _timescaledb_catalog.remote_txn;

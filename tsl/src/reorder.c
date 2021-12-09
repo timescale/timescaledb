@@ -569,7 +569,11 @@ timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wai
 	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap = make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock);
+	OIDNewHeap = make_new_heap_compat(tableOid,
+									  tableSpace,
+									  OldHeap->rd_rel->relam,
+									  relpersistence,
+									  ExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
 	copy_heap_data(OIDNewHeap,

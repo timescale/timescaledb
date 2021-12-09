@@ -160,7 +160,7 @@ lookup_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)
 bool
 is_builtin(Oid objectId)
 {
-	return (objectId < FirstBootstrapObjectId);
+	return (objectId < FirstBootstrapObjectIdCompat);
 }
 
 /*

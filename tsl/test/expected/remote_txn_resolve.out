@@ -6,6 +6,10 @@ CREATE OR REPLACE FUNCTION create_records()
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_records'
 LANGUAGE C;
+CREATE OR REPLACE FUNCTION create_prepared_record()
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_prepared_record'
+LANGUAGE C;
 CREATE OR REPLACE FUNCTION create_records_with_concurrent_heal()
 RETURNS VOID
 AS :TSL_MODULE_PATHNAME, 'ts_test_remote_txn_resolve_create_records_with_concurrent_heal'
@@ -137,6 +141,187 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn;
      1
 (1 row)
 
+SELECT create_records();
+ create_records 
+----------------
+ 
+(1 row)
+
+-- create an additional prepared entry. This will allow us to test heal behavior when one
+-- attempt errors out and when the other should succeed. The debug_inject_gid_error logic
+-- only induces one error for now. This can be modified later as desired via another
+-- session variable.
+SELECT create_prepared_record();
+ create_prepared_record 
+------------------------
+ 
+(1 row)
+
+--inject errors in the GID and test "commit" resolution for it
+SET timescaledb.debug_inject_gid_error TO 'commit';
+--heal should error out and the prepared transaction should still be visible
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+WARNING:  could not commit prepared transaction on data node "loopback2"
+ remote_txn_heal_data_node 
+---------------------------
+                         1
+(1 row)
+
+SELECT * FROM table_modified_by_txns;
+           describes            
+--------------------------------
+ committed
+ prepared not comitted
+ committed with concurrent heal
+ committed
+ prepared not comitted
+(5 rows)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+ count 
+-------
+     4
+(1 row)
+
+-- Again process 2 records where one errors out and other succeeds
+SELECT create_prepared_record();
+ create_prepared_record 
+------------------------
+ 
+(1 row)
+
+--inject errors in the GID and test "abort" resolution for it
+SET timescaledb.debug_inject_gid_error TO 'abort';
+--heal should error out and the prepared transaction should still be visible
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+WARNING:  could not roll back prepared transaction on data node "loopback2"
+ remote_txn_heal_data_node 
+---------------------------
+                         1
+(1 row)
+
+SELECT * FROM table_modified_by_txns;
+           describes            
+--------------------------------
+ committed
+ prepared not comitted
+ committed with concurrent heal
+ committed
+ prepared not comitted
+ prepared not comitted
+(6 rows)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+ count 
+-------
+     4
+(1 row)
+
+-- Again process 2 records where one errors out and other succeeds
+SELECT create_prepared_record();
+ create_prepared_record 
+------------------------
+ 
+(1 row)
+
+--test "inprogress" resolution for the prepared 2PC
+SET timescaledb.debug_inject_gid_error TO 'inprogress';
+--heal will not error out but the prepared transaction should still be visible
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+ remote_txn_heal_data_node 
+---------------------------
+                         1
+(1 row)
+
+SELECT * FROM table_modified_by_txns;
+           describes            
+--------------------------------
+ committed
+ prepared not comitted
+ committed with concurrent heal
+ committed
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
+(7 rows)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+ count 
+-------
+     4
+(1 row)
+
+-- Again process 2 records where one errors out and other succeeds
+SELECT create_prepared_record();
+ create_prepared_record 
+------------------------
+ 
+(1 row)
+
+--set to any random value so that it does not have any effect and allows healing
+SET timescaledb.debug_inject_gid_error TO 'ignored';
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback'));
+ remote_txn_heal_data_node 
+---------------------------
+                         2
+(1 row)
+
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback2'));
+ remote_txn_heal_data_node 
+---------------------------
+                         0
+(1 row)
+
+SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_foreign_server WHERE srvname = 'loopback3'));
+ remote_txn_heal_data_node 
+---------------------------
+                         0
+(1 row)
+
+SELECT * FROM table_modified_by_txns;
+           describes            
+--------------------------------
+ committed
+ prepared not comitted
+ committed with concurrent heal
+ committed
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
+(9 rows)
+
+SELECT count(*) FROM pg_prepared_xacts;
+ count 
+-------
+     0
+(1 row)
+
+SELECT count(*) FROM _timescaledb_catalog.remote_txn;
+ count 
+-------
+     0
+(1 row)
+
 --test that it is safe to have non-ts prepared-txns with heal
 BEGIN;
     INSERT INTO public.table_modified_by_txns VALUES ('non-ts-txn');
@@ -169,8 +354,14 @@ SELECT * FROM table_modified_by_txns;
  committed
  prepared not comitted
  committed with concurrent heal
+ committed
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
+ prepared not comitted
  non-ts-txn
-(4 rows)
+(10 rows)
 
 SELECT count(*) FROM pg_prepared_xacts;
  count 

@@ -489,9 +489,7 @@ dist_ddl_process_grant_on_database(const GrantStmt *stmt)
 	dbmatch = false;
 	foreach (i, stmt->objects)
 	{
-		Value *value = lfirst(i);
-
-		if (!strcmp(dbname, strVal(value)))
+		if (!strcmp(dbname, strVal(lfirst(i))))
 		{
 			dbmatch = true;
 			break;
