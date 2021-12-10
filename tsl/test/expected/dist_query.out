@@ -2444,16 +2444,18 @@ GROUP BY 1,2
 HAVING device > 4
 ORDER BY 1,2
 
-                                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                                    
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DataNodeScan)
-   Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
-   Relations: Aggregate on (public.hyper)
-   Data node: data_node_1
-   Fetcher Type: Row by row
-   Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND (("time" <= '2019-01-01 15:00:00-08'::timestamp with time zone)) AND ((device > 4)) AND ((device = 1)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST
-(7 rows)
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, avg(hyper.temp)
+   Group Key: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device
+   ->  Sort
+         Output: (time_bucket('@ 2 days'::interval, hyper."time")), hyper.device, hyper.temp
+         Sort Key: (time_bucket('@ 2 days'::interval, hyper."time"))
+         ->  Result
+               Output: time_bucket('@ 2 days'::interval, hyper."time"), hyper.device, hyper.temp
+               One-Time Filter: false
+(9 rows)
 
 EXPLAIN (verbose, costs off)
 SELECT time_bucket('2 days', time) AS time, device, avg(temp)
