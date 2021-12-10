@@ -589,18 +589,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 * aggregate. This is the initial state of the aggregate before any
 	 * refreshes. */
 	orig_ht = ts_hypertable_cache_get_entry(hcache, origquery_tblinfo->htoid, CACHE_FLAG_NONE);
-	if (hypertable_is_distributed(orig_ht))
-	{
-		remote_invalidation_log_add_entry(orig_ht,
-										  HypertableIsMaterialization,
-										  mat_ht->fd.id,
-										  TS_TIME_NOBEGIN,
-										  TS_TIME_NOEND);
-	}
-	else
-	{
-		invalidation_cagg_log_add_entry(mat_htid, TS_TIME_NOBEGIN, TS_TIME_NOEND);
-	}
+	continuous_agg_invalidate_mat_ht(orig_ht, mat_ht, TS_TIME_NOBEGIN, TS_TIME_NOEND);
 	ts_cache_release(hcache);
 	return mat_htid;
 }

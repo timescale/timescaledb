@@ -3857,11 +3857,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
 			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
-			ts_cm_functions->continuous_agg_invalidate(ht,
-													   HypertableIsRawTable,
-													   ht->fd.id,
-													   start,
-													   end);
+			ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 		}
 	}
 

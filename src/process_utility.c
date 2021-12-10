@@ -1036,11 +1036,10 @@ process_truncate(ProcessUtilityArgs *args)
 						 * longer has any data */
 						raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 						Assert(raw_ht != NULL);
-						ts_cm_functions->continuous_agg_invalidate(raw_ht,
-																   HypertableIsMaterialization,
-																   mat_ht->fd.id,
-																   TS_TIME_NOBEGIN,
-																   TS_TIME_NOEND);
+						ts_cm_functions->continuous_agg_invalidate_mat_ht(raw_ht,
+																		  mat_ht,
+																		  TS_TIME_NOBEGIN,
+																		  TS_TIME_NOEND);
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
@@ -1074,11 +1073,9 @@ process_truncate(ProcessUtilityArgs *args)
 						if (agg_status == HypertableIsRawTable)
 						{
 							/* The truncation invalidates all associated continuous aggregates */
-							ts_cm_functions->continuous_agg_invalidate(ht,
-																	   HypertableIsRawTable,
-																	   ht->fd.id,
-																	   TS_TIME_NOBEGIN,
-																	   TS_TIME_NOEND);
+							ts_cm_functions->continuous_agg_invalidate_raw_ht(ht,
+																			  TS_TIME_NOBEGIN,
+																			  TS_TIME_NOEND);
 						}
 
 						if (!relation_should_recurse(rv))
@@ -1223,11 +1220,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 					   chunk->cube->slices[0]->fd.dimension_id);
-				ts_cm_functions->continuous_agg_invalidate(ht,
-														   HypertableIsRawTable,
-														   ht->fd.id,
-														   start,
-														   end);
+				ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 			}
 		}
 	}
