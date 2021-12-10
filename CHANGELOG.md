@@ -12,6 +12,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #3808 Properly handle `max_retries` option
+* #3918 Fix DataNodeScan plans with one-time filter
 
 ## 2.5.1 (2021-12-02)
 

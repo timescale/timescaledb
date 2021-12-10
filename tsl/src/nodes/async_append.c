@@ -157,8 +157,9 @@ find_data_node_scan_state_child(PlanState *state)
 		{
 			case T_CustomScanState:
 				return state;
-			case T_SortState:
 			case T_AggState:
+			case T_ResultState:
+			case T_SortState:
 				/* Data scan state can be buried under AggState or SortState  */
 				return find_data_node_scan_state_child(state->lefttree);
 			default:
