@@ -2640,10 +2640,12 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 
 /*
  * Number of chunks created after given chunk.
- * If chunk2.id > chunk1.id then chunk2 is created after chunk1
+ * If chunk2.id > chunk1.id then chunk2 is created after chunk1.
+ * Can accept a limit for cases where we only need to check that there is more
+ * than a certain number of chunks after the given one.
  */
 int
-ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
+ts_chunk_num_of_chunks_created_after(const Chunk *chunk, int limit)
 {
 	ScanKeyData scankey[1];
 
@@ -2662,7 +2664,7 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 							   NULL,
 							   NULL,
 							   NULL,
-							   0,
+							   limit,
 							   ForwardScanDirection,
 							   AccessShareLock,
 							   CurrentMemoryContext);
