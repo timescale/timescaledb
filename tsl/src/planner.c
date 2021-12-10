@@ -145,7 +145,6 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		return;
 	}
 
-
 	Cache *hcache;
 	Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_MISSING_OK, &hcache);
