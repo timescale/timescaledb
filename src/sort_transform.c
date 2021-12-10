@@ -8,10 +8,11 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
-#include <parser/parsetree.h>
-#include <utils/guc.h>
-#include <optimizer/planner.h>
 #include <optimizer/paths.h>
+#include <optimizer/planner.h>
+#include <parser/parsetree.h>
+#include <utils/fmgroids.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
 
 #include "func_cache.h"
@@ -205,11 +206,16 @@ ts_sort_transform_expr(Expr *orig_expr)
 			return finfo->sort_transform(func);
 		}
 
-		char *func_name = get_func_name(func->funcid);
-		if (strncmp(func_name, "timestamp", NAMEDATALEN) == 0)
+		/* Functions of one argument that convert something to timestamp(tz). */
+		if (func->funcid == F_DATE_TIMESTAMP || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
+		{
 			return transform_timestamp_cast(func);
-		if (strncmp(func_name, "timestamptz", NAMEDATALEN) == 0)
+		}
+
+		if (func->funcid == F_DATE_TIMESTAMPTZ || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
+		{
 			return transform_timestamptz_cast(func);
+		}
 	}
 	if (IsA(orig_expr, OpExpr))
 	{
