@@ -203,8 +203,6 @@ remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 	if (non_ts_txns > 0)
 		elog(NOTICE, "skipping %d non-TimescaleDB prepared transaction", non_ts_txns);
 
-	remote_result_close(res);
-
 	/*
 	 * Perform cleanup of all records if there are no in progress txns and if the number of
 	 * resolved entities is same as the number of rows obtained from the datanode.
@@ -225,6 +223,7 @@ remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 			remote_txn_persistent_record_delete_for_data_node(foreign_server_oid, lfirst(lc));
 	}
 
+	remote_result_close(res);
 	remote_connection_close(conn);
 	PG_RETURN_INT32(resolved);
 }
