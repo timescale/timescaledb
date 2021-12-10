@@ -320,41 +320,37 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
  * hypertable.
  */
 void
-invalidation_add_entry(const Hypertable *ht, ContinuousAggHypertableStatus caggstatus,
-					   int32 entry_id, int64 start, int64 end)
+continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 end)
 {
-	Assert(ht != NULL);
+	Assert(raw_ht != NULL);
 
-	if (hypertable_is_distributed(ht))
+	if (hypertable_is_distributed(raw_ht))
 	{
-		remote_invalidation_log_add_entry(ht, caggstatus, entry_id, start, end);
+		remote_invalidation_log_add_entry(raw_ht, HypertableIsRawTable, raw_ht->fd.id, start, end);
 	}
 	else
 	{
-		ContinuousAggHypertableStatus caggstatus = ts_continuous_agg_hypertable_status(ht->fd.id);
+		invalidation_hyper_log_add_entry(raw_ht->fd.id, start, end);
+	}
+}
 
-		switch (caggstatus)
-		{
-			case HypertableIsMaterialization:
-				invalidation_cagg_log_add_entry(ht->fd.id, start, end);
-				break;
+void
+continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat_ht, int64 start,
+								 int64 end)
+{
+	Assert((raw_ht != NULL) && (mat_ht != NULL));
 
-			case HypertableIsRawTable:
-				invalidation_hyper_log_add_entry(ht->fd.id, start, end);
-				break;
-
-			case HypertableIsMaterializationAndRaw:
-				break;
-
-			case HypertableIsNotContinuousAgg:
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("cannot invalidate hypertable \"%s\"",
-								get_rel_name(ht->main_table_relid)),
-						 errdetail(
-							 "There is no continuous aggregate associated with the hypertable.")));
-				break;
-		}
+	if (hypertable_is_distributed(raw_ht))
+	{
+		remote_invalidation_log_add_entry(raw_ht,
+										  HypertableIsMaterialization,
+										  mat_ht->fd.id,
+										  start,
+										  end);
+	}
+	else
+	{
+		invalidation_cagg_log_add_entry(mat_ht->fd.id, start, end);
 	}
 }
 
