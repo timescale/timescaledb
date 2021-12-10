@@ -13,6 +13,7 @@
 
 #include "scan_plan.h"
 #include "scan_exec.h"
+#include "data_node_scan_plan.h"
 #include "data_node_scan_exec.h"
 #include "nodes/async_append.h"
 #include "remote/data_fetcher.h"
@@ -42,7 +43,7 @@ data_node_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	CustomScan *cscan = (CustomScan *) node->ss.ps.plan;
 	List *fdw_exprs = linitial(cscan->custom_exprs);
 	List *recheck_quals = lsecond(cscan->custom_exprs);
-	List *fdw_private = list_nth(cscan->custom_private, 0);
+	List *fdw_private = list_nth(cscan->custom_private, DataNodeScanFdwPrivate);
 
 	if ((eflags & EXEC_FLAG_EXPLAIN_ONLY) && !ts_guc_enable_remote_explain)
 		return;
@@ -123,7 +124,7 @@ static void
 data_node_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	CustomScan *scan = (CustomScan *) node->ss.ps.plan;
-	List *fdw_private = list_nth(scan->custom_private, 0);
+	List *fdw_private = list_nth(scan->custom_private, DataNodeScanFdwPrivate);
 
 	fdw_scan_explain(&node->ss, fdw_private, es, &((DataNodeScanState *) node)->fsstate);
 }
@@ -169,9 +170,10 @@ data_node_scan_state_create(CustomScan *cscan)
 		(DataNodeScanState *) newNode(sizeof(DataNodeScanState), T_CustomScanState);
 
 	dnss->async_state.css.methods = &data_node_scan_state_methods;
-	dnss->systemcol = linitial_int(list_nth(cscan->custom_private, 1));
+	dnss->systemcol = linitial_int(list_nth(cscan->custom_private, DataNodeScanSystemcol));
 	dnss->async_state.init = create_fetcher;
 	dnss->async_state.send_fetch_request = send_fetch_request;
 	dnss->async_state.fetch_data = fetch_data;
+	dnss->fsstate.fetcher_type = intVal(list_nth(cscan->custom_private, DataNodeScanFetcherType));
 	return (Node *) dnss;
 }

@@ -19,6 +19,8 @@
 #include "scan_exec.h"
 #include "utils.h"
 #include "remote/data_fetcher.h"
+#include "remote/row_by_row_fetcher.h"
+#include "remote/cursor_fetcher.h"
 #include "guc.h"
 
 /*
@@ -126,11 +128,28 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 
-	fetcher = data_fetcher_create_for_scan(fsstate->conn,
-										   ss,
-										   fsstate->retrieved_attrs,
-										   fsstate->query,
-										   params);
+	if (fsstate->fetcher_type == CursorFetcherType)
+	{
+		fetcher = cursor_fetcher_create_for_scan(fsstate->conn,
+												 ss,
+												 fsstate->retrieved_attrs,
+												 fsstate->query,
+												 params);
+	}
+	else
+	{
+		/*
+		 * The fetcher type must have been determined by the planner at this
+		 * point, so we shouldn't see 'auto' here.
+		 */
+		Assert(fsstate->fetcher_type == RowByRowFetcherType);
+		fetcher = row_by_row_fetcher_create_for_scan(fsstate->conn,
+													 ss,
+													 fsstate->retrieved_attrs,
+													 fsstate->query,
+													 params);
+	}
+
 	fsstate->fetcher = fetcher;
 	MemoryContextSwitchTo(oldcontext);
 
@@ -387,6 +406,23 @@ get_data_node_explain(const char *sql, TSConnection *conn, ExplainState *es)
 	return buf->data;
 }
 
+static char *
+explain_fetcher_type(DataFetcherType type)
+{
+	switch (type)
+	{
+		case AutoFetcherType:
+			return "Auto";
+		case RowByRowFetcherType:
+			return "Row by row";
+		case CursorFetcherType:
+			return "Cursor";
+		default:
+			Assert(false);
+			return "";
+	}
+}
+
 void
 fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanState *fsstate)
 {
@@ -413,6 +449,7 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 		char *sql;
 
 		ExplainPropertyText("Data node", server->servername, es);
+		ExplainPropertyText("Fetcher Type", explain_fetcher_type(fsstate->fetcher_type), es);
 
 		if (chunk_oids != NIL)
 		{

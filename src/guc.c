@@ -37,6 +37,7 @@ static const struct config_enum_entry telemetry_level_options[] = {
 static const struct config_enum_entry remote_data_fetchers[] = {
 	{ "rowbyrow", RowByRowFetcherType, false },
 	{ "cursor", CursorFetcherType, false },
+	{ "auto", AutoFetcherType, false },
 	{ NULL, 0, false }
 };
 
@@ -69,7 +70,7 @@ TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
 TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
 TSDLLEXPORT char *ts_guc_passfile = NULL;
 TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
-TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = RowByRowFetcherType;
+TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -310,7 +311,7 @@ _guc_init(void)
 							 "Pick data fetcher type based on type of queries you plan to run "
 							 "(rowbyrow or cursor)",
 							 (int *) &ts_guc_remote_data_fetcher,
-							 CursorFetcherType,
+							 AutoFetcherType,
 							 remote_data_fetchers,
 							 PGC_USERSET,
 							 0,

@@ -3,10 +3,11 @@ set(TEST_FILES_SHARED
     constraint_exclusion_prepared.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
-    dist_gapfill.sql
-    dist_insert.sql
     dist_distinct.sql
-    dist_distinct_pushdown.sql)
+    dist_distinct_pushdown.sql
+    dist_fetcher_type.sql
+    dist_gapfill.sql
+    dist_insert.sql)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED memoize.sql)

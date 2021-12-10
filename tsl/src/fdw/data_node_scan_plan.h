@@ -17,4 +17,12 @@ extern void data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKi
 											  RelOptInfo *input_rel, RelOptInfo *output_rel,
 											  void *extra);
 
+/* Indexes of fields in ForeignScan->custom_private */
+typedef enum
+{
+	DataNodeScanFdwPrivate,
+	DataNodeScanSystemcol,
+	DataNodeScanFetcherType,
+} DataNodeScanPrivateIndex;
+
 #endif /* TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H */

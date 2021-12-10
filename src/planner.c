@@ -85,6 +85,18 @@ static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, int rtno, List 
  */
 static const char *TS_CTE_EXPAND = "ts_expand";
 
+/*
+ * Controls which type of fetcher to use to fetch data from the data nodes.
+ * There is no place to store planner-global custom information (such as in
+ * PlannerInfo). Because of this, we have to use the global variable that is
+ * valid inside the scope of timescaledb_planner().
+ * Note that that function can be called recursively, e.g. when evaluating a
+ * SQL function at the planning time. We only have to determine the fetcher type
+ * in the outermost scope, so we distinguish it by that the fetcher type is set
+ * to the invalid value of 'auto'.
+ */
+DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
+
 static void
 rte_mark_for_expansion(RangeTblEntry *rte)
 {
@@ -192,6 +204,20 @@ ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed)
 #define IS_UPDL_CMD(parse)                                                                         \
 	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
 
+typedef struct
+{
+	Query *rootquery;
+	/*
+	 * The number of distributed hypertables in the query and its subqueries.
+	 * Specifically, we count range table entries here, so using the same
+	 * distributed table twice counts as two tables. No matter whether it's the
+	 * same physical table or not, the range table entries can be scanned
+	 * concurrently, and more than one of them being distributed means we have
+	 * to use the cursor fetcher so that these scans can be interleaved.
+	 */
+	int num_distributed_tables;
+} PreprocessQueryContext;
+
 /*
  * Preprocess the query tree, including, e.g., subqueries.
  *
@@ -207,7 +233,7 @@ ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed)
  * 3. Reordering of GROUP BY clauses for continuous aggregates.
  */
 static bool
-preprocess_query(Node *node, Query *rootquery)
+preprocess_query(Node *node, PreprocessQueryContext *context)
 {
 	if (node == NULL)
 		return false;
@@ -244,7 +270,7 @@ preprocess_query(Node *node, Query *rootquery)
 					{
 						/* Mark hypertable RTEs we'd like to expand ourselves */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							!IS_UPDL_CMD(rootquery) && query->resultRelation == 0 &&
+							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
 							query->rowMarks == NIL && rte->inh)
 							rte_mark_for_expansion(rte);
 
@@ -256,6 +282,11 @@ preprocess_query(Node *node, Query *rootquery)
 							 * companion hypertable */
 							ht = ts_hypertable_cache_get_entry_by_id(hcache, compr_htid);
 							Assert(ht != NULL);
+						}
+
+						if (hypertable_is_distributed(ht))
+						{
+							context->num_distributed_tables++;
 						}
 					}
 					else
@@ -280,10 +311,10 @@ preprocess_query(Node *node, Query *rootquery)
 			}
 			rti++;
 		}
-		return query_tree_walker(query, preprocess_query, rootquery, 0);
+		return query_tree_walker(query, preprocess_query, context, 0);
 	}
 
-	return expression_tree_walker(node, preprocess_query, rootquery);
+	return expression_tree_walker(node, preprocess_query, context);
 }
 
 static PlannedStmt *
@@ -296,6 +327,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 {
 	PlannedStmt *stmt;
 	ListCell *lc;
+	bool reset_fetcher_type = false;
 
 	/*
 	 * If we are in an aborted transaction, reject all queries.
@@ -312,8 +344,55 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 	PG_TRY();
 	{
+		PreprocessQueryContext context = { 0 };
+		context.rootquery = parse;
 		if (ts_extension_is_loaded())
-			preprocess_query((Node *) parse, parse);
+		{
+			preprocess_query((Node *) parse, &context);
+
+			/*
+			 * Determine which type of fetcher to use. If set by GUC, use what
+			 * is set. If the GUC says 'auto', use the row-by-row fetcher if we
+			 * have at most one distributed table in the query. This enables
+			 * parallel plans on data nodes, which speeds up the query.
+			 * We can't use parallel plans with the cursor fetcher, because the
+			 * cursors don't support parallel execution. This is because a
+			 * cursor can be suspended at any time, then some arbitrary user
+			 * code can be executed, and then the cursor is resumed. The
+			 * parallel infrastructure doesn't have enough reentrability to
+			 * survive this.
+			 * We have to use a cursor fetcher when we have multiple distributed
+			 * tables, because we might first have to get some rows from one
+			 * table and then from another, without running either of them to
+			 * completion first. This happens e.g. when doing a join. If we had
+			 * a connection per table, we could avoid this requirement.
+			 *
+			 * Note that this function can be called recursively, e.g. when
+			 * trying to evaluate an SQL function at the planning stage. We must
+			 * only set/reset the fetcher type at the topmost level, that's why
+			 * we check it's not already set.
+			 */
+			if (ts_data_node_fetcher_scan_type == AutoFetcherType)
+			{
+				reset_fetcher_type = true;
+
+				if (ts_guc_remote_data_fetcher == AutoFetcherType)
+				{
+					if (context.num_distributed_tables >= 2)
+					{
+						ts_data_node_fetcher_scan_type = CursorFetcherType;
+					}
+					else
+					{
+						ts_data_node_fetcher_scan_type = RowByRowFetcherType;
+					}
+				}
+				else
+				{
+					ts_data_node_fetcher_scan_type = ts_guc_remote_data_fetcher;
+				}
+			}
+		}
 
 		if (prev_planner_hook != NULL)
 		/* Call any earlier hooks */
@@ -348,6 +427,11 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 
 				if (subplan)
 					ts_hypertable_insert_fixup_tlist(subplan);
+			}
+
+			if (reset_fetcher_type)
+			{
+				ts_data_node_fetcher_scan_type = AutoFetcherType;
 			}
 		}
 	}

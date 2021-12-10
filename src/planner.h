@@ -12,6 +12,7 @@
 #include <nodes/pathnodes.h>
 
 #include "export.h"
+#include "guc.h"
 
 typedef struct TsFdwRelationInfo TsFdwRelationInfo;
 typedef struct TimescaleDBPrivate
@@ -29,6 +30,8 @@ typedef struct TimescaleDBPrivate
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);
 extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte);
+
+extern TSDLLEXPORT DataFetcherType ts_data_node_fetcher_scan_type;
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
