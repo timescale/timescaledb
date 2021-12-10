@@ -14,6 +14,7 @@
 #include <commands/explain.h>
 
 #include "remote/data_fetcher.h"
+#include "guc.h"
 
 /*
  * Execution state of a foreign scan using timescaledb_fdw.
@@ -30,13 +31,14 @@ typedef struct TsFdwScanState
 	List *retrieved_attrs; /* list of retrieved attribute numbers */
 
 	/* for remote query execution */
-	struct TSConnection *conn;   /* connection for the scan */
-	struct DataFetcher *fetcher; /* fetches tuples from data node */
-	int num_params;				 /* number of parameters passed to query */
-	FmgrInfo *param_flinfo;		 /* output conversion functions for them */
-	List *param_exprs;			 /* executable expressions for param values */
-	const char **param_values;   /* textual values of query parameters */
-	int fetch_size;				 /* number of tuples per fetch */
+	struct TSConnection *conn;	/* connection for the scan */
+	struct DataFetcher *fetcher;  /* fetches tuples from data node */
+	int num_params;				  /* number of parameters passed to query */
+	FmgrInfo *param_flinfo;		  /* output conversion functions for them */
+	List *param_exprs;			  /* executable expressions for param values */
+	const char **param_values;	/* textual values of query parameters */
+	int fetch_size;				  /* number of tuples per fetch */
+	DataFetcherType fetcher_type; /* the type of data fetcher to use  */
 	int row_counter;
 } TsFdwScanState;
 

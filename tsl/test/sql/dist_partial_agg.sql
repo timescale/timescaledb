@@ -33,6 +33,7 @@ SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'lo
 \ir 'include/aggregate_table_populate.sql'
 
 SET enable_partitionwise_aggregate = ON;
+SET timescaledb.remote_data_fetcher = 'cursor';
 
 -- Run an explain on the aggregate queries to make sure expected aggregates are being pushed down.
 -- Grouping by the paritioning column should result in full aggregate pushdown where possible,

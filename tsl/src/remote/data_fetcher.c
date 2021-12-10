@@ -11,26 +11,6 @@
 #include "guc.h"
 #include "errors.h"
 
-DataFetcher *
-data_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_attrs,
-							const char *stmt, StmtParams *params)
-{
-	if (ts_guc_remote_data_fetcher == CursorFetcherType)
-		return cursor_fetcher_create_for_rel(conn, rel, retrieved_attrs, stmt, params);
-	else
-		return row_by_row_fetcher_create_for_rel(conn, rel, retrieved_attrs, stmt, params);
-}
-
-DataFetcher *
-data_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-							 const char *stmt, StmtParams *params)
-{
-	if (ts_guc_remote_data_fetcher == CursorFetcherType)
-		return cursor_fetcher_create_for_scan(conn, ss, retrieved_attrs, stmt, params);
-	else
-		return row_by_row_fetcher_create_for_scan(conn, ss, retrieved_attrs, stmt, params);
-}
-
 #define DEFAULT_FETCH_SIZE 100
 
 void

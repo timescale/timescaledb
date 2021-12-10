@@ -595,7 +595,12 @@ data_node_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_
 		bms_free(attrs_used);
 	}
 
-	cscan->custom_private = list_make2(scaninfo.fdw_private, list_make1_int(scaninfo.systemcol));
+	/* Should have determined the fetcher type by now. */
+	Assert(ts_data_node_fetcher_scan_type != AutoFetcherType);
+
+	cscan->custom_private = list_make3(scaninfo.fdw_private,
+									   list_make1_int(scaninfo.systemcol),
+									   makeInteger(ts_data_node_fetcher_scan_type));
 
 	return &cscan->scan.plan;
 }
