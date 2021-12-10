@@ -37,3 +37,28 @@ where t1.id = t2.id + 1
 limit 1;
 
 reset timescaledb.remote_data_fetcher;
+
+-- #3786 test for assertion failure in cursor_fetcher_rewind
+SET jit TO off;
+SELECT *
+FROM devices AS d
+WHERE
+  EXISTS(
+    SELECT 1
+    FROM metrics_dist AS m,
+      LATERAL(
+        SELECT 1
+        FROM insert_test it
+        WHERE
+          EXISTS(
+            SELECT 1
+            FROM dist_chunk_copy AS ref_2
+            WHERE
+              it.id IS NOT NULL AND
+              EXISTS(SELECT d.name AS c0 FROM metrics_int WHERE NULL::TIMESTAMP <= m.time)
+          )
+      ) AS l
+    WHERE d.name ~~ d.name
+  )
+ORDER BY 1,2;
+RESET jit;
