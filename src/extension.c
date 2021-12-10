@@ -57,6 +57,13 @@ static Oid extension_proxy_oid = InvalidOid;
 
 static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
 
+/*
+ * Looking up the extension oid is a catalog lookup that can be costly, and we
+ * often need it during the planning, so we cache it here. We update it when
+ * the extension status is updated.
+ */
+Oid ts_extension_oid = InvalidOid;
+
 static bool
 extension_loader_present()
 {
@@ -158,7 +165,23 @@ extension_update_state()
 		return;
 
 	in_recursion = true;
-	extension_set_state(extension_current_state());
+	enum ExtensionState new_state = extension_current_state();
+	extension_set_state(new_state);
+	/*
+	 * Update the extension oid. Note that it is only safe to run
+	 * get_extension_oid() when the extension state is 'CREATED', because
+	 * otherwise we might not be even able to do a catalog lookup because we
+	 * are not in transaction state, and the like.
+	 */
+	if (new_state == EXTENSION_STATE_CREATED)
+	{
+		ts_extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
+		Assert(ts_extension_oid != InvalidOid);
+	}
+	else
+	{
+		ts_extension_oid = InvalidOid;
+	}
 	in_recursion = false;
 }
 

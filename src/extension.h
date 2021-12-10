@@ -19,4 +19,6 @@ extern const char *ts_experimental_schema_name(void);
 extern const char *ts_extension_get_so_name(void);
 extern TSDLLEXPORT const char *ts_extension_get_version(void);
 
+extern TSDLLEXPORT Oid ts_extension_oid;
+
 #endif /* TIMESCALEDB_EXTENSION_H */

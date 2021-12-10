@@ -18,19 +18,20 @@
 #include <extension_constants.h>
 #include <planner.h>
 
-#include "remote/connection.h"
-#include "option.h"
-#include "deparse.h"
-#include "relinfo.h"
-#include "estimate.h"
-#include "chunk_adaptive.h"
 #include "cache.h"
+#include "chunk.h"
+#include "chunk_adaptive.h"
+#include "deparse.h"
+#include "dimension.h"
+#include "errors.h"
+#include "estimate.h"
+#include "extension.h"
+#include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "dimension.h"
-#include "chunk.h"
-#include "hypercube.h"
-#include "errors.h"
+#include "option.h"
+#include "relinfo.h"
+#include "remote/connection.h"
 #include "scan_exec.h"
 
 /* Default CPU cost to start up a foreign query. */
@@ -427,7 +428,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 */
 	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
 	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
-	fpinfo->shippable_extensions = list_make1_oid(get_extension_oid(EXTENSION_NAME, true));
+	Assert(ts_extension_oid != InvalidOid);
+	fpinfo->shippable_extensions = list_make1_oid(ts_extension_oid);
 	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
 	apply_fdw_and_server_options(fpinfo);
