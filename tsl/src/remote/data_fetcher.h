@@ -61,12 +61,6 @@ typedef struct DataFetcher
 	AsyncRequest *data_req; /* a request to fetch data */
 } DataFetcher;
 
-extern DataFetcher *data_fetcher_create_for_rel(TSConnection *conn, Relation rel,
-												List *retrieved_attrs, const char *stmt,
-												StmtParams *params);
-extern DataFetcher *data_fetcher_create_for_scan(TSConnection *conn, ScanState *ss,
-												 List *retrieved_attrs, const char *stmt,
-												 StmtParams *params);
 void data_fetcher_free(DataFetcher *df);
 
 extern void data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt,

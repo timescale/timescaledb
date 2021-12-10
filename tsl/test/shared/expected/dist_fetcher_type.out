@@ -1,0 +1,93 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ON_ERROR_STOP off
+-- Test that we use the correct type of remote data fetcher.
+set timescaledb.remote_data_fetcher = 'auto';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ x 
+---
+ 1
+(1 row)
+
+set timescaledb.remote_data_fetcher = 'cursor';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ x 
+---
+ 1
+(1 row)
+
+explain (verbose, costs off)
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: 1
+   ->  Nested Loop
+         Output: 1
+         Join Filter: (t1.id = (t2.id + 1))
+         ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1
+               Output: t1.id
+               Data node: data_node_1
+               Fetcher Type: Cursor
+               Chunks: _dist_hyper_X_X_chunk
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+         ->  Materialize
+               Output: t2.id
+               ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2
+                     Output: t2.id
+                     Data node: data_node_1
+                     Fetcher Type: Cursor
+                     Chunks: _dist_hyper_X_X_chunk
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+(19 rows)
+
+set timescaledb.remote_data_fetcher = 'rowbyrow';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ERROR:  could not set single-row mode on connection to "data_node_1"
+explain (verbose, costs off)
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit
+   Output: 1
+   ->  Nested Loop
+         Output: 1
+         Join Filter: (t1.id = (t2.id + 1))
+         ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1
+               Output: t1.id
+               Data node: data_node_1
+               Fetcher Type: Row by row
+               Chunks: _dist_hyper_X_X_chunk
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+         ->  Materialize
+               Output: t2.id
+               ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2
+                     Output: t2.id
+                     Data node: data_node_1
+                     Fetcher Type: Row by row
+                     Chunks: _dist_hyper_X_X_chunk
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+(19 rows)
+
+-- Check once again that 'auto' is used after 'rowbyrow'.
+set timescaledb.remote_data_fetcher = 'auto';
+select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
+where t1.id = t2.id + 1
+limit 1;
+ x 
+---
+ 1
+(1 row)
+
+reset timescaledb.remote_data_fetcher;
