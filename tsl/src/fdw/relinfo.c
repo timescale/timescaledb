@@ -427,7 +427,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 */
 	fpinfo->fdw_startup_cost = DEFAULT_FDW_STARTUP_COST;
 	fpinfo->fdw_tuple_cost = DEFAULT_FDW_TUPLE_COST;
-	fpinfo->shippable_extensions = list_make1_oid(get_extension_oid(EXTENSION_NAME, true));
+	fpinfo->shippable_extensions = list_make1_oid(CurrentExtensionObject);
 	fpinfo->fetch_size = DEFAULT_FDW_FETCH_SIZE;
 
 	apply_fdw_and_server_options(fpinfo);
