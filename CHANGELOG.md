@@ -4,6 +4,16 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Features**
+* #3768 Allow ALTER TABLE ADD COLUMN with DEFAULT on compressed hypertable
+* #3769 Allow ALTER TABLE DROP COLUMN on compressed hypertable
+
+**Bugfixes**
+* #3808 Properly handle `max_retries` option
+* #3918 Fix DataNodeScan plans with one-time filter
+
 ## 2.5.1 (2021-12-02)
 
 This release contains bug fixes since the 2.5.0 release.
