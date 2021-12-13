@@ -575,6 +575,18 @@ SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 ERROR:  setup a refresh policy for "metrics_cagg" before setting up a compression policy
 \set ON_ERROR_STOP 1
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
+SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ; 
+ COMP_JOB 
+----------
+     1015
+(1 row)
+
+SELECT remove_compression_policy('metrics_cagg');
+ remove_compression_policy 
+---------------------------
+ t
+(1 row)
+
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset 
 --verify that jobs were added for the policies ---
 SELECT materialization_hypertable_schema AS "MAT_SCHEMA_NAME",

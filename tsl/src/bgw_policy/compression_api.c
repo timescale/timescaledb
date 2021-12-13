@@ -331,17 +331,38 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(job_id);
 }
 
+/* remove compression policy from ht or cagg */
 Datum
 policy_compression_remove(PG_FUNCTION_ARGS)
 {
-	Oid hypertable_oid = PG_GETARG_OID(0);
+	Oid user_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
 	Hypertable *ht;
 	Cache *hcache;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(user_oid, CACHE_FLAG_MISSING_OK, &hcache);
+	if (!ht)
+	{
+		const char *view_name = get_rel_name(user_oid);
+
+		if (!view_name)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("relation is not a hypertable or continuous aggregate")));
+		else
+		{
+			ContinuousAgg *ca = ts_continuous_agg_find_by_relid(user_oid);
+
+			if (!ca)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("relation \"%s\" is not a hypertable or continuous aggregate",
+								view_name)));
+			ht = ts_hypertable_get_by_id(ca->data.mat_hypertable_id);
+		}
+	}
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
 														   INTERNAL_SCHEMA_NAME,
@@ -355,17 +376,17 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("compression policy not found for hypertable \"%s\"",
-							get_rel_name(hypertable_oid))));
+							get_rel_name(user_oid))));
 		else
 		{
 			ereport(NOTICE,
 					(errmsg("compression policy not found for hypertable \"%s\", skipping",
-							get_rel_name(hypertable_oid))));
+							get_rel_name(user_oid))));
 			PG_RETURN_BOOL(false);
 		}
 	}
 
-	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
+	ts_hypertable_permissions_check(user_oid, GetUserId());
 
 	Assert(list_length(jobs) == 1);
 	BgwJob *job = linitial(jobs);
