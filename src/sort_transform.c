@@ -15,6 +15,7 @@
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
 
+#include "compat/compat.h"
 #include "func_cache.h"
 #include "sort_transform.h"
 
@@ -207,12 +208,20 @@ ts_sort_transform_expr(Expr *orig_expr)
 		}
 
 		/* Functions of one argument that convert something to timestamp(tz). */
+#if PG14_LT
 		if (func->funcid == F_DATE_TIMESTAMP || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
+#else
+		if (func->funcid == F_TIMESTAMP_DATE || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
+#endif
 		{
 			return transform_timestamp_cast(func);
 		}
 
+#if PG14_LT
 		if (func->funcid == F_DATE_TIMESTAMPTZ || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
+#else
+		if (func->funcid == F_TIMESTAMPTZ_DATE || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
+#endif
 		{
 			return transform_timestamptz_cast(func);
 		}

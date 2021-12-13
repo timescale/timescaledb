@@ -11,6 +11,7 @@
 #include <catalog/pg_proc.h>
 #include <common/int.h>
 #include <nodes/pathnodes.h>
+#include <nodes/extensible.h>
 #include <utils/datetime.h>
 
 #include "compat/compat.h"
@@ -165,6 +166,21 @@ static inline uint32
 ts_clear_flags_32(uint32 bitmap, uint32 flags)
 {
 	return bitmap & ~flags;
+}
+
+/**
+ * Try to register a custom scan method.
+ *
+ * When registering a custom scan node, it might be called multiple times when
+ * different databases have different versions of the extension installed, so
+ * this function can be used to try to register a custom scan method but not
+ * fail if it has already been registered.
+ */
+static inline void
+TryRegisterCustomScanMethods(const CustomScanMethods *methods)
+{
+	if (!GetCustomScanMethods(methods->CustomName, true))
+		RegisterCustomScanMethods(methods);
 }
 
 #endif /* TIMESCALEDB_UTILS_H */

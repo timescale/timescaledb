@@ -573,5 +573,5 @@ ts_is_constraint_aware_append_path(Path *path)
 void
 _constraint_aware_append_init(void)
 {
-	RegisterCustomScanMethods(&constraint_aware_append_plan_methods);
+	TryRegisterCustomScanMethods(&constraint_aware_append_plan_methods);
 }
