@@ -297,7 +297,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	}
 	/* If this is a compression policy for a cagg, verify that
 	 * compress_after > refresh_start of cagg policy. We do not want
-	 * to compress regions that can eb refreshed by the cagg policy.
+	 * to compress regions that can be refreshed by the cagg policy.
 	 */
 	if (is_cagg && !policy_refresh_cagg_refresh_start_lt(hypertable->fd.id,
 														 compress_after_type,
