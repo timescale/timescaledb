@@ -344,6 +344,8 @@ SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 \set ON_ERROR_STOP 1
 
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
+SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ; 
+SELECT remove_compression_policy('metrics_cagg');
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset 
 
 --verify that jobs were added for the policies ---
