@@ -124,7 +124,6 @@ typedef struct CrossModuleFunctions
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
-	PGFunction recompress_chunk;
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql
