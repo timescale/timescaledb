@@ -68,7 +68,7 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 
 /*
  * Retrieve the cagg view query and find the groupby clause and
- * time_bucket clause.Map them to the column names(of mat.hypertable)
+ * time_bucket clause. Map them to the column names(of mat.hypertable)
  * Returns: list of column names used in group by clause of the cagg query.
  */
 static List *
@@ -135,7 +135,7 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 	if (grp_colnames)
 	{
 		ListCell *lc;
-		/* we have column names. they are guaranteed to be atmost
+		/* we have column names. they are guaranteed to be at most
 		 * NAMEDATALEN
 		 */
 		int seglen = ((NAMEDATALEN + 1) * list_length(grp_colnames)) + 1;

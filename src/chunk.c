@@ -3945,9 +3945,8 @@ list_return_srf(FunctionCallInfo fcinfo)
  * Find either the hypertable or the materialized hypertable, if the relid is
  * a continuous aggregate, for the relid.
  *
- * Will error if relid is not a hypertable or view (or cannot be found) or if
- * it is a materialized hypertable.
- * allow_matht permits materialized hypertables and will not error out
+ * If allow_matht is false, relid should be a cagg or a hypertable.
+ * If allow_matht is true, materialized hypertable is also permitted as relid
  */
 static Hypertable *
 find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
