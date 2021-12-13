@@ -981,10 +981,30 @@ deparse_grant_revoke_on_database(Node *node, const char *dbname)
 	foreach (lc, stmt->grantees)
 	{
 		RoleSpec *role_spec = lfirst(lc);
-
+		const char *role_name = NULL;
+		switch (role_spec->roletype)
+		{
+			case ROLESPEC_CSTRING:
+				role_name = role_spec->rolename;
+				break;
+			case ROLESPEC_PUBLIC:
+				role_name = "PUBLIC";
+				break;
+			case ROLESPEC_SESSION_USER:
+				role_name = "SESSION_USER";
+				break;
+			case ROLESPEC_CURRENT_USER:
+				role_name = "CURRENT_USER";
+				break;
+#if PG14
+			case ROLESPEC_CURRENT_ROLE:
+				role_name = "CURRENT_ROLE";
+				break;
+#endif
+		}
 		appendStringInfo(command,
 						 "%s%s ",
-						 role_spec->rolename,
+						 role_name,
 						 lnext_compat(stmt->grantees, lc) != NULL ? "," : "");
 	}
 

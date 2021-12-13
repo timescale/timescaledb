@@ -1083,6 +1083,27 @@ DEBUG:  [data1]: REVOKE ALL ON DATABASE db_dist_grant_1 FROM cluster_super_user
 DEBUG:  [data2]: REVOKE ALL ON DATABASE db_dist_grant_2 FROM cluster_super_user 
 DEBUG:  [data3]: REVOKE ALL ON DATABASE db_dist_grant_3 FROM cluster_super_user 
 DEBUG:  [data4]: REVOKE ALL ON DATABASE db_dist_grant_4 FROM cluster_super_user 
+-- Grant to specific role types
+GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO PUBLIC;
+DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO PUBLIC 
+DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO PUBLIC 
+DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO PUBLIC 
+DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO PUBLIC 
+GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO CURRENT_USER;
+DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO CURRENT_USER 
+DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO CURRENT_USER 
+DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO CURRENT_USER 
+DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO CURRENT_USER 
+GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO SESSION_USER, :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  [data1]: GRANT temp, temporary ON DATABASE db_dist_grant_1 TO SESSION_USER, cluster_super_user 
+DEBUG:  [data2]: GRANT temp, temporary ON DATABASE db_dist_grant_2 TO SESSION_USER, cluster_super_user 
+DEBUG:  [data3]: GRANT temp, temporary ON DATABASE db_dist_grant_3 TO SESSION_USER, cluster_super_user 
+DEBUG:  [data4]: GRANT temp, temporary ON DATABASE db_dist_grant_4 TO SESSION_USER, cluster_super_user 
+-- PG14 added support for CURRENT_ROLE
+\set ON_ERROR_STOP 0
+GRANT TEMP, TEMPORARY ON DATABASE :TEST_DBNAME TO CURRENT_ROLE;
+ERROR:  syntax error at or near "CURRENT_ROLE" at character 52
+\set ON_ERROR_STOP 1
 -- Grant on other database should not be propagated
 GRANT CREATE ON DATABASE :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
 -- Prevent mixing databases
