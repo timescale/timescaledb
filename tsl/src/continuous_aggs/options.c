@@ -20,6 +20,7 @@
 #include "continuous_agg.h"
 #include "continuous_aggs/create.h"
 #include "compression/create.h"
+#include "errors.h"
 #include "hypertable_cache.h"
 #include "scan_iterator.h"
 
@@ -68,7 +69,7 @@ update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 
 /*
  * Retrieve the cagg view query and find the groupby clause and
- * time_bucket clause.Map them to the column names(of mat.hypertable)
+ * time_bucket clause. Map them to the column names(of mat.hypertable)
  * Returns: list of column names used in group by clause of the cagg query.
  */
 static List *
@@ -84,7 +85,7 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);
 	RewriteRule *rule = cagg_view_rules->rules[0];
 	if (rule->event != CMD_SELECT)
-		elog(ERROR, "rule missing for view ");
+		ereport(ERROR, (errcode(ERRCODE_TS_UNEXPECTED), errmsg("unexpected rule event for view")));
 
 	Query *cagg_view_query = copyObject(linitial(rule->actions));
 	table_close(cagg_view_rel, NoLock); // lock with be released at end of txn
@@ -99,7 +100,10 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 		 * the 3rd RTE entry has the SELECT 1 query from the union view. */
 		RangeTblEntry *orig_query_rte = lthird(cagg_view_query->rtable);
 		if (orig_query_rte->rtekind != RTE_SUBQUERY)
-			elog(ERROR, "unexpected view rule action ");
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_UNEXPECTED),
+					 errmsg("unexpected rte type for view %d", orig_query_rte->rtekind)));
+
 		orig_query = orig_query_rte->subquery;
 	}
 	else
@@ -135,7 +139,7 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 	if (grp_colnames)
 	{
 		ListCell *lc;
-		/* we have column names. they are guaranteed to be atmost
+		/* we have column names. they are guaranteed to be at most
 		 * NAMEDATALEN
 		 */
 		int seglen = ((NAMEDATALEN + 1) * list_length(grp_colnames)) + 1;

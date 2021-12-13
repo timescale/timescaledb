@@ -192,9 +192,7 @@ policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Dat
 			ts_jsonb_get_int64_field(cagg_config, CONFIG_KEY_START_OFFSET, &found);
 		if (!found) /*this is a null value */
 			return false;
-		Datum res =
-			DirectFunctionCall2(int8lt, Int64GetDatum(refresh_start), Int64GetDatum(cmpval));
-		ret = DatumGetBool(res);
+		ret = (refresh_start < cmpval);
 	}
 	else
 	{
