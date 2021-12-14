@@ -66,6 +66,7 @@ extern TSConnection *remote_connection_open_with_options_nothrow(const char *nod
 extern TSConnection *remote_connection_open_by_id(TSConnectionId id);
 extern TSConnection *remote_connection_open(Oid server_id, Oid user_id);
 extern TSConnection *remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg);
+extern List *remote_connection_prepare_auth_options(const ForeignServer *server, Oid user_id);
 extern bool remote_connection_set_autoclose(TSConnection *conn, bool autoclose);
 extern int remote_connection_xact_depth_get(const TSConnection *conn);
 extern int remote_connection_xact_depth_inc(TSConnection *conn);

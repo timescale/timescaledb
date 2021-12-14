@@ -121,13 +121,66 @@ SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
  bootstrap_test | localhost | 55432 | bootstrap_test | t            | f                | f
 (1 row)
 
+\set ON_ERROR_STOP 0
+-- Dropping the database with delete_data_node should not work in a
+-- transaction block since it is non-transactional.
+BEGIN;
+SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+ERROR:  delete_data_node() cannot run inside a transaction block
+ROLLBACK;
+\set ON_ERROR_STOP 1
+-- Using the drop_database option when there are active connections to
+-- the data node should fail. But any connections in the current
+-- session should be cleared when dropping the database. To test that
+-- the connection is cleared, first create a connection in the
+-- connection cache by inserting some data
+CREATE TABLE conditions (time timestamptz, device int, temp float);
+SELECT create_distributed_hypertable('conditions', 'time', 'device');
+WARNING:  only one data node was assigned to the hypertable
+NOTICE:  adding not-null constraint to column "time"
+ create_distributed_hypertable 
+-------------------------------
+ (1,public,conditions,t)
+(1 row)
+
+INSERT INTO conditions VALUES ('2021-12-01 10:30', 1, 20.3);
+DROP TABLE conditions;
+-- Now drop the data node and it should clear the connection from the
+-- cache first
+SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+ delete_data_node 
+------------------
+ t
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Dropping the database now should fail since it no longer exists
+DROP DATABASE bootstrap_test;
+ERROR:  database "bootstrap_test" does not exist
+\set ON_ERROR_STOP 1
+-- Adding the data node again should work
+SELECT * FROM add_data_node('bootstrap_test', host => 'localhost',
+                            database => 'bootstrap_test', bootstrap => true);
+   node_name    |   host    | port  |    database    | node_created | database_created | extension_created 
+----------------+-----------+-------+----------------+--------------+------------------+-------------------
+ bootstrap_test | localhost | 55432 | bootstrap_test | t            | t                | t
+(1 row)
+
+-- Now drop the database manually before using the drop_database option
+DROP DATABASE bootstrap_test;
+\set ON_ERROR_STOP 0
+-- Expect an error since the database does not exist. 
+SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+ERROR:  [bootstrap_test]: database "bootstrap_test" does not exist
+\set ON_ERROR_STOP 1
+-- Delete it without the drop_database option set since the database
+-- was manually deleted.
 SELECT * FROM delete_data_node('bootstrap_test');
  delete_data_node 
 ------------------
  t
 (1 row)
 
-DROP DATABASE bootstrap_test;
 ----------------------------------------------------------------------
 -- Do a manual bootstrap of the data node and check that it can be
 -- added.
