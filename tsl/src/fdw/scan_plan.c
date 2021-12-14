@@ -967,6 +967,9 @@ fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelat
 		case UPPERREL_SETOP:
 		case UPPERREL_WINDOW:
 		case UPPERREL_FINAL:
+#if PG15_GE
+		case UPPERREL_PARTIAL_DISTINCT:
+#endif
 			break;
 	}
 }

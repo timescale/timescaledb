@@ -421,7 +421,7 @@ cursor_fetcher_rewind(DataFetcher *df)
 	{
 		char sql[64];
 
-		Assert(cursor->state.data_req != NULL);
+		Assert(cursor->state.eof || cursor->state.data_req != NULL);
 
 		if (!cursor->state.eof)
 			async_request_discard_response(cursor->state.data_req);

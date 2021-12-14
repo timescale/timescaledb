@@ -140,6 +140,15 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 void
 tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
+	if (is_dummy_rel(rel))
+	{
+		/*
+		 * Don't have to create any other path if the relation is already proven
+		 * to be empty.
+		 */
+		return;
+	}
+
 	Cache *hcache;
 	Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_MISSING_OK, &hcache);

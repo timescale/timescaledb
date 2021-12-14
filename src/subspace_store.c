@@ -203,6 +203,12 @@ ts_subspace_store_get(const SubspaceStore *store, const Point *target)
 
 	Assert(target->cardinality == store->num_dimensions);
 
+	/* The internal compressed hypertable has no dimensions as
+	 * chunks are created explicitly by compress_chunk and linked
+	 * to the source chunk. */
+	if (store->num_dimensions == 0)
+		return NULL;
+
 	for (i = 0; i < target->cardinality; i++)
 	{
 		match = ts_dimension_vec_find_slice(vec, target->coordinates[i]);

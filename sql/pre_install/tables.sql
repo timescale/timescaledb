@@ -280,6 +280,23 @@ CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx ON _timescaledb_
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 
+-- See the comments for ContinuousAggsBucketFunction structure.
+CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(
+  mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  -- The schema of the function. Equals TRUE for "timescaledb_experimental", FALSE otherwise.
+  experimental bool NOT NULL,
+  -- Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng"
+  name text NOT NULL,
+  -- `bucket_width` argument of the function, e.g. "1 month"
+  bucket_width text NOT NULL,
+  -- `origin` argument of the function provided by the user
+  origin text NOT NULL,
+  -- `timezone` argument of the function provided by the user
+  timezone text NOT NULL
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
+
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_invalidation_threshold (
   hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   watermark bigint NOT NULL

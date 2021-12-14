@@ -8,12 +8,14 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
-#include <parser/parsetree.h>
-#include <utils/guc.h>
-#include <optimizer/planner.h>
 #include <optimizer/paths.h>
+#include <optimizer/planner.h>
+#include <parser/parsetree.h>
+#include <utils/fmgroids.h>
+#include <utils/guc.h>
 #include <utils/lsyscache.h>
 
+#include "compat/compat.h"
 #include "func_cache.h"
 #include "sort_transform.h"
 
@@ -195,7 +197,6 @@ ts_sort_transform_expr(Expr *orig_expr)
 	if (IsA(orig_expr, FuncExpr))
 	{
 		FuncExpr *func = (FuncExpr *) orig_expr;
-		char *func_name = get_func_name(func->funcid);
 		FuncInfo *finfo = ts_func_cache_get_bucketing_func(func->funcid);
 
 		if (NULL != finfo)
@@ -206,10 +207,24 @@ ts_sort_transform_expr(Expr *orig_expr)
 			return finfo->sort_transform(func);
 		}
 
-		if (strncmp(func_name, "timestamp", NAMEDATALEN) == 0)
+		/* Functions of one argument that convert something to timestamp(tz). */
+#if PG14_LT
+		if (func->funcid == F_DATE_TIMESTAMP || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
+#else
+		if (func->funcid == F_TIMESTAMP_DATE || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
+#endif
+		{
 			return transform_timestamp_cast(func);
-		if (strncmp(func_name, "timestamptz", NAMEDATALEN) == 0)
+		}
+
+#if PG14_LT
+		if (func->funcid == F_DATE_TIMESTAMPTZ || func->funcid == F_TIMESTAMP_TIMESTAMPTZ)
+#else
+		if (func->funcid == F_TIMESTAMPTZ_DATE || func->funcid == F_TIMESTAMPTZ_TIMESTAMP)
+#endif
+		{
 			return transform_timestamptz_cast(func);
+		}
 	}
 	if (IsA(orig_expr, OpExpr))
 	{

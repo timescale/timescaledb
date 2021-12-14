@@ -868,13 +868,13 @@ SELECT table_name from create_hypertable( 'conditions', 'timec');
  conditions
 (1 row)
 
-INSERT INTO conditions  
+INSERT INTO conditions
 SELECT generate_series('2010-01-01 09:00:00-08'::timestamptz, '2010-01-03 09:00:00-08'::timestamptz, '1 day'), 55 , 45;
 CREATE MATERIALIZED VIEW cagg_conditions WITH (timescaledb.continuous,
    timescaledb.materialized_only = true)
 AS
 SELECT time_bucket( '7 days', timec) bkt, count(*) cnt, sum(temperature) sumb
-FROM conditions 
+FROM conditions
 GROUP BY time_bucket('7 days', timec);
 NOTICE:  refreshing continuous aggregate "cagg_conditions"
 SELECT * FROM cagg_conditions ORDER BY 1;
@@ -890,7 +890,6 @@ SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
  _timescaledb_internal._hyper_15_24_chunk
 (1 row)
 
- 
 SELECT chunk_name, range_start, range_end, is_compressed
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions';
@@ -910,3 +909,22 @@ SELECT * FROM cagg_conditions ORDER BY 1;
  Sun Dec 27 16:00:00 2009 PST |   5 |  185
 (1 row)
 
+-- direct insert into interal compressed hypertable should be blocked
+CREATE TABLE direct_insert(time timestamptz not null);
+SELECT table_name FROM create_hypertable('direct_insert','time');
+  table_name   
+---------------
+ direct_insert
+(1 row)
+
+ALTER TABLE direct_insert SET(timescaledb.compress);
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'direct_insert') \gset
+\set ON_ERROR_STOP 0
+INSERT INTO :TABLENAME SELECT;
+ERROR:  direct insert into internal compressed hypertable is not supported
+\set ON_ERROR_STOP 1

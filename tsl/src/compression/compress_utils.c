@@ -504,71 +504,6 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
-/* setup FunctionCallInfo for compress_chunk/decompress_chunk
- * alloc memory for decompfn_fcinfo and init it.
- */
-static void
-get_compression_fcinfo(char *fname, FmgrInfo *decompfn, FunctionCallInfo *decompfn_fcinfo,
-					   FunctionCallInfo orig_fcinfo)
-{
-	/* compress_chunk, decompress_chunk have the same args */
-	Oid argtyp[] = { REGCLASSOID, BOOLOID };
-	fmNodePtr cxt =
-		orig_fcinfo->context; /* pass in the context from the current FunctionCallInfo */
-
-	Oid decomp_func_oid =
-		LookupFuncName(list_make1(makeString(fname)), lengthof(argtyp), argtyp, false);
-
-	fmgr_info(decomp_func_oid, decompfn);
-	*decompfn_fcinfo = HEAP_FCINFO(2);
-	InitFunctionCallInfoData(**decompfn_fcinfo,
-							 decompfn,
-							 2,
-							 InvalidOid, /* collation */
-							 cxt,
-							 NULL);
-	FC_ARG(*decompfn_fcinfo, 0) = FC_ARG(orig_fcinfo, 0);
-	FC_NULL(*decompfn_fcinfo, 0) = FC_NULL(orig_fcinfo, 0);
-	FC_ARG(*decompfn_fcinfo, 1) = FC_ARG(orig_fcinfo, 1);
-	FC_NULL(*decompfn_fcinfo, 1) = FC_NULL(orig_fcinfo, 1);
-}
-
-static Datum
-tsl_recompress_remote_chunk(Chunk *uncompressed_chunk, FunctionCallInfo fcinfo, bool if_compressed)
-{
-	FmgrInfo decompfn;
-	FmgrInfo compfn;
-	FunctionCallInfo decompfn_fcinfo;
-	FunctionCallInfo compfn_fcinfo;
-	get_compression_fcinfo(DECOMPRESS_CHUNK_FUNCNAME, &decompfn, &decompfn_fcinfo, fcinfo);
-
-	FunctionCallInvoke(decompfn_fcinfo);
-	if (decompfn_fcinfo->isnull)
-	{
-		ereport((if_compressed ? NOTICE : ERROR),
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("decompression failed for chunk \"%s\"",
-						get_rel_name(uncompressed_chunk->table_id)),
-				 errdetail("The compression status for the chunk is %d",
-						   uncompressed_chunk->fd.status)));
-
-		PG_RETURN_NULL();
-	}
-	get_compression_fcinfo(COMPRESS_CHUNK_FUNCNAME, &compfn, &compfn_fcinfo, fcinfo);
-	Datum compoid = FunctionCallInvoke(compfn_fcinfo);
-	if (compfn_fcinfo->isnull)
-	{
-		ereport((if_compressed ? NOTICE : ERROR),
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("compression failed for chunk \"%s\"",
-						get_rel_name(uncompressed_chunk->table_id)),
-				 errdetail("The compression status for the chunk is %d",
-						   uncompressed_chunk->fd.status)));
-		PG_RETURN_NULL();
-	}
-	return compoid;
-}
-
 bool
 tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
 {
@@ -584,40 +519,4 @@ tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
 	Assert(!ts_chunk_is_compressed(chunk));
 	tsl_compress_chunk_wrapper(chunk, false);
 	return true;
-}
-
-Datum
-tsl_recompress_chunk(PG_FUNCTION_ARGS)
-{
-	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	Chunk *uncompressed_chunk =
-		ts_chunk_get_by_relid(uncompressed_chunk_id, true /* fail_if_not_found */);
-	if (!ts_chunk_is_unordered(uncompressed_chunk))
-	{
-		if (!ts_chunk_is_compressed(uncompressed_chunk))
-		{
-			ereport((if_compressed ? NOTICE : ERROR),
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("call compress_chunk instead of recompress_chunk")));
-			PG_RETURN_NULL();
-		}
-		else
-		{
-			ereport((if_compressed ? NOTICE : ERROR),
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("nothing to recompress in chunk \"%s\" ",
-							get_rel_name(uncompressed_chunk->table_id))));
-			PG_RETURN_NULL();
-		}
-	}
-	if (uncompressed_chunk->relkind == RELKIND_FOREIGN_TABLE)
-		return tsl_recompress_remote_chunk(uncompressed_chunk, fcinfo, if_compressed);
-	else
-	{
-		tsl_recompress_chunk_wrapper(uncompressed_chunk);
-		PG_RETURN_OID(uncompressed_chunk_id);
-	}
 }
