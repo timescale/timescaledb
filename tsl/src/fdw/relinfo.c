@@ -496,15 +496,23 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 		const int parent_relid = bms_next_member(rel->top_parent_relids, -1);
 		if (parent_relid < 0)
 		{
+			/*
+			 * In some cases (e.g., UPDATE stmt) top_parent_relids is not set so
+			 * the best we can do is using shared buffers size without
+			 * partitioning information. Since updates are not something we
+			 * generaly optimize for, this should be fine.
+			 */
 			if (rel->pages == 0 && rel->tuples <= 0)
 			{
 				estimate_tuples_and_pages(root, rel);
+				RelEstimates *estimates = estimate_tuples_and_pages_using_shared_buffers(root, NULL, rel->reltarget->width);
+				set_rel_estimates(rel, estimates);
 			}
 		}
 		else
 		{
 			RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
-			TsFdwRelInfo *p = fdw_relinfo_get(parent_info);
+			TsFdwRelInfo *parent_private = fdw_relinfo_get(parent_info);
 			RangeTblEntry *parent_rte = planner_rt_fetch(parent_relid, root);
 			Cache *hcache = ts_hypertable_cache_pin();
 			Hypertable *ht =
@@ -523,30 +531,39 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 				// FIXME figure out when this happens
 				Assert(false);
 			}
-			double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
 
+			double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
 			if (rel->pages == 0 && rel->tuples <= 0)
 			{
-				if (p->average_chunk_pages > 0 && p->average_chunk_tuples > 0)
+				if (parent_private->average_chunk_pages > 0 && parent_private->average_chunk_tuples > 0)
 				{
-					rel->pages = p->average_chunk_pages * fillfactor;
-					rel->tuples = p->average_chunk_tuples * fillfactor;
+					rel->pages = parent_private->average_chunk_pages * fillfactor;
+					rel->tuples = parent_private->average_chunk_tuples * fillfactor;
 				}
 				else
 				{
-					estimate_tuples_and_pages(root, rel);
-
-					p->average_chunk_pages = rel->pages / fillfactor;
-					p->average_chunk_tuples = rel->tuples / fillfactor;
+					RelEstimates *estimates = estimate_tuples_and_pages_using_shared_buffers(root, NULL, rel->reltarget->width);
+					set_rel_estimates(rel, estimates);
 				}
+			}
+
+			/*
+			 * If there's still no estimate of the chunk size, initialize it with
+			 * the current chunk. Otherwise, compute an exponential moving
+			 * average.
+			 */
+			if (parent_private->average_chunk_pages == 0 && parent_private->average_chunk_tuples <= 0)
+			{
+				parent_private->average_chunk_pages = rel->pages;
+				parent_private->average_chunk_tuples = rel->tuples;
 			}
 			else
 			{
 				const double f = 0.1;
-				p->average_chunk_pages =
-					(1 - f) * p->average_chunk_pages + f * rel->pages / fillfactor;
-				p->average_chunk_tuples =
-					(1 - f) * p->average_chunk_tuples + f * rel->tuples / fillfactor;
+				parent_private->average_chunk_pages =
+					(1 - f) * parent_private->average_chunk_pages + f * rel->pages / fillfactor;
+				parent_private->average_chunk_tuples =
+					(1 - f) * parent_private->average_chunk_tuples + f * rel->tuples / fillfactor;
 			}
 
 			ts_cache_release(hcache);
