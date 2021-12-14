@@ -160,8 +160,19 @@ extension_update_state()
 		return;
 
 	in_recursion = true;
-	extension_set_state(extension_current_state());
-	extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
+	enum ExtensionState new_state = extension_current_state();
+	bool state_changed = extension_set_state(new_state);
+	if (state_changed)
+	{
+		if (new_state == EXTENSION_STATE_CREATED)
+		{
+			extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
+		}
+		else
+		{
+			extension_oid = InvalidOid;
+		}
+	}
 	in_recursion = false;
 }
 
