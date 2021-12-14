@@ -479,6 +479,11 @@ CALL refresh_continuous_aggregate('conditions_dist_1m_manual', '2010-01-01', '20
 SELECT * FROM conditions_dist_1m ORDER BY bucket;
 SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
 
+ALTER MATERIALIZED VIEW conditions_dist_1m_manual SET ( timescaledb.compress );
+SELECT compress_chunk(ch)
+FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+
 -- Clean up
 DROP TABLE conditions_dist CASCADE;
 

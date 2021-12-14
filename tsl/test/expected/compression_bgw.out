@@ -118,10 +118,19 @@ select count(*) from _timescaledb_config.bgw_job WHERE id>=1000;
 \set ON_ERROR_STOP 0
 CALL run_job(:compressjob_id);
 ERROR:  job 1000 not found
+--errors with bad input for add/remove compression policy
+create view dummyv1 as select * from conditions limit 1;
+select add_compression_policy( 100 , compress_after=> '1 day'::interval);
+ERROR:  "(null)" is not a hypertable or a continuous aggregate
+select add_compression_policy( 'dummyv1', compress_after=> '1 day'::interval );
+ERROR:  "dummyv1" is not a hypertable or a continuous aggregate
+select remove_compression_policy( 100 );
+ERROR:  relation is not a hypertable or continuous aggregate
 \set ON_ERROR_STOP 1
 -- We're done with the table, so drop it.
 DROP TABLE IF EXISTS conditions CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_2_4_chunk
+NOTICE:  drop cascades to view dummyv1
 --TEST 7
 --compression policy for smallint, integer or bigint based partition hypertable
 --smallint test
@@ -142,6 +151,10 @@ SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
 
 INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_smallint SET (timescaledb.compress);
+\set ON_ERROR_STOP 0
+select add_compression_policy( 'test_table_smallint', compress_after=> '1 day'::interval );
+ERROR:  unsupported compress_after argument type, expected type : smallint
+\set ON_ERROR_STOP 1
 SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |       owner       | scheduled | hypertable_id |                  config                   

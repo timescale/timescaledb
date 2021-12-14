@@ -569,3 +569,10 @@ SELECT add_compression_policy('i2980_cagg2', '3 day'::interval);
 SELECT add_compression_policy('i2980_cagg2', '1 day'::interval);
 SELECT add_compression_policy('i2980_cagg2', '3'::integer);
 SELECT add_compression_policy('i2980_cagg2', 13::integer);
+
+SELECT materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_TABLE_NAME"
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'i2980_cagg2'
+\gset
+SELECT add_compression_policy( :'MAT_TABLE_NAME', 13::integer);
+

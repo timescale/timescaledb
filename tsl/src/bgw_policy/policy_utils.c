@@ -8,6 +8,7 @@
 #include <utils/builtins.h>
 #include "continuous_agg.h"
 #include "dimension.h"
+#include "errors.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "jsonb_utils.h"
@@ -119,9 +120,10 @@ get_open_dimension_for_hypertable(const Hypertable *ht)
 		open_dim = ts_continuous_agg_find_integer_now_func_by_materialization_id(mat_id);
 		if (open_dim == NULL)
 		{
-			elog(ERROR,
-				 "missing integer_now function for hypertable \"%s\" ",
-				 get_rel_name(ht->main_table_relid));
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_UNEXPECTED),
+					 errmsg("missing integer_now function for hypertable \"%s\" ",
+							get_rel_name(ht->main_table_relid))));
 		}
 	}
 	return open_dim;

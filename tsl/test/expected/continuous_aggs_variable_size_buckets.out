@@ -1155,6 +1155,22 @@ SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
  03-01-2010 |   15 |  15
 (3 rows)
 
+ALTER MATERIALIZED VIEW conditions_dist_1m_manual SET ( timescaledb.compress );
+SELECT compress_chunk(ch)
+FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_17_533_chunk
+(1 row)
+
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+   bucket   | min  | max 
+------------+------+-----
+ 01-01-2010 |  101 | 999
+ 02-01-2010 | -999 | 228
+ 03-01-2010 |   15 |  15
+(3 rows)
+
 -- Clean up
 DROP TABLE conditions_dist CASCADE;
 NOTICE:  drop cascades to 5 other objects
