@@ -505,7 +505,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			if (rel->pages == 0 && rel->tuples <= 0)
 			{
 				estimate_tuples_and_pages(root, rel);
-				RelEstimates *estimates = estimate_tuples_and_pages_using_shared_buffers(root, NULL, rel->reltarget->width);
+				RelEstimates *estimates =
+					estimate_tuples_and_pages_using_shared_buffers(root,
+																   NULL,
+																   rel->reltarget->width);
 				set_rel_estimates(rel, estimates);
 			}
 		}
@@ -534,7 +537,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 
 			const double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
 			const bool have_chunk_statistics = rel->pages != 0 || rel->tuples > 0;
-			const bool have_moving_average = parent_private->average_chunk_pages != 0 || parent_private->average_chunk_tuples > 0;
+			const bool have_moving_average = parent_private->average_chunk_pages != 0 ||
+											 parent_private->average_chunk_tuples > 0;
 			if (!have_chunk_statistics)
 			{
 				/*
@@ -550,7 +554,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 				}
 				else
 				{
-					RelEstimates *estimates = estimate_tuples_and_pages_using_shared_buffers(root, ht, rel->reltarget->width);
+					RelEstimates *estimates =
+						estimate_tuples_and_pages_using_shared_buffers(root,
+																	   ht,
+																	   rel->reltarget->width);
 					set_rel_estimates(rel, estimates);
 				}
 			}
