@@ -521,6 +521,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 			else
 			{
 				// FIXME figure out when this happens
+				Assert(false);
 			}
 			double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
 
