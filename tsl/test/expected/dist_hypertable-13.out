@@ -3648,14 +3648,14 @@ SELECT *
 FROM hyper_estimate;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
- Append  (cost=100.00..707.67 rows=16 width=20)
+ Append  (cost=100.00..707.79 rows=17 width=20)
    ->  Foreign Scan on _dist_hyper_16_38_chunk  (cost=100.00..101.40 rows=4 width=20)
    ->  Foreign Scan on _dist_hyper_16_39_chunk  (cost=100.00..101.20 rows=2 width=20)
    ->  Foreign Scan on _dist_hyper_16_40_chunk  (cost=100.00..101.30 rows=3 width=20)
    ->  Foreign Scan on _dist_hyper_16_41_chunk  (cost=100.00..101.20 rows=2 width=20)
    ->  Foreign Scan on _dist_hyper_16_42_chunk  (cost=100.00..101.30 rows=3 width=20)
    ->  Foreign Scan on _dist_hyper_16_43_chunk  (cost=100.00..101.10 rows=1 width=20)
-   ->  Foreign Scan on _dist_hyper_16_44_chunk  (cost=100.00..100.09 rows=1 width=20)
+   ->  Foreign Scan on _dist_hyper_16_44_chunk  (cost=100.00..100.20 rows=2 width=20)
 (8 rows)
 
 CREATE TABLE devices (

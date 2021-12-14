@@ -532,38 +532,58 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 				Assert(false);
 			}
 
-			double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
-			if (rel->pages == 0 && rel->tuples <= 0)
+			const double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
+			const bool have_chunk_statistics = rel->pages != 0 || rel->tuples > 0;
+			const bool have_moving_average = parent_private->average_chunk_pages != 0 || parent_private->average_chunk_tuples > 0;
+			if (!have_chunk_statistics)
 			{
-				if (parent_private->average_chunk_pages > 0 && parent_private->average_chunk_tuples > 0)
+				/*
+				 * If we don't have the statistics from ANALYZE for this chunk,
+				 * use the moving average of chunk sizes. If we don't have even
+				 * that, use an estimate based on the default shared buffers
+				 * size for a chunk.
+				 */
+				if (have_moving_average)
 				{
 					rel->pages = parent_private->average_chunk_pages * fillfactor;
 					rel->tuples = parent_private->average_chunk_tuples * fillfactor;
 				}
 				else
 				{
-					RelEstimates *estimates = estimate_tuples_and_pages_using_shared_buffers(root, NULL, rel->reltarget->width);
+					RelEstimates *estimates = estimate_tuples_and_pages_using_shared_buffers(root, ht, rel->reltarget->width);
 					set_rel_estimates(rel, estimates);
 				}
 			}
 
-			/*
-			 * If there's still no estimate of the chunk size, initialize it with
-			 * the current chunk. Otherwise, compute an exponential moving
-			 * average.
-			 */
-			if (parent_private->average_chunk_pages == 0 && parent_private->average_chunk_tuples <= 0)
+			if (!have_moving_average)
 			{
+				/*
+				 * Initialize the moving average data if we don't have any yet.
+				 * Use even a bad estimate from shared buffers, to save on
+				 * recalculating the same bad estimate for the subsequent chunks
+				 * that are likely to not have the statistics as well.
+				 */
 				parent_private->average_chunk_pages = rel->pages;
 				parent_private->average_chunk_tuples = rel->tuples;
 			}
-			else
+			else if (have_chunk_statistics)
 			{
+				/*
+				 * We have the moving average of chunk sizes and a good estimate
+				 * of this chunk size from ANALYZE. Update the moving average.
+				 */
 				const double f = 0.1;
 				parent_private->average_chunk_pages =
 					(1 - f) * parent_private->average_chunk_pages + f * rel->pages / fillfactor;
 				parent_private->average_chunk_tuples =
 					(1 - f) * parent_private->average_chunk_tuples + f * rel->tuples / fillfactor;
+			}
+			else
+			{
+				/*
+				 * Already have some moving average data, but don't have good
+				 * statistics for this chunk. Do nothing.
+				 */
 			}
 
 			ts_cache_release(hcache);
