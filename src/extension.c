@@ -57,6 +57,8 @@ static Oid extension_proxy_oid = InvalidOid;
 
 static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
 
+static Oid extension_oid = InvalidOid;
+
 static bool
 extension_loader_present()
 {
@@ -158,7 +160,19 @@ extension_update_state()
 		return;
 
 	in_recursion = true;
-	extension_set_state(extension_current_state());
+	enum ExtensionState new_state = extension_current_state();
+	bool state_changed = extension_set_state(new_state);
+	if (state_changed)
+	{
+		if (new_state == EXTENSION_STATE_CREATED)
+		{
+			extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
+		}
+		else
+		{
+			extension_oid = InvalidOid;
+		}
+	}
 	in_recursion = false;
 }
 
@@ -201,6 +215,12 @@ ts_extension_schema_oid(void)
 	if (schema == InvalidOid)
 		elog(ERROR, "extension schema not found");
 	return schema;
+}
+
+Oid
+ts_extension_oid(void)
+{
+	return extension_oid;
 }
 
 char *
