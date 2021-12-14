@@ -34,9 +34,53 @@ typedef enum ContinuousAggViewType
 
 extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const List *defelems);
 
+#define BUCKET_WIDTH_VARIABLE (-1)
+
+/*
+ * Information about the bucketing function.
+ *
+ * Note that this structure should be serializable and it should be possible
+ * to transfer it over the network to the data nodes. The following procedures
+ * are responsible for serializing and deserializing respectively:
+ *
+ * - bucket_function_serialize()
+ * - bucket_function_deserialize()
+ *
+ * Serialized data is used as an input of the following procedures:
+ *
+ * - _timescaledb_internal.invalidation_process_hypertable_log()
+ * - _timescaledb_internal.invalidation_process_cagg_log()
+ *
+ * See bucket_functions[] argument.
+ */
+typedef struct ContinuousAggsBucketFunction
+{
+	/*
+	 * Schema of the bucketing function.
+	 * Equals TRUE for "timescaledb_experimental", FALSE otherwise.
+	 */
+	bool experimental;
+	/* Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng" */
+	char *name;
+	/* `bucket_width` argument of the function, e.g. "1 month" */
+	char *bucket_width;
+	/* `origin` argument of the function provided by the user */
+	char *origin;
+	/* `timezone` argument of the function provided by the user */
+	char *timezone;
+} ContinuousAggsBucketFunction;
+
 typedef struct ContinuousAgg
 {
 	FormData_continuous_agg data;
+
+	/*
+	 * bucket_function is NULL unless the bucket is variable in size,
+	 * e.g. monthly bucket or a bucket with a timezone.
+	 * In this case data.bucket_with stores BUCKET_WIDTH_VARIABLE.
+	 */
+	ContinuousAggsBucketFunction *bucket_function;
+
 	/* Relid of the user-facing view */
 	Oid relid;
 	/* Type of the primary partitioning dimension */
@@ -62,20 +106,27 @@ typedef struct ContinuousAggMatOptions
 
 typedef struct CaggsInfoData
 {
-	List *mat_hypertable_ids; /* (int32) element */
-	List *bucket_widths;	  /* (int64) Datum */
-	List *max_bucket_widths;  /* (int64) Datum */
+	/* (int32) elements */
+	List *mat_hypertable_ids;
+	/* (int64) Datum elements; stores BUCKET_WIDTH_VARIABLE for variable buckets */
+	List *bucket_widths;
+	/* (int64) Datum elements; stores BUCKET_WIDTH_VARIABLE for variable buckets */
+	List *max_bucket_widths;
+	/* (const ContinuousAggsBucketFunction *) elements; stores NULL for fixed buckets */
+	List *bucket_functions;
 } CaggsInfo;
 
 extern TSDLLEXPORT const CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
 														   ArrayType *bucket_widths,
 														   ArrayType *max_bucket_widths,
+														   ArrayType *bucket_functions,
 														   CaggsInfo *all_caggs);
 TSDLLEXPORT void ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs,
 												  ArrayType **mat_hypertable_ids,
 												  ArrayType **bucket_widths,
-												  ArrayType **max_bucket_widths);
+												  ArrayType **max_bucket_widths,
+												  ArrayType **bucket_functions);
 
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
@@ -108,7 +159,10 @@ extern TSDLLEXPORT const Dimension *
 ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid);
 extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, const char *name);
 
+extern TSDLLEXPORT bool ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg);
 extern TSDLLEXPORT int64 ts_continuous_agg_bucket_width(const ContinuousAgg *agg);
 extern TSDLLEXPORT int64 ts_continuous_agg_max_bucket_width(const ContinuousAgg *agg);
+extern TSDLLEXPORT int32
+ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction *agg);
 
 #endif /* TIMESCALEDB_CONTINUOUS_AGG_H */

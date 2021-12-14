@@ -204,6 +204,28 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 	}
 }
 
+/*
+ * Similar to ts_interval_value_to_internal() but for monthly interval returns
+ * the number of months and *months=true. Otherwise returns *months=false and
+ * the result of ts_interval_value_to_internal()
+ */
+int64
+ts_interval_value_to_internal_or_months(Datum time_val, Oid type_oid, bool *months)
+{
+	if (type_oid == INTERVALOID)
+	{
+		Interval *interval = DatumGetIntervalP(time_val);
+		if (interval->month != 0)
+		{
+			*months = true;
+			return interval->month;
+		}
+	}
+
+	*months = false;
+	return ts_interval_value_to_internal(time_val, type_oid);
+}
+
 static int64
 ts_integer_to_internal(Datum time_val, Oid type_oid)
 {

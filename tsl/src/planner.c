@@ -142,6 +142,10 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 {
 	if (is_dummy_rel(rel))
 	{
+		/*
+		 * Don't have to create any other path if the relation is already proven
+		 * to be empty.
+		 */
 		return;
 	}
 

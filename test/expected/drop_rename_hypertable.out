@@ -202,6 +202,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | compression_algorithm                            | table | super_user
  _timescaledb_catalog | compression_chunk_size                           | table | super_user
  _timescaledb_catalog | continuous_agg                                   | table | super_user
+ _timescaledb_catalog | continuous_aggs_bucket_function                  | table | super_user
  _timescaledb_catalog | continuous_aggs_hypertable_invalidation_log      | table | super_user
  _timescaledb_catalog | continuous_aggs_invalidation_threshold           | table | super_user
  _timescaledb_catalog | continuous_aggs_materialization_invalidation_log | table | super_user
@@ -213,7 +214,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | metadata                                         | table | super_user
  _timescaledb_catalog | remote_txn                                       | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user
-(19 rows)
+(20 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

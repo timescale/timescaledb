@@ -107,6 +107,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_COPY_OPERATION_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_BUCKET_FUNCTION] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -254,6 +258,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CHUNK_COPY_OPERATION_INDEX,
 		.names = (char *[]) {
 			[CHUNK_COPY_OPERATION_PKEY_IDX] = "chunk_copy_operation_pkey",
+		},
+	},
+	[CONTINUOUS_AGGS_BUCKET_FUNCTION] = {
+		.length = _MAX_CONTINUOUS_AGGS_BUCKET_FUNCTION_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX] = "continuous_aggs_bucket_function_pkey",
 		},
 	}
 };

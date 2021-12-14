@@ -102,6 +102,8 @@ typedef struct CaggInvalidationState
 	const CaggsInfo *all_caggs;
 	int64 bucket_width;
 	int64 max_bucket_width;
+	/* bucket_function is NULL unless bucket_width == max_bucket_width == BUCKET_WIDTH_VARIABLE */
+	const ContinuousAggsBucketFunction *bucket_function;
 } CaggInvalidationState;
 
 typedef enum LogType
@@ -542,6 +544,28 @@ invalidation_entry_reset(Invalidation *entry)
 }
 
 /*
+ * Expand an invalidation to bucket boundaries, for the case of monthly buckets.
+ *
+ * See invalidation_expand_to_bucket_boundaries() below.
+ */
+static void
+invalidation_expand_to_bucket_boundaries_for_months(
+	Invalidation *inv, Oid timetype, const ContinuousAggsBucketFunction *bucket_function)
+{
+	InternalTimeRange range_in, range_out;
+
+	range_in.type = timetype;
+	range_in.start = inv->lowest_modified_value;
+	range_in.end = inv->greatest_modified_value;
+
+	range_out = compute_circumscribed_bucketed_refresh_window_for_months(
+		&range_in, ts_bucket_function_to_bucket_width_in_months(bucket_function));
+
+	inv->lowest_modified_value = range_out.start;
+	inv->greatest_modified_value = range_out.end;
+}
+
+/*
  * Expand an invalidation to bucket boundaries.
  *
  * Since a refresh always materializes full buckets, we can safely expand an
@@ -549,12 +573,19 @@ invalidation_entry_reset(Invalidation *entry)
  * invalidations.
  */
 static void
-invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 bucket_width)
+invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 bucket_width,
+										 const ContinuousAggsBucketFunction *bucket_function)
 {
 	const int64 min_for_type = ts_time_get_min(timetype);
 	const int64 max_for_type = ts_time_get_max(timetype);
 	int64 min_bucket_start;
 	int64 max_bucket_end;
+
+	if (bucket_width == BUCKET_WIDTH_VARIABLE)
+	{
+		invalidation_expand_to_bucket_boundaries_for_months(inv, timetype, bucket_function);
+		return;
+	}
 
 	Assert(bucket_width > 0);
 
@@ -629,7 +660,8 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 
 
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
-											   int32 hyper_id, Oid dimtype, int64 bucket_width)
+											   int32 hyper_id, Oid dimtype, int64 bucket_width,
+											   const ContinuousAggsBucketFunction *bucket_function)
 {
 	INVALIDATION_ENTRY_SET(entry,
 						   ti,
@@ -639,12 +671,13 @@ invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleI
 	 * invalidation log, a different hypertable ID must be set (the ID of the
 	 * materialized hypertable). */
 	entry->hyper_id = hyper_id;
-	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width);
+	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width, bucket_function);
 }
 
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
-											  int64 bucket_width)
+											  int64 bucket_width,
+											  const ContinuousAggsBucketFunction *bucket_function)
 {
 	INVALIDATION_ENTRY_SET(entry,
 						   ti,
@@ -659,7 +692,7 @@ invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleIn
 	 * invalidation log for some users. Therefore we try to expand
 	 * invalidation entries also here, although in most cases it would do
 	 * nothing. */
-	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width);
+	invalidation_expand_to_bucket_boundaries(entry, dimtype, bucket_width, bucket_function);
 }
 
 /*
@@ -757,7 +790,7 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	const CaggsInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->raw_hypertable_id;
 	int32 last_cagg_hyper_id;
-	ListCell *lc1, *lc2;
+	ListCell *lc1, *lc2, *lc3;
 
 	last_cagg_hyper_id = llast_int(all_caggs->mat_hypertable_ids);
 
@@ -772,10 +805,17 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	 * the cagg invalidation log. This creates better locality for scanning
 	 * the invalidations later.
 	 */
-	forboth (lc1, all_caggs->mat_hypertable_ids, lc2, all_caggs->bucket_widths)
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		int64 bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
+		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc3);
+
 		Invalidation mergedentry;
 		ScanIterator iterator;
 
@@ -797,7 +837,8 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 														   ti,
 														   cagg_hyper_id,
 														   state->dimtype,
-														   bucket_width);
+														   bucket_width,
+														   bucket_function);
 
 			if (!IS_VALID_INVALIDATION(&mergedentry))
 			{
@@ -961,9 +1002,14 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 		MemoryContext oldmctx;
 		Invalidation logentry;
 		int64 bucket_width = state->bucket_width;
+		const ContinuousAggsBucketFunction *bucket_function = state->bucket_function;
 
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
-		invalidation_entry_set_from_cagg_invalidation(&logentry, ti, state->dimtype, bucket_width);
+		invalidation_entry_set_from_cagg_invalidation(&logentry,
+													  ti,
+													  state->dimtype,
+													  bucket_width,
+													  bucket_function);
 
 		if (!IS_VALID_INVALIDATION(&mergedentry))
 			mergedentry = logentry;
@@ -1005,7 +1051,7 @@ static void
 invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 						int32 raw_hypertable_id, Oid dimtype, const CaggsInfo *all_caggs)
 {
-	ListCell *lc1, *lc2, *lc3;
+	ListCell *lc1, *lc2, *lc3, *lc4;
 	bool PG_USED_FOR_ASSERTS_ONLY found = false;
 
 	state->mat_hypertable_id = mat_hypertable_id;
@@ -1017,13 +1063,14 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 												  "Continuous aggregate invalidations",
 												  ALLOCSET_DEFAULT_SIZES);
 	state->snapshot = RegisterSnapshot(GetTransactionSnapshot());
-
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->max_bucket_widths)
+	forfour(lc1,
+			all_caggs->mat_hypertable_ids,
+			lc2,
+			all_caggs->bucket_widths,
+			lc3,
+			all_caggs->max_bucket_widths,
+			lc4,
+			all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 
@@ -1034,6 +1081,8 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 
 			state->bucket_width = bucket_width;
 			state->max_bucket_width = max_bucket_width;
+			state->bucket_function = lfirst(lc4);
+
 			found = true;
 			break;
 		}
@@ -1060,6 +1109,30 @@ invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertabl
 	invalidation_state_cleanup(&state);
 }
 
+/*
+ * Generates the default bucket_functions[] argument for the following functions:
+ *
+ * - _timescaledb_internal.invalidation_process_hypertable_log()
+ * - _timescaledb_internal.invalidation_process_cagg_log()
+ *
+ * Users are expected to have the same or higher version of TimescaleDB on the
+ * data nodes. When the access node runs the older version that knows nothing
+ * about the bucket_functions[] argument, the data nodes that runs newer version
+ * will receive less arguments that they expect. When this happens data nodes
+ * generate the default argument, and execute the rest of the logic as usual.
+ */
+static ArrayType *
+bucket_functions_default_argument(int ndim)
+{
+	int i;
+	Datum *bucketfunctions = palloc(sizeof(Datum) * ndim);
+
+	for (i = 0; i < ndim; i++)
+		bucketfunctions[i] = CStringGetTextDatum("");
+
+	return construct_array(bucketfunctions, ndim, TEXTOID, -1, false, TYPALIGN_INT);
+}
+
 /**
  * Processes the hypertable invalidation log in a data node for all the CAGGs that belong to the
  * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node. The
@@ -1076,6 +1149,7 @@ invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertabl
  *                      'raw_hypertable_id'.
  * @param max_bucket_widths The array of the maximum time bucket widths for all the CAGGs that
  *                          belong to 'raw_hypertable_id'.
+ * @param bucket_functions (Optional) The array of serialized information about bucket functions.
  */
 Datum
 tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
@@ -1086,11 +1160,15 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(3);
 	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(4);
 	ArrayType *max_bucket_widths = PG_GETARG_ARRAYTYPE_P(5);
+	ArrayType *bucket_functions = PG_NARGS() > 6 ?
+									  PG_GETARG_ARRAYTYPE_P(6) :
+									  bucket_functions_default_argument(ARR_NDIM(bucket_widths));
 	CaggsInfo all_caggs_info;
 
 	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
 									   bucket_widths,
 									   max_bucket_widths,
+									   bucket_functions,
 									   &all_caggs_info);
 
 	invalidation_process_hypertable_log(mat_hypertable_id,
@@ -1100,7 +1178,7 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-#define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 6
+#define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 7
 #define INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME "invalidation_process_hypertable_log"
 
 void
@@ -1111,6 +1189,7 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	ArrayType *mat_hypertable_ids;
 	ArrayType *bucket_widths;
 	ArrayType *max_bucket_widths;
+	ArrayType *bucket_functions;
 	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS);
 	FmgrInfo flinfo;
 	unsigned int i;
@@ -1118,15 +1197,20 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	ts_create_arrays_from_caggs_info(all_caggs,
 									 &mat_hypertable_ids,
 									 &bucket_widths,
-									 &max_bucket_widths);
+									 &max_bucket_widths,
+									 &bucket_functions);
 
 	static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
-		INT4OID, INT4OID, OIDOID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
+		INT4OID, INT4OID, REGTYPEOID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID
 	};
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString(INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME));
 
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
+	/*
+	 * Note that we have to explicitly specify the amount of arguments in this
+	 * case, because there are several overloaded versions of invalidation_process_hypertable_log().
+	 */
+	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
 	Assert(OidIsValid(func_oid));
 
 	fmgr_info(func_oid, &flinfo);
@@ -1147,6 +1231,7 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	FC_ARG(fcinfo, 3) = PointerGetDatum(mat_hypertable_ids);
 	FC_ARG(fcinfo, 4) = PointerGetDatum(bucket_widths);
 	FC_ARG(fcinfo, 5) = PointerGetDatum(max_bucket_widths);
+	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_functions);
 	/* Check for null result, since caller is clearly not expecting one */
 	if (fcinfo->isnull)
 		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
@@ -1207,6 +1292,7 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 		continuous_agg_calculate_merged_refresh_window(refresh_window,
 													   store,
 													   state.max_bucket_width,
+													   state.bucket_function,
 													   &merged_refresh_window);
 		*do_merged_refresh = true;
 		*ret_merged_refresh_window = merged_refresh_window;
@@ -1235,6 +1321,7 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
  *                      'raw_hypertable_id'.
  * @param max_bucket_widths The array of the maximum time bucket widths for all the CAGGs that
  *                          belong to 'raw_hypertable_id'.
+ * @param bucket_functions (Optional) The array of serialized information about bucket functions.
  * @return a tuple of:
  *         ret_window_start - The merged refresh window starting time
  *         ret_window_end - The merged refresh window ending time
@@ -1253,12 +1340,16 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(5);
 	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(6);
 	ArrayType *max_bucket_widths = PG_GETARG_ARRAYTYPE_P(7);
+	ArrayType *bucket_functions = PG_NARGS() > 8 ?
+									  PG_GETARG_ARRAYTYPE_P(8) :
+									  bucket_functions_default_argument(ARR_NDIM(bucket_widths));
 	CaggsInfo all_caggs_info;
 	InternalTimeRange ret_merged_refresh_window;
 
 	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
 									   bucket_widths,
 									   max_bucket_widths,
+									   bucket_functions,
 									   &all_caggs_info);
 
 	/* Force to always merge the refresh ranges since it is running in the data node
@@ -1297,7 +1388,7 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
-#define INVALIDATION_PROCESS_CAGG_LOG_NARGS 8
+#define INVALIDATION_PROCESS_CAGG_LOG_NARGS 9
 #define INVALIDATION_PROCESS_CAGG_LOG_FUNCNAME "invalidation_process_cagg_log"
 
 void
@@ -1310,6 +1401,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	ArrayType *mat_hypertable_ids;
 	ArrayType *bucket_widths;
 	ArrayType *max_bucket_widths;
+	ArrayType *bucket_functions;
 	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_CAGG_LOG_NARGS);
 	FmgrInfo flinfo;
 	unsigned int i;
@@ -1319,15 +1411,21 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	ts_create_arrays_from_caggs_info(all_caggs,
 									 &mat_hypertable_ids,
 									 &bucket_widths,
-									 &max_bucket_widths);
+									 &max_bucket_widths,
+									 &bucket_functions);
 
 	static const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
-		INT4OID, INT4OID, OIDOID, INT8OID, INT8OID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID
+		INT4OID,	  INT4OID,		REGTYPEOID,   INT8OID,		INT8OID,
+		INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID,
 	};
 	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
 								 makeString(INVALIDATION_PROCESS_CAGG_LOG_FUNCNAME));
 
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
+	/*
+	 * Note that we have to explicitly specify the amount of arguments in this
+	 * case, because there are several overloaded versions of invalidation_process_cagg_log().
+	 */
+	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
 	Assert(OidIsValid(func_oid));
 
 	fmgr_info(func_oid, &flinfo);
@@ -1350,6 +1448,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	FC_ARG(fcinfo, 5) = PointerGetDatum(mat_hypertable_ids);
 	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_widths);
 	FC_ARG(fcinfo, 7) = PointerGetDatum(max_bucket_widths);
+	FC_ARG(fcinfo, 8) = PointerGetDatum(bucket_functions);
 	/* Check for null result, since caller is clearly not expecting one */
 	if (fcinfo->isnull)
 		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);

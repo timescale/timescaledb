@@ -12,6 +12,7 @@
 #include <parser/parse_coerce.h>
 #include <fmgr.h>
 
+#include "time_bucket.h"
 #include "dimension.h"
 #include "guc.h"
 #include "time_utils.h"
@@ -496,6 +497,30 @@ ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype)
 		return ts_time_get_noend_or_max(timetype);
 
 	return timeval - interval;
+}
+
+/*
+ * Rounds a time value to the beginning of the monthly bucket and adds the
+ * given number of months. Basically the pracedure calculates the beginning
+ * of the next montly bucket.
+ */
+int64
+ts_time_bucket_and_add_months(int64 timeval, int32 bucket_width_months)
+{
+	Interval interval;
+	Datum val_new;
+	Datum val_old = ts_internal_to_time_value(timeval, DATEOID);
+
+	memset(&interval, 0, sizeof(interval));
+	interval.month = bucket_width_months;
+
+	val_new = DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), val_old);
+	val_new = DirectFunctionCall1(timestamp_date,
+								  DirectFunctionCall2(date_pl_interval,
+													  val_new,
+													  IntervalPGetDatum(&interval)));
+
+	return ts_time_value_to_internal(val_new, DATEOID);
 }
 
 int64

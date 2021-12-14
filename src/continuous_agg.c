@@ -38,6 +38,7 @@
 #include "time_utils.h"
 #include "catalog.h"
 
+#define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 
 static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
@@ -72,6 +73,21 @@ init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertabl
 
 	ts_scan_iterator_scan_key_init(iterator,
 								   Anum_continuous_agg_pkey_mat_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(mat_hypertable_id));
+}
+
+static void
+init_scan_cagg_bucket_function_by_mat_hypertable_id(ScanIterator *iterator,
+													const int32 mat_hypertable_id)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											CONTINUOUS_AGGS_BUCKET_FUNCTION,
+											CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX);
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(mat_hypertable_id));
@@ -166,6 +182,22 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 }
 
 static void
+cagg_bucket_function_delete(int32 mat_hypertable_id)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
+													RowExclusiveLock,
+													CurrentMemoryContext);
+
+	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+}
+
+static void
 hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
@@ -234,6 +266,68 @@ ts_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
 }
 
 static void
+continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucketFunction *bf)
+{
+	ScanIterator iterator;
+	int count = 0;
+
+	iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
+									   AccessShareLock,
+									   CurrentMemoryContext);
+	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		Datum values[Natts_continuous_aggs_bucket_function];
+		bool isnull[Natts_continuous_aggs_bucket_function];
+
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+
+		/*
+		 * Our usual GETSTRUCT() approach doesn't work when TEXT fields are involved,
+		 * thus a more robust approach with heap_deform_tuple() is used here.
+		 */
+		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, isnull);
+
+		Assert(!isnull[Anum_continuous_aggs_bucket_function_experimental - 1]);
+		bf->experimental =
+			DatumGetBool(values[Anum_continuous_aggs_bucket_function_experimental - 1]);
+
+		Assert(!isnull[Anum_continuous_aggs_bucket_function_name - 1]);
+		bf->name = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_name - 1]);
+
+		Assert(!isnull[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
+		bf->bucket_width =
+			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
+
+		Assert(!isnull[Anum_continuous_aggs_bucket_function_origin - 1]);
+		bf->origin = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
+
+		Assert(!isnull[Anum_continuous_aggs_bucket_function_timezone - 1]);
+		bf->timezone =
+			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_timezone - 1]);
+
+		count++;
+
+		if (should_free)
+			heap_freetuple(tuple);
+	}
+
+	/*
+	 * This function should never be called unless we know that the corresponding
+	 * cagg exists and uses a variable-sized bucket. There should be exactly one
+	 * entry in .continuous_aggs_bucket_function catalog table for such a cagg.
+	 */
+	if (count != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("invalid or missing information about the bucketing function for cagg"),
+				 errdetail("%d", mat_hypertable_id)));
+	}
+}
+
+static void
 continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
 	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
@@ -249,6 +343,12 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
+
+	if (ts_continuous_agg_bucket_width_variable(cagg))
+	{
+		cagg->bucket_function = palloc0(sizeof(ContinuousAggsBucketFunction));
+		continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
+	}
 }
 
 TSDLLEXPORT const CaggsInfo
@@ -263,19 +363,28 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	all_caggs_info.bucket_widths = NIL;
 	all_caggs_info.max_bucket_widths = NIL;
 	all_caggs_info.mat_hypertable_ids = NIL;
+	all_caggs_info.bucket_functions = NIL;
+
 	Assert(list_length(caggs) > 0);
 
 	foreach (lc, caggs)
 	{
 		ContinuousAgg *cagg = lfirst(lc);
 
-		bucket_width = Int64GetDatum(ts_continuous_agg_bucket_width(cagg));
+		bucket_width = Int64GetDatum(ts_continuous_agg_bucket_width_variable(cagg) ?
+										 BUCKET_WIDTH_VARIABLE :
+										 ts_continuous_agg_bucket_width(cagg));
 		all_caggs_info.bucket_widths =
 			lappend(all_caggs_info.bucket_widths, DatumGetPointer(bucket_width));
 
-		bucket_width = Int64GetDatum(ts_continuous_agg_max_bucket_width(cagg));
+		bucket_width = Int64GetDatum(ts_continuous_agg_bucket_width_variable(cagg) ?
+										 BUCKET_WIDTH_VARIABLE :
+										 ts_continuous_agg_max_bucket_width(cagg));
 		all_caggs_info.max_bucket_widths =
 			lappend(all_caggs_info.max_bucket_widths, DatumGetPointer(bucket_width));
+
+		all_caggs_info.bucket_functions =
+			lappend(all_caggs_info.bucket_functions, cagg->bucket_function);
 
 		all_caggs_info.mat_hypertable_ids =
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
@@ -284,34 +393,133 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 }
 
 /*
+ * Serializes ContinuousAggsBucketFunction* into a string like:
+ *
+ *     ver;bucket_width;origin;timezone;
+ *
+ * ... where ver is a version of the serialization format. This particular format
+ * was chosen because of it's simplicity and good performance. Future versions
+ * of the procedure can use other format (like key=value or JSON) and/or add
+ * extra fields. NULL pointer is serialized to an empty string.
+ *
+ * Note that the schema and the name of the function are not serialized. This
+ * is intentional since this information is currently not used for anything.
+ * We can serialize the name of the function as well when and if this would be
+ * necessary.
+ */
+static const char *
+bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
+{
+	StringInfo str;
+
+	if (NULL == bf)
+		return "";
+
+	str = makeStringInfo();
+
+	/* We are pretty sure that user can't place ';' character in these fields */
+	Assert(strstr(bf->bucket_width, ";") == NULL);
+	Assert(strstr(bf->origin, ";") == NULL);
+	Assert(strstr(bf->timezone, ";") == NULL);
+
+	appendStringInfo(str,
+					 "%d;%s;%s;%s;",
+					 BUCKET_FUNCTION_SERIALIZE_VERSION,
+					 bf->bucket_width,
+					 bf->origin,
+					 bf->timezone);
+
+	return str->data;
+}
+
+/*
+ * Deserielizes a string into a palloc'ated ContinuousAggsBucketFunction*. Note
+ * that NULL is also a valid return value.
+ *
+ * See bucket_function_serialize() for more details.
+ */
+static const ContinuousAggsBucketFunction *
+bucket_function_deserialize(const char *str)
+{
+	int i;
+	char *begin, *end, *strings[4];
+	ContinuousAggsBucketFunction *bf;
+
+	/* empty string stands for serialized NULL */
+	if (*str == '\0')
+		return NULL;
+
+	begin = pstrdup(str);
+	for (i = 0; i < lengthof(strings); i++)
+	{
+		end = strstr(begin, ";");
+		if (end == NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("failed to deserialize \"%s\" into a bucketing function", str),
+					 errdetail("separator not found")));
+		}
+
+		*end = '\0';
+		strings[i] = begin;
+		begin = end + 1;
+	}
+
+	/* end of string was reached */
+	Assert(*begin == '\0');
+
+	if (atoi(strings[0]) != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("failed to deserialize \"%s\" into a bucketing function", str),
+				 errdetail("unsupported format version")));
+	}
+
+	bf = palloc(sizeof(ContinuousAggsBucketFunction));
+	bf->experimental = true;
+	bf->name = "time_bucket_ng";
+	bf->bucket_width = strings[1];
+	bf->origin = strings[2];
+	bf->timezone = strings[3];
+	return bf;
+}
+
+/*
  * Does not do deep copy of Datums For performance reasons. Make sure the arrays are not deallocated
  * before CaggsInfo.
  */
 TSDLLEXPORT void
 ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
-								   ArrayType *max_bucket_widths, CaggsInfo *all_caggs)
+								   ArrayType *max_bucket_widths, ArrayType *bucket_functions,
+								   CaggsInfo *all_caggs)
 {
 	all_caggs->mat_hypertable_ids = NIL;
 	all_caggs->bucket_widths = NIL;
 	all_caggs->max_bucket_widths = NIL;
+	all_caggs->bucket_functions = NIL;
 
 	Assert(ARR_NDIM(mat_hypertable_ids) > 0 && ARR_NDIM(bucket_widths) > 0 &&
-		   ARR_NDIM(bucket_widths) > 0);
+		   ARR_NDIM(max_bucket_widths) > 0 && ARR_NDIM(bucket_functions) > 0);
 	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
-		   ARR_NDIM(bucket_widths) == ARR_NDIM(bucket_widths));
+		   ARR_NDIM(max_bucket_widths) == ARR_NDIM(bucket_widths) &&
+		   ARR_NDIM(bucket_functions) == ARR_NDIM(bucket_widths));
 
-	ArrayIterator it_htids, it_widths, it_maxes;
-	Datum array_datum1, array_datum2, array_datum3;
-	bool isnull1, isnull2, isnull3;
+	ArrayIterator it_htids, it_widths, it_maxes, it_bfs;
+	Datum array_datum1, array_datum2, array_datum3, array_datum4;
+	bool isnull1, isnull2, isnull3, isnull4;
 
 	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
 	it_widths = array_create_iterator(bucket_widths, 0, NULL);
 	it_maxes = array_create_iterator(max_bucket_widths, 0, NULL);
+	it_bfs = array_create_iterator(bucket_functions, 0, NULL);
 	while (array_iterate(it_htids, &array_datum1, &isnull1) &&
 		   array_iterate(it_widths, &array_datum2, &isnull2) &&
-		   array_iterate(it_maxes, &array_datum3, &isnull3))
+		   array_iterate(it_maxes, &array_datum3, &isnull3) &&
+		   array_iterate(it_bfs, &array_datum4, &isnull4))
 	{
-		Assert(!isnull1 && !isnull2 && !isnull3);
+		Assert(!isnull1 && !isnull2 && !isnull3 && !isnull4);
 		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
 		all_caggs->mat_hypertable_ids =
 			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
@@ -323,6 +531,12 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 		bucket_width = array_datum3;
 		all_caggs->max_bucket_widths =
 			lappend(all_caggs->max_bucket_widths, DatumGetPointer(bucket_width));
+
+		const ContinuousAggsBucketFunction *bucket_function =
+			bucket_function_deserialize(TextDatumGetCString(array_datum4));
+		/* bucket_function is cast to non-const type to make Visual Studio happy */
+		all_caggs->bucket_functions =
+			lappend(all_caggs->bucket_functions, (ContinuousAggsBucketFunction *) bucket_function);
 	}
 	array_free_iterator(it_htids);
 	array_free_iterator(it_widths);
@@ -335,28 +549,35 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
  */
 TSDLLEXPORT void
 ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
-								 ArrayType **bucket_widths, ArrayType **max_bucket_widths)
+								 ArrayType **bucket_widths, ArrayType **max_bucket_widths,
+								 ArrayType **bucket_functions)
 {
-	ListCell *lc1, *lc2, *lc3;
+	ListCell *lc1, *lc2, *lc3, *lc4;
 	unsigned i;
 
 	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
 	Datum *widthdatums = palloc(sizeof(Datum) * list_length(all_caggs->bucket_widths));
 	Datum *maxwidthdatums = palloc(sizeof(Datum) * list_length(all_caggs->max_bucket_widths));
+	Datum *bucketfunctions = palloc(sizeof(Datum) * list_length(all_caggs->bucket_functions));
 
 	i = 0;
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->max_bucket_widths)
+	forfour(lc1,
+			all_caggs->mat_hypertable_ids,
+			lc2,
+			all_caggs->bucket_widths,
+			lc3,
+			all_caggs->max_bucket_widths,
+			lc4,
+			all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
 
 		widthdatums[i] = PointerGetDatum(lfirst(lc2));
 		maxwidthdatums[i] = PointerGetDatum(lfirst(lc3));
+
+		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc4);
+		bucketfunctions[i] = CStringGetTextDatum(bucket_function_serialize(bucket_function));
 
 		++i;
 	}
@@ -381,6 +602,13 @@ ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hyp
 										 8,
 										 FLOAT8PASSBYVAL,
 										 TYPALIGN_DOUBLE);
+
+	*bucket_functions = construct_array(bucketfunctions,
+										list_length(all_caggs->bucket_functions),
+										TEXTOID,
+										-1,
+										false,
+										TYPALIGN_INT);
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
@@ -770,6 +998,11 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 
 		if (should_free)
 			heap_freetuple(tuple);
+	}
+
+	if (cadata->bucket_width == BUCKET_WIDTH_VARIABLE)
+	{
+		cagg_bucket_function_delete(cadata->mat_hypertable_id);
 	}
 
 	/* Perform actual deletions now */
@@ -1173,14 +1406,27 @@ watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
 
 	if (!max_isnull)
 	{
-		int64 value;
-		int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
+		int64 value = ts_time_value_to_internal(maxdat, timetype);
 
 		/* The materialized hypertable is already bucketed, which means the
 		 * max is the start of the last bucket. Add one bucket to move to the
 		 * point where the materialized data ends. */
-		value = ts_time_value_to_internal(maxdat, timetype);
-		w->value = ts_time_saturating_add(value, bucket_width, timetype);
+		if (ts_continuous_agg_bucket_width_variable(cagg))
+		{
+			/*
+			 * Since `value` is already bucketed, `bucketed = true` flag can
+			 * be added to ts_time_bucket_and_add_months() as an optimization,
+			 * if necessary.
+			 */
+			w->value = ts_time_bucket_and_add_months(value,
+													 ts_bucket_function_to_bucket_width_in_months(
+														 cagg->bucket_function));
+		}
+		else
+		{
+			w->value =
+				ts_time_saturating_add(value, ts_continuous_agg_bucket_width(cagg), timetype);
+		}
 	}
 	else
 	{
@@ -1242,28 +1488,78 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	PG_RETURN_INT64(watermark->value);
 }
 
-/*
- * Determines bucket width for given continuous aggregate.
- *
- * Currently all buckets are fixed in size but this is going to change in the
- * future. Any code that needs to know bucket width has to determine it using
- * this procedure instead of accessing any ContinuousAgg fields directly.
- */
+/* Determines if bucket width if variable for given continuous aggregate. */
+bool
+ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg)
+{
+	return agg->data.bucket_width == BUCKET_WIDTH_VARIABLE;
+}
+
+/* Determines bucket width for given continuous aggregate. */
 int64
 ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
 {
+	if (ts_continuous_agg_bucket_width_variable(agg))
+	{
+		/* should never happen, this code is useful mostly for debugging purposes */
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("bucket width is not defined for a variable bucket")));
+	}
+
+	return agg->data.bucket_width;
+}
+
+/* Determines maximum possible bucket width for given continuous aggregate. */
+int64
+ts_continuous_agg_max_bucket_width(const ContinuousAgg *agg)
+{
+	if (ts_continuous_agg_bucket_width_variable(agg))
+	{
+		/* should never happen, this code is useful mostly for debugging purposes */
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("maximum bucket width is not defined for a variable bucket")));
+	}
+
 	return agg->data.bucket_width;
 }
 
 /*
- * Determines maximum possible bucket width for given continuous aggregate.
+ * Determines bucket size in months for given bucketing function.
  *
- * E.g. for monthly continuous aggreagtes this procedure will return 31 days.
- * This is not true for ts_continuous_agg_bucket_width which may use additional
- * arguments to determine the width of a concrete bucket.
+ * This procedure is a good candidate for using memoization. However, currently
+ * there are no known cases when this procedure creates a bottleneck. Thus there
+ * doesn't seem to be much sense optimizing it now.
  */
-int64
-ts_continuous_agg_max_bucket_width(const ContinuousAgg *agg)
+int32
+ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction *bf)
 {
-	return agg->data.bucket_width;
+	long long int nmonths;
+
+	/* bucket_function should always be filled for variable buckets */
+	Assert(NULL != bf);
+	/* expecting only _timescaledb_experimental.time_bucket_ng() bucketing function */
+	Assert(bf->experimental);
+	Assert(0 == strcmp(bf->name, "time_bucket_ng"));
+	/* variable buckets with specified non-default origin are not supported */
+	Assert(0 == strlen(bf->origin));
+	/* variable buckets with specified timezone are not supported */
+	Assert(0 == strlen(bf->timezone));
+
+	/*
+	 * The definition of int32 (and PRId32) differ across the platforms.
+	 * We have to implicitly cast it to long long to make %lld always work.
+	 */
+	if (sscanf(bf->bucket_width, "%lld months", &nmonths) < 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("unexpected bucket width \"%s\"", bf->bucket_width)));
+	}
+
+	/* See the corresponding check in cagg_create() */
+	Assert(nmonths <= PG_INT32_MAX);
+
+	return (int32) nmonths;
 }
