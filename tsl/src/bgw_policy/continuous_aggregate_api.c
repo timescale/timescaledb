@@ -358,7 +358,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 {
 	int64 start_offset;
 	int64 end_offset;
-	int64 max_bucket_width;
+	int64 bucket_width;
 
 	if (config->offset_start.isnull)
 		start_offset = ts_time_get_max(cagg->partition_type);
@@ -370,8 +370,8 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 	else
 		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
 
-	max_bucket_width = ts_continuous_agg_max_bucket_width(cagg);
-	if (ts_time_saturating_add(end_offset, max_bucket_width * 2, INT8OID) > start_offset)
+	bucket_width = ts_continuous_agg_bucket_width(cagg);
+	if (ts_time_saturating_add(end_offset, bucket_width * 2, INT8OID) > start_offset)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("policy refresh window too small"),

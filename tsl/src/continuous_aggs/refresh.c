@@ -466,7 +466,7 @@ update_merged_refresh_window(const InternalTimeRange *bucketed_refresh_window, c
 static long
 continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_window,
 										  const InvalidationStore *invalidations,
-										  const int64 max_bucket_width,
+										  const int64 bucket_width,
 										  const ContinuousAggsBucketFunction *bucket_function,
 										  scan_refresh_ranges_funct_t exec_func, void *func_arg1,
 										  void *func_arg2)
@@ -500,7 +500,7 @@ continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_windo
 
 		InternalTimeRange bucketed_refresh_window =
 			compute_circumscribed_bucketed_refresh_window(&invalidation,
-														  max_bucket_width,
+														  bucket_width,
 														  bucket_function);
 
 		(*exec_func)(&bucketed_refresh_window, count, func_arg1, func_arg2);
@@ -542,9 +542,9 @@ continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_windo
 static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
-								   const InvalidationStore *invalidations,
-								   const int64 max_bucket_width, const int32 chunk_id,
-								   const bool is_raw_ht_distributed, const bool do_merged_refresh,
+								   const InvalidationStore *invalidations, const int64 bucket_width,
+								   const int32 chunk_id, const bool is_raw_ht_distributed,
+								   const bool do_merged_refresh,
 								   const InternalTimeRange merged_refresh_window)
 {
 	CaggRefreshState refresh;
@@ -560,8 +560,8 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	{
 		Assert(merged_refresh_window.type == refresh_window->type);
 		Assert(merged_refresh_window.start >= refresh_window->start);
-		Assert((max_bucket_width == BUCKET_WIDTH_VARIABLE) ||
-			   (merged_refresh_window.end - max_bucket_width <= refresh_window->end));
+		Assert((bucket_width == BUCKET_WIDTH_VARIABLE) ||
+			   (merged_refresh_window.end - bucket_width <= refresh_window->end));
 
 		log_refresh_window(DEBUG1,
 						   cagg,
@@ -574,7 +574,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 		long count pg_attribute_unused();
 		count = continuous_agg_scan_refresh_window_ranges(refresh_window,
 														  invalidations,
-														  max_bucket_width,
+														  bucket_width,
 														  cagg->bucket_function,
 														  continuous_agg_refresh_execute_wrapper,
 														  (void *) &refresh /* arg1 */,
@@ -666,14 +666,14 @@ emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshCallContext c
 void
 continuous_agg_calculate_merged_refresh_window(const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
-											   const int64 max_bucket_width,
+											   const int64 bucket_width,
 											   const ContinuousAggsBucketFunction *bucket_function,
 											   InternalTimeRange *merged_refresh_window)
 {
 	long count pg_attribute_unused();
 	count = continuous_agg_scan_refresh_window_ranges(refresh_window,
 													  invalidations,
-													  max_bucket_width,
+													  bucket_width,
 													  bucket_function,
 													  update_merged_refresh_window,
 													  (void *) merged_refresh_window,
@@ -743,13 +743,13 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 							 "aggregate on creation.")));
 		}
 
-		int64 max_bucket_width = ts_continuous_agg_bucket_width_variable(cagg) ?
-									 BUCKET_WIDTH_VARIABLE :
-									 ts_continuous_agg_max_bucket_width(cagg);
+		int64 bucket_width = ts_continuous_agg_bucket_width_variable(cagg) ?
+								 BUCKET_WIDTH_VARIABLE :
+								 ts_continuous_agg_bucket_width(cagg);
 		continuous_agg_refresh_with_window(cagg,
 										   refresh_window,
 										   invalidations,
-										   max_bucket_width,
+										   bucket_width,
 										   chunk_id,
 										   is_raw_ht_distributed,
 										   do_merged_refresh,
@@ -809,7 +809,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	{
 		refresh_window =
 			compute_inscribed_bucketed_refresh_window(refresh_window_arg,
-													  ts_continuous_agg_max_bucket_width(cagg));
+													  ts_continuous_agg_bucket_width(cagg));
 	}
 
 	if (refresh_window.start >= refresh_window.end)

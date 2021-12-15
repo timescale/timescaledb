@@ -89,9 +89,6 @@
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
 #define INTERNAL_TO_TS_FUNCTION "to_timestamp_without_timezone"
 
-#define DEFAULT_MAX_INTERVAL_MULTIPLIER 20
-#define DEFAULT_MAX_INTERVAL_MAX_BUCKET_WIDTH (PG_INT64_MAX / DEFAULT_MAX_INTERVAL_MULTIPLIER)
-
 /*switch to ts user for _timescaledb_internal access */
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
 	do                                                                                             \
