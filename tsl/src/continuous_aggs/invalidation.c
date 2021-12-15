@@ -101,8 +101,7 @@ typedef struct CaggInvalidationState
 	Tuplestorestate *invalidations;
 	const CaggsInfo *all_caggs;
 	int64 bucket_width;
-	int64 max_bucket_width;
-	/* bucket_function is NULL unless bucket_width == max_bucket_width == BUCKET_WIDTH_VARIABLE */
+	/* bucket_function is NULL unless bucket_width == BUCKET_WIDTH_VARIABLE */
 	const ContinuousAggsBucketFunction *bucket_function;
 } CaggInvalidationState;
 
@@ -1051,7 +1050,7 @@ static void
 invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 						int32 raw_hypertable_id, Oid dimtype, const CaggsInfo *all_caggs)
 {
-	ListCell *lc1, *lc2, *lc3, *lc4;
+	ListCell *lc1, *lc2, *lc3;
 	bool PG_USED_FOR_ASSERTS_ONLY found = false;
 
 	state->mat_hypertable_id = mat_hypertable_id;
@@ -1063,25 +1062,19 @@ invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 												  "Continuous aggregate invalidations",
 												  ALLOCSET_DEFAULT_SIZES);
 	state->snapshot = RegisterSnapshot(GetTransactionSnapshot());
-	forfour(lc1,
-			all_caggs->mat_hypertable_ids,
-			lc2,
-			all_caggs->bucket_widths,
-			lc3,
-			all_caggs->max_bucket_widths,
-			lc4,
-			all_caggs->bucket_functions)
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 
 		if (cagg_hyper_id == mat_hypertable_id)
 		{
-			int64 bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
-			int64 max_bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc3)));
-
-			state->bucket_width = bucket_width;
-			state->max_bucket_width = max_bucket_width;
-			state->bucket_function = lfirst(lc4);
+			state->bucket_width = DatumGetInt64(PointerGetDatum(lfirst(lc2)));
+			state->bucket_function = lfirst(lc3);
 
 			found = true;
 			break;
@@ -1147,8 +1140,8 @@ bucket_functions_default_argument(int ndim)
  *                           the Access Node that belong to 'raw_hypertable_id'.
  * @param bucket_widths The array of time bucket widths for all the CAGGs that belong to
  *                      'raw_hypertable_id'.
- * @param max_bucket_widths The array of the maximum time bucket widths for all the CAGGs that
- *                          belong to 'raw_hypertable_id'.
+ * @param max_bucket_widths (Deprecated) This argument is ignored and is present only for backward
+ *                          compatibility.
  * @param bucket_functions (Optional) The array of serialized information about bucket functions.
  */
 Datum
@@ -1159,7 +1152,6 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 	Oid dimtype = PG_GETARG_OID(2);
 	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(3);
 	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(4);
-	ArrayType *max_bucket_widths = PG_GETARG_ARRAYTYPE_P(5);
 	ArrayType *bucket_functions = PG_NARGS() > 6 ?
 									  PG_GETARG_ARRAYTYPE_P(6) :
 									  bucket_functions_default_argument(ARR_NDIM(bucket_widths));
@@ -1167,7 +1159,6 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 
 	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
 									   bucket_widths,
-									   max_bucket_widths,
 									   bucket_functions,
 									   &all_caggs_info);
 
@@ -1188,7 +1179,6 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	Oid func_oid;
 	ArrayType *mat_hypertable_ids;
 	ArrayType *bucket_widths;
-	ArrayType *max_bucket_widths;
 	ArrayType *bucket_functions;
 	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS);
 	FmgrInfo flinfo;
@@ -1197,7 +1187,6 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	ts_create_arrays_from_caggs_info(all_caggs,
 									 &mat_hypertable_ids,
 									 &bucket_widths,
-									 &max_bucket_widths,
 									 &bucket_functions);
 
 	static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
@@ -1230,7 +1219,7 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	FC_ARG(fcinfo, 2) = ObjectIdGetDatum(dimtype);
 	FC_ARG(fcinfo, 3) = PointerGetDatum(mat_hypertable_ids);
 	FC_ARG(fcinfo, 4) = PointerGetDatum(bucket_widths);
-	FC_ARG(fcinfo, 5) = PointerGetDatum(max_bucket_widths);
+	FC_ARG(fcinfo, 5) = PointerGetDatum(construct_empty_array(INT8OID));
 	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_functions);
 	/* Check for null result, since caller is clearly not expecting one */
 	if (fcinfo->isnull)
@@ -1291,7 +1280,7 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 		InternalTimeRange merged_refresh_window;
 		continuous_agg_calculate_merged_refresh_window(refresh_window,
 													   store,
-													   state.max_bucket_width,
+													   state.bucket_width,
 													   state.bucket_function,
 													   &merged_refresh_window);
 		*do_merged_refresh = true;
@@ -1319,8 +1308,8 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
  *                           the Access Node that belong to 'raw_hypertable_id'.
  * @param bucket_widths The array of time bucket widths for all the CAGGs that belong to
  *                      'raw_hypertable_id'.
- * @param max_bucket_widths The array of the maximum time bucket widths for all the CAGGs that
- *                          belong to 'raw_hypertable_id'.
+ * @param max_bucket_widths (Deprecated) This argument is ignored and is present only for backward
+ *                          compatibility.
  * @param bucket_functions (Optional) The array of serialized information about bucket functions.
  * @return a tuple of:
  *         ret_window_start - The merged refresh window starting time
@@ -1339,7 +1328,6 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 										 .end = PG_GETARG_INT64(4) };
 	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(5);
 	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(6);
-	ArrayType *max_bucket_widths = PG_GETARG_ARRAYTYPE_P(7);
 	ArrayType *bucket_functions = PG_NARGS() > 8 ?
 									  PG_GETARG_ARRAYTYPE_P(8) :
 									  bucket_functions_default_argument(ARR_NDIM(bucket_widths));
@@ -1348,7 +1336,6 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 
 	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
 									   bucket_widths,
-									   max_bucket_widths,
 									   bucket_functions,
 									   &all_caggs_info);
 
@@ -1400,7 +1387,6 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	Oid func_oid;
 	ArrayType *mat_hypertable_ids;
 	ArrayType *bucket_widths;
-	ArrayType *max_bucket_widths;
 	ArrayType *bucket_functions;
 	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_CAGG_LOG_NARGS);
 	FmgrInfo flinfo;
@@ -1411,7 +1397,6 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	ts_create_arrays_from_caggs_info(all_caggs,
 									 &mat_hypertable_ids,
 									 &bucket_widths,
-									 &max_bucket_widths,
 									 &bucket_functions);
 
 	static const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
@@ -1447,7 +1432,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	FC_ARG(fcinfo, 4) = Int64GetDatum(refresh_window->end);
 	FC_ARG(fcinfo, 5) = PointerGetDatum(mat_hypertable_ids);
 	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_widths);
-	FC_ARG(fcinfo, 7) = PointerGetDatum(max_bucket_widths);
+	FC_ARG(fcinfo, 7) = PointerGetDatum(construct_empty_array(INT8OID));
 	FC_ARG(fcinfo, 8) = PointerGetDatum(bucket_functions);
 	/* Check for null result, since caller is clearly not expecting one */
 	if (fcinfo->isnull)

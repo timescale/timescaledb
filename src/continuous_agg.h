@@ -110,8 +110,6 @@ typedef struct CaggsInfoData
 	List *mat_hypertable_ids;
 	/* (int64) Datum elements; stores BUCKET_WIDTH_VARIABLE for variable buckets */
 	List *bucket_widths;
-	/* (int64) Datum elements; stores BUCKET_WIDTH_VARIABLE for variable buckets */
-	List *max_bucket_widths;
 	/* (const ContinuousAggsBucketFunction *) elements; stores NULL for fixed buckets */
 	List *bucket_functions;
 } CaggsInfo;
@@ -119,13 +117,11 @@ typedef struct CaggsInfoData
 extern TSDLLEXPORT const CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
 														   ArrayType *bucket_widths,
-														   ArrayType *max_bucket_widths,
 														   ArrayType *bucket_functions,
 														   CaggsInfo *all_caggs);
 TSDLLEXPORT void ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs,
 												  ArrayType **mat_hypertable_ids,
 												  ArrayType **bucket_widths,
-												  ArrayType **max_bucket_widths,
 												  ArrayType **bucket_functions);
 
 extern TSDLLEXPORT ContinuousAgg *
@@ -161,7 +157,6 @@ extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, c
 
 extern TSDLLEXPORT bool ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg);
 extern TSDLLEXPORT int64 ts_continuous_agg_bucket_width(const ContinuousAgg *agg);
-extern TSDLLEXPORT int64 ts_continuous_agg_max_bucket_width(const ContinuousAgg *agg);
 extern TSDLLEXPORT int32
 ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction *agg);
 
