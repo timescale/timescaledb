@@ -7,6 +7,7 @@
 #include <access/tsmapi.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
+#include <commands/extension.h>
 #include <executor/nodeAgg.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
@@ -348,6 +349,14 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 		context.rootquery = parse;
 		if (ts_extension_is_loaded())
 		{
+			/*
+			 * Some debug checks.
+			 */
+			Assert(ts_extension_oid == get_extension_oid(EXTENSION_NAME, /* missing_ok = */ false));
+
+			/*
+			 * Preprocess the hypertables in the query and warm up the caches.
+			 */
 			preprocess_query((Node *) parse, &context);
 
 			/*
