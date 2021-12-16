@@ -226,12 +226,6 @@ ts_extension_schema_oid(void)
 	return schema;
 }
 
-Oid
-ts_extension_oid(void)
-{
-	return extension_oid;
-}
-
 char *
 ts_extension_schema_name(void)
 {
