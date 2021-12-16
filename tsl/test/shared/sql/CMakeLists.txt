@@ -9,7 +9,8 @@ set(TEST_FILES_SHARED
     dist_fetcher_type.sql
     dist_gapfill.sql
     dist_insert.sql
-    dist_queries.sql)
+    dist_queries.sql
+    subtract_integer_from_now.sql)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED memoize.sql)
