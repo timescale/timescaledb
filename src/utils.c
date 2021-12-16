@@ -882,18 +882,24 @@ Datum
 ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 {
 	Oid ht_relid = PG_GETARG_OID(0);
-	Datum lag = PG_GETARG_INT64(1);
+	int64 lag = PG_GETARG_INT64(1);
 	Cache *hcache;
-	Hypertable *hypertable =
-		ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
-
-	const Dimension *dim = hyperspace_get_open_dimension(hypertable->space, 0);
-	Oid partitioning_type = ts_dimension_get_partition_type(dim);
-	Oid now_func = ts_get_integer_now_func(dim);
-	if (now_func == InvalidOid)
-		elog(ERROR, "could not find valid integer_now function for hypertable");
-	Assert(IS_INTEGER_TYPE(partitioning_type));
-	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
+	const Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
 	ts_cache_release(hcache);
+
+	if (!dim)
+		elog(ERROR, "hypertable has no open partitioning dimension");
+
+	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+
+	if (!IS_INTEGER_TYPE(partitioning_type))
+		elog(ERROR, "hypertable has no integer partitioning dimension");
+
+	Oid now_func = ts_get_integer_now_func(dim);
+	if (!OidIsValid(now_func))
+		elog(ERROR, "could not find valid integer_now function for hypertable");
+
+	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
 	return Int64GetDatum(res);
 }
