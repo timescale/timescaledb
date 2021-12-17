@@ -995,7 +995,7 @@ deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname)
 			case ROLESPEC_CURRENT_USER:
 				role_name = "CURRENT_USER";
 				break;
-#if PG14
+#if PG14_GE
 			case ROLESPEC_CURRENT_ROLE:
 				role_name = "CURRENT_ROLE";
 				break;
@@ -1010,7 +1010,7 @@ deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname)
 	if (stmt->grant_option)
 		appendStringInfoString(command, "WITH GRANT OPTION ");
 
-#if PG14
+#if PG14_GE
 	/* [ GRANTED BY role_specification ] */
 	if (stmt->grantor)
 		appendStringInfo(command, "GRANTED BY %s ", quote_identifier(stmt->grantor->rolename));
