@@ -1421,3 +1421,25 @@ EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, '2000-01-01', '2000-
 FROM metrics
 GROUP BY 1;
 
+-- issue #3834
+-- test projection handling in gapfill
+CREATE TABLE i3834(time timestamptz NOT NULL, ship_id int, value float);
+SELECT table_name FROM create_hypertable('i3834','time');
+
+INSERT INTO i3834 VALUES ('2020-12-01 14:05:00+01',1,3.123), ('2020-12-01 14:05:00+01',2,4.123), ('2020-12-01 14:05:00+01',3,5.123);
+
+SELECT
+  time_bucket_gapfill('30000 ms'::interval, time) AS time,
+  ship_id,
+  interpolate (avg(value)),
+  'speedlog' AS source
+FROM
+  i3834
+WHERE
+  ship_id IN (1, 2)
+  AND time >= '2020-12-01 14:05:00+01'
+  AND time < '2020-12-01 14:10:00+01'
+GROUP BY 1,2;
+
+DROP TABLE i3834;
+
