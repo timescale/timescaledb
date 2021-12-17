@@ -61,7 +61,6 @@ static bool gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot
 static void gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot);
 static TupleTableSlot *gapfill_state_return_subplan_slot(GapFillState *state);
 static TupleTableSlot *gapfill_fetch_next_tuple(GapFillState *state);
-static TupleTableSlot *fetch_subplan_tuple(CustomScanState *node);
 static void gapfill_state_initialize_columns(GapFillState *state);
 static GapFillColumnState *gapfill_column_state_create(GapFillColumnType ctype, Oid typeid);
 static bool gapfill_is_group_column(GapFillState *state, TargetEntry *tle);
@@ -969,6 +968,7 @@ static TupleTableSlot *
 gapfill_state_return_subplan_slot(GapFillState *state)
 {
 	GapFillColumnStateUnion column;
+	CustomScanState *node = castNode(CustomScanState, state);
 	int i;
 	Datum value;
 	bool isnull;
@@ -998,6 +998,14 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 			default:
 				break;
 		}
+	}
+
+	if (node->ss.ps.ps_ProjInfo)
+	{
+		ExprContext *econtext = node->ss.ps.ps_ExprContext;
+		ResetExprContext(econtext);
+		econtext->ecxt_scantuple = state->subslot;
+		return ExecProject(node->ss.ps.ps_ProjInfo);
 	}
 
 	return state->subslot;
@@ -1037,9 +1045,10 @@ gapfill_fetch_next_tuple(GapFillState *state)
 {
 	Datum time_value;
 	bool isnull;
-	TupleTableSlot *subslot = fetch_subplan_tuple((CustomScanState *) state);
+	PlanState *subplan = linitial(castNode(CustomScanState, state)->custom_ps);
+	TupleTableSlot *subslot = ExecProcNode(subplan);
 
-	if (!subslot)
+	if (TupIsNull(subslot))
 		return NULL;
 
 	/* we cannot simply treat an arbitrary source slot as virtual,
@@ -1056,33 +1065,6 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	state->subslot_time = gapfill_datum_get_internal(time_value, state->gapfill_typid);
 
 	return state->subslot;
-}
-
-/*
- * Fetch tuple from subplan
- */
-static TupleTableSlot *
-fetch_subplan_tuple(CustomScanState *node)
-{
-	TupleTableSlot *subslot;
-	ExprContext *econtext = node->ss.ps.ps_ExprContext;
-
-	ResetExprContext(econtext);
-
-	while (true)
-	{
-		subslot = ExecProcNode(linitial(node->custom_ps));
-
-		if (TupIsNull(subslot))
-			return NULL;
-
-		if (!node->ss.ps.ps_ProjInfo)
-			return subslot;
-
-		econtext->ecxt_scantuple = subslot;
-
-		return ExecProject(node->ss.ps.ps_ProjInfo);
-	}
 }
 
 /*
