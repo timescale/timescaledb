@@ -59,17 +59,22 @@
  * Some notes on design:
  *
  * We do not check for the installation of the extension upon loading the extension and instead rely
- *on a hook for two reasons: 1) We probably can't
- *	- The shared_preload_libraries is called in PostmasterMain which is way before InitPostgres is
- *called. (Note: This happens even before the fork of the backend) -- so we don't even know which
- *database this is for.
- *	-- This means we cannot query for the existence of the extension yet because the caches are
- *initialized in InitPostgres. 2) We actually don't want to load the extension in two cases: a) We
- *are upgrading the extension. b) We set the guc timescaledb.disable_load.
+ * on a hook for a few reasons:
+ *
+ * 1) We probably can't:
+ *    - The shared_preload_libraries is called in PostmasterMain which is way before InitPostgres is
+ *      called. Note: This happens even before the fork of the backend, so we don't even know which
+ *      database this is for.
+ *    - This means we cannot query for the existence of the extension yet because the caches are
+ *      initialized in InitPostgres.
+ *
+ * 2) We actually don't want to load the extension in two cases:
+ *    a) We are upgrading the extension.
+ *    b) We set the guc timescaledb.disable_load.
  *
  * 3) We include a section for the bgw launcher and some workers below the rest, separated with its
- *own notes, some function definitions are included as they are referenced by other loader
- *functions.
+ *    own notes, some function definitions are included as they are referenced by other loader
+ *    functions.
  *
  */
 
