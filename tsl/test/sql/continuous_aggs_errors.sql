@@ -582,3 +582,17 @@ WHERE view_name = 'i2980_cagg2'
 \gset
 SELECT add_compression_policy( :'MAT_TABLE_NAME', 13::integer);
 
+-- test error handling when trying to create on internal hypertable
+CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('comp_ht_test','time');
+ALTER TABLE comp_ht_test SET (timescaledb.compress);
+
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'comp_ht_test') \gset
+
+CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
+

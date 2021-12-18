@@ -952,6 +952,11 @@ cagg_validate_query(Query *query)
 
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
 
+		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertable is an internal compressed hypertable")));
+
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
 		{
