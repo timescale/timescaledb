@@ -44,3 +44,17 @@ SELECT drop_chunks(table_name::regclass, older_than=>'1 day'::interval)
 ORDER BY table_name DESC;
 SELECT show_chunks('public.uncompressed_table');
 SELECT show_chunks('public.table_to_compress');
+
+-- test calling on internal compressed table
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'table_to_compress') \gset
+
+\set ON_ERROR_STOP 0
+SELECT show_chunks(:'TABLENAME');
+SELECT drop_chunks(:'TABLENAME',now());
+\set ON_ERROR_STOP 1
+
