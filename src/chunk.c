@@ -2229,8 +2229,11 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		ht = find_hypertable_from_table_or_cagg(hcache, relid);
 		Assert(ht != NULL);
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
-		Assert(time_dim != NULL);
-		time_type = ts_dimension_get_partition_type(time_dim);
+
+		if (time_dim)
+			time_type = ts_dimension_get_partition_type(time_dim);
+		else
+			time_type = InvalidOid;
 
 		if (!PG_ARGISNULL(1))
 			older_than = ts_time_value_from_arg(PG_GETARG_DATUM(1),
@@ -4056,7 +4059,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	ht = find_hypertable_from_table_or_cagg(hcache, relid);
 	Assert(ht != NULL);
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
-	Assert(time_dim != NULL);
+
+	if (!time_dim)
+		elog(ERROR, "hypertable has no open partitioning dimension");
+
 	time_type = ts_dimension_get_partition_type(time_dim);
 
 	if (!PG_ARGISNULL(1))
