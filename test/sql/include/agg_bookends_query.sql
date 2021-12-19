@@ -24,6 +24,7 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
+:PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
 
 BEGIN;
 

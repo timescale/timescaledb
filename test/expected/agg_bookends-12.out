@@ -150,6 +150,17 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (6 rows)
 
+:PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
+                            QUERY PLAN                            
+------------------------------------------------------------------
+ Sort (actual rows=2 loops=1)
+   Sort Key: _hyper_1_1_chunk.gp
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=2 loops=1)
+         Group Key: _hyper_1_1_chunk.gp
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+(6 rows)
+
 BEGIN;
 --check null value as last element
 INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
@@ -749,6 +760,13 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
   2 | 20.1
 (2 rows)
 
+:PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
+ gp |  last   
+----+---------
+  1 | testing
+  2 | testing
+(2 rows)
+
 BEGIN;
 --check null value as last element
 INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
@@ -989,6 +1007,7 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
+:PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
 BEGIN;
 --check null value as last element
 INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
@@ -1077,6 +1096,7 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
+:PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
 BEGIN;
 --check null value as last element
 INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
