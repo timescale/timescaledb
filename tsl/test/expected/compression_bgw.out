@@ -121,7 +121,7 @@ ERROR:  job 1000 not found
 --errors with bad input for add/remove compression policy
 create view dummyv1 as select * from conditions limit 1;
 select add_compression_policy( 100 , compress_after=> '1 day'::interval);
-ERROR:  "(null)" is not a hypertable or a continuous aggregate
+ERROR:  object with id "100" not found
 select add_compression_policy( 'dummyv1', compress_after=> '1 day'::interval );
 ERROR:  "dummyv1" is not a hypertable or a continuous aggregate
 select remove_compression_policy( 100 );
