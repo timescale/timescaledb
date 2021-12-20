@@ -443,10 +443,15 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		if (cagg == NULL)
 		{
 			ts_cache_release(hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-					 errmsg("\"%s\" is not a hypertable or a continuous aggregate",
-							get_rel_name(user_htoid))));
+			const char *relname = get_rel_name(user_htoid);
+			if (relname)
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+						 errmsg("\"%s\" is not a hypertable or a continuous aggregate", relname)));
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_OBJECT),
+						 errmsg("object with id \"%u\" not found", user_htoid)));
 		}
 		*is_cagg = true;
 		mat_id = cagg->data.mat_hypertable_id;
