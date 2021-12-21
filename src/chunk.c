@@ -23,7 +23,9 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/hsearch.h>
+#include <utils/snapmgr.h>
 #include <storage/lmgr.h>
+#include <storage/procarray.h>
 #include <miscadmin.h>
 #include <funcapi.h>
 #include <fmgr.h>
@@ -2368,6 +2370,7 @@ ts_chunk_copy(const Chunk *chunk)
 	return copy;
 }
 
+
 static int
 chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_func filter,
 					tuple_found_func tuple_found, void *data, int limit, ScanDirection scandir,
@@ -2387,6 +2390,8 @@ chunk_scan_internal(int indexid, ScanKeyData scankey[], int nkeys, tuple_filter_
 		.scandirection = scandir,
 		.result_mctx = mctx,
 	};
+
+
 
 	return ts_scanner_scan(&ctx);
 }
@@ -2645,6 +2650,60 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 int
 ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 {
+	Catalog *catalog = ts_catalog_get();
+	ScannerCtx ctx = {
+		.table = catalog_get_table_id(catalog, CHUNK),
+		.index = catalog_get_index(catalog, CHUNK, CHUNK_ID_INDEX),
+		.lockmode = AccessShareLock,
+		.snapshot = RegisterSnapshot(GetSnapshotData(SnapshotSelf)),
+	};
+	Relation tablerel = table_open(ctx.table, ctx.lockmode);
+	Relation indexrel = index_open(ctx.index, ctx.lockmode);
+	IndexScanDesc index_scan = index_beginscan(tablerel, indexrel,
+		ctx.snapshot, /* nkeys = */ 0, /* norderbys = */ 0);
+	index_scan->xs_want_itup = false;
+	index_rescan(index_scan, /* keys = */ NULL, /* nkeys = */ 0,
+		/* orderbys = */ NULL, /* norderbys = */ 0);
+
+	TupleDesc tuple_desc = RelationGetDescr(tablerel);
+	TupleInfo tinfo = {
+		.scanrel = tablerel,
+		.mctx = CurrentMemoryContext,
+		.slot = MakeSingleTupleTableSlot(tuple_desc,
+			table_slot_callbacks(tablerel)),
+	};
+
+	bool success = index_getnext_slot(index_scan, BackwardScanDirection, tinfo.slot);
+
+	int result1 = 0;
+	if (success)
+	{
+		HeapTuple heap_tuple = ExecFetchSlotHeapTuple(tinfo.slot,
+			  /* materialize = */ true, /* *should_free = */ NULL);
+		bool nulls[Natts_chunk];
+		Datum values[Natts_chunk];
+		FormData_chunk fd = {0};
+
+		heap_deform_tuple(heap_tuple, tuple_desc, values, nulls);
+
+		const int max_chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
+		result1 = max_chunk_id - chunk->fd.id;
+//		fprintf(stderr, "max chunk id is %d, current %d, diff %d\n",
+//				max_chunk_id,
+//				chunk->fd.id,
+//				max_chunk_id - chunk->fd.id);
+	}
+
+	index_endscan(index_scan);
+	UnregisterSnapshot(ctx.snapshot);
+	ExecDropSingleTupleTableSlot(tinfo.slot);
+	table_close(tablerel, NoLock);
+	index_close(indexrel, NoLock);
+
+	Assert(result1 >= 0);
+
+	//------
+
 	ScanKeyData scankey[1];
 
 	/*
@@ -2656,7 +2715,7 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 				F_INT4GT,
 				Int32GetDatum(chunk->fd.id));
 
-	return chunk_scan_internal(CHUNK_ID_INDEX,
+	int result2 = chunk_scan_internal(CHUNK_ID_INDEX,
 							   scankey,
 							   1,
 							   NULL,
@@ -2666,6 +2725,9 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 							   ForwardScanDirection,
 							   AccessShareLock,
 							   CurrentMemoryContext);
+
+	Assert(result1 == result2);
+	return result2;
 }
 
 /*
