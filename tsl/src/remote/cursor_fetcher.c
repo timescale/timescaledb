@@ -12,6 +12,7 @@
 #include <postgres.h>
 #include <lib/stringinfo.h>
 #include <utils/rel.h>
+#include <utils/guc.h>
 
 #include "utils.h"
 #include "async.h"
@@ -305,7 +306,13 @@ cursor_fetcher_fetch_data_complete(CursorFetcher *cursor)
 
 		/* On error, report the original query, not the FETCH. */
 		if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		{
+			/* remote_result_elog will call PQclear() on the result, so need
+			 * to mark the response as NULL to avoid double PQclear() */
+			pfree(response);
+			response = NULL;
 			remote_result_elog(res, ERROR);
+		}
 
 		/* Convert the data into HeapTuples */
 		numrows = PQntuples(res);
