@@ -174,7 +174,14 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 
 			if (!(PQresultStatus(res) == PGRES_SINGLE_TUPLE ||
 				  PQresultStatus(res) == PGRES_TUPLES_OK))
+			{
+				/* remote_result_elog will call PQclear() on the result, so
+				 * need to mark the response as NULL to avoid double
+				 * PQclear() */
+				pfree(response);
+				response = NULL;
 				remote_result_elog(res, ERROR);
+			}
 
 			if (PQresultStatus(res) == PGRES_TUPLES_OK)
 			{
