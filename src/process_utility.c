@@ -169,7 +169,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 	}
 }
 
-/* on continuous aggregate materialization tables we block all altercommands except for ADD INDEX */
+/* we block some ALTER commands on continuous aggregate materialization tables
+ */
 static void
 check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 {
@@ -187,6 +188,7 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 		{
 			case AT_AddIndex:
 			case AT_ReAddIndex:
+			case AT_SetRelOptions:
 				/* allowed on materialization tables */
 				continue;
 			default:
@@ -472,10 +474,13 @@ process_alter_foreign_server(ProcessUtilityArgs *args)
 {
 	AlterForeignServerStmt *stmt = (AlterForeignServerStmt *) args->parsetree;
 
-	if (block_on_foreign_server(stmt->servername))
+	if (stmt->has_version)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("alter server not supported on a TimescaleDB data node")));
+				 errmsg("operation not supported"),
+				 errdetail("It is not possible to set a version on the data node configuration.")));
+
+	/* Other options are validated by the FDW */
 
 	return DDL_CONTINUE;
 }
@@ -2089,13 +2094,6 @@ process_rename(ProcessUtilityArgs *args)
 		 * stmt->relation never be NULL unless we are renaming a schema or
 		 * other objects, like foreign server
 		 */
-		if ((stmt->renameType == OBJECT_FOREIGN_SERVER) &&
-			block_on_foreign_server(strVal(stmt->object)))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("rename not supported on a TimescaleDB data node")));
-		}
 		if (stmt->renameType != OBJECT_SCHEMA)
 			return DDL_CONTINUE;
 	}

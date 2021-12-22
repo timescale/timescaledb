@@ -952,6 +952,11 @@ cagg_validate_query(Query *query)
 
 		ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
 
+		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertable is an internal compressed hypertable")));
+
 		/* there can only be one continuous aggregate per table */
 		switch (ts_continuous_agg_hypertable_status(ht->fd.id))
 		{
@@ -1690,6 +1695,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->relkind = RELKIND_RELATION;
 	rte->tablesample = NULL;
 	rte->eref->colnames = NIL;
+	rte->selectedCols = NULL;
 	/* aliases for column names for the materialization table*/
 	foreach (lc, matcollist)
 	{
@@ -1992,6 +1998,13 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 					 errhint("Drop or rename the existing continuous aggregate"
 							 " first or use another name.")));
 		}
+	}
+	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot enable compression while creating a continuous aggregate"),
+				 errhint("Use ALTER MATERIALIZED VIEW to enable compression.")));
 	}
 
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery);

@@ -139,7 +139,7 @@ ts_bgw_start_worker(const char *function, const char *name, const char *extra)
 	return handle;
 }
 
-#if USE_ASSERT_CHECKING
+#ifdef USE_ASSERT_CHECKING
 static void
 assert_that_worker_has_stopped(ScheduledBgwJob *sjob)
 {
@@ -177,7 +177,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 	 */
 	if (sjob->handle != NULL)
 	{
-#if USE_ASSERT_CHECKING
+#ifdef USE_ASSERT_CHECKING
 		/* Sanity check: worker has stopped (if it was started) */
 		assert_that_worker_has_stopped(sjob);
 #endif
@@ -239,7 +239,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 static void
 scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 {
-#if USE_ASSERT_CHECKING
+#ifdef USE_ASSERT_CHECKING
 	JobState prev_state = sjob->state;
 #endif
 

@@ -1361,3 +1361,24 @@ SELECT reorder_chunk(chunk,'i3651_attmap') from show_chunks('i3651') chunk;
  
 (1 row)
 
+-- test error handling when trying to create on internal hypertable
+CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('comp_ht_test','time');
+  table_name  
+--------------
+ comp_ht_test
+(1 row)
+
+ALTER TABLE comp_ht_test SET (timescaledb.compress);
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'comp_ht_test') \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE INDEX internal_idx ON :INTERNALTABLE(_ts_meta_min_1);
+\set ON_ERROR_STOP 0
+SELECT add_reorder_policy(:'INTERNALTABLE','internal_idx');
+ERROR:  cannot add reorder policy to compressed hypertable "_compressed_hypertable_5"
+\set ON_ERROR_STOP 1

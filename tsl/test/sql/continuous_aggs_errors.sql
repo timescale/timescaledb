@@ -540,5 +540,59 @@ create materialized view i2980_cagg with (timescaledb.continuous) AS SELECT time
 select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \gset
 \set ON_ERROR_STOP 0
 select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
-\set ON_ERROR_STOP 1
+
+--test creating continuous aggregate with compression enabled --
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.compress)
+AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
+
+--this one succeeds
+CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous)
+AS SELECT time_bucket('1h',time) as bucket, avg(7) FROM i2980 GROUP BY 1;
+
+--now enable compression with invalid parameters
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, 
+timescaledb.compress_segmentby = 'bucket');
+
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, 
+timescaledb.compress_orderby = 'bucket');
+
+--enable compression and test re-enabling compression 
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress);
+insert into i2980 select now();
+call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);
+SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.compress_segmentby = 'bucket');
+
+--Errors with compression policy on caggs--
+select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interval '2 day' ,'4h') AS job_id ;
+--this one fails as i2980_cagg refresh policy is (NULL, NULL)
+SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
+
+SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);
+SELECT add_compression_policy('i2980_cagg2', '3 day'::interval);
+SELECT add_compression_policy('i2980_cagg2', '1 day'::interval);
+SELECT add_compression_policy('i2980_cagg2', '3'::integer);
+SELECT add_compression_policy('i2980_cagg2', 13::integer);
+
+SELECT materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_TABLE_NAME"
+FROM timescaledb_information.continuous_aggregates
+WHERE view_name = 'i2980_cagg2'
+\gset
+SELECT add_compression_policy( :'MAT_TABLE_NAME', 13::integer);
+
+-- test error handling when trying to create on internal hypertable
+CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('comp_ht_test','time');
+ALTER TABLE comp_ht_test SET (timescaledb.compress);
+
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'comp_ht_test') \gset
+
+CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
 

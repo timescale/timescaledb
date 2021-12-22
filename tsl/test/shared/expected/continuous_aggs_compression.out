@@ -1,0 +1,343 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT
+       format('include/%s_setup.sql', :'TEST_BASE_NAME') as "TEST_SETUP_NAME",
+       format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/shared/results/%s_results_source.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_SOURCE",
+       format('%s/shared/results/%s_results_target.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_TARGET"
+\gset
+SELECT format('\! diff -u --label "Source results" --label "Target results" %s %s', :'TEST_RESULTS_SOURCE', :'TEST_RESULTS_TARGET') as "DIFF_CMD"
+\gset
+-- Setup
+\ir :TEST_SETUP_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE extra_devices(device_id INT, name TEXT);
+INSERT INTO extra_devices VALUES (4,'Device 4'),(5,'Device 5');
+--add a device id that is not in metrics or metrics_compressed
+-- need this for outer joins
+INSERT INTO extra_devices VALUES ( 333,'Device New 333');
+CREATE VIEW all_devices AS
+SELECT * FROM devices
+UNION
+SELECT * FROM extra_devices;
+-- Compressed CAgg + Compressed Hypertable
+CREATE MATERIALIZED VIEW metrics_compressed_summary
+WITH (timescaledb.continuous) AS
+SELECT
+	device_id,
+	time_bucket(INTERVAL '1 week', time) AS bucket,
+	AVG(v2),
+	MIN(v2),
+	MAX(v2)
+FROM
+	metrics_compressed
+GROUP BY
+	device_id, bucket
+WITH NO DATA;
+-- Force more than one chunk in the materialized hypertable
+SELECT
+    set_chunk_time_interval(
+        format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name),
+        '1 week'::interval
+    )
+FROM
+    timescaledb_information.continuous_aggregates
+WHERE
+    view_name = 'metrics_compressed_summary';
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+ALTER MATERIALIZED VIEW metrics_compressed_summary SET (timescaledb.compress);
+CALL refresh_continuous_aggregate('metrics_compressed_summary', NULL, '2000-01-15 23:55:00+0');
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'compressed'
+       END as comp
+FROM
+( SELECT compress_chunk(show_chunks('metrics_compressed_summary')) res ) q;
+    comp    
+------------
+ compressed
+ compressed
+(2 rows)
+
+-- Check for realtime caggs
+SELECT
+    count(*)
+FROM
+    metrics_compressed_summary
+WHERE
+    bucket > _timescaledb_internal.to_timestamp(
+        _timescaledb_internal.cagg_watermark(
+            (SELECT
+                mat_hypertable_id
+             FROM
+                _timescaledb_catalog.continuous_agg
+             WHERE
+                user_view_name = 'metrics_compressed_summary')
+        )
+    );
+ count 
+-------
+     5
+(1 row)
+
+-- Compressed CAgg + Uncompressed Hypertable
+CREATE MATERIALIZED VIEW metrics_summary
+WITH (timescaledb.continuous) AS
+SELECT
+	device_id,
+	time_bucket(INTERVAL '1 week', time) AS bucket,
+	AVG(v2),
+	MIN(v2),
+	MAX(v2)
+FROM
+	metrics
+GROUP BY
+	device_id, bucket
+WITH NO DATA;
+-- Force more than one chunk in the materialized hypertable
+SELECT
+    set_chunk_time_interval(
+        format('%I.%I', materialization_hypertable_schema, materialization_hypertable_name),
+        '1 week'::interval
+    )
+FROM
+    timescaledb_information.continuous_aggregates
+WHERE
+    view_name = 'metrics_summary';
+ set_chunk_time_interval 
+-------------------------
+ 
+(1 row)
+
+ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.compress);
+CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-15 23:55:00+0');
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'compressed'
+       END as comp
+FROM
+( SELECT compress_chunk(show_chunks('metrics_summary')) res ) q;
+    comp    
+------------
+ compressed
+ compressed
+(2 rows)
+
+-- Check for realtime caggs
+SELECT
+    count(*)
+FROM
+    metrics_summary
+WHERE
+    bucket > _timescaledb_internal.to_timestamp(
+        _timescaledb_internal.cagg_watermark(
+            (SELECT
+                mat_hypertable_id
+             FROM
+                _timescaledb_catalog.continuous_agg
+             WHERE
+                user_view_name = 'metrics_summary')
+        )
+    );
+ count 
+-------
+     5
+(1 row)
+
+\o :TEST_RESULTS_SOURCE
+\set TEST_TABLE1 'metrics_compressed_summary'
+\set TEST_TABLE2 'devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\set TEST_TABLE1 'metrics_compressed_summary'
+\set TEST_TABLE2 'all_devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\o
+\o :TEST_RESULTS_TARGET
+\set TEST_TABLE1 'metrics_summary'
+\set TEST_TABLE2 'devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\set TEST_TABLE1 'metrics_summary'
+\set TEST_TABLE2 'all_devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\o
+-- Compare results of CAgg over Compressed and Uncompressed hypertables
+:DIFF_CMD
+\o :TEST_RESULTS_SOURCE
+\set TEST_TABLE1 'metrics_compressed_summary'
+\set TEST_TABLE2 'devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\set TEST_TABLE1 'metrics_compressed_summary'
+\set TEST_TABLE2 'all_devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\o
+\o :TEST_RESULTS_TARGET
+\set TEST_TABLE1 '(SELECT device_id, time_bucket(INTERVAL $$1 week$$, time) AS bucket, AVG(v2), MIN(v2), MAX(v2) FROM metrics_compressed GROUP BY device_id, bucket)'
+\set TEST_TABLE2 'devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\set TEST_TABLE1 '(SELECT device_id, time_bucket(INTERVAL $$1 week$$, time) AS bucket, AVG(v2), MIN(v2), MAX(v2) FROM metrics_compressed GROUP BY device_id, bucket)'
+\set TEST_TABLE2 'all_devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\o
+-- Compare results between CAggs and Original View (to check PG and TSDB machinery)
+:DIFF_CMD
+-- Decompres 1 chunk from cagg
+SELECT CASE WHEN res is NULL THEN NULL
+            ELSE 'decompress'
+       END as dec
+FROM ( SELECT decompress_chunk(ch) res FROM show_chunks('metrics_compressed_summary') ch ORDER BY ch LIMIT 1) q;
+    dec     
+------------
+ decompress
+(1 row)
+
+-- Run tests and compare results
+\o :TEST_RESULTS_SOURCE
+\set TEST_TABLE1 'metrics_compressed_summary'
+\set TEST_TABLE2 'devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\set TEST_TABLE1 'metrics_compressed_summary'
+\set TEST_TABLE2 'all_devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\o
+\o :TEST_RESULTS_TARGET
+\set TEST_TABLE1 'metrics_summary'
+\set TEST_TABLE2 'devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\set TEST_TABLE1 'metrics_summary'
+\set TEST_TABLE2 'all_devices'
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT * FROM :TEST_TABLE1 m INNER JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m NATURAL JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m LEFT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m RIGHT JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m FULL JOIN :TEST_TABLE2 d USING (device_id) ORDER BY m.bucket, m.device_id;
+SELECT * FROM :TEST_TABLE1 m CROSS JOIN :TEST_TABLE2 d ORDER BY m.bucket, m.device_id, d.device_id;
+SELECT * FROM :TEST_TABLE1 m JOIN LATERAL (SELECT * FROM :TEST_TABLE2 d WHERE d.device_id = m.device_id) AS d ON true ORDER BY m.bucket, m.device_id;
+\o
+-- Compare results of CAgg (partial compressed) over Compressed hypertables
+:DIFF_CMD
+-- Teardown
+DROP MATERIALIZED VIEW metrics_compressed_summary;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW metrics_summary;
+NOTICE:  drop cascades to 2 other objects
+DROP VIEW all_devices;
+DROP TABLE extra_devices;

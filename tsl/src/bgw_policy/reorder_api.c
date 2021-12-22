@@ -145,6 +145,14 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	/* First verify that the hypertable corresponds to a valid table */
 	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot add reorder policy to compressed hypertable \"%s\"",
+						get_rel_name(ht_oid)),
+				 errhint("Please add the policy to the corresponding uncompressed hypertable "
+						 "instead.")));
+
 	if (hypertable_is_distributed(ht))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
