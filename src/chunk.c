@@ -2682,7 +2682,6 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 			  /* materialize = */ true, /* *should_free = */ NULL);
 		bool nulls[Natts_chunk];
 		Datum values[Natts_chunk];
-		FormData_chunk fd = {0};
 
 		heap_deform_tuple(heap_tuple, tuple_desc, values, nulls);
 
