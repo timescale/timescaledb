@@ -61,6 +61,7 @@ trap cleanup EXIT
 if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
   cat <<EOF | ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1
     SET client_min_messages=ERROR;
+    GRANT CREATE ON SCHEMA public TO PUBLIC;
     ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_CLUSTER_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_1} WITH CREATEDB CREATEROLE;
