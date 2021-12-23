@@ -731,9 +731,57 @@ NOTICE:  [data_node_3]:
 
 DROP TABLE non_disttable1;
 DROP TABLE non_disttable2;
--- CREATE and DROP SCHEMA on each node
+-- CREATE SCHEMA tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 CREATE SCHEMA dist_schema AUTHORIZATION :ROLE_1;
+-- make sure schema has been created on each data node
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_1]:
+nspname    |usename    
+-----------+-----------
+dist_schema|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_2]:
+nspname    |usename    
+-----------+-----------
+dist_schema|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_3]:
+nspname    |usename    
+-----------+-----------
+dist_schema|test_role_1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
 CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
 SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
@@ -772,6 +820,7 @@ dist_schema|some_dist_table
  
 (1 row)
 
+-- DROP SCHEMA
 DROP SCHEMA dist_schema CASCADE;
 NOTICE:  drop cascades to table dist_schema.some_dist_table
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
@@ -793,6 +842,243 @@ NOTICE:  [data_node_3]:  SELECT schemaname, tablename FROM pg_tables WHERE table
 NOTICE:  [data_node_3]:
 schemaname|tablename
 ----------+---------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- make sure schema has been dropped on each data node
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_1]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_2]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_3]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- make sure empty schema schema has been created and then dropped on each data node
+CREATE SCHEMA dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_1]:
+nspname      |usename           
+-------------+------------------
+dist_schema_2|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_2]:
+nspname      |usename           
+-------------+------------------
+dist_schema_2|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_3]:
+nspname      |usename           
+-------------+------------------
+dist_schema_2|cluster_super_user
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP SCHEMA dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_1]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_2]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_3]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- transactional schema create/drop with local table
+BEGIN;
+CREATE SCHEMA dist_schema_3;
+CREATE TABLE dist_schema_3.some_dist_table(time timestamptz, device int);
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_1]:
+nspname      |usename           
+-------------+------------------
+dist_schema_3|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_2]:
+nspname      |usename           
+-------------+------------------
+dist_schema_3|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_3]:
+nspname      |usename           
+-------------+------------------
+dist_schema_3|cluster_super_user
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP SCHEMA dist_schema_3 CASCADE;
+NOTICE:  drop cascades to table dist_schema_3.some_dist_table
+ROLLBACK;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_1]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_2]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_3]:
+nspname|usename
+-------+-------
 (0 rows)
 
 
