@@ -312,6 +312,25 @@ JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema_3';
 $$);
 
+-- ALTER SCHEMA RENAME TO
+CREATE SCHEMA dist_schema;
+CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
+SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
+ALTER SCHEMA dist_schema RENAME TO dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+
+-- ALTER SCHEMA OWNER TO
+ALTER SCHEMA dist_schema_2 OWNER TO :ROLE_1;
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+
+DROP SCHEMA dist_schema_2 CASCADE;
+
 -- DROP column cascades to index drop
 CREATE TABLE some_dist_table(time timestamptz, device int, color int, temp float);
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
