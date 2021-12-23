@@ -368,19 +368,24 @@ dist_ddl_process_drop(const ProcessUtilityArgs *args)
 {
 	DropStmt *stmt = castNode(DropStmt, args->parsetree);
 
+	/* For DROP TABLE and DROP SCHEMA operations hypertable_list will be empty */
 	if (list_length(args->hypertable_list) == 0)
 	{
-		/*
-		 * CASCADE operations of DROP TABLE and DROP SCHEMA are handled in
-		 * sql_drop trigger.
-		 */
-
-		/* For DROP TABLE and DROP SCHEMA operations hypertable_list will be
-		 * empty. Wait for sql_drop events.
-		 */
-		if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
-			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
-
+		switch (stmt->removeType)
+		{
+			case OBJECT_TABLE:
+				/* Wait for further sql_drop events  */
+				dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
+				break;
+			case OBJECT_SCHEMA:
+				/* Forward DROP SCHEMA command to all data nodes, following
+				 * sql_drop events will be ignored */
+				dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+				dist_ddl_state_add_current_data_node_list();
+				break;
+			default:
+				break;
+		}
 		return;
 	}
 
