@@ -20,12 +20,6 @@ set(PRE_INSTALL_SOURCE_FILES
     pre_install/fdw_functions.sql
     pre_install/timescaledb_fdw.sql)
 
-# Things like aggregate functions cannot be REPLACEd and really need to be
-# created just once(like PRE_INSTALL_SOURCE_FILES) but unlike
-# PRE_INSTALL_SOURCE_FILES these have to be loaded after everything else is
-# loaded.
-set(IMMUTABLE_API_SOURCE_FILES aggregates.sql)
-
 # The rest of the source files defining mostly functions
 set(SOURCE_FILES
     pre_install/types.functions.sql
