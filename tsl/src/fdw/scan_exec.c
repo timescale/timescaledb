@@ -449,7 +449,10 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 		char *sql;
 
 		ExplainPropertyText("Data node", server->servername, es);
-		ExplainPropertyText("Fetcher Type", explain_fetcher_type(fsstate->fetcher_type), es);
+
+		/* fsstate can be NULL, so check that first */
+		if (fsstate)
+			ExplainPropertyText("Fetcher Type", explain_fetcher_type(fsstate->fetcher_type), es);
 
 		if (chunk_oids != NIL)
 		{
@@ -474,7 +477,8 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 
 		ExplainPropertyText("Remote SQL", sql, es);
 
-		if (ts_guc_enable_remote_explain)
+		/* fsstate should be set up but better check again to avoid crashes */
+		if (ts_guc_enable_remote_explain && fsstate)
 		{
 			const char *data_node_explain =
 				get_data_node_explain(fsstate->query, fsstate->conn, es);
