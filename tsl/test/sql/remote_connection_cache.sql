@@ -17,16 +17,14 @@ RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_test_alter_data_node'
 LANGUAGE C STRICT;
 
-DO $d$
-    BEGIN
-        EXECUTE $$SELECT add_data_node('loopback_1', host => 'localhost',
-                database => 'db_remote_connection_cache_1',
-                port => current_setting('port')::int)$$;
-        EXECUTE $$SELECT add_data_node('loopback_2', host => 'localhost',
-                database => 'db_remote_connection_cache_2',
-                port => current_setting('port')::int)$$;
-    END;
-$d$;
+SET client_min_messages TO WARNING;
+SELECT node_name, database, node_created, extension_created
+FROM add_data_node('loopback_1', host => 'localhost', database => :'DN_DBNAME_1',
+                   port => current_setting('port')::int);
+SELECT node_name, database, node_created, extension_created
+FROM add_data_node('loopback_2', host => 'localhost', database => :'DN_DBNAME_2',
+                   port => current_setting('port')::int);
+SET client_min_messages TO INFO;
 
 SELECT _timescaledb_internal.test_remote_connection_cache();
 
