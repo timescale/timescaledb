@@ -41,12 +41,23 @@ TEST_ROLE_2=${TEST_ROLE_2:-test_role_2}
 TEST_ROLE_2_PASS=${TEST_ROLE_2_PASS:-pass}
 TEST_ROLE_3=${TEST_ROLE_3:-test_role_3}
 TEST_ROLE_3_PASS=${TEST_ROLE_3_PASS:-pass}
+TEST_ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY:-test_role_read_only}
 
 shift
 
 # Drop test database and make it less verbose in case of dropping a
-# distributed database
+# distributed database. Also revoke privileges granted when setting up
+# the template1 database. This has to be revoked since the user is
+# dropped from a different database.
 function cleanup {
+    ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1 <<EOF
+REVOKE CREATE ON SCHEMA public FROM ${TEST_PGUSER};
+REVOKE CREATE ON SCHEMA public FROM ${TEST_ROLE_DEFAULT_PERM_USER};
+REVOKE CREATE ON SCHEMA public FROM ${TEST_ROLE_DEFAULT_PERM_USER_2};
+REVOKE CREATE ON SCHEMA public FROM ${TEST_ROLE_1};
+REVOKE CREATE ON SCHEMA public FROM ${TEST_ROLE_2};
+REVOKE CREATE ON SCHEMA public FROM ${TEST_ROLE_3};
+EOF
     cat <<EOF | ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none >/dev/null 2>&1
     SET client_min_messages=ERROR;
     DROP DATABASE "${TEST_DBNAME}";
@@ -59,9 +70,14 @@ trap cleanup EXIT
 # we use mkdir here because it is an atomic operation unlike existance of a lockfile
 # where creating and checking are 2 separate operations
 if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
-  cat <<EOF | ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1
+  ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1 <<EOF
     SET client_min_messages=ERROR;
-    GRANT CREATE ON SCHEMA public TO PUBLIC;
+    GRANT CREATE ON SCHEMA public TO ${TEST_PGUSER};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_DEFAULT_PERM_USER};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_DEFAULT_PERM_USER_2};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_1};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_2};
+    GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_3};
     ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_CLUSTER_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_1} WITH CREATEDB CREATEROLE;
@@ -107,6 +123,7 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_1=${TEST_ROLE_1} \
      -v ROLE_2=${TEST_ROLE_2} \
      -v ROLE_3=${TEST_ROLE_3} \
+     -v ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY} \
      -v ROLE_2_PASS=${TEST_ROLE_2_PASS} \
      -v ROLE_3_PASS=${TEST_ROLE_3_PASS} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
