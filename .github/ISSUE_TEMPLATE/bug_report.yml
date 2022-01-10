@@ -15,13 +15,13 @@ body:
       label: What type of bug is this?
       multiple: true
       options:
-        - Crash
-        - Performance issue
-        - Incorrect result
-        - Data corruption
-        - Locking issue
-        - Unexpected error
         - Configuration
+        - Crash
+        - Data corruption
+        - Incorrect result
+        - Locking issue
+        - Performance issue
+        - Unexpected error
         - Other
     validations:
       required: true
@@ -33,32 +33,32 @@ body:
       description: You can pick multiple subsystems and features.
       multiple: true
       options:
-        - Query planner
-        - Query executor
-        - Command processing
-        - Continuous aggregate
+        - Access node
+        - Adaptive chunking
         - Background worker
-        - Policy
-        - User-Defined Action (UDA)
-        - Data ingestion
+        - Backup
+        - Build system
+        - Command processing
         - Compression
         - Configuration
-        - Multi-node
-        - Distributed hypertable
-        - Access node
+        - Continuous aggregate
+        - Data ingestion
         - Data node
-        - Node management
-        - Replication
+        - Distributed hypertable
         - Gapfill
-        - SkipScan
-        - Partitioning
-        - Adaptive chunking
-        - Telemetry
-        - Build system
-        - Platform/OS
-        - Backup
-        - Restore
+        - Multi-node
+        - Node management
         - Packaging
+        - Partitioning
+        - Platform/OS
+        - Policy
+        - Query executor
+        - Query planner
+        - Replication
+        - Restore
+        - SkipScan
+        - Telemetry
+        - User-Defined Action (UDA)
         - Other
     validations:
       required: true
@@ -110,11 +110,11 @@ body:
       label: What installation method did you use?
       multiple: true
       options:
-        - Source
-        - Docker
         - Deb/Apt
-        - RPM
+        - Docker
         - Homebrew
+        - RPM
+        - Source
         - Other
         - Not applicable
     validations:
@@ -126,12 +126,12 @@ body:
       label: What platform did you run on?
       multiple: true
       options:
-        - Timescale Cloud
-        - Managed Service for TimescaleDB (MST/Aiven)
         - Amazon Web Services (AWS)
         - Google Cloud Platform (GCP)
+        - Managed Service for TimescaleDB (MST/Aiven)
         - Microsoft Azure Cloud
         - On prem/Self-hosted
+        - Timescale Cloud
         - Other
         - Not applicable
     validations:
