@@ -29,6 +29,19 @@ INSERT INTO conditions (day, city, temperature) VALUES
   ('2021-06-25', 'Moscow', 32),
   ('2021-06-26', 'Moscow', 32),
   ('2021-06-27', 'Moscow', 31);
+-- Check that buckets like '1 month 15 days' (fixed-sized + variable-sized) are not allowed
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month 15 days', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions
+GROUP BY city, bucket
+WITH NO DATA;
+ERROR:  invalid interval specified
+\set ON_ERROR_STOP 1
 -- Make sure it's possible to create an empty cagg (WITH NO DATA) and
 -- that all the information about the bucketing function will be saved
 -- to the TS catalog.
@@ -62,7 +75,7 @@ FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
  experimental |      name      | bucket_width | origin | timezone 
 --------------+----------------+--------------+--------+----------
- t            | time_bucket_ng | 1 months     |        | 
+ t            | time_bucket_ng | @ 1 mon      |        | 
 (1 row)
 
 -- Check that there is no saved invalidation threshold before any refreshes
@@ -1071,7 +1084,7 @@ FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
  experimental |      name      | bucket_width | origin | timezone 
 --------------+----------------+--------------+--------+----------
- t            | time_bucket_ng | 1 months     |        | 
+ t            | time_bucket_ng | @ 1 mon      |        | 
 (1 row)
 
 SELECT * FROM conditions_dist_1m ORDER BY bucket;

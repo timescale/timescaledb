@@ -1496,7 +1496,7 @@ ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
 int32
 ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction *bf)
 {
-	long long int nmonths;
+	Interval *interval;
 
 	/* bucket_function should always be filled for variable buckets */
 	Assert(NULL != bf);
@@ -1508,19 +1508,13 @@ ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction 
 	/* variable buckets with specified timezone are not supported */
 	Assert(0 == strlen(bf->timezone));
 
-	/*
-	 * The definition of int32 (and PRId32) differ across the platforms.
-	 * We have to implicitly cast it to long long to make %lld always work.
-	 */
-	if (sscanf(bf->bucket_width, "%lld months", &nmonths) < 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("unexpected bucket width \"%s\"", bf->bucket_width)));
-	}
+	interval = DatumGetIntervalP(
+		DirectFunctionCall3(interval_in, CStringGetDatum(bf->bucket_width), InvalidOid, -1));
 
-	/* See the corresponding check in cagg_create() */
-	Assert(nmonths <= PG_INT32_MAX);
+	/* make sure this function is called only in the right contexts */
+	Assert(interval->month != 0);
+	Assert(interval->day == 0);
+	Assert(interval->time == 0);
 
-	return (int32) nmonths;
+	return interval->month;
 }
