@@ -16,7 +16,6 @@
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_user_mapping.h>
 #include <commands/defrem.h>
-#include <common/md5.h>
 #include <foreign/foreign.h>
 #include <libpq-events.h>
 #include <libpq/libpq.h>
@@ -1150,8 +1149,9 @@ make_user_path(const char *user_name, PathKind path_kind)
 	char ret_path[MAXPGPATH];
 	char hexsum[33];
 	StringInfo result;
+	const char *errstr;
 
-	pg_md5_hash(user_name, strlen(user_name), hexsum);
+	pg_md5_hash_compat(user_name, strlen(user_name), hexsum, &errstr);
 
 	if (strlcpy(ret_path, ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, MAXPGPATH) > MAXPGPATH)
 		report_path_error(path_kind, user_name);
