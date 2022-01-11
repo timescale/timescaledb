@@ -14,9 +14,12 @@ accidentally triggering the load of a previous DB version.**
 * #3808 Properly handle `max_retries` option
 * #3918 Fix DataNodeScan plans with one-time filter
 * #3939 Fix projection handling in time_bucket_gapfill
+* #3979 Fix deparsing of index predicates
 
 **Thanks**
 * @erikhh for reporting an issue with time_bucket_gapfill
+* @fvannee for reporting a first/last memory leak
+* @kancsuki for reporting drop column and partial index creation not working
 
 ## 2.5.1 (2021-12-02)
 

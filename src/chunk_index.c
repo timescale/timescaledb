@@ -107,7 +107,11 @@ adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
 
 		char *attname = get_attname(ht_relid, var->varattno, false);
 		var->varattno = get_attnum(chunkrel->rd_id, attname);
-
+#if PG13_GE
+		var->varattnosyn = var->varattno;
+#else
+		var->varoattno = var->varattno;
+#endif
 		if (var->varattno == InvalidAttrNumber)
 			elog(ERROR, "index attribute %s not found in chunk", attname);
 	}
