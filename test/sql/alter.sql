@@ -406,6 +406,21 @@ SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chu
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
 
+-- predicate reconstruction when attnos are different in hypertable and chunk
+
+CREATE TABLE p_hypertable (a integer not null, b integer, c integer);
+SELECT create_hypertable('p_hypertable', 'a', chunk_time_interval => int '3');
+
+BEGIN;
+ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
+CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
+END;
+INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
+
+\d+ _timescaledb_internal._hyper_14_28_chunk
+
+DROP TABLE p_hypertable;
+
 -- check none of our hooks interact badly with normal alter view handling
 CREATE VIEW v1 AS SELECT random();
 \set ON_ERROR_STOP 0
