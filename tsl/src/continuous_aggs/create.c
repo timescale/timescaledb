@@ -177,8 +177,9 @@ typedef struct CAggTimebucketInfo
 							/* This should also be the column used by time_bucket */
 	Oid htpartcoltype;
 	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
-	int64 bucket_width;			  /* bucket_width of time_bucket */
-	bool bucket_width_months;	 /* if true, bucket_width stores the amount of months */
+	int64 bucket_width;			  /* bucket_width of time_bucket, stores BUCKET_WIDHT_VARIABLE for
+									 variable-sized buckets */
+	Interval *interval;			  /* stores the interval, NULL if not specified */
 } CAggTimebucketInfo;
 
 typedef struct AggPartCxt
@@ -670,17 +671,27 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
-	src->bucket_width = 0; /*invalid value */
+	src->bucket_width = 0; /* invalid value */
+	src->interval = NULL;  /* not specified by default */
 }
 
-/* Check if the group-by clauses has exactly 1 time_bucket(.., <col>)
- * where <col> is the hypertable's partitioning column.
+/*
+ * Check if the group-by clauses has exactly 1 time_bucket(.., <col>) where
+ * <col> is the hypertable's partitioning column and other invariants. Then fill
+ * the `bucket_width` and other fields of `tbinfo`.
  */
 static void
 caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList)
 {
 	ListCell *l;
 	bool found = false;
+
+	/*
+	 * Make sure bucket_width was initialized by caggtimebucketinfo_init().
+	 * This assumption is used below.
+	 */
+	Assert(tbinfo->bucket_width == 0);
+
 	foreach (l, groupClause)
 	{
 		SortGroupClause *sgc = (SortGroupClause *) lfirst(l);
@@ -721,11 +732,19 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			if (IsA(width_arg, Const))
 			{
 				Const *width = castNode(Const, width_arg);
+				if (width->consttype == INTERVALOID)
+				{
+					tbinfo->interval = DatumGetIntervalP(width->constvalue);
+					if (tbinfo->interval->month != 0)
+						tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
+				}
 
-				tbinfo->bucket_width =
-					ts_interval_value_to_internal_or_months(width->constvalue,
-															width->consttype,
-															&tbinfo->bucket_width_months);
+				if (tbinfo->bucket_width != BUCKET_WIDTH_VARIABLE)
+				{
+					/* The bucket size is fixed */
+					tbinfo->bucket_width =
+						ts_interval_value_to_internal(width->constvalue, width->consttype);
+				}
 			}
 			else
 				ereport(ERROR,
@@ -733,6 +752,22 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						 errmsg("only immutable expressions allowed in time bucket function"),
 						 errhint("Use an immutable expression as first argument"
 								 " to the time bucket function.")));
+		}
+	}
+
+	if (tbinfo->bucket_width == BUCKET_WIDTH_VARIABLE)
+	{
+		/* variable-sized buckets can be used only with intervals */
+		Assert(tbinfo->interval != NULL);
+
+		if ((tbinfo->interval->month != 0) &&
+			((tbinfo->interval->day != 0) || (tbinfo->interval->time != 0)))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid interval specified"),
+					 errhint("Use either months or days and hours, but not months, days and hours "
+							 "together")));
 		}
 	}
 
@@ -1237,9 +1272,8 @@ get_partialize_funcexpr(Aggref *agg)
 }
 
 /*
- * check if the supplied oid belongs to a valid bucket function
- * for continuous aggregates
- * We only support 2-arg variants of time_bucket
+ * Check if the supplied OID belongs to a valid bucket function
+ * for continuous aggregates.
  */
 static bool
 is_valid_bucketing_function(Oid funcid)
@@ -1896,38 +1930,28 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	create_view_for_query(orig_userview_query, dum_rel);
 	/* Step 4 add catalog table entry for the objects we just created */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
+
 	create_cagg_catalog_entry(materialize_hypertable_id,
 							  origquery_ht->htid,
 							  get_namespace_name(nspid), /*schema name for user view */
 							  stmt->view->relname,
 							  part_rel->schemaname,
 							  part_rel->relname,
-							  origquery_ht->bucket_width_months ? BUCKET_WIDTH_VARIABLE :
-																  origquery_ht->bucket_width,
+							  origquery_ht->bucket_width,
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname);
 
-	if (origquery_ht->bucket_width_months)
+	if (origquery_ht->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		char bucket_width[32];
-		/* PostgreSQL's Interval type stores the number of months as int32 */
-		if (!(origquery_ht->bucket_width <= PG_INT32_MAX))
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("number of months exceeds PG_INT32_MAX (%d)", PG_INT32_MAX)));
-		}
+		const char *bucket_width;
 
 		/*
-		 * The definition of int64 (and PRId64) differ across the platforms.
-		 * We have to implicitly cast it to long long to make %lld always work.
-		 * pg_snprintf and port.h don't seem to have a solution for this.
+		 * Variable-sized buckets work only with intervals.
 		 */
-		snprintf(bucket_width,
-				 sizeof(bucket_width),
-				 "%lld months",
-				 (long long int) origquery_ht->bucket_width);
+		Assert(origquery_ht->interval != NULL);
+		bucket_width = DatumGetCString(
+			DirectFunctionCall1(interval_out, IntervalPGetDatum(origquery_ht->interval)));
 
 		/*
 		 * `experimental` = true and `name` = "time_bucket_ng" are hardcoded
@@ -2011,7 +2035,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 		/* We are creating a refresh window here in a similar way to how it's
 		 * done in continuous_agg_refresh. We do not call the PG function
-		 * directly since we want to be able to surpress the output in that
+		 * directly since we want to be able to suppress the output in that
 		 * function and adding a 'verbose' parameter to is not useful for a
 		 * user. */
 		relid = get_relname_relid(stmt->into->rel->relname, nspid);

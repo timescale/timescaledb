@@ -28,6 +28,19 @@ INSERT INTO conditions (day, city, temperature) VALUES
   ('2021-06-26', 'Moscow', 32),
   ('2021-06-27', 'Moscow', 31);
 
+-- Check that buckets like '1 month 15 days' (fixed-sized + variable-sized) are not allowed
+
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month 15 days', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions
+GROUP BY city, bucket
+WITH NO DATA;
+\set ON_ERROR_STOP 1
 
 -- Make sure it's possible to create an empty cagg (WITH NO DATA) and
 -- that all the information about the bucketing function will be saved
