@@ -185,8 +185,6 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	const Dimension *time_dim = hyperspace_get_open_dimension(space, 0);
 	const DimensionSlice *time_slice = get_chunk_time_slice(chunk, space);
 	Oid time_dim_type = ts_dimension_get_partition_type(time_dim);
-	int num_created_after = ts_chunk_num_of_chunks_created_after(chunk);
-	int total_slices = get_total_number_of_slices(space);
 
 	if (IS_TIMESTAMP_TYPE(time_dim_type))
 	{
@@ -206,8 +204,7 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 		{
 			/* If there are less newly created chunks then the number of slices then this is current
 			 * chunk. This also works better when writing historical data */
-			return num_created_after < total_slices ? FILL_FACTOR_CURRENT_CHUNK :
-													  FILL_FACTOR_HISTORICAL_CHUNK;
+			return FILL_FACTOR_HISTORICAL_CHUNK;
 		}
 
 		/* for chunks in future (highly unlikely) we assume same as for `current` chunk */
@@ -222,12 +219,8 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 
 		return elapsed / interval;
 	}
-	else
-	{
-		/* if current chunk is the last created we assume it has 0.5 fill factor */
-		return num_created_after < total_slices ? FILL_FACTOR_CURRENT_CHUNK :
-												  FILL_FACTOR_HISTORICAL_CHUNK;
-	}
+
+	return FILL_FACTOR_CURRENT_CHUNK;
 }
 
 static void
