@@ -480,7 +480,7 @@ ALTER TABLE test_table_integer ALTER COLUMN val TYPE float;
 ALTER TABLE test_table_bigint ALTER COLUMN val TYPE float;
 \set ON_ERROR_STOP 1
 
---create a cont agg view on the ht as well then the drop should nuke everything
+--create a cont agg view on the ht as well 
 CREATE MATERIALIZED VIEW test_recomp_int_cont_view
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
@@ -491,6 +491,37 @@ SELECT add_continuous_aggregate_policy('test_recomp_int_cont_view', NULL, BIGINT
 CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, NULL);
 SELECT * FROM test_recomp_int ORDER BY 1;
 SELECT * FROM test_recomp_int_cont_view ORDER BY 1;
+
+--TEST cagg triggers work on distributed hypertables when we insert into 
+-- compressed chunks.
+SELECT 
+CASE WHEN compress_chunk(chunk, true) IS NOT NULL THEN 'compress' END AS ch
+ FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk )q;
+
+SELECT * FROM test_recomp_int_cont_view 
+WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
+
+--insert into an existing compressed chunk and a new chunk
+SET timescaledb.enable_distributed_insert_with_copy=false;
+
+INSERT INTO test_recomp_int VALUES (1, 10), (2,10), (3, 10);
+INSERT INTO test_recomp_int VALUES(51, 10);
+ 
+--refresh the cagg and verify the new results
+CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, 100);
+SELECT * FROM test_recomp_int_cont_view 
+WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
+
+--repeat test with copy setting turned to true
+SET timescaledb.enable_distributed_insert_with_copy=true;
+INSERT INTO test_recomp_int VALUES (4, 10);
+
+CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, 100);
+SELECT * FROM test_recomp_int_cont_view 
+WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
+
+-- TEST drop should nuke everything
 DROP TABLE test_recomp_int CASCADE;
 
 -- test compression default handling
