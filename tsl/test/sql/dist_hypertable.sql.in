@@ -169,6 +169,14 @@ INSERT INTO disttable VALUES
        ('2018-07-01 09:21', 90, 2.8),
        ('2018-07-01 08:21', 29, 1.2);
 
+-- EXPLAIN some updates/deletes to see what plans and explain output for
+-- remote operations look like
+EXPLAIN (VERBOSE, COSTS FALSE)
+UPDATE disttable SET temp = 3.7 WHERE device = 1;
+
+EXPLAIN (VERBOSE, COSTS FALSE)
+DELETE FROM disttable WHERE device = 1;
+
 -- Test distributed ANALYZE.
 --
 

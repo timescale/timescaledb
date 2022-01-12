@@ -134,3 +134,16 @@ SELECT show_chunks('public.table_to_compress');
 -------------
 (0 rows)
 
+-- test calling on internal compressed table
+SELECT
+  format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
+FROM
+  _timescaledb_catalog.hypertable ht
+  INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
+      AND uncompress.table_name = 'table_to_compress') \gset
+\set ON_ERROR_STOP 0
+SELECT show_chunks(:'TABLENAME');
+ERROR:  invalid operation on compressed hypertable
+SELECT drop_chunks(:'TABLENAME',now());
+ERROR:  hypertable has no open partitioning dimension
+\set ON_ERROR_STOP 1

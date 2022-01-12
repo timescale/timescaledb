@@ -1,6 +1,7 @@
 set(TEST_FILES_SHARED
     constify_timestamptz_op_interval.sql
     constraint_exclusion_prepared.sql
+    continuous_aggs_compression.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
     dist_distinct.sql
@@ -8,7 +9,8 @@ set(TEST_FILES_SHARED
     dist_fetcher_type.sql
     dist_gapfill.sql
     dist_insert.sql
-    dist_queries.sql)
+    dist_queries.sql
+    subtract_integer_from_now.sql)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED memoize.sql)

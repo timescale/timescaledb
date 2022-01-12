@@ -145,7 +145,7 @@ polydatum_deserialize(PolyDatum *result, StringInfo buf, PolyDatumIOState *state
 	StringInfo bufptr;
 	char csave;
 
-	if (NULL == result)
+	if (result == NULL)
 	{
 		result = palloc(sizeof(PolyDatum));
 	}
@@ -222,6 +222,17 @@ typedef struct InternalCmpAggStore
 	PolyDatum cmp; /* the comparison element. e.g. time */
 } InternalCmpAggStore;
 
+inline static InternalCmpAggStore *
+init_store(MemoryContext aggcontext)
+{
+	InternalCmpAggStore *state =
+		(InternalCmpAggStore *) MemoryContextAllocZero(aggcontext, sizeof(InternalCmpAggStore));
+	state->value.is_null = true;
+	state->cmp.is_null = true;
+
+	return state;
+}
+
 /* State used to cache data for serialize/deserialize operations */
 typedef struct InternalCmpAggStoreIOState
 {
@@ -237,12 +248,6 @@ typedef struct TypeInfoCache
 } TypeInfoCache;
 
 inline static void
-typeinfocache_init(TypeInfoCache *tic)
-{
-	tic->type_oid = InvalidOid;
-}
-
-inline static void
 typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *output)
 {
 	if (tic->type_oid != input.type_oid)
@@ -250,7 +255,13 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 		tic->type_oid = input.type_oid;
 		get_typlenbyval(tic->type_oid, &tic->typelen, &tic->typebyval);
 	}
+	if (!tic->typebyval && !output->is_null)
+	{
+		pfree(DatumGetPointer(output->datum));
+	}
+
 	*output = input;
+
 	if (!input.is_null)
 	{
 		output->datum = datumCopy(input.datum, tic->typebyval, tic->typelen);
@@ -263,52 +274,37 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 	}
 }
 
-typedef struct CmpFuncCache
-{
-	Oid cmp_type;
-	char op;
-	FmgrInfo proc;
-} CmpFuncCache;
-
 inline static void
-cmpfunccache_init(CmpFuncCache *cache)
+cmpproc_init(FunctionCallInfo fcinfo, FmgrInfo *cmp_proc, Oid type_oid, char *opname)
 {
-	cache->cmp_type = InvalidOid;
+	Oid cmp_op, cmp_regproc;
+
+	if (!OidIsValid(type_oid))
+		elog(ERROR, "could not determine the type of the comparison_element");
+
+	cmp_op = OpernameGetOprid(list_make1(makeString(opname)), type_oid, type_oid);
+	if (!OidIsValid(cmp_op))
+		elog(ERROR, "could not find a %s operator for type %d", opname, type_oid);
+	cmp_regproc = get_opcode(cmp_op);
+	if (!OidIsValid(cmp_regproc))
+		elog(ERROR,
+			 "could not find the procedure for the %s operator for type %d",
+			 opname,
+			 type_oid);
+	fmgr_info_cxt(cmp_regproc, cmp_proc, fcinfo->flinfo->fn_mcxt);
 }
 
 inline static bool
-cmpfunccache_cmp(CmpFuncCache *cache, FunctionCallInfo fcinfo, char *opname, PolyDatum left,
-				 PolyDatum right)
+cmpproc_cmp(FmgrInfo *cmp_proc, FunctionCallInfo fcinfo, PolyDatum left, PolyDatum right)
 {
-	Assert(left.type_oid == right.type_oid);
-	Assert(opname[1] == '\0');
-
-	if (cache->cmp_type != left.type_oid || cache->op != opname[0])
-	{
-		Oid cmp_op, cmp_regproc;
-
-		if (!OidIsValid(left.type_oid))
-			elog(ERROR, "could not determine the type of the comparison_element");
-		cmp_op = OpernameGetOprid(list_make1(makeString(opname)), left.type_oid, left.type_oid);
-		if (!OidIsValid(cmp_op))
-			elog(ERROR, "could not find a %s operator for type %d", opname, left.type_oid);
-		cmp_regproc = get_opcode(cmp_op);
-		if (!OidIsValid(cmp_regproc))
-			elog(ERROR,
-				 "could not find the procedure for the %s operator for type %d",
-				 opname,
-				 left.type_oid);
-		fmgr_info_cxt(cmp_regproc, &cache->proc, fcinfo->flinfo->fn_mcxt);
-	}
-	return DatumGetBool(
-		FunctionCall2Coll(&cache->proc, fcinfo->fncollation, left.datum, right.datum));
+	return DatumGetBool(FunctionCall2Coll(cmp_proc, fcinfo->fncollation, left.datum, right.datum));
 }
 
 typedef struct TransCache
 {
 	TypeInfoCache value_type_cache;
 	TypeInfoCache cmp_type_cache;
-	CmpFuncCache cmp_func_cache;
+	FmgrInfo cmp_proc;
 } TransCache;
 
 static TransCache *
@@ -318,11 +314,9 @@ transcache_get(FunctionCallInfo fcinfo)
 
 	if (my_extra == NULL)
 	{
-		fcinfo->flinfo->fn_extra = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(TransCache));
+		fcinfo->flinfo->fn_extra =
+			MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(TransCache));
 		my_extra = (TransCache *) fcinfo->flinfo->fn_extra;
-		typeinfocache_init(&my_extra->value_type_cache);
-		typeinfocache_init(&my_extra->cmp_type_cache);
-		cmpfunccache_init(&my_extra->cmp_func_cache);
 	}
 	return my_extra;
 }
@@ -341,15 +335,15 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum va
 
 	if (state == NULL)
 	{
-		state = (InternalCmpAggStore *) MemoryContextAlloc(aggcontext, sizeof(InternalCmpAggStore));
+		state = init_store(aggcontext);
+		cmpproc_init(fcinfo, &cache->cmp_proc, cmp.type_oid, opname);
 		typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 		typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
 	}
 	else
 	{
 		/* only do comparison if cmp is not NULL */
-		if (!cmp.is_null &&
-			cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, cmp, state->cmp))
+		if (!cmp.is_null && cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
 		{
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 			typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
@@ -383,8 +377,7 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 	{
 		old_context = MemoryContextSwitchTo(aggcontext);
 
-		state1 =
-			(InternalCmpAggStore *) MemoryContextAlloc(aggcontext, sizeof(InternalCmpAggStore));
+		state1 = init_store(aggcontext);
 		typeinfocache_polydatumcopy(&cache->value_type_cache, state2->value, &state1->value);
 		typeinfocache_polydatumcopy(&cache->cmp_type_cache, state2->cmp, &state1->cmp);
 
@@ -403,7 +396,9 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 		else
 			PG_RETURN_POINTER(state1);
 	}
-	else if (cmpfunccache_cmp(&cache->cmp_func_cache, fcinfo, opname, state2->cmp, state1->cmp))
+
+	cmpproc_init(fcinfo, &cache->cmp_proc, state1->cmp.type_oid, opname);
+	if (cmpproc_cmp(&cache->cmp_proc, fcinfo, state2->cmp, state1->cmp))
 	{
 		old_context = MemoryContextSwitchTo(aggcontext);
 		typeinfocache_polydatumcopy(&cache->value_type_cache, state2->value, &state1->value);

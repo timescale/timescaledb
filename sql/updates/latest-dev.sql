@@ -1,5 +1,5 @@
 DROP FUNCTION IF EXISTS recompress_chunk;
-
+DROP FUNCTION IF EXISTS delete_data_node;
 
 -- Also see the comments for ContinuousAggsBucketFunction structure.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(
@@ -24,3 +24,5 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 -- Adding overloaded versions of invalidation_process_hypertable_log() and invalidation_process_cagg_log()
 -- with bucket_functions argument is done in cagg_utils.sql. Note that this file is included when building
 -- the update scripts, so we don't have to do it here.
+
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;

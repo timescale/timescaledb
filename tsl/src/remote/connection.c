@@ -16,7 +16,6 @@
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_user_mapping.h>
 #include <commands/defrem.h>
-#include <common/md5.h>
 #include <foreign/foreign.h>
 #include <libpq-events.h>
 #include <libpq/libpq.h>
@@ -1150,8 +1149,9 @@ make_user_path(const char *user_name, PathKind path_kind)
 	char ret_path[MAXPGPATH];
 	char hexsum[33];
 	StringInfo result;
+	const char *errstr;
 
-	pg_md5_hash(user_name, strlen(user_name), hexsum);
+	pg_md5_hash_compat(user_name, strlen(user_name), hexsum, &errstr);
 
 	if (strlcpy(ret_path, ts_guc_ssl_dir ? ts_guc_ssl_dir : DataDir, MAXPGPATH) > MAXPGPATH)
 		report_path_error(path_kind, user_name);
@@ -1461,11 +1461,11 @@ options_contain(List *options, const char *key)
 }
 
 /*
- * Add user info (username and optionally password) to the connection
+ * Add athentication info (username and optionally password) to the connection
  * options).
  */
-static List *
-add_userinfo_to_server_options(ForeignServer *server, Oid user_id)
+List *
+remote_connection_prepare_auth_options(const ForeignServer *server, Oid user_id)
 {
 	const UserMapping *um = get_user_mapping(user_id, server->serverid);
 	List *options = list_copy(server->options);
@@ -1544,7 +1544,7 @@ remote_connection_get_connstr(const char *node_name)
 	int i;
 
 	server = data_node_get_foreign_server(node_name, ACL_NO_CHECK, false, false);
-	connection_options = add_userinfo_to_server_options(server, GetUserId());
+	connection_options = remote_connection_prepare_auth_options(server, GetUserId());
 	setup_full_connection_options(connection_options, &keywords, &values);
 
 	/* Cycle through the options and create the connection string */
@@ -1574,7 +1574,7 @@ TSConnection *
 remote_connection_open_by_id(TSConnectionId id)
 {
 	ForeignServer *server = GetForeignServer(id.server_id);
-	List *connection_options = add_userinfo_to_server_options(server, id.user_id);
+	List *connection_options = remote_connection_prepare_auth_options(server, id.user_id);
 
 	return remote_connection_open_with_options(server->servername, connection_options, true);
 }
@@ -1607,7 +1607,7 @@ remote_connection_open_nothrow(Oid server_id, Oid user_id, char **errmsg)
 		return NULL;
 	}
 
-	connection_options = add_userinfo_to_server_options(server, user_id);
+	connection_options = remote_connection_prepare_auth_options(server, user_id);
 	conn =
 		remote_connection_open_with_options_nothrow(server->servername, connection_options, errmsg);
 

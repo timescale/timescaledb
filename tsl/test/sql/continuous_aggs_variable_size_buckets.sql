@@ -479,6 +479,11 @@ CALL refresh_continuous_aggregate('conditions_dist_1m_manual', '2010-01-01', '20
 SELECT * FROM conditions_dist_1m ORDER BY bucket;
 SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
 
+ALTER MATERIALIZED VIEW conditions_dist_1m_manual SET ( timescaledb.compress );
+SELECT compress_chunk(ch)
+FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+
 -- Clean up
 DROP TABLE conditions_dist CASCADE;
 
@@ -486,3 +491,54 @@ DROP TABLE conditions_dist CASCADE;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;
+
+-- Test the specific code path of creating a CAGG on top of empty hypertable.
+
+CREATE TABLE conditions_empty(
+  day DATE NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+
+SELECT create_hypertable(
+  'conditions_empty', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+
+CREATE MATERIALIZED VIEW conditions_summary_empty
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_empty
+GROUP BY city, bucket;
+
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary_empty
+ORDER by month, city;
+
+-- The test above changes the record that gets added to the invalidation log
+-- for an empty table. Make sure it doesn't have any unintended side-effects
+-- and the refreshing works as expected.
+
+INSERT INTO conditions_empty (day, city, temperature) VALUES
+  ('2021-06-14', 'Moscow', 26),
+  ('2021-06-15', 'Moscow', 22),
+  ('2021-06-16', 'Moscow', 24),
+  ('2021-06-17', 'Moscow', 24),
+  ('2021-06-18', 'Moscow', 27),
+  ('2021-06-19', 'Moscow', 28),
+  ('2021-06-20', 'Moscow', 30),
+  ('2021-06-21', 'Moscow', 31),
+  ('2021-06-22', 'Moscow', 34),
+  ('2021-06-23', 'Moscow', 34),
+  ('2021-06-24', 'Moscow', 34),
+  ('2021-06-25', 'Moscow', 32),
+  ('2021-06-26', 'Moscow', 32),
+  ('2021-06-27', 'Moscow', 31);
+
+CALL refresh_continuous_aggregate('conditions_summary_empty', '2021-06-01', '2021-07-01');
+
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary_empty
+ORDER by month, city;

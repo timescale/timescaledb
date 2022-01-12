@@ -164,7 +164,8 @@ CREATE OR REPLACE FUNCTION delete_data_node(
     node_name              NAME,
     if_exists              BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE,
-    repartition            BOOLEAN = TRUE
+    repartition            BOOLEAN = TRUE,
+	drop_database          BOOLEAN = FALSE
 ) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
 
 -- Attach a data node to a distributed hypertable

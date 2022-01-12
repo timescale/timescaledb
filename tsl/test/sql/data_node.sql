@@ -55,11 +55,20 @@ SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN
 
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
 
--- Test altering server command is blocked
+
+-- Altering the host, dbname, and port should work via ALTER SERVER
+BEGIN;
+ALTER SERVER data_node_3 OPTIONS (SET host 'data_node_3', SET dbname 'new_db_name', SET port '9999');
+SELECT srvname, srvoptions FROM pg_foreign_server WHERE srvname = 'data_node_3';
+-- Altering the name should work
+ALTER SERVER data_node_3 RENAME TO data_node_4;
+SELECT srvname FROM pg_foreign_server WHERE srvname = 'data_node_4';
+-- Revert name and options
+ROLLBACK;
+
 \set ON_ERROR_STOP 0
-ALTER SERVER data_node_1 OPTIONS (SET fdw_startup_cost '110.0');
-ALTER SERVER data_node_1 OPTIONS (DROP sslmode);
-ALTER SERVER data_node_1 RENAME TO data_node_k;
+-- Should not be possible to set a version:
+ALTER SERVER data_node_3 VERSION '2';
 \set ON_ERROR_STOP 1
 
 -- Make sure changing server owner is allowed
@@ -678,7 +687,7 @@ SET ROLE :ROLE_3;
 -- foreign data wrapper will fail.
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6');
-\set ON_ERROR_STOP 0
+\set ON_ERROR_STOP 1
 
 RESET ROLE;
 GRANT USAGE ON FOREIGN DATA WRAPPER timescaledb_fdw TO :ROLE_3;
@@ -688,12 +697,12 @@ SET ROLE :ROLE_3;
 -- ROLE_3 doesn't have a password in the passfile and has not way to
 -- authenticate so adding a data node will still fail.
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6');
-\set ON_ERROR_STOP 0
+\set ON_ERROR_STOP 1
 
 -- Providing the password on the command line should work
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6', password => :'ROLE_3_PASS');
-SELECT * FROM delete_data_node('data_node_6');
 
+SELECT * FROM delete_data_node('data_node_6');
 --
 -- Tests for copy/move chunk API
 --

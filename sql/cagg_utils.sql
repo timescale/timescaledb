@@ -51,8 +51,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigg
 --                      Access Node that belong to 'raw_hypertable_id'
 -- bucket_widths - The array of time bucket widths for all the CAGGs that belong to
 --                 'raw_hypertable_id'
--- max_bucket_widths - The array of the maximum time bucket widths for all the CAGGs that belong
---                     to 'raw_hypertable_id'
+-- max_bucket_widths - (Deprecated) This argument is ignored and is present only
+--                     for backward compatibility.
 -- bucket_functions - (Optional) The array of serialized information about bucket functions
 CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
     mat_hypertable_id INTEGER,
@@ -87,8 +87,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
 --                      Access Node that belong to 'raw_hypertable_id'
 -- bucket_widths - The array of time bucket widths for all the CAGGs that belong to
 --                 'raw_hypertable_id'
--- max_bucket_widths - The array of the maximum time bucket widths for all the CAGGs that belong
---                     to 'raw_hypertable_id'
+-- max_bucket_widths - (Deprecated) This argument is ignored and is present only
+--                     for backward compatibility.
 -- bucket_functions - (Optional) The array of serialized information about bucket functions
 --
 -- Returns a tuple of:

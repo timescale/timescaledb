@@ -27,7 +27,7 @@
 #include <fmgr.h>
 #include <executor/spi.h>
 
-#if USE_ASSERT_CHECKING
+#ifdef USE_ASSERT_CHECKING
 #include <funcapi.h>
 #endif
 

@@ -10,12 +10,12 @@ body:
       label: What type of enhancement is this?
       multiple: true
       options:
-        - Performance
-        - User experience
         - API improvement
         - Configuration
+        - Performance
         - Refactor
         - Tech debt reduction
+        - User experience
         - Other
     validations:
       required: true
@@ -27,30 +27,30 @@ body:
       description: You can pick multiple subsystems and features.
       multiple: true
       options:
-        - Query planner
-        - Query executor
-        - Command processing
-        - Continuous aggregate
+        - Access node
+        - Adaptive chunking
         - Background worker
-        - Policy
-        - User-Defined Action (UDA)
-        - Data ingestion
+        - Build system
+        - Command processing
         - Compression
         - Configuration
-        - Multi-node
-        - Distributed hypertable
-        - Access node
+        - Continuous aggregate
+        - Data ingestion
         - Data node
-        - Node management
-        - Replication
+        - Distributed hypertable
         - Gapfill
-        - SkipScan
-        - Partitioning
-        - Adaptive chunking
-        - Telemetry
-        - Build system
-        - Platform/OS
+        - Multi-node
+        - Node management
         - Packaging
+        - Partitioning
+        - Platform/OS
+        - Policy
+        - Query executor
+        - Query planner
+        - Replication
+        - SkipScan
+        - Telemetry
+        - User-Defined Action (UDA)
         - Other
     validations:
       required: true

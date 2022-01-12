@@ -241,15 +241,95 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT 1 FROM pg_tables WHERE tablename 
 DROP TABLE non_disttable1;
 DROP TABLE non_disttable2;
 
--- CREATE and DROP SCHEMA on each node
+-- CREATE SCHEMA tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 CREATE SCHEMA dist_schema AUTHORIZATION :ROLE_1;
+
+-- make sure schema has been created on each data node
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema';
+$$);
 
 CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
 SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+
+-- DROP SCHEMA
 DROP SCHEMA dist_schema CASCADE;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+
+-- make sure schema has been dropped on each data node
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema';
+$$);
+
+-- make sure empty schema schema has been created and then dropped on each data node
+CREATE SCHEMA dist_schema_2;
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+
+DROP SCHEMA dist_schema_2;
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+
+-- transactional schema create/drop with local table
+BEGIN;
+
+CREATE SCHEMA dist_schema_3;
+CREATE TABLE dist_schema_3.some_dist_table(time timestamptz, device int);
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3';
+$$);
+
+DROP SCHEMA dist_schema_3 CASCADE;
+
+ROLLBACK;
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3';
+$$);
+
+-- ALTER SCHEMA RENAME TO
+CREATE SCHEMA dist_schema;
+CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
+SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
+ALTER SCHEMA dist_schema RENAME TO dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+
+-- ALTER SCHEMA OWNER TO
+ALTER SCHEMA dist_schema_2 OWNER TO :ROLE_1;
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+
+DROP SCHEMA dist_schema_2 CASCADE;
 
 -- DROP column cascades to index drop
 CREATE TABLE some_dist_table(time timestamptz, device int, color int, temp float);

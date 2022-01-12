@@ -513,6 +513,18 @@ data_node_bootstrap_extension(TSConnection *conn)
 								  " WITH SCHEMA %s VERSION %s CASCADE",
 								  schema_name_quoted,
 								  quote_literal_cstr(ts_extension_get_version()));
+#if PG15_GE
+		/*
+		 * Since PG15, by default, non-superuser accounts are not allowed to
+		 * create tables in public schema of databases they don't own. This
+		 * default can be changed manually. The following query ensures that the
+		 * permissions are going to be the same regardless of the used PostgreSQL
+		 * version.
+		 *
+		 * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commitdiff;h=b073c3cc
+		 */
+		remote_connection_cmdf_ok(conn, "GRANT CREATE ON SCHEMA public TO PUBLIC");
+#endif
 		return true;
 	}
 	else
@@ -1320,6 +1332,132 @@ data_node_detach(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(removed);
 }
 
+/*
+ * Drop a data node's database.
+ *
+ * To drop the database on the data node, a connection must be made to another
+ * database since one cannot drop the database currently connected
+ * to. Therefore, we bypass the connection cache and use a "raw" connection to
+ * a standard database (e.g., template0 or postgres), similar to how
+ * bootstrapping does it.
+ *
+ * Note that no password is provided on the command line as is done when
+ * bootstrapping. Instead, it is assumed that the current user already has a
+ * method to authenticate with the remote data node (e.g., via a password
+ * file, certificate, or user mapping). This should normally be the case or
+ * otherwise the user wouldn't have been able to use the data node.
+ *
+ * Note that the user that deletes a data node also must be the database owner
+ * on the data node. The database will only be dropped if there are no other
+ * concurrent connections so all connections must be closed before being able
+ * to drop the database.
+ */
+static void
+drop_data_node_database(const ForeignServer *server)
+{
+	ListCell *lc;
+	TSConnection *conn;
+	Oid userid = GetUserId();
+	TSConnectionId connid = {
+		.server_id = server->serverid,
+		.user_id = userid,
+	};
+	/* Make a copy of the node name since the server pointer will be
+	 * updated */
+	char *nodename = pstrdup(server->servername);
+	char *dbname = NULL;
+	char *err = NULL;
+	int i;
+
+	/* Figure out the name of the database that should be dropped */
+	foreach (lc, server->options)
+	{
+		DefElem *d = lfirst(lc);
+
+		if (strcmp(d->defname, "dbname") == 0)
+		{
+			dbname = defGetString(d);
+			break;
+		}
+	}
+
+	if (NULL == dbname)
+	{
+		/* This should not happen unless the configuration is messed up */
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
+				 errmsg("could not drop the database on data node \"%s\"", nodename),
+				 errdetail("The data node configuration lacks the \"dbname\" option.")));
+		pg_unreachable();
+		return;
+	}
+
+	/* Clear potentially cached connection to the data node for the current
+	 * session so that it won't block dropping the database */
+	remote_connection_cache_remove(connid);
+
+	/* Cannot connect to the database that is being dropped, so try to connect
+	 * to a "standard" bootstrap database that we expect to exist on the data
+	 * node */
+	for (i = 0; i < lengthof(bootstrap_databases); i++)
+	{
+		List *conn_options;
+		DefElem dbname_elem = {
+			.type = T_DefElem,
+			.defaction = DEFELEM_SET,
+			.defname = "dbname",
+			.arg = (Node *) makeString(pstrdup(bootstrap_databases[i])),
+		};
+		AlterForeignServerStmt stmt = {
+			.type = T_AlterForeignServerStmt,
+			.servername = nodename,
+			.has_version = false,
+			.options = list_make1(&dbname_elem),
+		};
+
+		/*
+		 * We assume that the user already has credentials configured to
+		 * connect to the data node, e.g., via a user mapping, password file,
+		 * or certificate. But in order to easily make use of those
+		 * authentication methods, we need to establish the connection using
+		 * the standard connection functions to pick up the foreign server
+		 * options and associated user mapping (if such a mapping
+		 * exists). However, the foreign server configuration references the
+		 * database we are trying to drop, so we first need to update the
+		 * foreign server definition to use the bootstrap database. */
+		AlterForeignServer(&stmt);
+
+		/* Make changes to foreign server database visible */
+		CommandCounterIncrement();
+
+		/* Get the updated server definition */
+		server = data_node_get_foreign_server(nodename, ACL_USAGE, true, false);
+		/* Open a connection to the bootstrap database using the new server options */
+		conn_options = remote_connection_prepare_auth_options(server, userid);
+		conn = remote_connection_open_with_options_nothrow(nodename, conn_options, &err);
+
+		if (NULL != conn)
+			break;
+	}
+
+	if (NULL != conn)
+	{
+		/* Do not include FORCE or IF EXISTS options when dropping the
+		 * database. Instead, we expect the database to exist, or the user
+		 * has to rerun the command without drop_database=>true set. We
+		 * don't force removal if there are other connections to the
+		 * database out of caution. If the user wants to forcefully remove
+		 * the database, they can do it manually. */
+		remote_connection_cmdf_ok(conn, "DROP DATABASE %s", quote_identifier(dbname));
+		remote_connection_close(conn);
+	}
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION),
+				 errmsg("could not connect to data node \"%s\"", nodename),
+				 err == NULL ? 0 : errdetail("%s", err)));
+}
+
 Datum
 data_node_delete(PG_FUNCTION_ARGS)
 {
@@ -1327,6 +1465,7 @@ data_node_delete(PG_FUNCTION_ARGS)
 	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool repartition = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	bool drop_database = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 	List *hypertable_data_nodes = NIL;
 	DropStmt stmt;
 	ObjectAddress address;
@@ -1351,6 +1490,12 @@ data_node_delete(PG_FUNCTION_ARGS)
 	{
 		elog(NOTICE, "data node \"%s\" does not exist, skipping", node_name);
 		PG_RETURN_BOOL(false);
+	}
+
+	if (drop_database)
+	{
+		TS_PREVENT_IN_TRANSACTION_BLOCK(true);
+		drop_data_node_database(server);
 	}
 
 	/* close any pending connections */

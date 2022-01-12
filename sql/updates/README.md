@@ -39,11 +39,6 @@ to consider.
 4. The creation of new metadata tables need to be part of modfiles,
    similar to `ALTER`s of such tables. Otherwise, later modfiles
    cannot rely on those tables being present.
-5. When creating a new aggregate, the `CREATE` statement should be
-   added to both aggregate.sql AND an update file. aggregate.sql is
-   run once when TimescaleDB is installed so adding a definition in
-   an update file is the only way to ensure that upgrading users get
-   the new function.
 
 Notes on post_update.sql
    We use a special config var (timescaledb.update_script_stage )

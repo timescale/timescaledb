@@ -57,6 +57,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.type_id = BOOLOID,
 			.default_val = BoolGetDatum(false),
 		},
+        [ContinuousViewOptionCompress] = {
+			.arg_name = "compress",
+			.type_id = BOOLOID,
+		},
 };
 
 WithClauseResult *
@@ -361,7 +365,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	Datum bucket_width;
 
 	all_caggs_info.bucket_widths = NIL;
-	all_caggs_info.max_bucket_widths = NIL;
 	all_caggs_info.mat_hypertable_ids = NIL;
 	all_caggs_info.bucket_functions = NIL;
 
@@ -376,12 +379,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 										 ts_continuous_agg_bucket_width(cagg));
 		all_caggs_info.bucket_widths =
 			lappend(all_caggs_info.bucket_widths, DatumGetPointer(bucket_width));
-
-		bucket_width = Int64GetDatum(ts_continuous_agg_bucket_width_variable(cagg) ?
-										 BUCKET_WIDTH_VARIABLE :
-										 ts_continuous_agg_max_bucket_width(cagg));
-		all_caggs_info.max_bucket_widths =
-			lappend(all_caggs_info.max_bucket_widths, DatumGetPointer(bucket_width));
 
 		all_caggs_info.bucket_functions =
 			lappend(all_caggs_info.bucket_functions, cagg->bucket_function);
@@ -492,34 +489,29 @@ bucket_function_deserialize(const char *str)
  */
 TSDLLEXPORT void
 ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
-								   ArrayType *max_bucket_widths, ArrayType *bucket_functions,
-								   CaggsInfo *all_caggs)
+								   ArrayType *bucket_functions, CaggsInfo *all_caggs)
 {
 	all_caggs->mat_hypertable_ids = NIL;
 	all_caggs->bucket_widths = NIL;
-	all_caggs->max_bucket_widths = NIL;
 	all_caggs->bucket_functions = NIL;
 
 	Assert(ARR_NDIM(mat_hypertable_ids) > 0 && ARR_NDIM(bucket_widths) > 0 &&
-		   ARR_NDIM(max_bucket_widths) > 0 && ARR_NDIM(bucket_functions) > 0);
+		   ARR_NDIM(bucket_functions) > 0);
 	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
-		   ARR_NDIM(max_bucket_widths) == ARR_NDIM(bucket_widths) &&
 		   ARR_NDIM(bucket_functions) == ARR_NDIM(bucket_widths));
 
-	ArrayIterator it_htids, it_widths, it_maxes, it_bfs;
-	Datum array_datum1, array_datum2, array_datum3, array_datum4;
-	bool isnull1, isnull2, isnull3, isnull4;
+	ArrayIterator it_htids, it_widths, it_bfs;
+	Datum array_datum1, array_datum2, array_datum3;
+	bool isnull1, isnull2, isnull3;
 
 	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
 	it_widths = array_create_iterator(bucket_widths, 0, NULL);
-	it_maxes = array_create_iterator(max_bucket_widths, 0, NULL);
 	it_bfs = array_create_iterator(bucket_functions, 0, NULL);
 	while (array_iterate(it_htids, &array_datum1, &isnull1) &&
 		   array_iterate(it_widths, &array_datum2, &isnull2) &&
-		   array_iterate(it_maxes, &array_datum3, &isnull3) &&
-		   array_iterate(it_bfs, &array_datum4, &isnull4))
+		   array_iterate(it_bfs, &array_datum3, &isnull3))
 	{
-		Assert(!isnull1 && !isnull2 && !isnull3 && !isnull4);
+		Assert(!isnull1 && !isnull2 && !isnull3);
 		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
 		all_caggs->mat_hypertable_ids =
 			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
@@ -528,19 +520,15 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 		bucket_width = array_datum2;
 		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, DatumGetPointer(bucket_width));
 
-		bucket_width = array_datum3;
-		all_caggs->max_bucket_widths =
-			lappend(all_caggs->max_bucket_widths, DatumGetPointer(bucket_width));
-
 		const ContinuousAggsBucketFunction *bucket_function =
-			bucket_function_deserialize(TextDatumGetCString(array_datum4));
+			bucket_function_deserialize(TextDatumGetCString(array_datum3));
 		/* bucket_function is cast to non-const type to make Visual Studio happy */
 		all_caggs->bucket_functions =
 			lappend(all_caggs->bucket_functions, (ContinuousAggsBucketFunction *) bucket_function);
 	}
 	array_free_iterator(it_htids);
 	array_free_iterator(it_widths);
-	array_free_iterator(it_maxes);
+	array_free_iterator(it_bfs);
 }
 
 /*
@@ -549,34 +537,29 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
  */
 TSDLLEXPORT void
 ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
-								 ArrayType **bucket_widths, ArrayType **max_bucket_widths,
-								 ArrayType **bucket_functions)
+								 ArrayType **bucket_widths, ArrayType **bucket_functions)
 {
-	ListCell *lc1, *lc2, *lc3, *lc4;
+	ListCell *lc1, *lc2, *lc3;
 	unsigned i;
 
 	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
 	Datum *widthdatums = palloc(sizeof(Datum) * list_length(all_caggs->bucket_widths));
-	Datum *maxwidthdatums = palloc(sizeof(Datum) * list_length(all_caggs->max_bucket_widths));
 	Datum *bucketfunctions = palloc(sizeof(Datum) * list_length(all_caggs->bucket_functions));
 
 	i = 0;
-	forfour(lc1,
-			all_caggs->mat_hypertable_ids,
-			lc2,
-			all_caggs->bucket_widths,
-			lc3,
-			all_caggs->max_bucket_widths,
-			lc4,
-			all_caggs->bucket_functions)
+	forthree (lc1,
+			  all_caggs->mat_hypertable_ids,
+			  lc2,
+			  all_caggs->bucket_widths,
+			  lc3,
+			  all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
 		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
 
 		widthdatums[i] = PointerGetDatum(lfirst(lc2));
-		maxwidthdatums[i] = PointerGetDatum(lfirst(lc3));
 
-		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc4);
+		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc3);
 		bucketfunctions[i] = CStringGetTextDatum(bucket_function_serialize(bucket_function));
 
 		++i;
@@ -595,13 +578,6 @@ ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hyp
 									 8,
 									 FLOAT8PASSBYVAL,
 									 TYPALIGN_DOUBLE);
-
-	*max_bucket_widths = construct_array(maxwidthdatums,
-										 list_length(all_caggs->max_bucket_widths),
-										 INT8OID,
-										 8,
-										 FLOAT8PASSBYVAL,
-										 TYPALIGN_DOUBLE);
 
 	*bucket_functions = construct_array(bucketfunctions,
 										list_length(all_caggs->bucket_functions),
@@ -1505,21 +1481,6 @@ ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("bucket width is not defined for a variable bucket")));
-	}
-
-	return agg->data.bucket_width;
-}
-
-/* Determines maximum possible bucket width for given continuous aggregate. */
-int64
-ts_continuous_agg_max_bucket_width(const ContinuousAgg *agg)
-{
-	if (ts_continuous_agg_bucket_width_variable(agg))
-	{
-		/* should never happen, this code is useful mostly for debugging purposes */
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("maximum bucket width is not defined for a variable bucket")));
 	}
 
 	return agg->data.bucket_width;

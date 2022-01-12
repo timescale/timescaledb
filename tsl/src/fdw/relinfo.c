@@ -235,17 +235,11 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	}
 }
 
-typedef struct RelEstimates
+static void
+estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht, RelOptInfo *rel)
 {
-	double tuples;
-	BlockNumber pages;
-} RelEstimates;
-
-static RelEstimates *
-estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht, int result_width)
-{
-	RelEstimates *estimates = palloc(sizeof(RelEstimates));
 	int64 chunk_size_estimate = ts_chunk_calculate_initial_chunk_target_size();
+	const int result_width = rel->reltarget->width;
 
 	if (ht != NULL)
 	{
@@ -257,52 +251,31 @@ estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht
 		/* half-size seems to be the safest bet */
 		chunk_size_estimate /= 2;
 
-	estimates->tuples = chunk_size_estimate / (result_width + MAXALIGN(SizeofHeapTupleHeader));
-	estimates->pages = chunk_size_estimate / BLCKSZ;
-	return estimates;
+	rel->tuples = chunk_size_estimate / (result_width + MAXALIGN(SizeofHeapTupleHeader));
+	rel->pages = chunk_size_estimate / BLCKSZ;
 }
 
-static void
-set_rel_estimates(RelOptInfo *rel, RelEstimates *estimates)
-{
-	rel->tuples = estimates->tuples;
-	rel->pages = estimates->pages;
-}
-
-static void
-rel_estimates_apply_fillfactor(RelEstimates *estimates, double fillfactor)
-{
-	estimates->pages *= fillfactor;
-	estimates->tuples *= fillfactor;
-}
-
+/*
+ * Estimate the chunk size if we don't have ANALYZE statistics, and update the
+ * moving average of chunk sizes used for estimation.
+ */
 static void
 estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 {
-	/*
-	 * In any case, cache the chunk info for this chunk.
-	 */
-	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
-	Assert(!chunk_private->chunk);
-	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
-
-	/*
-	 * In some cases (e.g., UPDATE stmt) top_parent_relids is not set so
-	 * the best we can do is using shared buffers size without
-	 * partitioning information. Since updates are not something we
-	 * generaly optimize for, this should be fine.
-	 */
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
 	if (parent_relid < 0)
 	{
-		if (chunk_rel->pages == 0 && chunk_rel->tuples <= 0)
+		/*
+		 * In some cases (e.g., UPDATE stmt) top_parent_relids is not set so the
+		 * best we can do is using shared buffers size without partitioning
+		 * information. Since updates are not something we generaly optimize
+		 * for, this should be fine.
+		 */
+		if (chunk_rel->pages == 0)
 		{
-			RelEstimates *estimates =
-				estimate_tuples_and_pages_using_shared_buffers(root,
-															   NULL,
-															   chunk_rel->reltarget->width);
-			set_rel_estimates(chunk_rel, estimates);
+			/* Can't have nonzero tuples in zero pages */
+			Assert(chunk_rel->tuples <= 0);
+			estimate_tuples_and_pages_using_shared_buffers(root, NULL, chunk_rel);
 		}
 		return;
 	}
@@ -313,19 +286,20 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, parent_rte->relid, CACHE_FLAG_NONE);
 	Hyperspace *hyperspace = ht->space;
+	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 
-	const double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
-	const bool have_chunk_statistics = chunk_rel->pages != 0 || chunk_rel->tuples > 0;
+	const double fillfactor = estimate_chunk_fillfactor(chunk, hyperspace);
+
+	/* Can't have nonzero tuples in zero pages */
+	Assert(parent_private->average_chunk_pages != 0 || parent_private->average_chunk_tuples <= 0);
+	Assert(chunk_rel->pages != 0 || chunk_rel->tuples <= 0);
+
+	const bool have_chunk_statistics = chunk_rel->pages != 0;
 	const bool have_moving_average =
 		parent_private->average_chunk_pages != 0 || parent_private->average_chunk_tuples > 0;
 	if (!have_chunk_statistics)
 	{
-		/*
-		 * If the foreign table has never been ANALYZEd, it will have relpages
-		 * and reltuples equal to zero, which most likely has nothing to do
-		 * with reality. Starting with PG14 it will have reltuples < 0, meaning
-		 * "unknown". The best we can do is estimate number of tuples/pages.
-		 */
 		/*
 		 * If we don't have the statistics from ANALYZE for this chunk,
 		 * use the moving average of chunk sizes. If we don't have even
@@ -339,12 +313,9 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 		}
 		else
 		{
-			RelEstimates *estimates =
-				estimate_tuples_and_pages_using_shared_buffers(root,
-															   ht,
-															   chunk_rel->reltarget->width);
-			rel_estimates_apply_fillfactor(estimates, fillfactor);
-			set_rel_estimates(chunk_rel, estimates);
+			estimate_tuples_and_pages_using_shared_buffers(root, ht, chunk_rel);
+			chunk_rel->pages *= fillfactor;
+			chunk_rel->tuples *= fillfactor;
 		}
 	}
 
@@ -483,6 +454,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 
 	if (type == TS_FDW_RELINFO_FOREIGN_TABLE)
 	{
+		/*
+		 * For a chunk, estimate its size if we don't know it, and update the
+		 * moving average of chunk sizes used for this estimation.
+		 */
 		estimate_chunk_size(root, rel);
 	}
 

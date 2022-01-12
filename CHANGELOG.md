@@ -9,10 +9,17 @@ accidentally triggering the load of a previous DB version.**
 **Features**
 * #3768 Allow ALTER TABLE ADD COLUMN with DEFAULT on compressed hypertable
 * #3769 Allow ALTER TABLE DROP COLUMN on compressed hypertable
+* #3943 Optimize first/last
 
 **Bugfixes**
 * #3808 Properly handle `max_retries` option
 * #3918 Fix DataNodeScan plans with one-time filter
+* #3938 Fix subtract_integer_from_now on 32-bit platforms and improve error handling
+* #3939 Fix projection handling in time_bucket_gapfill
+
+**Thanks**
+* @erikhh for reporting an issue with time_bucket_gapfill
+* @fvannee for reporting a first/last memory leak
 
 ## 2.5.1 (2021-12-02)
 

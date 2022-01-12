@@ -194,6 +194,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
     -Wempty-body
     -Wvla
     -Wall
+    -Wundef
     -Wmissing-prototypes
     -Wpointer-arith
     -Werror=vla
