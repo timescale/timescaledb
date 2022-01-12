@@ -19,13 +19,16 @@
  * Continuous aggregate triggers are called explicitly on
  * compressed chunks after INSERTS as AFTER ROW insert triggers
  * do now work with the PG infrastructure.
+ * Note: the 2nd trigger arg is required for distributed hypertables.
  */
 typedef struct CompressChunkInsertState
 {
 	Relation compress_rel;					  /*compressed chunk */
 	ResultRelInfo *orig_result_relation_info; /*original chunk */
 	CompressSingleRowState *compress_state;
-	bool has_cagg_trigger; /* are there any continuous aggregate triggers */
+	int32 cagg_trig_args[2]; /* cagg trigger args are hypertable ids */
+	bool has_cagg_trigger;
+	int cagg_trig_nargs;
 } CompressChunkInsertState;
 
 typedef struct ChunkInsertState
@@ -76,5 +79,7 @@ typedef struct ChunkDispatch ChunkDispatch;
 
 extern ChunkInsertState *ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
+extern void ts_compress_chunk_invoke_cagg_trigger(CompressChunkInsertState *compress_info,
+												  Relation chunk_rel, HeapTuple tuple);
 
 #endif /* TIMESCALEDB_CHUNK_INSERT_STATE_H */

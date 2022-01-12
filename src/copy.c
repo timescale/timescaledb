@@ -397,23 +397,14 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 				 */
 				if (cis->compress_info->has_cagg_trigger)
 				{
-					Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
 					HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) myslot;
 					if (!hslot->tuple)
 						hslot->tuple = heap_form_tuple(myslot->tts_tupleDescriptor,
 													   myslot->tts_values,
 													   myslot->tts_isnull);
-
-					ts_cm_functions->continuous_agg_call_invalidation_trigger(
-						ht->fd.id,
-						cis->rel,
-						hslot->tuple,
-						NULL /* chunk_newtuple */,
-						false /* update */,
-						false /* is_distributed_hypertable
-							   */
-						,
-						/* parent_hypertable_id */ 0);
+					ts_compress_chunk_invoke_cagg_trigger(cis->compress_info,
+														  cis->rel,
+														  hslot->tuple);
 				}
 
 				table_tuple_insert(resultRelInfo->ri_RelationDesc,

@@ -173,14 +173,7 @@ chunk_dispatch_exec(CustomScanState *node)
 											   orig_slot->tts_values,
 											   orig_slot->tts_isnull);
 
-			ts_cm_functions
-				->continuous_agg_call_invalidation_trigger(ht->fd.id,
-														   cis->rel,
-														   hslot->tuple,
-														   NULL /* chunk_newtuple */,
-														   false /* update */,
-														   false /* is_distributed_hypertable */,
-														   /* parent_hypertable_id */ 0);
+			ts_compress_chunk_invoke_cagg_trigger(cis->compress_info, cis->rel, hslot->tuple);
 		}
 	}
 	return slot;
