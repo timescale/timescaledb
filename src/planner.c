@@ -747,14 +747,43 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 	if (set_pathlist_for_current_rel)
 	{
+		bool do_distributed;
+
+		Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
+		Assert(ht != NULL);
+
 		/* the hypertable will have been planned as if it was a regular table
 		 * with no data. Since such a plan would be cheaper than any real plan,
 		 * it would always be used, and we need to remove these plans before
 		 * adding ours.
+		 *
+		 * Also, if it's a distributed hypertable and per data node queries are
+		 * enabled then we will be throwing this below append path away. So only
+		 * build it otherwise
 		 */
+		do_distributed = !IS_DUMMY_REL(rel) && hypertable_is_distributed(ht) &&
+						 ts_guc_enable_per_data_node_queries;
+
 		rel->pathlist = NIL;
 		rel->partial_pathlist = NIL;
-		ts_set_append_rel_pathlist(root, rel, rti, rte);
+		/* allow a session parameter to override the use of this datanode only path */
+#ifdef TS_DEBUG
+		if (do_distributed)
+		{
+			const char *allow_dn_path =
+				GetConfigOption("timescaledb.debug_allow_datanode_only_path", true, false);
+			if (allow_dn_path && pg_strcasecmp(allow_dn_path, "on") != 0)
+			{
+				do_distributed = false;
+				elog(DEBUG2, "creating per chunk append paths");
+			}
+			else
+				elog(DEBUG2, "avoiding per chunk append paths");
+		}
+#endif
+
+		if (!do_distributed)
+			ts_set_append_rel_pathlist(root, rel, rti, rte);
 	}
 }
 
