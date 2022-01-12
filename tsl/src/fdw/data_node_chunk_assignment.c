@@ -91,11 +91,10 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 
 	/* If this is the first chunk we assign to this data node, increment the
 	 * number of data nodes with one or more chunks on them */
-	if (list_length(sca->chunk_oids) == 0)
+	if (list_length(sca->chunks) == 0)
 		scas->num_nodes_with_chunks++;
 
 	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
-	sca->chunk_oids = lappend_oid(sca->chunk_oids, rte->relid);
 	sca->chunks = lappend(sca->chunks, p->chunk);
 	sca->remote_chunk_ids =
 		lappend_int(sca->remote_chunk_ids,
@@ -259,7 +258,6 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 
 		/* Check each slice on the data node against the slices on other
 		 * data nodes */
-		Assert(list_length(sca->chunk_oids) == list_length(sca->chunks));
 		foreach (lc, sca->chunks)
 		{
 			Chunk *chunk = (Chunk *) lfirst(lc);

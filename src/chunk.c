@@ -2646,7 +2646,7 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
  * If chunk2.id > chunk1.id then chunk2 is created after chunk1
  */
 int
-ts_chunk_num_of_chunks_created_after(const Chunk *chunk, int limit)
+ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 {
 	ScanKeyData scankey[1];
 
@@ -2665,7 +2665,7 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk, int limit)
 							   NULL,
 							   NULL,
 							   NULL,
-							   limit,
+							   0,
 							   ForwardScanDirection,
 							   AccessShareLock,
 							   CurrentMemoryContext);

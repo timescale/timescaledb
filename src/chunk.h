@@ -154,7 +154,7 @@ extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
 							bool missing_ok);
 extern bool ts_chunk_exists_relid(Oid relid);
-extern TSDLLEXPORT int ts_chunk_num_of_chunks_created_after(const Chunk *chunk, int limit);
+extern TSDLLEXPORT int ts_chunk_num_of_chunks_created_after(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hyperspace *hs, int32 dimension_id);
 extern TSDLLEXPORT void ts_chunk_drop_fks(const Chunk *const chunk);

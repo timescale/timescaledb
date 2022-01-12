@@ -33,6 +33,7 @@
 #include "debug.h"
 #include "fdw_utils.h"
 #include "scan_exec.h"
+#include "chunk.h"
 
 /*
  * get_useful_pathkeys_for_relation
@@ -581,6 +582,17 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 	/* Remember remote_exprs for possible use by PlanDirectModify */
 	fpinfo->final_remote_exprs = remote_where;
 
+	/* Build the chunk oid list for use by EXPLAIN. */
+	List *chunk_oids = NIL;
+	if (fpinfo->sca)
+	{
+		foreach(lc, fpinfo->sca->chunks)
+		{
+			Chunk *chunk = (Chunk *) lfirst(lc);
+			chunk_oids = lappend_oid(chunk_oids, chunk->table_id);
+		}
+	}
+
 	/*
 	 * Build the fdw_private list that will be available to the executor.
 	 * Items in the list must match order in enum FdwScanPrivateIndex.
@@ -589,7 +601,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 							 retrieved_attrs,
 							 makeInteger(fpinfo->fetch_size),
 							 makeInteger(fpinfo->server->serverid),
-							 (fpinfo->sca != NULL ? list_copy(fpinfo->sca->chunk_oids) : NIL));
+							 chunk_oids);
 	Assert(!IS_JOIN_REL(rel));
 
 	if (IS_UPPER_REL(rel))
