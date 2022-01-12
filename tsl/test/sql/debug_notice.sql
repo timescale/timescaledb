@@ -51,6 +51,8 @@ ANALYZE hyper;
 SET client_min_messages TO DEBUG2;
 
 -- Turning on show_rel should show a message
+-- But disable the code which avoids dist chunk planning
+SET timescaledb.debug_allow_datanode_only_path = 'off';
 SET timescaledb.debug_optimizer_flags = 'show_rel';
 SHOW timescaledb.debug_optimizer_flags;
 
@@ -59,6 +61,10 @@ FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
+
+-- Enable session level datanode only path parameter which doesn't
+-- plan distributed chunk scans unnecessarily
+SET timescaledb.debug_allow_datanode_only_path = 'on';
 
 -- Turning off the show_rel (and turning on another flag) should not
 -- show a notice on the relations, but show the upper paths.

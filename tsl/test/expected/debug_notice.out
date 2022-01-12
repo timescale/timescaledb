@@ -63,6 +63,8 @@ ANALYZE hyper;
 -- Optimizer debug messages shown at debug level 2
 SET client_min_messages TO DEBUG2;
 -- Turning on show_rel should show a message
+-- But disable the code which avoids dist chunk planning
+SET timescaledb.debug_allow_datanode_only_path = 'off';
 SET timescaledb.debug_optimizer_flags = 'show_rel';
 SHOW timescaledb.debug_optimizer_flags;
  timescaledb.debug_optimizer_flags 
@@ -75,6 +77,7 @@ FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
+DEBUG:  creating per chunk append paths
 DEBUG:  RELOPTINFO [rel name: _timescaledb_internal._dist_hyper_1_8_chunk hyper, type: FOREIGN_TABLE, kind: OTHER_MEMBER_REL, base rel names: hyper] rows=1 width=20
 Path list:
 	ForeignScan [rel type: FOREIGN_TABLE, kind: OTHER_MEMBER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
@@ -172,6 +175,9 @@ Path list:
  Wed May 30 13:02:00 2018 PDT |      3 |    9
 (5 rows)
 
+-- Enable session level datanode only path parameter which doesn't
+-- plan distributed chunk scans unnecessarily
+SET timescaledb.debug_allow_datanode_only_path = 'on';
 -- Turning off the show_rel (and turning on another flag) should not
 -- show a notice on the relations, but show the upper paths.
 SET timescaledb.debug_optimizer_flags = 'show_upper=*';
@@ -186,6 +192,7 @@ FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
+DEBUG:  avoiding per chunk append paths
 DEBUG:  Upper rel stage GROUP_AGG:
 RELOPTINFO [rel name: Aggregate on (public.hyper), type: DATA_NODE, kind: OTHER_UPPER_REL, base rel names: hyper] rows=0 width=20
 Path list:
@@ -232,6 +239,7 @@ FROM hyper
 WHERE time BETWEEN '2018-04-19 00:01' AND '2018-06-01 00:00'
 GROUP BY 1, 2
 ORDER BY 1, 2;
+DEBUG:  avoiding per chunk append paths
              time             | device | temp 
 ------------------------------+--------+------
  Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6
