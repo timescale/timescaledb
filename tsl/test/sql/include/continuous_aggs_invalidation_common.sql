@@ -224,7 +224,7 @@ CALL refresh_continuous_aggregate('cond_20', 60, 100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
 SELECT * FROM cagg_invals;
-	  
+
 -- There should be no hypertable invalidations initially:
 SELECT * FROM hyper_invals;
 SELECT * FROM cagg_invals;
@@ -426,6 +426,14 @@ SELECT mat_hypertable_id AS cond_1_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_1' \gset
 
+-- Test manual invalidation error
+\if :IS_DISTRIBUTED
+\else
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.invalidation_cagg_log_add_entry(:cond_1_id, 1, 0);
+\set ON_ERROR_STOP 1
+\endif
+
 -- Test invalidations with bucket size 1
 INSERT INTO conditions VALUES (0, 1, 1.0);
 
@@ -553,6 +561,14 @@ WHERE user_view_name = 'thresh_2' \gset
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
+
+-- Test manual invalidation error
+\if :IS_DISTRIBUTED
+\else
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.invalidation_hyper_log_add_entry(:thresh_hyper_id, 1, 0);
+\set ON_ERROR_STOP 1
+\endif
 
 -- Test that threshold is initilized to min value when there's no data
 -- and we specify an infinite end. Note that the min value may differ
