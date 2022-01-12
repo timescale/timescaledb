@@ -717,6 +717,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
 		state->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
 		state->orig_result_relation_info = relinfo;
+		state->has_cagg_trigger = (ts_continuous_aggs_find_by_raw_table_id(htid) != NIL);
 	}
 	else
 	{

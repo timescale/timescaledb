@@ -585,7 +585,18 @@ INSERT INTO conditions VALUES('2010-01-01 12:00:00-08', 10, 20);
 CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
 SELECT * FROM cagg_conditions ORDER BY 1;
 
--- direct insert into interal compressed hypertable should be blocked
+-- TEST cagg triggers with copy into compressed chunk
+COPY conditions FROM STDIN DELIMITER ',';
+2010-01-01 11:16:00-05,100,100
+2010-01-01 11:17:00-05,100,100
+2010-01-01 11:18:00-05,100,100
+\.
+
+--refresh cagg, should have updated info
+CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
+SELECT * FROM cagg_conditions ORDER BY 1;
+
+-- TEST direct insert into internal compressed hypertable should be blocked
 CREATE TABLE direct_insert(time timestamptz not null);
 SELECT table_name FROM create_hypertable('direct_insert','time');
 ALTER TABLE direct_insert SET(timescaledb.compress);

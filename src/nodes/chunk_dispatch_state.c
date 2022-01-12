@@ -163,7 +163,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		 * the function that records invalidations directly as AFTER ROW
 		 * triggers do not work with compressed chunks.
 		 */
-		if (ts_continuous_aggs_find_by_raw_table_id(ht->fd.id))
+		if (cis->has_cagg_trigger)
 		{
 			Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
 			HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) orig_slot;

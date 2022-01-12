@@ -392,6 +392,30 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 			{
 				TupleTableSlot *compress_slot =
 					ts_cm_functions->compress_row_exec(cis->compress_state, myslot);
+				/* After Row triggers do not work with compressed chunks. So
+				 * explicitly call cagg trigger here
+				 */
+				if (cis->has_cagg_trigger)
+				{
+					Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
+					HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) myslot;
+					if (!hslot->tuple)
+						hslot->tuple = heap_form_tuple(myslot->tts_tupleDescriptor,
+													   myslot->tts_values,
+													   myslot->tts_isnull);
+
+					ts_cm_functions->continuous_agg_call_invalidation_trigger(
+						ht->fd.id,
+						cis->rel,
+						hslot->tuple,
+						NULL /* chunk_newtuple */,
+						false /* update */,
+						false /* is_distributed_hypertable
+							   */
+						,
+						/* parent_hypertable_id */ 0);
+				}
+
 				table_tuple_insert(resultRelInfo->ri_RelationDesc,
 								   compress_slot,
 								   mycid,
@@ -423,14 +447,13 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 																 false,
 																 NULL,
 																 NIL);
+				/* AFTER ROW INSERT Triggers */
+				ExecARInsertTriggers(estate,
+									 check_resultRelInfo,
+									 myslot,
+									 recheckIndexes,
+									 NULL /* transition capture */);
 			}
-
-			/* AFTER ROW INSERT Triggers */
-			ExecARInsertTriggers(estate,
-								 check_resultRelInfo,
-								 myslot,
-								 recheckIndexes,
-								 NULL /* transition capture */);
 
 			list_free(recheckIndexes);
 
