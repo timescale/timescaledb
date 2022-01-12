@@ -731,9 +731,57 @@ NOTICE:  [data_node_3]:
 
 DROP TABLE non_disttable1;
 DROP TABLE non_disttable2;
--- CREATE and DROP SCHEMA on each node
+-- CREATE SCHEMA tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 CREATE SCHEMA dist_schema AUTHORIZATION :ROLE_1;
+-- make sure schema has been created on each data node
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_1]:
+nspname    |usename    
+-----------+-----------
+dist_schema|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_2]:
+nspname    |usename    
+-----------+-----------
+dist_schema|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_3]:
+nspname    |usename    
+-----------+-----------
+dist_schema|test_role_1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
 CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
 SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
@@ -772,6 +820,7 @@ dist_schema|some_dist_table
  
 (1 row)
 
+-- DROP SCHEMA
 DROP SCHEMA dist_schema CASCADE;
 NOTICE:  drop cascades to table dist_schema.some_dist_table
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
@@ -801,13 +850,342 @@ schemaname|tablename
  
 (1 row)
 
+-- make sure schema has been dropped on each data node
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_1]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_2]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema'
+NOTICE:  [data_node_3]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- make sure empty schema schema has been created and then dropped on each data node
+CREATE SCHEMA dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_1]:
+nspname      |usename           
+-------------+------------------
+dist_schema_2|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_2]:
+nspname      |usename           
+-------------+------------------
+dist_schema_2|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_3]:
+nspname      |usename           
+-------------+------------------
+dist_schema_2|cluster_super_user
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP SCHEMA dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_1]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_2]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_3]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- transactional schema create/drop with local table
+BEGIN;
+CREATE SCHEMA dist_schema_3;
+CREATE TABLE dist_schema_3.some_dist_table(time timestamptz, device int);
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_1]:
+nspname      |usename           
+-------------+------------------
+dist_schema_3|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_2]:
+nspname      |usename           
+-------------+------------------
+dist_schema_3|cluster_super_user
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_3]:
+nspname      |usename           
+-------------+------------------
+dist_schema_3|cluster_super_user
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP SCHEMA dist_schema_3 CASCADE;
+NOTICE:  drop cascades to table dist_schema_3.some_dist_table
+ROLLBACK;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_1]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_2]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_3'
+NOTICE:  [data_node_3]:
+nspname|usename
+-------+-------
+(0 rows)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- ALTER SCHEMA RENAME TO
+CREATE SCHEMA dist_schema;
+CREATE TABLE dist_schema.some_dist_table(time timestamptz, device int, color int, temp float);
+SELECT * FROM create_hypertable('dist_schema.some_dist_table', 'time', replication_factor => 3);
+NOTICE:  adding not-null constraint to column "time"
+ hypertable_id | schema_name |   table_name    | created 
+---------------+-------------+-----------------+---------
+             4 | dist_schema | some_dist_table | t
+(1 row)
+
+ALTER SCHEMA dist_schema RENAME TO dist_schema_2;
+SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+NOTICE:  [data_node_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_1]:
+schemaname   |tablename      
+-------------+---------------
+dist_schema_2|some_dist_table
+(1 row)
+
+
+NOTICE:  [data_node_2]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_2]:
+schemaname   |tablename      
+-------------+---------------
+dist_schema_2|some_dist_table
+(1 row)
+
+
+NOTICE:  [data_node_3]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
+NOTICE:  [data_node_3]:
+schemaname   |tablename      
+-------------+---------------
+dist_schema_2|some_dist_table
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- ALTER SCHEMA OWNER TO
+ALTER SCHEMA dist_schema_2 OWNER TO :ROLE_1;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_1]:
+nspname      |usename    
+-------------+-----------
+dist_schema_2|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_2]:
+nspname      |usename    
+-------------+-----------
+dist_schema_2|test_role_1
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'dist_schema_2'
+NOTICE:  [data_node_3]:
+nspname      |usename    
+-------------+-----------
+dist_schema_2|test_role_1
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+DROP SCHEMA dist_schema_2 CASCADE;
+NOTICE:  drop cascades to table dist_schema_2.some_dist_table
 -- DROP column cascades to index drop
 CREATE TABLE some_dist_table(time timestamptz, device int, color int, temp float);
 SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-             4 | public      | some_dist_table | t
+             5 | public      | some_dist_table | t
 (1 row)
 
 CREATE INDEX some_dist_device_idx ON some_dist_table (device);
@@ -898,7 +1276,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-             6 | public      | some_dist_table | t
+             7 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -951,7 +1329,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-             7 | public      | some_dist_table | t
+             8 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1001,7 +1379,7 @@ SELECT * FROM create_distributed_hypertable('some_dist_table', 'time');
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-             8 | public      | some_dist_table | t
+             9 | public      | some_dist_table | t
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -1020,7 +1398,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-             9 | public      | some_dist_table | t
+            10 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1113,7 +1491,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            10 | public      | some_dist_table | t
+            11 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1199,7 +1577,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            11 | public      | some_dist_table | t
+            12 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1294,7 +1672,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            12 | public      | some_dist_table | t
+            13 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1386,7 +1764,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            13 | public      | some_dist_table | t
+            14 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1474,7 +1852,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            14 | public      | some_dist_table | t
+            15 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1563,7 +1941,7 @@ SELECT * FROM create_hypertable('some_dist_table', 'time', replication_factor =>
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
-            15 | public      | some_dist_table | t
+            16 | public      | some_dist_table | t
 (1 row)
 
 BEGIN;
@@ -1657,14 +2035,14 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            16 | public      | disttable  | t
+            17 | public      | disttable  | t
 (1 row)
 
 INSERT INTO disttable VALUES ('2017-01-01 06:01', 0, 1, 0.0);
 SELECT show_chunks('disttable');
                  show_chunks                  
 ----------------------------------------------
- _timescaledb_internal._dist_hyper_16_6_chunk
+ _timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 SELECT * FROM test.show_constraints('disttable');
@@ -1705,7 +2083,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_1]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._dist_hyper_16_6_chunk
+_timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 
@@ -1732,7 +2110,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_2]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._dist_hyper_16_6_chunk
+_timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 
@@ -1759,7 +2137,7 @@ SELECT show_chunks('disttable')
 NOTICE:  [data_node_3]:
 show_chunks                                 
 --------------------------------------------
-_timescaledb_internal._dist_hyper_16_6_chunk
+_timescaledb_internal._dist_hyper_17_6_chunk
 (1 row)
 
 
@@ -1816,7 +2194,7 @@ SELECT * FROM create_hypertable('disttable', 'time', replication_factor => 3);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            17 | public      | disttable  | t
+            18 | public      | disttable  | t
 (1 row)
 
 CREATE INDEX disttable_device_idx ON disttable (device);

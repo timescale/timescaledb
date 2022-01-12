@@ -368,19 +368,24 @@ dist_ddl_process_drop(const ProcessUtilityArgs *args)
 {
 	DropStmt *stmt = castNode(DropStmt, args->parsetree);
 
+	/* For DROP TABLE and DROP SCHEMA operations hypertable_list will be empty */
 	if (list_length(args->hypertable_list) == 0)
 	{
-		/*
-		 * CASCADE operations of DROP TABLE and DROP SCHEMA are handled in
-		 * sql_drop trigger.
-		 */
-
-		/* For DROP TABLE and DROP SCHEMA operations hypertable_list will be
-		 * empty. Wait for sql_drop events.
-		 */
-		if (stmt->removeType == OBJECT_TABLE || stmt->removeType == OBJECT_SCHEMA)
-			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
-
+		switch (stmt->removeType)
+		{
+			case OBJECT_TABLE:
+				/* Wait for further sql_drop events  */
+				dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
+				break;
+			case OBJECT_SCHEMA:
+				/* Forward DROP SCHEMA command to all data nodes, following
+				 * sql_drop events will be ignored */
+				dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+				dist_ddl_state_add_current_data_node_list();
+				break;
+			default:
+				break;
+		}
 		return;
 	}
 
@@ -418,12 +423,12 @@ dist_ddl_process_alter_object_schema(const ProcessUtilityArgs *args)
 {
 	AlterObjectSchemaStmt *stmt = castNode(AlterObjectSchemaStmt, args->parsetree);
 
-	/* ALTER object SET SCHEMA */
-	if (list_length(args->hypertable_list) != 1)
-		return;
-
 	if (stmt->objectType == OBJECT_TABLE)
 	{
+		/* ALTER object SET SCHEMA */
+		if (list_length(args->hypertable_list) != 1)
+			return;
+
 		/*
 		 * Hypertable oid is available in hypertable_list but
 		 * cannot be resolved here until standard utility hook will synchronize new
@@ -437,30 +442,54 @@ dist_ddl_process_alter_object_schema(const ProcessUtilityArgs *args)
 }
 
 static void
+dist_ddl_process_alter_owner_stmt(const ProcessUtilityArgs *args)
+{
+	AlterOwnerStmt *stmt = castNode(AlterOwnerStmt, args->parsetree);
+
+	if (stmt->objectType == OBJECT_SCHEMA)
+	{
+		/* ALTER SCHEMA OWNER TO */
+		dist_ddl_state_add_current_data_node_list();
+		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+	}
+}
+
+static void
 dist_ddl_process_rename(const ProcessUtilityArgs *args)
 {
 	RenameStmt *stmt = castNode(RenameStmt, args->parsetree);
 
-	if (list_length(args->hypertable_list) != 1)
-		return;
-
-	if (stmt->renameType == OBJECT_TABLE)
+	switch (stmt->renameType)
 	{
-		/*
-		 * Hypertable oid is available in hypertable_list but
-		 * cannot be resolved here until standard utility hook will synchronize new
-		 * relation name and schema.
-		 *
-		 * Save oid for dist_ddl_end execution.
-		 */
-		dist_ddl_state.relid = linitial_oid(args->hypertable_list);
-		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
-		return;
-	}
+		case OBJECT_SCHEMA:
 
-	/* Only handles other renamings here (e.g., triggers) */
-	if (dist_ddl_state_set_hypertable(args))
-		dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+			/* ALTER SCHEMA RENAME TO */
+			dist_ddl_state_add_current_data_node_list();
+			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+			break;
+
+		case OBJECT_TABLE:
+
+			/* ALTER TABLE RENAME TO */
+			if (list_length(args->hypertable_list) != 1)
+				break;
+			/*
+			 * Hypertable oid is available in hypertable_list but
+			 * cannot be resolved here until standard utility hook will synchronize new
+			 * relation name and schema.
+			 *
+			 * Save oid for dist_ddl_end execution.
+			 */
+			dist_ddl_state.relid = linitial_oid(args->hypertable_list);
+			dist_ddl_state_schedule(DIST_DDL_EXEC_ON_END, args);
+			break;
+
+		default:
+			/* Only handles other renamings here (e.g., triggers) */
+			if (dist_ddl_state_set_hypertable(args))
+				dist_ddl_state_schedule(DIST_DDL_EXEC_ON_START, args);
+			break;
+	}
 }
 
 static void
@@ -887,6 +916,7 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
+
 	switch (tag)
 	{
 		case T_CreateSchemaStmt:
@@ -903,6 +933,10 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 
 		case T_AlterObjectSchemaStmt:
 			dist_ddl_process_alter_object_schema(args);
+			break;
+
+		case T_AlterOwnerStmt:
+			dist_ddl_process_alter_owner_stmt(args);
 			break;
 
 		case T_RenameStmt:

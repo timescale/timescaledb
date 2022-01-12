@@ -299,8 +299,29 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 
 		if (isnull)
 		{
-			/* No data in hypertable, so return min (start of time) */
-			return ts_time_get_min(refresh_window->type);
+			/* No data in hypertable */
+			if (ts_continuous_agg_bucket_width_variable(cagg))
+			{
+				/*
+				 * To determine inscribed/circumscribed refresh window for variable-sized
+				 * buckets we should be able to calculate time_bucket(window.begin) and
+				 * time_bucket(window.end). This, however, is not possible in general case.
+				 * As an example, the minimum date is 4714-11-24 BC, which is before any
+				 * reasonable default `origin` value. Thus for variable-sized buckets
+				 * instead of minimum date we use -infinity since time_bucket(-infinity)
+				 * is well-defined as -infinity.
+				 *
+				 * For more details see refresh.c, particularly:
+				 * - compute_inscribed_bucketed_refresh_window_for_months()
+				 * - compute_circumscribed_bucketed_refresh_window_for_months()
+				 */
+				return ts_time_get_nobegin(refresh_window->type);
+			}
+			else
+			{
+				/* For fixed-sized buckets return min (start of time) */
+				return ts_time_get_min(refresh_window->type);
+			}
 		}
 		else
 		{

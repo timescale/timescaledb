@@ -513,6 +513,18 @@ data_node_bootstrap_extension(TSConnection *conn)
 								  " WITH SCHEMA %s VERSION %s CASCADE",
 								  schema_name_quoted,
 								  quote_literal_cstr(ts_extension_get_version()));
+#if PG15_GE
+		/*
+		 * Since PG15, by default, non-superuser accounts are not allowed to
+		 * create tables in public schema of databases they don't own. This
+		 * default can be changed manually. The following query ensures that the
+		 * permissions are going to be the same regardless of the used PostgreSQL
+		 * version.
+		 *
+		 * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commitdiff;h=b073c3cc
+		 */
+		remote_connection_cmdf_ok(conn, "GRANT CREATE ON SCHEMA public TO PUBLIC");
+#endif
 		return true;
 	}
 	else

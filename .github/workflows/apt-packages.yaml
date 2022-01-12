@@ -33,9 +33,8 @@ jobs:
     - name: Add repositories
       run: |
         apt-get update
-        apt-get install -y wget lsb-release gnupg apt-transport-https sudo
-        echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -c -s)-pgdg main" > /etc/apt/sources.list.d/pgdg.list
-        wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+        apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common
+        yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" > /etc/apt/sources.list.d/timescaledb.list
         wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
