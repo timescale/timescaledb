@@ -15,6 +15,19 @@
 #include "cache.h"
 #include "cross_module_fn.h"
 
+/* Info related to compressed chunk
+ * Continuous aggregate triggers are called explicitly on
+ * compressed chunks after INSERTS as AFTER ROW insert triggers
+ * do now work with the PG infrastructure.
+ */
+typedef struct CompressChunkInsertState
+{
+	Relation compress_rel;					  /*compressed chunk */
+	ResultRelInfo *orig_result_relation_info; /*original chunk */
+	CompressSingleRowState *compress_state;
+	bool has_cagg_trigger; /* are there any continuous aggregate triggers */
+} CompressChunkInsertState;
+
 typedef struct ChunkInsertState
 {
 	Relation rel;
@@ -56,10 +69,7 @@ typedef struct ChunkInsertState
 	Oid user_id;
 
 	/* for tracking compressed chunks */
-	Relation compress_rel;
-	ResultRelInfo *orig_result_relation_info;
-	CompressSingleRowState *compress_state;
-	bool has_cagg_trigger;
+	CompressChunkInsertState *compress_info;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
