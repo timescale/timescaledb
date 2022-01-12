@@ -59,6 +59,7 @@ typedef struct ChunkInsertState
 	Relation compress_rel;
 	ResultRelInfo *orig_result_relation_info;
 	CompressSingleRowState *compress_state;
+	bool has_cagg_trigger;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
