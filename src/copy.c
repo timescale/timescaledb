@@ -348,8 +348,8 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 		estate->es_result_relation_info = resultRelInfo;
 #endif
 
-		if (cis->compress_state != NULL)
-			check_resultRelInfo = cis->orig_result_relation_info;
+		if (cis->compress_info != NULL)
+			check_resultRelInfo = cis->compress_info->orig_result_relation_info;
 		else
 			check_resultRelInfo = resultRelInfo;
 
@@ -388,14 +388,14 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, void (*call
 				ExecConstraints(check_resultRelInfo, myslot, estate);
 			}
 
-			if (cis->compress_state)
+			if (cis->compress_info)
 			{
 				TupleTableSlot *compress_slot =
-					ts_cm_functions->compress_row_exec(cis->compress_state, myslot);
+					ts_cm_functions->compress_row_exec(cis->compress_info->compress_state, myslot);
 				/* After Row triggers do not work with compressed chunks. So
 				 * explicitly call cagg trigger here
 				 */
-				if (cis->has_cagg_trigger)
+				if (cis->compress_info->has_cagg_trigger)
 				{
 					Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
 					HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) myslot;

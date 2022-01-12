@@ -708,20 +708,22 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	if (has_compressed_chunk)
 	{
+		CompressChunkInsertState *compress_info = palloc0(sizeof(CompressChunkInsertState));
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
 		/* this is true as compressed chunks are not created on access node */
 		Assert(chunk->relkind != RELKIND_FOREIGN_TABLE);
 		Assert(compress_rel != NULL);
-		state->compress_rel = compress_rel;
+		compress_info->compress_rel = compress_rel;
 		Assert(ts_cm_functions->compress_row_init != NULL);
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
-		state->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
-		state->orig_result_relation_info = relinfo;
-		state->has_cagg_trigger = (ts_continuous_aggs_find_by_raw_table_id(htid) != NIL);
+		compress_info->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
+		compress_info->orig_result_relation_info = relinfo;
+		compress_info->has_cagg_trigger = (ts_continuous_aggs_find_by_raw_table_id(htid) != NIL);
+		state->compress_info = compress_info;
 	}
 	else
 	{
-		state->compress_state = NULL;
+		state->compress_info = NULL;
 	}
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
@@ -804,16 +806,16 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);
 
-	if (state->compress_rel)
+	if (state->compress_info)
 	{
-		ResultRelInfo *orig_chunk_rri = state->orig_result_relation_info;
+		ResultRelInfo *orig_chunk_rri = state->compress_info->orig_result_relation_info;
 		Oid chunk_relid = RelationGetRelid(orig_chunk_rri->ri_RelationDesc);
-		ts_cm_functions->compress_row_end(state->compress_state);
-		ts_cm_functions->compress_row_destroy(state->compress_state);
+		ts_cm_functions->compress_row_end(state->compress_info->compress_state);
+		ts_cm_functions->compress_row_destroy(state->compress_info->compress_state);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		if (!ts_chunk_is_unordered(chunk))
 			ts_chunk_set_unordered(chunk);
-		table_close(state->compress_rel, NoLock);
+		table_close(state->compress_info->compress_rel, NoLock);
 	}
 	else if (RelationGetForm(state->result_relation_info->ri_RelationDesc)->relkind ==
 			 RELKIND_FOREIGN_TABLE)
