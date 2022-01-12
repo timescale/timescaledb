@@ -2664,29 +2664,30 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 	Relation indexrel = index_open(ctx.index, ctx.lockmode);
 	IndexScanDesc index_scan = index_beginscan(tablerel, indexrel,
 		ctx.snapshot, /* nkeys = */ 0, /* norderbys = */ 0);
-	index_scan->xs_want_itup = false;
+	index_scan->xs_want_itup = true;
 	index_rescan(index_scan, /* keys = */ NULL, /* nkeys = */ 0,
 		/* orderbys = */ NULL, /* norderbys = */ 0);
 
-	TupleDesc tuple_desc = RelationGetDescr(tablerel);
-	TupleInfo tinfo = {
+	TupleDesc heap_tuple_desc = RelationGetDescr(tablerel);
+	TupleInfo heap_tinfo = {
 		.scanrel = tablerel,
 		.mctx = CurrentMemoryContext,
-		.slot = MakeSingleTupleTableSlot(tuple_desc,
+		.slot = MakeSingleTupleTableSlot(heap_tuple_desc,
 			table_slot_callbacks(tablerel)),
 	};
+	TupleDesc index_tuple_desc = RelationGetDescr(indexrel);
 
-	bool success = index_getnext_slot(index_scan, BackwardScanDirection, tinfo.slot);
+	bool success = index_getnext_slot(index_scan, BackwardScanDirection, heap_tinfo.slot);
 
 	int result1 = 0;
 	if (success)
 	{
-		HeapTuple heap_tuple = ExecFetchSlotHeapTuple(tinfo.slot,
+		HeapTuple heap_tuple = ExecFetchSlotHeapTuple(heap_tinfo.slot,
 			  /* materialize = */ true, /* *should_free = */ NULL);
 		bool nulls[Natts_chunk];
 		Datum values[Natts_chunk];
 
-		heap_deform_tuple(heap_tuple, tuple_desc, values, nulls);
+		heap_deform_tuple(heap_tuple, heap_tuple_desc, values, nulls);
 
 		const int max_chunk_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 		result1 = max_chunk_id - chunk->fd.id;
@@ -2698,7 +2699,7 @@ ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
 
 	index_endscan(index_scan);
 	UnregisterSnapshot(ctx.snapshot);
-	ExecDropSingleTupleTableSlot(tinfo.slot);
+	ExecDropSingleTupleTableSlot(heap_tinfo.slot);
 	table_close(tablerel, NoLock);
 	index_close(indexrel, NoLock);
 
