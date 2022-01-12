@@ -157,27 +157,31 @@ get_total_number_of_slices(Hyperspace *space)
 }
 
 /*
- * Fillfactor values are between 0 and 1. It's an indication of how much data is in the chunk.
+ * Estimate fill factor for the chunks that don't have ANALYZE statistics.
+ * Fill factor values are between 0 and 1. It's an indication of how much data is
+ * in the chunk, expressed as a fraction of its maximum size.
  *
- * Two major drivers for estimation is current time and number of chunks created after.
- *
- * Fill factor estimation assumes that data written is 'recent' in regards to time dimension (eg.
- * almost real-time). For the case when writing historical data, given estimates might be more off
- * as we assume that historical chunks have fill factor 1 unless the number of chunks created after
- * is smaller then total number of slices. Even for writing historical data we might not be totally
+ * Fill factor estimation assumes that data written is 'recent' in regards to
+ * time dimension (eg. almost real-time). For the case when writing historical
+ * data, given estimates might be more off as we assume that historical chunks
+ * have fill factor 1. Even for writing historical data we might not be totally
  * wrong since most probably data has monotonically increasing time.
  *
- * Estimation handles two possible hypertable configurations: 1. time dimension is of timestamp
- * type 2. time dimension is of integer type. If hypertable uses timestamp type to partition data
- * then there are three possible scenarios here: we are beyond chunk end time (historical chunk), we
- * are somewhere in between chunk time boundaries (current chunk) or chunk start time is in the
- * future (highly unlikely). For integer type we assume that all chunks execpt for current have
- * factor 1.
+ * Estimation handles two possible hypertable configurations:
+ * 1. time dimension is of timestamp type
+ * 2. time dimension is of integer type.
  *
- * To explain how number of chunks created after the chunk affects estimation
- * let's imagine that table is space partitioned with one dimension and having 3 partitions. If data
- * is equaliy distributed amount partitions then there will be 3 current chunks. If there are two
- * new chunks created after chunk X then chunk X is the current chunk.
+ * If hypertable uses timestamp type to partition data then there are three
+ * possible scenarios here: we are beyond chunk end time (historical chunk), we
+ * are somewhere in between chunk time boundaries (current chunk) or chunk start
+ * time is in the future (highly unlikely, also treated as current chunk).
+ *
+ * For integer type we assume that all chunks w/o ANALYZE stats are current.
+ *
+ * Earlier, this function used chunk ids to guess which chunks are created later,
+ * and treated such chunks as current. Unfortunately, the chunk ids are global
+ * for all hypertables, so this approach didn't really work if there was more
+ * than one hypertable.
  */
 static double
 estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
@@ -189,37 +193,54 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 	if (IS_TIMESTAMP_TYPE(time_dim_type))
 	{
 		TimestampTz now = GetSQLCurrentTimestamp(-1);
-		int64 now_internal_time;
-		double elapsed;
-		double interval;
-
 #ifdef TS_DEBUG
 		if (ts_current_timestamp_override_value >= 0)
 			now = ts_current_timestamp_override_value;
 #endif
-		now_internal_time = ts_time_value_to_internal(TimestampTzGetDatum(now), TIMESTAMPTZOID);
+		int64 now_internal_time = ts_time_value_to_internal(TimestampTzGetDatum(now), TIMESTAMPTZOID);
 
 		/* if we are beyond end range then chunk can possibly be totally filled */
 		if (time_slice->fd.range_end <= now_internal_time)
 		{
-			/* If there are less newly created chunks then the number of slices then this is current
-			 * chunk. This also works better when writing historical data */
+			/*
+			 * Current time is later than the end of the chunk time range, which
+			 * means it is a historical chunk.
+			 */
 			return FILL_FACTOR_HISTORICAL_CHUNK;
 		}
 
-		/* for chunks in future (highly unlikely) we assume same as for `current` chunk */
+		/*
+		 * The chunk time range starts later than current time, so we treat it
+		 * as a current chunk.
+		 */
 		if (time_slice->fd.range_start >= now_internal_time)
 			return FILL_FACTOR_CURRENT_CHUNK;
 
-		/* current time falls within chunk time constraints */
-		elapsed = (now_internal_time - time_slice->fd.range_start);
-		interval = (time_slice->fd.range_end - time_slice->fd.range_start);
+		/*
+		 * Current time falls within chunk time constraints. The fill factor is
+		 * interpolated linearly based on where the current time is inside the
+		 * range, from 'current chunk fill factor' at the start of the range, to
+		 * 'historical chunk fill factor' at the end of the range.
+		 */
+		double elapsed = (now_internal_time - time_slice->fd.range_start);
+		double interval = (time_slice->fd.range_end - time_slice->fd.range_start);
+		Assert(interval > 0);
+		Assert(elapsed <= interval);
 
-		Assert(interval != 0);
+		Assert(FILL_FACTOR_HISTORICAL_CHUNK >= FILL_FACTOR_CURRENT_CHUNK);
+		double fill_factor = FILL_FACTOR_CURRENT_CHUNK
+			+ (FILL_FACTOR_HISTORICAL_CHUNK - FILL_FACTOR_CURRENT_CHUNK)
+				* (elapsed / interval);
 
-		return elapsed / interval;
+		Assert(fill_factor >= 0.);
+		Assert(fill_factor <= 1.);
+		return fill_factor;
 	}
 
+	/*
+	 * This chunk doesn't have the ANALYZE data, so it's more likely to be a
+	 * recently created, current chunk, not an old historical chunk.
+	 */
 	return FILL_FACTOR_CURRENT_CHUNK;
 }
 
