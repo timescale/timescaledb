@@ -197,7 +197,8 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 		if (ts_current_timestamp_override_value >= 0)
 			now = ts_current_timestamp_override_value;
 #endif
-		int64 now_internal_time = ts_time_value_to_internal(TimestampTzGetDatum(now), TIMESTAMPTZOID);
+		int64 now_internal_time =
+			ts_time_value_to_internal(TimestampTzGetDatum(now), TIMESTAMPTZOID);
 
 		/* if we are beyond end range then chunk can possibly be totally filled */
 		if (time_slice->fd.range_end <= now_internal_time)
@@ -228,9 +229,9 @@ estimate_chunk_fillfactor(Chunk *chunk, Hyperspace *space)
 		Assert(elapsed <= interval);
 
 		Assert(FILL_FACTOR_HISTORICAL_CHUNK >= FILL_FACTOR_CURRENT_CHUNK);
-		double fill_factor = FILL_FACTOR_CURRENT_CHUNK
-			+ (FILL_FACTOR_HISTORICAL_CHUNK - FILL_FACTOR_CURRENT_CHUNK)
-				* (elapsed / interval);
+		double fill_factor =
+			FILL_FACTOR_CURRENT_CHUNK +
+			(FILL_FACTOR_HISTORICAL_CHUNK - FILL_FACTOR_CURRENT_CHUNK) * (elapsed / interval);
 
 		Assert(fill_factor >= 0.);
 		Assert(fill_factor <= 1.);
