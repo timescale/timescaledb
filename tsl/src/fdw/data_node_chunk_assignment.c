@@ -96,9 +96,26 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 
 	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
 	sca->chunks = lappend(sca->chunks, p->chunk);
-	sca->remote_chunk_ids =
-		lappend_int(sca->remote_chunk_ids,
-					get_remote_chunk_id_from_chunk(chunkrel->serverid, p->chunk));
+	int this_chunk_id = get_remote_chunk_id_from_chunk(chunkrel->serverid, p->chunk);
+	sca->remote_chunk_ids = lappend_int(sca->remote_chunk_ids, this_chunk_id);
+
+	Assert(this_chunk_id != InvalidOid);
+
+	int cached_chunk_id = InvalidOid;
+	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunkrel);
+	ListCell *lc;
+	foreach (lc, chunk_private->chunk->data_nodes)
+	{
+		ChunkDataNode *cdn = (ChunkDataNode *) lfirst(lc);
+		if (cdn->foreign_server_oid == chunkrel->serverid)
+		{
+			cached_chunk_id = cdn->fd.node_chunk_id;
+			break;
+		}
+	}
+	Assert(cached_chunk_id != InvalidOid);
+	Assert(cached_chunk_id == this_chunk_id);
+
 	// FIXME calculate remote chunk id from cached chunk data here.
 	sca->pages += chunkrel->pages;
 	sca->rows += chunkrel->rows;
