@@ -586,7 +586,7 @@ fdw_scan_info_init(ScanInfo *scaninfo, PlannerInfo *root, RelOptInfo *rel, Path 
 	List *chunk_oids = NIL;
 	if (fpinfo->sca)
 	{
-		foreach(lc, fpinfo->sca->chunks)
+		foreach (lc, fpinfo->sca->chunks)
 		{
 			Chunk *chunk = (Chunk *) lfirst(lc);
 			chunk_oids = lappend_oid(chunk_oids, chunk->table_id);
