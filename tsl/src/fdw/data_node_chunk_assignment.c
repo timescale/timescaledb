@@ -19,21 +19,6 @@
 #include "chunk_data_node.h"
 #include "relinfo.h"
 
-static int
-get_remote_chunk_id_from_chunk(Oid server_oid, Chunk *chunk)
-{
-	ForeignServer *fs = GetForeignServer(server_oid);
-	ChunkDataNode *cdn;
-
-	Assert(chunk != NULL);
-	cdn = ts_chunk_data_node_scan_by_chunk_id_and_node_name(chunk->fd.id,
-															fs->servername,
-															CurrentMemoryContext);
-	Assert(cdn != NULL);
-
-	return cdn->fd.node_chunk_id;
-}
-
 /*
  * Find an existing data node chunk assignment or initialize a new one.
  */
@@ -73,58 +58,47 @@ DataNodeChunkAssignment *
 data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptInfo *chunkrel)
 {
 	DataNodeChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
-	RangeTblEntry *rte = planner_rt_fetch(chunkrel->relid, scas->root);
-	TsFdwRelInfo *p = fdw_relinfo_get(chunkrel);
+	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunkrel);
 	MemoryContext old;
 
 	/* Should never assign the same chunk twice */
 	Assert(!bms_is_member(chunkrel->relid, sca->chunk_relids));
-
-	if (!p->chunk)
-	{
-		// FIXME figure out when this happens
-		Assert(false);
-		p->chunk = ts_chunk_get_by_relid(rte->relid, true /* fail_if_not_found */);
-	}
-
-	old = MemoryContextSwitchTo(scas->mctx);
 
 	/* If this is the first chunk we assign to this data node, increment the
 	 * number of data nodes with one or more chunks on them */
 	if (list_length(sca->chunks) == 0)
 		scas->num_nodes_with_chunks++;
 
-	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
-	sca->chunks = lappend(sca->chunks, p->chunk);
-	int this_chunk_id = get_remote_chunk_id_from_chunk(chunkrel->serverid, p->chunk);
-	sca->remote_chunk_ids = lappend_int(sca->remote_chunk_ids, this_chunk_id);
+	scas->total_num_chunks++;
 
-	Assert(this_chunk_id != InvalidOid);
-
-	int cached_chunk_id = InvalidOid;
-	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunkrel);
+	/*
+	 * Use the cached ChunkDataNode data to find the relid of the chunk on the
+	 * data node.
+	 */
+	int remote_chunk_relid = InvalidOid;
 	ListCell *lc;
 	foreach (lc, chunk_private->chunk->data_nodes)
 	{
 		ChunkDataNode *cdn = (ChunkDataNode *) lfirst(lc);
 		if (cdn->foreign_server_oid == chunkrel->serverid)
 		{
-			cached_chunk_id = cdn->fd.node_chunk_id;
+			remote_chunk_relid = cdn->fd.node_chunk_id;
 			break;
 		}
 	}
-	Assert(cached_chunk_id != InvalidOid);
-	Assert(cached_chunk_id == this_chunk_id);
-	(void) cached_chunk_id;
+	Assert(remote_chunk_relid != InvalidOid);
 
-	// FIXME calculate remote chunk id from cached chunk data here.
+	/*
+	 * Fill the data node chunk assignment struct.
+	 */
+	old = MemoryContextSwitchTo(scas->mctx);
+	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
+	sca->chunks = lappend(sca->chunks, chunk_private->chunk);
+	sca->remote_chunk_ids = lappend_int(sca->remote_chunk_ids, remote_chunk_relid);
 	sca->pages += chunkrel->pages;
 	sca->rows += chunkrel->rows;
 	sca->tuples += chunkrel->tuples;
-
 	MemoryContextSwitchTo(old);
-
-	scas->total_num_chunks++;
 
 	return sca;
 }
