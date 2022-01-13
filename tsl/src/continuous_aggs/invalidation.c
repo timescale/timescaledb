@@ -194,6 +194,9 @@ tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS)
 	int64 start_time = PG_GETARG_INT64(1);
 	int64 end_time = PG_GETARG_INT64(2);
 
+	if (end_time < start_time)
+		elog(ERROR, "cannot invalidate cagg, end time should be greater than start time");
+
 	invalidation_cagg_log_add_entry(mat_hypertable_id, start_time, end_time);
 
 	PG_RETURN_VOID();
@@ -213,6 +216,9 @@ tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS)
 	int32 raw_hypertable_id = PG_GETARG_INT32(0);
 	int64 start_time = PG_GETARG_INT64(1);
 	int64 end_time = PG_GETARG_INT64(2);
+
+	if (end_time < start_time)
+		elog(ERROR, "cannot invalidate hypertable, end time should be greater than start time");
 
 	invalidation_hyper_log_add_entry(raw_hypertable_id, start_time, end_time);
 
