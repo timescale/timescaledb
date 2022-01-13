@@ -99,6 +99,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	sca->remote_chunk_ids =
 		lappend_int(sca->remote_chunk_ids,
 					get_remote_chunk_id_from_chunk(chunkrel->serverid, p->chunk));
+	// FIXME calculate remote chunk id from cached chunk data here.
 	sca->pages += chunkrel->pages;
 	sca->rows += chunkrel->rows;
 	sca->tuples += chunkrel->tuples;
