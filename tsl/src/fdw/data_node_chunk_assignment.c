@@ -115,6 +115,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	}
 	Assert(cached_chunk_id != InvalidOid);
 	Assert(cached_chunk_id == this_chunk_id);
+	(void) cached_chunk_id;
 
 	// FIXME calculate remote chunk id from cached chunk data here.
 	sca->pages += chunkrel->pages;
