@@ -5,7 +5,7 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
 set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
     remote_create_chunk.spec.in dist_restore_point.spec.in
-    continuous_aggs_drop_chunks.spec.in)
+    cagg_drop_chunks.spec.in)
 
 # These tests are using markers for the isolation tests (to avoid race
 # conditions causing differing output), which were added after 12.7, 13.3, and
@@ -20,15 +20,15 @@ list(
   APPEND
   TEST_FILES
   compression_ddl.spec
-  continuous_aggs_insert.spec
-  continuous_aggs_multi.spec
-  continuous_aggs_concurrent_refresh.spec
-  continuous_aggs_concurrent_refresh_dist_ht.spec
+  cagg_insert.spec
+  cagg_multi.spec
+  cagg_concurrent_refresh.spec
+  cagg_concurrent_refresh_dist_ht.spec
   deadlock_drop_chunks_compress.spec)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
-  list(APPEND TEST_FILES continuous_aggs_multi_dist_ht.spec)
+  list(APPEND TEST_FILES cagg_multi_dist_ht.spec)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # need to generate MODULE name for the .spec files
