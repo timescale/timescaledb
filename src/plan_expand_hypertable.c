@@ -1260,8 +1260,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
 	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
-	Assert(chunks != NULL);
-	Assert(num_chunks != 0);
+	/* Can have zero chunks. */
+	Assert(chunks == NULL || num_chunks != 0);
 
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{

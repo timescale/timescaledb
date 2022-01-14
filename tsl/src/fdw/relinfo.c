@@ -286,7 +286,10 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	chunk_private->chunk = ts_get_private_reloptinfo(chunk_rel)->chunk;
 
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
-	if (parent_relid < 0)
+	// FIXME figure out for which updates the chunk is null.
+	// now it happens in a simplest case of
+	// update t set value = 1 where value = 2;
+	if (parent_relid < 0 || chunk_private->chunk == 0)
 	{
 		/*
 		 * In some cases (e.g., UPDATE stmt) top_parent_relids is not set so the
