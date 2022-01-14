@@ -1,6 +1,6 @@
 TimescaleDB (TM)
 
-Copyright (c) 2017-2021  Timescale, Inc. All Rights Reserved.
+Copyright (c) 2017-2022  Timescale, Inc. All Rights Reserved.
 Copyright (c) 2016-2017  440 Labs, Inc. dba Timescale. All Rights Reserved.
 
 Source code in this repository is variously licensed under the Apache License
@@ -32,7 +32,7 @@ The PostgreSQL License
 PostgreSQL Database Management System
 (formerly known as Postgres, then as Postgres95)
 
-Portions Copyright (c) 1996-2018, The PostgreSQL Global Development Group
+Portions Copyright (c) 1996-2022, The PostgreSQL Global Development Group
 Portions Copyright (c) 1994, The Regents of the University of California
 
 Permission to use, copy, modify, and distribute this software and its

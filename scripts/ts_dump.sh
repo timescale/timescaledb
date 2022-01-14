@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
-#
-# This file is licensed under the Apache License, see LICENSE-APACHE
-# at the top level directory of the timescaledb distribution.
+#  This file and its contents are licensed under the Apache License 2.0.
+#  Please see the included NOTICE for copyright information and
+#  LICENSE-APACHE for a copy of the license.
 
 # This script is used for backing up a single hypertable into an easy-to-restore
 # tarball. The tarball contains two files: (1) a .sql file for recreating the

@@ -1,7 +1,8 @@
-# Copyright (c) 2016-2018  Timescale, Inc. All Rights Reserved.
-#
-# This file is licensed under the Apache License, see LICENSE-APACHE
-# at the top level directory of the timescaledb distribution.
+#!/usr/bin/env python
+
+#  This file and its contents are licensed under the Apache License 2.0.
+#  Please see the included NOTICE for copyright information and
+#  LICENSE-APACHE for a copy of the license.
 
 # Python script to check if there are memory spikes when running
 # out of order random inserts to TimescaleDB database
