@@ -40,6 +40,7 @@ step "Setup2"
 
 # need to do multiple transactions in teardown
 session "TearDownMultiTransaction"
+setup { SET client_min_messages TO WARNING; }
 step "TearD1"
 {
     DROP FUNCTION lock_mattable(TEXT, TEXT);

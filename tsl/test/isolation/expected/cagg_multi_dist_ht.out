@@ -45,13 +45,6 @@ step Refresh1: <... completed>
 step TearD1: 
     DROP FUNCTION lock_mattable(TEXT, TEXT);
 
-TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to view _timescaledb_internal._partial_view_110
-drop cascades to view _timescaledb_internal._direct_view_110
-drop cascades to view _timescaledb_internal._partial_view_111
-drop cascades to view _timescaledb_internal._direct_view_111
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_110_241_chunk
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_111_240_chunk
 step TearD2: 
     DROP TABLE ts_continuous_test CASCADE;
 
@@ -116,13 +109,6 @@ bkt|maxl
 step TearD1: 
     DROP FUNCTION lock_mattable(TEXT, TEXT);
 
-TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to view _timescaledb_internal._partial_view_113
-drop cascades to view _timescaledb_internal._direct_view_113
-drop cascades to view _timescaledb_internal._partial_view_114
-drop cascades to view _timescaledb_internal._direct_view_114
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_113_245_chunk
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_114_246_chunk
 step TearD2: 
     DROP TABLE ts_continuous_test CASCADE;
 
@@ -201,13 +187,6 @@ bkt|maxl
 step TearD1: 
     DROP FUNCTION lock_mattable(TEXT, TEXT);
 
-TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to view _timescaledb_internal._partial_view_116
-drop cascades to view _timescaledb_internal._direct_view_116
-drop cascades to view _timescaledb_internal._partial_view_117
-drop cascades to view _timescaledb_internal._direct_view_117
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_116_250_chunk
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_117_251_chunk
 step TearD2: 
     DROP TABLE ts_continuous_test CASCADE;
 
@@ -281,13 +260,6 @@ bkt|maxl
 step TearD1: 
     DROP FUNCTION lock_mattable(TEXT, TEXT);
 
-TearDownMultiTransaction: NOTICE:  drop cascades to 4 other objects
-DETAIL:  drop cascades to view _timescaledb_internal._partial_view_119
-drop cascades to view _timescaledb_internal._direct_view_119
-drop cascades to view _timescaledb_internal._partial_view_120
-drop cascades to view _timescaledb_internal._direct_view_120
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_119_256_chunk
-TearDownMultiTransaction: NOTICE:  drop cascades to table _timescaledb_internal._hyper_120_257_chunk
 step TearD2: 
     DROP TABLE ts_continuous_test CASCADE;
 
