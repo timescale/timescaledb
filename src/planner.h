@@ -14,6 +14,7 @@
 #include "export.h"
 #include "guc.h"
 
+typedef struct Chunk Chunk;
 typedef struct TsFdwRelationInfo TsFdwRelationInfo;
 typedef struct TimescaleDBPrivate
 {
@@ -25,6 +26,7 @@ typedef struct TimescaleDBPrivate
 	List *chunk_oids;
 	List *serverids;
 	Relids server_relids;
+	Chunk *chunk;
 	TsFdwRelationInfo *fdw_relation_info;
 } TimescaleDBPrivate;
 

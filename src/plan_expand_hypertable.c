@@ -1190,6 +1190,12 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 		propagate_join_quals(root, rel, &ctx);
 }
 
+static int
+chunk_cmp_chunk_id(const void *c1, const void *c2)
+{
+	return (*(Chunk **) c1)->fd.id - (*(Chunk **) c2)->fd.id;
+}
+
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
@@ -1243,6 +1249,13 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
 	Assert(chunks != NULL);
 	Assert(num_chunks != 0);
+
+	/*
+	 * Sort the chunks by id ascending to roughly match the order provided by
+	 * find_inheritance_children. This is mostly needed to avoid test reference
+	 * changes.
+	 */
+	qsort(chunks, num_chunks, sizeof(Chunk *), chunk_cmp_chunk_id);
 
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
@@ -1385,6 +1398,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		/* if we're performing partitionwise aggregation, we must populate part_rels */
 		if (rel->part_rels != NULL)
 			rel->part_rels[i] = child_rel;
+
+		ts_get_private_reloptinfo(child_rel)->chunk = chunks[i];
+		Assert(chunks[i]->table_id == root->simple_rte_array[child_rtindex]->relid);
 	}
 }
 
