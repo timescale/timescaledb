@@ -28,18 +28,18 @@
 #include "chunk.h"
 #include "compat/compat.h"
 #include "cross_module_fn.h"
-#include "guc.h"
 #include "extension.h"
 #include "extension_constants.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
+#include "import/planner.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "partitioning.h"
 #include "plan_expand_hypertable.h"
 #include "plan_partialize.h"
 #include "planner.h"
 #include "time_utils.h"
-#include "nodes/chunk_append/chunk_append.h"
-#include "import/planner.h"
 
 typedef struct CollectQualCtx
 {
@@ -846,23 +846,17 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	return expression_tree_walker(node, collect_quals_walker, ctx);
 }
 
-static List *
-find_children_oids(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode)
+static Chunk **
+find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode,
+					 unsigned int *num_chunks)
 {
-	/*
-	 * Using the HRI only makes sense if we are not using all the chunks,
-	 * otherwise using the cached inheritance hierarchy is faster.
-	 */
-	if (!ts_hypertable_restrict_info_has_restrictions(hri))
-		return find_inheritance_children(ht->main_table_relid, lockmode);
-
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there
 	 * are restrictions the parent table cannot fulfill them and since we do
 	 * have a trigger blocking inserts on the parent table it cannot contain
 	 * any rows.
 	 */
-	return ts_hypertable_restrict_info_get_chunk_oids(hri, ht, lockmode);
+	return ts_hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
 }
 
 static bool
@@ -890,10 +884,10 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
  *  Similar to the regular get_chunk_oids, we also populate the fdw_private
  *  structure appropriately if ordering info is present.
  */
-static List *
-get_explicit_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
+static Chunk **
+get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+					unsigned int *num_chunks)
 {
-	List *chunk_oids = NIL;
 	Const *chunks_arg;
 	ArrayIterator chunk_id_iterator;
 	ArrayType *chunk_id_arr;
@@ -903,7 +897,7 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel,
 	bool reverse;
 	int order_attno;
 	Chunk **chunks = NULL;
-	unsigned int num_chunks = 0;
+	*num_chunks = 0;
 
 	Assert(ctx->chunk_exclusion_func->args->length == 2);
 	expr = lsecond(ctx->chunk_exclusion_func->args);
@@ -944,9 +938,7 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel,
 								chunk_id,
 								NameStr(ht->fd.table_name))));
 
-			chunk_oids = lappend_int(chunk_oids, chunk->table_id);
-
-			chunks[num_chunks++] = chunk;
+			chunks[(*num_chunks)++] = chunk;
 		}
 		else
 			elog(ERROR, "chunk id can't be NULL");
@@ -976,16 +968,16 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel,
 			nested_oids = &priv->nested_oids;
 
 		/* we don't need "hri" here since we already have the chunks */
-		return ts_hypertable_restrict_info_get_chunk_oids_ordered(NULL,
-																  ht,
-																  chunks,
-																  num_chunks,
-																  AccessShareLock,
-																  nested_oids,
-																  reverse);
+		return ts_hypertable_restrict_info_get_chunks_ordered(NULL,
+															  ht,
+															  chunks,
+															  AccessShareLock,
+															  reverse,
+															  nested_oids,
+															  num_chunks);
 	}
 
-	return chunk_oids;
+	return chunks;
 }
 
 /**
@@ -998,8 +990,9 @@ get_explicit_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel,
  * If the hypertable uses space partitioning the nested oids are stored in nested_oids
  * on rel->fdw_private when appends are ordered.
  */
-static List *
-get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
+static Chunk **
+get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+		   unsigned int *num_chunks)
 {
 	bool reverse;
 	int order_attno;
@@ -1037,18 +1030,18 @@ get_chunk_oids(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertab
 			if (ht->space->num_dimensions > 1)
 				nested_oids = &priv->nested_oids;
 
-			return ts_hypertable_restrict_info_get_chunk_oids_ordered(hri,
-																	  ht,
-																	  NULL,
-																	  0,
-																	  AccessShareLock,
-																	  nested_oids,
-																	  reverse);
+			return ts_hypertable_restrict_info_get_chunks_ordered(hri,
+																  ht,
+																  NULL,
+																  AccessShareLock,
+																  reverse,
+																  nested_oids,
+																  num_chunks);
 		}
-		return find_children_oids(hri, ht, AccessShareLock);
+		return find_children_chunks(hri, ht, AccessShareLock, num_chunks);
 	}
 	else
-		return get_explicit_chunk_oids(ctx, root, rel, ht);
+		return get_explicit_chunks(ctx, root, rel, ht, num_chunks);
 }
 
 /*
@@ -1198,14 +1191,14 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /* Inspired by expand_inherited_rtentry but expands
- * a hypertable chunks into an append relationship */
+ * a hypertable chunks into an append relation. */
 void
 ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
 {
 	TimescaleDBPrivate *priv = rel->fdw_private;
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
-	List *inh_oids;
+	List *inh_oids = NULL;
 	ListCell *l;
 	Relation oldrelation;
 	Query *parse = root->parse;
@@ -1245,7 +1238,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	if (ctx.propagate_conditions != NIL)
 		propagate_join_quals(root, rel, &ctx);
 
-	inh_oids = get_chunk_oids(&ctx, root, rel, ht);
+	Chunk **chunks = NULL;
+	unsigned int num_chunks = 0;
+	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
+	Assert(chunks != NULL);
+	Assert(num_chunks != 0);
+
+	for (unsigned int i = 0; i < num_chunks; i++)
+	{
+		inh_oids = lappend_oid(inh_oids, chunks[i]->table_id);
+	}
 
 	/* nothing to do here if we have no chunks and no data nodes */
 	if (list_length(inh_oids) + list_length(ht->data_nodes) == 0)
@@ -1314,6 +1316,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		if (first_chunk_index == 0)
 			first_chunk_index = child_rtindex;
 		root->simple_rte_array[child_rtindex] = childrte;
+		Assert(root->simple_rel_array[child_rtindex] == NULL);
 
 		appinfo = makeNode(AppendRelInfo);
 		appinfo->parent_relid = rti;

@@ -383,7 +383,9 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * We use TsFdwRelInfo to pass various information to subsequent
 	 * functions.
 	 */
-	fpinfo = fdw_relinfo_alloc(rel, type);
+	// fpinfo = fdw_relinfo_alloc(rel, type);
+	fpinfo = fdw_relinfo_get(rel);
+	fpinfo->type = type;
 
 	/*
 	 * Set the name of relation in fpinfo, while we are constructing it here.
