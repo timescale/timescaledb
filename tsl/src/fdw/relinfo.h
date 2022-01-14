@@ -132,14 +132,17 @@ typedef struct TsFdwRelInfo
 #endif
 
 	/*
-	 * Moving averages of chunk size. We use them to compute the size for remote
-	 * chunks that don't have local statistics, e.g. because ANALYZE haven't
-	 * been run. Note that these values are adjusted for fill factor, i.e. they
-	 * correspond to a fill factor of 1.0. The fill factor for a particular
-	 * chunk is estimated separately.
+	 * Moving averages of chunk size, valid for the hypertable relinfo.
+	 * We use them to compute the size for remote chunks that don't have local
+	 * statistics, e.g. because ANALYZE haven't been run. Note that these values
+	 * are adjusted for fill factor, i.e. they correspond to a fill factor of
+	 * 1.0. The fill factor for a particular chunk is estimated separately.
 	 */
 	double average_chunk_pages;
 	double average_chunk_tuples;
+
+	/* Cached chunk data for the chunk relinfo. */
+	struct Chunk *chunk;
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,

@@ -275,6 +275,20 @@ estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht
 static void
 estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 {
+	/*
+	 * In any case, cache the chunk info for this chunk.
+	 *
+	 * Ideally, we would look up the chunks in a centralized manner in
+	 * ts_plan_expand_hypertable(), but that code path is not used by UPDATES
+	 * which use expand_inherited_rtentry() instead. For now, do this lookup
+	 * here where we need the chunk, to avoid complicating things. After we have
+	 * chunk exclusion for UPDATEs, we can revisit this.
+	 */
+	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
+	Assert(!chunk_private->chunk);
+	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
+
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
 	if (parent_relid < 0)
 	{
@@ -299,10 +313,8 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, parent_rte->relid, CACHE_FLAG_NONE);
 	Hyperspace *hyperspace = ht->space;
-	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 
-	const double fillfactor = estimate_chunk_fillfactor(chunk, hyperspace);
+	const double fillfactor = estimate_chunk_fillfactor(chunk_private->chunk, hyperspace);
 
 	/* Can't have nonzero tuples in zero pages */
 	Assert(parent_private->average_chunk_pages != 0 || parent_private->average_chunk_tuples <= 0);
