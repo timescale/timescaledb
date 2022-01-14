@@ -846,6 +846,12 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 	return expression_tree_walker(node, collect_quals_walker, ctx);
 }
 
+static int
+chunk_cmp_chunk_id(const void *c1, const void *c2)
+{
+	return (*(Chunk **) c1)->fd.id - (*(Chunk **) c2)->fd.id;
+}
+
 static Chunk **
 find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode,
 					 unsigned int *num_chunks)
@@ -856,7 +862,19 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockm
 	 * have a trigger blocking inserts on the parent table it cannot contain
 	 * any rows.
 	 */
-	return ts_hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
+	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
+
+	if (!ts_hypertable_restrict_info_has_restrictions(hri))
+	{
+		/*
+		 * If we're using all the chunks, sort them by id ascending to roughly
+		 * match the order provided by find_inheritance_children. This is mostly
+		 * needed to avoid test reference changes.
+		 */
+		qsort(chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_chunk_id);
+	}
+
+	return chunks;
 }
 
 static bool
@@ -977,6 +995,9 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 															  num_chunks);
 	}
 
+
+	mybt();
+
 	return chunks;
 }
 
@@ -997,51 +1018,52 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	bool reverse;
 	int order_attno;
 
-	if (ctx->chunk_exclusion_func == NULL)
+	if (ctx->chunk_exclusion_func != NULL)
 	{
-		HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
-
-		/*
-		 * This is where the magic happens: use our HypertableRestrictInfo
-		 * infrastructure to deduce the appropriate chunks using our range
-		 * exclusion
-		 */
-		ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
-
-		/*
-		 * If fdw_private has not been setup by caller there is no point checking
-		 * for ordered append as we can't pass the required metadata in fdw_private
-		 * to signal that this is safe to transform in ordered append plan in
-		 * set_rel_pathlist.
-		 */
-		if (rel->fdw_private != NULL &&
-			should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
-		{
-			TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
-			List **nested_oids = NULL;
-
-			priv->appends_ordered = true;
-			priv->order_attno = order_attno;
-
-			/*
-			 * for space partitioning we need extra information about the
-			 * time slices of the chunks
-			 */
-			if (ht->space->num_dimensions > 1)
-				nested_oids = &priv->nested_oids;
-
-			return ts_hypertable_restrict_info_get_chunks_ordered(hri,
-																  ht,
-																  NULL,
-																  AccessShareLock,
-																  reverse,
-																  nested_oids,
-																  num_chunks);
-		}
-		return find_children_chunks(hri, ht, AccessShareLock, num_chunks);
-	}
-	else
 		return get_explicit_chunks(ctx, root, rel, ht, num_chunks);
+	}
+
+	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
+
+	/*
+	 * This is where the magic happens: use our HypertableRestrictInfo
+	 * infrastructure to deduce the appropriate chunks using our range
+	 * exclusion
+	 */
+	ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
+
+	/*
+	 * If fdw_private has not been setup by caller there is no point checking
+	 * for ordered append as we can't pass the required metadata in fdw_private
+	 * to signal that this is safe to transform in ordered append plan in
+	 * set_rel_pathlist.
+	 */
+	if (rel->fdw_private != NULL &&
+		should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
+	{
+		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
+		List **nested_oids = NULL;
+
+		priv->appends_ordered = true;
+		priv->order_attno = order_attno;
+
+		/*
+		 * for space partitioning we need extra information about the
+		 * time slices of the chunks
+		 */
+		if (ht->space->num_dimensions > 1)
+			nested_oids = &priv->nested_oids;
+
+		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
+															  ht,
+															  NULL,
+															  AccessShareLock,
+															  reverse,
+															  nested_oids,
+															  num_chunks);
+	}
+
+	return find_children_chunks(hri, ht, AccessShareLock, num_chunks);
 }
 
 /*
@@ -1190,12 +1212,6 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 		propagate_join_quals(root, rel, &ctx);
 }
 
-static int
-chunk_cmp_chunk_id(const void *c1, const void *c2)
-{
-	return (*(Chunk **) c1)->fd.id - (*(Chunk **) c2)->fd.id;
-}
-
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
@@ -1249,13 +1265,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	chunks = get_chunks(&ctx, root, rel, ht, &num_chunks);
 	Assert(chunks != NULL);
 	Assert(num_chunks != 0);
-
-	/*
-	 * Sort the chunks by id ascending to roughly match the order provided by
-	 * find_inheritance_children. This is mostly needed to avoid test reference
-	 * changes.
-	 */
-	qsort(chunks, num_chunks, sizeof(Chunk *), chunk_cmp_chunk_id);
 
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{

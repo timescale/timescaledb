@@ -279,10 +279,11 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
 	Assert(!chunk_private->chunk);
-	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
-
-	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk != NULL);
-	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk->fd.id == chunk_private->chunk->fd.id);
+//	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
+//
+//	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk != NULL);
+//	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk->fd.id == chunk_private->chunk->fd.id);
+	chunk_private->chunk = ts_get_private_reloptinfo(chunk_rel)->chunk;
 
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
 	if (parent_relid < 0)
