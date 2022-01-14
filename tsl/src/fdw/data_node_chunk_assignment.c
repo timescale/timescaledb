@@ -17,22 +17,7 @@
 #include "hypercube.h"
 #include "chunk.h"
 #include "ts_catalog/chunk_data_node.h"
-
-static int
-get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)
-{
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	ForeignServer *fs = GetForeignServer(server_oid);
-	ChunkDataNode *cdn;
-
-	Assert(chunk != NULL);
-	cdn = ts_chunk_data_node_scan_by_chunk_id_and_node_name(chunk->fd.id,
-															fs->servername,
-															CurrentMemoryContext);
-	Assert(cdn != NULL);
-
-	return cdn->fd.node_chunk_id;
-}
+#include "relinfo.h"
 
 /*
  * Find an existing data node chunk assignment or initialize a new one.
@@ -58,10 +43,8 @@ get_or_create_sca(DataNodeChunkAssignments *scas, Oid serverid, RelOptInfo *rel)
 }
 
 static const DimensionSlice *
-get_slice_for_dimension(Oid chunk_relid, int32 dimension_id)
+get_slice_for_dimension(Chunk *chunk, int32 dimension_id)
 {
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-
 	return ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
 }
 
@@ -75,31 +58,47 @@ DataNodeChunkAssignment *
 data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptInfo *chunkrel)
 {
 	DataNodeChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
-	RangeTblEntry *rte = planner_rt_fetch(chunkrel->relid, scas->root);
+	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunkrel);
 	MemoryContext old;
 
 	/* Should never assign the same chunk twice */
 	Assert(!bms_is_member(chunkrel->relid, sca->chunk_relids));
 
-	old = MemoryContextSwitchTo(scas->mctx);
-
 	/* If this is the first chunk we assign to this data node, increment the
 	 * number of data nodes with one or more chunks on them */
-	if (list_length(sca->chunk_oids) == 0)
+	if (list_length(sca->chunks) == 0)
 		scas->num_nodes_with_chunks++;
 
+	scas->total_num_chunks++;
+
+	/*
+	 * Use the cached ChunkDataNode data to find the relid of the chunk on the
+	 * data node.
+	 */
+	Oid remote_chunk_relid = InvalidOid;
+	ListCell *lc;
+	foreach (lc, chunk_private->chunk->data_nodes)
+	{
+		ChunkDataNode *cdn = (ChunkDataNode *) lfirst(lc);
+		if (cdn->foreign_server_oid == chunkrel->serverid)
+		{
+			remote_chunk_relid = cdn->fd.node_chunk_id;
+			break;
+		}
+	}
+	Assert(remote_chunk_relid != InvalidOid);
+
+	/*
+	 * Fill the data node chunk assignment struct.
+	 */
+	old = MemoryContextSwitchTo(scas->mctx);
 	sca->chunk_relids = bms_add_member(sca->chunk_relids, chunkrel->relid);
-	sca->chunk_oids = lappend_oid(sca->chunk_oids, rte->relid);
-	sca->remote_chunk_ids =
-		lappend_int(sca->remote_chunk_ids,
-					get_remote_chunk_id_from_relid(chunkrel->serverid, rte->relid));
+	sca->chunks = lappend(sca->chunks, chunk_private->chunk);
+	sca->remote_chunk_ids = lappend_int(sca->remote_chunk_ids, remote_chunk_relid);
 	sca->pages += chunkrel->pages;
 	sca->rows += chunkrel->rows;
 	sca->tuples += chunkrel->tuples;
-
 	MemoryContextSwitchTo(old);
-
-	scas->total_num_chunks++;
 
 	return sca;
 }
@@ -252,14 +251,14 @@ data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 
 		/* Check each slice on the data node against the slices on other
 		 * data nodes */
-		foreach (lc, sca->chunk_oids)
+		foreach (lc, sca->chunks)
 		{
-			Oid chunk_oid = lfirst_oid(lc);
+			Chunk *chunk = (Chunk *) lfirst(lc);
 			const DimensionSlice *slice;
 			DataNodeSlice *ss;
 			bool found;
 
-			slice = get_slice_for_dimension(chunk_oid, partitioning_dimension_id);
+			slice = get_slice_for_dimension(chunk, partitioning_dimension_id);
 
 			Assert(NULL != slice);
 

@@ -29,7 +29,7 @@ typedef struct DataNodeChunkAssignment
 	Cost startup_cost;
 	Cost total_cost;
 	Relids chunk_relids;
-	List *chunk_oids;
+	List *chunks;
 	List *remote_chunk_ids;
 } DataNodeChunkAssignment;
 

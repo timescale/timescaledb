@@ -193,6 +193,7 @@ ts_chunk_data_node_scan_by_node_internal(const char *node_name, tuple_found_func
 											   mctx);
 }
 
+/* Returns a List of ChunkDataNode structs. */
 List *
 ts_chunk_data_node_scan_by_chunk_id(int32 chunk_id, MemoryContext mctx)
 {
