@@ -995,9 +995,6 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 															  num_chunks);
 	}
 
-
-	mybt();
-
 	return chunks;
 }
 
