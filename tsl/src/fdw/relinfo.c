@@ -276,9 +276,9 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	/*
 	 * In any case, cache the chunk info for this chunk.
 	 */
-	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
 	Assert(!chunk_private->chunk);
+//	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 //	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 //
 //	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk != NULL);
