@@ -112,7 +112,8 @@ chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 	old = MemoryContextSwitchTo(ti->mctx);
 	chunk_data_node = palloc(sizeof(ChunkDataNode));
 	memcpy(&chunk_data_node->fd, form, sizeof(FormData_chunk_data_node));
-	chunk_data_node->foreign_server_oid = get_foreign_server_oid(NameStr(form->node_name), /* missing_ok = */ false);
+	chunk_data_node->foreign_server_oid =
+		get_foreign_server_oid(NameStr(form->node_name), /* missing_ok = */ false);
 	*nodes = lappend(*nodes, chunk_data_node);
 	MemoryContextSwitchTo(old);
 
