@@ -1,7 +1,8 @@
-# Copyright (c) 2016-2021  Timescale, Inc. All Rights Reserved.
-#
-# This file is licensed under the Apache License, see LICENSE-APACHE
-# at the top level directory of the timescaledb distribution.
+#!/usr/bin/env python
+
+#  This file and its contents are licensed under the Apache License 2.0.
+#  Please see the included NOTICE for copyright information and
+#  LICENSE-APACHE for a copy of the license.
 
 # Python script to dynamically generate matrix for github action
 
@@ -123,14 +124,14 @@ if event_type != "pull_request":
   # chunk_utils is skipped because of a use after free bug in postgres 12.0 which one of our tests hit
   pg12_debug_earliest = {
     "pg": PG12_EARLIEST,
-    "installcheck_args": "SKIPS='chunk_utils' IGNORES='cluster-12 compression_ddl continuous_aggs_concurrent_refresh continuous_aggs_concurrent_refresh_dist_ht continuous_aggs_insert continuous_aggs_multi continuous_aggs_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk deadlock_dropchunks_select debug_notice dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback continuous_aggs_drop_chunks'"
+    "installcheck_args": "SKIPS='chunk_utils' IGNORES='cluster-12 compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht continuous_aggs_policy deadlock_drop_chunks_compress deadlock_recompress_chunk deadlock_dropchunks_select debug_notice dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
 
   # add debug test for first supported PG13 version
   pg13_debug_earliest = {
     "pg": PG13_EARLIEST,
-    "installcheck_args": "IGNORES='compression_ddl continuous_aggs_concurrent_refresh continuous_aggs_concurrent_refresh_dist_ht continuous_aggs_insert continuous_aggs_multi continuous_aggs_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk deadlock_dropchunks_select dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback continuous_aggs_drop_chunks'"
+    "installcheck_args": "IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk deadlock_dropchunks_select dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
   }
   m["include"].append(build_debug_config(pg13_debug_earliest))
 

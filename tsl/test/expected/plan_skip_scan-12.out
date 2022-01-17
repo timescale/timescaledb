@@ -1614,19 +1614,10 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
    ->  Merge Append (actual rows=10020 loops=1)
          Sort Key: ((_hyper_1_1_chunk.dev % 3))
          ->  Index Scan using _hyper_1_1_chunk_skip_scan_expr_idx on _hyper_1_1_chunk (actual rows=2505 loops=1)
-         ->  Sort (actual rows=2505 loops=1)
-               Sort Key: ((_hyper_1_2_chunk.dev % 3))
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
-         ->  Sort (actual rows=2505 loops=1)
-               Sort Key: ((_hyper_1_3_chunk.dev % 3))
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=2505 loops=1)
-         ->  Sort (actual rows=2505 loops=1)
-               Sort Key: ((_hyper_1_4_chunk.dev % 3))
-               Sort Method: quicksort 
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=2505 loops=1)
-(16 rows)
+         ->  Index Scan using _hyper_1_2_chunk_skip_scan_expr_idx on _hyper_1_2_chunk (actual rows=2505 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_skip_scan_expr_idx on _hyper_1_3_chunk (actual rows=2505 loops=1)
+         ->  Index Scan using _hyper_1_4_chunk_skip_scan_expr_idx on _hyper_1_4_chunk (actual rows=2505 loops=1)
+(7 rows)
 
 DROP INDEX skip_scan_expr_idx;
 CREATE INDEX ON :TABLE(dev_name);
