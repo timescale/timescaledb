@@ -155,7 +155,7 @@ if event_type != "pull_request":
   # the stable branches of supported PG releases
   m["include"].append(build_debug_config({"pg":12,"snapshot":"snapshot"}))
   m["include"].append(build_debug_config({"pg":13,"snapshot":"snapshot"}))
-  m["include"].append(build_debug_config({"pg":14,"snapshot":"snapshot"}))
+  m["include"].append(build_debug_config({"pg":14,"snapshot":"snapshot", "installcheck_args": "IGNORES='memoize'"}))
 
 # generate command to set github action variable
 print(str.format("::set-output name=matrix::{0}",json.dumps(m)))
