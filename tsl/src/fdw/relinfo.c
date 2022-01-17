@@ -273,23 +273,8 @@ estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht
 static void
 estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 {
-	/*
-	 * In any case, cache the chunk info for this chunk.
-	 */
-	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
-	Assert(!chunk_private->chunk);
-//	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-//	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
-//
-//	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk != NULL);
-//	Assert(ts_get_private_reloptinfo(chunk_rel)->chunk->fd.id == chunk_private->chunk->fd.id);
-	chunk_private->chunk = ts_get_private_reloptinfo(chunk_rel)->chunk;
-
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
-	// FIXME figure out for which updates the chunk is null.
-	// now it happens in a simplest case of
-	// update t set value = 1 where value = 2;
-	if (parent_relid < 0 || chunk_private->chunk == 0)
+	if (parent_relid < 0)
 	{
 		/*
 		 * In some cases (e.g., UPDATE stmt) top_parent_relids is not set so the
@@ -304,6 +289,19 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 			estimate_tuples_and_pages_using_shared_buffers(root, NULL, chunk_rel);
 		}
 		return;
+	}
+
+	/*
+	 * Check if we have the chunk info cached for this chunk relation. For
+	 * SELECTs, we should have cached it when we performed chunk exclusion.
+	 * The UPDATEs use a completely different code path that doesn't do chunk
+	 * exclusion, so we'll have to look up this info now.
+	 */
+	TimescaleDBPrivate *chunk_private = ts_get_private_reloptinfo(chunk_rel);
+	if (chunk_private->chunk == NULL)
+	{
+		RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+		chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 	}
 
 	RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
