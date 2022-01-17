@@ -250,8 +250,7 @@ continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg
  */
 static void
 continuous_agg_refresh_execute(const CaggRefreshState *refresh,
-							   const InternalTimeRange *bucketed_refresh_window,
-							   const int32 chunk_id)
+							   const InternalTimeRange *bucketed_refresh_window)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
@@ -273,8 +272,7 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,
-										  unused_invalidation_range,
-										  chunk_id);
+										  unused_invalidation_range);
 }
 
 static void
@@ -352,15 +350,13 @@ typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_re
 
 static void
 continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
-									   const long iteration, void *arg1_refresh,
-									   void *arg2_chunk_id)
+									   const long iteration, void *arg1_refresh, void *arg2)
 {
 	const CaggRefreshState *refresh = (const CaggRefreshState *) arg1_refresh;
-	const int32 chunk_id = *(const int32 *) arg2_chunk_id;
 	(void) iteration;
 
 	log_refresh_window(DEBUG1, &refresh->cagg, bucketed_refresh_window, "invalidation refresh on");
-	continuous_agg_refresh_execute(refresh, bucketed_refresh_window, chunk_id);
+	continuous_agg_refresh_execute(refresh, bucketed_refresh_window);
 }
 
 static void
@@ -462,8 +458,7 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, const int64 bucket_width,
-								   const int32 chunk_id, const bool is_raw_ht_distributed,
-								   const bool do_merged_refresh,
+								   const bool is_raw_ht_distributed, const bool do_merged_refresh,
 								   const InternalTimeRange merged_refresh_window)
 {
 	CaggRefreshState refresh;
@@ -486,7 +481,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 						   cagg,
 						   &merged_refresh_window,
 						   "merged invalidations for refresh on");
-		continuous_agg_refresh_execute(&refresh, &merged_refresh_window, chunk_id);
+		continuous_agg_refresh_execute(&refresh, &merged_refresh_window);
 	}
 	else
 	{
@@ -497,7 +492,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 														  cagg->bucket_function,
 														  continuous_agg_refresh_execute_wrapper,
 														  (void *) &refresh /* arg1 */,
-														  (void *) &chunk_id /* arg2 */);
+														  NULL /* arg2 */);
 		Assert(count);
 	}
 	ts_guc_enable_per_data_node_queries = old_per_data_node_queries;
@@ -603,7 +598,7 @@ continuous_agg_calculate_merged_refresh_window(const InternalTimeRange *refresh_
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const InternalTimeRange *refresh_window,
-									   const CaggRefreshCallContext callctx, int32 chunk_id)
+									   const CaggRefreshCallContext callctx)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id);
@@ -669,7 +664,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   refresh_window,
 										   invalidations,
 										   bucket_width,
-										   chunk_id,
 										   is_raw_ht_distributed,
 										   do_merged_refresh,
 										   merged_refresh_window);
@@ -818,80 +812,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
 
-	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
+	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx))
 		emit_up_to_date_notice(cagg, callctx);
 
 	if ((rc = SPI_finish()) != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
-}
-
-/*
- * Refresh a continuous aggregate on the given hypertable chunk according to invalidations.
- *
- * The refreshing happens in a single transaction. For this to work correctly,
- * there must be no new invalidations written in the refreshed region during
- * the refresh. Therefore, it locks exclusively the chunk to
- * ensure there are no invalidations (INSERTs, DELETEs, etc.).
- */
-Datum
-continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
-{
-	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Oid chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
-	ContinuousAgg *cagg = get_cagg_by_relid(cagg_relid);
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Catalog *catalog = ts_catalog_get();
-	const InternalTimeRange refresh_window = {
-		.type = cagg->partition_type,
-		.start = ts_chunk_primary_dimension_start(chunk),
-		.end = ts_chunk_primary_dimension_end(chunk),
-	};
-
-	/* Like regular materialized views, require owner to refresh. */
-	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
-					   get_rel_name(cagg->relid));
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	if (chunk->fd.hypertable_id != cagg->data.raw_hypertable_id)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot refresh continuous aggregate on chunk from different hypertable"),
-				 errdetail("The the continuous aggregate is defined on hypertable \"%s\", while "
-						   "chunk is from hypertable \"%s\". The continuous aggregate can be "
-						   "refreshed only on a chunk from the same hypertable.",
-						   get_rel_name(ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id)),
-						   get_rel_name(chunk->hypertable_relid))));
-
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
-
-	LockRelationOid(chunk->table_id, ExclusiveLock);
-	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-					AccessExclusiveLock);
-	invalidation_threshold_set_or_get(chunk->fd.hypertable_id, refresh_window.end);
-
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	if (is_raw_ht_distributed)
-	{
-		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-												   cagg->data.raw_hypertable_id,
-												   refresh_window.type,
-												   &all_caggs_info);
-	}
-	else
-	{
-		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-											cagg->data.raw_hypertable_id,
-											refresh_window.type,
-											&all_caggs_info);
-	}
-	/* Must make invalidation processing visible */
-	CommandCounterIncrement();
-	process_cagg_invalidations_and_refresh(cagg, &refresh_window, CAGG_REFRESH_CHUNK, chunk->fd.id);
-
-	PG_RETURN_VOID();
 }

@@ -4,7 +4,7 @@
 
 ------------------------------------------------------------------------
 -- Experimental DDL functions and APIs.
--- 
+--
 -- Users should not rely on these functions unless they accept that
 -- they can change and/or be removed at any time.
 ------------------------------------------------------------------------
@@ -20,11 +20,6 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
 -- distributed hypertables
 CREATE OR REPLACE FUNCTION timescaledb_experimental.allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
-
-CREATE OR REPLACE FUNCTION timescaledb_experimental.refresh_continuous_aggregate(
-    continuous_aggregate     REGCLASS,
-    hypertable_chunk         REGCLASS
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh_chunk' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE PROCEDURE timescaledb_experimental.move_chunk(
     chunk REGCLASS,

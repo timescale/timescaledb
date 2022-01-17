@@ -80,7 +80,6 @@
 
 #define FINALFN "finalize_agg"
 #define PARTIALFN "partialize_agg"
-#define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define HT_DEFAULT_CHUNKFN "calculate_chunk_interval"
@@ -203,8 +202,6 @@ static void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collis
 									List *grouplist);
 static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
 										int original_query_resno);
-static void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo,
-										   RangeTblEntry *usertbl_rte, int32 usertbl_htid);
 static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
@@ -1550,83 +1547,6 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	return var;
 }
 
-/*add internal columns for the materialization table */
-static void
-mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *usertbl_rte,
-							   int32 usertbl_htid)
-{
-	Index maxRef;
-	int colno = list_length(matcolinfo->partial_seltlist) + 1;
-	ColumnDef *col;
-	Var *chunkfn_arg1;
-	FuncExpr *chunk_fnexpr;
-	Oid chunkfnoid;
-	Oid argtype[] = { OIDOID };
-	Oid rettype = INT4OID;
-	TargetEntry *chunk_te;
-	Oid sortop, eqop;
-	bool hashable;
-	ListCell *lc;
-	SortGroupClause *grpcl;
-
-	/* add a chunk_id column for materialization table */
-	Node *vexpr = (Node *) makeVar(1, colno, INT4OID, -1, InvalidOid, 0);
-	col = makeColumnDef(CONTINUOUS_AGG_CHUNK_ID_COL_NAME,
-						exprType(vexpr),
-						exprTypmod(vexpr),
-						exprCollation(vexpr));
-	matcolinfo->matcollist = lappend(matcolinfo->matcollist, col);
-
-	/* need to add an entry to the target list for computing chunk_id column
-	: chunk_for_tuple( htid, table.*)
-	*/
-	chunkfnoid =
-		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
-					   sizeof(argtype) / sizeof(argtype[0]),
-					   argtype,
-					   false);
-	chunkfn_arg1 = makeVar(1, TableOidAttributeNumber, OIDOID, -1, 0, 0);
-
-	chunk_fnexpr = makeFuncExpr(chunkfnoid,
-								rettype,
-								list_make1(chunkfn_arg1),
-								InvalidOid,
-								InvalidOid,
-								COERCE_EXPLICIT_CALL);
-	chunk_te = makeTargetEntry((Expr *) chunk_fnexpr,
-							   colno,
-							   pstrdup(CONTINUOUS_AGG_CHUNK_ID_COL_NAME),
-							   false);
-	matcolinfo->partial_seltlist = lappend(matcolinfo->partial_seltlist, chunk_te);
-	/*any internal column needs to be added to the group-by clause as well */
-	maxRef = 0;
-	foreach (lc, matcolinfo->partial_seltlist)
-	{
-		Index ref = ((TargetEntry *) lfirst(lc))->ressortgroupref;
-
-		if (ref > maxRef)
-			maxRef = ref;
-	}
-	chunk_te->ressortgroupref =
-		maxRef + 1; /* used by sortgroupclause to identify the targetentry */
-	grpcl = makeNode(SortGroupClause);
-	get_sort_group_operators(exprType((Node *) chunk_te->expr),
-							 false,
-							 true,
-							 false,
-							 &sortop,
-							 &eqop,
-							 NULL,
-							 &hashable);
-	grpcl->tleSortGroupRef = chunk_te->ressortgroupref;
-	grpcl->eqop = eqop;
-	grpcl->sortop = sortop;
-	grpcl->nulls_first = false;
-	grpcl->hashable = hashable;
-
-	matcolinfo->partial_grouplist = lappend(matcolinfo->partial_grouplist, grpcl);
-}
-
 static Aggref *
 add_partialize_column(Aggref *agg_to_partialize, AggPartCxt *cxt)
 {
@@ -1997,7 +1917,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	Query *final_selquery;
 	Query *partial_selquery;	/* query to populate the mattable*/
 	Query *orig_userview_query; /* copy of the original user query for dummy view */
-	RangeTblEntry *usertbl_rte;
 	Oid nspid;
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 materialize_hypertable_id;
@@ -2014,12 +1933,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * The options are valid only for internal use (ts_continuous)
 	 */
 	stmt->options = NULL;
-
-	/* Step 0: add any internal columns needed for materialization based
-		on the user query's table
-	*/
-	usertbl_rte = list_nth(panquery->rtable, 0);
-	mattablecolumninfo_addinternal(&mattblinfo, usertbl_rte, origquery_ht->htid);
 
 	/* Step 1: create the materialization table */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);

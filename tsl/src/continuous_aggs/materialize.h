@@ -40,6 +40,6 @@ void continuous_agg_update_materialization(SchemaAndName partial_view,
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
 										   InternalTimeRange new_materialization_range,
-										   InternalTimeRange invalidation_range, int32 chunk_id);
+										   InternalTimeRange invalidation_range);
 
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_MATERIALIZE_H */

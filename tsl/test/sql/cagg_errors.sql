@@ -474,15 +474,6 @@ SELECT create_hypertable('measurements', 'time');
 
 INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
 
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-SELECT timescaledb_experimental.refresh_continuous_aggregate(
-  'mat_with_test',
-  show_chunks('measurements')
-);
-\set ON_ERROR_STOP 1
-\set VERBOSITY terse
-
 -- Add a continuous aggregate on the measurements table and a policy
 -- to be able to test error cases for the add_job function.
 CREATE MATERIALIZED VIEW measurements_summary WITH (timescaledb.continuous) AS
@@ -550,13 +541,13 @@ CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous)
 AS SELECT time_bucket('1h',time) as bucket, avg(7) FROM i2980 GROUP BY 1;
 
 --now enable compression with invalid parameters
-ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, 
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress,
 timescaledb.compress_segmentby = 'bucket');
 
-ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, 
+ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress,
 timescaledb.compress_orderby = 'bucket');
 
---enable compression and test re-enabling compression 
+--enable compression and test re-enabling compression
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress);
 insert into i2980 select now();
 call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);

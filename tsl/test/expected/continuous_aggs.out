@@ -70,7 +70,6 @@ WHERE user_view_name = 'mat_m1'
 insert into :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select a, _timescaledb_internal.partialize_agg(count(b)),
 time_bucket(1, a)
-,1
 from foo
 group by time_bucket(1, a) , a ;
 select * from mat_m1 order by a ;
@@ -155,7 +154,6 @@ SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1day', timec), _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity))
-,1
 from conditions
 group by time_bucket('1day', timec) ;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -230,7 +228,6 @@ SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
-,1
 from conditions
 group by time_bucket('1week', timec) ;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -286,7 +283,6 @@ SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
-,1
 from conditions
 where location = 'NYC'
 group by time_bucket('1week', timec) ;
@@ -340,7 +336,6 @@ SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
-,1
 from conditions
 group by time_bucket('1week', timec) ;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -412,8 +407,8 @@ select attnum , attname from pg_attribute
 where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
- attnum | attname  
---------+----------
+ attnum | attname 
+--------+---------
       1 | bucket
       2 | loc
       3 | agg_3_3
@@ -421,8 +416,7 @@ order by attnum, attname;
       5 | agg_4_5
       6 | agg_0_6
       7 | agg_0_7
-      8 | chunk_id
-(8 rows)
+(7 rows)
 
 DROP MATERIALIZED VIEW mat_naming;
 --naming with default names
@@ -455,8 +449,7 @@ order by attnum, attname;
       5 | agg_4_5
       6 | agg_0_6
       7 | agg_0_7
-      8 | chunk_id
-(8 rows)
+(7 rows)
 
 DROP MATERIALIZED VIEW mat_naming;
 --naming with view col names
@@ -480,8 +473,8 @@ select attnum , attname from pg_attribute
 where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
- attnum | attname  
---------+----------
+ attnum | attname 
+--------+---------
       1 | bucket
       2 | loc
       3 | agg_3_3
@@ -489,8 +482,7 @@ order by attnum, attname;
       5 | agg_4_5
       6 | agg_0_6
       7 | agg_0_7
-      8 | chunk_id
-(8 rows)
+(7 rows)
 
 DROP MATERIALIZED VIEW mat_naming;
 CREATE MATERIALIZED VIEW mat_m1(timec, minl, sumth, stddevh)
@@ -514,23 +506,21 @@ select attnum , attname from pg_attribute
 where attnum > 0 and attrelid =
 (Select oid from pg_class where relname like :'MAT_TABLE_NAME')
 order by attnum, attname;
- attnum | attname  
---------+----------
+ attnum | attname 
+--------+---------
       1 | timec
       2 | agg_2_2
       3 | agg_3_3
       4 | agg_3_4
       5 | agg_4_5
       6 | agg_0_6
-      7 | chunk_id
-(7 rows)
+(6 rows)
 
 SET ROLE :ROLE_SUPERUSER;
 insert into  :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
 select
  time_bucket('1week', timec),  _timescaledb_internal.partialize_agg( min(location)), _timescaledb_internal.partialize_agg( sum(temperature)) , _timescaledb_internal.partialize_agg( sum(humidity)), _timescaledb_internal.partialize_agg(stddev(humidity))
 ,_timescaledb_internal.partialize_agg( avg(temperature))
-,1
 from conditions
 group by time_bucket('1week', timec) ;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -1022,9 +1012,9 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'space_view'
 \gset
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
-  ORDER BY time_bucket, chunk_id;
- time_bucket | agg_2_2 | chunk_id 
--------------+---------+----------
+  ORDER BY time_bucket;
+ time_bucket | agg_2_2 
+-------------+---------
 (0 rows)
 
 CALL refresh_continuous_aggregate('space_view', NULL, NULL);
@@ -1036,14 +1026,12 @@ SELECT * FROM space_view ORDER BY 1;
 (2 rows)
 
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
-  ORDER BY time_bucket, chunk_id;
- time_bucket |      agg_2_2       | chunk_id 
--------------+--------------------+----------
-           0 | \x0000000000000002 |       58
-           0 | \x0000000000000002 |       59
-           8 | \x0000000000000002 |       60
-           8 | \x0000000000000002 |       61
-(4 rows)
+  ORDER BY time_bucket;
+ time_bucket |      agg_2_2       
+-------------+--------------------
+           0 | \x0000000000000004
+           8 | \x0000000000000004
+(2 rows)
 
 INSERT INTO space_table VALUES (3, 2, 1);
 CALL refresh_continuous_aggregate('space_view', NULL, NULL);
@@ -1055,14 +1043,12 @@ SELECT * FROM space_view ORDER BY 1;
 (2 rows)
 
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
-  ORDER BY time_bucket, chunk_id;
- time_bucket |      agg_2_2       | chunk_id 
--------------+--------------------+----------
-           0 | \x0000000000000002 |       58
-           0 | \x0000000000000003 |       59
-           8 | \x0000000000000002 |       60
-           8 | \x0000000000000002 |       61
-(4 rows)
+  ORDER BY time_bucket;
+ time_bucket |      agg_2_2       
+-------------+--------------------
+           0 | \x0000000000000005
+           8 | \x0000000000000004
+(2 rows)
 
 INSERT INTO space_table VALUES (2, 3, 1);
 CALL refresh_continuous_aggregate('space_view', NULL, NULL);
@@ -1074,15 +1060,12 @@ SELECT * FROM space_view ORDER BY 1;
 (2 rows)
 
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME"
-  ORDER BY time_bucket, chunk_id;
- time_bucket |      agg_2_2       | chunk_id 
--------------+--------------------+----------
-           0 | \x0000000000000002 |       58
-           0 | \x0000000000000003 |       59
-           0 | \x0000000000000001 |       63
-           8 | \x0000000000000002 |       60
-           8 | \x0000000000000002 |       61
-(5 rows)
+  ORDER BY time_bucket;
+ time_bucket |      agg_2_2       
+-------------+--------------------
+           0 | \x0000000000000006
+           8 | \x0000000000000004
+(2 rows)
 
 DROP TABLE space_table CASCADE;
 NOTICE:  drop cascades to 2 other objects
@@ -1294,7 +1277,7 @@ SELECT create_hypertable('water_consumption', 'timestamp', 'sensor_id', 2);
  (34,public,water_consumption,t)
 (1 row)
 
-INSERT INTO public.water_consumption (sensor_id, timestamp, water_index) VALUES 
+INSERT INTO public.water_consumption (sensor_id, timestamp, water_index) VALUES
   (1, '2010-11-03 09:42:30', 1030),
   (1, '2010-11-03 09:42:40', 1032),
   (1, '2010-11-03 09:42:50', 1035),
@@ -1426,8 +1409,8 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 insert into raw_data select '2000-01-01','Q1';
---having has exprs that appear in select 
-CREATE MATERIALIZED VIEW search_query_count_1m WITH (timescaledb.continuous) 
+--having has exprs that appear in select
+CREATE MATERIALIZED VIEW search_query_count_1m WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count,
          time_bucket(INTERVAL '1 minute', time) AS bucket
@@ -1436,18 +1419,18 @@ AS
  GROUP BY search_query, bucket HAVING count(search_query) > 3 OR sum(cnt) > 1;
 NOTICE:  refreshing continuous aggregate "search_query_count_1m"
 --having has aggregates + grp by columns that appear in select
-CREATE MATERIALIZED VIEW search_query_count_2 WITH (timescaledb.continuous) 
+CREATE MATERIALIZED VIEW search_query_count_2 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt),
          time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM raw_data
  WHERE search_query is not null AND LENGTH(TRIM(both from search_query))>0
- GROUP BY search_query, bucket 
-HAVING count(search_query) > 3 OR sum(cnt) > 1 OR 
+ GROUP BY search_query, bucket
+HAVING count(search_query) > 3 OR sum(cnt) > 1 OR
        ( sum(cnt) + count(cnt)) > 1
        AND search_query = 'Q1';
 NOTICE:  refreshing continuous aggregate "search_query_count_2"
-CREATE MATERIALIZED VIEW search_query_count_3 WITH (timescaledb.continuous) 
+CREATE MATERIALIZED VIEW search_query_count_3 WITH (timescaledb.continuous)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt),
          time_bucket(INTERVAL '1 minute', time) AS bucket
@@ -1517,7 +1500,7 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 SELECT mat_htid AS "MAT_HTID"
      , mat_schema_name || '.' || mat_table_name AS "MAT_HTNAME"
      , mat_table_name AS "MAT_TABLE_NAME"
-FROM cagg_compression_status 
+FROM cagg_compression_status
 WHERE cagg_name = 'search_query_count_3' \gset
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'true');
 SELECT cagg_name, mat_table_name
@@ -1528,7 +1511,7 @@ FROM cagg_compression_status where cagg_name = 'search_query_count_3';
 (1 row)
 
 \x
-SELECT * FROM timescaledb_information.compression_settings 
+SELECT * FROM timescaledb_information.compression_settings
 WHERE hypertable_name = :'MAT_TABLE_NAME';
 -[ RECORD 1 ]----------+----------------------------
 hypertable_schema      | _timescaledb_internal
@@ -1587,7 +1570,7 @@ ERROR:  cannot update/delete rows from chunk "_hyper_41_81_chunk" as it is compr
 CALL refresh_continuous_aggregate('search_query_count_3', '2000-05-01 00:00+0'::timestamptz, '2000-06-01 00:00+0'::timestamptz);
 ERROR:  cannot update/delete rows from chunk "_hyper_41_81_chunk" as it is compressed
 \set ON_ERROR_STOP 1
---insert row 
+--insert row
 insert into raw_data select '2001-05-10 00:00+0','Q3', 100, 100;
 --this should succeed since it does not refresh any compressed regions in the cagg
 CALL refresh_continuous_aggregate('search_query_count_3', '2001-05-01 00:00+0'::timestamptz, '2001-06-01 00:00+0'::timestamptz);
@@ -1599,7 +1582,7 @@ SELECT _timescaledb_internal.to_timestamp(w) FROM _timescaledb_internal.cagg_wat
 (1 row)
 
 SELECT chunk_name, range_start, range_end, is_compressed
-FROM timescaledb_information.chunks 
+FROM timescaledb_information.chunks
 WHERE hypertable_name = :'MAT_TABLE_NAME'
 ORDER BY 1;
      chunk_name     |         range_start          |          range_end           | is_compressed 
@@ -1617,7 +1600,7 @@ WHERE materialization_id = :'MAT_HTID' ORDER BY 1, 2,3;
                  41 |       991353600000000 |     9223372036854775807
 (3 rows)
 
-SELECT * from search_query_count_3 
+SELECT * from search_query_count_3
 WHERE bucket > '2001-01-01'
 ORDER BY 1, 2, 3;
  search_query | count | sum |            bucket            
@@ -1648,7 +1631,7 @@ FROM cagg_compression_status where cagg_name = 'search_query_count_3';
 (1 row)
 
 SELECT view_name, materialized_only, compression_enabled
-FROM timescaledb_information.continuous_aggregates 
+FROM timescaledb_information.continuous_aggregates
 where view_name = 'search_query_count_3';
       view_name       | materialized_only | compression_enabled 
 ----------------------+-------------------+---------------------
@@ -1665,9 +1648,9 @@ SELECT create_hypertable('test_morecols', 'time', chunk_time_interval=> '7 days'
  (43,public,test_morecols,t)
 (1 row)
 
-INSERT INTO test_morecols 
+INSERT INTO test_morecols
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 55, 75, 40, 70, NULL, 100, 200, 200;
-CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous) 
+CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous)
 AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
  FROM test_morecols GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "test_morecols_cagg"
@@ -1678,7 +1661,7 @@ SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
  _timescaledb_internal._hyper_44_91_chunk
 (1 row)
 
-SELECT * FROM test_morecols_cagg;
+SELECT * FROM test_morecols_cagg ORDER BY time_bucket;
          time_bucket          |         avg         | count 
 ------------------------------+---------------------+-------
  Fri Nov 23 16:00:00 2018 PST | 55.0000000000000000 |    23
@@ -1686,7 +1669,7 @@ SELECT * FROM test_morecols_cagg;
 (2 rows)
 
 SELECT view_name, materialized_only, compression_enabled
-FROM timescaledb_information.continuous_aggregates 
+FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_morecols_cagg';
      view_name      | materialized_only | compression_enabled 
 --------------------+-------------------+---------------------
@@ -1696,7 +1679,7 @@ where view_name = 'test_morecols_cagg';
 --should keep compressed option, modify only materialized --
 ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.materialized_only='true');
 SELECT view_name, materialized_only, compression_enabled
-FROM timescaledb_information.continuous_aggregates 
+FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_morecols_cagg';
      view_name      | materialized_only | compression_enabled 
 --------------------+-------------------+---------------------
