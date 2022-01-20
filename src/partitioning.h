@@ -14,7 +14,7 @@
 #include <utils/typcache.h>
 #include <fmgr.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "dimension.h"
 
 #define OPEN_START_TIME -1

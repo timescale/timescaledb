@@ -29,7 +29,7 @@
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "chunk.h"

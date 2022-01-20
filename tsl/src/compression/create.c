@@ -31,16 +31,16 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "create.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "compat/compat.h"
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"
-#include "hypertable_compression.h"
+#include "ts_catalog/hypertable_compression.h"
 #include "custom_type_cache.h"
 #include "trigger.h"
 #include "utils.h"

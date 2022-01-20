@@ -6,7 +6,7 @@
 
 #include <postgres.h>
 #include <utils/builtins.h>
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "dimension.h"
 #include "errors.h"
 #include "guc.h"

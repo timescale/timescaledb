@@ -16,7 +16,7 @@
 #include "dimension_vector.h"
 #include "hypercube.h"
 #include "chunk.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 
 static int
 get_remote_chunk_id_from_relid(Oid server_oid, Oid chunk_relid)

@@ -16,7 +16,7 @@
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "dimension.h"

@@ -6,7 +6,7 @@
 #ifndef TIMESCALEDB_HYPERTABLE_DATA_NODE_H
 #define TIMESCALEDB_HYPERTABLE_DATA_NODE_H
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "export.h"
 
 typedef struct HypertableDataNode

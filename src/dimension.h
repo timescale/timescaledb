@@ -12,7 +12,7 @@
 #include <executor/tuptable.h>
 #include <catalog/pg_type.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "export.h"
 #include "time_utils.h"
 

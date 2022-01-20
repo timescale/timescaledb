@@ -11,7 +11,7 @@
 
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "remote/dist_commands.h"

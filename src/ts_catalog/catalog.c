@@ -19,7 +19,7 @@
 #include <commands/sequence.h>
 
 #include "compat/compat.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "extension.h"
 
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {

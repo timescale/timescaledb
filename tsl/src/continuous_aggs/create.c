@@ -58,8 +58,8 @@
 
 #include "create.h"
 
-#include "catalog.h"
-#include "continuous_agg.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 #include "dimension.h"
 #include "extension_constants.h"
 #include "func_cache.h"
@@ -67,14 +67,14 @@
 #include "hypertable.h"
 #include "invalidation.h"
 #include "dimension.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "options.h"
 #include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
 #include "refresh.h"
 #include "remote/dist_commands.h"
-#include "hypertable_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "deparse.h"
 
 #define FINALFN "finalize_agg"

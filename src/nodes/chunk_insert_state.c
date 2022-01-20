@@ -23,13 +23,13 @@
 #include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
-#include <continuous_agg.h>
 
 #include "compat/compat.h"
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
+#include "ts_catalog/continuous_agg.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
 #include "indexing.h"

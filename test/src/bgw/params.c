@@ -20,7 +20,7 @@
 #include "test_utils.h"
 #include "log.h"
 #include "scanner.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct FormData_bgw_dsm_handle
 {

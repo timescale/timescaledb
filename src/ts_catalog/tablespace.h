@@ -9,7 +9,7 @@
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct Tablespace
 {

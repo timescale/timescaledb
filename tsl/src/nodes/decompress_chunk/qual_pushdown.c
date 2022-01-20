@@ -15,7 +15,7 @@
 
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
-#include "hypertable_compression.h"
+#include "ts_catalog/hypertable_compression.h"
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "compression/segment_meta.h"

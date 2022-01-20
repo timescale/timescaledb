@@ -11,9 +11,9 @@
 #include <foreign/foreign.h>
 #include <miscadmin.h>
 
-#include "hypertable_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "scanner.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "compat/compat.h"
 
 static void

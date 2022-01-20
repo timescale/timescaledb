@@ -6,7 +6,7 @@
 #ifndef TIMESCALEDB_TSL_REMOTE_DIST_COMMANDS_H
 #define TIMESCALEDB_TSL_REMOTE_DIST_COMMANDS_H
 
-#include <catalog.h>
+#include "ts_catalog/catalog.h"
 
 #include "async.h"
 

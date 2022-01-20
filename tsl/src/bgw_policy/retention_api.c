@@ -15,7 +15,7 @@
 #include <hypertable_cache.h>
 
 #include "bgw/job.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "chunk.h"
 #include "retention_api.h"
 #include "errors.h"

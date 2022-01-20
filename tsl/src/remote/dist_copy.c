@@ -23,7 +23,7 @@
 #include "hypertable.h"
 #include "partitioning.h"
 #include "chunk.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 #include "guc.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"

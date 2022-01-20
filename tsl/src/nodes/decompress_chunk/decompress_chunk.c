@@ -21,7 +21,7 @@
 
 #include <planner.h>
 
-#include "hypertable_compression.h"
+#include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
 #include "compression/create.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"

@@ -9,7 +9,7 @@
 #include <catalog/namespace.h>
 
 #include "custom_type_cache.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "extension_constants.h"
 
 /* Information about functions that we put in the cache */

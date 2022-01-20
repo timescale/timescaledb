@@ -10,13 +10,13 @@
 #include <nodes/primnodes.h>
 #include <utils/array.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "chunk_adaptive.h"
 #include "dimension.h"
 #include "export.h"
 #include "scanner.h"
 #include "scan_iterator.h"
-#include "tablespace.h"
+#include "ts_catalog/tablespace.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"

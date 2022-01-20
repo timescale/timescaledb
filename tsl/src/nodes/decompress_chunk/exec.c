@@ -24,7 +24,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
-#include "hypertable_compression.h"
+#include "ts_catalog/hypertable_compression.h"
 
 typedef enum DecompressChunkColumnType
 {

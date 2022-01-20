@@ -8,9 +8,8 @@
 
 #include <foreign/foreign.h>
 
-#include <hypertable_data_node.h>
-
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "hypertable.h"
 #include "remote/dist_txn.h"
 

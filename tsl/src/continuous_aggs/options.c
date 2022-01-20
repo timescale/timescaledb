@@ -17,7 +17,7 @@
 #include "options.h"
 #include "cache.h"
 #include "compression_with_clause.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/create.h"
 #include "compression/create.h"
 #include "errors.h"

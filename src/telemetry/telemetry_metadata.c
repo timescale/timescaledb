@@ -8,8 +8,8 @@
 #include <utils/builtins.h>
 #include <utils/timestamp.h>
 
-#include "catalog.h"
-#include "metadata.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/metadata.h"
 #include "telemetry/uuid.h"
 #include "telemetry/telemetry_metadata.h"
 #include "scan_iterator.h"

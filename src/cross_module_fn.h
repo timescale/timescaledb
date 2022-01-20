@@ -19,7 +19,7 @@
 #include "bgw/job.h"
 #include "process_utility.h"
 #include "with_clause_parser.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "plan_expand_hypertable.h"
 #include "planner.h"
 
