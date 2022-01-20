@@ -18,9 +18,9 @@
 
 #include "hypertable_cache.h"
 #include "errors.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "scanner.h"
-#include "tablespace.h"
+#include "ts_catalog/tablespace.h"
 #include "compat/compat.h"
 
 #define TABLESPACE_DEFAULT_CAPACITY 4

@@ -23,7 +23,6 @@
 #include <utils/memutils.h>
 
 #include <export.h>
-#include <chunk_data_node.h>
 #include <hypertable_cache.h>
 #include <planner.h>
 #include <import/allpaths.h>

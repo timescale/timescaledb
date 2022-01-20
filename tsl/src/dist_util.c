@@ -11,12 +11,12 @@
 #include <utils/builtins.h>
 #include <utils/fmgrprotos.h>
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "dist_util.h"
 #include "errors.h"
 #include "funcapi.h"
 #include "loader/seclabel.h"
-#include "metadata.h"
+#include "ts_catalog/metadata.h"
 #include "remote/dist_commands.h"
 #include "telemetry/telemetry_metadata.h"
 #include "utils/uuid.h"

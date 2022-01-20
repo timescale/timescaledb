@@ -14,14 +14,14 @@
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 
-#include <catalog.h>
+#include "ts_catalog/catalog.h"
 #include <scanner.h>
 #include <scan_iterator.h>
 #include <compat/compat.h>
 #include <time_utils.h>
 #include <time_bucket.h>
 
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "invalidation_threshold.h"
 

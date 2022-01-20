@@ -29,14 +29,14 @@
 #include "compat/compat.h"
 
 #include "bgw/job.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "cross_module_fn.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)

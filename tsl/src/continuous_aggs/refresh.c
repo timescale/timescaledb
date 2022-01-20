@@ -16,8 +16,8 @@
 #include <fmgr.h>
 #include <executor/spi.h>
 
-#include <catalog.h>
-#include <continuous_agg.h>
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 #include <dimension.h>
 #include <hypertable.h>
 #include <hypertable_cache.h>

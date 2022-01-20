@@ -7,7 +7,7 @@
 #ifndef TIMESCALEDB_BGW_JOB_CHUNK_STATS_H
 #define TIMESCALEDB_BGW_JOB_CHUNK_STATS_H
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "export.h"
 
 typedef struct BgwPolicyChunkStats

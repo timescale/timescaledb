@@ -31,14 +31,14 @@
 #include "errors.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "hypertable_compression.h"
+#include "ts_catalog/hypertable_compression.h"
 #include "create.h"
 #include "compress_utils.h"
 #include "compression.h"
 #include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
-#include "compression_chunk_size.h"
+#include "ts_catalog/compression_chunk_size.h"
 
 typedef struct CompressChunkCxt
 {

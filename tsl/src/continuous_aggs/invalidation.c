@@ -22,7 +22,6 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <parser/parse_func.h>
-#include <catalog.h>
 #include <scanner.h>
 #include <scan_iterator.h>
 #include <utils.h>
@@ -31,7 +30,8 @@
 #include <hypertable_cache.h>
 
 #include "remote/dist_commands.h"
-#include "continuous_agg.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "data_node.h"
 #include "deparse.h"

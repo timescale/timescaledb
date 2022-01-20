@@ -8,8 +8,8 @@
 
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "catalog.h"
-#include "hypertable_compression.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/hypertable_compression.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 

@@ -20,7 +20,8 @@
 #include <funcapi.h>
 #include <miscadmin.h>
 
-#include <chunk_data_node.h>
+#include "ts_catalog/chunk_data_node.h"
+
 #include <nodes/chunk_dispatch_plan.h>
 #include <nodes/chunk_dispatch_state.h>
 #include <nodes/chunk_insert_state.h>

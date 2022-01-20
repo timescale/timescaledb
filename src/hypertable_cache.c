@@ -12,11 +12,11 @@
 #include "errors.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "cache.h"
 #include "scanner.h"
 #include "dimension.h"
-#include "tablespace.h"
+#include "ts_catalog/tablespace.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);
 static void hypertable_cache_missing_error(const Cache *cache, const CacheQuery *query);

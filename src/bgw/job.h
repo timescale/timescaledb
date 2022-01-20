@@ -11,7 +11,7 @@
 #include <postmaster/bgworker.h>
 
 #include "export.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct BgwJob
 {

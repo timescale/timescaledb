@@ -8,8 +8,8 @@
 #include <postgres.h>
 #include <catalog/pg_type.h>
 
-#include <catalog.h>
-#include <chunk.h>
+#include "ts_catalog/catalog.h"
+#include "chunk.h"
 
 extern TSDLLEXPORT List *ts_hypertable_compression_get(int32 htid);
 extern TSDLLEXPORT FormData_hypertable_compression *

@@ -32,7 +32,7 @@
 #endif
 
 #include <compat/compat.h>
-#include <chunk_data_node.h>
+#include "ts_catalog/chunk_data_node.h"
 #include <extension.h>
 #include <errors.h>
 #include <error_utils.h>

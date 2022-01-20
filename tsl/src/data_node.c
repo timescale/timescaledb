@@ -7,20 +7,18 @@
 
 #include <access/htup_details.h>
 #include <access/xact.h>
-#include <catalog.h>
+//#include <catalog.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_database.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_namespace.h>
-#include <chunk_data_node.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <compat/compat.h>
 #include <extension.h>
 #include <funcapi.h>
-#include <hypertable_data_node.h>
 #include <libpq/crypt.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
@@ -46,6 +44,8 @@
 #include "utils/uuid.h"
 #include "mb/pg_wchar.h"
 #include "chunk.h"
+#include "ts_catalog/chunk_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
 #define TS_DEFAULT_POSTGRES_HOST "localhost"

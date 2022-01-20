@@ -21,11 +21,9 @@
 #include <access/xact.h>
 
 #include <scanner.h>
-#include <continuous_agg.h>
 
 #include "compat/compat.h"
 
-#include "catalog.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "hypertable.h"
@@ -35,6 +33,8 @@
 #include "partitioning.h"
 #include "utils.h"
 #include "time_bucket.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 
 #include "continuous_aggs/insert.h"
 

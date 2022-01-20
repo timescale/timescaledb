@@ -17,7 +17,7 @@
 
 #include "errors.h"
 #include "guc.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "debug_point.h"
 #include "dist_util.h"
 #include "remote/dist_commands.h"

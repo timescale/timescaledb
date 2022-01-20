@@ -15,7 +15,7 @@
 #include <catalog/pg_type.h>
 
 #include "bgw_policy/chunk_stats.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
 #include "dimension.h"

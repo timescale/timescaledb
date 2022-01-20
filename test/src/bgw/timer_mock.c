@@ -17,7 +17,7 @@
 #include "timer_mock.h"
 #include "log.h"
 #include "scanner.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "params.h"
 #include "bgw/launcher_interface.h"
 

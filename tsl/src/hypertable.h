@@ -9,7 +9,7 @@
 #include <hypertable.h>
 #include "dimension.h"
 #include "config.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 
 /* We cannot make use of more data nodes than we have slices in closed (space)
  * dimensions, and the value for number of slices is an int16. */

@@ -5,8 +5,8 @@
  */
 #include <postgres.h>
 
-#include "compression_chunk_size.h"
-#include "catalog.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/catalog.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 

@@ -9,7 +9,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <nodes/pg_list.h>
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 
 typedef struct SchemaAndName
 {
