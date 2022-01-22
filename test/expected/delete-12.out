@@ -217,6 +217,7 @@ SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, serie
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (6 rows)
 
+BEGIN;
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
@@ -228,3 +229,23 @@ SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, serie
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (4 rows)
 
+ROLLBACK;
+BEGIN;
+DELETE FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val()) RETURNING "timeCustom";
+     timeCustom      
+---------------------
+ 1257894002000000000
+ 1257894002000000000
+(2 rows)
+
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(4 rows)
+
+ROLLBACK;

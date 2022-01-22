@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_INSERT_H
-#define TIMESCALEDB_HYPERTABLE_INSERT_H
+#ifndef TIMESCALEDB_HYPERTABLE_MODIFY_H
+#define TIMESCALEDB_HYPERTABLE_MODIFY_H
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -12,25 +12,25 @@
 
 #include "hypertable.h"
 
-typedef struct HypertableInsertPath
+typedef struct HypertableModifyPath
 {
 	CustomPath cpath;
 	/* A bitmapset to remember which subpaths are using data node dispatching. */
 	Bitmapset *distributed_insert_plans;
 	/* List of server oids for the hypertable's data nodes */
 	List *serveroids;
-} HypertableInsertPath;
+} HypertableModifyPath;
 
-typedef struct HypertableInsertState
+typedef struct HypertableModifyState
 {
 	CustomScanState cscan_state;
 	ModifyTable *mt;
 	List *serveroids;
 	FdwRoutine *fdwroutine;
-} HypertableInsertState;
+} HypertableModifyState;
 
-extern void ts_hypertable_insert_fixup_tlist(Plan *plan);
-extern Path *ts_hypertable_insert_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
+extern void ts_hypertable_modify_fixup_tlist(Plan *plan);
+extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
 											  Hypertable *ht);
 
-#endif /* TIMESCALEDB_HYPERTABLE_INSERT_H */
+#endif /* TIMESCALEDB_HYPERTABLE_MODIFY_H */

@@ -36,6 +36,14 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
 
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+BEGIN;
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+ROLLBACK;
+
+BEGIN;
+DELETE FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val()) RETURNING "timeCustom";
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+ROLLBACK;

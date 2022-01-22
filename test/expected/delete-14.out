@@ -111,37 +111,38 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
 EXPLAIN (costs off)
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
- Delete on "two_Partitions"
-   Delete on "two_Partitions" "two_Partitions_2"
-   Delete on _hyper_1_1_chunk "two_Partitions_3"
-   Delete on _hyper_1_2_chunk "two_Partitions_4"
-   Delete on _hyper_1_3_chunk "two_Partitions_5"
-   Delete on _hyper_1_4_chunk "two_Partitions_6"
-   ->  Hash Join
-         Hash Cond: ("two_Partitions".series_1 = "two_Partitions_1".series_1)
-         ->  Append
-               ->  Seq Scan on "two_Partitions" "two_Partitions_2"
-               ->  Seq Scan on _hyper_1_1_chunk "two_Partitions_3"
-               ->  Seq Scan on _hyper_1_2_chunk "two_Partitions_4"
-               ->  Seq Scan on _hyper_1_3_chunk "two_Partitions_5"
-               ->  Seq Scan on _hyper_1_4_chunk "two_Partitions_6"
-         ->  Hash
-               ->  HashAggregate
-                     Group Key: "two_Partitions_1".series_1
-                     ->  Append
-                           ->  Seq Scan on "two_Partitions" "two_Partitions_7"
-                                 Filter: (series_1 > (series_val())::double precision)
-                           ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk "two_Partitions_8"
-                                 Index Cond: (series_1 > (series_val())::double precision)
-                           ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk "two_Partitions_9"
-                                 Index Cond: (series_1 > (series_val())::double precision)
-                           ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_3_chunk "two_Partitions_10"
-                                 Index Cond: (series_1 > (series_val())::double precision)
-                           ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk "two_Partitions_11"
-                                 Index Cond: (series_1 > (series_val())::double precision)
-(28 rows)
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on "two_Partitions"
+         Delete on "two_Partitions" "two_Partitions_2"
+         Delete on _hyper_1_1_chunk "two_Partitions_3"
+         Delete on _hyper_1_2_chunk "two_Partitions_4"
+         Delete on _hyper_1_3_chunk "two_Partitions_5"
+         Delete on _hyper_1_4_chunk "two_Partitions_6"
+         ->  Hash Join
+               Hash Cond: ("two_Partitions".series_1 = "two_Partitions_1".series_1)
+               ->  Append
+                     ->  Seq Scan on "two_Partitions" "two_Partitions_2"
+                     ->  Seq Scan on _hyper_1_1_chunk "two_Partitions_3"
+                     ->  Seq Scan on _hyper_1_2_chunk "two_Partitions_4"
+                     ->  Seq Scan on _hyper_1_3_chunk "two_Partitions_5"
+                     ->  Seq Scan on _hyper_1_4_chunk "two_Partitions_6"
+               ->  Hash
+                     ->  HashAggregate
+                           Group Key: "two_Partitions_1".series_1
+                           ->  Append
+                                 ->  Seq Scan on "two_Partitions" "two_Partitions_7"
+                                       Filter: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk "two_Partitions_8"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk "two_Partitions_9"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_3_chunk "two_Partitions_10"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+                                 ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk "two_Partitions_11"
+                                       Index Cond: (series_1 > (series_val())::double precision)
+(29 rows)
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
@@ -154,6 +155,7 @@ SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, serie
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (6 rows)
 
+BEGIN;
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
@@ -165,3 +167,23 @@ SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, serie
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (4 rows)
 
+ROLLBACK;
+BEGIN;
+DELETE FROM "two_Partitions"
+WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val()) RETURNING "timeCustom";
+     timeCustom      
+---------------------
+ 1257894002000000000
+ 1257894002000000000
+(2 rows)
+
+SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
+     timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
+---------------------+-----------+----------+----------+----------+-------------
+ 1257894000000001000 | dev1      |      2.5 |        3 |          | 
+ 1257894001000000000 | dev1      |      3.5 |        4 |          | 
+ 1257894002000000000 | dev1      |      2.5 |        3 |          | 
+ 1257897600000000000 | dev1      |      4.5 |        5 |          | f
+(4 rows)
+
+ROLLBACK;

@@ -181,7 +181,7 @@ INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
                   QUERY PLAN                   
 -----------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
          ->  Custom Scan (DataNodeDispatch)
@@ -195,7 +195,7 @@ INSERT INTO disttable VALUES
        ('2017-01-01 06:01', 1, 1.1);
                                                               QUERY PLAN                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
    ->  Insert on public.disttable
@@ -2756,7 +2756,7 @@ EXPLAIN (VERBOSE, COSTS OFF, TIMING OFF, SUMMARY OFF)
 INSERT INTO twodim DEFAULT VALUES;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable public.twodim
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
    ->  Insert on public.twodim
@@ -2788,7 +2788,7 @@ INSERT INTO twodim VALUES
        ('2019-02-10 17:11', 7, 3.2);
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable public.twodim
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
    ->  Insert on public.twodim
@@ -2810,7 +2810,7 @@ INSERT INTO twodim VALUES
        ('2019-02-10 17:11', 7, 3.2);
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable public.twodim
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
    Remote SQL: INSERT INTO public.twodim("time", "Color", temp) VALUES ($1, $2, $3)
@@ -4793,7 +4793,7 @@ SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=506)
+ Custom Scan (HypertableModify)  (cost=0.00..0.01 rows=1 width=506)
  Insert on distributed hypertable test_1702
    ->  Insert on test_1702  (cost=0.00..0.01 rows=1 width=506)
          ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=506)
@@ -4806,7 +4806,7 @@ INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
 EXPLAIN INSERT INTO test_1702(id, time) SELECT generate_series(2, 1500), current_timestamp;
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..37.50 rows=1499 width=506)
+ Custom Scan (HypertableModify)  (cost=0.00..37.50 rows=1499 width=506)
  Insert on distributed hypertable test_1702
    ->  Insert on test_1702  (cost=0.00..37.50 rows=1499 width=506)
          ->  Custom Scan (DataNodeDispatch)  (cost=0.00..37.50 rows=1499 width=506)
@@ -4845,7 +4845,7 @@ SELECT create_distributed_hypertable('test_1702', 'time', 'id');
 EXPLAIN INSERT INTO test_1702(id, time) VALUES('1', current_timestamp);
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=242)
+ Custom Scan (HypertableModify)  (cost=0.00..0.01 rows=1 width=242)
  Insert on distributed hypertable test_1702
    ->  Insert on test_1702  (cost=0.00..0.01 rows=1 width=242)
          ->  Custom Scan (DataNodeDispatch)  (cost=0.00..0.01 rows=1 width=242)
@@ -5051,7 +5051,7 @@ SELECT time, device, temp_c FROM datatable
 RETURNING *;
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..24.55 rows=970 width=24)
+ Custom Scan (HypertableModify)  (cost=0.00..24.55 rows=970 width=24)
    Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
@@ -5111,7 +5111,7 @@ INSERT INTO disttable (time, device, temp_c, minmaxes)
 SELECT time, device, temp_c, minmaxes FROM datatable;
                                                                         QUERY PLAN                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..24.55 rows=970 width=56)
+ Custom Scan (HypertableModify)  (cost=0.00..24.55 rows=970 width=56)
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
    ->  Insert on public.disttable  (cost=0.00..24.55 rows=970 width=56)
@@ -5165,7 +5165,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM disttable;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
          ->  Custom Scan (DataNodeDispatch)
@@ -5182,7 +5182,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM disttable LIMIT 1;
                                              QUERY PLAN                                              
 -----------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
          ->  Custom Scan (DataNodeDispatch)
@@ -5202,7 +5202,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM disttable RETURNING *;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
          ->  Custom Scan (DataNodeDispatch)
@@ -5338,7 +5338,7 @@ EXPLAIN VERBOSE
 INSERT INTO disttable VALUES ('2017-08-01 06:01', 1, 35.0) RETURNING *;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=28)
+ Custom Scan (HypertableModify)  (cost=0.00..0.01 rows=1 width=28)
    Output: disttable."time", disttable.device, disttable.temp_c, disttable.temp_f
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
@@ -5397,7 +5397,7 @@ EXPLAIN VERBOSE
 INSERT INTO disttable VALUES ('2017-09-01 06:01', 5, 40.0) RETURNING *;
                                                                                QUERY PLAN                                                                                
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..0.01 rows=1 width=28)
+ Custom Scan (HypertableModify)  (cost=0.00..0.01 rows=1 width=28)
    Output: disttable."time", disttable.device, disttable.temp_c, disttable.temp_f
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
