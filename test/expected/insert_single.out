@@ -321,7 +321,7 @@ INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
                          ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
                  QUERY PLAN                  
 ---------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
    ->  Insert on "3dim"
          ->  Custom Scan (ChunkDispatch)
                ->  Values Scan on "*VALUES*"
@@ -335,9 +335,9 @@ WITH "3dim_insert" AS (
 ) INSERT INTO "1dim" (SELECT time, temp FROM "3dim_insert" UNION SELECT time, temp FROM regular_insert);
                                   QUERY PLAN                                  
 ------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
    CTE 3dim_insert
-     ->  Custom Scan (HypertableInsert)
+     ->  Custom Scan (HypertableModify)
            ->  Insert on "3dim"
                  ->  Custom Scan (ChunkDispatch)
                        ->  Result

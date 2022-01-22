@@ -3813,7 +3813,7 @@ INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
                           QUERY PLAN                          
 --------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
    ->  Insert on t2
          ->  Custom Scan (ChunkDispatch)
                ->  Append

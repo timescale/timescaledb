@@ -44,7 +44,7 @@ FROM many_partitions_test
 GROUP BY period, device;
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
    ->  Insert on public.many_partitions_test_1m
          ->  Custom Scan (ChunkDispatch)
                Output: "*SELECT*".period, "*SELECT*".avg, "*SELECT*".device
