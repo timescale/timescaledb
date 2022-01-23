@@ -4,4 +4,4 @@
 
 \set IS_DISTRIBUTED FALSE
 
-\ir include/continuous_aggs_bgw_common.sql
+\ir include/cagg_ddl_common.sql

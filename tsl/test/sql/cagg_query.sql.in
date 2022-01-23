@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set TEST_BASE_NAME continuous_aggs_query
+\set TEST_BASE_NAME cagg_query
 SELECT
        format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
        format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
