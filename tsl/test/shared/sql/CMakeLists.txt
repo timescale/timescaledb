@@ -1,7 +1,7 @@
 set(TEST_FILES_SHARED
+    cagg_compression.sql
     constify_timestamptz_op_interval.sql
     constraint_exclusion_prepared.sql
-    continuous_aggs_compression.sql
     decompress_placeholdervar.sql
     dist_chunk.sql
     dist_distinct.sql

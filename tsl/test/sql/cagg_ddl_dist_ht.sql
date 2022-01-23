@@ -20,7 +20,7 @@ GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC
 
 \set IS_DISTRIBUTED TRUE
 
-\ir include/continuous_aggs_ddl_common.sql
+\ir include/cagg_ddl_common.sql
 
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;

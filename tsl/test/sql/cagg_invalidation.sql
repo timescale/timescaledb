@@ -4,4 +4,4 @@
 
 \set IS_DISTRIBUTED FALSE
 
-\ir include/continuous_aggs_ddl_common.sql
+\ir include/cagg_invalidation_common.sql

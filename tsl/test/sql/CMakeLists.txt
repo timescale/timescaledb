@@ -4,13 +4,13 @@ set(TEST_FILES
     compression_bgw.sql
     compression_permissions.sql
     compression_qualpushdown.sql
-    continuous_aggs_errors.sql
-    continuous_aggs_invalidation.sql
-    continuous_aggs_permissions.sql
-    continuous_aggs_policy.sql
-    continuous_aggs_refresh.sql
-    continuous_aggs_watermark.sql
-    continuous_aggs_experimental.sql
+    cagg_errors.sql
+    cagg_invalidation.sql
+    cagg_permissions.sql
+    cagg_policy.sql
+    cagg_refresh.sql
+    cagg_watermark.sql
+    cagg_experimental.sql
     dist_views.sql
     move.sql
     partialize_finalize.sql
@@ -30,20 +30,20 @@ set(TEST_FILES_DEBUG
     compression_segment_meta.sql
     compression.sql
     compress_table.sql
-    continuous_aggs_bgw_drop_chunks.sql
-    continuous_aggs_bgw.sql
-    continuous_aggs_bgw_dist_ht.sql
-    continuous_aggs_ddl.sql
-    continuous_aggs_ddl_dist_ht.sql
-    continuous_aggs_drop_chunks.sql
-    continuous_aggs_dump.sql
-    continuous_aggs_invalidation_dist_ht.sql
-    continuous_aggs_multi.sql
+    cagg_bgw_drop_chunks.sql
+    cagg_bgw.sql
+    cagg_bgw_dist_ht.sql
+    cagg_ddl.sql
+    cagg_ddl_dist_ht.sql
+    cagg_drop_chunks.sql
+    cagg_dump.sql
+    cagg_invalidation_dist_ht.sql
+    cagg_multi.sql
     continuous_aggs.sql
-    continuous_aggs_tableam.sql
-    continuous_aggs_usage.sql
-    continuous_aggs_policy_run.sql
-    continuous_aggs_variable_size_buckets.sql
+    cagg_tableam.sql
+    cagg_usage.sql
+    cagg_policy_run.sql
+    cagg_variable_size_buckets.sql
     data_fetcher.sql
     data_node_bootstrap.sql
     data_node.sql
@@ -74,13 +74,13 @@ set(TEST_FILES_DEBUG
     license.sql)
 
 set(TEST_TEMPLATES
-    compression_insert.sql.in continuous_aggs_union_view.sql.in
-    plan_skip_scan.sql.in transparent_decompression.sql.in
+    compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
+    transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES continuous_aggs_query.sql.in
-       dist_hypertable.sql.in remote_copy.sql.in dist_grant.sql.in)
+  list(APPEND TEST_TEMPLATES cagg_query.sql.in dist_hypertable.sql.in
+       remote_copy.sql.in dist_grant.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Check if PostgreSQL was compiled with JIT support
@@ -101,10 +101,10 @@ set(SOLO_TESTS
     bgw_reorder_drop_chunks
     compress_bgw_reorder_drop_chunks
     compression_ddl
-    continuous_aggs_bgw
-    continuous_aggs_ddl
-    continuous_aggs_ddl_dist_ht
-    continuous_aggs_dump
+    cagg_bgw
+    cagg_ddl
+    cagg_ddl_dist_ht
+    cagg_dump
     data_fetcher
     dist_util
     move
