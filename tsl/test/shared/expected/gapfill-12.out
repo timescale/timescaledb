@@ -3183,3 +3183,26 @@ GROUP BY 1,2;
 (20 rows)
 
 DROP TABLE i3834;
+-- issue #1528
+-- test float rounding for certain float values when start and end are identical
+SELECT
+  time_bucket_gapfill('1min'::interval, ts::timestamptz, '2019-11-05 2:20', '2019-11-05 2:30'),
+  interpolate(avg(20266.959547::float4)) AS float4,
+  interpolate(avg(20266.959547::float8)) AS float8
+FROM (VALUES ('2019-11-05 2:20'), ('2019-11-05 2:30')) v (ts)
+GROUP BY 1;
+     time_bucket_gapfill      |     float4      |    float8    
+------------------------------+-----------------+--------------
+ Tue Nov 05 02:20:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:21:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:22:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:23:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:24:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:25:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:26:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:27:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:28:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:29:00 2019 PST | 20266.958984375 | 20266.959547
+ Tue Nov 05 02:30:00 2019 PST | 20266.958984375 | 20266.959547
+(11 rows)
+
