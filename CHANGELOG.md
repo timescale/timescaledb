@@ -18,6 +18,7 @@ accidentally triggering the load of a previous DB version.**
 * #3939 Fix projection handling in time_bucket_gapfill
 * #3979 Fix deparsing of index predicates
 * #4015 Eliminate float rounding instabilities in interpolate
+* #4020 Fix ALTER TABLE EventTrigger initialization
 
 **Thanks**
 * @erikhh for reporting an issue with time_bucket_gapfill

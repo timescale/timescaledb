@@ -3267,6 +3267,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				if (ht != NULL)
 				{
+					EventTriggerAlterTableStart(args->parsetree);
 					result = process_altertable_set_options(cmd, ht);
 				}
 				break;
