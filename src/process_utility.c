@@ -266,8 +266,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 					{
 						FormData_hypertable_compression *fd = lfirst(lc);
 						if (fd->segmentby_column_index > 0)
-							allowed = lappend(allowed,
-											  makeString(NameStr(fd->attname)));
+							allowed = lappend(allowed, makeString(NameStr(fd->attname)));
 					}
 
 					/*
@@ -277,19 +276,21 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 					for (i = 0; i < ht->space->num_dimensions; i++)
 					{
 						Dimension *dim = &ht->space->dimensions[i];
-						allowed = lappend(allowed,
-										  makeString(NameStr(dim->fd.column_name)));
+						allowed = lappend(allowed, makeString(NameStr(dim->fd.column_name)));
 					}
 
 					diff = list_difference(constraint->keys, allowed);
-					if(diff != NIL)
+					if (diff != NIL)
 					{
 						StringInfo not_allowed = makeStringInfo();
-						foreach(lc, diff)
+						int i = 0;
+						foreach (lc, diff)
 						{
 							outNode(not_allowed, lfirst(lc));
-							if (foreach_current_index(lc) < list_length(diff) - 1)
+							if (i < list_length(diff) - 1)
 								appendStringInfoString(not_allowed, ", ");
+
+							i++;
 						}
 
 						ereport(ERROR,
@@ -297,10 +298,8 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 								 errmsg("UNIQUE constraints on columns not "
 										"included in compress_segmentby "
 										"are not supported"),
-								 errhint("Not allowed columns: %s",
-									 	 not_allowed->data)));
+								 errhint("Not allowed columns: %s", not_allowed->data)));
 					}
-
 				}
 
 				break;
