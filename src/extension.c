@@ -169,11 +169,11 @@ extension_update_state()
 	extension_set_state(new_state);
 	/*
 	 * Update the extension oid. Note that it is only safe to run
-	 * get_extension_oid() when the extension state is 'CREATED', because
-	 * otherwise we might not be even able to do a catalog lookup because we
-	 * are not in transaction state, and the like.
+	 * get_extension_oid() when the extension state is 'CREATED' or
+	 * 'TRANSITIONING', because otherwise we might not be even able to do a
+	 * catalog lookup because we are not in transaction state, and the like.
 	 */
-	if (new_state == EXTENSION_STATE_CREATED)
+	if (new_state == EXTENSION_STATE_CREATED || new_state == EXTENSION_STATE_TRANSITIONING)
 	{
 		ts_extension_oid = get_extension_oid(EXTENSION_NAME, true /* missing_ok */);
 		Assert(ts_extension_oid != InvalidOid);
