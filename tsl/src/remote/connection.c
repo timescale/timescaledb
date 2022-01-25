@@ -288,7 +288,16 @@ fill_result_error(TSConnectionError *err, int errcode, const char *errmsg, const
 	const char *sqlstate;
 
 	if (NULL == err || NULL == res || NULL == entry)
+	{
+		if (err)
+		{
+			MemSet(err, 0, sizeof(*err));
+			err->errcode = errcode;
+			err->msg = errmsg;
+			err->nodename = "";
+		}
 		return false;
+	}
 
 	Assert(entry->conn);
 
@@ -300,6 +309,8 @@ fill_result_error(TSConnectionError *err, int errcode, const char *errmsg, const
 	err->remote.hint = get_error_field_copy(res, PG_DIAG_MESSAGE_HINT);
 	err->remote.context = get_error_field_copy(res, PG_DIAG_CONTEXT);
 	err->remote.stmtpos = get_error_field_copy(res, PG_DIAG_STATEMENT_POSITION);
+	if (err->remote.msg == NULL)
+		err->remote.msg = pstrdup(PQresultErrorMessage(res));
 
 	sqlstate = err->remote.sqlstate;
 
@@ -867,14 +878,36 @@ remote_connection_get_result_error(const PGresult *res, TSConnectionError *err)
 PGresult *
 remote_connection_exec(TSConnection *conn, const char *cmd)
 {
+	PGresult *res;
+
 	if (!remote_connection_configure_if_changed(conn))
 	{
-		PGresult *res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
+		res = PQmakeEmptyPGresult(conn->pg_conn, PGRES_FATAL_ERROR);
 		PQfireResultCreateEvents(conn->pg_conn, res);
 		return res;
 	}
 
-	return PQexec(conn->pg_conn, cmd);
+	res = PQexec(conn->pg_conn, cmd);
+
+	/*
+	 * Workaround for the libpq disconnect case.
+	 *
+	 * libpq disconnect will create an result object without creating
+	 * events, which is usually done for a regular errors.
+	 *
+	 * In order to be compatible with our error handling code, force
+	 * create result event, if the result object does not have
+	 * it already.
+	 */
+	if (res)
+	{
+		ExecStatusType status = PQresultStatus(res);
+		ResultEntry *entry = PQresultInstanceData(res, eventproc);
+
+		if (status == PGRES_FATAL_ERROR && entry == NULL)
+			PQfireResultCreateEvents(conn->pg_conn, res);
+	}
+	return res;
 }
 
 /*
