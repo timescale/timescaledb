@@ -721,6 +721,9 @@ enum Anum_bgw_job_stat
 	Anum_bgw_job_stat_total_crashes,
 	Anum_bgw_job_stat_consecutive_failures,
 	Anum_bgw_job_stat_consecutive_crashes,
+	Anum_bgw_job_stat_total_successful_duration,
+	Anum_bgw_job_stat_max_successful_duration,
+	Anum_bgw_job_stat_min_successful_duration,
 	_Anum_bgw_job_stat_max,
 };
 
@@ -741,6 +744,9 @@ typedef struct FormData_bgw_job_stat
 	int64 total_crashes;
 	int32 consecutive_failures;
 	int32 consecutive_crashes;
+  Interval max_successful_duration;
+  Interval min_successful_duration;
+  Interval total_successful_duration;
 } FormData_bgw_job_stat;
 
 typedef FormData_bgw_job_stat *Form_bgw_job_stat;

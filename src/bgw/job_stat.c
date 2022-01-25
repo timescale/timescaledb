@@ -305,6 +305,20 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	if (result_ctx->result == JOB_SUCCESS)
 	{
 		fd->total_success++;
+		fd->total_successful_duration =
+			*DatumGetIntervalP(DirectFunctionCall2(interval_pl,
+												   IntervalPGetDatum(&fd->total_successful_duration),
+												   IntervalPGetDatum(duration)));
+
+		if (DatumGetInt32(DirectFunctionCall2(interval_cmp, IntervalPGetDatum(&fd->max_successful_duration), IntervalPGetDatum(duration))) < 0 || fd->total_success==1)
+		{
+			fd->max_successful_duration = *duration;
+		}
+		if (DatumGetInt32(DirectFunctionCall2(interval_cmp, IntervalPGetDatum(&fd->min_successful_duration), IntervalPGetDatum(duration))) > 0 || fd->total_success==1)
+		{
+			fd->min_successful_duration = *duration;
+		}
+
 		fd->consecutive_failures = 0;
 		fd->last_successful_finish = fd->last_finish;
 		/* Mark the next start at the end if the job itself hasn't */
@@ -383,7 +397,12 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 		IntervalPGetDatum(&zero_ival);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_success)] = Int64GetDatum(0);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_failures)] = Int64GetDatum(0);
-	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_consecutive_failures)] = Int32GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_total_successful_duration)] =
+		IntervalPGetDatum(&zero_ival);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_max_successful_duration)] =
+		IntervalPGetDatum(&zero_ival);
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_min_successful_duration)] =
+		IntervalPGetDatum(&zero_ival);
 
 	if (mark_start)
 	{

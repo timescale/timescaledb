@@ -237,7 +237,10 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
   total_failures bigint NOT NULL,
   total_crashes bigint NOT NULL,
   consecutive_failures int NOT NULL,
-  consecutive_crashes int NOT NULL
+  consecutive_crashes int NOT NULL,
+  max_successful_duration interval NOT NULL,
+  min_successful_duration interval NOT NULL,
+  total_successful_duration interval NOT NULL
 );
 
 --The job_stat table is not dumped by pg_dump on purpose because

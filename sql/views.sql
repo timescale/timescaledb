@@ -76,7 +76,27 @@ SELECT ht.schema_name AS hypertable_schema,
   END AS next_start,
   js.total_runs,
   js.total_successes,
-  js.total_failures
+  js.total_failures,
+  CASE WHEN js.total_successes = 0 THEN
+	NULL
+  ELSE 
+  	js.total_successful_duration
+  END AS total_successful_duration,
+  CASE WHEN js.total_successes = 0 THEN
+	NULL
+  ELSE 
+  	js.max_successful_duration
+  END AS max_successful_duration,
+  CASE WHEN js.total_successes = 0 THEN
+	NULL
+  ELSE 
+  	js.min_successful_duration
+  END AS min_successful_duration,
+  CASE WHEN js.total_successes = 0 THEN
+	NULL
+  ELSE 
+	js.total_successful_duration / js.total_successes
+  END AS mean_successful_duration
 FROM _timescaledb_config.bgw_job j
   INNER JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
   LEFT JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
