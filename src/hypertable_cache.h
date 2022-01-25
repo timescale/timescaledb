@@ -13,6 +13,34 @@
 #include "hypertable.h"
 #include "export.h"
 
+/* When a hypertable entry ht is fetched using the cache
+ * i.e. ts_hypertable_cache_get_entry and variants, all related information such as
+ *  hyperspaces, dimensions etc are also fetched into the cache. These are allocated in
+ *  the cache's memory context.
+ *  If the cache pin is released by calling ts_cache_release or variants, the memory
+ *  associated with hypertable, its space dimensions etc. have also been released.
+ *  As a best practice, call ts_cache_release right before returning from the function
+ *  where the cache entry was acquired. This prevents inadvertent errors if someone
+ *  modifies this function later and uses an indirectly linked object from the cache.
+ *  Example:
+ *  void my_func(...)
+ *  {
+ *
+ *     Hypertable * ht = ts_hypertable_cache_get_xxx(...)
+ *     ......
+ *
+ *    if ( error )
+ *    {
+ *        elog(ERROR, ... ); <----- ts_cache_release not needed here.
+ *    }
+ *
+ *    .....
+ *    ts_cache_release();
+ *    return ..;
+ *  }
+ *  Note that any exceptions/errors i.e. elog/ereport etc. will trigger an automatic
+ *  cache release. So there is no need for additional  ts_cache_release() calls.
+ */
 extern TSDLLEXPORT Hypertable *ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid,
 															 const unsigned int flags);
 extern TSDLLEXPORT Hypertable *ts_hypertable_cache_get_cache_and_entry(const Oid relid,
