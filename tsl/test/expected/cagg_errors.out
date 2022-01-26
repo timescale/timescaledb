@@ -656,7 +656,9 @@ select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interva
    1002
 (1 row)
 
---this one fails as i2980_cagg refresh policy is (NULL, NULL)
+SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
+ERROR:  compression not enabled on continuous aggregate "i2980_cagg"
+ALTER MATERIALIZED VIEW i2980_cagg SET ( timescaledb.compress );
 SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
 ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for i2980_cagg
 SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);

@@ -336,14 +336,17 @@ FROM metrics
 GROUP BY 1, 2
 WITH NO DATA;
 
-ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
-
 --can set compression policy only after setting up refresh policy --
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
+
+--can set compression policy only after enabling compression --
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
+SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ; 
 \set ON_ERROR_STOP 1
 
-SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
+ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
+
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ; 
 SELECT remove_compression_policy('metrics_cagg');
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset 
