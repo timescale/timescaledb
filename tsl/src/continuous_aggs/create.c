@@ -164,8 +164,8 @@ typedef struct MatTableColumnInfo
 
 typedef struct FinalizeQueryInfo
 {
-	List *final_seltlist;   /*select target list for finalize query */
-	Node *final_havingqual; /*having qual for finalize query */
+	List *final_seltlist;   /* select target list for finalize query */
+	Node *final_havingqual; /* having qual for finalize query */
 	Query *final_userquery; /* user query used to compute the finalize_query */
 } FinalizeQueryInfo;
 
@@ -232,7 +232,7 @@ static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, int64 bucket_width, bool materialized_only,
-						  const char *direct_schema, const char *direct_view)
+						  const char *direct_schema, const char *direct_view, const int32 version)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -269,6 +269,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_version)] = Int32GetDatum(version);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -1672,16 +1673,16 @@ finalizequery_create_havingqual(FinalizeQueryInfo *inp, MatTableColumnInfo *matt
 }
 
 /*
-Init the finalize query data structure.
-Parameters:
-orig_query - the original query from user view that is being used as template for the finalize query
-tlist_aliases - aliases for the view select list
-materialization table columns are created . This will be returned in  the mattblinfo
-
-DO NOT modify orig_query. Make a copy if needed.
-SIDE_EFFCT: the data structure in mattblinfo is modified as a side effect by adding new materialize
-table columns and partialize exprs.
-*/
+ * Init the finalize query data structure.
+ * Parameters:
+ * orig_query - the original query from user view that is being used as template for the finalize query
+ * tlist_aliases - aliases for the view select list
+ * materialization table columns are created . This will be returned in  the mattblinfo
+ *
+ * DO NOT modify orig_query. Make a copy if needed.
+ * SIDE_EFFCT: the data structure in mattblinfo is modified as a side effect by adding new materialize
+ * table columns and partialize exprs.
+ */
 static void
 finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo *mattblinfo)
 {
@@ -1709,10 +1710,12 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		TargetEntry *modte = copyObject(tle);
 		cxt.addcol = false;
 		cxt.original_query_resno = resno;
+
 		/* if tle has aggrefs , get the corresponding
 		 * finalize_agg expression and save it in modte
 		 * also add correspong materialization table column info
 		 * for the aggrefs in tle. */
+		// @TODO: check cagg version here
 		modte = (TargetEntry *) expression_tree_mutator((Node *) modte,
 														add_aggregate_partialize_mutator,
 														&cxt);
@@ -1765,6 +1768,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 {
 	Query *final_selquery = NULL;
 	ListCell *lc;
+
 	/*
 	 * for initial cagg creation rtable will have only 1 entry,
 	 * for alter table rtable will have multiple entries with our
@@ -1778,6 +1782,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	rte->tablesample = NULL;
 	rte->eref->colnames = NIL;
 	rte->selectedCols = NULL;
+
 	/* aliases for column names for the materialization table*/
 	foreach (lc, matcollist)
 	{
@@ -1812,7 +1817,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	fromexpr->quals = NULL;
 	final_selquery->jointree = fromexpr;
 	final_selquery->targetList = inp->final_seltlist;
-	final_selquery->groupClause = inp->final_userquery->groupClause;
+	//final_selquery->groupClause = inp->final_userquery->groupClause;
 	final_selquery->sortClause = inp->final_userquery->sortClause;
 	/* copy the having clause too */
 	final_selquery->havingQual = inp->final_havingqual;
@@ -1934,7 +1939,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 */
 	stmt->options = NULL;
 
-	/* Step 1: create the materialization table */
+	/*
+	 * Step 1: create the materialization table
+	 */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
 	ts_catalog_restore_user(&sec_ctx);
@@ -1949,8 +1956,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													create_stmt->into->tableSpaceName,
 													create_stmt->into->accessMethod,
 													&mataddress);
-	/* Step 2: create view with select finalize from materialization
-	 * table
+	/*
+	 * Step 2: create view with select finalize from materialization table
 	 */
 	final_selquery =
 		finalizequery_get_select_query(&finalqinfo, mattblinfo.matcollist, &mataddress);
@@ -1964,7 +1971,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	create_view_for_query(final_selquery, stmt->view);
 
-	/* Step 3: create the internal view with select partialize(..)
+	/*
+	 * Step 3: create the internal view with select partialize(..)
 	 */
 	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
 
@@ -1992,7 +2000,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  origquery_ht->bucket_width,
 							  materialized_only,
 							  dum_rel->schemaname,
-							  dum_rel->relname);
+							  dum_rel->relname,
+							  CONTINUOUS_AGG_VERSION_1);
 
 	if (origquery_ht->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{

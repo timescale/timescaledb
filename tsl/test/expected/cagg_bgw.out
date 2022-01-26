@@ -68,8 +68,8 @@ SELECT * FROM timescaledb_information.job_stats;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | direct_view_schema | direct_view_name | materialized_only 
--------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------------------+------------------+-------------------
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | direct_view_schema | direct_view_name | materialized_only | version 
+-------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------------------+------------------+-------------------+---------
 (0 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

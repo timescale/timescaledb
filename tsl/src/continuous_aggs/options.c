@@ -250,6 +250,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		update_materialized_only(agg, agg->data.materialized_only);
 		ts_cache_release(hcache);
 	}
+
 	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
 	{
 		bool compress_enable =
@@ -262,8 +263,19 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_alter_compression(agg, mat_ht, compress_enable);
 		ts_cache_release(hcache);
 	}
+
 	if (!with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default)
 	{
 		elog(ERROR, "cannot alter create_group_indexes option for continuous aggregates");
+	}
+
+	if (!with_clause_options[ContinuousViewOptionVersion].is_default)
+	{
+		int32 version = DatumGetInt32(with_clause_options[ContinuousViewOptionVersion].parsed);
+
+		if (version == CONTINUOUS_AGG_VERSION_0)
+			elog(ERROR, "cannot alter continuous aggregates to a deprecated version");
+
+		elog(INFO, "new version %d", version);
 	}
 }

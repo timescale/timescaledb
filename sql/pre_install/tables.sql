@@ -272,6 +272,7 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_schema name NOT NULL,
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
+  version integer NOT NULL DEFAULT 1 CHECK (version IN (0, 1, 2)), /* 0-Current and deprecated version 1-Faster version finalizing data (only single-node) 2-New version removing re-aggregation */
   UNIQUE (user_view_schema, user_view_name),
   UNIQUE (partial_view_schema, partial_view_name)
 );

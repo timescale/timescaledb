@@ -23,6 +23,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionCreateGroupIndex,
 	ContinuousViewOptionMaterializedOnly,
 	ContinuousViewOptionCompress,
+	ContinuousViewOptionVersion,
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType

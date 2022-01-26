@@ -61,6 +61,11 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 			.arg_name = "compress",
 			.type_id = BOOLOID,
 		},
+		[ContinuousViewOptionVersion] = {
+			.arg_name = "version",
+			.type_id = INT4OID,
+			.default_val = Int32GetDatum(1),
+		},
 };
 
 WithClauseResult *

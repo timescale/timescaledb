@@ -849,6 +849,10 @@ typedef struct FormData_bgw_policy_chunk_stats_job_id_chunk_id_idx
  *
  ******************************************/
 #define CONTINUOUS_AGG_TABLE_NAME "continuous_agg"
+
+#define CONTINUOUS_AGG_VERSION_0	0
+#define CONTINUOUS_AGG_VERSION_1	1
+#define CONTINUOUS_AGG_VERSION_2	2
 typedef enum Anum_continuous_agg
 {
 	Anum_continuous_agg_mat_hypertable_id = 1,
@@ -861,6 +865,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
+	Anum_continuous_agg_version,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
