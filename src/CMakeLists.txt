@@ -39,6 +39,7 @@ set(SOURCES
     scan_iterator.c
     sort_transform.c
     subspace_store.c
+    timezones.c
     time_bucket.c
     time_utils.c
     custom_type_cache.c
