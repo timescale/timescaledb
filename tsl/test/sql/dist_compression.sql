@@ -480,7 +480,10 @@ ALTER TABLE test_table_integer ALTER COLUMN val TYPE float;
 ALTER TABLE test_table_bigint ALTER COLUMN val TYPE float;
 \set ON_ERROR_STOP 1
 
---create a cont agg view on the ht as well 
+--create a cont agg view on the ht with compressed chunks as well 
+SELECT compress_chunk(chunk, true) FROM
+( SELECT chunk FROM show_chunks('test_recomp_int') AS chunk ORDER BY chunk LIMIT 1 )q;
+
 CREATE MATERIALIZED VIEW test_recomp_int_cont_view
 WITH (timescaledb.continuous,
       timescaledb.materialized_only=true)
@@ -520,6 +523,21 @@ INSERT INTO test_recomp_int VALUES (4, 10);
 CALL refresh_continuous_aggregate('test_recomp_int_cont_view', NULL, 100);
 SELECT * FROM test_recomp_int_cont_view 
 WHERE time_bucket = 0 or time_bucket = 50 ORDER BY 1;
+
+--TEST drop one of the compressed chunks in test_recomp_int. The catalog
+--tuple for the chunk will be preserved since we have a cagg.
+-- Verify that status is accurate.
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' ORDER BY 1;
+SELECT drop_chunks('test_recomp_int', older_than=> 20::bigint );
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'test_recomp_int' ORDER BY 1;
 
 -- TEST drop should nuke everything
 DROP TABLE test_recomp_int CASCADE;

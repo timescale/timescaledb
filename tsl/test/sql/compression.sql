@@ -312,7 +312,7 @@ FROM _timescaledb_catalog.hypertable ht
 WHERE ht.table_name='datatype_test'
 ORDER BY attname;
 
---try to compress a hypertable that has a continuous aggregate
+--TEST try to compress a hypertable that has a continuous aggregate
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
 SELECT create_hypertable('metrics','time');
 
@@ -329,7 +329,8 @@ SELECT
   CASE WHEN true THEN 'foo' ELSE 'bar' END,
   COALESCE(NULL,'coalesce'),
   avg(v1) + avg(v2) AS avg1,
-  avg(v1+v2) AS avg2
+  avg(v1+v2) AS avg2, 
+  count(*) AS cnt
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 
@@ -660,3 +661,30 @@ SELECT approximate_row_count('approx_count');
 ANALYZE approx_count;
 SELECT approximate_row_count('approx_count');
 DROP TABLE approx_count;
+
+--TEST drop_chunks from a compressed hypertable (that has caggs defined).
+-- chunk metadata is still retained. verify correct status for chunk
+SELECT count(*)
+FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch ) q;
+SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
+
+--now reload data into the dropped chunks region, then compress 
+-- then verify chunk status/dropped column 
+INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
+SELECT count(*)
+FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch) q;
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+
+SELECT count(*) FROM metrics;

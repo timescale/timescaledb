@@ -3030,6 +3030,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 		form.compressed_chunk_id = INVALID_CHUNK_ID;
 		form.dropped = true;
+		form.status = CHUNK_STATUS_DEFAULT;
 		new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 		ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
 		heap_freetuple(new_tuple);
