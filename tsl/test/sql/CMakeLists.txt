@@ -44,6 +44,7 @@ set(TEST_FILES_DEBUG
     cagg_usage.sql
     cagg_policy_run.sql
     cagg_variable_size_buckets.sql
+    cagg_with_timezone.sql
     data_fetcher.sql
     data_node_bootstrap.sql
     data_node.sql

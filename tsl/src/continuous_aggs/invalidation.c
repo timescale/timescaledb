@@ -545,28 +545,6 @@ invalidation_entry_reset(Invalidation *entry)
 }
 
 /*
- * Expand an invalidation to bucket boundaries, for the case of monthly buckets.
- *
- * See invalidation_expand_to_bucket_boundaries() below.
- */
-static void
-invalidation_expand_to_bucket_boundaries_for_months(
-	Invalidation *inv, Oid timetype, const ContinuousAggsBucketFunction *bucket_function)
-{
-	InternalTimeRange range_in, range_out;
-
-	range_in.type = timetype;
-	range_in.start = inv->lowest_modified_value;
-	range_in.end = inv->greatest_modified_value;
-
-	range_out = compute_circumscribed_bucketed_refresh_window_for_months(
-		&range_in, ts_bucket_function_to_bucket_width_in_months(bucket_function));
-
-	inv->lowest_modified_value = range_out.start;
-	inv->greatest_modified_value = range_out.end;
-}
-
-/*
  * Expand an invalidation to bucket boundaries.
  *
  * Since a refresh always materializes full buckets, we can safely expand an
@@ -584,7 +562,9 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 
 
 	if (bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		invalidation_expand_to_bucket_boundaries_for_months(inv, timetype, bucket_function);
+		ts_compute_circumscribed_bucketed_refresh_window_variable(&inv->lowest_modified_value,
+																  &inv->greatest_modified_value,
+																  bucket_function);
 		return;
 	}
 

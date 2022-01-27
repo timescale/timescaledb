@@ -884,7 +884,6 @@ typedef struct FormData_continuous_agg
 	 * procedures instead, such as:
 	 * - ts_continuous_agg_bucket_width_variable
 	 * - ts_continuous_agg_bucket_width
-	 * - ts_bucket_function_to_bucket_width_in_months
 	 */
 	int64 bucket_width;
 	NameData direct_view_schema;

@@ -145,90 +145,6 @@ compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh
 }
 
 /*
- * Same as compute_inscribed_bucketed_refresh_window() but for months.
- *
- * The algorithm is simple:
- *
- * end = time_bucket("N months", end)
- *
- * if(start != time_bucket("N months", start))
- *     start = time_bucket("N months", start) + interval "N months"
- *
- */
-static InternalTimeRange
-compute_inscribed_bucketed_refresh_window_for_months(const InternalTimeRange *const refresh_window,
-													 const int32 bucket_width_months)
-{
-	InternalTimeRange result = *refresh_window;
-	Datum start_old, end_old, start_new, end_new;
-	Interval interval;
-
-	memset(&interval, 0, sizeof(interval));
-	interval.month = bucket_width_months;
-
-	start_old = ts_internal_to_time_value(refresh_window->start, DATEOID);
-	end_old = ts_internal_to_time_value(refresh_window->end, DATEOID);
-	end_new = DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), end_old);
-	start_new =
-		DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), start_old);
-
-	if (start_new != start_old)
-	{
-		start_new = DirectFunctionCall1(timestamp_date,
-										DirectFunctionCall2(date_pl_interval,
-															start_new,
-															IntervalPGetDatum(&interval)));
-	}
-
-	result.start = ts_time_value_to_internal(start_new, DATEOID);
-	result.end = ts_time_value_to_internal(end_new, DATEOID);
-	return result;
-}
-
-/*
- * Same as compute_circumscribed_bucketed_refresh_window(), but for months.
- *
- * The algorithm is simple:
- *
- * start = time_bucket("N months", start)
- *
- * if(end != time_bucket("N months", end))
- *     end = time_bucket("N months", end) + interval "N months"
- *
- * This procedure is re-used for invalidation and thus is public.
- * See invalidation_expand_to_bucket_boundaries_for_months().
- */
-InternalTimeRange
-compute_circumscribed_bucketed_refresh_window_for_months(
-	const InternalTimeRange *const refresh_window, const int32 bucket_width_months)
-{
-	InternalTimeRange result = *refresh_window;
-	Datum start_old, end_old, start_new, end_new;
-	Interval interval;
-
-	memset(&interval, 0, sizeof(interval));
-	interval.month = bucket_width_months;
-
-	start_old = ts_internal_to_time_value(refresh_window->start, DATEOID);
-	end_old = ts_internal_to_time_value(refresh_window->end, DATEOID);
-	start_new =
-		DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), start_old);
-	end_new = DirectFunctionCall2(ts_time_bucket_ng_date, IntervalPGetDatum(&interval), end_old);
-
-	if (end_new != end_old)
-	{
-		end_new = DirectFunctionCall1(timestamp_date,
-									  DirectFunctionCall2(date_pl_interval,
-														  end_new,
-														  IntervalPGetDatum(&interval)));
-	}
-
-	result.start = ts_time_value_to_internal(start_new, DATEOID);
-	result.end = ts_time_value_to_internal(end_new, DATEOID);
-	return result;
-}
-
-/*
  * Adjust the refresh window to align with circumscribed buckets, so it includes buckets, which
  * fully cover the refresh window.
  *
@@ -262,8 +178,11 @@ compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const ref
 {
 	if (bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		return compute_circumscribed_bucketed_refresh_window_for_months(
-			refresh_window, ts_bucket_function_to_bucket_width_in_months(bucket_function));
+		InternalTimeRange result = *refresh_window;
+		ts_compute_circumscribed_bucketed_refresh_window_variable(&result.start,
+																  &result.end,
+																  bucket_function);
+		return result;
 	}
 
 	InternalTimeRange result = *refresh_window;
@@ -801,9 +720,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	if (ts_continuous_agg_bucket_width_variable(cagg))
 	{
-		refresh_window = compute_inscribed_bucketed_refresh_window_for_months(
-			refresh_window_arg,
-			ts_bucket_function_to_bucket_width_in_months(cagg->bucket_function));
+		refresh_window = *refresh_window_arg;
+		ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
+															  &refresh_window.end,
+															  cagg->bucket_function);
 	}
 	else
 	{

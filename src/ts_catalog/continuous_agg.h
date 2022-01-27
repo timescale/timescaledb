@@ -63,8 +63,8 @@ typedef struct ContinuousAggsBucketFunction
 	bool experimental;
 	/* Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng" */
 	char *name;
-	/* `bucket_width` argument of the function, e.g. "1 month" */
-	char *bucket_width;
+	/* `bucket_width` argument of the function */
+	Interval *bucket_width;
 	/* `origin` argument of the function provided by the user */
 	char *origin;
 	/* `timezone` argument of the function provided by the user */
@@ -158,7 +158,14 @@ extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, c
 
 extern TSDLLEXPORT bool ts_continuous_agg_bucket_width_variable(const ContinuousAgg *agg);
 extern TSDLLEXPORT int64 ts_continuous_agg_bucket_width(const ContinuousAgg *agg);
-extern TSDLLEXPORT int32
-ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction *agg);
+
+extern TSDLLEXPORT void
+ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
+													  const ContinuousAggsBucketFunction *bf);
+extern TSDLLEXPORT void
+ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
+														  const ContinuousAggsBucketFunction *bf);
+extern TSDLLEXPORT int64 ts_compute_beginning_of_the_next_bucket_variable(
+	int64 timeval, const ContinuousAggsBucketFunction *bf);
 
 #endif /* TIMESCALEDB_CONTINUOUS_AGG_H */

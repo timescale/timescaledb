@@ -281,6 +281,7 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
+		const char *bucket_width_str;
 		Datum values[Natts_continuous_aggs_bucket_function];
 		bool isnull[Natts_continuous_aggs_bucket_function];
 
@@ -300,9 +301,17 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 		Assert(!isnull[Anum_continuous_aggs_bucket_function_name - 1]);
 		bf->name = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_name - 1]);
 
+		/*
+		 * So far bucket_width is stored as TEXT for flexibility, but it's type
+		 * most likely is going to change to Interval when the variable-sized
+		 * buckets feature will stabilize.
+		 */
 		Assert(!isnull[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
-		bf->bucket_width =
+		bucket_width_str =
 			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
+		Assert(strlen(bucket_width_str) > 0);
+		bf->bucket_width = DatumGetIntervalP(
+			DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
 
 		Assert(!isnull[Anum_continuous_aggs_bucket_function_origin - 1]);
 		bf->origin = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
@@ -407,6 +416,7 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 static const char *
 bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
 {
+	char *bucket_width_str;
 	StringInfo str;
 
 	if (NULL == bf)
@@ -415,14 +425,15 @@ bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
 	str = makeStringInfo();
 
 	/* We are pretty sure that user can't place ';' character in these fields */
-	Assert(strstr(bf->bucket_width, ";") == NULL);
 	Assert(strstr(bf->origin, ";") == NULL);
 	Assert(strstr(bf->timezone, ";") == NULL);
 
+	bucket_width_str =
+		DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(bf->bucket_width)));
 	appendStringInfo(str,
 					 "%d;%s;%s;%s;",
 					 BUCKET_FUNCTION_SERIALIZE_VERSION,
-					 bf->bucket_width,
+					 bucket_width_str,
 					 bf->origin,
 					 bf->timezone);
 
@@ -477,7 +488,9 @@ bucket_function_deserialize(const char *str)
 	bf = palloc(sizeof(ContinuousAggsBucketFunction));
 	bf->experimental = true;
 	bf->name = "time_bucket_ng";
-	bf->bucket_width = strings[1];
+	Assert(strlen(strings[1]) > 0);
+	bf->bucket_width = DatumGetIntervalP(
+		DirectFunctionCall3(interval_in, CStringGetDatum(strings[1]), InvalidOid, -1));
 	bf->origin = strings[2];
 	bf->timezone = strings[3];
 	return bf;
@@ -1391,12 +1404,11 @@ watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
 		{
 			/*
 			 * Since `value` is already bucketed, `bucketed = true` flag can
-			 * be added to ts_time_bucket_and_add_months() as an optimization,
-			 * if necessary.
+			 * be added to ts_compute_beginning_of_the_next_bucket_variable() as
+			 * an optimization, if necessary.
 			 */
-			w->value = ts_time_bucket_and_add_months(value,
-													 ts_bucket_function_to_bucket_width_in_months(
-														 cagg->bucket_function));
+			w->value =
+				ts_compute_beginning_of_the_next_bucket_variable(value, cagg->bucket_function);
 		}
 		else
 		{
@@ -1487,34 +1499,161 @@ ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
 }
 
 /*
- * Determines bucket size in months for given bucketing function.
- *
- * This procedure is a good candidate for using memoization. However, currently
- * there are no known cases when this procedure creates a bottleneck. Thus there
- * doesn't seem to be much sense optimizing it now.
+ * Calls one of time_bucket_ng() versions depending on the arguments. This is
+ * a common procedure used by ts_compute_* below.
  */
-int32
-ts_bucket_function_to_bucket_width_in_months(const ContinuousAggsBucketFunction *bf)
+static Datum
+generic_time_bucket_ng(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
-	Interval *interval;
+	/* bf->timezone can't be NULL. If timezone is not specified, "" is stored */
+	Assert(bf->timezone != NULL);
 
-	/* bucket_function should always be filled for variable buckets */
-	Assert(NULL != bf);
-	/* expecting only _timescaledb_experimental.time_bucket_ng() bucketing function */
-	Assert(bf->experimental);
-	Assert(0 == strcmp(bf->name, "time_bucket_ng"));
-	/* variable buckets with specified non-default origin are not supported */
-	Assert(0 == strlen(bf->origin));
-	/* variable buckets with specified timezone are not supported */
-	Assert(0 == strlen(bf->timezone));
+	if (strlen(bf->timezone) > 0)
+	{
+		return DirectFunctionCall3(ts_time_bucket_ng_timezone,
+								   IntervalPGetDatum(bf->bucket_width),
+								   timestamp,
+								   CStringGetTextDatum(bf->timezone));
+	}
 
-	interval = DatumGetIntervalP(
-		DirectFunctionCall3(interval_in, CStringGetDatum(bf->bucket_width), InvalidOid, -1));
+	return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
+							   IntervalPGetDatum(bf->bucket_width),
+							   timestamp);
+}
 
-	/* make sure this function is called only in the right contexts */
-	Assert(interval->month != 0);
-	Assert(interval->day == 0);
-	Assert(interval->time == 0);
+/*
+ * Adds one bf->bucket_size interval to the timestamp. This is a common
+ * procedure used by ts_compute_* below.
+ *
+ * If bf->timezone is specified, the math happens in this timezone.
+ * Otherwise, it happens in UTC.
+ */
+static Datum
+generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
+{
+	Datum tzname = 0;
+	bool has_timezone;
 
-	return interval->month;
+	/* bf->timezone can't be NULL. If timezone is not specified, "" is stored */
+	Assert(bf->timezone != NULL);
+
+	has_timezone = (strlen(bf->timezone) > 0);
+
+	if (has_timezone)
+	{
+		/*
+		 * Convert 'timestamp' to TIMESTAMP at given timezone.
+		 * The code is equal to 'timestamptz AT TIME ZONE tzname'.
+		 */
+		tzname = CStringGetTextDatum(bf->timezone);
+		timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
+	}
+
+	timestamp =
+		DirectFunctionCall2(timestamp_pl_interval, timestamp, IntervalPGetDatum(bf->bucket_width));
+
+	if (has_timezone)
+	{
+		Assert(tzname != 0);
+		timestamp = DirectFunctionCall2(timestamp_zone, tzname, timestamp);
+	}
+
+	return timestamp;
+}
+
+/*
+ * Computes inscribed refresh_window for variable-sized buckets.
+ *
+ * The algorithm is simple:
+ *
+ * end = time_bucket(bucket_size, end)
+ *
+ * if(start != time_bucket(bucket_size, start))
+ *     start = time_bucket(bucket_size, start) + interval bucket_size
+ *
+ */
+void
+ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
+													  const ContinuousAggsBucketFunction *bf)
+{
+	Datum start_old, end_old, start_new, end_new;
+	/*
+	 * It's OK to use TIMESTAMPOID here. Variable-sized buckets can be used
+	 * only for dates, timestamps and timestamptz's. For all these types our
+	 * internal time representation is microseconds relative the UNIX epoch.
+	 * So the results will be correct regardless of the actual type used in
+	 * the CAGG. For more details see ts_internal_to_time_value() implementation.
+	 */
+	start_old = ts_internal_to_time_value(*start, TIMESTAMPOID);
+	end_old = ts_internal_to_time_value(*end, TIMESTAMPOID);
+
+	start_new = generic_time_bucket_ng(bf, start_old);
+	end_new = generic_time_bucket_ng(bf, end_old);
+
+	if (DatumGetTimestamp(start_new) != DatumGetTimestamp(start_old))
+	{
+		start_new = generic_add_interval(bf, start_new);
+	}
+
+	*start = ts_time_value_to_internal(start_new, TIMESTAMPOID);
+	*end = ts_time_value_to_internal(end_new, TIMESTAMPOID);
+}
+
+/*
+ * Computes circumscribed refresh_window for variable-sized buckets.
+ *
+ * The algorithm is simple:
+ *
+ * start = time_bucket(bucket_size, start)
+ *
+ * if(end != time_bucket(bucket_size, end))
+ *     end = time_bucket(bucket_size, end) + interval bucket_size
+ */
+void
+ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
+														  const ContinuousAggsBucketFunction *bf)
+{
+	Datum start_old, end_old, start_new, end_new;
+
+	/*
+	 * It's OK to use TIMESTAMPOID here.
+	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 */
+	start_old = ts_internal_to_time_value(*start, TIMESTAMPOID);
+	end_old = ts_internal_to_time_value(*end, TIMESTAMPOID);
+	start_new = generic_time_bucket_ng(bf, start_old);
+	end_new = generic_time_bucket_ng(bf, end_old);
+
+	if (DatumGetTimestamp(end_new) != DatumGetTimestamp(end_old))
+	{
+		end_new = generic_add_interval(bf, end_new);
+	}
+
+	*start = ts_time_value_to_internal(start_new, TIMESTAMPOID);
+	*end = ts_time_value_to_internal(end_new, TIMESTAMPOID);
+}
+
+/*
+ * Calculates the beginning of the next bucket.
+ *
+ * The algorithm is just:
+ *
+ * val = time_bucket(bucket_size, val) + interval bucket_size
+ */
+int64
+ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
+												 const ContinuousAggsBucketFunction *bf)
+{
+	Datum val_new;
+	Datum val_old;
+
+	/*
+	 * It's OK to use TIMESTAMPOID here.
+	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 */
+	val_old = ts_internal_to_time_value(timeval, TIMESTAMPOID);
+
+	val_new = generic_time_bucket_ng(bf, val_old);
+	val_new = generic_add_interval(bf, val_new);
+	return ts_time_value_to_internal(val_new, TIMESTAMPOID);
 }
