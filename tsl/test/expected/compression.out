@@ -915,7 +915,7 @@ ORDER BY attname;
  timestamptz_column | COMPRESSION_ALGORITHM_DELTADELTA
 (14 rows)
 
---try to compress a hypertable that has a continuous aggregate
+--TEST try to compress a hypertable that has a continuous aggregate
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
 SELECT create_hypertable('metrics','time');
 NOTICE:  adding not-null constraint to column "time"
@@ -936,18 +936,19 @@ SELECT
   CASE WHEN true THEN 'foo' ELSE 'bar' END,
   COALESCE(NULL,'coalesce'),
   avg(v1) + avg(v2) AS avg1,
-  avg(v1+v2) AS avg2
+  avg(v1+v2) AS avg2, 
+  count(*) AS cnt
 FROM metrics
 GROUP BY 1 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
-             time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 
-------------------------------+-------+---------+----------------------------------------------+------+----------+------+------
- Fri Dec 31 16:00:00 1999 PST | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Sat Jan 01 16:00:00 2000 PST | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Sun Jan 02 16:00:00 2000 PST | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Mon Jan 03 16:00:00 2000 PST | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
- Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1
+             time             | const | numeric |                    first                     | case | coalesce | avg1 | avg2 | cnt  
+------------------------------+-------+---------+----------------------------------------------+------+----------+------+------+------
+ Fri Dec 31 16:00:00 1999 PST | Const |     4.3 | ("Sat Jan 01 00:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1 |  960
+ Sat Jan 01 16:00:00 2000 PST | Const |     4.3 | ("Sat Jan 01 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1 | 1440
+ Sun Jan 02 16:00:00 2000 PST | Const |     4.3 | ("Sun Jan 02 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1 | 1440
+ Mon Jan 03 16:00:00 2000 PST | Const |     4.3 | ("Mon Jan 03 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1 | 1440
+ Tue Jan 04 16:00:00 2000 PST | Const |     4.3 | ("Tue Jan 04 16:00:00 2000 PST",1,0.25,0.75) | foo  | coalesce |    1 |    1 | 1440
 (5 rows)
 
 ALTER TABLE metrics set(timescaledb.compress);
@@ -1520,3 +1521,69 @@ SELECT approximate_row_count('approx_count');
 (1 row)
 
 DROP TABLE approx_count;
+--TEST drop_chunks from a compressed hypertable (that has caggs defined).
+-- chunk metadata is still retained. verify correct status for chunk
+SELECT count(*)
+FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch ) q;
+ count 
+-------
+     2
+(1 row)
+
+SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
+               drop_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_13_33_chunk
+ _timescaledb_internal._hyper_13_34_chunk
+(2 rows)
+
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+     chunk_name     | chunk_status | dropped | comp_id 
+--------------------+--------------+---------+---------
+ _hyper_13_33_chunk |            0 | t       |        
+ _hyper_13_34_chunk |            0 | t       |        
+(2 rows)
+
+SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
+             time             | cnt  
+------------------------------+------
+ Fri Dec 31 16:00:00 1999 PST |  960
+ Sat Jan 01 16:00:00 2000 PST | 1440
+ Sun Jan 02 16:00:00 2000 PST | 1440
+ Mon Jan 03 16:00:00 2000 PST | 1440
+ Tue Jan 04 16:00:00 2000 PST | 1440
+(5 rows)
+
+--now reload data into the dropped chunks region, then compress 
+-- then verify chunk status/dropped column 
+INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
+SELECT count(*)
+FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch) q;
+ count 
+-------
+     2
+(1 row)
+
+SELECT
+   c.table_name as chunk_name,
+   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
+ORDER BY 1;
+     chunk_name     | chunk_status | dropped | comp_id 
+--------------------+--------------+---------+---------
+ _hyper_13_33_chunk |            1 | f       |      64
+ _hyper_13_34_chunk |            1 | f       |      65
+(2 rows)
+
+SELECT count(*) FROM metrics;
+ count 
+-------
+ 12961
+(1 row)
+
