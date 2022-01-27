@@ -10,6 +10,7 @@
 #include <utils/palloc.h>
 
 #include "scanner.h"
+#include "ts_catalog/catalog.h"
 
 #define EMBEDDED_SCAN_KEY_SIZE 5
 
@@ -18,19 +19,25 @@ typedef struct ScanIterator
 	ScannerCtx ctx;
 	TupleInfo *tinfo;
 	InternalScannerCtx ictx;
+	MemoryContext scankey_mcxt;
 	ScanKeyData scankey[EMBEDDED_SCAN_KEY_SIZE];
 } ScanIterator;
 
-#define ts_scan_iterator_create(catalog_table_id, lock_mode, mctx)                                 \
-	(ScanIterator)                                                                                 \
-	{                                                                                              \
+#define ts_scan_iterator_create(catalog_table_id, lock_mode, mctx)                                   \
+	(ScanIterator)                                                                                   \
+	{                                                                                                \
 		.ctx = {                                                                                   \
 			.table = catalog_get_table_id(ts_catalog_get(), catalog_table_id),                     \
 			.nkeys = 0,                                                                            \
 			.scandirection = ForwardScanDirection,                                                 \
 			.lockmode = lock_mode,                                                                 \
 			.result_mctx = mctx,                                                                   \
-		}                                                                                          \
+		},																\
+		.scankey_mcxt = CurrentMemoryContext, \
+		.ictx = { \
+			.ended = true, \
+			.closed = true, \
+		}, \
 	}
 
 static inline TupleInfo *
@@ -69,16 +76,44 @@ ts_scan_iterator_alloc_result(const ScanIterator *iterator, Size size)
 	return ts_scanner_alloc_result(iterator->tinfo, size);
 }
 
-void TSDLLEXPORT ts_scan_iterator_close(ScanIterator *iterator);
+static inline void
+ts_scan_iterator_start_scan(ScanIterator *iterator)
+{
+	MemoryContext oldmcxt = MemoryContextSwitchTo(iterator->scankey_mcxt);
+	ts_scanner_start_scan(&(iterator)->ctx, &(iterator)->ictx);
+	MemoryContextSwitchTo(oldmcxt);
+}
 
+static inline TupleInfo *
+ts_scan_iterator_next(ScanIterator *iterator)
+{
+	iterator->tinfo = ts_scanner_next(&(iterator)->ctx, &(iterator)->ictx);
+	return iterator->tinfo;
+}
+
+static inline void
+ts_scan_iterator_scan_key_reset(ScanIterator *iterator)
+{
+	iterator->ctx.nkeys = 0;
+}
+
+void TSDLLEXPORT ts_scan_iterator_set_index(ScanIterator *iterator, CatalogTable table,
+											int indexid);
+void TSDLLEXPORT ts_scan_iterator_close(ScanIterator *iterator);
 void TSDLLEXPORT ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumber,
 												StrategyNumber strategy, RegProcedure procedure,
 												Datum argument);
 
+/*
+ * Reset the scan to use a new scan key.
+ *
+ * Note that the scan key should typically be reinitialized before a rescan.
+ */
+void TSDLLEXPORT ts_scan_iterator_rescan(ScanIterator *iterator);
+
 /* You must use `ts_scan_iterator_close` if terminating this loop early */
 #define ts_scanner_foreach(scan_iterator)                                                          \
-	for (ts_scanner_start_scan(&(scan_iterator)->ctx, &(scan_iterator)->ictx);                     \
-		 ((scan_iterator)->tinfo =                                                                 \
-			  ts_scanner_next(&(scan_iterator)->ctx, &(scan_iterator)->ictx)) != NULL;)
+	for (ts_scan_iterator_start_scan((scan_iterator));                                             \
+		 ts_scan_iterator_next(scan_iterator) != NULL;)
 
 #endif /* TIMESCALEDB_SCAN_ITERATOR_H */
