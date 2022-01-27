@@ -243,8 +243,8 @@ NOTICE:  chunk "_hyper_11_2_chunk" is already compressed
 select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;
 ERROR:  compression not enabled on "non_compressed"
-DETAIL:  It is not possible to compress chunks on a hypertable that does not have compression enabled.
-HINT:  Enable compression using ALTER TABLE with the timescaledb.compress option.
+DETAIL:  It is not possible to compress chunks on a hypertable or continuous aggregate that does not have compression enabled.
+HINT:  Enable compression using ALTER TABLE/MATERIALIZED VIEW with the timescaledb.compress option.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'c');
 ERROR:  cannot change configuration on already compressed chunks
 DETAIL:  There are compressed chunks that prevent changing the existing compression configuration.

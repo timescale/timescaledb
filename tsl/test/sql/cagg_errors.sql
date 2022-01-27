@@ -583,7 +583,12 @@ WHERE view_name = 'i2980_cagg2'
 \gset
 SELECT add_compression_policy( :'MAT_TABLE_NAME', 13::integer);
 
--- test error handling when trying to create on internal hypertable
+--TEST compressing cagg chunks without enabling compression
+SELECT count(*) FROM (select decompress_chunk(ch) FROM show_chunks('i2980_cagg2') ch ) q;
+ALTER MATERIALIZED VIEW i2980_cagg2 SET (timescaledb.compress = 'false');
+SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
+
+-- test error handling when trying to create cagg on internal hypertable
 CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
 SELECT table_name FROM create_hypertable('comp_ht_test','time');
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
