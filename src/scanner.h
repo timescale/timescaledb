@@ -140,10 +140,14 @@ typedef struct InternalScannerCtx
 	ScannerCtx *sctx;
 	bool registered_snapshot;
 	bool closed;
+	bool ended;
 } InternalScannerCtx;
 
 extern TSDLLEXPORT void ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
 extern TSDLLEXPORT void ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
+extern TSDLLEXPORT void ts_scanner_end_and_close_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
+extern TSDLLEXPORT void ts_scanner_rescan(ScannerCtx *ctx, InternalScannerCtx *ictx,
+										  const ScanKey scankey);
 extern TSDLLEXPORT TupleInfo *ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx);
 extern TSDLLEXPORT ItemPointer ts_scanner_get_tuple_tid(TupleInfo *ti);
 extern TSDLLEXPORT HeapTuple ts_scanner_fetch_heap_tuple(const TupleInfo *ti, bool materialize,

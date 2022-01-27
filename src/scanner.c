@@ -31,6 +31,7 @@ typedef struct Scanner
 	Relation (*openscan)(InternalScannerCtx *ctx);
 	ScanDesc (*beginscan)(InternalScannerCtx *ctx);
 	bool (*getnext)(InternalScannerCtx *ctx);
+	void (*rescan)(InternalScannerCtx *ctx);
 	void (*endscan)(InternalScannerCtx *ctx);
 	void (*closescan)(InternalScannerCtx *ctx);
 } Scanner;
@@ -61,6 +62,12 @@ table_scanner_getnext(InternalScannerCtx *ctx)
 		table_scan_getnextslot(ctx->scan.table_scan, ForwardScanDirection, ctx->tinfo.slot);
 
 	return success;
+}
+
+static void
+table_scanner_rescan(InternalScannerCtx *ctx)
+{
+	table_rescan(ctx->scan.table_scan, ctx->sctx->scankey);
 }
 
 static void
@@ -110,6 +117,14 @@ index_scanner_getnext(InternalScannerCtx *ctx)
 }
 
 static void
+index_scanner_rescan(InternalScannerCtx *ctx)
+{
+	ScannerCtx *sctx = ctx->sctx;
+
+	index_rescan(ctx->scan.index_scan, sctx->scankey, sctx->nkeys, NULL, sctx->norderbys);
+}
+
+static void
 index_scanner_endscan(InternalScannerCtx *ctx)
 {
 	index_endscan(ctx->scan.index_scan);
@@ -119,9 +134,8 @@ static void
 index_scanner_close(InternalScannerCtx *ctx)
 {
 	LOCKMODE lockmode = ctx->sctx->keeplock ? NoLock : ctx->sctx->lockmode;
-
-	table_close(ctx->tablerel, lockmode);
 	index_close(ctx->indexrel, ctx->sctx->lockmode);
+	table_close(ctx->tablerel, lockmode);
 }
 
 /*
@@ -132,6 +146,7 @@ static Scanner scanners[] = {
 		.openscan = table_scanner_open,
 		.beginscan = table_scanner_beginscan,
 		.getnext = table_scanner_getnext,
+		.rescan = table_scanner_rescan,
 		.endscan = table_scanner_endscan,
 		.closescan = table_scanner_close,
 	},
@@ -139,6 +154,7 @@ static Scanner scanners[] = {
 		.openscan = index_scanner_open,
 		.beginscan = index_scanner_beginscan,
 		.getnext = index_scanner_getnext,
+		.rescan = index_scanner_rescan,
 		.endscan = index_scanner_endscan,
 		.closescan = index_scanner_close,
 	}
@@ -151,6 +167,19 @@ scanner_ctx_get_scanner(ScannerCtx *ctx)
 		return &scanners[ScannerTypeIndex];
 	else
 		return &scanners[ScannerTypeTable];
+}
+
+TSDLLEXPORT void
+ts_scanner_rescan(ScannerCtx *ctx, InternalScannerCtx *ictx, const ScanKey scankey)
+{
+	Scanner *scanner = scanner_ctx_get_scanner(ctx);
+
+	/* If scankey is NULL, the existing scan key was already updated or the
+	 * old should be reused */
+	if (NULL != scankey)
+		memcpy(ctx->scankey, scankey, sizeof(*ctx->scankey));
+
+	scanner->rescan(ictx);
 }
 
 /*
@@ -168,6 +197,7 @@ ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 
 	ictx->sctx = ctx;
 	ictx->closed = false;
+	ictx->ended = false;
 	ictx->registered_snapshot = false;
 
 	scanner = scanner_ctx_get_scanner(ctx);
@@ -226,16 +256,31 @@ ts_scanner_limit_reached(ScannerCtx *ctx, InternalScannerCtx *ictx)
 TSDLLEXPORT void
 ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
 {
-	Scanner *scanner = scanner_ctx_get_scanner(ictx->sctx);
+	Scanner *scanner = scanner_ctx_get_scanner(ctx);
 
-	if (ictx->closed)
+	if (ictx->ended)
 		return;
 
 	/* Call post-scan handler, if any. */
-	if (ictx->sctx->postscan != NULL)
-		ictx->sctx->postscan(ictx->tinfo.count, ictx->sctx->data);
+	if (ctx->postscan != NULL)
+		ctx->postscan(ictx->tinfo.count, ictx->sctx->data);
 
 	scanner->endscan(ictx);
+	ictx->ended = true;
+}
+
+TSDLLEXPORT void
+ts_scanner_end_and_close_scan(ScannerCtx *ctx, InternalScannerCtx *ictx)
+{
+	Scanner *scanner = scanner_ctx_get_scanner(ctx);
+
+	if (ictx->closed)
+	{
+		Assert(ictx->ended);
+		return;
+	}
+
+	ts_scanner_end_scan(ctx, ictx);
 
 	if (ictx->registered_snapshot)
 	{
@@ -282,7 +327,7 @@ ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx)
 		is_valid = ts_scanner_limit_reached(ctx, ictx) ? false : scanner->getnext(ictx);
 	}
 
-	ts_scanner_end_scan(ctx, ictx);
+	ts_scanner_end_and_close_scan(ctx, ictx);
 
 	return NULL;
 }
@@ -305,7 +350,7 @@ ts_scanner_scan(ScannerCtx *ctx)
 		/* Call tuple_found handler. Abort the scan if the handler wants us to */
 		if (ctx->tuple_found != NULL && ctx->tuple_found(tinfo, ctx->data) == SCAN_DONE)
 		{
-			ts_scanner_end_scan(ctx, &ictx);
+			ts_scanner_end_and_close_scan(ctx, &ictx);
 			break;
 		}
 	}
