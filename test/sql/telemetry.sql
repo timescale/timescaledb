@@ -160,42 +160,50 @@ SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');
 
--- Test error message and override for when telemetry is disabled
-SET timescaledb.telemetry_level=off;
-SELECT get_telemetry_report();
-SELECT get_telemetry_report(NULL);
-SELECT * FROM json_object_keys(get_telemetry_report(always_display_report := true)::json) AS key
-WHERE key != 'os_name_pretty' AND key != 'distributed_db';
-
 -- Test telemetry report contents
 SET timescaledb.telemetry_level=basic;
 
-SELECT * FROM json_object_keys(get_telemetry_report()::json) AS key
-WHERE key != 'os_name_pretty' AND key != 'distributed_db';
+SELECT * FROM jsonb_object_keys(get_telemetry_report()) AS key
+WHERE key != 'os_name_pretty';
+
+CREATE MATERIALIZED VIEW telemetry_report AS
+SELECT t FROM get_telemetry_report() t;
 
 -- check telemetry picks up flagged content from metadata
-SELECT json_object_field(get_telemetry_report()::json,'db_metadata');
+SELECT t -> 'db_metadata' FROM telemetry_report;
 
 -- check timescaledb_telemetry.cloud
-SELECT json_object_field(get_telemetry_report()::json,'instance_metadata');
+SELECT t -> 'instance_metadata' FROM telemetry_report;
 
-SELECT json_object_field(get_telemetry_report()::json,'num_hypertables');
-
-SELECT json_object_field(get_telemetry_report()::json,'num_continuous_aggs');
+WITH t AS (
+	 SELECT t -> 'relations' AS rels
+	 FROM telemetry_report
+)
+SELECT rels -> 'hypertables' -> 'num_relations' AS num_hypertables,
+	   rels -> 'continuous_aggregates' -> 'num_relations' AS num_caggs
+FROM t;
 
 CREATE TABLE device_readings (
       observation_time  TIMESTAMPTZ       NOT NULL
 );
 SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
 
-SELECT json_object_field(get_telemetry_report()::json,'num_hypertables');
+REFRESH MATERIALIZED VIEW telemetry_report;
+
+WITH t AS (
+	 SELECT t -> 'relations' AS rels
+	 FROM telemetry_report
+)
+SELECT rels -> 'hypertables' -> 'num_relations' AS num_hypertables,
+	   rels -> 'continuous_aggregates' -> 'num_relations' AS num_caggs
+FROM t;
 
 set datestyle to iso;
 -- check that installed_time formatting in telemetry report does not depend on local date settings
-SELECT json_object_field_text(get_telemetry_report()::json,'installed_time') as installed_time
+SELECT t -> 'installed_time' AS installed_time FROM telemetry_report
 \gset
 set datestyle to sql;
-SELECT json_object_field_text(get_telemetry_report()::json,'installed_time') as installed_time2
+SELECT t-> 'installed_time' AS installed_time2 FROM telemetry_report
 \gset
 
 SELECT :'installed_time' = :'installed_time2' AS equal, length(:'installed_time'), length(:'installed_time2');

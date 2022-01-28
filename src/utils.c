@@ -903,3 +903,31 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 	return Int64GetDatum(res);
 }
+
+RelationSize
+ts_relation_size(Oid relid)
+{
+	int64 tot_size;
+	int i = 0;
+	RelationSize ret;
+	Datum oid = ObjectIdGetDatum(relid);
+	static const char *filtyp[] = { "main", "init", "fsm", "vm" };
+
+	/*
+	 * For heap get size from fsm, vm, init and main as this is included in
+	 * pg_table_size calculation
+	 */
+	ret.heap_size = 0;
+
+	for (i = 0; i < lengthof(filtyp); i++)
+	{
+		ret.heap_size += DatumGetInt64(
+			DirectFunctionCall2(pg_relation_size, oid, CStringGetTextDatum(filtyp[i])));
+	}
+
+	ret.index_size = DatumGetInt64(DirectFunctionCall1(pg_indexes_size, relid));
+	tot_size = DatumGetInt64(DirectFunctionCall1(pg_table_size, relid));
+	ret.toast_size = tot_size - ret.heap_size;
+
+	return ret;
+}

@@ -2,160 +2,875 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 --telemetry tests that require a community license
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs');
- json_object_field 
--------------------
- "0"
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SELECT setseed(1);
+ setseed 
+---------
+ 
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_hypertables');
- json_object_field 
--------------------
- "0"
+-- Create a materialized view from the telemetry report so that we
+-- don't regenerate telemetry for every query.  Filter heap_size for
+-- materialized views since PG14 reports a different heap size for
+-- them compared to earlier PG versions.
+CREATE MATERIALIZED VIEW telemetry_report AS
+SELECT (r #- '{relations,materialized_views,heap_size}') AS r
+FROM get_telemetry_report() r;
+CREATE VIEW relations AS
+SELECT r -> 'relations' AS rels
+FROM telemetry_report;
+SELECT rels -> 'continuous_aggregates' -> 'num_relations' AS num_continuous_aggs,
+	   rels -> 'hypertables' -> 'num_relations' AS num_hypertables
+FROM relations;
+ num_continuous_aggs | num_hypertables 
+---------------------+-----------------
+ 0                   | 0
 (1 row)
 
 -- check telemetry picks up flagged content from metadata
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'db_metadata');
- json_object_field 
--------------------
+SELECT r -> 'db_metadata' AS db_metadata
+FROM telemetry_report;
+ db_metadata 
+-------------
  {}
 (1 row)
 
 -- check timescaledb_telemetry.cloud
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'instance_metadata');
- json_object_field 
+SELECT r -> 'instance_metadata' AS instance_metadata
+FROM telemetry_report r;
+ instance_metadata 
 -------------------
  {"cloud": "ci"}
 (1 row)
 
---create a continuous agg
-CREATE TABLE device_readings (
-      observation_time  TIMESTAMPTZ       NOT NULL
-);
-SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
-   table_name    
------------------
- device_readings
+CREATE TABLE normal (time timestamptz NOT NULL, device int, temp float);
+CREATE TABLE part (time timestamptz NOT NULL, device int, temp float) PARTITION BY RANGE (time);
+CREATE TABLE part_t1 PARTITION OF part FOR VALUES FROM ('2018-01-01') TO ('2018-02-01') PARTITION BY HASH (device);
+CREATE TABLE part_t2 PARTITION OF part FOR VALUES FROM ('2018-02-01') TO ('2018-03-01') PARTITION BY HASH (device);
+CREATE TABLE part_t1_d1 PARTITION OF part_t1 FOR VALUES WITH (MODULUS 2, REMAINDER 0);
+CREATE TABLE part_t1_d2 PARTITION OF part_t1 FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+CREATE TABLE part_t2_d1 PARTITION OF part_t2 FOR VALUES WITH (MODULUS 2, REMAINDER 0);
+CREATE TABLE part_t2_d2 PARTITION OF part_t2 FOR VALUES WITH (MODULUS 2, REMAINDER 1);
+CREATE TABLE hyper (LIKE normal);
+SELECT table_name FROM create_hypertable('hyper', 'time');
+ table_name 
+------------
+ hyper
 (1 row)
 
-CREATE MATERIALIZED VIEW device_summary
+CREATE MATERIALIZED VIEW contagg
 WITH (timescaledb.continuous) AS
 SELECT
-  time_bucket('1 hour', observation_time) as bucket,
-  min(observation_time)
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
 FROM
-  device_readings
-GROUP BY bucket;
-NOTICE:  continuous aggregate "device_summary" is already up-to-date
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs');
- json_object_field 
--------------------
- "1"
+  hyper
+GROUP BY hour, device;
+NOTICE:  continuous aggregate "contagg" is already up-to-date
+-- Create another view (already have the "relations" view)
+CREATE VIEW devices AS
+SELECT DISTINCT ON (device) device
+FROM hyper;
+-- Show relations with no data
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT jsonb_pretty(rels) AS relations FROM relations;
+                      relations                      
+-----------------------------------------------------
+ {                                                  +
+     "views": {                                     +
+         "num_relations": 2                         +
+     },                                             +
+     "tables": {                                    +
+         "heap_size": 0,                            +
+         "toast_size": 8192,                        +
+         "indexes_size": 0,                         +
+         "num_relations": 2,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "hypertables": {                               +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 8192,                      +
+         "num_children": 0,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "materialized_views": {                        +
+         "toast_size": 8192,                        +
+         "indexes_size": 0,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "partitioned_tables": {                        +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "indexes_size": 0,                         +
+         "num_children": 6,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "continuous_aggregates": {                     +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "num_compressed_caggs": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0         +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "distributed_hypertables_data_node": {         +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 0,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "distributed_hypertables_access_node": {       +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 0,                        +
+         "num_reltuples": 0,                        +
+         "num_replica_chunks": 0,                   +
+         "num_replicated_distributed_hypertables": 0+
+     }                                              +
+ }
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_hypertables');
- json_object_field 
--------------------
- "1"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_compressed_hypertables');
- json_object_field 
--------------------
- "0"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_heap_size');
- json_object_field 
--------------------
- "0"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_index_size');
- json_object_field 
--------------------
- "0"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_toast_size');
- json_object_field 
--------------------
- "0"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_heap_size');
- json_object_field 
--------------------
- "0"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_index_size');
- json_object_field 
--------------------
- "0"
-(1 row)
-
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_toast_size');
- json_object_field 
--------------------
- "0"
-(1 row)
-
---test compression
-ALTER TABLE device_readings SET(timescaledb.compress);
-insert into device_readings select  generate_series('2018-01-01 00:00'::timestamp, '2018-01-02 00:00'::timestamp, '1 hour');
-select  count(compress_chunk(ch1.schema_name|| '.' || ch1.table_name))
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'device_readings';
+-- Insert data
+INSERT INTO normal
+SELECT t, ceil(random() * 10)::int, random() * 30
+FROM generate_series('2018-01-01'::timestamptz, '2018-02-28', '2h') t;
+INSERT INTO hyper
+SELECT * FROM normal;
+INSERT INTO part
+SELECT * FROM normal;
+CALL refresh_continuous_aggregate('contagg', NULL, NULL);
+-- ANALYZE to get updated reltuples stats
+ANALYZE normal, hyper, part;
+SELECT count(c) FROM show_chunks('hyper') c;
  count 
 -------
-     1
+     9
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_hypertables');
- json_object_field 
--------------------
- "1"
+SELECT count(c) FROM show_chunks('contagg') c;
+ count 
+-------
+     2
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_compressed_hypertables');
- json_object_field 
--------------------
- "1"
+-- Update and show the telemetry report
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT jsonb_pretty(rels) AS relations FROM relations;
+                      relations                      
+-----------------------------------------------------
+ {                                                  +
+     "views": {                                     +
+         "num_relations": 2                         +
+     },                                             +
+     "tables": {                                    +
+         "heap_size": 65536,                        +
+         "toast_size": 8192,                        +
+         "indexes_size": 0,                         +
+         "num_relations": 2,                        +
+         "num_reltuples": 697                       +
+     },                                             +
+     "hypertables": {                               +
+         "heap_size": 73728,                        +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 155648,                    +
+         "num_children": 9,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 697                       +
+     },                                             +
+     "materialized_views": {                        +
+         "toast_size": 8192,                        +
+         "indexes_size": 0,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "partitioned_tables": {                        +
+         "heap_size": 98304,                        +
+         "toast_size": 0,                           +
+         "indexes_size": 0,                         +
+         "num_children": 6,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 697                       +
+     },                                             +
+     "continuous_aggregates": {                     +
+         "heap_size": 98304,                        +
+         "toast_size": 16384,                       +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "num_compressed_caggs": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0         +
+         },                                         +
+         "indexes_size": 114688,                    +
+         "num_children": 2,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "distributed_hypertables_data_node": {         +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 0,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "distributed_hypertables_access_node": {       +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 0,                        +
+         "num_reltuples": 0,                        +
+         "num_replica_chunks": 0,                   +
+         "num_replicated_distributed_hypertables": 0+
+     }                                              +
+ }
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_heap_size');
- json_object_field 
--------------------
- "8192"
+-- Actual row count should be the same as reltuples stats for all tables
+SELECT (SELECT count(*) FROM normal) num_inserted_rows,
+	   (SELECT rels -> 'tables' -> 'num_reltuples' FROM relations) normal_reltuples,
+	   (SELECT rels -> 'hypertables' -> 'num_reltuples' FROM relations) hyper_reltuples,
+	   (SELECT rels -> 'partitioned_tables' -> 'num_reltuples' FROM relations) part_reltuples;
+ num_inserted_rows | normal_reltuples | hyper_reltuples | part_reltuples 
+-------------------+------------------+-----------------+----------------
+               697 | 697              | 697             | 697
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_index_size');
- json_object_field 
--------------------
- "0"
+-- Add compression
+ALTER TABLE hyper SET (timescaledb.compress);
+SELECT compress_chunk(c) 
+FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+(4 rows)
+
+ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
+SELECT compress_chunk(c) 
+FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_2_10_chunk
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'compressed_toast_size');
- json_object_field 
--------------------
- "8192"
+ANALYZE normal, hyper, part;
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT jsonb_pretty(rels) AS relations FROM relations;
+                      relations                      
+-----------------------------------------------------
+ {                                                  +
+     "views": {                                     +
+         "num_relations": 2                         +
+     },                                             +
+     "tables": {                                    +
+         "heap_size": 65536,                        +
+         "toast_size": 8192,                        +
+         "indexes_size": 0,                         +
+         "num_relations": 2,                        +
+         "num_reltuples": 697                       +
+     },                                             +
+     "hypertables": {                               +
+         "heap_size": 73728,                        +
+         "toast_size": 32768,                       +
+         "compression": {                           +
+             "compressed_heap_size": 32768,         +
+             "compressed_row_count": 4,             +
+             "compressed_toast_size": 32768,        +
+             "num_compressed_chunks": 4,            +
+             "uncompressed_heap_size": 32768,       +
+             "uncompressed_row_count": 284,         +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 65536,    +
+             "num_compressed_hypertables": 1        +
+         },                                         +
+         "indexes_size": 122880,                    +
+         "num_children": 9,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 697                       +
+     },                                             +
+     "materialized_views": {                        +
+         "toast_size": 8192,                        +
+         "indexes_size": 0,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "partitioned_tables": {                        +
+         "heap_size": 98304,                        +
+         "toast_size": 0,                           +
+         "indexes_size": 0,                         +
+         "num_children": 6,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 697                       +
+     },                                             +
+     "continuous_aggregates": {                     +
+         "heap_size": 81920,                        +
+         "toast_size": 24576,                       +
+         "compression": {                           +
+             "compressed_heap_size": 40960,         +
+             "compressed_row_count": 10,            +
+             "num_compressed_caggs": 1,             +
+             "compressed_toast_size": 8192,         +
+             "num_compressed_chunks": 1,            +
+             "uncompressed_heap_size": 57344,       +
+             "uncompressed_row_count": 452,         +
+             "compressed_indexes_size": 16384,      +
+             "uncompressed_toast_size": 8192,       +
+             "uncompressed_indexes_size": 81920     +
+         },                                         +
+         "indexes_size": 65536,                     +
+         "num_children": 2,                         +
+         "num_relations": 1,                        +
+         "num_reltuples": 452                       +
+     },                                             +
+     "distributed_hypertables_data_node": {         +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 0,                        +
+         "num_reltuples": 0                         +
+     },                                             +
+     "distributed_hypertables_access_node": {       +
+         "heap_size": 0,                            +
+         "toast_size": 0,                           +
+         "compression": {                           +
+             "compressed_heap_size": 0,             +
+             "compressed_row_count": 0,             +
+             "compressed_toast_size": 0,            +
+             "num_compressed_chunks": 0,            +
+             "uncompressed_heap_size": 0,           +
+             "uncompressed_row_count": 0,           +
+             "compressed_indexes_size": 0,          +
+             "uncompressed_toast_size": 0,          +
+             "uncompressed_indexes_size": 0,        +
+             "num_compressed_hypertables": 0        +
+         },                                         +
+         "indexes_size": 0,                         +
+         "num_children": 0,                         +
+         "num_relations": 0,                        +
+         "num_reltuples": 0,                        +
+         "num_replica_chunks": 0,                   +
+         "num_replicated_distributed_hypertables": 0+
+     }                                              +
+ }
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_heap_size');
- json_object_field 
--------------------
- "8192"
+-- Add distributed hypertables
+\set DN_DBNAME_1 :TEST_DBNAME _1
+\set DN_DBNAME_2 :TEST_DBNAME _2
+-- Not an access node or data node
+SELECT r -> 'num_data_nodes' AS num_data_nodes,
+	   r -> 'distributed_member' AS distributed_member
+FROM telemetry_report;
+ num_data_nodes | distributed_member 
+----------------+--------------------
+                | "none"
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_index_size');
- json_object_field 
--------------------
- "16384"
+-- Become an access node by adding a data node
+SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+  node_name  |   host    | port  |         database         | node_created | database_created | extension_created 
+-------------+-----------+-------+--------------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_telemetry_community_1 | t            | t                | t
 (1 row)
 
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'uncompressed_toast_size');
- json_object_field 
--------------------
- "0"
+-- Telemetry should show one data node and "acces node" status
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT r -> 'num_data_nodes' AS num_data_nodes,
+	   r -> 'distributed_member' AS distributed_member
+FROM telemetry_report;
+ num_data_nodes | distributed_member 
+----------------+--------------------
+ 1              | "access node"
 (1 row)
 
+-- See telemetry report from a data node
+\ir include/remote_exec.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE SCHEMA IF NOT EXISTS test;
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+GRANT USAGE ON SCHEMA test TO PUBLIC;
+CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
+LANGUAGE C;
+CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], command text)
+RETURNS TABLE("table_record" CSTRING[])
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
+LANGUAGE C;
+SELECT test.remote_exec(NULL, $$
+	   SELECT t -> 'num_data_nodes' AS num_data_nodes,
+	   		  t -> 'distributed_member' AS distributed_member
+	   FROM get_telemetry_report() t;
+$$);
+NOTICE:  [data_node_1]: 
+	   SELECT t -> 'num_data_nodes' AS num_data_nodes,
+	   		  t -> 'distributed_member' AS distributed_member
+	   FROM get_telemetry_report() t
+NOTICE:  [data_node_1]:
+num_data_nodes|distributed_member
+--------------+------------------
+              |"data node"       
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+  node_name  |   host    | port  |         database         | node_created | database_created | extension_created 
+-------------+-----------+-------+--------------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_telemetry_community_2 | t            | t                | t
+(1 row)
+
+CREATE TABLE disthyper (LIKE normal);
+SELECT create_distributed_hypertable('disthyper', 'time', 'device');
+ create_distributed_hypertable 
+-------------------------------
+ (5,public,disthyper,t)
+(1 row)
+
+-- Show distributed hypertables stats with no data
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT
+	jsonb_pretty(rels -> 'distributed_hypertables_access_node') AS distributed_hypertables_an
+FROM relations;
+           distributed_hypertables_an            
+-------------------------------------------------
+ {                                              +
+     "heap_size": 0,                            +
+     "toast_size": 0,                           +
+     "compression": {                           +
+         "compressed_heap_size": 0,             +
+         "compressed_row_count": 0,             +
+         "compressed_toast_size": 0,            +
+         "num_compressed_chunks": 0,            +
+         "uncompressed_heap_size": 0,           +
+         "uncompressed_row_count": 0,           +
+         "compressed_indexes_size": 0,          +
+         "uncompressed_toast_size": 0,          +
+         "uncompressed_indexes_size": 0,        +
+         "num_compressed_hypertables": 0        +
+     },                                         +
+     "indexes_size": 0,                         +
+     "num_children": 0,                         +
+     "num_relations": 1,                        +
+     "num_reltuples": 0,                        +
+     "num_replica_chunks": 0,                   +
+     "num_replicated_distributed_hypertables": 0+
+ }
+(1 row)
+
+-- No datanode-related stats on the access node
+SELECT
+	jsonb_pretty(rels -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+FROM relations;
+       distributed_hypertables_dn        
+-----------------------------------------
+ {                                      +
+     "heap_size": 0,                    +
+     "toast_size": 0,                   +
+     "compression": {                   +
+         "compressed_heap_size": 0,     +
+         "compressed_row_count": 0,     +
+         "compressed_toast_size": 0,    +
+         "num_compressed_chunks": 0,    +
+         "uncompressed_heap_size": 0,   +
+         "uncompressed_row_count": 0,   +
+         "compressed_indexes_size": 0,  +
+         "uncompressed_toast_size": 0,  +
+         "uncompressed_indexes_size": 0,+
+         "num_compressed_hypertables": 0+
+     },                                 +
+     "indexes_size": 0,                 +
+     "num_children": 0,                 +
+     "num_relations": 0,                +
+     "num_reltuples": 0                 +
+ }
+(1 row)
+
+-- Insert data into the distributed hypertable
+INSERT INTO disthyper
+SELECT * FROM normal;
+-- Update telemetry stats and show output on access node and data
+-- nodes. Note that the access node doesn't store data so shows
+-- zero. It should have stats from ANALYZE, though, like
+-- num_reltuples.
+ANALYZE disthyper;
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT
+	jsonb_pretty(rels -> 'distributed_hypertables_access_node') AS distributed_hypertables_an
+FROM relations;
+           distributed_hypertables_an            
+-------------------------------------------------
+ {                                              +
+     "heap_size": 0,                            +
+     "toast_size": 0,                           +
+     "compression": {                           +
+         "compressed_heap_size": 0,             +
+         "compressed_row_count": 0,             +
+         "compressed_toast_size": 0,            +
+         "num_compressed_chunks": 0,            +
+         "uncompressed_heap_size": 0,           +
+         "uncompressed_row_count": 0,           +
+         "compressed_indexes_size": 0,          +
+         "uncompressed_toast_size": 0,          +
+         "uncompressed_indexes_size": 0,        +
+         "num_compressed_hypertables": 0        +
+     },                                         +
+     "indexes_size": 0,                         +
+     "num_children": 18,                        +
+     "num_relations": 1,                        +
+     "num_reltuples": 697,                      +
+     "num_replica_chunks": 0,                   +
+     "num_replicated_distributed_hypertables": 0+
+ }
+(1 row)
+
+-- Show data node stats
+SELECT test.remote_exec(NULL, $$
+	   SELECT
+			jsonb_pretty(t -> 'relations' -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+	   FROM get_telemetry_report() t;
+$$);
+NOTICE:  [data_node_1]: 
+	   SELECT
+			jsonb_pretty(t -> 'relations' -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+	   FROM get_telemetry_report() t
+NOTICE:  [data_node_1]:
+distributed_hypertables_dn                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    "heap_size": 73728,
+    "toast_size": 0,
+    "compression": {
+        "compressed_heap_size": 0,
+        "compressed_row_count": 0,
+        "compressed_toast_size": 0,
+        "num_compressed_chunks": 0,
+        "uncompressed_heap_size": 0,
+        "uncompressed_row_count": 0,
+        "compressed_indexes_size": 0,
+        "uncompressed_toast_size": 0,
+        "uncompressed_indexes_size": 0,
+        "num_compressed_hypertables": 0
+    },
+    "indexes_size": 311296,
+    "num_children": 9,
+    "num_relations": 1,
+    "num_reltuples": 357
+}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	   SELECT
+			jsonb_pretty(t -> 'relations' -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+	   FROM get_telemetry_report() t
+NOTICE:  [data_node_2]:
+distributed_hypertables_dn                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    "heap_size": 73728,
+    "toast_size": 0,
+    "compression": {
+        "compressed_heap_size": 0,
+        "compressed_row_count": 0,
+        "compressed_toast_size": 0,
+        "num_compressed_chunks": 0,
+        "uncompressed_heap_size": 0,
+        "uncompressed_row_count": 0,
+        "compressed_indexes_size": 0,
+        "uncompressed_toast_size": 0,
+        "uncompressed_indexes_size": 0,
+        "num_compressed_hypertables": 0
+    },
+    "indexes_size": 311296,
+    "num_children": 9,
+    "num_relations": 1,
+    "num_reltuples": 340
+}
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Add compression
+ALTER TABLE disthyper SET (timescaledb.compress);
+SELECT compress_chunk(c) 
+FROM show_chunks('disthyper') c ORDER BY c LIMIT 4;
+                compress_chunk                
+----------------------------------------------
+ _timescaledb_internal._dist_hyper_5_17_chunk
+ _timescaledb_internal._dist_hyper_5_18_chunk
+ _timescaledb_internal._dist_hyper_5_19_chunk
+ _timescaledb_internal._dist_hyper_5_20_chunk
+(4 rows)
+
+ANALYZE disthyper;
+-- Update telemetry stats and show updated compression stats
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT
+	jsonb_pretty(rels -> 'distributed_hypertables_access_node') AS distributed_hypertables_an
+FROM relations;
+           distributed_hypertables_an            
+-------------------------------------------------
+ {                                              +
+     "heap_size": 0,                            +
+     "toast_size": 0,                           +
+     "compression": {                           +
+         "compressed_heap_size": 0,             +
+         "compressed_row_count": 0,             +
+         "compressed_toast_size": 0,            +
+         "num_compressed_chunks": 4,            +
+         "uncompressed_heap_size": 0,           +
+         "uncompressed_row_count": 0,           +
+         "compressed_indexes_size": 0,          +
+         "uncompressed_toast_size": 0,          +
+         "uncompressed_indexes_size": 0,        +
+         "num_compressed_hypertables": 1        +
+     },                                         +
+     "indexes_size": 0,                         +
+     "num_children": 18,                        +
+     "num_relations": 1,                        +
+     "num_reltuples": 697,                      +
+     "num_replica_chunks": 0,                   +
+     "num_replicated_distributed_hypertables": 0+
+ }
+(1 row)
+
+-- Show data node stats
+SELECT test.remote_exec(NULL, $$
+	   SELECT
+			jsonb_pretty(t -> 'relations' -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+	   FROM get_telemetry_report() t;
+$$);
+NOTICE:  [data_node_1]: 
+	   SELECT
+			jsonb_pretty(t -> 'relations' -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+	   FROM get_telemetry_report() t
+NOTICE:  [data_node_1]:
+distributed_hypertables_dn                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    "heap_size": 73728,
+    "toast_size": 16384,
+    "compression": {
+        "compressed_heap_size": 16384,
+        "compressed_row_count": 2,
+        "compressed_toast_size": 16384,
+        "num_compressed_chunks": 2,
+        "uncompressed_heap_size": 16384,
+        "uncompressed_row_count": 72,
+        "compressed_indexes_size": 0,
+        "uncompressed_toast_size": 0,
+        "uncompressed_indexes_size": 65536,
+        "num_compressed_hypertables": 1
+    },
+    "indexes_size": 278528,
+    "num_children": 9,
+    "num_relations": 1,
+    "num_reltuples": 357
+}
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+	   SELECT
+			jsonb_pretty(t -> 'relations' -> 'distributed_hypertables_data_node') AS distributed_hypertables_dn
+	   FROM get_telemetry_report() t
+NOTICE:  [data_node_2]:
+distributed_hypertables_dn                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+{
+    "heap_size": 73728,
+    "toast_size": 16384,
+    "compression": {
+        "compressed_heap_size": 16384,
+        "compressed_row_count": 2,
+        "compressed_toast_size": 16384,
+        "num_compressed_chunks": 2,
+        "uncompressed_heap_size": 16384,
+        "uncompressed_row_count": 44,
+        "compressed_indexes_size": 0,
+        "uncompressed_toast_size": 0,
+        "uncompressed_indexes_size": 65536,
+        "num_compressed_hypertables": 1
+    },
+    "indexes_size": 278528,
+    "num_children": 9,
+    "num_relations": 1,
+    "num_reltuples": 340
+}
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+-- Create a replicated distributed hypertable and show replication stats
+CREATE TABLE disthyper_repl (LIKE normal);
+SELECT create_distributed_hypertable('disthyper_repl', 'time', 'device', replication_factor => 2);
+ create_distributed_hypertable 
+-------------------------------
+ (6,public,disthyper_repl,t)
+(1 row)
+
+INSERT INTO disthyper_repl
+SELECT * FROM normal;
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT
+	jsonb_pretty(rels -> 'distributed_hypertables_access_node') AS distributed_hypertables_an
+FROM relations;
+           distributed_hypertables_an            
+-------------------------------------------------
+ {                                              +
+     "heap_size": 0,                            +
+     "toast_size": 0,                           +
+     "compression": {                           +
+         "compressed_heap_size": 0,             +
+         "compressed_row_count": 0,             +
+         "compressed_toast_size": 0,            +
+         "num_compressed_chunks": 4,            +
+         "uncompressed_heap_size": 0,           +
+         "uncompressed_row_count": 0,           +
+         "compressed_indexes_size": 0,          +
+         "uncompressed_toast_size": 0,          +
+         "uncompressed_indexes_size": 0,        +
+         "num_compressed_hypertables": 1        +
+     },                                         +
+     "indexes_size": 0,                         +
+     "num_children": 36,                        +
+     "num_relations": 2,                        +
+     "num_reltuples": 697,                      +
+     "num_replica_chunks": 18,                  +
+     "num_replicated_distributed_hypertables": 1+
+ }
+(1 row)
+
+DROP VIEW relations;
+DROP MATERIALIZED VIEW telemetry_report;

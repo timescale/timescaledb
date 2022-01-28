@@ -466,13 +466,13 @@ ts_catalog_get(void)
 							   catalog_table_index_definitions,
 							   catalog_table_serial_id_names);
 
-	s_catalog.cache_schema_id = get_namespace_oid(CACHE_SCHEMA_NAME, false);
+	for (i = 0; i < _TS_MAX_SCHEMA; i++)
+		s_catalog.extension_schema_id[i] = get_namespace_oid(ts_extension_schema_names[i], false);
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
 		s_catalog.caches[i].inval_proxy_id =
-			get_relname_relid(cache_proxy_table_names[i], s_catalog.cache_schema_id);
-
-	s_catalog.internal_schema_id = get_namespace_oid(INTERNAL_SCHEMA_NAME, false);
+			get_relname_relid(cache_proxy_table_names[i],
+							  s_catalog.extension_schema_id[TS_CACHE_SCHEMA]);
 
 	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
 	{
@@ -532,6 +532,12 @@ catalog_get_table(Catalog *catalog, Oid relid)
 			return (CatalogTable) i;
 
 	return INVALID_CATALOG_TABLE;
+}
+
+bool
+ts_is_catalog_table(Oid relid)
+{
+	return catalog_get_table(ts_catalog_get(), relid) != INVALID_CATALOG_TABLE;
 }
 
 /*

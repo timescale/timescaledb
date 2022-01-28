@@ -33,13 +33,14 @@
 #include "hypertable_cache.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/hypertable_compression.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "create.h"
 #include "compress_utils.h"
 #include "compression.h"
 #include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
-#include "ts_catalog/compression_chunk_size.h"
+#include "utils.h"
 
 typedef struct CompressChunkCxt
 {
@@ -48,39 +49,9 @@ typedef struct CompressChunkCxt
 	Hypertable *compress_ht; /*compressed table for srcht */
 } CompressChunkCxt;
 
-typedef struct
-{
-	int64 heap_size;
-	int64 toast_size;
-	int64 index_size;
-} ChunkSize;
-
-static ChunkSize
-compute_chunk_size(Oid chunk_relid)
-{
-	int64 tot_size;
-	int i = 0;
-	ChunkSize ret;
-	Datum relid = ObjectIdGetDatum(chunk_relid);
-	char *filtyp[] = { "main", "init", "fsm", "vm" };
-	/* for heap get size from fsm, vm, init and main as this is included in
-	 * pg_table_size calculation
-	 */
-	ret.heap_size = 0;
-	for (i = 0; i < 4; i++)
-	{
-		ret.heap_size += DatumGetInt64(
-			DirectFunctionCall2(pg_relation_size, relid, CStringGetTextDatum(filtyp[i])));
-	}
-	ret.index_size = DatumGetInt64(DirectFunctionCall1(pg_indexes_size, relid));
-	tot_size = DatumGetInt64(DirectFunctionCall1(pg_table_size, relid));
-	ret.toast_size = tot_size - ret.heap_size;
-	return ret;
-}
-
 static void
-compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
-									  int32 compress_chunk_id, ChunkSize *compress_size,
+compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
+									  int32 compress_chunk_id, const RelationSize *compress_size,
 									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -244,7 +215,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	List *htcols_list = NIL;
 	const ColumnCompressionInfo **colinfo_array;
 	int i = 0, htcols_listlen;
-	ChunkSize before_size, after_size;
+	RelationSize before_size, after_size;
 	CompressionStats cstat;
 
 	hcache = ts_hypertable_cache_pin();
@@ -275,7 +246,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		FormData_hypertable_compression *fd = (FormData_hypertable_compression *) lfirst(lc);
 		colinfo_array[i++] = fd;
 	}
-	before_size = compute_chunk_size(cxt.srcht_chunk->table_id);
+	before_size = ts_relation_size(cxt.srcht_chunk->table_id);
 	cstat = compress_chunk(cxt.srcht_chunk->table_id,
 						   compress_ht_chunk->table_id,
 						   colinfo_array,
@@ -297,7 +268,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * directly on the hypertable or chunks.
 	 */
 	ts_chunk_drop_fks(cxt.srcht_chunk);
-	after_size = compute_chunk_size(compress_ht_chunk->table_id);
+	after_size = ts_relation_size(compress_ht_chunk->table_id);
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &before_size,
 										  compress_ht_chunk->fd.id,

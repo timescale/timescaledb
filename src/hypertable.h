@@ -71,18 +71,6 @@ enum Anum_create_hypertable
 
 #define Natts_create_hypertable (_Anum_create_hypertable_max - 1)
 
-typedef struct HypertablesStat
-{
-	int num_hypertables_user;
-	int num_hypertables_compressed;
-	int num_hypertables_distributed_members;
-	int num_hypertables_distributed;
-	int num_hypertables_distributed_and_replicated;
-	int num_hypertables_total;
-} HypertablesStat;
-
-extern TSDLLEXPORT void ts_number_of_hypertables(HypertablesStat *stat);
-
 extern TSDLLEXPORT Oid ts_rel_get_owner(Oid relid);
 extern List *ts_hypertable_get_all(void);
 
