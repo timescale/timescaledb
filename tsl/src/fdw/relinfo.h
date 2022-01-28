@@ -49,6 +49,7 @@ typedef struct TsFdwRelInfo
 	 * foreign scan.
 	 */
 	bool pushdown_safe;
+	bool pushdown_gapfill;
 
 	/*
 	 * Restriction clauses, divided into safe and unsafe to pushdown subsets.
@@ -146,7 +147,8 @@ typedef struct TsFdwRelInfo
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
-										Oid local_table_id, TsFdwRelInfoType type);
+										Oid local_table_id, TsFdwRelInfoType type,
+										bool gapfill_safe);
 extern TsFdwRelInfo *fdw_relinfo_alloc_or_get(RelOptInfo *rel);
 extern TsFdwRelInfo *fdw_relinfo_get(RelOptInfo *rel);
 

@@ -13,14 +13,16 @@ SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:0
        first(value, time),
        avg(value)
 FROM :CONDITIONS
-GROUP BY 1,2;
+GROUP BY 1,2
+ORDER BY 2,1;
 
 SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
        device,
        first(value, time),
        avg(value)
 FROM :CONDITIONS
-GROUP BY 2,1;
+GROUP BY 2,1
+ORDER BY 2,1;
 
 SELECT
   time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),

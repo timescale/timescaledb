@@ -69,6 +69,7 @@
 #include <utils/typcache.h>
 
 #include <func_cache.h>
+#include <hypertable_cache.h>
 #include <remote/utils.h>
 
 #include "relinfo.h"
@@ -105,6 +106,7 @@ typedef struct deparse_expr_cxt
 	StringInfo buf;			/* output buffer to append to */
 	List **params_list;		/* exprs that will become remote Params */
 	DataNodeChunkAssignment *sca;
+	bool has_gapfill;
 } deparse_expr_cxt;
 
 #define REL_ALIAS_PREFIX "r"
@@ -407,10 +409,8 @@ is_foreign_expr(PlannerInfo *root, RelOptInfo *baserel, Expr *expr)
 	if (!foreign_expr_walker((Node *) expr, &glob_cxt))
 		return false;
 
-	/*
-	 * It is not supported to execute time_bucket_gapfill on data node.
-	 */
-	if (gapfill_in_expression(expr))
+	/* It is safe to pushdown gapfill in limited cases */
+	if (gapfill_in_expression(expr) && !fpinfo->pushdown_gapfill)
 		return false;
 
 	/*
@@ -808,6 +808,7 @@ deparseSelectStmtForRel(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, List
 	context.scanrel = IS_UPPER_REL(rel) ? fpinfo->outerrel : rel;
 	context.params_list = params_list;
 	context.sca = sca;
+	context.has_gapfill = false;
 
 	/* Construct SELECT clause */
 	deparseSelectSql(tlist, is_subquery, retrieved_attrs, &context, pathkeys);
@@ -2091,6 +2092,8 @@ deparseExpr(Expr *node, deparse_expr_cxt *context)
 			deparseSubscriptingRef(castNode(SubscriptingRef, node), context);
 			break;
 		case T_FuncExpr:
+			if (gapfill_in_expression(node))
+				context->has_gapfill = true;
 			deparseFuncExpr(castNode(FuncExpr, node), context);
 			break;
 		case T_OpExpr:
@@ -2707,7 +2710,7 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 	use_variadic = node->aggvariadic;
 
 	/* Find aggregate name from aggfnoid which is a pg_proc entry */
-	if (partial_agg)
+	if (!context->has_gapfill && partial_agg)
 		appendStringInfoString(buf, INTERNAL_SCHEMA_NAME "." PARTIALIZE_FUNC_NAME "(");
 
 	appendFunctionName(node->aggfnoid, context);
@@ -2783,7 +2786,7 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 		deparseExpr((Expr *) node->aggfilter, context);
 	}
 
-	appendStringInfoString(buf, partial_agg ? "))" : ")");
+	appendStringInfoString(buf, !context->has_gapfill && partial_agg ? "))" : ")");
 }
 
 /*

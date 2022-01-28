@@ -21,6 +21,8 @@
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/gapfill/planner.h"
 #include "nodes/gapfill/exec.h"
+#include "func_cache.h"
+#include "estimate.h"
 
 static CustomScanMethods gapfill_plan_methods = {
 	.CustomName = "GapFill",
@@ -572,4 +574,97 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 			}
 		}
 	}
+}
+
+/*
+ * Check if it is safe to push down gapfill to data nodes.
+ * Currently, we allow only in the following cases,
+ *
+ * 1. when only one data node has all the chunks
+ * 2. when relation has at least one closed dimension and chunks
+ *    do not overlap across data nodes.
+ * 3. when group by matches space dimension
+ *    and is not an expression of space dimension.
+ */
+bool
+pushdown_gapfill(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
+				 DataNodeChunkAssignments *scas)
+{
+	const Dimension *dim;
+	ListCell *lc;
+	TargetEntry *tle;
+	bool space_dim_in_group_by = false;
+
+	Query *parse = root->parse;
+	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
+
+	if (CMD_SELECT != parse->commandType || parse->groupClause == NIL)
+		return false;
+
+	if (!enable_partitionwise_aggregate)
+		return false;
+	/*
+	 * Only check for queries with gapfill call.
+	 */
+	gapfill_function_walker((Node *) parse->targetList, &context);
+
+	if (context.count == 0)
+		return false;
+
+	if (context.count > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("multiple time_bucket_gapfill calls not allowed")));
+
+	Assert(hs->num_dimensions >= 1);
+
+	/* Avoid push down of gapfill when window funcs are present */
+	if (parse->hasWindowFuncs)
+		return false;
+
+	/*
+	 * Check for special case when there is only one data node with chunks. This
+	 * can always be safely pushed down irrespective of partitioning
+	 */
+	if (scas->num_nodes_with_chunks == 1)
+		return true;
+
+	/*
+	 * Get first closed dimension that we use for assigning chunks to
+	 * data nodes. If there is no closed dimension, then pushing gapfill
+	 * to data nodes is not possible.
+	 */
+	dim = hyperspace_get_closed_dimension(hs, 0);
+
+	if (dim == NULL)
+		return false;
+	else
+	{
+		if (parse->groupClause)
+		{
+			foreach (lc, parse->groupClause)
+			{
+				/*
+				 * Check if the group by matches dimension and
+				 * group by clause has exact dimension and not
+				 * an expression of that attribute.
+				 */
+				SortGroupClause *sort = (SortGroupClause *) lfirst(lc);
+				tle = get_sortgroupref_tle(sort->tleSortGroupRef, parse->targetList);
+
+				if (tle->resno == dim->column_attno)
+				{
+					space_dim_in_group_by = true;
+
+					if (IsA(tle->expr, Var))
+						break;
+					else
+						return false;
+				}
+			}
+		}
+		if (!space_dim_in_group_by)
+			return false;
+	}
+	return !data_node_chunk_assignments_are_overlapping(scas, dim->fd.id);
 }

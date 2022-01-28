@@ -254,3 +254,38 @@ order by r;
 create table distinct_on_distributed(ts timestamp, id int, val numeric);
 select create_distributed_hypertable('distinct_on_distributed', 'ts');
 insert into distinct_on_distributed select * from distinct_on_hypertable;
+
+-- Table with non-overlapping data across data-nodes to test gapfill pushdown to data nodes
+CREATE TABLE test_gapfill(time timestamp, name text, value numeric);
+
+SELECT table_name from create_distributed_hypertable('test_gapfill', 'time', partitioning_column => 'name');
+
+INSERT INTO test_gapfill VALUES
+    ('2018-01-01 06:01', 'one', 1.2),
+    ('2018-01-02 09:11', 'two', 4.3),
+    ('2018-01-03 08:01', 'three', 7.3),
+    ('2018-01-04 08:01', 'one', 0.23),
+    ('2018-07-05 08:01', 'five', 0.0),
+    ('2018-07-06 06:01', 'forty', 3.1),
+    ('2018-07-07 09:11', 'eleven', 10303.12),
+    ('2018-07-08 08:01', 'ten', 64);
+
+-- Make table with data nodes overlapping
+
+CREATE TABLE test_gapfill_overlap(time timestamp, name text, value numeric);
+
+SELECT table_name from create_distributed_hypertable('test_gapfill_overlap', 'time', partitioning_column => 'name');
+
+INSERT INTO test_gapfill_overlap SELECT  * FROM test_gapfill;
+
+SELECT set_number_partitions('test_gapfill_overlap', 4);
+
+INSERT INTO test_gapfill_overlap VALUES
+('2020-01-01 06:01', 'eleven', 1.2),
+('2020-01-02 09:11', 'twenty-two', 4.3),
+('2020-01-03 08:01', 'three', 7.3),
+('2020-01-04 08:01', 'one', 0.23),
+('2020-07-05 08:01', 'five', 0.0),
+('2020-07-06 06:01', 'forty-six', 3.1),
+('2020-07-07 09:11', 'eleven', 10303.12),
+('2020-07-08 08:01', 'ten', 64);

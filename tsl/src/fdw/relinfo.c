@@ -373,7 +373,7 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 
 TsFdwRelInfo *
 fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local_table_id,
-				   TsFdwRelInfoType type)
+				   TsFdwRelInfoType type, bool gapfill_safe)
 {
 	TsFdwRelInfo *fpinfo;
 	ListCell *lc;
@@ -405,6 +405,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 					 quote_identifier(get_rel_name(rte->relid)));
 	if (*refname && strcmp(refname, get_rel_name(rte->relid)) != 0)
 		appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
+
+	fpinfo->pushdown_gapfill = gapfill_safe;
 
 	if (type == TS_FDW_RELINFO_HYPERTABLE)
 	{
