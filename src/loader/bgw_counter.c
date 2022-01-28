@@ -19,7 +19,7 @@
 
 #define BGW_COUNTER_STATE_NAME "ts_bgw_counter_state"
 
-int ts_guc_max_background_workers = 8;
+int ts_guc_max_background_workers = 16;
 
 /*
  * We need a bit of shared state here to deal with keeping track of the total
