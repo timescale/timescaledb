@@ -71,7 +71,11 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	{
 		case UPPERREL_GROUP_AGG:
 			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
-				plan_add_gapfill(root, output_rel);
+			{
+				/* Avoid adding gapfill node to the access node if it is pushed to data node */
+				if (!dist_ht || !ht->push_gapfill)
+					plan_add_gapfill(root, output_rel);
+			}
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))

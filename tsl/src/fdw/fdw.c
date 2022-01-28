@@ -65,7 +65,12 @@ get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 	 * kind of regular table that will ever have this callback called on it. */
 	if (RELKIND_RELATION == rte->relkind)
 	{
-		fdw_relinfo_create(root, baserel, InvalidOid, foreigntableid, TS_FDW_RELINFO_HYPERTABLE);
+		fdw_relinfo_create(root,
+						   baserel,
+						   InvalidOid,
+						   foreigntableid,
+						   TS_FDW_RELINFO_HYPERTABLE,
+						   false);
 	}
 	else
 	{
@@ -75,7 +80,8 @@ get_foreign_rel_size(PlannerInfo *root, RelOptInfo *baserel, Oid foreigntableid)
 						   baserel,
 						   table->serverid,
 						   foreigntableid,
-						   TS_FDW_RELINFO_FOREIGN_TABLE);
+						   TS_FDW_RELINFO_FOREIGN_TABLE,
+						   false);
 
 		apply_table_options(table, fdw_relinfo_get(baserel));
 	}
