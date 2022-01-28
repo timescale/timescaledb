@@ -85,9 +85,9 @@ SELECT * FROM timescaledb_information.jobs ORDER BY 1;
 (6 rows)
 
 -- check for corrects counts in telemetry
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_user_defined_actions');
- json_object_field 
--------------------
+SELECT get_telemetry_report() -> 'num_user_defined_actions';
+ ?column? 
+----------
  5
 (1 row)
 

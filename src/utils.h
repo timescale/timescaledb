@@ -184,4 +184,13 @@ TryRegisterCustomScanMethods(const CustomScanMethods *methods)
 		RegisterCustomScanMethods(methods);
 }
 
+typedef struct RelationSize
+{
+	int64 heap_size;
+	int64 toast_size;
+	int64 index_size;
+} RelationSize;
+
+extern TSDLLEXPORT RelationSize ts_relation_size(Oid relid);
+
 #endif /* TIMESCALEDB_UTILS_H */

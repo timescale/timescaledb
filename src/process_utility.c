@@ -1966,7 +1966,7 @@ process_rename_schema(RenameStmt *stmt)
 	/* Block any renames of our internal schemas */
 	for (i = 0; i < NUM_TIMESCALEDB_SCHEMAS; i++)
 	{
-		if (strncmp(stmt->subname, timescaledb_schema_names[i], NAMEDATALEN) == 0)
+		if (strncmp(stmt->subname, ts_extension_schema_names[i], NAMEDATALEN) == 0)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),

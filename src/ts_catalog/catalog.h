@@ -1296,14 +1296,13 @@ typedef struct CatalogDatabaseInfo
 typedef struct Catalog
 {
 	CatalogTableInfo tables[_MAX_CATALOG_TABLES];
+	Oid extension_schema_id[_TS_MAX_SCHEMA];
 
-	Oid cache_schema_id;
 	struct
 	{
 		Oid inval_proxy_id;
 	} caches[_MAX_CACHE_TYPES];
 
-	Oid internal_schema_id;
 	struct
 	{
 		Oid function_id;
@@ -1325,6 +1324,7 @@ extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 extern TSDLLEXPORT CatalogDatabaseInfo *ts_catalog_database_info_get(void);
 extern TSDLLEXPORT Catalog *ts_catalog_get(void);
 extern void ts_catalog_reset(void);
+extern bool ts_is_catalog_table(Oid relid);
 
 /* Functions should operate on a passed-in Catalog struct */
 static inline Oid

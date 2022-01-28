@@ -8,6 +8,8 @@
 
 #include <postgres.h>
 
+#include <utils/jsonb.h>
+
 #define HTTP_HOST "Host"
 #define HTTP_CONTENT_LENGTH "Content-Length"
 #define HTTP_CONTENT_TYPE "Content-Type"
@@ -69,7 +71,7 @@ extern void ts_http_request_set_version(HttpRequest *req, HttpVersion version);
 
 /* Assume that name and value are null-terminated */
 extern void ts_http_request_set_header(HttpRequest *req, const char *name, const char *value);
-extern void ts_http_request_set_body(HttpRequest *req, const char *body, size_t body_len);
+extern void ts_http_request_set_body_jsonb(HttpRequest *req, const Jsonb *json);
 
 /*  Serialize the request into char *dst. Return the length of request in optional size pointer*/
 extern const char *ts_http_request_build(HttpRequest *req, size_t *buf_size);

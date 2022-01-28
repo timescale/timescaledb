@@ -1,5 +1,6 @@
 DROP FUNCTION IF EXISTS recompress_chunk;
 DROP FUNCTION IF EXISTS delete_data_node;
+DROP FUNCTION IF EXISTS get_telemetry_report;
 
 -- Also see the comments for ContinuousAggsBucketFunction structure.
 CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(

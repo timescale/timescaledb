@@ -118,27 +118,36 @@ ts_http_request_set_version(HttpRequest *req, HttpVersion version)
 	req->version = version;
 }
 
+static void
+set_header(HttpRequest *req, const char *name, const char *value)
+{
+	int name_len = strlen(name);
+	int value_len = strlen(value);
+
+	req->headers = ts_http_header_create(name, name_len, value, value_len, req->headers);
+}
+
 void
 ts_http_request_set_header(HttpRequest *req, const char *name, const char *value)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
-	int name_len = strlen(name);
-	int value_len = strlen(value);
-	HttpHeader *new_header = ts_http_header_create(name, name_len, value, value_len, req->headers);
-
-	req->headers = new_header;
+	set_header(req, name, value);
 	MemoryContextSwitchTo(old);
 }
 
 void
-ts_http_request_set_body(HttpRequest *req, const char *body, size_t body_len)
+ts_http_request_set_body_jsonb(HttpRequest *req, const Jsonb *json)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
+	StringInfo jtext = makeStringInfo();
+	char content_length[10];
 
-	req->body = palloc(body_len + 1);
-	memcpy(req->body, body, body_len);
-	req->body[body_len] = '\0';
-	req->body_len = body_len;
+	JsonbToCString(jtext, (JsonbContainer *) &json->root, VARSIZE(json));
+	req->body = jtext->data;
+	req->body_len = jtext->len;
+	snprintf(content_length, sizeof(content_length), "%d", jtext->len);
+	set_header(req, HTTP_CONTENT_TYPE, "application/json");
+	set_header(req, HTTP_CONTENT_LENGTH, content_length);
 	MemoryContextSwitchTo(old);
 }
 

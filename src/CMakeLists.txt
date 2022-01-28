@@ -17,6 +17,7 @@ set(SOURCES
     estimate.c
     event_trigger.c
     extension.c
+    extension_constants.c
     gapfill.c
     guc.c
     histogram.c

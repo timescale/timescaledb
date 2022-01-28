@@ -21,16 +21,28 @@
 	(8 + NAMEDATALEN + 1 + MAX_VERSION_LEN) /* "$libdir/"+extname+"-"+version                      \
 											 * */
 
+typedef enum TsExtensionSchemas
+{
+	TS_CATALOG_SCHEMA,
+	TS_INTERNAL_SCHEMA,
+	TS_CACHE_SCHEMA,
+	TS_CONFIG_SCHEMA,
+	TS_EXPERIMENTAL_SCHEMA,
+	TS_INFORMATION_SCHEMA,
+	_TS_MAX_SCHEMA,
+} TsExtensionSchemas;
+
+#define NUM_TIMESCALEDB_SCHEMAS _TS_MAX_SCHEMA
+
 #define CATALOG_SCHEMA_NAME "_timescaledb_catalog"
 #define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
 #define CONFIG_SCHEMA_NAME "_timescaledb_config"
+#define EXPERIMENTAL_SCHEMA_NAME "timescaledb_experimental"
+#define INFORMATION_SCHEMA_NAME "timescaledb_information"
+
+extern const char *const ts_extension_schema_names[];
+
 #define RENDEZVOUS_BGW_LOADER_API_VERSION "timescaledb.bgw_loader_api_version"
-
-static const char *const timescaledb_schema_names[] = {
-	CATALOG_SCHEMA_NAME, INTERNAL_SCHEMA_NAME, CACHE_SCHEMA_NAME, CONFIG_SCHEMA_NAME
-};
-
-#define NUM_TIMESCALEDB_SCHEMAS (sizeof(timescaledb_schema_names) / sizeof(char *))
 
 #endif /* TIMESCALEDB_EXTENSION_CONSTANTS_H */

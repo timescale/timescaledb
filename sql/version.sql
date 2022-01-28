@@ -10,8 +10,5 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.get_os_info()
     RETURNS TABLE(sysname TEXT, version TEXT, release TEXT, version_pretty TEXT)
     AS '@MODULE_PATHNAME@', 'ts_get_os_info' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION get_telemetry_report(always_display_report boolean DEFAULT false) RETURNS TEXT
-    AS '@MODULE_PATHNAME@', 'ts_get_telemetry_report' LANGUAGE C STABLE PARALLEL SAFE;
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.tsl_loaded() RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_tsl_loaded' LANGUAGE C;

@@ -669,10 +669,10 @@ SELECT * from sorted_bgw_log;
       1 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | permission denied for table test_continuous_agg_table_w_grant
 (7 rows)
 
--- check for corrects counts in telemetry
-SELECT json_object_field(get_telemetry_report(always_display_report := true)::json,'num_continuous_aggs_policies');
- json_object_field 
--------------------
+-- check for correct counts in telemetry
+SELECT get_telemetry_report() -> 'num_continuous_aggs_policies';
+ ?column? 
+----------
  1
 (1 row)
 

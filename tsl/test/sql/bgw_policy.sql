@@ -322,6 +322,6 @@ select remove_retention_policy('test_table');
 
 \set ON_ERROR_STOP 1
 
-SELECT * FROM json_each(get_telemetry_report(always_display_report:=true)::JSON) WHERE KEY ~ '(policies|actions)$' ORDER BY 1;
+SELECT * FROM jsonb_each(get_telemetry_report()) WHERE KEY ~ '(policies|actions)$' ORDER BY 1;
 
 
