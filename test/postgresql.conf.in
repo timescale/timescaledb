@@ -3,7 +3,7 @@
 # 2) appveyor.yml needs to be updated with the same options
 
 shared_preload_libraries=timescaledb
-max_worker_processes=16
+max_worker_processes=24
 autovacuum=false
 random_page_cost=1.0
 timescaledb.license='apache'
