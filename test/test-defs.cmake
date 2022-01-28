@@ -43,6 +43,7 @@ configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
 set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
 
 configure_file(postgresql.conf.in postgresql.conf)
+configure_file(max_bgw_8.conf.in max_bgw_8.conf)
 
 # pgpass file requires chmod 0600
 configure_file(${PRIMARY_TEST_DIR}/pgpass.conf.in

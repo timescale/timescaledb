@@ -1,0 +1,21 @@
+# NOTE: any changes here require changes to two other places
+# 1) tsl/test/postgresql.conf requires that it's prefix be the same as this file.
+# 2) appveyor.yml needs to be updated with the same options
+
+shared_preload_libraries=timescaledb
+max_worker_processes=16
+autovacuum=false
+random_page_cost=1.0
+timescaledb.license='apache'
+@TELEMETRY_DEFAULT_SETTING@
+timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'
+timescaledb.last_tuned_version='0.0.1'
+timescaledb_telemetry.cloud='ci'
+log_line_prefix='%u [%p] %d '
+# PG12 changed the default rounding behavior of floating point
+# numbers. Setting extra_float_digits=0 retains the old behavior which
+# is needed to make our tests work for multiple PostgreSQL versions.
+extra_float_digits=0
+timescaledb.passfile='@TEST_PASSFILE@'
+hba_file='@TEST_PG_HBA_FILE@'
+timescaledb.max_background_workers = 8

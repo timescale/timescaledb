@@ -1,4 +1,13 @@
-set(TEST_FILES
+include(GenerateTestSchedule)
+
+# These are the configurations. There has to be a file whatever.conf.in for each
+# configuration name in this list and the corresponding variables use the
+# configuration name as a suffix.
+set(TEST_CONFIGURATIONS postgresql max_bgw_8)
+
+# These are the files for the 'postgresql' configuration. This is the default,
+# so unless you have a good reason, add new test files here.
+set(TEST_FILES_postgresql
     bgw_custom.sql
     bgw_policy.sql
     compression_bgw.sql
@@ -17,8 +26,10 @@ set(TEST_FILES
     reorder.sql
     skip_scan.sql)
 
-set(TEST_FILES_DEBUG
-    bgw_db_scheduler.sql
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(
+    APPEND
+    TEST_FILES_postgresql
     bgw_reorder_drop_chunks.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
@@ -74,6 +85,34 @@ set(TEST_FILES_DEBUG
     tsl_tables.sql
     license.sql)
 
+endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
+set(SOLO_TESTS_postgresql
+    bgw_reorder_drop_chunks
+    compress_bgw_reorder_drop_chunks
+    compression_ddl
+    cagg_bgw
+    cagg_ddl
+    cagg_ddl_dist_ht
+    cagg_dump
+    data_fetcher
+    dist_util
+    move
+    remote_connection_cache
+    remote_copy
+    remote_txn
+    remote_txn_resolve
+    reorder
+    telemetry_distributed)
+
+# Test files for the max_bgw_8 configuration that configures TimescaleDB with a
+# max of 8 TimescaleDB background workers.
+set(TEST_FILES_max_bgw_8)
+set(SOLO_TESTS_max_bgw_8 bgw_db_scheduler)
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND TEST_FILES_max_bgw_8 bgw_db_scheduler.sql)
+endif()
+
 set(TEST_TEMPLATES
     compression_insert.sql.in cagg_union_view.sql.in plan_skip_scan.sql.in
     transparent_decompression.sql.in
@@ -94,28 +133,6 @@ if(EXISTS ${PG_CONFIG_H})
   endif()
 endif()
 
-# the following tests will run by itself before the parallel tests because they
-# fail or are flaky when run in parallel dist_views.sql sets some global
-# information, so do not run it in parallel
-set(SOLO_TESTS
-    bgw_db_scheduler
-    bgw_reorder_drop_chunks
-    compress_bgw_reorder_drop_chunks
-    compression_ddl
-    cagg_bgw
-    cagg_ddl
-    cagg_ddl_dist_ht
-    cagg_dump
-    data_fetcher
-    dist_util
-    move
-    remote_connection_cache
-    remote_copy
-    remote_txn
-    remote_txn_resolve
-    reorder
-    telemetry_distributed)
-
 # Regression tests that vary with PostgreSQL version. Generated test files are
 # put in the original source directory since all tests must be in the same
 # directory. These files are updated when the template is edited, but not when
@@ -131,36 +148,20 @@ foreach(TEMPLATE_FILE ${TEST_TEMPLATES})
   list(APPEND TEST_FILES ${TEST_FILE})
 endforeach(TEMPLATE_FILE)
 
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES ${TEST_FILES_DEBUG})
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-list(SORT TEST_FILES)
-file(REMOVE ${TEST_SCHEDULE})
-
 if(NOT TEST_GROUP_SIZE)
   set(PARALLEL_GROUP_SIZE 10)
 else()
   set(PARALLEL_GROUP_SIZE ${TEST_GROUP_SIZE})
 endif()
 
-# append solo tests to schedule first
-foreach(SOLO_TEST_NAME ${SOLO_TESTS})
-  string(REGEX REPLACE "(.+)" "\\1.sql" TEST_FILE ${SOLO_TEST_NAME})
-  if(TEST_FILE IN_LIST TEST_FILES)
-    file(APPEND ${TEST_SCHEDULE} "test: ${SOLO_TEST_NAME}\n")
-  endif()
-endforeach(SOLO_TEST_NAME)
-
-set(GROUP_MEMBERS 0)
-foreach(TEST_FILE ${TEST_FILES})
-  string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if(NOT (TESTS_TO_RUN IN_LIST SOLO_TESTS))
-    if(GROUP_MEMBERS EQUAL 0)
-      file(APPEND ${TEST_SCHEDULE} "\ntest: ")
-    endif()
-    file(APPEND ${TEST_SCHEDULE} "${TESTS_TO_RUN} ")
-    math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
-  endif()
-endforeach(TEST_FILE)
-file(APPEND ${TEST_SCHEDULE} "\n")
+# Generate a test schedule for each configuration.
+foreach(_conf ${TEST_CONFIGURATIONS})
+  generate_test_schedule(
+    ${TEST_SCHEDULE}_${_conf}
+    TEST_FILES
+    ${TEST_FILES_${_conf}}
+    SOLO
+    ${SOLO_TESTS_${_conf}}
+    GROUP_SIZE
+    ${PARALLEL_GROUP_SIZE})
+endforeach()

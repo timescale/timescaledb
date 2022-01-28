@@ -8,14 +8,27 @@ set(_install_checks)
 # No checks for REGRESS_CHECKS needed here since all the checks are done in the
 # parent CMakeLists.txt.
 if(PG_REGRESS)
+  # This custom target executes one command for each test configuration. It
+  # might be possible to automatically generate this custom target, but for now
+  # the configurations are hard-coded.
   add_custom_target(
     regresscheck-t
     COMMAND
       ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
       EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      TEST_SCHEDULE=${TEST_SCHEDULE}_postgresql
       TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE} ${PRIMARY_TEST_DIR}/pg_regress.sh
       ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
       ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
+    COMMAND
+      ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
+      EXE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+      TEST_SCHEDULE=${TEST_SCHEDULE}_max_bgw_8
+      TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE} ${PRIMARY_TEST_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
+      ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      --temp-config=${TEST_OUTPUT_DIR}/max_bgw_8.conf
     USES_TERMINAL)
 
   add_custom_target(
@@ -40,6 +53,7 @@ if(PG_REGRESS)
       TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE} ${PRIMARY_TEST_DIR}/pg_regress.sh
       ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_SHARED_OPTS_EXTRA}
       ${PG_REGRESS_SHARED_OPTS_INOUT} ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
     USES_TERMINAL)
 
   add_custom_target(
@@ -88,6 +102,7 @@ if(PG_ISOLATION_REGRESS)
       TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE} ${PRIMARY_TEST_DIR}/pg_regress.sh
       ${PG_REGRESS_OPTS_BASE} ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
       ${PG_ISOLATION_REGRESS_OPTS_INOUT} ${PG_REGRESS_OPTS_TEMP_INSTANCE}
+      --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
     USES_TERMINAL)
 
   add_custom_target(
