@@ -86,11 +86,11 @@ jobs:
     - name: Downgrade diff
       if: failure()
       run: |
-        find . -name "update_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+        find . -name "downgrade_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
 
     - name: Upload Artifacts
       if: failure()
       uses: actions/upload-artifact@v2
       with:
-        name: Extension update diff ${{ matrix.pg }}
-        path: update_test.*.diff.*
+        name: Extension downgrade diff ${{ matrix.pg }}
+        path: downgrade_test.*.diff.*
