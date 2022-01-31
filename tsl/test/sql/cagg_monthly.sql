@@ -555,3 +555,57 @@ CALL refresh_continuous_aggregate('conditions_summary_empty', '2021-06-01', '202
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
 FROM conditions_summary_empty
 ORDER by month, city;
+
+-- Make sure add_continuous_aggregate_policy() works
+
+CREATE TABLE conditions_policy(
+  day DATE NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+
+SELECT create_hypertable(
+  'conditions_policy', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+
+INSERT INTO conditions_policy (day, city, temperature) VALUES
+  ('2021-06-14', 'Moscow', 26),
+  ('2021-06-15', 'Moscow', 22),
+  ('2021-06-16', 'Moscow', 24),
+  ('2021-06-17', 'Moscow', 24),
+  ('2021-06-18', 'Moscow', 27),
+  ('2021-06-19', 'Moscow', 28),
+  ('2021-06-20', 'Moscow', 30),
+  ('2021-06-21', 'Moscow', 31),
+  ('2021-06-22', 'Moscow', 34),
+  ('2021-06-23', 'Moscow', 34),
+  ('2021-06-24', 'Moscow', 34),
+  ('2021-06-25', 'Moscow', 32),
+  ('2021-06-26', 'Moscow', 32),
+  ('2021-06-27', 'Moscow', 31);
+
+CREATE MATERIALIZED VIEW conditions_summary_policy
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_policy
+GROUP BY city, bucket;
+
+SELECT * FROM conditions_summary_policy;
+
+\set ON_ERROR_STOP 0
+-- Check for "policy refresh window too small" error
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    -- Historically, 1 month is just a synonym to 30 days here.
+    -- See interval_to_int64() and interval_to_int128().
+    start_offset => INTERVAL '2 months', 
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour');
+\set ON_ERROR_STOP 1
+
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    start_offset => INTERVAL '65 days',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour');
