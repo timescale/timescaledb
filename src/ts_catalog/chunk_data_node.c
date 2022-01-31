@@ -107,13 +107,13 @@ chunk_data_node_tuple_found(TupleInfo *ti, void *data)
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	Form_chunk_data_node form = (Form_chunk_data_node) GETSTRUCT(tuple);
 	ChunkDataNode *chunk_data_node;
-	ForeignServer *foreign_server = GetForeignServerByName(NameStr(form->node_name), false);
 	MemoryContext old;
 
 	old = MemoryContextSwitchTo(ti->mctx);
 	chunk_data_node = palloc(sizeof(ChunkDataNode));
 	memcpy(&chunk_data_node->fd, form, sizeof(FormData_chunk_data_node));
-	chunk_data_node->foreign_server_oid = foreign_server->serverid;
+	chunk_data_node->foreign_server_oid =
+		get_foreign_server_oid(NameStr(form->node_name), /* missing_ok = */ false);
 	*nodes = lappend(*nodes, chunk_data_node);
 	MemoryContextSwitchTo(old);
 
