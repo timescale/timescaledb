@@ -545,3 +545,58 @@ DROP TABLE conditions_dist CASCADE;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
 DROP DATABASE :DATA_NODE_3;
+
+-- Make sure add_continuous_aggregate_policy() works
+
+CREATE TABLE conditions_policy(
+  day TIMESTAMPTZ NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+
+SELECT create_hypertable(
+  'conditions_policy', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+
+INSERT INTO conditions_policy (day, city, temperature) VALUES
+  ('2021-06-14 00:00:00 MSK', 'Moscow', 26),
+  ('2021-06-14 10:00:00 MSK', 'Moscow', 22),
+  ('2021-06-14 20:00:00 MSK', 'Moscow', 24),
+  ('2021-06-15 00:00:00 MSK', 'Moscow', 24),
+  ('2021-06-15 10:00:00 MSK', 'Moscow', 27),
+  ('2021-06-15 20:00:00 MSK', 'Moscow', 28),
+  ('2021-06-16 00:00:00 MSK', 'Moscow', 30),
+  ('2021-06-16 10:00:00 MSK', 'Moscow', 31),
+  ('2021-06-16 20:00:00 MSK', 'Moscow', 34),
+  ('2021-06-17 00:00:00 MSK', 'Moscow', 34),
+  ('2021-06-17 10:00:00 MSK', 'Moscow', 34),
+  ('2021-06-17 20:00:00 MSK', 'Moscow', 32),
+  ('2021-06-18 00:00:00 MSK', 'Moscow', 32),
+  ('2021-06-18 10:00:00 MSK', 'Moscow', 31),
+  ('2021-06-18 20:00:00 MSK', 'Moscow', 26);
+
+CREATE MATERIALIZED VIEW conditions_summary_policy
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 day', day, 'Europe/Moscow') AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_policy
+GROUP BY city, bucket;
+
+SELECT city, to_char(bucket at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') as month, min, max
+FROM conditions_summary_policy
+ORDER by month, city;
+
+\set ON_ERROR_STOP 0
+-- Check for "policy refresh window too small" error
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    start_offset => INTERVAL '2 days 23 hours',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour');
+\set ON_ERROR_STOP 1
+
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    start_offset => INTERVAL '3 days',
+    end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour');
