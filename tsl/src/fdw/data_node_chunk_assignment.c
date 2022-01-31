@@ -18,6 +18,7 @@
 #include "chunk.h"
 #include "ts_catalog/chunk_data_node.h"
 #include "relinfo.h"
+#include "planner.h"
 
 /*
  * Find an existing data node chunk assignment or initialize a new one.
