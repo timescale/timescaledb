@@ -27,10 +27,21 @@ SKIPS=${SKIPS:-}
 PSQL=${PSQL:-psql}
 PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
 
-contains() {
-    # a list contains a value foo if the regex ".* foo .*" holds true
-    [[ $1 =~ (.*[[:space:]]|^)$2([[:space:]].*|$) ]];
-    return $?
+# check if test matches any of the patterns in a list
+# $1 list of patterns or test names
+# $2 test name
+# we use == intentionally and not =~ because the pattern syntax differs between
+# those two and == allows for simpler patterns. With == the pattern to match
+# all bgw tests would be "*bgw*" while with =~ it would be ".*bgw.*"
+matches() {
+  for pattern in $1; do
+    # shellcheck disable=SC2053
+    # We do want to match globs in $pattern here.
+    if [[ $2 == $pattern ]]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 if [[ -z ${TEST_SCHEDULE} ]];  then
@@ -77,16 +88,16 @@ else
   # validating against schedule as TESTS might contain tests from
   # multiple suites and not apply to current run
   current_tests=""
-  for t in ${TESTS}; do
-    if ! contains "${SKIPS}" "${t}"; then
-      for t2 in ${ALL_TESTS}; do
+  for test_pattern in ${TESTS}; do
+    for test_name in ${ALL_TESTS}; do
+      if ! matches "${SKIPS}" "${test_name}"; then
         # shellcheck disable=SC2053
-        # We do want to match globs in $t here.
-        if [[ $t2 == $t ]]; then
-          current_tests="${current_tests} ${t2}"
+        # We do want to match globs in $test_pattern here.
+        if [[ $test_name == $test_pattern ]]; then
+          current_tests="${current_tests} ${test_name}"
         fi
-      done
-    fi
+      fi
+    done
   done
 
   # if none of the tests survived filtering we can exit early

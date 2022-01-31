@@ -55,4 +55,35 @@ SELECT create_hypertable('metrics', 'time');
 ALTER TABLE metrics SET (timescaledb.compress);
 ERROR:  functionality not supported under the current "apache" license
 HINT:  Upgrade your license to 'timescale' to use this free community feature.
+INSERT INTO metrics
+VALUES ('2022-01-01 00:00:00', 1), ('2022-01-01 01:00:00', 2), ('2022-01-01 02:00:00', 3);
+CREATE MATERIALIZED VIEW metrics_hourly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 hour', time) AS bucket,
+   AVG(value),
+   MAX(value),
+   MIN(value)
+FROM metrics
+GROUP BY bucket
+WITH NO DATA;
+ERROR:  functionality not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this free community feature.
+CREATE MATERIALIZED VIEW metrics_hourly
+AS
+SELECT time_bucket(INTERVAL '1 hour', time) AS bucket,
+   AVG(value),
+   MAX(value),
+   MIN(value)
+FROM metrics
+GROUP BY bucket;
+CALL refresh_continuous_aggregate('metrics_hourly', NULL, NULL);
+ERROR:  function "refresh_continuous_aggregate" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this free community feature.
+SELECT _timescaledb_internal.invalidation_hyper_log_add_entry(0, 0, 0);
+ERROR:  function "invalidation_hyper_log_add_entry" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this free community feature.
+SELECT _timescaledb_internal.invalidation_cagg_log_add_entry(0, 0, 0);
+ERROR:  function "invalidation_cagg_log_add_entry" is not supported under the current "apache" license
+HINT:  Upgrade your license to 'timescale' to use this free community feature.
+DROP MATERIALIZED VIEW metrics_hourly;
 DROP TABLE metrics;

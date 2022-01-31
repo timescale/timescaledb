@@ -2282,18 +2282,19 @@ EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
- Delete on b1
-   Delete on b1 b1_1
-   Delete on _hyper_8_42_chunk b1_2
-   ->  Append
-         ->  Seq Scan on b1 b1_1
-               Filter: ((a > 0) AND (a = 6) AND ((a % 2) = 0) AND f_leak(b))
-         ->  Index Scan using _hyper_8_42_chunk_b1_a_idx on _hyper_8_42_chunk b1_2
-               Index Cond: ((a > 0) AND (a = 6))
-               Filter: (((a % 2) = 0) AND f_leak(b))
-(9 rows)
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on b1
+         Delete on b1 b1_1
+         Delete on _hyper_8_42_chunk b1_2
+         ->  Append
+               ->  Seq Scan on b1 b1_1
+                     Filter: ((a > 0) AND (a = 6) AND ((a % 2) = 0) AND f_leak(b))
+               ->  Index Scan using _hyper_8_42_chunk_b1_a_idx on _hyper_8_42_chunk b1_2
+                     Index Cond: ((a > 0) AND (a = 6))
+                     Filter: (((a % 2) = 0) AND f_leak(b))
+(10 rows)
 
 DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
 NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
@@ -3797,7 +3798,7 @@ INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
                           QUERY PLAN                          
 --------------------------------------------------------------
- Custom Scan (HypertableInsert)
+ Custom Scan (HypertableModify)
    ->  Insert on t2
          ->  Custom Scan (ChunkDispatch)
                ->  Append

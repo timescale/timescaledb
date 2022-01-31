@@ -9,7 +9,7 @@
 
 #include <process_utility.h>
 #include "with_clause_parser.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
 

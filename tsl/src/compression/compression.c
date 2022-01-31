@@ -32,7 +32,6 @@
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
-#include <catalog.h>
 #include <utils.h>
 
 #include "compat/compat.h"
@@ -42,11 +41,12 @@
 #include "deltadelta.h"
 #include "dictionary.h"
 #include "gorilla.h"
-#include "compression_chunk_size.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "create.h"
 #include "custom_type_cache.h"
-#include "hypertable_compression.h"
 #include "segment_meta.h"
+#include "ts_catalog/hypertable_compression.h"
+#include "ts_catalog/catalog.h"
 
 #include <nodes/print.h>
 

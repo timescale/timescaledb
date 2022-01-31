@@ -19,7 +19,7 @@
 #include "bgw/job.h"
 #include "process_utility.h"
 #include "with_clause_parser.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "plan_expand_hypertable.h"
 #include "planner.h"
 
@@ -100,9 +100,9 @@ typedef struct CrossModuleFunctions
 													 int32 parent_hypertable_id);
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_refresh_chunk;
-	void (*continuous_agg_invalidate)(const Hypertable *ht,
-									  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
-									  int64 start, int64 end);
+	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
+	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
+											 int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction invalidation_cagg_log_add_entry;

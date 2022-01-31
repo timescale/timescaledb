@@ -12,7 +12,7 @@
 #include <utils/memutils.h>
 #include <utils/syscache.h>
 #include "dist_txn.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "connection.h"
 #include "async.h"
 #include "errors.h"

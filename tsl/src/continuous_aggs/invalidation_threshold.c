@@ -14,14 +14,14 @@
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 
-#include <catalog.h>
+#include "ts_catalog/catalog.h"
 #include <scanner.h>
 #include <scan_iterator.h>
 #include <compat/compat.h>
 #include <time_utils.h>
 #include <time_bucket.h>
 
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "invalidation_threshold.h"
 
@@ -311,9 +311,9 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 				 * instead of minimum date we use -infinity since time_bucket(-infinity)
 				 * is well-defined as -infinity.
 				 *
-				 * For more details see refresh.c, particularly:
-				 * - compute_inscribed_bucketed_refresh_window_for_months()
-				 * - compute_circumscribed_bucketed_refresh_window_for_months()
+				 * For more details see:
+				 * - ts_compute_inscribed_bucketed_refresh_window_variable()
+				 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
 				 */
 				return ts_time_get_nobegin(refresh_window->type);
 			}
@@ -329,9 +329,8 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 
 			if (ts_continuous_agg_bucket_width_variable(cagg))
 			{
-				return ts_time_bucket_and_add_months(maxval,
-													 ts_bucket_function_to_bucket_width_in_months(
-														 cagg->bucket_function));
+				return ts_compute_beginning_of_the_next_bucket_variable(maxval,
+																		cagg->bucket_function);
 			}
 
 			int64 bucket_width = ts_continuous_agg_bucket_width(cagg);

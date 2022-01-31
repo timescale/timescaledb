@@ -160,7 +160,7 @@ get_total_number_of_slices(Hyperspace *space)
 /*
  * Estimate fill factor for the chunks that don't have ANALYZE statistics.
  * Fill factor values are between 0 and 1. It's an indication of how much data is
- * in the chunk, expressed as a fraction of its maximum size.
+ * in the chunk, expressed as a fraction of its estimated final size.
  *
  * Fill factor estimation assumes that data written is 'recent' in regards to
  * time dimension (eg. almost real-time). For the case when writing historical
@@ -178,6 +178,9 @@ get_total_number_of_slices(Hyperspace *space)
  * time is in the future (highly unlikely, also treated as current chunk).
  *
  * For integer type we assume that all chunks w/o ANALYZE stats are current.
+ * We could use the user-specified integer time function here
+ * (set_integer_now_func()), but this logic is a fallback so we're keeping it
+ * simple for now.
  *
  * Earlier, this function used chunk ids to guess which chunks are created later,
  * and treated such chunks as current. Unfortunately, the chunk ids are global
@@ -273,6 +276,20 @@ estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht
 static void
 estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 {
+	/*
+	 * In any case, cache the chunk info for this chunk.
+	 *
+	 * Ideally, we would look up the chunks in a centralized manner in
+	 * ts_plan_expand_hypertable(), but that code path is not used by UPDATES
+	 * which use expand_inherited_rtentry() instead. For now, do this lookup
+	 * here where we need the chunk, to avoid complicating things. After we have
+	 * chunk exclusion for UPDATEs, we can revisit this.
+	 */
+	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
+	Assert(!chunk_private->chunk);
+	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
+
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
 	if (parent_relid < 0)
 	{

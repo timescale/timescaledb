@@ -17,7 +17,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/policy_utils.h"
 #include "bgw/job.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "dimension.h"
 #include "hypertable_cache.h"

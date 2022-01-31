@@ -3,17 +3,13 @@ set(SOURCES
     func_cache.c
     cache.c
     cache_invalidate.c
-    catalog.c
-    continuous_agg.c
     chunk.c
     chunk_adaptive.c
     chunk_constraint.c
     chunk_index.c
-    chunk_data_node.c
     constraint.c
     cross_module_fn.c
     copy.c
-    compression_chunk_size.c
     compression_with_clause.c
     dimension.c
     dimension_slice.c
@@ -27,12 +23,9 @@ set(SOURCES
     hypercube.c
     hypertable.c
     hypertable_cache.c
-    hypertable_compression.c
     hypertable_restrict_info.c
-    hypertable_data_node.c
     indexing.c
     init.c
-    metadata.c
     jsonb_utils.c
     license_guc.c
     partitioning.c
@@ -46,7 +39,7 @@ set(SOURCES
     scan_iterator.c
     sort_transform.c
     subspace_store.c
-    tablespace.c
+    timezones.c
     time_bucket.c
     time_utils.c
     custom_type_cache.c
@@ -101,5 +94,6 @@ add_subdirectory(telemetry)
 add_subdirectory(loader)
 add_subdirectory(bgw_policy)
 add_subdirectory(compat)
+add_subdirectory(ts_catalog)
 add_subdirectory(import)
 add_subdirectory(nodes)

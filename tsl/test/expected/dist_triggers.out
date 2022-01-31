@@ -490,7 +490,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM datatable;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+ Custom Scan (HypertableModify)  (cost=0.00..33.55 rows=1570 width=24)
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
    ->  Insert on public.disttable  (cost=0.00..33.55 rows=1570 width=24)
@@ -510,7 +510,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM datatable RETURNING *;
                                                                                      QUERY PLAN                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+ Custom Scan (HypertableModify)  (cost=0.00..33.55 rows=1570 width=24)
    Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
@@ -536,7 +536,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM datatable;
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+ Custom Scan (HypertableModify)  (cost=0.00..33.55 rows=1570 width=24)
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3
    ->  Insert on public.disttable  (cost=0.00..33.55 rows=1570 width=24)
@@ -555,7 +555,7 @@ INSERT INTO disttable (time, device, temp_c)
 SELECT time, device, temp_c FROM datatable RETURNING *;
                                                                                      QUERY PLAN                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableInsert)  (cost=0.00..33.55 rows=1570 width=24)
+ Custom Scan (HypertableModify)  (cost=0.00..33.55 rows=1570 width=24)
    Output: disttable.id, disttable."time", disttable.device, disttable.temp_c
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_triggers_1, db_dist_triggers_2, db_dist_triggers_3

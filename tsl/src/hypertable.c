@@ -24,7 +24,7 @@
 #include "utils.h"
 #include "hypertable_cache.h"
 #include "chunk.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
@@ -34,7 +34,7 @@
 #include "deparse.h"
 #include "remote/dist_commands.h"
 #include "compat/compat.h"
-#include "hypertable_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "extension.h"
 
 static List *

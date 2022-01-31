@@ -32,7 +32,6 @@
 #endif
 
 #include <compat/compat.h>
-#include <chunk_data_node.h>
 #include <extension.h>
 #include <errors.h>
 #include <error_utils.h>
@@ -42,8 +41,9 @@
 #include "chunk_api.h"
 #include "data_node.h"
 #include "deparse.h"
-#include "remote/dist_commands.h"
 #include "dist_util.h"
+#include "remote/dist_commands.h"
+#include "ts_catalog/chunk_data_node.h"
 
 static bool
 chunk_match_data_node_by_server(const Chunk *chunk, const ForeignServer *server)

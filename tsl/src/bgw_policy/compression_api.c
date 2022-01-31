@@ -413,7 +413,6 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 	{
 		if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		{
-			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("compression not enabled on hypertable \"%s\"",
@@ -423,7 +422,6 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		status = ts_continuous_agg_hypertable_status(ht->fd.id);
 		if ((status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw))
 		{
-			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot add compression policy to materialized hypertable \"%s\" ",
@@ -460,7 +458,6 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		found = policy_refresh_cagg_exists(mat_id);
 		if (!found)
 		{
-			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("continuous aggregate policy does not exist for \"%s\"",
@@ -468,6 +465,14 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 					 errmsg("setup a refresh policy for \"%s\" before setting up a compression "
 							"policy",
 							get_rel_name(user_htoid))));
+		}
+		if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("compression not enabled on continuous aggregate \"%s\"",
+							get_rel_name(user_htoid)),
+					 errhint("Enable compression before adding a compression policy.")));
 		}
 	}
 	Assert(ht != NULL);

@@ -8,7 +8,7 @@
 
 #include <postgres.h>
 
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 
 /*
@@ -39,8 +39,9 @@ typedef struct Hypertable Hypertable;
 
 extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end);
 extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end);
-extern void invalidation_add_entry(const Hypertable *ht, ContinuousAggHypertableStatus caggstatus,
-								   int32 entry_id, int64 start, int64 end);
+extern void continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 end);
+extern void continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat_ht,
+											 int64 start, int64 end);
 
 extern Datum tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS);
 extern Datum tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS);

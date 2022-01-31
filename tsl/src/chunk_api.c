@@ -25,22 +25,22 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
-#include <catalog.h>
-#include <compat/compat.h>
-#include <chunk_data_node.h>
-#include <errors.h>
-#include <error_utils.h>
-#include <hypercube.h>
-#include <hypertable_cache.h>
+#include "compat/compat.h"
+#include "chunk.h"
+#include "chunk_api.h"
+#include "data_node.h"
+#include "errors.h"
+#include "error_utils.h"
+#include "hypercube.h"
+#include "hypertable_cache.h"
 
 #include "remote/async.h"
 #include "remote/dist_txn.h"
 #include "remote/stmt_params.h"
 #include "remote/dist_commands.h"
 #include "remote/tuplefactory.h"
-#include "chunk.h"
-#include "chunk_api.h"
-#include "data_node.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_data_node.h"
 
 /*
  * These values come from the pg_type table.

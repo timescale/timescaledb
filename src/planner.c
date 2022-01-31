@@ -47,7 +47,7 @@
 #include "guc.h"
 #include "dimension.h"
 #include "nodes/chunk_dispatch_plan.h"
-#include "nodes/hypertable_insert.h"
+#include "nodes/hypertable_modify.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "partitioning.h"
@@ -428,14 +428,14 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			 * standard_planner. Therefore, we fixup the final target list for
 			 * HypertableInsert here.
 			 */
-			ts_hypertable_insert_fixup_tlist(stmt->planTree);
+			ts_hypertable_modify_fixup_tlist(stmt->planTree);
 
 			foreach (lc, stmt->subplans)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
 
 				if (subplan)
-					ts_hypertable_insert_fixup_tlist(subplan);
+					ts_hypertable_modify_fixup_tlist(subplan);
 			}
 
 			if (reset_fetcher_type)
@@ -747,14 +747,43 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 	if (set_pathlist_for_current_rel)
 	{
+		bool do_distributed;
+
+		Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
+		Assert(ht != NULL);
+
 		/* the hypertable will have been planned as if it was a regular table
 		 * with no data. Since such a plan would be cheaper than any real plan,
 		 * it would always be used, and we need to remove these plans before
 		 * adding ours.
+		 *
+		 * Also, if it's a distributed hypertable and per data node queries are
+		 * enabled then we will be throwing this below append path away. So only
+		 * build it otherwise
 		 */
+		do_distributed = !IS_DUMMY_REL(rel) && hypertable_is_distributed(ht) &&
+						 ts_guc_enable_per_data_node_queries;
+
 		rel->pathlist = NIL;
 		rel->partial_pathlist = NIL;
-		ts_set_append_rel_pathlist(root, rel, rti, rte);
+		/* allow a session parameter to override the use of this datanode only path */
+#ifdef TS_DEBUG
+		if (do_distributed)
+		{
+			const char *allow_dn_path =
+				GetConfigOption("timescaledb.debug_allow_datanode_only_path", true, false);
+			if (allow_dn_path && pg_strcasecmp(allow_dn_path, "on") != 0)
+			{
+				do_distributed = false;
+				elog(DEBUG2, "creating per chunk append paths");
+			}
+			else
+				elog(DEBUG2, "avoiding per chunk append paths");
+		}
+#endif
+
+		if (!do_distributed)
+			ts_set_append_rel_pathlist(root, rel, rti, rte);
 	}
 }
 
@@ -1091,7 +1120,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  * we do not change our behavior yet, but might choose to in the future.
  */
 static List *
-replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
+replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist)
 {
 	List *new_pathlist = NIL;
 	ListCell *lc;
@@ -1100,14 +1129,26 @@ replace_hypertable_insert_paths(PlannerInfo *root, List *pathlist)
 	{
 		Path *path = lfirst(lc);
 
-		if (IsA(path, ModifyTablePath) && ((ModifyTablePath *) path)->operation == CMD_INSERT)
+		if (IsA(path, ModifyTablePath))
 		{
-			ModifyTablePath *mt = (ModifyTablePath *) path;
-			RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
-			Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 
-			if (ht)
-				path = ts_hypertable_insert_path_create(root, mt, ht);
+#if PG14_GE
+			/* We only route DELETEs through our CustomNode for PG 14+ because
+			 * the codepath for earlier versions is different. */
+			if (mt->operation == CMD_INSERT || mt->operation == CMD_DELETE)
+#else
+			if (mt->operation == CMD_INSERT)
+#endif
+			{
+				RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
+				Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+
+				if (ht && (mt->operation == CMD_INSERT || !hypertable_is_distributed(ht)))
+				{
+					path = ts_hypertable_modify_path_create(root, mt, ht);
+				}
+			}
 		}
 
 		new_pathlist = lappend(new_pathlist, path);
@@ -1142,7 +1183,7 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	{
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
-			output_rel->pathlist = replace_hypertable_insert_paths(root, output_rel->pathlist);
+			output_rel->pathlist = replace_hypertable_modify_paths(root, output_rel->pathlist);
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{
 			/* Existing AggPaths are modified here.

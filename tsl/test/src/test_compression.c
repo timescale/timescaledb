@@ -20,7 +20,7 @@
 #include <utils/typcache.h>
 #include <fmgr.h>
 
-#include <catalog.h>
+#include "ts_catalog/catalog.h"
 #include <export.h>
 #include "test_utils.h"
 

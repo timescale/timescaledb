@@ -5,7 +5,7 @@
  */
 #include <postgres.h>
 
-#include <continuous_agg.h>
+#include "ts_catalog/continuous_agg.h"
 #include <test_utils.h>
 
 TS_TEST_FN(ts_test_continuous_agg_find_by_view_name)

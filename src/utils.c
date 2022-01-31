@@ -204,28 +204,6 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 	}
 }
 
-/*
- * Similar to ts_interval_value_to_internal() but for monthly interval returns
- * the number of months and *months=true. Otherwise returns *months=false and
- * the result of ts_interval_value_to_internal()
- */
-int64
-ts_interval_value_to_internal_or_months(Datum time_val, Oid type_oid, bool *months)
-{
-	if (type_oid == INTERVALOID)
-	{
-		Interval *interval = DatumGetIntervalP(time_val);
-		if (interval->month != 0)
-		{
-			*months = true;
-			return interval->month;
-		}
-	}
-
-	*months = false;
-	return ts_interval_value_to_internal(time_val, type_oid);
-}
-
 static int64
 ts_integer_to_internal(Datum time_val, Oid type_oid)
 {
@@ -908,7 +886,6 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
 	const Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
-	ts_cache_release(hcache);
 
 	if (!dim)
 		elog(ERROR, "hypertable has no open partitioning dimension");
@@ -923,5 +900,6 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 
 	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
+	ts_cache_release(hcache);
 	return Int64GetDatum(res);
 }

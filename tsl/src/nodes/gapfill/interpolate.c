@@ -231,10 +231,22 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 														DirectFunctionCall1(int8_numeric, y1)));
 			break;
 		case FLOAT4OID:
-			*value = Float4GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat4(y0), DatumGetFloat4(y1)));
+			/* Shortcircuit calculation when y0 == y1 for float because otherwise
+			 * output will be unstable for certain values due to float rounding. */
+			if (DatumGetFloat4(y0) == DatumGetFloat4(y1))
+				*value = y0;
+			else
+				*value =
+					Float4GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat4(y0), DatumGetFloat4(y1)));
 			break;
 		case FLOAT8OID:
-			*value = Float8GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat8(y0), DatumGetFloat8(y1)));
+			/* Shortcircuit calculation when y0 == y1 for float because otherwise
+			 * output will be unstable for certain values due to float rounding. */
+			if (DatumGetFloat8(y0) == DatumGetFloat8(y1))
+				*value = y0;
+			else
+				*value =
+					Float8GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat8(y0), DatumGetFloat8(y1)));
 			break;
 		default:
 

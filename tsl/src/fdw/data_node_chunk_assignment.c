@@ -16,9 +16,8 @@
 #include "dimension_vector.h"
 #include "hypercube.h"
 #include "chunk.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 #include "relinfo.h"
-#include "planner.h"
 
 /*
  * Find an existing data node chunk assignment or initialize a new one.
@@ -76,7 +75,7 @@ data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptIn
 	 * Use the cached ChunkDataNode data to find the relid of the chunk on the
 	 * data node.
 	 */
-	int remote_chunk_relid = InvalidOid;
+	Oid remote_chunk_relid = InvalidOid;
 	ListCell *lc;
 	foreach (lc, chunk_private->chunk->data_nodes)
 	{

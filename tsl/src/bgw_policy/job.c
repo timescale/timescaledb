@@ -8,7 +8,6 @@
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
-#include <continuous_agg.h>
 #include <funcapi.h>
 #include <hypertable_cache.h>
 #include <nodes/makefuncs.h>
@@ -38,6 +37,7 @@
 #include "compression/compress_utils.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
+#include "ts_catalog/continuous_agg.h"
 
 #include "tsl/src/chunk.h"
 

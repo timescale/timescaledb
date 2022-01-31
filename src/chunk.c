@@ -39,10 +39,10 @@
 #include "debug_point.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 #include "cross_module_fn.h"
-#include "catalog.h"
-#include "continuous_agg.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 #include "cross_module_fn.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -50,7 +50,7 @@
 #include "errors.h"
 #include "partitioning.h"
 #include "hypertable.h"
-#include "hypertable_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "hypercube.h"
 #include "scanner.h"
 #include "process_utility.h"
@@ -62,7 +62,7 @@
 #include "cache.h"
 #include "bgw_policy/chunk_stats.h"
 #include "scan_iterator.h"
-#include "compression_chunk_size.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "extension.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
@@ -3857,11 +3857,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
 			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
-			ts_cm_functions->continuous_agg_invalidate(ht,
-													   HypertableIsRawTable,
-													   ht->fd.id,
-													   start,
-													   end);
+			ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 		}
 	}
 

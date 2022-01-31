@@ -13,7 +13,7 @@
 #include <utils/syscache.h>
 
 #include "annotations.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "compat/compat.h"
 #include "extension.h"
 #include "hypertable_cache.h"

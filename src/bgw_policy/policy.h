@@ -8,7 +8,7 @@
 #define TIMESCALEDB_BGW_POLICY_POLICY_H
 
 #include "scanner.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "export.h"
 
 typedef struct BgwJobTypeCount

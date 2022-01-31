@@ -19,7 +19,7 @@
 #include <guc.h>
 #include "compat/compat.h"
 #include "data_node.h"
-#include "hypertable_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "chunk_index.h"
 #include "chunk_api.h"
 #include "process_utility.h"

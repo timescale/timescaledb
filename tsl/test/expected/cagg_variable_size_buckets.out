@@ -1,0 +1,1252 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE conditions(
+  day DATE NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+SELECT create_hypertable(
+  'conditions', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+    create_hypertable    
+-------------------------
+ (1,public,conditions,t)
+(1 row)
+
+INSERT INTO conditions (day, city, temperature) VALUES
+  ('2021-06-14', 'Moscow', 26),
+  ('2021-06-15', 'Moscow', 22),
+  ('2021-06-16', 'Moscow', 24),
+  ('2021-06-17', 'Moscow', 24),
+  ('2021-06-18', 'Moscow', 27),
+  ('2021-06-19', 'Moscow', 28),
+  ('2021-06-20', 'Moscow', 30),
+  ('2021-06-21', 'Moscow', 31),
+  ('2021-06-22', 'Moscow', 34),
+  ('2021-06-23', 'Moscow', 34),
+  ('2021-06-24', 'Moscow', 34),
+  ('2021-06-25', 'Moscow', 32),
+  ('2021-06-26', 'Moscow', 32),
+  ('2021-06-27', 'Moscow', 31);
+-- Check that buckets like '1 month 15 days' (fixed-sized + variable-sized) are not allowed
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month 15 days', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions
+GROUP BY city, bucket
+WITH NO DATA;
+ERROR:  invalid interval specified
+\set ON_ERROR_STOP 1
+-- Make sure it's possible to create an empty cagg (WITH NO DATA) and
+-- that all the information about the bucketing function will be saved
+-- to the TS catalog.
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions
+GROUP BY city, bucket
+WITH NO DATA;
+SELECT mat_hypertable_id AS cagg_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'conditions_summary'
+\gset
+SELECT raw_hypertable_id AS ht_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'conditions_summary'
+\gset
+SELECT bucket_width
+FROM _timescaledb_catalog.continuous_agg
+WHERE mat_hypertable_id = :cagg_id;
+ bucket_width 
+--------------
+           -1
+(1 row)
+
+SELECT experimental, name, bucket_width, origin, timezone
+FROM _timescaledb_catalog.continuous_aggs_bucket_function
+WHERE mat_hypertable_id = :cagg_id;
+ experimental |      name      | bucket_width | origin | timezone 
+--------------+----------------+--------------+--------+----------
+ t            | time_bucket_ng | @ 1 mon      |        | 
+(1 row)
+
+-- Check that there is no saved invalidation threshold before any refreshes
+SELECT _timescaledb_internal.to_timestamp(watermark)
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :ht_id;
+ to_timestamp 
+--------------
+(0 rows)
+
+-- Make sure truncating of the refresh window works
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('conditions_summary', '2021-07-02', '2021-07-12');
+ERROR:  refresh window too small
+\set ON_ERROR_STOP 1
+-- Make sure refreshing works
+CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+(1 row)
+
+-- Make sure larger refresh window is fine too
+CALL refresh_continuous_aggregate('conditions_summary', '2021-03-01', '2021-07-01');
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+(1 row)
+
+-- Special check for "invalid or missing information about the bucketing
+-- function" code path
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+CREATE TEMPORARY TABLE restore_table ( LIKE _timescaledb_catalog.continuous_aggs_bucket_function );
+INSERT INTO restore_table SELECT * FROM  _timescaledb_catalog.continuous_aggs_bucket_function;
+DELETE FROM _timescaledb_catalog.continuous_aggs_bucket_function;
+\set ON_ERROR_STOP 0
+-- should fail with "invalid or missing information..."
+CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
+ERROR:  invalid or missing information about the bucketing function for cagg
+\set ON_ERROR_STOP 1
+INSERT INTO _timescaledb_catalog.continuous_aggs_bucket_function SELECT * FROM restore_table;
+DROP TABLE restore_table;
+-- should execute successfully
+CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
+NOTICE:  continuous aggregate "conditions_summary" is already up-to-date
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Check the invalidation threshold
+SELECT _timescaledb_internal.to_timestamp(watermark) at time zone 'UTC'
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :ht_id;
+         timezone         
+--------------------------
+ Thu Jul 01 00:00:00 2021
+(1 row)
+
+-- Add some dummy data for two more months and call refresh (no invalidations test case)
+INSERT INTO conditions (day, city, temperature)
+SELECT ts :: date, city, row_number() OVER ()
+FROM generate_series('2021-07-01' :: date, '2021-08-31', '1 day') as ts,
+     unnest(array['Moscow', 'Berlin']) as city;
+-- Double check generated data
+SELECT to_char(day, 'YYYY-MM-DD'), city, temperature
+FROM conditions
+WHERE day >= '2021-07-01'
+ORDER BY city DESC, day;
+  to_char   |  city  | temperature 
+------------+--------+-------------
+ 2021-07-01 | Moscow |           1
+ 2021-07-02 | Moscow |           2
+ 2021-07-03 | Moscow |           3
+ 2021-07-04 | Moscow |           4
+ 2021-07-05 | Moscow |           5
+ 2021-07-06 | Moscow |           6
+ 2021-07-07 | Moscow |           7
+ 2021-07-08 | Moscow |           8
+ 2021-07-09 | Moscow |           9
+ 2021-07-10 | Moscow |          10
+ 2021-07-11 | Moscow |          11
+ 2021-07-12 | Moscow |          12
+ 2021-07-13 | Moscow |          13
+ 2021-07-14 | Moscow |          14
+ 2021-07-15 | Moscow |          15
+ 2021-07-16 | Moscow |          16
+ 2021-07-17 | Moscow |          17
+ 2021-07-18 | Moscow |          18
+ 2021-07-19 | Moscow |          19
+ 2021-07-20 | Moscow |          20
+ 2021-07-21 | Moscow |          21
+ 2021-07-22 | Moscow |          22
+ 2021-07-23 | Moscow |          23
+ 2021-07-24 | Moscow |          24
+ 2021-07-25 | Moscow |          25
+ 2021-07-26 | Moscow |          26
+ 2021-07-27 | Moscow |          27
+ 2021-07-28 | Moscow |          28
+ 2021-07-29 | Moscow |          29
+ 2021-07-30 | Moscow |          30
+ 2021-07-31 | Moscow |          31
+ 2021-08-01 | Moscow |          32
+ 2021-08-02 | Moscow |          33
+ 2021-08-03 | Moscow |          34
+ 2021-08-04 | Moscow |          35
+ 2021-08-05 | Moscow |          36
+ 2021-08-06 | Moscow |          37
+ 2021-08-07 | Moscow |          38
+ 2021-08-08 | Moscow |          39
+ 2021-08-09 | Moscow |          40
+ 2021-08-10 | Moscow |          41
+ 2021-08-11 | Moscow |          42
+ 2021-08-12 | Moscow |          43
+ 2021-08-13 | Moscow |          44
+ 2021-08-14 | Moscow |          45
+ 2021-08-15 | Moscow |          46
+ 2021-08-16 | Moscow |          47
+ 2021-08-17 | Moscow |          48
+ 2021-08-18 | Moscow |          49
+ 2021-08-19 | Moscow |          50
+ 2021-08-20 | Moscow |          51
+ 2021-08-21 | Moscow |          52
+ 2021-08-22 | Moscow |          53
+ 2021-08-23 | Moscow |          54
+ 2021-08-24 | Moscow |          55
+ 2021-08-25 | Moscow |          56
+ 2021-08-26 | Moscow |          57
+ 2021-08-27 | Moscow |          58
+ 2021-08-28 | Moscow |          59
+ 2021-08-29 | Moscow |          60
+ 2021-08-30 | Moscow |          61
+ 2021-08-31 | Moscow |          62
+ 2021-07-01 | Berlin |          63
+ 2021-07-02 | Berlin |          64
+ 2021-07-03 | Berlin |          65
+ 2021-07-04 | Berlin |          66
+ 2021-07-05 | Berlin |          67
+ 2021-07-06 | Berlin |          68
+ 2021-07-07 | Berlin |          69
+ 2021-07-08 | Berlin |          70
+ 2021-07-09 | Berlin |          71
+ 2021-07-10 | Berlin |          72
+ 2021-07-11 | Berlin |          73
+ 2021-07-12 | Berlin |          74
+ 2021-07-13 | Berlin |          75
+ 2021-07-14 | Berlin |          76
+ 2021-07-15 | Berlin |          77
+ 2021-07-16 | Berlin |          78
+ 2021-07-17 | Berlin |          79
+ 2021-07-18 | Berlin |          80
+ 2021-07-19 | Berlin |          81
+ 2021-07-20 | Berlin |          82
+ 2021-07-21 | Berlin |          83
+ 2021-07-22 | Berlin |          84
+ 2021-07-23 | Berlin |          85
+ 2021-07-24 | Berlin |          86
+ 2021-07-25 | Berlin |          87
+ 2021-07-26 | Berlin |          88
+ 2021-07-27 | Berlin |          89
+ 2021-07-28 | Berlin |          90
+ 2021-07-29 | Berlin |          91
+ 2021-07-30 | Berlin |          92
+ 2021-07-31 | Berlin |          93
+ 2021-08-01 | Berlin |          94
+ 2021-08-02 | Berlin |          95
+ 2021-08-03 | Berlin |          96
+ 2021-08-04 | Berlin |          97
+ 2021-08-05 | Berlin |          98
+ 2021-08-06 | Berlin |          99
+ 2021-08-07 | Berlin |         100
+ 2021-08-08 | Berlin |         101
+ 2021-08-09 | Berlin |         102
+ 2021-08-10 | Berlin |         103
+ 2021-08-11 | Berlin |         104
+ 2021-08-12 | Berlin |         105
+ 2021-08-13 | Berlin |         106
+ 2021-08-14 | Berlin |         107
+ 2021-08-15 | Berlin |         108
+ 2021-08-16 | Berlin |         109
+ 2021-08-17 | Berlin |         110
+ 2021-08-18 | Berlin |         111
+ 2021-08-19 | Berlin |         112
+ 2021-08-20 | Berlin |         113
+ 2021-08-21 | Berlin |         114
+ 2021-08-22 | Berlin |         115
+ 2021-08-23 | Berlin |         116
+ 2021-08-24 | Berlin |         117
+ 2021-08-25 | Berlin |         118
+ 2021-08-26 | Berlin |         119
+ 2021-08-27 | Berlin |         120
+ 2021-08-28 | Berlin |         121
+ 2021-08-29 | Berlin |         122
+ 2021-08-30 | Berlin |         123
+ 2021-08-31 | Berlin |         124
+(124 rows)
+
+-- Make sure the invalidation threshold was unaffected
+SELECT _timescaledb_internal.to_timestamp(watermark) at time zone 'UTC'
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :ht_id;
+         timezone         
+--------------------------
+ Thu Jul 01 00:00:00 2021
+(1 row)
+
+-- Make sure the invalidation log is empty
+SELECT
+    _timescaledb_internal.to_timestamp(lowest_modified_value) AS lowest,
+    _timescaledb_internal.to_timestamp(greatest_modified_value) AS greatest
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = :ht_id;
+ lowest | greatest 
+--------+----------
+(0 rows)
+
+-- Call refresh
+CALL refresh_continuous_aggregate('conditions_summary', '2021-06-15', '2021-09-15');
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+(5 rows)
+
+-- Make sure the invalidation threshold has changed
+SELECT _timescaledb_internal.to_timestamp(watermark) at time zone 'UTC'
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :ht_id;
+         timezone         
+--------------------------
+ Wed Sep 01 00:00:00 2021
+(1 row)
+
+-- Make sure the catalog is cleaned up when the cagg is dropped
+DROP MATERIALIZED VIEW conditions_summary;
+NOTICE:  drop cascades to 3 other objects
+SELECT * FROM _timescaledb_catalog.continuous_agg
+WHERE mat_hypertable_id = :cagg_id;
+ mat_hypertable_id | raw_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | direct_view_schema | direct_view_name | materialized_only 
+-------------------+-------------------+------------------+----------------+---------------------+-------------------+--------------+--------------------+------------------+-------------------
+(0 rows)
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
+WHERE mat_hypertable_id = :cagg_id;
+ mat_hypertable_id | experimental | name | bucket_width | origin | timezone 
+-------------------+--------------+------+--------------+--------+----------
+(0 rows)
+
+-- Re-create cagg, this time WITH DATA
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions
+GROUP BY city, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary"
+-- Make sure cagg was filled
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+(5 rows)
+
+-- Check the invalidation.
+-- Step 1/2. Insert some more data , do a refresh and make sure that the
+--           invalidation log is empty.
+INSERT INTO conditions (day, city, temperature)
+SELECT ts :: date, city, row_number() OVER ()
+FROM generate_series('2021-09-01' :: date, '2021-09-15', '1 day') as ts,
+     unnest(array['Moscow', 'Berlin']) as city;
+CALL refresh_continuous_aggregate('conditions_summary', '2021-09-01', '2021-10-01');
+SELECT
+    _timescaledb_internal.to_timestamp(lowest_modified_value) AS lowest,
+    _timescaledb_internal.to_timestamp(greatest_modified_value) AS greatest
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = :ht_id;
+ lowest | greatest 
+--------+----------
+(0 rows)
+
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  30
+ Moscow | 2021-09-01 |   1 |  15
+(7 rows)
+
+-- Step 2/2. Add more data below the invalidation threshold, make sure that the
+--           invalidation log is not empty, that do a refresh.
+INSERT INTO conditions (day, city, temperature)
+SELECT ts :: date, city, (CASE WHEN city = 'Moscow' THEN -40 ELSE 40 END)
+FROM generate_series('2021-09-16' :: date, '2021-09-30', '1 day') as ts,
+     unnest(array['Moscow', 'Berlin']) as city;
+SELECT
+    _timescaledb_internal.to_timestamp(lowest_modified_value) at time zone 'UTC' AS lowest,
+    _timescaledb_internal.to_timestamp(greatest_modified_value) at time zone 'UTC' AS greatest
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = :ht_id;
+          lowest          |         greatest         
+--------------------------+--------------------------
+ Thu Sep 16 00:00:00 2021 | Thu Sep 30 00:00:00 2021
+(1 row)
+
+CALL refresh_continuous_aggregate('conditions_summary', '2021-09-01', '2021-10-01');
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  40
+ Moscow | 2021-09-01 | -40 |  15
+(7 rows)
+
+SELECT
+    _timescaledb_internal.to_timestamp(lowest_modified_value) AS lowest,
+    _timescaledb_internal.to_timestamp(greatest_modified_value) AS greatest
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+WHERE hypertable_id = :ht_id;
+ lowest | greatest 
+--------+----------
+(0 rows)
+
+-- Create a real-time aggregate
+DROP MATERIALIZED VIEW conditions_summary;
+NOTICE:  drop cascades to 4 other objects
+CREATE MATERIALIZED VIEW conditions_summary
+WITH (timescaledb.continuous) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions
+GROUP BY city, bucket;
+NOTICE:  refreshing continuous aggregate "conditions_summary"
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  40
+ Moscow | 2021-09-01 | -40 |  15
+(7 rows)
+
+-- Add some data to the hypertable and make sure they are visible in the cagg
+INSERT INTO conditions (day, city, temperature) VALUES
+  ('2021-10-01', 'Moscow', 1),
+  ('2021-10-02', 'Moscow', 2),
+  ('2021-10-03', 'Moscow', 3),
+  ('2021-10-04', 'Moscow', 4),
+  ('2021-10-01', 'Berlin', 5),
+  ('2021-10-02', 'Berlin', 6),
+  ('2021-10-03', 'Berlin', 7),
+  ('2021-10-04', 'Berlin', 8);
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  40
+ Moscow | 2021-09-01 | -40 |  15
+ Berlin | 2021-10-01 |   5 |   8
+ Moscow | 2021-10-01 |   1 |   4
+(9 rows)
+
+-- Refresh the cagg and make sure that the result of SELECT query didn't change
+CALL refresh_continuous_aggregate('conditions_summary', '2021-10-01', '2021-11-01');
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  40
+ Moscow | 2021-09-01 | -40 |  15
+ Berlin | 2021-10-01 |   5 |   8
+ Moscow | 2021-10-01 |   1 |   4
+(9 rows)
+
+-- Add some more data, enable compression, compress the chunks and repeat the test
+INSERT INTO conditions (day, city, temperature) VALUES
+  ('2021-11-01', 'Moscow', 11),
+  ('2021-11-02', 'Moscow', 12),
+  ('2021-11-03', 'Moscow', 13),
+  ('2021-11-04', 'Moscow', 14),
+  ('2021-11-01', 'Berlin', 15),
+  ('2021-11-02', 'Berlin', 16),
+  ('2021-11-03', 'Berlin', 17),
+  ('2021-11-04', 'Berlin', 18);
+ALTER TABLE conditions SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'city'
+);
+SELECT compress_chunk(ch) FROM show_chunks('conditions') AS ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_10_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_12_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_14_chunk
+ _timescaledb_internal._hyper_1_16_chunk
+ _timescaledb_internal._hyper_1_17_chunk
+ _timescaledb_internal._hyper_1_18_chunk
+ _timescaledb_internal._hyper_1_19_chunk
+ _timescaledb_internal._hyper_1_20_chunk
+ _timescaledb_internal._hyper_1_21_chunk
+ _timescaledb_internal._hyper_1_22_chunk
+ _timescaledb_internal._hyper_1_23_chunk
+ _timescaledb_internal._hyper_1_24_chunk
+ _timescaledb_internal._hyper_1_25_chunk
+ _timescaledb_internal._hyper_1_26_chunk
+ _timescaledb_internal._hyper_1_27_chunk
+ _timescaledb_internal._hyper_1_28_chunk
+ _timescaledb_internal._hyper_1_29_chunk
+ _timescaledb_internal._hyper_1_30_chunk
+ _timescaledb_internal._hyper_1_31_chunk
+ _timescaledb_internal._hyper_1_32_chunk
+ _timescaledb_internal._hyper_1_33_chunk
+ _timescaledb_internal._hyper_1_34_chunk
+ _timescaledb_internal._hyper_1_35_chunk
+ _timescaledb_internal._hyper_1_36_chunk
+ _timescaledb_internal._hyper_1_37_chunk
+ _timescaledb_internal._hyper_1_38_chunk
+ _timescaledb_internal._hyper_1_39_chunk
+ _timescaledb_internal._hyper_1_40_chunk
+ _timescaledb_internal._hyper_1_41_chunk
+ _timescaledb_internal._hyper_1_42_chunk
+ _timescaledb_internal._hyper_1_43_chunk
+ _timescaledb_internal._hyper_1_44_chunk
+ _timescaledb_internal._hyper_1_45_chunk
+ _timescaledb_internal._hyper_1_46_chunk
+ _timescaledb_internal._hyper_1_47_chunk
+ _timescaledb_internal._hyper_1_48_chunk
+ _timescaledb_internal._hyper_1_49_chunk
+ _timescaledb_internal._hyper_1_50_chunk
+ _timescaledb_internal._hyper_1_51_chunk
+ _timescaledb_internal._hyper_1_52_chunk
+ _timescaledb_internal._hyper_1_53_chunk
+ _timescaledb_internal._hyper_1_54_chunk
+ _timescaledb_internal._hyper_1_55_chunk
+ _timescaledb_internal._hyper_1_56_chunk
+ _timescaledb_internal._hyper_1_57_chunk
+ _timescaledb_internal._hyper_1_58_chunk
+ _timescaledb_internal._hyper_1_59_chunk
+ _timescaledb_internal._hyper_1_60_chunk
+ _timescaledb_internal._hyper_1_61_chunk
+ _timescaledb_internal._hyper_1_62_chunk
+ _timescaledb_internal._hyper_1_63_chunk
+ _timescaledb_internal._hyper_1_64_chunk
+ _timescaledb_internal._hyper_1_65_chunk
+ _timescaledb_internal._hyper_1_66_chunk
+ _timescaledb_internal._hyper_1_67_chunk
+ _timescaledb_internal._hyper_1_68_chunk
+ _timescaledb_internal._hyper_1_69_chunk
+ _timescaledb_internal._hyper_1_70_chunk
+ _timescaledb_internal._hyper_1_71_chunk
+ _timescaledb_internal._hyper_1_72_chunk
+ _timescaledb_internal._hyper_1_73_chunk
+ _timescaledb_internal._hyper_1_74_chunk
+ _timescaledb_internal._hyper_1_75_chunk
+ _timescaledb_internal._hyper_1_76_chunk
+ _timescaledb_internal._hyper_1_77_chunk
+ _timescaledb_internal._hyper_1_83_chunk
+ _timescaledb_internal._hyper_1_84_chunk
+ _timescaledb_internal._hyper_1_85_chunk
+ _timescaledb_internal._hyper_1_86_chunk
+ _timescaledb_internal._hyper_1_87_chunk
+ _timescaledb_internal._hyper_1_88_chunk
+ _timescaledb_internal._hyper_1_89_chunk
+ _timescaledb_internal._hyper_1_90_chunk
+ _timescaledb_internal._hyper_1_91_chunk
+ _timescaledb_internal._hyper_1_92_chunk
+ _timescaledb_internal._hyper_1_93_chunk
+ _timescaledb_internal._hyper_1_94_chunk
+ _timescaledb_internal._hyper_1_95_chunk
+ _timescaledb_internal._hyper_1_96_chunk
+ _timescaledb_internal._hyper_1_97_chunk
+ _timescaledb_internal._hyper_1_99_chunk
+ _timescaledb_internal._hyper_1_100_chunk
+ _timescaledb_internal._hyper_1_101_chunk
+ _timescaledb_internal._hyper_1_102_chunk
+ _timescaledb_internal._hyper_1_103_chunk
+ _timescaledb_internal._hyper_1_104_chunk
+ _timescaledb_internal._hyper_1_105_chunk
+ _timescaledb_internal._hyper_1_106_chunk
+ _timescaledb_internal._hyper_1_107_chunk
+ _timescaledb_internal._hyper_1_108_chunk
+ _timescaledb_internal._hyper_1_109_chunk
+ _timescaledb_internal._hyper_1_110_chunk
+ _timescaledb_internal._hyper_1_111_chunk
+ _timescaledb_internal._hyper_1_112_chunk
+ _timescaledb_internal._hyper_1_113_chunk
+ _timescaledb_internal._hyper_1_118_chunk
+ _timescaledb_internal._hyper_1_119_chunk
+ _timescaledb_internal._hyper_1_120_chunk
+ _timescaledb_internal._hyper_1_121_chunk
+ _timescaledb_internal._hyper_1_123_chunk
+ _timescaledb_internal._hyper_1_124_chunk
+ _timescaledb_internal._hyper_1_125_chunk
+ _timescaledb_internal._hyper_1_126_chunk
+(114 rows)
+
+-- Data for 2021-11 is seen because the cagg is real-time
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  40
+ Moscow | 2021-09-01 | -40 |  15
+ Berlin | 2021-10-01 |   5 |   8
+ Moscow | 2021-10-01 |   1 |   4
+ Berlin | 2021-11-01 |  15 |  18
+ Moscow | 2021-11-01 |  11 |  14
+(11 rows)
+
+CALL refresh_continuous_aggregate('conditions_summary', '2021-11-01', '2021-12-01');
+-- Data for 2021-11 is seen because the cagg was refreshed
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+ Berlin | 2021-07-01 |  63 |  93
+ Moscow | 2021-07-01 |   1 |  31
+ Berlin | 2021-08-01 |  94 | 124
+ Moscow | 2021-08-01 |  32 |  62
+ Berlin | 2021-09-01 |  16 |  40
+ Moscow | 2021-09-01 | -40 |  15
+ Berlin | 2021-10-01 |   5 |   8
+ Moscow | 2021-10-01 |   1 |   4
+ Berlin | 2021-11-01 |  15 |  18
+ Moscow | 2021-11-01 |  11 |  14
+(11 rows)
+
+-- Test N-months buckets where N in 2,3,4,5,6,12,13 on a relatively large table
+-- This also tests the case when a single hypertable has multiple caggs.
+CREATE TABLE conditions_large(
+  day DATE NOT NULL,
+  temperature INT NOT NULL);
+SELECT create_hypertable(
+  'conditions_large', 'day',
+  chunk_time_interval => INTERVAL '1 month'
+);
+       create_hypertable       
+-------------------------------
+ (6,public,conditions_large,t)
+(1 row)
+
+INSERT INTO conditions_large(day, temperature)
+SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
+FROM generate_series('2010-01-01' :: date, '2020-01-01' :: date - interval '1 day', '1 day') as ts;
+CREATE MATERIALIZED VIEW conditions_large_2m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('2 months', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_2m"
+SELECT * FROM conditions_large_2m ORDER BY bucket;
+   bucket   | min  | max  
+------------+------+------
+ 01-01-2010 |  101 |  228
+ 03-01-2010 |  301 |  430
+ 05-01-2010 |  501 |  630
+ 07-01-2010 |  701 |  831
+ 09-01-2010 |  901 | 1031
+ 11-01-2010 | 1101 | 1231
+ 01-01-2011 |  101 |  228
+ 03-01-2011 |  301 |  430
+ 05-01-2011 |  501 |  630
+ 07-01-2011 |  701 |  831
+ 09-01-2011 |  901 | 1031
+ 11-01-2011 | 1101 | 1231
+ 01-01-2012 |  101 |  229
+ 03-01-2012 |  301 |  430
+ 05-01-2012 |  501 |  630
+ 07-01-2012 |  701 |  831
+ 09-01-2012 |  901 | 1031
+ 11-01-2012 | 1101 | 1231
+ 01-01-2013 |  101 |  228
+ 03-01-2013 |  301 |  430
+ 05-01-2013 |  501 |  630
+ 07-01-2013 |  701 |  831
+ 09-01-2013 |  901 | 1031
+ 11-01-2013 | 1101 | 1231
+ 01-01-2014 |  101 |  228
+ 03-01-2014 |  301 |  430
+ 05-01-2014 |  501 |  630
+ 07-01-2014 |  701 |  831
+ 09-01-2014 |  901 | 1031
+ 11-01-2014 | 1101 | 1231
+ 01-01-2015 |  101 |  228
+ 03-01-2015 |  301 |  430
+ 05-01-2015 |  501 |  630
+ 07-01-2015 |  701 |  831
+ 09-01-2015 |  901 | 1031
+ 11-01-2015 | 1101 | 1231
+ 01-01-2016 |  101 |  229
+ 03-01-2016 |  301 |  430
+ 05-01-2016 |  501 |  630
+ 07-01-2016 |  701 |  831
+ 09-01-2016 |  901 | 1031
+ 11-01-2016 | 1101 | 1231
+ 01-01-2017 |  101 |  228
+ 03-01-2017 |  301 |  430
+ 05-01-2017 |  501 |  630
+ 07-01-2017 |  701 |  831
+ 09-01-2017 |  901 | 1031
+ 11-01-2017 | 1101 | 1231
+ 01-01-2018 |  101 |  228
+ 03-01-2018 |  301 |  430
+ 05-01-2018 |  501 |  630
+ 07-01-2018 |  701 |  831
+ 09-01-2018 |  901 | 1031
+ 11-01-2018 | 1101 | 1231
+ 01-01-2019 |  101 |  228
+ 03-01-2019 |  301 |  430
+ 05-01-2019 |  501 |  630
+ 07-01-2019 |  701 |  831
+ 09-01-2019 |  901 | 1031
+ 11-01-2019 | 1101 | 1231
+(60 rows)
+
+CREATE MATERIALIZED VIEW conditions_large_3m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('3 months', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_3m"
+SELECT * FROM conditions_large_3m ORDER BY bucket;
+   bucket   | min  | max  
+------------+------+------
+ 01-01-2010 |  101 |  331
+ 04-01-2010 |  401 |  630
+ 07-01-2010 |  701 |  930
+ 10-01-2010 | 1001 | 1231
+ 01-01-2011 |  101 |  331
+ 04-01-2011 |  401 |  630
+ 07-01-2011 |  701 |  930
+ 10-01-2011 | 1001 | 1231
+ 01-01-2012 |  101 |  331
+ 04-01-2012 |  401 |  630
+ 07-01-2012 |  701 |  930
+ 10-01-2012 | 1001 | 1231
+ 01-01-2013 |  101 |  331
+ 04-01-2013 |  401 |  630
+ 07-01-2013 |  701 |  930
+ 10-01-2013 | 1001 | 1231
+ 01-01-2014 |  101 |  331
+ 04-01-2014 |  401 |  630
+ 07-01-2014 |  701 |  930
+ 10-01-2014 | 1001 | 1231
+ 01-01-2015 |  101 |  331
+ 04-01-2015 |  401 |  630
+ 07-01-2015 |  701 |  930
+ 10-01-2015 | 1001 | 1231
+ 01-01-2016 |  101 |  331
+ 04-01-2016 |  401 |  630
+ 07-01-2016 |  701 |  930
+ 10-01-2016 | 1001 | 1231
+ 01-01-2017 |  101 |  331
+ 04-01-2017 |  401 |  630
+ 07-01-2017 |  701 |  930
+ 10-01-2017 | 1001 | 1231
+ 01-01-2018 |  101 |  331
+ 04-01-2018 |  401 |  630
+ 07-01-2018 |  701 |  930
+ 10-01-2018 | 1001 | 1231
+ 01-01-2019 |  101 |  331
+ 04-01-2019 |  401 |  630
+ 07-01-2019 |  701 |  930
+ 10-01-2019 | 1001 | 1231
+(40 rows)
+
+CREATE MATERIALIZED VIEW conditions_large_4m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('4 months', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_4m"
+SELECT * FROM conditions_large_4m ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 01-01-2010 | 101 |  430
+ 05-01-2010 | 501 |  831
+ 09-01-2010 | 901 | 1231
+ 01-01-2011 | 101 |  430
+ 05-01-2011 | 501 |  831
+ 09-01-2011 | 901 | 1231
+ 01-01-2012 | 101 |  430
+ 05-01-2012 | 501 |  831
+ 09-01-2012 | 901 | 1231
+ 01-01-2013 | 101 |  430
+ 05-01-2013 | 501 |  831
+ 09-01-2013 | 901 | 1231
+ 01-01-2014 | 101 |  430
+ 05-01-2014 | 501 |  831
+ 09-01-2014 | 901 | 1231
+ 01-01-2015 | 101 |  430
+ 05-01-2015 | 501 |  831
+ 09-01-2015 | 901 | 1231
+ 01-01-2016 | 101 |  430
+ 05-01-2016 | 501 |  831
+ 09-01-2016 | 901 | 1231
+ 01-01-2017 | 101 |  430
+ 05-01-2017 | 501 |  831
+ 09-01-2017 | 901 | 1231
+ 01-01-2018 | 101 |  430
+ 05-01-2018 | 501 |  831
+ 09-01-2018 | 901 | 1231
+ 01-01-2019 | 101 |  430
+ 05-01-2019 | 501 |  831
+ 09-01-2019 | 901 | 1231
+(30 rows)
+
+CREATE MATERIALIZED VIEW conditions_large_5m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('5 months', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_5m"
+SELECT * FROM conditions_large_5m ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 01-01-2010 | 101 |  531
+ 06-01-2010 | 601 | 1031
+ 11-01-2010 | 101 | 1231
+ 04-01-2011 | 401 |  831
+ 09-01-2011 | 101 | 1231
+ 02-01-2012 | 201 |  630
+ 07-01-2012 | 701 | 1130
+ 12-01-2012 | 101 | 1231
+ 05-01-2013 | 501 |  930
+ 10-01-2013 | 101 | 1231
+ 03-01-2014 | 301 |  731
+ 08-01-2014 | 801 | 1231
+ 01-01-2015 | 101 |  531
+ 06-01-2015 | 601 | 1031
+ 11-01-2015 | 101 | 1231
+ 04-01-2016 | 401 |  831
+ 09-01-2016 | 101 | 1231
+ 02-01-2017 | 201 |  630
+ 07-01-2017 | 701 | 1130
+ 12-01-2017 | 101 | 1231
+ 05-01-2018 | 501 |  930
+ 10-01-2018 | 101 | 1231
+ 03-01-2019 | 301 |  731
+ 08-01-2019 | 801 | 1231
+(24 rows)
+
+CREATE MATERIALIZED VIEW conditions_large_6m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('6 months', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_6m"
+SELECT * FROM conditions_large_6m ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 01-01-2010 | 101 |  630
+ 07-01-2010 | 701 | 1231
+ 01-01-2011 | 101 |  630
+ 07-01-2011 | 701 | 1231
+ 01-01-2012 | 101 |  630
+ 07-01-2012 | 701 | 1231
+ 01-01-2013 | 101 |  630
+ 07-01-2013 | 701 | 1231
+ 01-01-2014 | 101 |  630
+ 07-01-2014 | 701 | 1231
+ 01-01-2015 | 101 |  630
+ 07-01-2015 | 701 | 1231
+ 01-01-2016 | 101 |  630
+ 07-01-2016 | 701 | 1231
+ 01-01-2017 | 101 |  630
+ 07-01-2017 | 701 | 1231
+ 01-01-2018 | 101 |  630
+ 07-01-2018 | 701 | 1231
+ 01-01-2019 | 101 |  630
+ 07-01-2019 | 701 | 1231
+(20 rows)
+
+CREATE MATERIALIZED VIEW conditions_large_1y
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('1 year', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_1y"
+SELECT * FROM conditions_large_1y ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 01-01-2010 | 101 | 1231
+ 01-01-2011 | 101 | 1231
+ 01-01-2012 | 101 | 1231
+ 01-01-2013 | 101 | 1231
+ 01-01-2014 | 101 | 1231
+ 01-01-2015 | 101 | 1231
+ 01-01-2016 | 101 | 1231
+ 01-01-2017 | 101 | 1231
+ 01-01-2018 | 101 | 1231
+ 01-01-2019 | 101 | 1231
+(10 rows)
+
+CREATE MATERIALIZED VIEW conditions_large_1y1m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('1 year 1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_1y1m"
+SELECT * FROM conditions_large_1y1m ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 10-01-2009 | 101 | 1031
+ 11-01-2010 | 101 | 1231
+ 12-01-2011 | 101 | 1231
+ 01-01-2013 | 101 | 1231
+ 02-01-2014 | 101 | 1231
+ 03-01-2015 | 101 | 1231
+ 04-01-2016 | 101 | 1231
+ 05-01-2017 | 101 | 1231
+ 06-01-2018 | 101 | 1231
+ 07-01-2019 | 701 | 1231
+(10 rows)
+
+-- Trigger merged refresh to check corresponding code path as well
+DROP MATERIALIZED VIEW conditions_large_1y;
+NOTICE:  drop cascades to 10 other objects
+SET timescaledb.materializations_per_refresh_window = 0;
+CREATE MATERIALIZED VIEW conditions_large_1y
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('1 year', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_large
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_large_1y"
+SELECT * FROM conditions_large_1y ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 01-01-2010 | 101 | 1231
+ 01-01-2011 | 101 | 1231
+ 01-01-2012 | 101 | 1231
+ 01-01-2013 | 101 | 1231
+ 01-01-2014 | 101 | 1231
+ 01-01-2015 | 101 | 1231
+ 01-01-2016 | 101 | 1231
+ 01-01-2017 | 101 | 1231
+ 01-01-2018 | 101 | 1231
+ 01-01-2019 | 101 | 1231
+(10 rows)
+
+INSERT INTO conditions_large(day, temperature)
+SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
+FROM generate_series('2020-01-01' :: date, '2021-01-01' :: date - interval '1 day', '1 day') as ts;
+CALL refresh_continuous_aggregate('conditions_large_1y', '2020-01-01', '2021-01-01');
+SELECT * FROM conditions_large_1y ORDER BY bucket;
+   bucket   | min | max  
+------------+-----+------
+ 01-01-2010 | 101 | 1231
+ 01-01-2011 | 101 | 1231
+ 01-01-2012 | 101 | 1231
+ 01-01-2013 | 101 | 1231
+ 01-01-2014 | 101 | 1231
+ 01-01-2015 | 101 | 1231
+ 01-01-2016 | 101 | 1231
+ 01-01-2017 | 101 | 1231
+ 01-01-2018 | 101 | 1231
+ 01-01-2019 | 101 | 1231
+ 01-01-2020 | 101 | 1231
+(11 rows)
+
+RESET timescaledb.materializations_per_refresh_window;
+-- Test caggs with monthly buckets on top of distributed hypertable
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
+FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+            node_name            |   host    | port  |            database             | node_created | database_created | extension_created 
+---------------------------------+-----------+-------+---------------------------------+--------------+------------------+-------------------
+ db_cagg_variable_size_buckets_1 | localhost | 55432 | db_cagg_variable_size_buckets_1 | t            | t                | t
+ db_cagg_variable_size_buckets_2 | localhost | 55432 | db_cagg_variable_size_buckets_2 | t            | t                | t
+ db_cagg_variable_size_buckets_3 | localhost | 55432 | db_cagg_variable_size_buckets_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+CREATE TABLE conditions_dist(
+  day DATE NOT NULL,
+  temperature INT NOT NULL);
+SELECT table_name FROM create_distributed_hypertable('conditions_dist', 'day', chunk_time_interval => INTERVAL '1 day');
+   table_name    
+-----------------
+ conditions_dist
+(1 row)
+
+INSERT INTO conditions_dist(day, temperature)
+SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
+FROM generate_series('2010-01-01' :: date, '2010-03-01' :: date - interval '1 day', '1 day') as ts;
+CREATE MATERIALIZED VIEW conditions_dist_1m
+WITH (timescaledb.continuous) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_dist
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "conditions_dist_1m"
+SELECT mat_hypertable_id AS cagg_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'conditions_dist_1m'
+\gset
+SELECT raw_hypertable_id AS ht_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'conditions_dist_1m'
+\gset
+SELECT bucket_width
+FROM _timescaledb_catalog.continuous_agg
+WHERE mat_hypertable_id = :cagg_id;
+ bucket_width 
+--------------
+           -1
+(1 row)
+
+SELECT experimental, name, bucket_width, origin, timezone
+FROM _timescaledb_catalog.continuous_aggs_bucket_function
+WHERE mat_hypertable_id = :cagg_id;
+ experimental |      name      | bucket_width | origin | timezone 
+--------------+----------------+--------------+--------+----------
+ t            | time_bucket_ng | @ 1 mon      |        | 
+(1 row)
+
+SELECT * FROM conditions_dist_1m ORDER BY bucket;
+   bucket   | min | max 
+------------+-----+-----
+ 01-01-2010 | 101 | 131
+ 02-01-2010 | 201 | 228
+(2 rows)
+
+-- Same test but with non-realtime, NO DATA aggregate and manual refresh
+CREATE MATERIALIZED VIEW conditions_dist_1m_manual
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_dist
+GROUP BY bucket
+WITH NO DATA;
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+ bucket | min | max 
+--------+-----+-----
+(0 rows)
+
+CALL refresh_continuous_aggregate('conditions_dist_1m_manual', '2010-01-01', '2010-03-01');
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+   bucket   | min | max 
+------------+-----+-----
+ 01-01-2010 | 101 | 131
+ 02-01-2010 | 201 | 228
+(2 rows)
+
+-- Check invalidation for caggs on top of distributed hypertable
+INSERT INTO conditions_dist(day, temperature)
+VALUES ('2010-01-15', 999), ('2010-02-15', -999), ('2010-03-01', 15);
+SELECT * FROM conditions_dist_1m ORDER BY bucket;
+   bucket   | min | max 
+------------+-----+-----
+ 01-01-2010 | 101 | 131
+ 02-01-2010 | 201 | 228
+ 03-01-2010 |  15 |  15
+(3 rows)
+
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+   bucket   | min | max 
+------------+-----+-----
+ 01-01-2010 | 101 | 131
+ 02-01-2010 | 201 | 228
+(2 rows)
+
+CALL refresh_continuous_aggregate('conditions_dist_1m', '2010-01-01', '2010-04-01');
+SELECT * FROM conditions_dist_1m ORDER BY bucket;
+   bucket   | min  | max 
+------------+------+-----
+ 01-01-2010 |  101 | 999
+ 02-01-2010 | -999 | 228
+ 03-01-2010 |   15 |  15
+(3 rows)
+
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+   bucket   | min | max 
+------------+-----+-----
+ 01-01-2010 | 101 | 131
+ 02-01-2010 | 201 | 228
+(2 rows)
+
+CALL refresh_continuous_aggregate('conditions_dist_1m_manual', '2010-01-01', '2010-04-01');
+SELECT * FROM conditions_dist_1m ORDER BY bucket;
+   bucket   | min  | max 
+------------+------+-----
+ 01-01-2010 |  101 | 999
+ 02-01-2010 | -999 | 228
+ 03-01-2010 |   15 |  15
+(3 rows)
+
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+   bucket   | min  | max 
+------------+------+-----
+ 01-01-2010 |  101 | 999
+ 02-01-2010 | -999 | 228
+ 03-01-2010 |   15 |  15
+(3 rows)
+
+ALTER MATERIALIZED VIEW conditions_dist_1m_manual SET ( timescaledb.compress );
+SELECT compress_chunk(ch)
+FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_17_533_chunk
+(1 row)
+
+SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
+   bucket   | min  | max 
+------------+------+-----
+ 01-01-2010 |  101 | 999
+ 02-01-2010 | -999 | 228
+ 03-01-2010 |   15 |  15
+(3 rows)
+
+-- Clean up
+DROP TABLE conditions_dist CASCADE;
+NOTICE:  drop cascades to 5 other objects
+NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 3 other objects
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP DATABASE :DATA_NODE_1;
+DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_3;
+-- Test the specific code path of creating a CAGG on top of empty hypertable.
+CREATE TABLE conditions_empty(
+  day DATE NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+SELECT create_hypertable(
+  'conditions_empty', 'day',
+  chunk_time_interval => INTERVAL '1 day'
+);
+       create_hypertable        
+--------------------------------
+ (19,public,conditions_empty,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW conditions_summary_empty
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT city,
+   timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
+   MIN(temperature),
+   MAX(temperature)
+FROM conditions_empty
+GROUP BY city, bucket;
+NOTICE:  continuous aggregate "conditions_summary_empty" is already up-to-date
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary_empty
+ORDER by month, city;
+ city | month | min | max 
+------+-------+-----+-----
+(0 rows)
+
+-- The test above changes the record that gets added to the invalidation log
+-- for an empty table. Make sure it doesn't have any unintended side-effects
+-- and the refreshing works as expected.
+INSERT INTO conditions_empty (day, city, temperature) VALUES
+  ('2021-06-14', 'Moscow', 26),
+  ('2021-06-15', 'Moscow', 22),
+  ('2021-06-16', 'Moscow', 24),
+  ('2021-06-17', 'Moscow', 24),
+  ('2021-06-18', 'Moscow', 27),
+  ('2021-06-19', 'Moscow', 28),
+  ('2021-06-20', 'Moscow', 30),
+  ('2021-06-21', 'Moscow', 31),
+  ('2021-06-22', 'Moscow', 34),
+  ('2021-06-23', 'Moscow', 34),
+  ('2021-06-24', 'Moscow', 34),
+  ('2021-06-25', 'Moscow', 32),
+  ('2021-06-26', 'Moscow', 32),
+  ('2021-06-27', 'Moscow', 31);
+CALL refresh_continuous_aggregate('conditions_summary_empty', '2021-06-01', '2021-07-01');
+SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
+FROM conditions_summary_empty
+ORDER by month, city;
+  city  |   month    | min | max 
+--------+------------+-----+-----
+ Moscow | 2021-06-01 |  22 |  34
+(1 row)
+

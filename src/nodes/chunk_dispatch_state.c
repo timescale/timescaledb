@@ -115,8 +115,8 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * just when the chunk changes.
 	 */
 #if PG14_LT
-	if (cis->compress_state != NULL)
-		estate->es_result_relation_info = cis->orig_result_relation_info;
+	if (cis->compress_info != NULL)
+		estate->es_result_relation_info = cis->compress_info->orig_result_relation_info;
 	else
 		estate->es_result_relation_info = cis->result_relation_info;
 #endif
@@ -127,43 +127,44 @@ chunk_dispatch_exec(CustomScanState *node)
 	if (cis->hyper_to_chunk_map != NULL)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
-	if (cis->compress_state != NULL)
+	if (cis->compress_info != NULL)
 	{
 		/*
 		 * When the chunk is compressed, we redirect the insert to the internal compressed
 		 * chunk. However, any BEFORE ROW triggers defined on the chunk have to be executed
 		 * before we redirect the insert.
 		 */
-		if (cis->orig_result_relation_info->ri_TrigDesc &&
-			cis->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
+		if (cis->compress_info->orig_result_relation_info->ri_TrigDesc &&
+			cis->compress_info->orig_result_relation_info->ri_TrigDesc->trig_insert_before_row)
 		{
 			bool skip_tuple;
-			skip_tuple = !ExecBRInsertTriggers(estate, cis->orig_result_relation_info, slot);
+			skip_tuple =
+				!ExecBRInsertTriggers(estate, cis->compress_info->orig_result_relation_info, slot);
 
 			if (skip_tuple)
 				return NULL;
 		}
 
 		if (cis->rel->rd_att->constr && cis->rel->rd_att->constr->has_generated_stored)
-			ExecComputeStoredGeneratedCompat(cis->orig_result_relation_info,
+			ExecComputeStoredGeneratedCompat(cis->compress_info->orig_result_relation_info,
 											 estate,
 											 slot,
 											 CMD_INSERT);
 
 		if (cis->rel->rd_att->constr)
-			ExecConstraints(cis->orig_result_relation_info, slot, estate);
+			ExecConstraints(cis->compress_info->orig_result_relation_info, slot, estate);
 
 #if PG14_LT
 		estate->es_result_relation_info = cis->result_relation_info;
 #endif
 		Assert(ts_cm_functions->compress_row_exec != NULL);
 		TupleTableSlot *orig_slot = slot;
-		slot = ts_cm_functions->compress_row_exec(cis->compress_state, slot);
+		slot = ts_cm_functions->compress_row_exec(cis->compress_info->compress_state, slot);
 		/* If we have cagg defined on the hypertable, we have to execute
 		 * the function that records invalidations directly as AFTER ROW
 		 * triggers do not work with compressed chunks.
 		 */
-		if (ts_continuous_aggs_find_by_raw_table_id(ht->fd.id))
+		if (cis->compress_info->has_cagg_trigger)
 		{
 			Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
 			HeapTupleTableSlot *hslot = (HeapTupleTableSlot *) orig_slot;
@@ -172,14 +173,7 @@ chunk_dispatch_exec(CustomScanState *node)
 											   orig_slot->tts_values,
 											   orig_slot->tts_isnull);
 
-			ts_cm_functions
-				->continuous_agg_call_invalidation_trigger(ht->fd.id,
-														   cis->rel,
-														   hslot->tuple,
-														   NULL /* chunk_newtuple */,
-														   false /* update */,
-														   false /* is_distributed_hypertable */,
-														   /* parent_hypertable_id */ 0);
+			ts_compress_chunk_invoke_cagg_trigger(cis->compress_info, cis->rel, hslot->tuple);
 		}
 	}
 	return slot;

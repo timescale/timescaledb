@@ -140,6 +140,9 @@ typedef struct TsFdwRelInfo
 	 */
 	double average_chunk_pages;
 	double average_chunk_tuples;
+
+	/* Cached chunk data for the chunk relinfo. */
+	struct Chunk *chunk;
 } TsFdwRelInfo;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,

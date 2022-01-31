@@ -23,13 +23,13 @@
 #include <utils/memutils.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
-#include <continuous_agg.h>
 
 #include "compat/compat.h"
 #include "errors.h"
 #include "chunk_insert_state.h"
 #include "chunk_dispatch.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
+#include "ts_catalog/continuous_agg.h"
 #include "chunk_dispatch_state.h"
 #include "chunk_index.h"
 #include "indexing.h"
@@ -576,6 +576,8 @@ lock_associated_compressed_chunk(int32 chunk_id, bool *has_compressed_chunk)
 extern ChunkInsertState *
 ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 {
+	int cagg_trig_nargs = 0;
+	int32 cagg_trig_args[2] = { 0, 0 };
 	ChunkInsertState *state;
 	Relation rel, parent_rel, compress_rel = NULL;
 	MemoryContext old_mcxt;
@@ -673,7 +675,14 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 				if (strncmp(tg->triggers[i].tgname,
 							CAGGINVAL_TRIGGER_NAME,
 							strlen(CAGGINVAL_TRIGGER_NAME)) == 0)
+				{
+					/* collect arg information here */
+					cagg_trig_nargs = tg->triggers[i].tgnargs;
+					cagg_trig_args[0] = atol(tg->triggers[i].tgargs[0]);
+					if (cagg_trig_nargs > 1)
+						cagg_trig_args[1] = atol(tg->triggers[i].tgargs[1]);
 					continue;
+				}
 				if (i > 0)
 					appendStringInfoString(trigger_list, ", ");
 				appendStringInfoString(trigger_list, tg->triggers[i].tgname);
@@ -708,19 +717,28 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	if (has_compressed_chunk)
 	{
+		CompressChunkInsertState *compress_info = palloc0(sizeof(CompressChunkInsertState));
 		int32 htid = ts_hypertable_relid_to_id(chunk->hypertable_relid);
 		/* this is true as compressed chunks are not created on access node */
 		Assert(chunk->relkind != RELKIND_FOREIGN_TABLE);
 		Assert(compress_rel != NULL);
-		state->compress_rel = compress_rel;
+		compress_info->compress_rel = compress_rel;
 		Assert(ts_cm_functions->compress_row_init != NULL);
 		/* need a way to convert from chunk tuple to compressed chunk tuple */
-		state->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
-		state->orig_result_relation_info = relinfo;
+		compress_info->compress_state = ts_cm_functions->compress_row_init(htid, rel, compress_rel);
+		compress_info->orig_result_relation_info = relinfo;
+		if (cagg_trig_nargs > 0) /*we found a cagg trigger earlier */
+		{
+			compress_info->has_cagg_trigger = true;
+			compress_info->cagg_trig_nargs = cagg_trig_nargs;
+			compress_info->cagg_trig_args[0] = cagg_trig_args[0];
+			compress_info->cagg_trig_args[1] = cagg_trig_args[1];
+		}
+		state->compress_info = compress_info;
 	}
 	else
 	{
-		state->compress_state = NULL;
+		state->compress_info = NULL;
 	}
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
@@ -803,16 +821,16 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	destroy_on_conflict_state(state);
 	ExecCloseIndices(state->result_relation_info);
 
-	if (state->compress_rel)
+	if (state->compress_info)
 	{
-		ResultRelInfo *orig_chunk_rri = state->orig_result_relation_info;
+		ResultRelInfo *orig_chunk_rri = state->compress_info->orig_result_relation_info;
 		Oid chunk_relid = RelationGetRelid(orig_chunk_rri->ri_RelationDesc);
-		ts_cm_functions->compress_row_end(state->compress_state);
-		ts_cm_functions->compress_row_destroy(state->compress_state);
+		ts_cm_functions->compress_row_end(state->compress_info->compress_state);
+		ts_cm_functions->compress_row_destroy(state->compress_info->compress_state);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		if (!ts_chunk_is_unordered(chunk))
 			ts_chunk_set_unordered(chunk);
-		table_close(state->compress_rel, NoLock);
+		table_close(state->compress_info->compress_rel, NoLock);
 	}
 	else if (RelationGetForm(state->result_relation_info->ri_RelationDesc)->relkind ==
 			 RELKIND_FOREIGN_TABLE)
@@ -888,4 +906,32 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 							   state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	else
 		MemoryContextDelete(state->mctx);
+}
+
+/* invoke cagg trigger on a compressed chunk. AFTER Row Triggers on
+ * compressed chunks do not work with the PG framework - so we explicitly
+ * call the underlying C function. Note that in the case of a distr. ht, this
+ * trigger is executed on the AN.
+ * Parameters:
+ * chunk_rel : chunk that will be modified (original chunk)
+ * chunk_tuple: tuple to be inserted into the chunk (before being transformed
+ *            into compressed format)
+ */
+void
+ts_compress_chunk_invoke_cagg_trigger(CompressChunkInsertState *compress_info, Relation chunk_rel,
+									  HeapTuple chunk_tuple)
+{
+	Assert(ts_cm_functions->continuous_agg_call_invalidation_trigger);
+	int32 hypertable_id = compress_info->cagg_trig_args[0];
+	int32 parent_hypertable_id = compress_info->cagg_trig_args[1];
+	bool is_distributed_ht = (compress_info->cagg_trig_nargs == 2);
+	Assert((compress_info->cagg_trig_nargs == 1 && parent_hypertable_id == 0) ||
+		   (compress_info->cagg_trig_nargs == 2 && parent_hypertable_id > 0));
+	ts_cm_functions->continuous_agg_call_invalidation_trigger(hypertable_id,
+															  chunk_rel,
+															  chunk_tuple,
+															  NULL /* chunk_newtuple */,
+															  false /* update */,
+															  is_distributed_ht,
+															  parent_hypertable_id);
 }

@@ -22,7 +22,6 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <parser/parse_func.h>
-#include <catalog.h>
 #include <scanner.h>
 #include <scan_iterator.h>
 #include <utils.h>
@@ -31,7 +30,8 @@
 #include <hypertable_cache.h>
 
 #include "remote/dist_commands.h"
-#include "continuous_agg.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "data_node.h"
 #include "deparse.h"
@@ -320,41 +320,37 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
  * hypertable.
  */
 void
-invalidation_add_entry(const Hypertable *ht, ContinuousAggHypertableStatus caggstatus,
-					   int32 entry_id, int64 start, int64 end)
+continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 end)
 {
-	Assert(ht != NULL);
+	Assert(raw_ht != NULL);
 
-	if (hypertable_is_distributed(ht))
+	if (hypertable_is_distributed(raw_ht))
 	{
-		remote_invalidation_log_add_entry(ht, caggstatus, entry_id, start, end);
+		remote_invalidation_log_add_entry(raw_ht, HypertableIsRawTable, raw_ht->fd.id, start, end);
 	}
 	else
 	{
-		ContinuousAggHypertableStatus caggstatus = ts_continuous_agg_hypertable_status(ht->fd.id);
+		invalidation_hyper_log_add_entry(raw_ht->fd.id, start, end);
+	}
+}
 
-		switch (caggstatus)
-		{
-			case HypertableIsMaterialization:
-				invalidation_cagg_log_add_entry(ht->fd.id, start, end);
-				break;
+void
+continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat_ht, int64 start,
+								 int64 end)
+{
+	Assert((raw_ht != NULL) && (mat_ht != NULL));
 
-			case HypertableIsRawTable:
-				invalidation_hyper_log_add_entry(ht->fd.id, start, end);
-				break;
-
-			case HypertableIsMaterializationAndRaw:
-				break;
-
-			case HypertableIsNotContinuousAgg:
-				ereport(ERROR,
-						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-						 errmsg("cannot invalidate hypertable \"%s\"",
-								get_rel_name(ht->main_table_relid)),
-						 errdetail(
-							 "There is no continuous aggregate associated with the hypertable.")));
-				break;
-		}
+	if (hypertable_is_distributed(raw_ht))
+	{
+		remote_invalidation_log_add_entry(raw_ht,
+										  HypertableIsMaterialization,
+										  mat_ht->fd.id,
+										  start,
+										  end);
+	}
+	else
+	{
+		invalidation_cagg_log_add_entry(mat_ht->fd.id, start, end);
 	}
 }
 
@@ -549,28 +545,6 @@ invalidation_entry_reset(Invalidation *entry)
 }
 
 /*
- * Expand an invalidation to bucket boundaries, for the case of monthly buckets.
- *
- * See invalidation_expand_to_bucket_boundaries() below.
- */
-static void
-invalidation_expand_to_bucket_boundaries_for_months(
-	Invalidation *inv, Oid timetype, const ContinuousAggsBucketFunction *bucket_function)
-{
-	InternalTimeRange range_in, range_out;
-
-	range_in.type = timetype;
-	range_in.start = inv->lowest_modified_value;
-	range_in.end = inv->greatest_modified_value;
-
-	range_out = compute_circumscribed_bucketed_refresh_window_for_months(
-		&range_in, ts_bucket_function_to_bucket_width_in_months(bucket_function));
-
-	inv->lowest_modified_value = range_out.start;
-	inv->greatest_modified_value = range_out.end;
-}
-
-/*
  * Expand an invalidation to bucket boundaries.
  *
  * Since a refresh always materializes full buckets, we can safely expand an
@@ -588,7 +562,9 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid timetype, int64 
 
 	if (bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		invalidation_expand_to_bucket_boundaries_for_months(inv, timetype, bucket_function);
+		ts_compute_circumscribed_bucketed_refresh_window_variable(&inv->lowest_modified_value,
+																  &inv->greatest_modified_value,
+																  bucket_function);
 		return;
 	}
 

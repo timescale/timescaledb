@@ -17,7 +17,7 @@
 #include "txn.h"
 #include "connection.h"
 #include "scanner.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "txn_id.h"
 
 /* This seemingly long timeout matches what postgres_fdw uses. */

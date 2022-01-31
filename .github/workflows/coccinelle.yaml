@@ -6,15 +6,16 @@ jobs:
   coccinelle:
     name: Coccinelle
     runs-on: ubuntu-latest
+    container:
+      # coccinelle version in ubuntu-latest (20.04) is too old so we run
+      # this in impish (21.10) container which has the version we need
+      image: ubuntu:impish
 
     steps:
     - name: Install Dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install software-properties-common
-        sudo add-apt-repository ppa:npalix/coccinelle
-        sudo apt-get update
-        sudo apt-get install coccinelle
+        apt-get update
+        apt-get -y install coccinelle
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v2

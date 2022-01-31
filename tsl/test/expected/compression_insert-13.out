@@ -909,7 +909,17 @@ SELECT * FROM cagg_conditions ORDER BY 1;
  Sun Dec 27 16:00:00 2009 PST |   5 |  185
 (1 row)
 
--- direct insert into interal compressed hypertable should be blocked
+-- TEST cagg triggers with copy into compressed chunk
+COPY conditions FROM STDIN DELIMITER ',';
+--refresh cagg, should have updated info
+CALL refresh_continuous_aggregate('cagg_conditions', NULL, '2011-01-01 12:00:00-08' );
+SELECT * FROM cagg_conditions ORDER BY 1;
+             bkt              | cnt | sumb 
+------------------------------+-----+------
+ Sun Dec 27 16:00:00 2009 PST |   8 |  485
+(1 row)
+
+-- TEST direct insert into internal compressed hypertable should be blocked
 CREATE TABLE direct_insert(time timestamptz not null);
 SELECT table_name FROM create_hypertable('direct_insert','time');
   table_name   

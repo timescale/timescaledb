@@ -31,7 +31,4 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const CaggRefreshCallContext callctx);
 
-extern InternalTimeRange compute_circumscribed_bucketed_refresh_window_for_months(
-	const InternalTimeRange *const refresh_window, const int32 bucket_width_months);
-
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_REFRESH_H */

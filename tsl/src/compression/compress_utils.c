@@ -31,14 +31,15 @@
 #include "errors.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "hypertable_compression.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/hypertable_compression.h"
 #include "create.h"
 #include "compress_utils.h"
 #include "compression.h"
 #include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
-#include "compression_chunk_size.h"
+#include "ts_catalog/compression_chunk_size.h"
 
 typedef struct CompressChunkCxt
 {
@@ -123,6 +124,27 @@ compression_chunk_size_catalog_insert(int32 src_chunk_id, ChunkSize *src_size,
 }
 
 static void
+get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
+{
+	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+	if (status == HypertableIsNotContinuousAgg)
+		namestrcpy(objname, NameStr(ht->fd.table_name));
+	else if (status == HypertableIsMaterialization)
+	{
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+		namestrcpy(objname, NameStr(cagg->data.user_view_name));
+	}
+	else
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("unexpected hypertable status for %s %d",
+						NameStr(ht->fd.table_name),
+						status)));
+	}
+}
+
+static void
 compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid, Oid chunk_relid)
 {
 	Hypertable *srcht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
@@ -132,14 +154,17 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(srcht))
+	{
+		NameData cagg_ht_name;
+		get_hypertable_or_cagg_name(srcht, &cagg_ht_name);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression not enabled on \"%s\"", NameStr(srcht->fd.table_name)),
-				 errdetail("It is not possible to compress chunks on a hypertable"
-						   " that does not have compression enabled."),
-				 errhint("Enable compression using ALTER TABLE with"
+				 errmsg("compression not enabled on \"%s\"", NameStr(cagg_ht_name)),
+				 errdetail("It is not possible to compress chunks on a hypertable or"
+						   " continuous aggregate that does not have compression enabled."),
+				 errhint("Enable compression using ALTER TABLE/MATERIALIZED VIEW with"
 						 " the timescaledb.compress option.")));
-
+	}
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compress hypertable")));

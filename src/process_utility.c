@@ -43,10 +43,10 @@
 #include "annotations.h"
 #include "export.h"
 #include "process_utility.h"
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "chunk_data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 #include "compat/compat.h"
 #include "copy.h"
 #include "errors.h"
@@ -55,7 +55,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "hypertable_data_node.h"
+#include "ts_catalog/hypertable_data_node.h"
 #include "dimension_vector.h"
 #include "indexing.h"
 #include "scan_iterator.h"
@@ -64,7 +64,7 @@
 #include "utils.h"
 #include "with_clause_parser.h"
 #include "cross_module_fn.h"
-#include "continuous_agg.h"
+#include "ts_catalog/continuous_agg.h"
 #include "compression_with_clause.h"
 #include "partitioning.h"
 #include "debug_point.h"
@@ -1036,11 +1036,10 @@ process_truncate(ProcessUtilityArgs *args)
 						 * longer has any data */
 						raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 						Assert(raw_ht != NULL);
-						ts_cm_functions->continuous_agg_invalidate(raw_ht,
-																   HypertableIsMaterialization,
-																   mat_ht->fd.id,
-																   TS_TIME_NOBEGIN,
-																   TS_TIME_NOEND);
+						ts_cm_functions->continuous_agg_invalidate_mat_ht(raw_ht,
+																		  mat_ht,
+																		  TS_TIME_NOBEGIN,
+																		  TS_TIME_NOEND);
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
@@ -1074,11 +1073,9 @@ process_truncate(ProcessUtilityArgs *args)
 						if (agg_status == HypertableIsRawTable)
 						{
 							/* The truncation invalidates all associated continuous aggregates */
-							ts_cm_functions->continuous_agg_invalidate(ht,
-																	   HypertableIsRawTable,
-																	   ht->fd.id,
-																	   TS_TIME_NOBEGIN,
-																	   TS_TIME_NOEND);
+							ts_cm_functions->continuous_agg_invalidate_raw_ht(ht,
+																			  TS_TIME_NOBEGIN,
+																			  TS_TIME_NOEND);
 						}
 
 						if (!relation_should_recurse(rv))
@@ -1223,11 +1220,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 
 				Assert(hyperspace_get_open_dimension(ht->space, 0)->fd.id ==
 					   chunk->cube->slices[0]->fd.dimension_id);
-				ts_cm_functions->continuous_agg_invalidate(ht,
-														   HypertableIsRawTable,
-														   ht->fd.id,
-														   start,
-														   end);
+				ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 			}
 		}
 	}
@@ -3274,6 +3267,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				if (ht != NULL)
 				{
+					EventTriggerAlterTableStart(args->parsetree);
 					result = process_altertable_set_options(cmd, ht);
 				}
 				break;

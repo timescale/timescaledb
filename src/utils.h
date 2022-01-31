@@ -62,8 +62,6 @@ extern int64 ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 												   TimevalInfinity *is_infinite_out);
 
 extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_oid);
-extern TSDLLEXPORT int64 ts_interval_value_to_internal_or_months(Datum time_val, Oid type_oid,
-																 bool *months);
 
 /*
  * Convert a column from the internal time representation into the specified type

@@ -6,7 +6,7 @@
 #ifndef BGW_JOB_STAT_H
 #define BGW_JOB_STAT_H
 
-#include "catalog.h"
+#include "ts_catalog/catalog.h"
 #include "job.h"
 
 typedef struct BgwJobStat
