@@ -31,6 +31,7 @@ typedef struct HypertableModifyState
 
 extern void ts_hypertable_modify_fixup_tlist(Plan *plan);
 extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
-											  Hypertable *ht);
+											  Hypertable *ht, RelOptInfo *input_rel);
+extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
 #endif /* TIMESCALEDB_HYPERTABLE_MODIFY_H */

@@ -33,6 +33,7 @@ extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel
 											  bool *reverse);
 
 extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
+extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
 

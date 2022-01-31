@@ -22,6 +22,7 @@
 
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
+#include "nodes/hypertable_modify.h"
 #include "import/planner.h"
 #include "guc.h"
 
@@ -34,6 +35,13 @@ static CustomScanMethods chunk_append_plan_methods = {
 	.CustomName = "ChunkAppend",
 	.CreateCustomScanState = ts_chunk_append_state_create,
 };
+
+bool
+ts_is_chunk_append_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &chunk_append_plan_methods;
+}
 
 void
 _chunk_append_init(void)
@@ -95,6 +103,17 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	cscan->scan.scanrelid = rel->relid;
 
 	tlist = ts_build_path_tlist(root, (Path *) path);
+
+#if PG14_GE
+	/*
+	 * If this is a child of HypertableModify we need to adjust
+	 * targetlists to not have any ROWID_VAR references as postgres
+	 * asserts that scan targetlists do not have them in setrefs.c
+	 */
+	if (root->parse->commandType != CMD_SELECT)
+		tlist = ts_replace_rowid_vars(root, tlist, rel->relid);
+#endif
+
 	cscan->scan.plan.targetlist = tlist;
 
 	if (path->path.pathkeys == NIL)

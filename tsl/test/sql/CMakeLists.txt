@@ -88,6 +88,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
+  list(APPEND TEST_FILES_postgresql delete_exclusion.sql)
+endif()
+
 set(SOLO_TESTS_postgresql
     bgw_reorder_drop_chunks
     compress_bgw_reorder_drop_chunks

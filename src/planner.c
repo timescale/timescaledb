@@ -683,9 +683,17 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (root->parse->commandType != CMD_SELECT || !ts_guc_enable_chunk_append ||
-		hypertable_is_distributed(ht))
+	if (!(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE) ||
+		!ts_guc_enable_chunk_append || hypertable_is_distributed(ht))
 		return false;
+
+#if PG14_GE
+	/*
+	 * We only support chunk exclusion on DELETE when no JOIN is involved on PG14+.
+	 */
+	if (root->parse->commandType == CMD_DELETE && bms_num_members(root->all_baserels) > 1)
+		return false;
+#endif
 
 	switch (nodeTag(path))
 	{
@@ -762,7 +770,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 }
 
 static inline bool
-should_constraint_aware_append(Hypertable *ht, Path *path)
+should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 {
 	/* Constraint-aware append currently expects children that scans a real
 	 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
@@ -770,7 +778,7 @@ should_constraint_aware_append(Hypertable *ht, Path *path)
 	 * per-server relations without a corresponding "real" table in the
 	 * system. Further, per-server appends shouldn't need runtime pruning in any
 	 * case. */
-	if (hypertable_is_distributed(ht))
+	if (root->parse->commandType != CMD_SELECT || hypertable_is_distributed(ht))
 		return false;
 
 	return ts_constraint_aware_append_possible(path);
@@ -926,14 +934,17 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 	if (ts_cm_functions->set_rel_pathlist_query != NULL)
 		ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
 
-	if (
+	if (reltype == TS_REL_HYPERTABLE &&
+#if PG14_GE
+		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE)
+#else
 		/*
-		 * Right now this optimization applies only to hypertables (ht used
-		 * below). Can be relaxed later to apply to reg tables but needs testing
+		 * For PG < 14 commandType will be CMD_SELECT even when planning DELETE so we
+		 * check resultRelation instead.
 		 */
-		reltype == TS_REL_HYPERTABLE &&
-		/* Do not optimize result relations (INSERT, UPDATE, DELETE) */
-		0 == root->parse->resultRelation)
+		root->parse->resultRelation == 0
+#endif
+	)
 	{
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
@@ -959,7 +970,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 															   false,
 															   ordered,
 															   nested_oids);
-					else if (should_constraint_aware_append(ht, *pathptr))
+					else if (should_constraint_aware_append(root, ht, *pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, *pathptr);
 					break;
 				default:
@@ -978,7 +989,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
 						*pathptr =
 							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
-					else if (should_constraint_aware_append(ht, *pathptr))
+					else if (should_constraint_aware_append(root, ht, *pathptr))
 						*pathptr = ts_constraint_aware_append_path_create(root, *pathptr);
 					break;
 				default:
@@ -1211,7 +1222,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *
  * Modified plan:
  *
- *	[ HypertableInsert ]
+ *	[ HypertableModify ]
  *		  ^
  *		  |
  *	[ ModifyTable ] -> resultRelation
@@ -1224,15 +1235,12 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *		  |
  *	  [ subplan ]
  *
- * PG11 adds a value to the create_upper_paths_hook for FDW support. (See:
- * https://github.com/postgres/postgres/commit/7e0d64c7a57e28fbcf093b6da9310a38367c1d75).
- * Additionally, it calls the hook in a different place, once for each
- * RelOptInfo (see:
- * https://github.com/postgres/postgres/commit/c596fadbfe20ff50a8e5f4bc4b4ff5b7c302ecc0),
- * we do not change our behavior yet, but might choose to in the future.
+ * For PG < 14, the modifytable plan is modified for INSERTs only.
+ * For PG14+, we modify the plan for DELETEs as well.
+ *
  */
 static List *
-replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist)
+replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
 {
 	List *new_pathlist = NIL;
 	ListCell *lc;
@@ -1259,7 +1267,7 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist)
 
 				if (ht && (mt->operation == CMD_INSERT || !hypertable_is_distributed(ht)))
 				{
-					path = ts_hypertable_modify_path_create(root, mt, ht);
+					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
 				}
 			}
 		}
@@ -1296,7 +1304,9 @@ timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, Re
 	{
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
-			output_rel->pathlist = replace_hypertable_modify_paths(root, output_rel->pathlist);
+			output_rel->pathlist =
+				replace_hypertable_modify_paths(root, output_rel->pathlist, input_rel);
+
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{
 			/* Existing AggPaths are modified here.

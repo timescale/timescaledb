@@ -6,6 +6,9 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+**Features**
+* #4169 Add support for chunk exclusion on DELETE on PG14
+
 **Bugfixes**
 * #4122 Fix segfault on INSERT into distributed hypertable
 * #4161 Fix memory handling during scans
