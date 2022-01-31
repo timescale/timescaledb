@@ -2612,6 +2612,26 @@ ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found)
 	return chunk_get_by_name(schema, table, fail_if_not_found);
 }
 
+void
+ts_chunk_free(Chunk *chunk)
+{
+	if (chunk->cube)
+	{
+		ts_hypercube_free(chunk->cube);
+	}
+
+	if (chunk->constraints)
+	{
+		ChunkConstraints *c = chunk->constraints;
+		pfree(c->constraints);
+		pfree(c);
+	}
+
+	list_free(chunk->data_nodes);
+
+	pfree(chunk);
+}
+
 static const char *
 DatumGetInt32AsString(Datum datum)
 {

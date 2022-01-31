@@ -68,6 +68,8 @@ get_chunk_data_nodes(Oid relid)
 		serveroids = lappend_oid(serveroids, cs->foreign_server_oid);
 	}
 
+	ts_chunk_free(chunk);
+
 	return serveroids;
 }
 

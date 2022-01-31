@@ -523,6 +523,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 					reltype = TS_REL_CHUNK;
 					ht = get_hypertable(chunk->hypertable_relid, CACHE_FLAG_NONE);
 					Assert(ht != NULL);
+					ts_chunk_free(chunk);
 				}
 			}
 			break;
