@@ -13,6 +13,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/plancat.h>
 #include <parser/parsetree.h>
 #include <storage/lmgr.h>
@@ -22,13 +23,14 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
-#include "hypertable_modify.h"
-#include "chunk_dispatch_state.h"
 #include "chunk_dispatch_plan.h"
-#include "hypertable_cache.h"
-#include "ts_catalog/hypertable_data_node.h"
+#include "chunk_dispatch_state.h"
 #include "cross_module_fn.h"
 #include "guc.h"
+#include "hypertable_cache.h"
+#include "hypertable_modify.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "ts_catalog/hypertable_data_node.h"
 
 #if PG14_GE
 static void fireASTriggers(ModifyTableState *node);
@@ -188,13 +190,32 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 {
 	HypertableModifyState *state = (HypertableModifyState *) node;
 	List *fdw_private = linitial_node(List, state->mt->fdwPrivLists);
-	ModifyTableState *mtstate = linitial(node->custom_ps);
+	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
 	Index rti = state->mt->nominalRelation;
 	RangeTblEntry *rte = rt_fetch(rti, es->rtable);
 	const char *relname = get_rel_name(rte->relid);
 	const char *namespace = get_namespace_name(get_rel_namespace(rte->relid));
 
-	Assert(IsA(mtstate, ModifyTableState));
+#if PG14_GE
+	/*
+	 * The targetlist for this node will have references that cannot be resolved by
+	 * EXPLAIN. So for EXPLAIN VERBOSE we clear the targetlist so that EXPLAIN does not
+	 * complain. PostgreSQL does something equivalent and does not print the targetlist
+	 * for ModifyTable for EXPLAIN VERBOSE.
+	 */
+	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_DELETE && es->verbose &&
+		ts_is_chunk_append_plan(mtstate->ps.plan->lefttree))
+	{
+		mtstate->ps.plan->lefttree->targetlist = NULL;
+		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+	}
+
+	/*
+	 * Since we hijack the ModifyTable node instrumentation on ModifyTable will
+	 * be missing so we set it to instrumentation of HypertableModify node.
+	 */
+	mtstate->ps.instrument = node->ss.ps.instrument;
+#endif
 
 	if (NULL != state->fdwroutine)
 	{
@@ -401,6 +422,35 @@ ts_hypertable_modify_fixup_tlist(Plan *plan)
 	}
 }
 
+/* ROWID_VAR only exists in PG14+ */
+#if PG14_GE
+List *
+ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno)
+{
+	ListCell *lc;
+	tlist = list_copy(tlist);
+	foreach (lc, tlist)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+
+		if (IsA(tle->expr, Var) && castNode(Var, tle->expr)->varno == ROWID_VAR)
+		{
+			tle = copyObject(tle);
+			Var *var = castNode(Var, copyObject(tle->expr));
+			RowIdentityVarInfo *ridinfo =
+				(RowIdentityVarInfo *) list_nth(root->row_identity_vars, var->varattno - 1);
+			var = copyObject(ridinfo->rowidvar);
+			var->varno = varno;
+			var->varnosyn = 0;
+			var->varattnosyn = 0;
+			tle->expr = (Expr *) var;
+			lfirst(lc) = tle;
+		}
+	}
+	return tlist;
+}
+#endif
+
 static Plan *
 hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_path,
 							  List *tlist, List *clauses, List *custom_plans)
@@ -487,17 +537,8 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 #if PG14_GE
 	if (mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE)
 	{
-		ListCell *lc;
-		foreach (lc, cscan->scan.plan.targetlist)
-		{
-			TargetEntry *tle = lfirst_node(TargetEntry, lc);
-
-			if (IsA(tle->expr, Var) && castNode(Var, tle->expr)->varno == ROWID_VAR)
-			{
-				Var *var = castNode(Var, tle->expr);
-				tle->expr = (Expr *) makeNullConst(var->vartype, var->vartypmod, var->varcollid);
-			}
-		}
+		cscan->scan.plan.targetlist =
+			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
 	}
 #else
 	/*
@@ -526,7 +567,8 @@ static CustomPathMethods hypertable_modify_path_methods = {
 };
 
 Path *
-ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht)
+ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht,
+								 RelOptInfo *rel)
 {
 	Path *path = &mtpath->path;
 	Path *subpath = NULL;
