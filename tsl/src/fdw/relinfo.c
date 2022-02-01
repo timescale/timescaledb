@@ -117,17 +117,6 @@ fdw_relinfo_alloc(RelOptInfo *rel, TsFdwRelInfoType reltype)
 	return fpinfo;
 }
 
-static char *
-get_relation_qualified_name(Oid relid)
-{
-	StringInfo name = makeStringInfo();
-	const char *relname = get_rel_name(relid);
-	const char *namespace = get_namespace_name(get_rel_namespace(relid));
-	appendStringInfo(name, "%s.%s", quote_identifier(namespace), quote_identifier(relname));
-
-	return name->data;
-}
-
 static const double FILL_FACTOR_CURRENT_CHUNK = 0.5;
 static const double FILL_FACTOR_HISTORICAL_CHUNK = 1;
 
@@ -405,7 +394,10 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 
 	fpinfo->relation_name = makeStringInfo();
 	refname = rte->eref->aliasname;
-	appendStringInfoString(fpinfo->relation_name, get_relation_qualified_name(rte->relid));
+	appendStringInfo(fpinfo->relation_name,
+					 "%s.%s",
+					 quote_identifier(get_namespace_name(get_rel_namespace(rte->relid))),
+					 quote_identifier(get_rel_name(rte->relid)));
 	if (*refname && strcmp(refname, get_rel_name(rte->relid)) != 0)
 		appendStringInfo(fpinfo->relation_name, " %s", quote_identifier(rte->eref->aliasname));
 

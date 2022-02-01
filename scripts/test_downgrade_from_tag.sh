@@ -114,12 +114,12 @@ docker_pgdiff_all() {
     docker_pgtest ${CONTAINER_UPDATED} $1 $database
     docker_pgtest ${CONTAINER_CLEAN_RESTORE} $1 $database
     docker_pgtest ${CONTAINER_CLEAN_RERUN} $1 $database
-    echo "Diffing updated container vs restored. Updated: ${CONTAINER_UPDATED} restored: ${CONTAINER_CLEAN_RESTORE}" 
+    echo "Diffing downgraded container vs restored. Downgraded: ${CONTAINER_UPDATED} restored: ${CONTAINER_CLEAN_RESTORE}" 
     diff -u ${TEST_TMPDIR}/${CONTAINER_UPDATED}.out ${TEST_TMPDIR}/${CONTAINER_CLEAN_RESTORE}.out | tee ${diff_file1}
     if [ ! -s ${diff_file1} ]; then
       rm ${diff_file1}
     fi
-    echo "Diffing updated container vs clean run. Updated: ${CONTAINER_UPDATED} clean run: ${CONTAINER_CLEAN_RERUN}"
+    echo "Diffing downgraded container vs clean run. Downgraded: ${CONTAINER_UPDATED} clean run: ${CONTAINER_CLEAN_RERUN}"
     diff -u ${TEST_TMPDIR}/${CONTAINER_UPDATED}.out ${TEST_TMPDIR}/${CONTAINER_CLEAN_RERUN}.out | tee ${diff_file2}
     if [ ! -s ${diff_file2} ]; then
       rm ${diff_file2}
@@ -200,7 +200,7 @@ done
 # Remove container but keep volume
 docker rm -f ${CONTAINER_ORIG}
 
-echo "Running update container"
+echo "Running downgraded container"
 docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
 
 dstdir=$(docker exec ${CONTAINER_UPDATED} /bin/bash -c 'pg_config --pkglibdir')
@@ -264,5 +264,5 @@ docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.rest
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.dump"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 RESET timescaledb.restoring"
 
-echo "Comparing upgraded ($UPDATE_FROM_TAG -> $UPDATE_FROM_TAG) with clean install ($UPDATE_FROM_TAG)"
+echo "Comparing downgraded ($UPDATE_FROM_TAG -> $UPDATE_FROM_TAG) with clean install ($UPDATE_FROM_TAG)"
 docker_pgdiff_all /src/test/sql/updates/post.${TEST_VERSION}.sql "single"
