@@ -856,6 +856,30 @@ static Chunk **
 find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode,
 					 unsigned int *num_chunks)
 {
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+	{
+		/*
+		 * FIXME somehow chunk lookup doesn't work for internal compression
+		 * tables
+		 */
+		List *chunk_oids = find_inheritance_children(ht->main_table_relid, lockmode);
+		if (chunk_oids == NIL)
+		{
+			*num_chunks = 0;
+			return 0;
+		}
+
+		*num_chunks = list_length(chunk_oids);
+		Chunk **chunks = (Chunk **) palloc(sizeof(Chunk *) * *num_chunks);
+
+		for (int i = 0; i < *num_chunks; i++)
+		{
+			chunks[i] = ts_chunk_get_by_relid(list_nth_oid(chunk_oids, i),
+				/* fail_if_not_found = */ true);
+		}
+
+		return chunks;
+	}
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there
 	 * are restrictions the parent table cannot fulfill them and since we do
@@ -999,7 +1023,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 }
 
 /**
- * Get chunk oids from either restrict info or explicit chunk exclusion. Explicit chunk exclusion
+ * Get chunks from either restrict info or explicit chunk exclusion. Explicit chunk exclusion
  * takes precedence.
  *
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.

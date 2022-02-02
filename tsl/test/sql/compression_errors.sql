@@ -282,15 +282,3 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 --should fail
 CALL run_job(:compressjob_id);
-
--- Create a hypertable and add a rogue inherited table to it. 
-CREATE TABLE i165 (time timestamptz PRIMARY KEY);
-SELECT create_hypertable('i165','time');
-ALTER TABLE i165 SET (timescaledb.compress);
-SELECT compress_chunk(show_chunks('i165'));
-CREATE TABLE extras (more_magic bool) INHERITS (i165);
-INSERT INTO i165 (time) VALUES
-       (generate_series(TIMESTAMP '2019-08-01', TIMESTAMP '2019-08-10', INTERVAL '10 minutes'));
-\set VERBOSITY default
-SELECT * FROM i165;
-\set VERBOSITY terse
