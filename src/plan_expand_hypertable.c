@@ -875,7 +875,7 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockm
 		for (int i = 0; i < *num_chunks; i++)
 		{
 			chunks[i] = ts_chunk_get_by_relid(list_nth_oid(chunk_oids, i),
-				/* fail_if_not_found = */ true);
+											  /* fail_if_not_found = */ true);
 		}
 
 		return chunks;
