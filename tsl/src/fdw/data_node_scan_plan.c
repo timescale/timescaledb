@@ -105,8 +105,10 @@ build_data_node_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *pa
 {
 	RelOptInfo *rel = build_simple_rel(root, relid, parent);
 
-	/* Use relevant exprs and restrictinfos from the parent rel. These will be
-	 * adjusted to match the data node rel's relid later. */
+	/*
+	 * Use relevant exprs and restrictinfos from the parent rel. These will be
+	 * adjusted to match the data node rel's relid later.
+	 */
 	rel->reltarget->exprs = copyObject(parent->reltarget->exprs);
 	rel->baserestrictinfo = parent->baserestrictinfo;
 	rel->baserestrictcost = parent->baserestrictcost;
@@ -116,13 +118,15 @@ build_data_node_rel(PlannerInfo *root, Index relid, Oid serverid, RelOptInfo *pa
 	rel->lateral_relids = parent->lateral_relids;
 	rel->serverid = serverid;
 
-	/* We need to use the FDW interface to get called by the planner for
+	/*
+	 * We need to use the FDW interface to get called by the planner for
 	 * partial aggs. For some reason, the standard upper_paths_hook is never
 	 * called for upper rels of type UPPERREL_PARTIAL_GROUP_AGG, which is odd
 	 * (see end of PostgreSQL planner.c:create_partial_grouping_paths). Until
 	 * this gets fixed in the PostgreSQL planner, we're forced to set
 	 * fdwroutine here although we will scan this rel with a DataNodeScan and
-	 * not a ForeignScan. */
+	 * not a ForeignScan.
+	 */
 	rel->fdwroutine = GetFdwRoutineByServerId(serverid);
 
 	return rel;
@@ -233,10 +237,12 @@ build_data_node_part_rels(PlannerInfo *root, RelOptInfo *hyper_rel, int *nparts)
 
 		Assert(i > 0);
 
-		/* The planner expects an AppendRelInfo for any part_rels. Needs to be
+		/*
+		 * The planner expects an AppendRelInfo for any part_rels. Needs to be
 		 * added prior to creating the rel because build_simple_rel will
 		 * invoke our planner hooks that classify relations using this
-		 * information. */
+		 * information.
+		 */
 		appinfo = create_append_rel_info(root, i, hyper_rel->relid);
 		root->append_rel_array[i] = appinfo;
 		data_node_rel = build_data_node_rel(root, i, data_node_id, hyper_rel);
@@ -306,8 +312,10 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 	groupexprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
 	new_partnatts = list_length(groupexprs);
 
-	/* Only reallocate the partitioning attributes arrays if it is smaller than
-	 * the new size. palloc0 is needed to zero out the extra space. */
+	/*
+	 * Only reallocate the partitioning attributes arrays if it is smaller than
+	 * the new size. palloc0 is needed to zero out the extra space.
+	 */
 	if (partscheme->partnatts < new_partnatts)
 	{
 		partopfamily = palloc0(new_partnatts * sizeof(Oid));
@@ -373,16 +381,20 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 	Assert(hs->num_dimensions >= 1);
 	Assert(hyper_rel->part_scheme->partnatts == hs->num_dimensions);
 
-	/* Check for special case when there is only one data node with chunks. This
-	 * can always be safely pushed down irrespective of partitioning */
+	/*
+	 * Check for special case when there is only one data node with chunks. This
+	 * can always be safely pushed down irrespective of partitioning
+	 */
 	if (scas->num_nodes_with_chunks == 1)
 	{
 		force_group_by_push_down(root, hyper_rel);
 		return;
 	}
 
-	/* Get first closed dimension that we use for assigning chunks to
-	 * data nodes. If there is no closed dimension, we are done. */
+	/*
+	 * Get first closed dimension that we use for assigning chunks to
+	 * data nodes. If there is no closed dimension, we are done.
+	 */
 	dim = hyperspace_get_closed_dimension(hs, 0);
 
 	if (NULL == dim)
@@ -392,7 +404,8 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 
 	if (!overlaps)
 	{
-		/* If data node chunk assignments are non-overlapping along the
+		/*
+		 * If data node chunk assignments are non-overlapping along the
 		 * "space" dimension, we can treat this as a one-dimensional
 		 * partitioned table since any aggregate GROUP BY that includes the
 		 * data node assignment dimension is safe to execute independently on
@@ -449,8 +462,10 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	/* Try to push down GROUP BY expressions and bucketing, if possible */
 	push_down_group_bys(root, hyper_rel, ht->space, &scas);
 
-	/* Create estimates and paths for each data node rel based on data node chunk
-	 * assignments */
+	/*
+	 * Create estimates and paths for each data node rel based on data node chunk
+	 * assignments.
+	 */
 	for (i = 0; i < ndata_node_rels; i++)
 	{
 		RelOptInfo *data_node_rel = data_node_rels[i];
@@ -458,8 +473,10 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 			data_node_chunk_assignment_get_or_create(&scas, data_node_rel);
 		TsFdwRelInfo *fpinfo;
 
-		/* Basic stats for data node rels come from the assigned chunks since
-		 * data node rels don't correspond to real tables in the system */
+		/*
+		 * Basic stats for data node rels come from the assigned chunks since
+		 * data node rels don't correspond to real tables in the system.
+		 */
 		data_node_rel->pages = sca->pages;
 		data_node_rel->tuples = sca->tuples;
 		data_node_rel->rows = sca->rows;
