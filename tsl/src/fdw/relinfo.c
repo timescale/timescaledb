@@ -109,6 +109,7 @@ fdw_relinfo_alloc(RelOptInfo *rel, TsFdwRelInfoType reltype)
 		ts_create_private_reloptinfo(rel);
 
 	rel_private = rel->fdw_private;
+	Assert(rel_private->fdw_relation_info == NULL);
 
 	fpinfo = (TsFdwRelInfo *) palloc0(sizeof(*fpinfo));
 	rel_private->fdw_relation_info = (void *) fpinfo;
@@ -381,9 +382,7 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * We use TsFdwRelInfo to pass various information to subsequent
 	 * functions.
 	 */
-	// fpinfo = fdw_relinfo_alloc(rel, type);
-	fpinfo = fdw_relinfo_get(rel);
-	fpinfo->type = type;
+	fpinfo = fdw_relinfo_alloc(rel, type);
 
 	/*
 	 * Set the name of relation in fpinfo, while we are constructing it here.
