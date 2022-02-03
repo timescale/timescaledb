@@ -133,9 +133,10 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	}
 }
 
-/* The fdw needs to expand a distributed hypertable inside the `GetForeignPath` callback. But, since
- * the hypertable base table is not a foreign table, that callback would not normally be called.
- * Thus, we call it manually in this hook.
+/*
+ * The fdw needs to expand a distributed hypertable inside the `GetForeignPath`
+ * callback. But, since the hypertable base table is not a foreign table, that
+ * callback would not normally be called. Thus, we call it manually in this hook.
  */
 void
 tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)

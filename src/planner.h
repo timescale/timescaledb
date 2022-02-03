@@ -14,7 +14,7 @@
 #include "export.h"
 #include "guc.h"
 
-typedef struct TsFdwRelationInfo TsFdwRelationInfo;
+typedef struct TsFdwRelInfo TsFdwRelInfo;
 typedef struct TimescaleDBPrivate
 {
 	bool appends_ordered;
@@ -25,7 +25,7 @@ typedef struct TimescaleDBPrivate
 	List *chunk_oids;
 	List *serverids;
 	Relids server_relids;
-	TsFdwRelationInfo *fdw_relation_info;
+	TsFdwRelInfo *fdw_relation_info;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);
