@@ -497,7 +497,7 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 
 /* copied from allpaths.c */
 static void
-set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
 	int parentRTindex = rti;
 	bool has_live_children;
@@ -853,7 +853,7 @@ ts_set_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rt
 	else if (rte->inh)
 	{
 		/* It's an "append relation", process accordingly */
-		set_append_rel_size(root, rel, rti, rte);
+		ts_set_append_rel_size(root, rel, rti, rte);
 	}
 	else
 	{

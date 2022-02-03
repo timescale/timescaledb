@@ -147,7 +147,6 @@ typedef struct TsFdwRelInfo
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
 										Oid local_table_id, TsFdwRelInfoType type);
-extern TsFdwRelInfo *fdw_relinfo_alloc(RelOptInfo *rel, TsFdwRelInfoType reltype);
 extern TsFdwRelInfo *fdw_relinfo_get(RelOptInfo *rel);
 
 #endif /* TIMESCALEDB_TSL_FDW_RELINFO_H */

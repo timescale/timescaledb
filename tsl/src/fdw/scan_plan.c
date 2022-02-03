@@ -949,6 +949,8 @@ fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelat
 {
 	Assert(input_fpinfo != NULL);
 
+	TsFdwRelInfo *output_fpinfo = NULL;
+
 	/*
 	 * If input rel is not safe to pushdown, then simply return as we cannot
 	 * perform any post-join operations on the data node.
@@ -965,8 +967,9 @@ fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelat
 	{
 		case UPPERREL_GROUP_AGG:
 		case UPPERREL_PARTIAL_GROUP_AGG:
-			input_fpinfo = fdw_relinfo_alloc(output_rel, input_fpinfo->type);
-			input_fpinfo->pushdown_safe = false;
+			output_fpinfo = fdw_relinfo_get(output_rel);
+			output_fpinfo->type = input_fpinfo->type;
+			output_fpinfo->pushdown_safe = false;
 			add_foreign_grouping_paths(root,
 									   input_rel,
 									   output_rel,

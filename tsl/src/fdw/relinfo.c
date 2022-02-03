@@ -86,36 +86,18 @@ apply_fdw_and_server_options(TsFdwRelInfo *fpinfo)
 TsFdwRelInfo *
 fdw_relinfo_get(RelOptInfo *rel)
 {
-	TimescaleDBPrivate *rel_private;
+	TimescaleDBPrivate *rel_private = rel->fdw_private;
+	if (rel_private == NULL)
+	{
+		rel_private = ts_create_private_reloptinfo(rel);
+	}
 
-	if (!rel->fdw_private)
-		ts_create_private_reloptinfo(rel);
+	if (rel_private->fdw_relation_info == NULL)
+	{
+		rel_private->fdw_relation_info = (TsFdwRelInfo *) palloc0(sizeof(TsFdwRelInfo));
+	}
 
-	rel_private = rel->fdw_private;
-
-	if (!rel_private->fdw_relation_info)
-		rel_private->fdw_relation_info = palloc0(sizeof(TsFdwRelInfo));
-
-	return (TsFdwRelInfo *) rel_private->fdw_relation_info;
-}
-
-TsFdwRelInfo *
-fdw_relinfo_alloc(RelOptInfo *rel, TsFdwRelInfoType reltype)
-{
-	TimescaleDBPrivate *rel_private;
-	TsFdwRelInfo *fpinfo;
-
-	if (NULL == rel->fdw_private)
-		ts_create_private_reloptinfo(rel);
-
-	rel_private = rel->fdw_private;
-	Assert(rel_private->fdw_relation_info == NULL);
-
-	fpinfo = (TsFdwRelInfo *) palloc0(sizeof(*fpinfo));
-	rel_private->fdw_relation_info = (void *) fpinfo;
-	fpinfo->type = reltype;
-
-	return fpinfo;
+	return rel_private->fdw_relation_info;
 }
 
 static const double FILL_FACTOR_CURRENT_CHUNK = 0.5;
@@ -380,9 +362,12 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 
 	/*
 	 * We use TsFdwRelInfo to pass various information to subsequent
-	 * functions.
+	 * functions. It might be already partially initialized for a data node
+	 * hypertable, because we use it to maintain the chunk size estimates when
+	 * planning.
 	 */
-	fpinfo = fdw_relinfo_alloc(rel, type);
+	fpinfo = fdw_relinfo_get(rel);
+	fpinfo->type = type;
 
 	/*
 	 * Set the name of relation in fpinfo, while we are constructing it here.
