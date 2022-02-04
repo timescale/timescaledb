@@ -79,7 +79,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     remote_txn_id.sql
     remote_txn_resolve.sql
     remote_txn.sql
-    telemetry_community.sql
+    telemetry_stats.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
     license.sql)
@@ -102,7 +102,7 @@ set(SOLO_TESTS_postgresql
     remote_txn
     remote_txn_resolve
     reorder
-    telemetry_community)
+    telemetry_stats)
 
 # Test files for the max_bgw_8 configuration that configures TimescaleDB with a
 # max of 8 TimescaleDB background workers.
