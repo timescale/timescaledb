@@ -484,9 +484,9 @@ FROM telemetry_report;
 
 -- Become an access node by adding a data node
 SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
-  node_name  |   host    | port  |         database         | node_created | database_created | extension_created 
--------------+-----------+-------+--------------------------+--------------+------------------+-------------------
- data_node_1 | localhost | 55432 | db_telemetry_community_1 | t            | t                | t
+  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
+-------------+-----------+-------+----------------------+--------------+------------------+-------------------
+ data_node_1 | localhost | 55432 | db_telemetry_stats_1 | t            | t                | t
 (1 row)
 
 -- Telemetry should show one data node and "acces node" status
@@ -537,9 +537,9 @@ num_data_nodes|distributed_member
 (1 row)
 
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
-  node_name  |   host    | port  |         database         | node_created | database_created | extension_created 
--------------+-----------+-------+--------------------------+--------------+------------------+-------------------
- data_node_2 | localhost | 55432 | db_telemetry_community_2 | t            | t                | t
+  node_name  |   host    | port  |       database       | node_created | database_created | extension_created 
+-------------+-----------+-------+----------------------+--------------+------------------+-------------------
+ data_node_2 | localhost | 55432 | db_telemetry_stats_2 | t            | t                | t
 (1 row)
 
 CREATE TABLE disthyper (LIKE normal);
