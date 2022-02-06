@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "centos:centos7", "centos:centos8" ]
+        image: [ "centos:centos7", "rockylinux:8" ]
         pg: [ 12, 13, 14 ]
         license: [ "TSL", "Apache"]
         include:
