@@ -186,7 +186,7 @@ extension_load_without_preload()
 		 */
 		/* Only privileged users can get the value of `config file` */
 
-		if (is_member_of_role(GetUserId(), ROLE_PG_READ_ALL_SETTINGS))
+		if (has_privs_of_role(GetUserId(), ROLE_PG_READ_ALL_SETTINGS))
 		{
 			char *config_file = GetConfigOptionByName("config_file", NULL, false);
 
