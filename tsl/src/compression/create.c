@@ -587,6 +587,7 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	CatalogSecurityContext sec_ctx;
 	Chunk *compress_chunk;
 	int namelen;
+	Oid tablespace_oid;
 	const char *tablespace;
 
 	/* Create a new chunk based on the hypercube */
@@ -632,16 +633,24 @@ create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk)
 	 * on which to base this decision. We simply pick the same tablespace as the uncompressed chunk
 	 * for now.
 	 */
-	tablespace = get_tablespace_name(get_rel_tablespace(src_chunk->table_id));
+	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+	tablespace = get_tablespace_name(tablespace_oid);
 	compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht, tablespace);
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compressed chunk table");
 
+	/* if the src chunk is not in the default tablespace, the compressed indexes
+	 * should also be in a non-default tablespace. IN the usual case, this is inferred
+	 * from the hypertable's and chunk's tablespace info. We do not propagate
+	 * attach_tablespace settings to the compressed hypertable. So we have to explicitly
+	 * pass the tablespace information here
+	 */
 	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
 							  compress_chunk->hypertable_relid,
 							  compress_chunk->fd.id,
-							  compress_chunk->table_id);
+							  compress_chunk->table_id,
+							  tablespace_oid);
 
 	return compress_chunk;
 }

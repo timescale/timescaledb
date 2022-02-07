@@ -97,3 +97,12 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'pg_default', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
 SELECT * FROM test.show_subtables('cluster_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+
+--TEST with compression bug 4000
+--compress chunk and then  move chunk and index to different tablespaces
+ALTER TABLE cluster_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'location');
+SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk') as ch;
+SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', verbose=>TRUE);
+SELECT * FROM test.show_subtables('cluster_test');
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+SELECT * FROM test.show_indexesp('_timescaledb_internal.compress_hyper%_chunk');
