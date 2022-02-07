@@ -9,6 +9,7 @@
 #include <catalog/namespace.h>
 #include <commands/event_trigger.h>
 #include <commands/dbcommands.h>
+#include <commands/extension.h>
 #include <nodes/parsenodes.h>
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
@@ -916,7 +917,6 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 
 	/* Block unsupported operations on distributed hypertables and
 	 * decide on how to execute it. */
-
 	switch (tag)
 	{
 		case T_CreateSchemaStmt:
@@ -978,10 +978,6 @@ dist_ddl_process(const ProcessUtilityArgs *args)
 
 		case T_TruncateStmt:
 			dist_ddl_process_truncate(args);
-			break;
-
-		case T_CopyStmt:
-			/* Nothing to do for COPY. */
 			break;
 
 		default:
@@ -1070,6 +1066,83 @@ dist_ddl_get_analyze_stats(const ProcessUtilityArgs *args)
 	chunk_api_update_distributed_hypertable_stats(relid);
 }
 
+static bool
+dist_ddl_enable_distributed_ddl(void)
+{
+	const char *enable_distributed_ddl =
+		GetConfigOption("timescaledb_experimental.enable_distributed_ddl", true, false);
+
+	/* Default to disabled */
+	if (NULL == enable_distributed_ddl)
+		return false;
+
+	return strcmp(enable_distributed_ddl, "true") == 0 || strcmp(enable_distributed_ddl, "on") == 0;
+}
+
+/*
+ * Check if it is allowed to execute distributed DDL operation on a
+ * database objects such as SCHEMA, DATABASE, etc.
+ */
+static bool
+dist_ddl_process_database_object(ProcessUtilityArgs *args)
+{
+	if (dist_ddl_enable_distributed_ddl())
+		return true;
+
+	/* disable this functionality while any extension being
+	 * created or upgraded */
+	if (creating_extension)
+		return false;
+
+	switch (nodeTag(args->parsetree))
+	{
+		case T_CreateSchemaStmt:
+		case T_DropOwnedStmt:
+		case T_ReassignOwnedStmt:
+		case T_AlterDefaultPrivilegesStmt:
+			return false;
+
+		case T_DropStmt:
+		{
+			const DropStmt *stmt = castNode(DropStmt, args->parsetree);
+			if (stmt->removeType == OBJECT_SCHEMA)
+				return false;
+			break;
+		}
+
+		case T_RenameStmt:
+		{
+			const RenameStmt *stmt = castNode(RenameStmt, args->parsetree);
+			if (stmt->renameType == OBJECT_SCHEMA)
+				return false;
+			break;
+		}
+
+		case T_AlterOwnerStmt:
+		{
+			const AlterOwnerStmt *stmt = castNode(AlterOwnerStmt, args->parsetree);
+			if (stmt->objectType == OBJECT_SCHEMA)
+				return false;
+			break;
+		}
+
+		case T_GrantStmt:
+		{
+			const GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
+			if (stmt->targtype == ACL_TARGET_ALL_IN_SCHEMA || stmt->targtype == ACL_TARGET_DEFAULTS)
+				return false;
+			if (stmt->objtype == OBJECT_DATABASE || stmt->objtype == OBJECT_SCHEMA)
+				return false;
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return true;
+}
+
 void
 dist_ddl_start(ProcessUtilityArgs *args)
 {
@@ -1097,6 +1170,14 @@ dist_ddl_start(ProcessUtilityArgs *args)
 	 */
 	if (!IsTransactionState() || dist_util_membership() == DIST_MEMBER_NONE)
 		return;
+
+	/* Do not process DDL command on a database object, unless it is
+	 * allowed by a session variable */
+	if (!dist_ddl_process_database_object(args))
+	{
+		elog(DEBUG1, "skipping dist DDL on object: %s", args->query_string);
+		return;
+	}
 
 	/* Save origin query and memory context used to save information in
 	 * data_node_list since it will differ during event hooks execution. */
