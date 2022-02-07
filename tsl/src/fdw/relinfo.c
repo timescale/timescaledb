@@ -84,7 +84,7 @@ apply_fdw_and_server_options(TsFdwRelInfo *fpinfo)
 }
 
 TsFdwRelInfo *
-fdw_relinfo_get(RelOptInfo *rel)
+fdw_relinfo_alloc_or_get(RelOptInfo *rel)
 {
 	TimescaleDBPrivate *rel_private = rel->fdw_private;
 	if (rel_private == NULL)
@@ -98,6 +98,21 @@ fdw_relinfo_get(RelOptInfo *rel)
 	}
 
 	return rel_private->fdw_relation_info;
+}
+
+TsFdwRelInfo *
+fdw_relinfo_get(RelOptInfo *rel)
+{
+	TimescaleDBPrivate *rel_private = rel->fdw_private;
+	TsFdwRelInfo *fdw_relation_info = rel_private->fdw_relation_info;
+
+	/*
+	 * This function is expected to return either null or a fully initialized
+	 * fdw_relation_info struct.
+	 */
+	Assert(!fdw_relation_info || fdw_relation_info->type != TS_FDW_RELINFO_UNINITIALIZED);
+
+	return fdw_relation_info;
 }
 
 static const double FILL_FACTOR_CURRENT_CHUNK = 0.5;
@@ -281,7 +296,12 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 	}
 
 	RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
-	TsFdwRelInfo *parent_private = fdw_relinfo_get(parent_info);
+	/*
+	 * The parent FdwRelInfo might not be allocated and initialized here, because
+	 * it happens later in tsl_set_pathlist callback. We don't care about this
+	 * because we only need it for chunk size estimates, so allocate it ourselves.
+	 */
+	TsFdwRelInfo *parent_private = fdw_relinfo_alloc_or_get(parent_info);
 	RangeTblEntry *parent_rte = planner_rt_fetch(parent_relid, root);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, parent_rte->relid, CACHE_FLAG_NONE);
@@ -366,7 +386,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	 * hypertable, because we use it to maintain the chunk size estimates when
 	 * planning.
 	 */
-	fpinfo = fdw_relinfo_get(rel);
+	fpinfo = fdw_relinfo_alloc_or_get(rel);
+	Assert(fpinfo->type == TS_FDW_RELINFO_UNINITIALIZED || fpinfo->type == type);
 	fpinfo->type = type;
 
 	/*

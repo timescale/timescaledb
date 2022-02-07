@@ -25,7 +25,7 @@
 
 typedef enum
 {
-	TS_FDW_RELINFO_UNKNOWN = 0,
+	TS_FDW_RELINFO_UNINITIALIZED = 0,
 	TS_FDW_RELINFO_HYPERTABLE_DATA_NODE,
 	TS_FDW_RELINFO_HYPERTABLE,
 	TS_FDW_RELINFO_FOREIGN_TABLE,
@@ -147,6 +147,7 @@ typedef struct TsFdwRelInfo
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
 										Oid local_table_id, TsFdwRelInfoType type);
+extern TsFdwRelInfo *fdw_relinfo_alloc_or_get(RelOptInfo *rel);
 extern TsFdwRelInfo *fdw_relinfo_get(RelOptInfo *rel);
 
 #endif /* TIMESCALEDB_TSL_FDW_RELINFO_H */
