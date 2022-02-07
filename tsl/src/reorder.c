@@ -184,6 +184,9 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 
 		AlterTableInternal(chunk_id, list_make1(&cmd), false);
 		AlterTableInternal(compressed_chunk->table_id, list_make1(&cmd), false);
+		/* move indexes on original and compressed chunk */
+		ts_chunk_index_move_all(chunk_id, index_destination_tablespace);
+		ts_chunk_index_move_all(compressed_chunk->table_id, index_destination_tablespace);
 	}
 	else
 	{

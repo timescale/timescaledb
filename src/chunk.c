@@ -1093,7 +1093,8 @@ chunk_create_table_constraints(const Chunk *chunk)
 		ts_chunk_index_create_all(chunk->fd.hypertable_id,
 								  chunk->hypertable_relid,
 								  chunk->fd.id,
-								  chunk->table_id);
+								  chunk->table_id,
+								  InvalidOid);
 	}
 }
 

@@ -17,6 +17,7 @@
 #include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
+#include <commands/tablespace.h>
 #include <miscadmin.h>
 #include <nodes/parsenodes.h>
 #include <optimizer/optimizer.h>
@@ -380,7 +381,7 @@ ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constr
  */
 static void
 chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypertable_idxrel,
-				   int32 chunk_id, Relation chunkrel, Oid constraint_oid)
+				   int32 chunk_id, Relation chunkrel, Oid constraint_oid, Oid index_tblspc)
 {
 	Oid chunk_indexrelid;
 
@@ -393,8 +394,11 @@ chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypert
 		return;
 	}
 
-	chunk_indexrelid =
-		chunk_relation_index_create(hypertable_rel, hypertable_idxrel, chunkrel, false, InvalidOid);
+	chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
+												   hypertable_idxrel,
+												   chunkrel,
+												   false,
+												   index_tblspc);
 
 	chunk_index_insert(chunk_id,
 					   get_rel_name(chunk_indexrelid),
@@ -425,7 +429,8 @@ ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hyp
  * hypertable.
  */
 void
-ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid)
+ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk_id, Oid chunkrelid,
+						  Oid index_tblspc)
 {
 	Relation htrel;
 	Relation chunkrel;
@@ -467,7 +472,8 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 						   hypertable_idxrel,
 						   chunk_id,
 						   chunkrel,
-						   get_index_constraint(hypertable_idxoid));
+						   get_index_constraint(hypertable_idxoid),
+						   index_tblspc);
 
 		index_close(hypertable_idxrel, AccessShareLock);
 	}
@@ -1260,4 +1266,35 @@ ts_chunk_index_replace(PG_FUNCTION_ARGS)
 	RenameRelationInternal(chunk_index_oid_new, name, false, true);
 
 	PG_RETURN_VOID();
+}
+
+void
+ts_chunk_index_move_all(Oid chunk_relid, Oid index_tblspc)
+{
+	Relation chunkrel;
+	List *indexlist;
+	ListCell *lc;
+	const char chunk_relkind = get_rel_relkind(chunk_relid);
+
+	/* execute ALTER INDEX .. SET TABLESPACE for each index on the chunk */
+	AlterTableCmd cmd = { .type = T_AlterTableCmd,
+						  .subtype = AT_SetTableSpace,
+						  .name = get_tablespace_name(index_tblspc) };
+
+	/* Foreign table chunks don't support indexes */
+	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+		return;
+
+	Assert(chunk_relkind == RELKIND_RELATION);
+
+	chunkrel = table_open(chunk_relid, AccessShareLock);
+
+	indexlist = RelationGetIndexList(chunkrel);
+
+	foreach (lc, indexlist)
+	{
+		Oid chunk_idxoid = lfirst_oid(lc);
+		AlterTableInternal(chunk_idxoid, list_make1(&cmd), false);
+	}
+	table_close(chunkrel, AccessShareLock);
 }
