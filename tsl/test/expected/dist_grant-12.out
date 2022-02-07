@@ -1111,6 +1111,26 @@ GRANT CREATE ON DATABASE :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
 GRANT CREATE ON DATABASE :TEST_DBNAME, :DN_DBNAME_1 TO :ROLE_CLUSTER_SUPERUSER;
 ERROR:  cannot change privileges on multiple databases
 \set ON_ERROR_STOP 1
+-- Test disabling DDL commands on global objects
+SET timescaledb_experimental.enable_distributed_ddl TO 'off';
+-- ALTER DEFAULT PRIVELEGES
+ALTER DEFAULT PRIVILEGES GRANT INSERT ON TABLES TO :ROLE_1;
+DEBUG:  skipping dist DDL on object: ALTER DEFAULT PRIVILEGES GRANT INSERT ON TABLES TO test_role_1;
+-- GRANT/REVOKE
+REVOKE ALL ON DATABASE :TEST_DBNAME FROM :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  skipping dist DDL on object: REVOKE ALL ON DATABASE db_dist_grant FROM cluster_super_user;
+GRANT ALL ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
+DEBUG:  skipping dist DDL on object: GRANT ALL ON DATABASE db_dist_grant TO cluster_super_user;
+REVOKE ALL ON SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
+DEBUG:  skipping dist DDL on object: REVOKE ALL ON SCHEMA public FROM default_perm_user;
+GRANT ALL ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+DEBUG:  skipping dist DDL on object: GRANT ALL ON SCHEMA public TO default_perm_user;
+REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
+DEBUG:  rehashing catalog cache id 7 for pg_attribute; 257 tups, 128 buckets
+DEBUG:  skipping dist DDL on object: REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM default_perm_user;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+DEBUG:  skipping dist DDL on object: GRANT ALL ON ALL TABLES IN SCHEMA public TO default_perm_user;
+SET timescaledb_experimental.enable_distributed_ddl TO 'on';
 RESET client_min_messages;
 -- Test GRANT on foreign server and data node authentication using a
 -- user mapping

@@ -352,6 +352,49 @@ $$);
 DROP TABLE some_dist_table;
 DROP TABLE non_htable;
 
+-- Test disabling DDL commands on global objects
+--
+SET timescaledb_experimental.enable_distributed_ddl TO 'off';
+SET client_min_messages TO DEBUG1;
+
+-- CREATE SCHEMA
+CREATE SCHEMA schema_global;
+
+-- Ensure SCHEMA is not created on data nodes
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'schema_global';
+$$);
+
+-- RENAME SCHEMA
+ALTER SCHEMA schema_global RENAME TO schema_global_2;
+
+-- ALTER SCHEMA OWNER TO
+ALTER SCHEMA schema_global_2 OWNER TO :ROLE_1;
+
+-- REASSIGN OWNED BY TO
+REASSIGN OWNED BY :ROLE_1 TO :ROLE_1;
+
+-- Reset earlier to avoid different debug output between PG versions
+RESET client_min_messages;
+
+-- DROP OWNED BY schema_global_2
+DROP OWNED BY :ROLE_1;
+
+-- DROP SCHEMA
+CREATE SCHEMA schema_global;
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT s.nspname, u.usename
+FROM pg_catalog.pg_namespace s
+JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
+WHERE s.nspname = 'schema_global';
+$$);
+DROP SCHEMA schema_global;
+
+SET timescaledb_experimental.enable_distributed_ddl TO 'on';
+
 -- Transactional DDL tests
 -- Single-statement transactions
 
