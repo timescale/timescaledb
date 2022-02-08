@@ -277,6 +277,9 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_COMPRESSED_INDEXES_SIZE "compressed_indexes_size"
 #define REQ_RELKIND_COMPRESSED_ROWCOUNT "compressed_row_count"
 
+#define REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT "num_caggs_on_distributed_hypertables"
+#define REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT "num_caggs_using_real_time_aggregation"
+
 static JsonbValue *
 add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
 							 const HyperStats *hs)
@@ -356,6 +359,18 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 							   hs->replicated_hypertable_count);
 			ts_jsonb_add_int64(parse_state, REQ_RELKIND_REPLICA_CHUNKS, hs->replica_chunk_count);
 		}
+	}
+
+	if (statstype == STATS_TYPE_CAGG)
+	{
+		const CaggStats *cs = (const CaggStats *) stats;
+
+		ts_jsonb_add_int64(parse_state,
+						   REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT,
+						   cs->on_distributed_hypertable_count);
+		ts_jsonb_add_int64(parse_state,
+						   REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT,
+						   cs->uses_real_time_aggregation_count);
 	}
 
 	return pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
@@ -467,9 +482,9 @@ build_telemetry_report()
 							 STATS_TYPE_HYPER);
 	add_relkind_stats_object(parse_state,
 							 REQ_RELS_CONTINUOUS_AGGS,
-							 &relstats.continuous_aggs.storage.base,
+							 &relstats.continuous_aggs.hyp.storage.base,
 							 RELTYPE_CONTINUOUS_AGG,
-							 STATS_TYPE_HYPER);
+							 STATS_TYPE_CAGG);
 
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 

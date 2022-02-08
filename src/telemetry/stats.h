@@ -35,7 +35,8 @@ typedef enum StatsType
 {
 	STATS_TYPE_BASE,
 	STATS_TYPE_STORAGE,
-	STATS_TYPE_HYPER
+	STATS_TYPE_HYPER,
+	STATS_TYPE_CAGG,
 } StatsType;
 
 typedef struct BaseStats
@@ -69,15 +70,22 @@ typedef struct HyperStats
 	int64 uncompressed_row_count;
 } HyperStats;
 
+typedef struct CaggStats
+{
+	HyperStats hyp; /* "hyper" as field name leads to name conflict on Windows compiler */
+	int64 on_distributed_hypertable_count;
+	int64 uses_real_time_aggregation_count;
+} CaggStats;
+
 typedef struct TelemetryStats
 {
 	HyperStats hypertables;
 	HyperStats distributed_hypertables;
 	HyperStats distributed_hypertable_members;
-	HyperStats continuous_aggs;
 	HyperStats partitioned_tables;
 	StorageStats tables;
 	StorageStats materialized_views;
+	CaggStats continuous_aggs;
 	BaseStats views;
 } TelemetryStats;
 

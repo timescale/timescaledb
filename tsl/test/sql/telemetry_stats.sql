@@ -99,6 +99,9 @@ ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
 SELECT compress_chunk(c) 
 FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
 
+-- Turn of real-time aggregation
+ALTER MATERIALIZED VIEW contagg SET (timescaledb.materialized_only = true);
+
 ANALYZE normal, hyper, part;
 
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -194,6 +197,22 @@ SELECT * FROM normal;
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT
 	jsonb_pretty(rels -> 'distributed_hypertables_access_node') AS distributed_hypertables_an
+FROM relations;
+
+-- Create a continuous aggregate on the distributed hypertable
+CREATE MATERIALIZED VIEW distcontagg
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
+FROM
+  disthyper
+GROUP BY hour, device;
+
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT
+	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates
 FROM relations;
 
 DROP VIEW relations;
