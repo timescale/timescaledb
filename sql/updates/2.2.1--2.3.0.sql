@@ -29,10 +29,10 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_id_seq;
 DROP TABLE _timescaledb_catalog.chunk;
 
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_id_seq MINVALUE 1;
+CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
 
 -- now create table without self referential foreign key
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
+CREATE TABLE _timescaledb_catalog.chunk (
   id integer PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
   hypertable_id int NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
   schema_name name NOT NULL,
@@ -56,8 +56,8 @@ SELECT id, hypertable_id, schema_name, table_name,
 FROM _timescaledb_catalog.chunk_tmp;
 
 --add indexes to the chunk table
-CREATE INDEX IF NOT EXISTS chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
-CREATE INDEX IF NOT EXISTS chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
+CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
+CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
 
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 SELECT setval('_timescaledb_catalog.chunk_id_seq', last_value, is_called) FROM tmp_chunk_seq_value;

@@ -17,6 +17,7 @@ set(TEST_FILES
     drop_schema.sql
     dump_meta.sql
     extension.sql
+    extension_scripts.sql
     generated_as_identity.sql
     grant_hypertable.sql
     hash.sql
