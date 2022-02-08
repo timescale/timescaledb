@@ -1,8 +1,8 @@
 
-DROP FUNCTION IF EXISTS detach_data_node(name,regclass,boolean,boolean);
-DROP FUNCTION IF EXISTS distributed_exec;
+DROP FUNCTION IF EXISTS @extschema@.detach_data_node(name,regclass,boolean,boolean);
+DROP FUNCTION IF EXISTS @extschema@.distributed_exec;
 
-DROP PROCEDURE IF EXISTS refresh_continuous_aggregate(regclass,"any","any");
+DROP PROCEDURE IF EXISTS @extschema@.refresh_continuous_aggregate;
 
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 
@@ -163,3 +163,19 @@ SELECT DISTINCT
             END
        END AS range_end
   FROM unparsed_missing_slices;
+
+CREATE FUNCTION @extschema@.detach_data_node(
+    node_name              NAME,
+    hypertable             REGCLASS = NULL,
+    if_attached            BOOLEAN = FALSE,
+    force                  BOOLEAN = FALSE,
+    repartition            BOOLEAN = TRUE
+) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE PROCEDURE @extschema@.distributed_exec(
+       query TEXT,
+       node_list name[] = NULL,
+       transactional BOOLEAN = TRUE)
+AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C;
+

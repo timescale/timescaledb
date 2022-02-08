@@ -458,7 +458,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1000 config must have compress_after
-CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 30 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 35 at RAISE
 SELECT remove_compression_policy('test_table_int');
  remove_compression_policy 
 ---------------------------
@@ -480,7 +480,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1001 config must have hypertable_id
-CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 21 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 26 at RAISE
 UPDATE _timescaledb_config.bgw_job
 SET config = NULL
 WHERE id = :compressjob_id;
@@ -493,7 +493,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1001 has null config
-CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 16 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 21 at RAISE
 -- Create a hypertable and add a rogue inherited table to it. 
 CREATE TABLE i165 (time timestamptz PRIMARY KEY);
 SELECT create_hypertable('i165','time');

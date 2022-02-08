@@ -1,8 +1,20 @@
 
-DROP PROCEDURE IF EXISTS recompress_chunk;
+SET LOCAL search_path TO pg_catalog;
+
+DROP PROCEDURE IF EXISTS @extschema@.recompress_chunk;
 DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_status;
-DROP FUNCTION IF EXISTS delete_data_node;
-DROP FUNCTION IF EXISTS get_telemetry_report;
+DROP FUNCTION IF EXISTS @extschema@.delete_data_node;
+DROP FUNCTION IF EXISTS @extschema@.get_telemetry_report;
+
+CREATE FUNCTION @extschema@.delete_data_node(
+  node_name              NAME,
+  if_exists              BOOLEAN = FALSE,
+  force                  BOOLEAN = FALSE,
+  repartition            BOOLEAN = TRUE
+) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.get_telemetry_report(always_display_report boolean DEFAULT false) RETURNS TEXT
+  AS '@MODULE_PATHNAME@', 'ts_get_telemetry_report' LANGUAGE C STABLE PARALLEL SAFE;
 
 DO $$
 DECLARE
@@ -25,7 +37,7 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_buck
 
 -- Actually drop the table.
 -- ALTER EXTENSION only removes the table from the extension but doesn't drop it.
-DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_bucket_function;
 
 -- Drop overloaded versions of invalidation_process_hypertable_log() and invalidation_process_cagg_log()
 -- with bucket_functions argument.
@@ -40,7 +52,7 @@ ALTER EXTENSION timescaledb DROP FUNCTION _timescaledb_internal.invalidation_pro
     bucket_functions TEXT[]
 );
 
-DROP FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
+DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_process_hypertable_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
@@ -64,7 +76,7 @@ ALTER EXTENSION timescaledb DROP FUNCTION _timescaledb_internal.invalidation_pro
     OUT ret_window_end BIGINT
 );
 
-DROP FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
+DROP FUNCTION IF EXISTS _timescaledb_internal.invalidation_process_cagg_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
@@ -105,4 +117,7 @@ BEGIN
 END $$;
 
 -- revert changes to continuous aggregates view definition
-DROP VIEW timescaledb_information.continuous_aggregates;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+
+SET LOCAL search_path TO @extschema@;
+
