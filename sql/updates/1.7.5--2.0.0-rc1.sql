@@ -41,7 +41,7 @@ DROP VIEW IF EXISTS timescaledb_information.reorder_policies;
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
 -- Table for hypertable -> node mappings
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
+CREATE TABLE _timescaledb_catalog.hypertable_data_node (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
     node_hypertable_id   INTEGER NULL,
     node_name            NAME NOT NULL,
@@ -54,7 +54,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data
 GRANT SELECT ON _timescaledb_catalog.hypertable_data_node TO PUBLIC;
 
 -- Table for chunk -> nodes mappings
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_data_node (
+CREATE TABLE _timescaledb_catalog.chunk_data_node (
     chunk_id               INTEGER NOT NULL     REFERENCES _timescaledb_catalog.chunk(id),
     node_chunk_id        INTEGER NOT NULL,
     node_name            NAME NOT NULL,
@@ -85,7 +85,7 @@ CREATE TABLE _timescaledb_catalog.remote_txn (
     remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
     PRIMARY KEY (remote_transaction_id)
 );
-CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx
+CREATE INDEX remote_txn_data_node_name_idx
 ON _timescaledb_catalog.remote_txn(data_node_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
@@ -95,8 +95,8 @@ DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
 DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
 
 -- all existing compressed chunks have NULL value for the new columns
-ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF NOT EXISTS numrows_pre_compression BIGINT;
-ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF NOT EXISTS numrows_post_compression BIGINT;
+ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN numrows_pre_compression BIGINT;
+ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN numrows_post_compression BIGINT;
 
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_catalog.compression_chunk_size USING compression_chunk_size_pkey;
@@ -276,12 +276,12 @@ CREATE TABLE tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timesca
 
 DROP TABLE _timescaledb_config.bgw_job;
 
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
+CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
 SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM tmp_bgw_job_seq_value;
 DROP TABLE tmp_bgw_job_seq_value;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
+CREATE TABLE _timescaledb_config.bgw_job (
     id                  INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
     application_name    NAME        NOT NULL,
     schedule_interval   INTERVAL    NOT NULL,
@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
 );
 
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
-CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
+CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
 
 INSERT INTO _timescaledb_config.bgw_job SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config FROM _timescaledb_config.bgw_job_tmp ORDER BY id;
 DROP TABLE _timescaledb_config.bgw_job_tmp;
@@ -367,7 +367,7 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_lo
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
 DROP TABLE _timescaledb_catalog.continuous_agg;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
+CREATE TABLE _timescaledb_catalog.continuous_agg (
     mat_hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     raw_hypertable_id INTEGER NOT NULL REFERENCES  _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     user_view_schema NAME NOT NULL,
@@ -382,7 +382,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     UNIQUE(partial_view_schema, partial_view_name)
 );
 
-CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx
+CREATE INDEX continuous_agg_raw_hypertable_id_idx
     ON _timescaledb_catalog.continuous_agg(raw_hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
