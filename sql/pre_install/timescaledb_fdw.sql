@@ -3,5 +3,5 @@
 -- LICENSE-APACHE for a copy of the license.
 
 CREATE FOREIGN DATA WRAPPER timescaledb_fdw
-  HANDLER timescaledb_fdw_handler
-  VALIDATOR timescaledb_fdw_validator;
+  HANDLER @extschema@.timescaledb_fdw_handler
+  VALIDATOR @extschema@.timescaledb_fdw_validator;

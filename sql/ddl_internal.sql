@@ -49,4 +49,4 @@ BEGIN
     END LOOP;
     RAISE 'subscription sync wait timedout';
 END
-$BODY$;
+$BODY$ SET search_path TO pg_catalog;

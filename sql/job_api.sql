@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE OR REPLACE FUNCTION add_job(
+CREATE OR REPLACE FUNCTION @extschema@.add_job(
   proc REGPROC,
   schedule_interval INTERVAL,
   config JSONB DEFAULT NULL,
@@ -10,11 +10,11 @@ CREATE OR REPLACE FUNCTION add_job(
   scheduled BOOL DEFAULT true
 ) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION delete_job(job_id INTEGER) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_job_delete' LANGUAGE C VOLATILE STRICT;
-CREATE OR REPLACE PROCEDURE run_job(job_id INTEGER) AS '@MODULE_PATHNAME@', 'ts_job_run' LANGUAGE C;
+CREATE OR REPLACE FUNCTION @extschema@.delete_job(job_id INTEGER) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_job_delete' LANGUAGE C VOLATILE STRICT;
+CREATE OR REPLACE PROCEDURE @extschema@.run_job(job_id INTEGER) AS '@MODULE_PATHNAME@', 'ts_job_run' LANGUAGE C;
 
 -- Returns the updated job schedule values
-CREATE OR REPLACE FUNCTION alter_job(
+CREATE OR REPLACE FUNCTION @extschema@.alter_job(
     job_id INTEGER,
     schedule_interval INTERVAL = NULL,
     max_runtime INTERVAL = NULL,

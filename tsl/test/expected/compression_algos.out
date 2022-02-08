@@ -10,56 +10,11 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-------------------
--- C unit tests --
-------------------
-SELECT ts_test_compression();
  ts_test_compression 
 ---------------------
  
 (1 row)
 
-\ir include/rand_generator.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
---------------------------
--- cheap rand generator --
---------------------------
-create table rand_minstd_state(i bigint);
-create function rand_minstd_advance(bigint) returns bigint
-language sql immutable as
-$$
-	select (16807 * $1) % 2147483647
-$$;
-create function gen_rand_minstd() returns bigint
-language sql security definer as
-$$
-	update rand_minstd_state set i = rand_minstd_advance(i) returning i
-$$;
--- seed the random num generator
-insert into rand_minstd_state values (321);
-------------------------
--- BIGINT Compression --
-------------------------
-SELECT
-  $$
-  select item from base_ints order by rn
-  $$ AS "QUERY"
-\gset
-\set TABLE_NAME base_ints
-\set TYPE BIGINT
-\set COMPRESSION_CMD _timescaledb_internal.compress_deltadelta(item)
-\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
-\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::BIGINT)
--- random order
-CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY gen_rand_minstd()) sub;
-\ir include/compression_test.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set ECHO errors
 psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist, skipping
  compressed size 
 -----------------

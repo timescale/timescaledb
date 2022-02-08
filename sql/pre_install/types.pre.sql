@@ -10,6 +10,6 @@ CREATE TYPE _timescaledb_internal.compressed_data;
 --
 -- Remote transaction ID
 --
-CREATE TYPE rxid;
+CREATE TYPE @extschema@.rxid;
 
 --placeholder to allow creation of functions below

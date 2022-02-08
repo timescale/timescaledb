@@ -359,7 +359,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chu
 --each datanode will have a unique remote_transaction_id.
 CREATE TABLE _timescaledb_catalog.remote_txn (
   data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
-  remote_transaction_id text CHECK (remote_transaction_id::rxid IS NOT NULL),
+  remote_transaction_id text CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL),
   PRIMARY KEY (remote_transaction_id)
 );
 

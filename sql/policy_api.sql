@@ -10,7 +10,7 @@
 -- might be larger than the given one, but never smaller. In other
 -- words, some data beyond the retention window
 -- might be kept, but data within the window will never be deleted.
-CREATE OR REPLACE FUNCTION add_retention_policy(
+CREATE OR REPLACE FUNCTION @extschema@.add_retention_policy(
        relation REGCLASS,
        drop_after "any",
        if_not_exists BOOL = false
@@ -18,7 +18,7 @@ CREATE OR REPLACE FUNCTION add_retention_policy(
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_retention_policy(
+CREATE OR REPLACE FUNCTION @extschema@.remove_retention_policy(
     relation REGCLASS,
     if_exists BOOL = false
 ) RETURNS VOID
@@ -26,31 +26,31 @@ AS '@MODULE_PATHNAME@', 'ts_policy_retention_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* reorder policy */
-CREATE OR REPLACE FUNCTION add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
+CREATE OR REPLACE FUNCTION @extschema@.add_reorder_policy(hypertable REGCLASS, index_name NAME, if_not_exists BOOL = false) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_add'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
+CREATE OR REPLACE FUNCTION @extschema@.remove_reorder_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* compression policy */
-CREATE OR REPLACE FUNCTION add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL = false)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
 LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION remove_compression_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
+CREATE OR REPLACE FUNCTION @extschema@.remove_compression_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* continuous aggregates policy */
-CREATE OR REPLACE FUNCTION add_continuous_aggregate_policy(continuous_aggregate REGCLASS, start_offset "any", end_offset "any", schedule_interval INTERVAL, if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_policy(continuous_aggregate REGCLASS, start_offset "any", end_offset "any", schedule_interval INTERVAL, if_not_exists BOOL = false)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION remove_continuous_aggregate_policy(continuous_aggregate REGCLASS, if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION @extschema@.remove_continuous_aggregate_policy(continuous_aggregate REGCLASS, if_not_exists BOOL = false)
 RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_remove'
 LANGUAGE C VOLATILE STRICT;

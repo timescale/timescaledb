@@ -104,4 +104,3 @@ CREATE AGGREGATE _timescaledb_internal.compress_array(ANYELEMENT) (
     FINALFUNC = _timescaledb_internal.array_compressor_finish
 );
 
-\set ECHO all
