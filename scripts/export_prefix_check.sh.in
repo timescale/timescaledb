@@ -9,7 +9,11 @@ fi
 DEFINED_ONLY="--defined-only"
 EXTERN_ONLY="--extern-only"
 
-if nm --help | grep -q llvm; then
+if nm --help | grep -q ' \-defined\-only'; then
+	# The flag can be either --defined-only or -defined-only
+	# depending on nm-llvm version. If there is " -defined-only"
+	# string in the --help output, we assume this is the right
+	# way to specify the flag.
     DEFINED_ONLY="-defined-only"
     EXTERN_ONLY="-extern-only"
 fi
