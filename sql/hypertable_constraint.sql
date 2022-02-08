@@ -28,11 +28,14 @@ BEGIN
         RAISE 'unknown constraint type';
     END IF;
     IF def IS NOT NULL THEN
-        EXECUTE format(
+        -- to allow for custom types with operators outside of pg_catalog
+        -- we set search_path to @extschema@
+        SET LOCAL search_path TO @extschema@;
+        EXECUTE pg_catalog.format(
             $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
             compressed_ht_row.schema_name, compressed_ht_row.table_name, user_ht_constraint_name, def
         );
     END IF;
 
 END
-$BODY$;
+$BODY$ SET search_path TO pg_catalog;

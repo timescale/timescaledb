@@ -119,7 +119,7 @@ DECLARE
 BEGIN
   FOR chunk IN SELECT show_chunks(hypertable) ORDER BY 1 LIMIT lim
   LOOP
-    CALL recompress_chunk(chunk, if_not_compressed);
+    CALL public.recompress_chunk(chunk, if_not_compressed);
   END LOOP;
 END $$ LANGUAGE plpgsql;
 
@@ -132,7 +132,7 @@ DECLARE
 BEGIN
   FOR chunk IN SELECT show_chunks(hypertable) ORDER BY 1
   LOOP
-    CALL recompress_chunk(chunk, if_not_compressed);
+    CALL public.recompress_chunk(chunk, if_not_compressed);
   END LOOP;
 END $$ LANGUAGE plpgsql;
 

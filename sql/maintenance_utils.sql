@@ -5,13 +5,13 @@
 -- chunk - the OID of the chunk to be CLUSTERed
 -- index - the OID of the index to be CLUSTERed on, or NULL to use the index
 --         last used
-CREATE OR REPLACE FUNCTION reorder_chunk(
+CREATE OR REPLACE FUNCTION @extschema@.reorder_chunk(
     chunk REGCLASS,
     index REGCLASS=NULL,
     verbose BOOLEAN=FALSE
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_reorder_chunk' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION move_chunk(
+CREATE OR REPLACE FUNCTION @extschema@.move_chunk(
     chunk REGCLASS,
     destination_tablespace Name,
     index_destination_tablespace Name=NULL,
@@ -19,12 +19,12 @@ CREATE OR REPLACE FUNCTION move_chunk(
     verbose BOOLEAN=FALSE
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_chunk' LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION compress_chunk(
+CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C STRICT VOLATILE;
 
-CREATE OR REPLACE FUNCTION decompress_chunk(
+CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
     uncompressed_chunk REGCLASS,
     if_compressed BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
@@ -39,13 +39,18 @@ CREATE OR REPLACE FUNCTION decompress_chunk(
 -- Parameters:
 --   chunk: Chunk to recompress.
 --   if_not_compressed: Print notice instead of error if chunk is already compressed.
-CREATE OR REPLACE PROCEDURE recompress_chunk(chunk REGCLASS,
+CREATE OR REPLACE PROCEDURE @extschema@.recompress_chunk(chunk REGCLASS,
                                              if_not_compressed BOOLEAN = false)
 AS $$
 DECLARE
   status INT;
   chunk_name TEXT[];
 BEGIN
+
+    -- procedures with SET clause cannot execute transaction
+    -- control so we adjust search_path in procedure body
+    SET LOCAL search_path TO pg_catalog;
+
     status := _timescaledb_internal.chunk_status(chunk);
 
     -- Chunk names are in the internal catalog, but we only care about
@@ -62,9 +67,9 @@ BEGIN
             RAISE EXCEPTION 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
         END IF;
     WHEN 3 THEN
-        PERFORM decompress_chunk(chunk);
+        PERFORM @extschema@.decompress_chunk(chunk);
         COMMIT;
     END CASE;
-    PERFORM compress_chunk(chunk, if_not_compressed);
+    PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
 END
 $$ LANGUAGE plpgsql;

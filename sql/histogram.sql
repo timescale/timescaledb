@@ -36,7 +36,7 @@ LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- This aggregate partitions the dataset into a specified number of buckets (nbuckets) ranging
 -- from the inputted min to max values.
-CREATE OR REPLACE AGGREGATE histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER) (
+CREATE OR REPLACE AGGREGATE @extschema@.histogram (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION, INTEGER) (
     SFUNC = _timescaledb_internal.hist_sfunc,
     STYPE = INTERNAL,
     COMBINEFUNC = _timescaledb_internal.hist_combinefunc,

@@ -13,23 +13,23 @@ DROP VIEW IF EXISTS _timescaledb_internal.compressed_chunk_stats;
 DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size;
 DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_from_main_table;
 
-CREATE TABLE _timescaledb_catalog.hypertable_tmp
+CREATE TABLE pg_temp.hypertable_tmp
 AS SELECT * from _timescaledb_catalog.hypertable;
 
---drop foreign keys on hypertable 
-ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_compressed_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.hypertable_data_node DROP CONSTRAINT hypertable_data_node_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.tablespace DROP CONSTRAINT tablespace_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.dimension DROP CONSTRAINT dimension_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT chunk_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.chunk_index DROP CONSTRAINT chunk_index_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_config.bgw_job DROP CONSTRAINT bgw_job_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.continuous_agg DROP CONSTRAINT continuous_agg_mat_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.continuous_agg DROP CONSTRAINT continuous_agg_raw_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold DROP CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey ; 
-ALTER TABLE _timescaledb_catalog.hypertable_compression DROP CONSTRAINT hypertable_compression_hypertable_id_fkey ;
+--drop foreign keys on hypertable
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT hypertable_compressed_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.hypertable_data_node DROP CONSTRAINT hypertable_data_node_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.tablespace DROP CONSTRAINT tablespace_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.dimension DROP CONSTRAINT dimension_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT chunk_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.chunk_index DROP CONSTRAINT chunk_index_hypertable_id_fkey;
+ALTER TABLE _timescaledb_config.bgw_job DROP CONSTRAINT bgw_job_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_agg DROP CONSTRAINT continuous_agg_mat_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_agg DROP CONSTRAINT continuous_agg_raw_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold DROP CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.hypertable_compression DROP CONSTRAINT hypertable_compression_hypertable_id_fkey;
 
-CREATE TABLE tmp_hypertable_seq_value AS 
+CREATE TABLE pg_temp.tmp_hypertable_seq_value AS
 SELECT last_value, is_called FROM _timescaledb_catalog.hypertable_id_seq;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
 ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.hypertable_id_seq;
@@ -63,7 +63,7 @@ CREATE TABLE _timescaledb_catalog.hypertable(
 );
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
-SELECT setval('_timescaledb_catalog.hypertable_id_seq', last_value, is_called) FROM tmp_hypertable_seq_value;
+SELECT setval('_timescaledb_catalog.hypertable_id_seq', last_value, is_called) FROM pg_temp.tmp_hypertable_seq_value;
 
 INSERT INTO _timescaledb_catalog.hypertable
 ( id, schema_name, table_name, associated_schema_name, associated_table_prefix,
@@ -79,15 +79,15 @@ SELECT id, schema_name, table_name, associated_schema_name, associated_table_pre
        END,
        compressed_hypertable_id,
        replication_factor
-FROM _timescaledb_catalog.hypertable_tmp;
+FROM pg_temp.hypertable_tmp;
  
 -- add self referential foreign key
 ALTER TABLE _timescaledb_catalog.hypertable ADD CONSTRAINT hypertable_compressed_hypertable_id_fkey FOREIGN KEY ( compressed_hypertable_id )
  REFERENCES _timescaledb_catalog.hypertable( id );
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 --cleanup
-DROP TABLE _timescaledb_catalog.hypertable_tmp;
-DROP TABLE tmp_hypertable_seq_value;
+DROP TABLE pg_temp.hypertable_tmp;
+DROP TABLE pg_temp.tmp_hypertable_seq_value;
 
 -- add all the other foreign keys
 ALTER TABLE _timescaledb_catalog.hypertable_data_node 

@@ -4,7 +4,7 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.time_col_type_for_chunk(name,name)
 -- Handle column renames for continuous aggregates that were not
 -- handled correctly and fix it in the update. We save the information
 -- in a table.
-CREATE UNLOGGED TABLE rename_tables (
+CREATE TABLE pg_temp.rename_tables (
        user_view regclass,
        new_name text,
        old_name text,
@@ -35,7 +35,7 @@ WITH
         SELECT attrelid, attname, attnum, mat_id
           FROM objs, pg_attribute
          WHERE attrelid = objs.direct_view)
-INSERT INTO rename_tables
+INSERT INTO pg_temp.rename_tables
 SELECT (SELECT user_view FROM objs WHERE uv.attrelid = user_view),
        uv.attname AS new_name,
        dv.attname AS old_name,
@@ -46,7 +46,7 @@ SELECT (SELECT user_view FROM objs WHERE uv.attrelid = user_view),
   FROM user_view uv JOIN direct_view dv USING (mat_id, attnum)
  WHERE uv.attname != dv.attname;
 
-CREATE PROCEDURE alter_table_column(cagg regclass, relation regclass, old_column_name name, new_column_name name) AS $$
+CREATE PROCEDURE pg_temp.alter_table_column(cagg regclass, relation regclass, old_column_name name, new_column_name name) AS $$
 BEGIN
     EXECUTE format('ALTER TABLE %s RENAME COLUMN %I TO %I', relation, old_column_name, new_column_name);
 END;
@@ -67,18 +67,18 @@ DECLARE
     ht_id int;
 BEGIN
   FOR user_view, new_name, old_name, partial_view, direct_view, mat_table, ht_id IN
-  SELECT * FROM rename_tables
+  SELECT * FROM pg_temp.rename_tables
   LOOP
     -- There is no RENAME COLUMN for views, but we can use ALTER TABLE
     -- to rename a column in a view.
-    CALL alter_table_column(user_view, partial_view, old_name, new_name);
-    CALL alter_table_column(user_view, direct_view, old_name, new_name);
-    CALL alter_table_column(user_view, mat_table, old_name, new_name);
+    CALL pg_temp.alter_table_column(user_view, partial_view, old_name, new_name);
+    CALL pg_temp.alter_table_column(user_view, direct_view, old_name, new_name);
+    CALL pg_temp.alter_table_column(user_view, mat_table, old_name, new_name);
     UPDATE _timescaledb_catalog.dimension SET column_name = new_name
      WHERE hypertable_id = ht_id AND column_name = old_name;
   END LOOP;
 END
 $$;
 
-DROP PROCEDURE alter_table_column;
-DROP TABLE rename_tables;
+DROP PROCEDURE pg_temp.alter_table_column;
+DROP TABLE pg_temp.rename_tables;

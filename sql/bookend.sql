@@ -47,7 +47,7 @@ LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 --This aggregate returns the "first" value of the first argument when ordered by the second argument.
 --Ex. first(temp, time) returns the temp value for the row with the lowest time
-CREATE OR REPLACE AGGREGATE first(anyelement, "any") (
+CREATE OR REPLACE AGGREGATE @extschema@.first(anyelement, "any") (
     SFUNC = _timescaledb_internal.first_sfunc,
     STYPE = internal,
     COMBINEFUNC = _timescaledb_internal.first_combinefunc,
@@ -60,7 +60,7 @@ CREATE OR REPLACE AGGREGATE first(anyelement, "any") (
 
 --This aggregate returns the "last" value of the first argument when ordered by the second argument.
 --Ex. last(temp, time) returns the temp value for the row with highest time
-CREATE OR REPLACE AGGREGATE last(anyelement, "any") (
+CREATE OR REPLACE AGGREGATE @extschema@.last(anyelement, "any") (
     SFUNC = _timescaledb_internal.last_sfunc,
     STYPE = internal,
     COMBINEFUNC = _timescaledb_internal.last_combinefunc,
