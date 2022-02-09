@@ -159,7 +159,7 @@ function(generate_downgrade_script)
     ${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake/ScriptFiles.cmake)
 
   set(_downgrade_PRE_FILES ${PRE_UPDATE_FILES})
-  set(_downgrade_POST_FILES ${SOURCE_FILES} ${SET_POST_UPDATE_STAGE}
+  set(_downgrade_POST_FILES "${PRE_INSTALL_FUNCTION_FILES};${SOURCE_FILES}" ${SET_POST_UPDATE_STAGE}
                             ${POST_UPDATE_FILES} ${UNSET_UPDATE_STAGE})
 
   # Fetch prolog and epilog from target version.
