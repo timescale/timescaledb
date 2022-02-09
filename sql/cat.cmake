@@ -17,10 +17,12 @@ endfunction()
 
 # Function to concatenate all files in SRC_FILE_LIST into file OUTPUT_FILE
 function(cat SRC_FILE_LIST OUTPUT_FILE STRIP_REPLACE)
+  message(STATUS "SRC: ${SRC_FILE_LIST} OUT: ${OUTPUT_FILE}")
   file(WRITE ${OUTPUT_FILE} "")
   foreach(SRC_FILE ${SRC_FILE_LIST})
     append_file(${SRC_FILE} ${OUTPUT_FILE} ${STRIP_REPLACE})
   endforeach()
 endfunction()
 
+message(STATUS "OUTER SRC: ${SRC_FILE_LIST} OUT: ${OUTPUT_FILE}")
 cat("${SRC_FILE_LIST}" "${OUTPUT_FILE}" "${STRIP_REPLACE}")
