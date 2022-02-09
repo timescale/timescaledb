@@ -250,8 +250,49 @@ bool
 policy_retention_execute(int32 job_id, Jsonb *config)
 {
 	PolicyRetentionData policy_data;
+	char *relname;
+	char *message = "applying retention policy to hypertable";
+	Datum boundary;
 
 	policy_retention_read_and_validate_config(config, &policy_data);
+
+	relname = get_rel_name(policy_data.object_relid);
+	boundary = policy_data.boundary;
+	if (IS_INTEGER_TYPE(policy_data.boundary_type))
+	{
+		elog(LOG,
+			 "%s: %s dropping data older than %s",
+			 message,
+			 relname,
+			 DatumGetCString(DirectFunctionCall1(int8out, boundary)));
+	}
+	switch (policy_data.boundary_type)
+	{
+		case TIMESTAMPOID:
+			elog(LOG,
+				 "%s: \"%s\" dropping data older than %s",
+				 message,
+				 relname,
+				 DatumGetCString(DirectFunctionCall1(timestamp_out, boundary)));
+			break;
+		case TIMESTAMPTZOID:
+			elog(LOG,
+				 "%s: \"%s\" dropping data older than %s",
+				 message,
+				 relname,
+				 DatumGetCString(DirectFunctionCall1(timestamptz_out, boundary)));
+			break;
+		case DATEOID:
+			elog(LOG,
+				 "%s: \"%s\" dropping data older than %s",
+				 message,
+				 relname,
+				 DatumGetCString(DirectFunctionCall1(date_out, boundary)));
+			break;
+		default:
+			/* this should never happen as otherwise hypertable has unsupported time type */
+			break;
+	}
 
 	chunk_invoke_drop_chunks(policy_data.object_relid,
 							 policy_data.boundary,
@@ -552,6 +593,13 @@ job_execute(BgwJob *job)
 	StringInfo query;
 	Portal portal = ActivePortal;
 
+	if (job->fd.config)
+		elog(DEBUG1,
+			 "Executing %s with parameters %s",
+			 NameStr(job->fd.proc_name),
+			 DatumGetCString(DirectFunctionCall1(jsonb_out, JsonbPGetDatum(job->fd.config))));
+	else
+		elog(DEBUG1, "Executing %s with no parameters", NameStr(job->fd.proc_name));
 	/* Create a portal if there's no active */
 	if (!PortalIsValid(portal))
 	{
