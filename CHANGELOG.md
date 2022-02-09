@@ -18,11 +18,13 @@ accidentally triggering the load of a previous DB version.**
 * #4015 Eliminate float rounding instabilities in interpolate
 * #4020 Fix ALTER TABLE EventTrigger initialization
 * #4024 Fix premature cache release call
+* #4069 Fix riinfo NULL handling in ANY construct
 
 **Thanks**
 * @erikhh for reporting an issue with time_bucket_gapfill
 * @fvannee for reporting a first/last memory leak
 * @kancsuki for reporting drop column and partial index creation not working
+* @carlocperez for reporting crash with NULL handling in ANY construct
 
 ## 2.5.1 (2021-12-02)
 

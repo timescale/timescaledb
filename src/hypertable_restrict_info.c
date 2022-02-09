@@ -392,6 +392,10 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 
 	c = (Const *) expr;
 
+	/* quick check for a NULL constant */
+	if (c->constisnull)
+		return false;
+
 	rte = rt_fetch(v->varno, root->parse->rtable);
 
 	columntype = get_atttype(rte->relid, dri->dimension->column_attno);
