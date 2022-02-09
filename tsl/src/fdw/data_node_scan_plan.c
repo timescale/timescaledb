@@ -293,7 +293,11 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 {
 	PartitionScheme partscheme = hyper_rel->part_scheme;
 	List *groupexprs;
+	List **nullable_partexprs;
 	int16 new_partnatts;
+	Oid *partopfamily;
+	Oid *partopcintype;
+	Oid *partcollation;
 	ListCell *lc;
 	int i = 0;
 
@@ -302,10 +306,27 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 	groupexprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
 	new_partnatts = list_length(groupexprs);
 
-	/* Only reallocate the partitioning attributes array if it is smaller than
-	 * the new size */
+	/* Only reallocate the partitioning attributes arrays if it is smaller than
+	 * the new size. palloc0 is needed to zero out the extra space. */
 	if (partscheme->partnatts < new_partnatts)
+	{
+		partopfamily = palloc0(new_partnatts * sizeof(Oid));
+		partopcintype = palloc0(new_partnatts * sizeof(Oid));
+		partcollation = palloc0(new_partnatts * sizeof(Oid));
+		nullable_partexprs = palloc0(new_partnatts * sizeof(List *));
+
+		memcpy(partopfamily, partscheme->partopfamily, new_partnatts * sizeof(Oid));
+		memcpy(partopcintype, partscheme->partopcintype, new_partnatts * sizeof(Oid));
+		memcpy(partcollation, partscheme->partcollation, new_partnatts * sizeof(Oid));
+		memcpy(nullable_partexprs, hyper_rel->nullable_partexprs, new_partnatts * sizeof(List *));
+
+		partscheme->partopfamily = partopfamily;
+		partscheme->partopcintype = partopcintype;
+		partscheme->partcollation = partcollation;
+		hyper_rel->nullable_partexprs = nullable_partexprs;
+
 		hyper_rel->partexprs = (List **) palloc0(sizeof(List *) * new_partnatts);
+	}
 
 	partscheme->partnatts = new_partnatts;
 
