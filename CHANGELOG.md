@@ -21,6 +21,7 @@ accidentally triggering the load of a previous DB version.**
 * #4020 Fix ALTER TABLE EventTrigger initialization
 * #4024 Fix premature cache release call
 * #4069 Fix riinfo NULL handling in ANY construct
+* #4073 Fix buffer overflow in partition scheme
 
 **Thanks**
 * @erikhh for reporting an issue with time_bucket_gapfill
