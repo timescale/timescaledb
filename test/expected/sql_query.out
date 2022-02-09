@@ -116,6 +116,22 @@ SELECT * FROM "int_part" WHERE object_id = 1;
  Fri Jan 20 09:00:01 2017 |         1 | 22.5
 (1 row)
 
+--check that queries with IN/ANY/= work for the "time" column
+SELECT * FROM "int_part" WHERE time IN (NULL);
+ time | object_id | temp 
+------+-----------+------
+(0 rows)
+
+SELECT * FROM "int_part" WHERE time = ANY (NULL);
+ time | object_id | temp 
+------+-----------+------
+(0 rows)
+
+SELECT * FROM "int_part" WHERE time = NULL;
+ time | object_id | temp 
+------+-----------+------
+(0 rows)
+
 --make sure this touches only one partititon
 EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
                                                QUERY PLAN                                                

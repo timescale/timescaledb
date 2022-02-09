@@ -25,6 +25,12 @@ INSERT INTO "int_part" VALUES('2017-01-20T09:00:01', 2, 22.5);
 SELECT * FROM test.show_subtables('int_part');
 
 SELECT * FROM "int_part" WHERE object_id = 1;
+
+--check that queries with IN/ANY/= work for the "time" column
+SELECT * FROM "int_part" WHERE time IN (NULL);
+SELECT * FROM "int_part" WHERE time = ANY (NULL);
+SELECT * FROM "int_part" WHERE time = NULL;
+
 --make sure this touches only one partititon
 EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
 
