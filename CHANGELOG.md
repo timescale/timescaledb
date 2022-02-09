@@ -21,6 +21,7 @@ accidentally triggering the load of a previous DB version.**
 * #3961 Fix crash in EXPLAIN VERBOSE on distributed hypertable
 * #4015 Eliminate float rounding instabilities in interpolate
 * #4019 Update ts_extension_oid in transitioning state
+* #4073 Fix buffer overflow in partition scheme
 
 **Thanks**
 * @fvannee for reporting a first/last memory leak
@@ -46,7 +47,6 @@ upgrade as soon as possible.
 * #4037 Fix status for dropped chunks that have catalog entries
 * #4069 Fix riinfo NULL handling in ANY construct
 * #4071 Fix extension installation privilege escalation
-* #4073 Fix buffer overflow in partition scheme
 
 **Thanks**
 * @carlocperez for reporting crash with NULL handling in ANY construct
