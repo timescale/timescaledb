@@ -438,7 +438,7 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 
 		delta = (year * 12 + month) - (origin_year * 12 + origin_month);
 		bucket_number = delta / interval->month;
-		year = origin_year + (bucket_number * interval->month) / 12;
+		year = origin_year + (origin_month - 1 + bucket_number * interval->month) / 12;
 		month =
 			(((origin_year * 12 + (origin_month - 1)) + (bucket_number * interval->month)) % 12) +
 			1;
