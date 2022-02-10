@@ -315,10 +315,12 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
 		partcollation = palloc0(new_partnatts * sizeof(Oid));
 		nullable_partexprs = palloc0(new_partnatts * sizeof(List *));
 
-		memcpy(partopfamily, partscheme->partopfamily, new_partnatts * sizeof(Oid));
-		memcpy(partopcintype, partscheme->partopcintype, new_partnatts * sizeof(Oid));
-		memcpy(partcollation, partscheme->partcollation, new_partnatts * sizeof(Oid));
-		memcpy(nullable_partexprs, hyper_rel->nullable_partexprs, new_partnatts * sizeof(List *));
+		memcpy(partopfamily, partscheme->partopfamily, partscheme->partnatts * sizeof(Oid));
+		memcpy(partopcintype, partscheme->partopcintype, partscheme->partnatts * sizeof(Oid));
+		memcpy(partcollation, partscheme->partcollation, partscheme->partnatts * sizeof(Oid));
+		memcpy(nullable_partexprs,
+			   hyper_rel->nullable_partexprs,
+			   partscheme->partnatts * sizeof(List *));
 
 		partscheme->partopfamily = partopfamily;
 		partscheme->partopcintype = partopcintype;
