@@ -214,55 +214,12 @@ get_vacuum_options(const VacuumStmt *stmt)
 }
 
 /*
- * The number of arguments of pg_md5_hash() has changed in PG >= 14.2. At the
- * moment of writing this used to be an upcoming release, thus PG_VERSION_NUM
- * couldn't be used to distinguish between REL_14_1 and REL_14_STABLE.
+ * The number of arguments of pg_md5_hash() has changed in PG 15.
  *
- * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=3a0cced8
+ * https://github.com/postgres/postgres/commit/b69aba74
  */
-#if PG14
 
-#include <common/cryptohash.h>
-#include <common/md5.h>
-
-static inline void
-bytesToHex(uint8 b[16], char *s)
-{
-	static const char *hex = "0123456789abcdef";
-	int q, w;
-
-	for (q = 0, w = 0; q < 16; q++)
-	{
-		s[w++] = hex[(b[q] >> 4) & 0x0F];
-		s[w++] = hex[b[q] & 0x0F];
-	}
-	s[w] = '\0';
-}
-
-static inline bool
-pg_md5_hash_compat(const void *buff, size_t len, char *hexsum, const char **errstr)
-{
-	uint8 sum[MD5_DIGEST_LENGTH];
-	pg_cryptohash_ctx *ctx;
-
-	*errstr = NULL;
-	ctx = pg_cryptohash_create(PG_MD5);
-	if (ctx == NULL)
-		return false;
-
-	if (pg_cryptohash_init(ctx) < 0 || pg_cryptohash_update(ctx, buff, len) < 0 ||
-		pg_cryptohash_final(ctx, sum, sizeof(sum)) < 0)
-	{
-		pg_cryptohash_free(ctx);
-		return false;
-	}
-
-	bytesToHex(sum, hexsum);
-	pg_cryptohash_free(ctx);
-	return true;
-}
-
-#elif PG14_LT
+#if PG15_LT
 
 #include <common/md5.h>
 static inline bool
