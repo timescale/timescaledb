@@ -16,7 +16,7 @@ ts_scan_iterator_set_index(ScanIterator *iterator, CatalogTable table, int index
 void
 ts_scan_iterator_close(ScanIterator *iterator)
 {
-	ts_scanner_end_and_close_scan(&iterator->ctx, &iterator->ictx);
+	ts_scanner_end_and_close_scan(&iterator->ctx);
 }
 
 TSDLLEXPORT void
@@ -48,5 +48,5 @@ ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumbe
 TSDLLEXPORT void
 ts_scan_iterator_rescan(ScanIterator *iterator)
 {
-	ts_scanner_rescan(&iterator->ctx, &iterator->ictx, NULL);
+	ts_scanner_rescan(&iterator->ctx, NULL);
 }
