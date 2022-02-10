@@ -156,8 +156,8 @@ ts_hypertable_compression_get_by_pkey(int32 htid, const char *attname)
 								   F_NAMEEQ,
 								   CStringGetDatum(attname));
 
-	ts_scanner_start_scan(&iterator.ctx, &iterator.ictx);
-	TupleInfo *ti = ts_scanner_next(&iterator.ctx, &iterator.ictx);
+	ts_scanner_start_scan(&iterator.ctx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
 	if (!ti)
 		return NULL;
 
@@ -209,8 +209,8 @@ ts_hypertable_compression_delete_by_pkey(int32 htid, const char *attname)
 								   F_NAMEEQ,
 								   CStringGetDatum(attname));
 
-	ts_scanner_start_scan(&iterator.ctx, &iterator.ictx);
-	TupleInfo *ti = ts_scanner_next(&iterator.ctx, &iterator.ictx);
+	ts_scanner_start_scan(&iterator.ctx);
+	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
 	if (!ti)
 		return false;
 
