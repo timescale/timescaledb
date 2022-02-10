@@ -34,7 +34,7 @@ LANGUAGE C VOLATILE;
 SELECT _timescaledb_internal.restart_background_workers();
 
 -- Table for ACL and initprivs of tables.
-CREATE TABLE pg_temp.saved_privs(
+CREATE TABLE _timescaledb_internal.saved_privs(
        tmpnsp name,
        tmpname name,
        tmpacl aclitem[],
@@ -44,7 +44,7 @@ CREATE TABLE pg_temp.saved_privs(
 -- We save away both the ACL and the initprivs for all tables and
 -- views in the extension (but not for chunks and internal objects) so
 -- that we can restore them to the proper state after the update.
-INSERT INTO pg_temp.saved_privs
+INSERT INTO _timescaledb_internal.saved_privs
 SELECT nspname, relname, relacl, initprivs
   FROM pg_class cl JOIN pg_namespace ns ON ns.oid = relnamespace
                    JOIN pg_init_privs ip ON ip.objoid = cl.oid AND ip.objsubid = 0
