@@ -37,9 +37,9 @@
 -- chunks.
 -- The unique constraint is table_name +schema_name. The ordering is
 -- important as we want index access when we filter by table_name
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
+CREATE SEQUENCE _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable (
+CREATE TABLE _timescaledb_catalog.hypertable (
   id INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'), 
   schema_name name NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
   table_name name NOT NULL,
@@ -67,7 +67,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_s
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
+CREATE TABLE _timescaledb_catalog.hypertable_data_node (
   hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
   node_hypertable_id integer NULL,
   node_name name NOT NULL,
@@ -80,7 +80,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data
 
 -- The tablespace table maps tablespaces to hypertables.
 -- This allows spreading a hypertable's chunks across multiple disks.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.tablespace (
+CREATE TABLE _timescaledb_catalog.tablespace (
   id serial PRIMARY KEY,
   hypertable_id int NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   tablespace_name name NOT NULL,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.tablespace (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.tablespace', '');
 
 -- A dimension represents an axis along which data is partitioned.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.dimension (
+CREATE TABLE _timescaledb_catalog.dimension (
   id serial NOT NULL PRIMARY KEY,
   hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   column_name name NOT NULL,
@@ -115,7 +115,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '')
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
 
 -- A dimension slice defines a keyspace range along a dimension axis.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.dimension_slice (
+CREATE TABLE _timescaledb_catalog.dimension_slice (
   id serial NOT NULL PRIMARY KEY,
   dimension_id integer NOT NULL REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE,
   range_start bigint NOT NULL,
@@ -133,9 +133,9 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- the chunk's hypercube. Tuples that fall within the chunk's
 -- hypercube are stored in the chunk's data table, as given by
 -- 'schema_name' and 'table_name'.
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_id_seq MINVALUE 1;
+CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
+CREATE TABLE _timescaledb_catalog.chunk (
   id integer PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
   hypertable_id int NOT NULL REFERENCES _timescaledb_catalog.hypertable (id),
   schema_name name NOT NULL,
@@ -147,9 +147,9 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk (
 );
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
 
-CREATE INDEX IF NOT EXISTS chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
+CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
 
-CREATE INDEX IF NOT EXISTS chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
+CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
@@ -157,7 +157,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', 
 -- A chunk constraint maps a dimension slice to a chunk. Each
 -- constraint associated with a chunk will also be a table constraint
 -- on the chunk's data table.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_constraint (
+CREATE TABLE _timescaledb_catalog.chunk_constraint (
   chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id),
   dimension_slice_id integer NULL REFERENCES _timescaledb_catalog.dimension_slice (id),
   constraint_name name NOT NULL,
@@ -167,13 +167,13 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_constraint (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
 
-CREATE INDEX IF NOT EXISTS chunk_constraint_chunk_id_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (chunk_id, dimension_slice_id);
+CREATE INDEX chunk_constraint_chunk_id_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (chunk_id, dimension_slice_id);
 
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_constraint_name;
+CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_index (
+CREATE TABLE _timescaledb_catalog.chunk_index (
   chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   index_name name NOT NULL,
   hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
@@ -181,11 +181,11 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_index (
   UNIQUE (chunk_id, index_name)
 );
 
-CREATE INDEX IF NOT EXISTS chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb_catalog.chunk_index (hypertable_id, hypertable_index_name);
+CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb_catalog.chunk_index (hypertable_id, hypertable_index_name);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_data_node (
+CREATE TABLE _timescaledb_catalog.chunk_data_node (
   chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id),
   node_chunk_id integer NOT NULL,
   node_name name NOT NULL,
@@ -198,12 +198,12 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
 -- inside other .sql scripts. This avoids insertion conflicts during pg_restore.
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_config.bgw_job_id_seq
+CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq
 MINVALUE 1000;
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
+CREATE TABLE _timescaledb_config.bgw_job (
   id integer PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
   application_name name NOT NULL,
   schedule_interval interval NOT NULL,
@@ -220,11 +220,11 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
 
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
 
-CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job (proc_schema, proc_name, hypertable_id);
+CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job (proc_schema, proc_name, hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
+CREATE TABLE _timescaledb_internal.bgw_job_stat (
   job_id integer PRIMARY KEY REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE,
   last_start timestamptz NOT NULL DEFAULT NOW(),
   last_finish timestamptz NOT NULL,
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_job_stat (
 --the statistics probably aren't very meaningful across instances.
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
 -- to determine whether to run a specific job on a specific chunk.
-CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (
+CREATE TABLE _timescaledb_internal.bgw_policy_chunk_stats (
   job_id integer NOT NULL REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE,
   chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   num_times_job_run integer,
@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_internal.bgw_policy_chunk_stats (
   UNIQUE (job_id, chunk_id)
 );
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.metadata (
+CREATE TABLE _timescaledb_catalog.metadata (
   key NAME NOT NULL PRIMARY KEY,
   value text NOT NULL,
   include_in_telemetry boolean NOT NULL
@@ -261,7 +261,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.metadata (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$
   WHERE KEY = 'exported_uuid' $$);
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
+CREATE TABLE _timescaledb_catalog.continuous_agg (
   mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   raw_hypertable_id integer NOT NULL REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   user_view_schema name NOT NULL,
@@ -276,12 +276,12 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
   UNIQUE (partial_view_schema, partial_view_name)
 );
 
-CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.continuous_agg (raw_hypertable_id);
+CREATE INDEX continuous_agg_raw_hypertable_id_idx ON _timescaledb_catalog.continuous_agg (raw_hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
 
 -- See the comments for ContinuousAggsBucketFunction structure.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(
+CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function(
   mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   -- The schema of the function. Equals TRUE for "timescaledb_experimental", FALSE otherwise.
   experimental bool NOT NULL,
@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_invalidation_threshold (
+CREATE TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold (
   hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   watermark bigint NOT NULL
 );
@@ -306,7 +306,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 -- this does not have an FK on the materialization table since INSERTs to this
 -- table are performance critical
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (
+CREATE TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (
   hypertable_id integer NOT NULL,
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL
@@ -317,7 +317,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 CREATE INDEX continuous_aggs_hypertable_invalidation_log_idx ON _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log (hypertable_id, lowest_modified_value ASC);
 
 -- per cagg copy of invalidation log
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (
   materialization_id integer REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE,
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL
@@ -331,14 +331,14 @@ CREATE INDEX continuous_aggs_materialization_invalidation_log_idx ON _timescaled
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.
  */
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_algorithm (
+CREATE TABLE _timescaledb_catalog.compression_algorithm (
   id smallint PRIMARY KEY,
   version smallint NOT NULL,
   name name NOT NULL,
   description text
 );
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
+CREATE TABLE _timescaledb_catalog.hypertable_compression (
   hypertable_id integer REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   attname name NOT NULL,
   compression_algorithm_id smallint REFERENCES _timescaledb_catalog.compression_algorithm (id),
@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_compression (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_compression', '');
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.compression_chunk_size (
+CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   chunk_id integer REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   compressed_chunk_id integer REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
   uncompressed_heap_size bigint NOT NULL,
@@ -376,11 +376,11 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chu
 --each datanode will have a unique remote_transaction_id.
 CREATE TABLE _timescaledb_catalog.remote_txn (
   data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
-  remote_transaction_id text CHECK (remote_transaction_id::rxid IS NOT NULL),
+  remote_transaction_id text CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL),
   PRIMARY KEY (remote_transaction_id)
 );
 
-CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);
+CREATE INDEX remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
@@ -402,9 +402,9 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', ''
 -- carry over chunk copy/move operations from earlier (if it makes sense at all)
 --
 
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_catalog.chunk_copy_operation_id_seq MINVALUE 1;
+CREATE SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq MINVALUE 1;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_copy_operation (
+CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
   operation_id name PRIMARY KEY, -- the publisher/subscriber identifier used
   backend_pid integer NOT NULL, -- the pid of the backend running this activity
   completed_stage name NOT NULL, -- the completed stage/step

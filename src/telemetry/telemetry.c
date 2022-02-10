@@ -172,13 +172,10 @@ ts_check_version_response(const char *json)
 	}
 }
 
-static char *
+static int32
 get_architecture_bit_size()
 {
-	StringInfo buf = makeStringInfo();
-
-	appendStringInfo(buf, "%d", BUILD_POINTER_BYTES * 8);
-	return buf->data;
+	return BUILD_POINTER_BYTES * 8;
 }
 
 static void
@@ -193,15 +190,10 @@ add_job_counts(JsonbParseState *state)
 	ts_jsonb_add_int32(state, REQ_NUM_USER_DEFINED_ACTIONS, counts.user_defined_action);
 }
 
-static char *
+static int64
 get_database_size()
 {
-	StringInfo buf = makeStringInfo();
-	int64 data_size =
-		DatumGetInt64(DirectFunctionCall1(pg_database_size_oid, ObjectIdGetDatum(MyDatabaseId)));
-
-	appendStringInfo(buf, "" INT64_FORMAT "", data_size);
-	return buf->data;
+	return DatumGetInt64(DirectFunctionCall1(pg_database_size_oid, ObjectIdGetDatum(MyDatabaseId)));
 }
 
 static void
@@ -215,7 +207,7 @@ add_related_extensions(JsonbParseState *state)
 	{
 		const char *ext = related_extensions[i];
 
-		ts_jsonb_add_str(state, ext, OidIsValid(get_extension_oid(ext, true)) ? "true" : "false");
+		ts_jsonb_add_bool(state, ext, OidIsValid(get_extension_oid(ext, true)));
 	}
 
 	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
@@ -276,6 +268,9 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_COMPRESSED_TOAST_SIZE "compressed_toast_size"
 #define REQ_RELKIND_COMPRESSED_INDEXES_SIZE "compressed_indexes_size"
 #define REQ_RELKIND_COMPRESSED_ROWCOUNT "compressed_row_count"
+
+#define REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT "num_caggs_on_distributed_hypertables"
+#define REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT "num_caggs_using_real_time_aggregation"
 
 static JsonbValue *
 add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
@@ -358,6 +353,18 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 		}
 	}
 
+	if (statstype == STATS_TYPE_CAGG)
+	{
+		const CaggStats *cs = (const CaggStats *) stats;
+
+		ts_jsonb_add_int64(parse_state,
+						   REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT,
+						   cs->on_distributed_hypertable_count);
+		ts_jsonb_add_int64(parse_state,
+						   REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT,
+						   cs->uses_real_time_aggregation_count);
+	}
+
 	return pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 }
 
@@ -399,8 +406,8 @@ build_telemetry_report()
 	ts_jsonb_add_str(parse_state, REQ_BUILD_OS, BUILD_OS_NAME);
 	ts_jsonb_add_str(parse_state, REQ_BUILD_OS_VERSION, BUILD_OS_VERSION);
 	ts_jsonb_add_str(parse_state, REQ_BUILD_ARCHITECTURE, BUILD_PROCESSOR);
-	ts_jsonb_add_str(parse_state, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
-	ts_jsonb_add_str(parse_state, REQ_DATA_VOLUME, get_database_size());
+	ts_jsonb_add_int32(parse_state, REQ_BUILD_ARCHITECTURE_BIT_SIZE, get_architecture_bit_size());
+	ts_jsonb_add_int64(parse_state, REQ_DATA_VOLUME, get_database_size());
 
 	/* Add relation stats */
 	ts_telemetry_stats_gather(&relstats);
@@ -467,9 +474,9 @@ build_telemetry_report()
 							 STATS_TYPE_HYPER);
 	add_relkind_stats_object(parse_state,
 							 REQ_RELS_CONTINUOUS_AGGS,
-							 &relstats.continuous_aggs.storage.base,
+							 &relstats.continuous_aggs.hyp.storage.base,
 							 RELTYPE_CONTINUOUS_AGG,
-							 STATS_TYPE_HYPER);
+							 STATS_TYPE_CAGG);
 
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 

@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE OR REPLACE FUNCTION timescaledb_pre_restore() RETURNS BOOL AS
+CREATE OR REPLACE FUNCTION @extschema@.timescaledb_pre_restore() RETURNS BOOL AS
 $BODY$
 DECLARE
     db text;
@@ -16,10 +16,10 @@ BEGIN
     RETURN true;
 END
 $BODY$
-LANGUAGE PLPGSQL;
+LANGUAGE PLPGSQL SET search_path TO pg_catalog;
 
 
-CREATE OR REPLACE FUNCTION timescaledb_post_restore() RETURNS BOOL AS
+CREATE OR REPLACE FUNCTION @extschema@.timescaledb_post_restore() RETURNS BOOL AS
 $BODY$
 DECLARE
     db text;
@@ -38,4 +38,4 @@ BEGIN
     RETURN true;
 END
 $BODY$
-LANGUAGE PLPGSQL;
+LANGUAGE PLPGSQL SET search_path TO pg_catalog;

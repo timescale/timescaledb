@@ -228,40 +228,44 @@ process_relation(BaseStats *stats, Form_pg_class class)
 }
 
 static void
-process_hypertable(BaseStats *stats, Form_pg_class class, const Hypertable *ht)
+process_hypertable(HyperStats *hyp, Form_pg_class class, const Hypertable *ht)
 {
-	HyperStats *hyperstats = (HyperStats *) stats;
-
-	process_relation(stats, class);
+	process_relation(&hyp->storage.base, class);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		hyperstats->compressed_hypertable_count++;
+		hyp->compressed_hypertable_count++;
 }
 
 static void
-process_distributed_hypertable(BaseStats *stats, Form_pg_class class, const Hypertable *ht)
+process_distributed_hypertable(HyperStats *hyp, Form_pg_class class, const Hypertable *ht)
 {
-	HyperStats *hyperstats = (HyperStats *) stats;
-
-	stats->relcount++;
+	hyp->storage.base.relcount++;
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		hyperstats->compressed_hypertable_count++;
+		hyp->compressed_hypertable_count++;
 
 	if (ht->fd.replication_factor > 1)
-		hyperstats->replicated_hypertable_count++;
+		hyp->replicated_hypertable_count++;
 }
 
 static void
-process_continuous_agg(BaseStats *stats, Form_pg_class class, const ContinuousAgg *cagg)
+process_continuous_agg(CaggStats *cs, Form_pg_class class, const ContinuousAgg *cagg)
 {
-	HyperStats *hyperstats = (HyperStats *) stats;
-	const Hypertable *ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	const Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	const Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 
-	process_relation(stats, class);
+	Assert(cagg);
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		hyperstats->compressed_hypertable_count++;
+	process_relation(&cs->hyp.storage.base, class);
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+		cs->hyp.compressed_hypertable_count++;
+
+	if (hypertable_is_distributed(raw_ht))
+		cs->on_distributed_hypertable_count++;
+
+	if (!cagg->data.materialized_only)
+		cs->uses_real_time_aggregation_count++;
 }
 
 static void
@@ -433,7 +437,7 @@ process_chunk(StatsContext *statsctx, StatsRelType chunk_reltype, Form_pg_class 
 			add_chunk_stats(&stats->distributed_hypertable_members, class, chunk, compr_stats);
 			break;
 		case RELTYPE_MATERIALIZED_CHUNK:
-			add_chunk_stats(&stats->continuous_aggs, class, chunk, compr_stats);
+			add_chunk_stats(&stats->continuous_aggs.hyp, class, chunk, compr_stats);
 			break;
 		default:
 			pg_unreachable();
@@ -538,13 +542,11 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 		{
 			case RELTYPE_HYPERTABLE:
 				Assert(NULL != ht);
-				process_hypertable(&stats->hypertables.storage.base, class, ht);
+				process_hypertable(&stats->hypertables, class, ht);
 				break;
 			case RELTYPE_DISTRIBUTED_HYPERTABLE:
 				Assert(NULL != ht);
-				process_distributed_hypertable(&stats->distributed_hypertables.storage.base,
-											   class,
-											   ht);
+				process_distributed_hypertable(&stats->distributed_hypertables, class, ht);
 				break;
 			case RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER:
 				/*
@@ -552,7 +554,7 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 				 * a regular hypertable.
 				 */
 				Assert(NULL != ht);
-				process_hypertable(&stats->distributed_hypertable_members.storage.base, class, ht);
+				process_hypertable(&stats->distributed_hypertable_members, class, ht);
 				break;
 			case RELTYPE_TABLE:
 				process_relation(&stats->tables.base, class);
@@ -581,9 +583,8 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 				break;
 			case RELTYPE_CONTINUOUS_AGG:
 				Assert(NULL != cagg);
-				process_continuous_agg(&stats->continuous_aggs.storage.base, class, cagg);
+				process_continuous_agg(&stats->continuous_aggs, class, cagg);
 				break;
-
 				/* No stats collected for types below */
 			case RELTYPE_COMPRESSION_HYPERTABLE:
 			case RELTYPE_MATERIALIZED_HYPERTABLE:

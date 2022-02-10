@@ -140,7 +140,9 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "indexes_size": 0,                         +
          "num_children": 0,                         +
          "num_relations": 1,                        +
-         "num_reltuples": 0                         +
+         "num_reltuples": 0,                        +
+         "num_caggs_on_distributed_hypertables": 0, +
+         "num_caggs_using_real_time_aggregation": 1 +
      },                                             +
      "distributed_hypertables_data_node": {         +
          "heap_size": 0,                            +
@@ -278,7 +280,9 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "indexes_size": 114688,                    +
          "num_children": 2,                         +
          "num_relations": 1,                        +
-         "num_reltuples": 0                         +
+         "num_reltuples": 0,                        +
+         "num_caggs_on_distributed_hypertables": 0, +
+         "num_caggs_using_real_time_aggregation": 1 +
      },                                             +
      "distributed_hypertables_data_node": {         +
          "heap_size": 0,                            +
@@ -355,6 +359,8 @@ FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
  _timescaledb_internal._hyper_2_10_chunk
 (1 row)
 
+-- Turn of real-time aggregation
+ALTER MATERIALIZED VIEW contagg SET (timescaledb.materialized_only = true);
 ANALYZE normal, hyper, part;
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT jsonb_pretty(rels) AS relations FROM relations;
@@ -423,7 +429,9 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "indexes_size": 65536,                     +
          "num_children": 2,                         +
          "num_relations": 1,                        +
-         "num_reltuples": 452                       +
+         "num_reltuples": 452,                      +
+         "num_caggs_on_distributed_hypertables": 0, +
+         "num_caggs_using_real_time_aggregation": 0 +
      },                                             +
      "distributed_hypertables_data_node": {         +
          "heap_size": 0,                            +
@@ -869,6 +877,47 @@ FROM relations;
      "num_reltuples": 697,                      +
      "num_replica_chunks": 18,                  +
      "num_replicated_distributed_hypertables": 1+
+ }
+(1 row)
+
+-- Create a continuous aggregate on the distributed hypertable
+CREATE MATERIALIZED VIEW distcontagg
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
+FROM
+  disthyper
+GROUP BY hour, device;
+NOTICE:  refreshing continuous aggregate "distcontagg"
+REFRESH MATERIALIZED VIEW telemetry_report;
+SELECT
+	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates
+FROM relations;
+             continuous_aggregates              
+------------------------------------------------
+ {                                             +
+     "heap_size": 180224,                      +
+     "toast_size": 40960,                      +
+     "compression": {                          +
+         "compressed_heap_size": 40960,        +
+         "compressed_row_count": 10,           +
+         "num_compressed_caggs": 1,            +
+         "compressed_toast_size": 8192,        +
+         "num_compressed_chunks": 1,           +
+         "uncompressed_heap_size": 57344,      +
+         "uncompressed_row_count": 452,        +
+         "compressed_indexes_size": 16384,     +
+         "uncompressed_toast_size": 8192,      +
+         "uncompressed_indexes_size": 81920    +
+     },                                        +
+     "indexes_size": 180224,                   +
+     "num_children": 4,                        +
+     "num_relations": 2,                       +
+     "num_reltuples": 452,                     +
+     "num_caggs_on_distributed_hypertables": 1,+
+     "num_caggs_using_real_time_aggregation": 1+
  }
 (1 row)
 

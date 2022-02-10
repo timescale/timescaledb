@@ -12,7 +12,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_is_finite(
 $BODY$
     --end values of bigint reserved for infinite
     SELECT val > (-9223372036854775808)::bigint AND val < 9223372036854775807::bigint
-$BODY$;
+$BODY$ SET search_path TO pg_catalog;
 
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.dimension_slice_get_constraint_sql(
@@ -90,7 +90,7 @@ BEGIN
         return array_to_string(parts, 'AND');
     END IF;
 END
-$BODY$;
+$BODY$ SET search_path TO pg_catalog;
 
 -- Outputs the create_hypertable command to recreate the given hypertable.
 --
@@ -156,4 +156,4 @@ BEGIN
 
     RETURN ret;
 END
-$BODY$;
+$BODY$ SET search_path TO pg_catalog;

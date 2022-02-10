@@ -128,8 +128,7 @@ CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
-CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
@@ -148,8 +147,7 @@ CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
-CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -206,8 +204,7 @@ CREATE DATABASE bootstrap_test
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
-CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -227,8 +224,7 @@ CREATE DATABASE bootstrap_test
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
-CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -248,8 +244,7 @@ CREATE DATABASE bootstrap_test
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER;
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
-CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+CREATE EXTENSION timescaledb;
 SET client_min_messages TO NOTICE;
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -308,8 +303,8 @@ CREATE DATABASE access_node OWNER :ROLE_CLUSTER_SUPERUSER;
 
 \c access_node :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
-CREATE EXTENSION timescaledb WITH SCHEMA _timescaledb_catalog CASCADE;
+CREATE SCHEMA ts_non_default AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE EXTENSION timescaledb WITH SCHEMA ts_non_default CASCADE;
 SET client_min_messages TO NOTICE;
 
 -- Show the schema for the extension to verify that it is not public.
@@ -320,7 +315,7 @@ CREATE DATABASE bootstrap_test OWNER :ROLE_CLUSTER_SUPERUSER;
 
 \c bootstrap_test :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;
-CREATE SCHEMA _timescaledb_catalog AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
+CREATE SCHEMA ts_non_default AUTHORIZATION :ROLE_CLUSTER_SUPERUSER;
 SET client_min_messages TO NOTICE;
 
 \c access_node :ROLE_CLUSTER_SUPERUSER
@@ -328,10 +323,10 @@ SET client_min_messages TO NOTICE;
 -- Add data node and delete it under error suppression. We want to
 -- avoid later tests to have random failures because the add succeeds.
 \set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_catalog.add_data_node(
+SELECT * FROM ts_non_default.add_data_node(
        'bootstrap_test', host => 'localhost',
        database => 'bootstrap_test', bootstrap => true);
-SELECT * FROM _timescaledb_catalog.delete_data_node('bootstrap_test');
+SELECT * FROM ts_non_default.delete_data_node('bootstrap_test');
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER

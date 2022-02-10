@@ -1,32 +1,32 @@
 --Drop functions in size_utils and dependencies, ordering matters.
 -- Do not reorder
 DROP VIEW IF EXISTS timescaledb_information.hypertable;
-DROP FUNCTION IF EXISTS hypertable_relation_size_pretty;
-DROP FUNCTION IF EXISTS hypertable_relation_size;
-DROP FUNCTION IF EXISTS chunk_relation_size_pretty;
-DROP FUNCTION IF EXISTS chunk_relation_size;
-DROP FUNCTION IF EXISTS indexes_relation_size_pretty;
-DROP FUNCTION IF EXISTS indexes_relation_size;
+DROP FUNCTION IF EXISTS @extschema@.hypertable_relation_size_pretty;
+DROP FUNCTION IF EXISTS @extschema@.hypertable_relation_size;
+DROP FUNCTION IF EXISTS @extschema@.chunk_relation_size_pretty;
+DROP FUNCTION IF EXISTS @extschema@.chunk_relation_size;
+DROP FUNCTION IF EXISTS @extschema@.indexes_relation_size_pretty;
+DROP FUNCTION IF EXISTS @extschema@.indexes_relation_size;
 DROP FUNCTION IF EXISTS _timescaledb_internal.partitioning_column_to_pretty;
 DROP FUNCTION IF EXISTS _timescaledb_internal.range_value_to_pretty;
 -- end of do not reorder
-DROP FUNCTION IF EXISTS hypertable_approximate_row_count;
+DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_row_count;
 DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
 DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
 DROP VIEW IF EXISTS timescaledb_information.license;
 
 -- Add new function definitions, columns and tables for distributed hypertables
-DROP FUNCTION IF EXISTS create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
-DROP FUNCTION IF EXISTS add_drop_chunks_policy;
-DROP FUNCTION IF EXISTS remove_drop_chunks_policy;
-DROP FUNCTION IF EXISTS drop_chunks;
-DROP FUNCTION IF EXISTS show_chunks;
-DROP FUNCTION IF EXISTS add_compress_chunks_policy;
-DROP FUNCTION IF EXISTS remove_compress_chunks_policy;
-DROP FUNCTION IF EXISTS alter_job_schedule;
-DROP FUNCTION IF EXISTS set_chunk_time_interval;
-DROP FUNCTION IF EXISTS set_number_partitions;
-DROP FUNCTION IF EXISTS add_dimension;
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc);
+DROP FUNCTION IF EXISTS @extschema@.add_drop_chunks_policy;
+DROP FUNCTION IF EXISTS @extschema@.remove_drop_chunks_policy;
+DROP FUNCTION IF EXISTS @extschema@.drop_chunks;
+DROP FUNCTION IF EXISTS @extschema@.show_chunks;
+DROP FUNCTION IF EXISTS @extschema@.add_compress_chunks_policy;
+DROP FUNCTION IF EXISTS @extschema@.remove_compress_chunks_policy;
+DROP FUNCTION IF EXISTS @extschema@.alter_job_schedule;
+DROP FUNCTION IF EXISTS @extschema@.set_chunk_time_interval;
+DROP FUNCTION IF EXISTS @extschema@.set_number_partitions;
+DROP FUNCTION IF EXISTS @extschema@.add_dimension;
 DROP FUNCTION IF EXISTS _timescaledb_internal.enterprise_enabled;
 DROP FUNCTION IF EXISTS _timescaledb_internal.current_license_key;
 DROP FUNCTION IF EXISTS _timescaledb_internal.license_expiration_time;
@@ -41,7 +41,7 @@ DROP VIEW IF EXISTS timescaledb_information.reorder_policies;
 ALTER TABLE _timescaledb_catalog.hypertable ADD COLUMN replication_factor SMALLINT NULL CHECK (replication_factor > 0);
 
 -- Table for hypertable -> node mappings
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.hypertable_data_node (
+CREATE TABLE _timescaledb_catalog.hypertable_data_node (
     hypertable_id          INTEGER NOT NULL     REFERENCES _timescaledb_catalog.hypertable(id),
     node_hypertable_id   INTEGER NULL,
     node_name            NAME NOT NULL,
@@ -54,7 +54,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data
 GRANT SELECT ON _timescaledb_catalog.hypertable_data_node TO PUBLIC;
 
 -- Table for chunk -> nodes mappings
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.chunk_data_node (
+CREATE TABLE _timescaledb_catalog.chunk_data_node (
     chunk_id               INTEGER NOT NULL     REFERENCES _timescaledb_catalog.chunk(id),
     node_chunk_id        INTEGER NOT NULL,
     node_name            NAME NOT NULL,
@@ -66,15 +66,15 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node
 GRANT SELECT ON _timescaledb_catalog.chunk_data_node TO PUBLIC;
 
 --placeholder to allow creation of functions below
-CREATE TYPE rxid;
+CREATE TYPE @extschema@.rxid;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.rxid_in(cstring) RETURNS rxid
+CREATE FUNCTION _timescaledb_internal.rxid_in(cstring) RETURNS @extschema@.rxid
     AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.rxid_out(rxid) RETURNS cstring
+CREATE FUNCTION _timescaledb_internal.rxid_out(@extschema@.rxid) RETURNS cstring
     AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE TYPE rxid (
+CREATE TYPE @extschema@.rxid (
    internallength = 16,
    input = _timescaledb_internal.rxid_in,
    output = _timescaledb_internal.rxid_out
@@ -82,10 +82,10 @@ CREATE TYPE rxid (
 
 CREATE TABLE _timescaledb_catalog.remote_txn (
     data_node_name              NAME, --this is really only to allow us to cleanup stuff on a per-node basis.
-    remote_transaction_id    TEXT CHECK (remote_transaction_id::rxid is not null),
+    remote_transaction_id    TEXT CHECK (remote_transaction_id::@extschema@.rxid is not null),
     PRIMARY KEY (remote_transaction_id)
 );
-CREATE INDEX IF NOT EXISTS remote_txn_data_node_name_idx
+CREATE INDEX remote_txn_data_node_name_idx
 ON _timescaledb_catalog.remote_txn(data_node_name);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
 
@@ -95,8 +95,8 @@ DROP VIEW IF EXISTS timescaledb_information.compressed_hypertable_stats;
 DROP VIEW IF EXISTS timescaledb_information.compressed_chunk_stats;
 
 -- all existing compressed chunks have NULL value for the new columns
-ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF NOT EXISTS numrows_pre_compression BIGINT;
-ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN IF NOT EXISTS numrows_post_compression BIGINT;
+ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN numrows_pre_compression BIGINT;
+ALTER TABLE IF EXISTS _timescaledb_catalog.compression_chunk_size ADD COLUMN numrows_post_compression BIGINT;
 
 --rewrite catalog table to not break catalog scans on tables with missingval optimization
 CLUSTER  _timescaledb_catalog.compression_chunk_size USING compression_chunk_size_pkey;
@@ -196,7 +196,7 @@ WHERE job_type = 'drop_chunks'
 -- migrate cagg jobs
 --- timescale functions cannot be invoked in latest-dev.sql
 --- this is a mapping for get_time_type
-CREATE FUNCTION ts_tmp_get_time_type(htid integer)
+CREATE FUNCTION pg_temp.ts_tmp_get_time_type(htid integer)
 RETURNS OID LANGUAGE SQL AS
 $BODY$
   SELECT dim.column_type
@@ -205,7 +205,7 @@ $BODY$
         and dim.interval_length is not null;
 $BODY$;
 --- this is a mapping for _timescaledb_internal.to_interval
-CREATE FUNCTION ts_tmp_get_interval( intval bigint)
+CREATE FUNCTION pg_temp.ts_tmp_get_interval( intval bigint)
 RETURNS INTERVAL LANGUAGE SQL AS
 $BODY$
    SELECT format('%sd %ss', intval/86400000000, (intval%86400000000)/1E6)::interval; 
@@ -219,14 +219,14 @@ SET
   proc_name = 'policy_refresh_continuous_aggregate',
   job_type = 'custom',
   config = 
-    CASE WHEN ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+    CASE WHEN pg_temp.ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
     THEN
     jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
         CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
             THEN NULL 
-            ELSE ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
+            ELSE pg_temp.ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
         END 
-    , 'end_offset', ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
+    , 'end_offset', pg_temp.ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
     ELSE
     jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
         CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
@@ -247,8 +247,8 @@ WHERE job_type = 'continuous_aggregate'
   AND job.id = cagg.job_id ;
 
 --drop tmp functions created for cont agg job migration
-DROP FUNCTION ts_tmp_get_time_type;
-DROP FUNCTION ts_tmp_get_interval;
+DROP FUNCTION pg_temp.ts_tmp_get_time_type;
+DROP FUNCTION pg_temp.ts_tmp_get_interval;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_compress_chunks;
@@ -272,16 +272,16 @@ ALTER TABLE _timescaledb_internal.bgw_job_stat DROP CONSTRAINT IF EXISTS bgw_job
 ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT IF EXISTS bgw_policy_chunk_stats_job_id_fkey;
 
 -- remember sequence values so they can be restored in new sequence
-CREATE TABLE tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
+CREATE TABLE pg_temp.tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
 
 DROP TABLE _timescaledb_config.bgw_job;
 
-CREATE SEQUENCE IF NOT EXISTS _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
+CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
-SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM tmp_bgw_job_seq_value;
-DROP TABLE tmp_bgw_job_seq_value;
+SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM pg_temp.tmp_bgw_job_seq_value;
+DROP TABLE pg_temp.tmp_bgw_job_seq_value;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
+CREATE TABLE _timescaledb_config.bgw_job (
     id                  INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
     application_name    NAME        NOT NULL,
     schedule_interval   INTERVAL    NOT NULL,
@@ -297,7 +297,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_config.bgw_job (
 );
 
 ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
-CREATE INDEX IF NOT EXISTS bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
+CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job(proc_schema,proc_name,hypertable_id);
 
 INSERT INTO _timescaledb_config.bgw_job SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config FROM _timescaledb_config.bgw_job_tmp ORDER BY id;
 DROP TABLE _timescaledb_config.bgw_job_tmp;
@@ -367,7 +367,7 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_lo
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg;
 DROP TABLE _timescaledb_catalog.continuous_agg;
 
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
+CREATE TABLE _timescaledb_catalog.continuous_agg (
     mat_hypertable_id INTEGER PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     raw_hypertable_id INTEGER NOT NULL REFERENCES  _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
     user_view_schema NAME NOT NULL,
@@ -382,7 +382,7 @@ CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_agg (
     UNIQUE(partial_view_schema, partial_view_name)
 );
 
-CREATE INDEX IF NOT EXISTS continuous_agg_raw_hypertable_id_idx
+CREATE INDEX continuous_agg_raw_hypertable_id_idx
     ON _timescaledb_catalog.continuous_agg(raw_hypertable_id);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg', '');
@@ -407,17 +407,641 @@ BEGIN
 END
 $$;
 
-CREATE OR REPLACE FUNCTION timescaledb_fdw_handler()
+CREATE FUNCTION @extschema@.timescaledb_fdw_handler()
 RETURNS fdw_handler
 AS '@MODULE_PATHNAME@', 'ts_timescaledb_fdw_handler'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION timescaledb_fdw_validator(text[], oid)
+CREATE FUNCTION @extschema@.timescaledb_fdw_validator(text[], oid)
 RETURNS void
 AS '@MODULE_PATHNAME@', 'ts_timescaledb_fdw_validator'
 LANGUAGE C STRICT;
 
 CREATE FOREIGN DATA WRAPPER timescaledb_fdw
-  HANDLER timescaledb_fdw_handler
-  VALIDATOR timescaledb_fdw_validator;
+  HANDLER @extschema@.timescaledb_fdw_handler
+  VALIDATOR @extschema@.timescaledb_fdw_validator;
 
+-- policy functions
+CREATE FUNCTION @extschema@.add_retention_policy(relation REGCLASS, drop_after "any", if_not_exists BOOL = false)
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION @extschema@.remove_retention_policy(relation REGCLASS, if_exists BOOL = false)
+RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_policy_retention_remove' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL = false)
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_compression_add' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION @extschema@.remove_compression_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policy_compression_remove' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(continuous_aggregate REGCLASS, start_offset "any", end_offset "any", schedule_interval INTERVAL, if_not_exists BOOL = false)
+RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.remove_continuous_aggregate_policy(continuous_aggregate REGCLASS, if_not_exists BOOL = false)
+RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_remove' LANGUAGE C VOLATILE STRICT;
+
+-- job api
+CREATE FUNCTION @extschema@.add_job(
+  proc REGPROC,
+  schedule_interval INTERVAL,
+  config JSONB DEFAULT NULL,
+  initial_start TIMESTAMPTZ DEFAULT NULL,
+  scheduled BOOL DEFAULT true
+) RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_add' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.delete_job(job_id INTEGER) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_job_delete' LANGUAGE C VOLATILE STRICT;
+CREATE PROCEDURE @extschema@.run_job(job_id INTEGER) AS '@MODULE_PATHNAME@', 'ts_job_run' LANGUAGE C;
+
+CREATE FUNCTION @extschema@.alter_job(
+    job_id INTEGER,
+    schedule_interval INTERVAL = NULL,
+    max_runtime INTERVAL = NULL,
+    max_retries INTEGER = NULL,
+    retry_period INTERVAL = NULL,
+    scheduled BOOL = NULL,
+    config JSONB = NULL,
+    next_start TIMESTAMPTZ = NULL,
+    if_exists BOOL = FALSE
+)
+RETURNS TABLE (job_id INTEGER, schedule_interval INTERVAL, max_runtime INTERVAL, max_retries INTEGER, retry_period INTERVAL, scheduled BOOL, config JSONB, next_start TIMESTAMPTZ)
+AS '@MODULE_PATHNAME@', 'ts_job_alter'
+LANGUAGE C VOLATILE;
+
+-- ddl api
+CREATE FUNCTION @extschema@.attach_data_node(
+    node_name              NAME,
+    hypertable             REGCLASS,
+    if_not_attached        BOOLEAN = FALSE,
+    repartition            BOOLEAN = TRUE
+) RETURNS TABLE(hypertable_id INTEGER, node_hypertable_id INTEGER, node_name NAME)
+AS '@MODULE_PATHNAME@', 'ts_data_node_attach' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.create_hypertable(
+    relation                REGCLASS,
+    time_column_name        NAME,
+    partitioning_column     NAME = NULL,
+    number_partitions       INTEGER = NULL,
+    associated_schema_name  NAME = NULL,
+    associated_table_prefix NAME = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL,
+    replication_factor      INTEGER = NULL,
+    data_nodes              NAME[] = NULL
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.create_distributed_hypertable(
+    relation                REGCLASS,
+    time_column_name        NAME,
+    partitioning_column     NAME = NULL,
+    number_partitions       INTEGER = NULL,
+    associated_schema_name  NAME = NULL,
+    associated_table_prefix NAME = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::bigint,
+    create_default_indexes  BOOLEAN = TRUE,
+    if_not_exists           BOOLEAN = FALSE,
+    partitioning_func       REGPROC = NULL,
+    migrate_data            BOOLEAN = FALSE,
+    chunk_target_size       TEXT = NULL,
+    chunk_sizing_func       REGPROC = '_timescaledb_internal.calculate_chunk_interval'::regproc,
+    time_partitioning_func  REGPROC = NULL,
+    replication_factor      INTEGER = 1,
+    data_nodes              NAME[] = NULL
+) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.drop_chunks(
+    relation               REGCLASS,
+    older_than             "any" = NULL,
+    newer_than             "any" = NULL,
+    verbose                BOOLEAN = FALSE
+) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+LANGUAGE C VOLATILE PARALLEL UNSAFE;
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    cagg                     REGCLASS,
+    window_start             "any",
+    window_end               "any"
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
+
+CREATE FUNCTION @extschema@.set_replication_factor(
+    hypertable              REGCLASS,
+    replication_factor      INTEGER
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_set_replication_factor' LANGUAGE C VOLATILE;
+
+-- size utils
+CREATE FUNCTION @extschema@.approximate_row_count(relation REGCLASS)
+RETURNS BIGINT
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+  WITH RECURSIVE inherited_id(oid) AS
+  (
+    SELECT relation
+    UNION ALL
+    SELECT i.inhrelid
+    FROM pg_inherits i
+    JOIN inherited_id b ON i.inhparent = b.oid
+  )
+  -- reltuples for partitioned tables is the sum of it's children in pg14 so we need to filter those out
+  SELECT COALESCE((SUM(reltuples) FILTER (WHERE reltuples > 0 AND relkind <> 'p')), 0)::BIGINT
+  FROM inherited_id
+  JOIN pg_class USING (oid);
+$BODY$;
+
+CREATE VIEW _timescaledb_internal.compressed_chunk_stats AS
+SELECT
+    srcht.schema_name AS hypertable_schema,
+    srcht.table_name AS hypertable_name,
+    srcch.schema_name AS chunk_schema,
+    srcch.table_name AS chunk_name,
+    CASE WHEN srcch.compressed_chunk_id IS NULL THEN
+        'Uncompressed'::text
+    ELSE
+        'Compressed'::text
+    END AS compression_status,
+    map.uncompressed_heap_size,
+    map.uncompressed_index_size,
+    map.uncompressed_toast_size,
+    map.uncompressed_heap_size + map.uncompressed_toast_size + map.uncompressed_index_size AS uncompressed_total_size,
+    map.compressed_heap_size,
+    map.compressed_index_size,
+    map.compressed_toast_size,
+    map.compressed_heap_size + map.compressed_toast_size + map.compressed_index_size AS compressed_total_size
+FROM
+    _timescaledb_catalog.hypertable AS srcht
+    JOIN _timescaledb_catalog.chunk AS srcch ON srcht.id = srcch.hypertable_id
+        AND srcht.compressed_hypertable_id IS NOT NULL
+        AND srcch.dropped = FALSE
+    LEFT JOIN _timescaledb_catalog.compression_chunk_size map ON srcch.id = map.chunk_id;
+
+CREATE FUNCTION _timescaledb_internal.data_node_compressed_chunk_stats (node_name name, schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint
+    )
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_internal.compressed_chunk_local_stats (schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint)
+    LANGUAGE SQL
+    STABLE STRICT
+    AS
+$BODY$
+    SELECT
+        ch.chunk_schema,
+        ch.chunk_name,
+        ch.compression_status,
+        ch.uncompressed_heap_size,
+        ch.uncompressed_index_size,
+        ch.uncompressed_toast_size,
+        ch.uncompressed_total_size,
+        ch.compressed_heap_size,
+        ch.compressed_index_size,
+        ch.compressed_toast_size,
+        ch.compressed_total_size
+    FROM
+        _timescaledb_internal.compressed_chunk_stats ch
+    WHERE
+        ch.hypertable_schema = schema_name_in
+        AND ch.hypertable_name = table_name_in;
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.compressed_chunk_remote_stats (schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE SQL
+    STABLE STRICT
+    AS
+$BODY$
+    SELECT
+        ch.*,
+        srv.node_name
+    FROM (
+        SELECT
+            s.node_name
+        FROM
+            _timescaledb_catalog.hypertable AS ht,
+            _timescaledb_catalog.hypertable_data_node AS s
+        WHERE
+            ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id) AS srv
+    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_compressed_chunk_stats (
+        srv.node_name, schema_name_in, table_name_in) ch ON TRUE
+	WHERE ch.chunk_name IS NOT NULL;
+$BODY$;
+
+CREATE FUNCTION @extschema@.chunk_compression_stats (hypertable REGCLASS)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE PLPGSQL
+    STABLE STRICT
+    AS $BODY$
+DECLARE
+    table_name name;
+    schema_name name;
+    is_distributed bool;
+BEGIN
+    SELECT
+        relname,
+        nspname,
+        replication_factor > 0
+    INTO
+	    table_name,
+        schema_name,
+        is_distributed
+    FROM
+        pg_class c
+        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+        INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname
+                AND ht.table_name = c.relname)
+    WHERE
+        c.OID = hypertable;
+
+    IF table_name IS NULL THEN
+	    RETURN;
+	END IF;
+
+    CASE WHEN is_distributed THEN
+        RETURN QUERY
+        SELECT
+            *
+        FROM
+            _timescaledb_internal.compressed_chunk_remote_stats (schema_name, table_name);
+    ELSE
+        RETURN QUERY
+        SELECT
+            *,
+            NULL::name
+        FROM
+            _timescaledb_internal.compressed_chunk_local_stats (schema_name, table_name);
+    END CASE;
+END;
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.chunks_local_size(
+    schema_name_in name,
+    table_name_in name)
+RETURNS TABLE (
+    chunk_id    integer,
+    chunk_schema NAME,
+    chunk_name  NAME,
+    table_bytes bigint,
+    index_bytes bigint,
+    toast_bytes bigint,
+    total_bytes bigint)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+   SELECT
+      ch.chunk_id,
+      ch.chunk_schema,
+      ch.chunk_name,
+      (ch.total_bytes - COALESCE( ch.index_bytes , 0 ) - COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_heap_size , 0 ))::bigint  as heap_bytes,
+      (COALESCE( ch.index_bytes, 0 ) + COALESCE( ch.compressed_index_size , 0) )::bigint as index_bytes,
+      (COALESCE( ch.toast_bytes, 0 ) + COALESCE( ch.compressed_toast_size, 0 ))::bigint as toast_bytes,
+      (ch.total_bytes + COALESCE( ch.compressed_total_size, 0 ))::bigint as total_bytes 
+   FROM
+	  _timescaledb_internal.hypertable_chunk_local_size ch
+   WHERE
+      ch.hypertable_schema = schema_name_in
+      AND ch.hypertable_name = table_name_in;
+$BODY$;
+
+---should return same information as chunks_local_size--
+CREATE FUNCTION _timescaledb_internal.chunks_remote_size(
+    schema_name_in name,
+    table_name_in name)
+RETURNS TABLE (
+    chunk_id    integer,
+    chunk_schema NAME,
+    chunk_name  NAME,
+    table_bytes bigint,
+    index_bytes bigint,
+    toast_bytes bigint,
+    total_bytes bigint,
+    node_name NAME)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+    SELECT
+        entry.chunk_id,
+        entry.chunk_schema,
+        entry.chunk_name,
+        entry.table_bytes AS table_bytes,
+        entry.index_bytes AS index_bytes,
+        entry.toast_bytes AS toast_bytes,
+        entry.total_bytes AS total_bytes,
+        srv.node_name
+    FROM (
+        SELECT
+            s.node_name
+        FROM
+            _timescaledb_catalog.hypertable AS ht,
+            _timescaledb_catalog.hypertable_data_node AS s
+        WHERE
+            ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id
+         ) AS srv
+    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_chunk_info(
+        srv.node_name, schema_name_in, table_name_in) entry ON TRUE
+	WHERE
+	    entry.chunk_name IS NOT NULL;
+$BODY$;
+
+CREATE FUNCTION @extschema@.chunks_detailed_size(
+    hypertable              REGCLASS
+)
+RETURNS TABLE (
+               chunk_schema NAME,
+               chunk_name NAME,
+               table_bytes BIGINT,
+               index_bytes BIGINT,
+               toast_bytes BIGINT,
+               total_bytes BIGINT,
+               node_name   NAME)
+LANGUAGE PLPGSQL VOLATILE STRICT AS
+$BODY$
+DECLARE
+        table_name       NAME;
+        schema_name      NAME;
+        is_distributed   BOOL;
+BEGIN
+        SELECT relname, nspname, replication_factor > 0
+        INTO table_name, schema_name, is_distributed
+        FROM pg_class c
+        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+        INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
+        WHERE c.OID = hypertable;
+
+		IF table_name IS NULL THEN
+		    RETURN;
+		END IF;
+
+        CASE WHEN is_distributed THEN
+            RETURN QUERY SELECT ch.chunk_schema, ch.chunk_name, ch.table_bytes, ch.index_bytes,
+                        ch.toast_bytes, ch.total_bytes, ch.node_name
+            FROM _timescaledb_internal.chunks_remote_size(schema_name, table_name) ch;
+        ELSE
+            RETURN QUERY SELECT chl.chunk_schema, chl.chunk_name, chl.table_bytes, chl.index_bytes,
+                        chl.toast_bytes, chl.total_bytes, NULL::NAME
+            FROM _timescaledb_internal.chunks_local_size(schema_name, table_name) chl;
+        END CASE;
+END;
+$BODY$;
+
+CREATE FUNCTION @extschema@.hypertable_compression_stats (hypertable REGCLASS)
+    RETURNS TABLE (
+        total_chunks bigint,
+        number_compressed_chunks bigint,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE SQL
+    STABLE STRICT
+    AS	
+$BODY$
+	SELECT
+        count(*)::bigint AS total_chunks,
+        (count(*) FILTER (WHERE ch.compression_status = 'Compressed'))::bigint AS number_compressed_chunks,
+        sum(ch.before_compression_table_bytes)::bigint AS before_compression_table_bytes,
+        sum(ch.before_compression_index_bytes)::bigint AS before_compression_index_bytes,
+        sum(ch.before_compression_toast_bytes)::bigint AS before_compression_toast_bytes,
+        sum(ch.before_compression_total_bytes)::bigint AS before_compression_total_bytes,
+        sum(ch.after_compression_table_bytes)::bigint AS after_compression_table_bytes,
+        sum(ch.after_compression_index_bytes)::bigint AS after_compression_index_bytes,
+        sum(ch.after_compression_toast_bytes)::bigint AS after_compression_toast_bytes,
+        sum(ch.after_compression_total_bytes)::bigint AS after_compression_total_bytes,
+        ch.node_name
+    FROM
+	    chunk_compression_stats(hypertable) ch
+    GROUP BY
+        ch.node_name;
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.hypertable_local_size(
+	schema_name_in name,
+	table_name_in name)
+RETURNS TABLE (
+	table_bytes bigint,
+	index_bytes bigint,
+	toast_bytes bigint,
+	total_bytes bigint)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+	SELECT
+		(COALESCE(sum(ch.total_bytes), 0) - COALESCE(sum(ch.index_bytes), 0) - COALESCE(sum(ch.toast_bytes), 0) + COALESCE(sum(ch.compressed_heap_size), 0))::bigint + pg_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS heap_bytes,
+		(COALESCE(sum(ch.index_bytes), 0) + COALESCE(sum(ch.compressed_index_size), 0))::bigint + pg_indexes_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS index_bytes,
+		(COALESCE(sum(ch.toast_bytes), 0) + COALESCE(sum(ch.compressed_toast_size), 0))::bigint AS toast_bytes,
+		(COALESCE(sum(ch.total_bytes), 0) + COALESCE(sum(ch.compressed_total_size), 0))::bigint + pg_total_relation_size(format('%I.%I', schema_name_in, table_name_in)::regclass)::bigint AS total_bytes
+	FROM
+		_timescaledb_internal.hypertable_chunk_local_size ch
+	WHERE
+		hypertable_schema = schema_name_in
+		AND hypertable_name = table_name_in
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.hypertable_remote_size(
+    schema_name_in name,
+    table_name_in name)
+RETURNS TABLE (
+    table_bytes bigint,
+    index_bytes bigint,
+    toast_bytes bigint,
+    total_bytes bigint,
+    node_name   NAME)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+    SELECT
+        sum(entry.table_bytes)::bigint AS table_bytes,
+        sum(entry.index_bytes)::bigint AS index_bytes,
+        sum(entry.toast_bytes)::bigint AS toast_bytes,
+        sum(entry.total_bytes)::bigint AS total_bytes,
+        srv.node_name
+    FROM (
+        SELECT
+            s.node_name
+        FROM
+            _timescaledb_catalog.hypertable AS ht,
+            _timescaledb_catalog.hypertable_data_node AS s
+        WHERE
+            ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id
+         ) AS srv
+    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_hypertable_info(
+        srv.node_name, schema_name_in, table_name_in) entry ON TRUE
+    GROUP BY srv.node_name;
+$BODY$;
+
+CREATE FUNCTION @extschema@.hypertable_detailed_size(
+    hypertable              REGCLASS)
+RETURNS TABLE (table_bytes BIGINT,
+               index_bytes BIGINT,
+               toast_bytes BIGINT,
+               total_bytes BIGINT,
+               node_name   NAME)
+LANGUAGE PLPGSQL VOLATILE STRICT AS
+$BODY$
+DECLARE
+        table_name       NAME = NULL;
+        schema_name      NAME = NULL;
+        is_distributed   BOOL = FALSE;
+BEGIN
+        SELECT relname, nspname, replication_factor > 0
+        INTO table_name, schema_name, is_distributed
+        FROM pg_class c
+        INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
+        INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
+        WHERE c.OID = hypertable;
+
+		IF table_name IS NULL THEN
+		    RETURN;
+		END IF;
+
+        CASE WHEN is_distributed THEN
+			RETURN QUERY
+			SELECT *, NULL::name
+			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name)
+			UNION
+			SELECT *
+			FROM _timescaledb_internal.hypertable_remote_size(schema_name, table_name);
+        ELSE
+			RETURN QUERY
+			SELECT *, NULL::name
+			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name);
+        END CASE;
+END;
+$BODY$;
+
+CREATE FUNCTION @extschema@.hypertable_size(
+    hypertable              REGCLASS)
+RETURNS BIGINT 
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+   -- One row per data node is returned (in case of a distributed
+   -- hypertable), so sum them up:
+   SELECT sum(total_bytes)::bigint
+   FROM @extschema@.hypertable_detailed_size(hypertable);
+$BODY$;
+
+CREATE FUNCTION _timescaledb_internal.indexes_remote_size(
+    schema_name_in             NAME,
+    table_name_in              NAME,
+    index_name_in              NAME
+)
+RETURNS BIGINT
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+    SELECT
+        sum(entry.total_bytes)::bigint AS total_bytes
+    FROM (
+        SELECT
+            s.node_name
+        FROM
+            _timescaledb_catalog.hypertable AS ht,
+            _timescaledb_catalog.hypertable_data_node AS s
+        WHERE
+            ht.schema_name = schema_name_in
+            AND ht.table_name = table_name_in
+            AND s.hypertable_id = ht.id
+         ) AS srv
+    JOIN LATERAL _timescaledb_internal.data_node_index_size(
+        srv.node_name, schema_name_in, index_name_in) entry ON TRUE;
+$BODY$;
+
+CREATE FUNCTION @extschema@.hypertable_index_size(
+    index_name              REGCLASS
+)
+RETURNS BIGINT
+LANGUAGE PLPGSQL VOLATILE STRICT AS
+$BODY$
+DECLARE
+        ht_index_name       NAME;
+        ht_schema_name      NAME;
+        ht_name      NAME;
+        is_distributed   BOOL;
+        ht_id INTEGER;
+        index_bytes BIGINT;
+BEGIN
+   SELECT c.relname, cl.relname, nsp.nspname, ht.replication_factor > 0
+   INTO ht_index_name, ht_name, ht_schema_name, is_distributed
+   FROM pg_class c, pg_index cind, pg_class cl,
+        pg_namespace nsp, _timescaledb_catalog.hypertable ht
+   WHERE c.oid = cind.indexrelid AND cind.indrelid = cl.oid
+         AND cl.relnamespace = nsp.oid AND c.oid = index_name
+		 AND ht.schema_name = nsp.nspname ANd ht.table_name = cl.relname;
+
+   IF ht_index_name IS NULL THEN
+       RETURN NULL;
+   END IF;
+
+   -- get the local size or size of access node indexes
+   SELECT il.total_bytes
+   INTO index_bytes
+   FROM _timescaledb_internal.indexes_local_size(ht_schema_name, ht_index_name) il;
+
+   IF index_bytes IS NULL THEN
+       index_bytes = 0;
+   END IF;
+
+   -- Add size from data nodes
+   IF is_distributed THEN
+       index_bytes = index_bytes + _timescaledb_internal.indexes_remote_size(ht_schema_name, ht_name, ht_index_name);
+   END IF;
+
+   RETURN index_bytes;
+END;
+$BODY$;

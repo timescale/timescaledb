@@ -35,7 +35,7 @@ jobs:
       - name: Check for diff
         run: git diff --exit-code
   misc_checks:
-    name: Check formatting, license and git hooks
+    name: Check formatting, license, update scripts and git hooks
     runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
@@ -62,3 +62,6 @@ jobs:
         sudo update-alternatives --set clang-format /usr/bin/clang-format-8
         ./scripts/clang_format_all.sh
         git diff --exit-code
+    - name: Check update scripts
+      if: always()
+      run: ./scripts/check_update_scripts.sh

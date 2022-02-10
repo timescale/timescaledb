@@ -10,24 +10,50 @@ accidentally triggering the load of a previous DB version.**
 * #3768 Allow ALTER TABLE ADD COLUMN with DEFAULT on compressed hypertable
 * #3769 Allow ALTER TABLE DROP COLUMN on compressed hypertable
 * #3943 Optimize first/last
+* #3945 Add support for ALTER SCHEMA on multi-node
+* #3949 Add support for DROP SCHEMA on multi-node
 
 **Bugfixes**
 * #3808 Properly handle `max_retries` option
-* #3918 Fix DataNodeScan plans with one-time filter
-* #3938 Fix subtract_integer_from_now on 32-bit platforms and improve error handling
-* #3939 Fix projection handling in time_bucket_gapfill
-* #3979 Fix deparsing of index predicates
+* #3863 Fix remote transaction heal logic
+* #3869 Fix ALTER SET/DROP NULL contstraint on distributed hypertable
+* #3944 Fix segfault in add_compression_policy
+* #3961 Fix crash in EXPLAIN VERBOSE on distributed hypertable
 * #4015 Eliminate float rounding instabilities in interpolate
-* #4020 Fix ALTER TABLE EventTrigger initialization
-* #4024 Fix premature cache release call
-* #4069 Fix riinfo NULL handling in ANY construct
+* #4019 Update ts_extension_oid in transitioning state
 
 **Thanks**
-* @erikhh for reporting an issue with time_bucket_gapfill
 * @fvannee for reporting a first/last memory leak
+* @mmouterde for reporting an issue with floats and interpolate
+
+## 2.5.2 (2022-02-09)
+
+This release contains bug fixes since the 2.5.1 release.
+This release is high priority for upgrade. We strongly recommend that you
+upgrade as soon as possible.
+
+**Bugfixes**
+* #3900 Improve custom scan node registration
+* #3911 Fix role type deparsing for GRANT command
+* #3918 Fix DataNodeScan plans with one-time filter
+* #3921 Fix segfault on insert into internal compressed table
+* #3938 Fix subtract_integer_from_now on 32-bit platforms and improve error handling
+* #3939 Fix projection handling in time_bucket_gapfill
+* #3948 Avoid double PGclear() in data fetchers
+* #3979 Fix deparsing of index predicates
+* #4020 Fix ALTER TABLE EventTrigger initialization
+* #4024 Fix premature cache release call
+* #4037 Fix status for dropped chunks that have catalog entries
+* #4069 Fix riinfo NULL handling in ANY construct
+* #4071 Fix extension installation privilege escalation
+* #4073 Fix buffer overflow in partition scheme
+
+**Thanks**
+* @carlocperez for reporting crash with NULL handling in ANY construct
+* @erikhh for reporting an issue with time_bucket_gapfill
 * @kancsuki for reporting drop column and partial index creation not working
 * @mmouterde for reporting an issue with floats and interpolate
-* @carlocperez for reporting crash with NULL handling in ANY construct
+* Pedro Gallegos for reporting a possible privilege escalation during extension installation
 
 ## 2.5.1 (2021-12-02)
 

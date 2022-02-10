@@ -18,7 +18,7 @@ CREATE TYPE _timescaledb_internal.compressed_data (
 --
 -- Remote transaction ID
 --
-CREATE TYPE rxid (
+CREATE TYPE @extschema@.rxid (
   internallength = 16,
   input = _timescaledb_internal.rxid_in,
   output = _timescaledb_internal.rxid_out

@@ -1,9 +1,9 @@
-DROP FUNCTION IF EXISTS recompress_chunk;
-DROP FUNCTION IF EXISTS delete_data_node;
-DROP FUNCTION IF EXISTS get_telemetry_report;
+DROP FUNCTION IF EXISTS @extschema@.recompress_chunk;
+DROP FUNCTION IF EXISTS @extschema@.delete_data_node;
+DROP FUNCTION IF EXISTS @extschema@.get_telemetry_report;
 
 -- Also see the comments for ContinuousAggsBucketFunction structure.
-CREATE TABLE IF NOT EXISTS _timescaledb_catalog.continuous_aggs_bucket_function(
+CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function(
   mat_hypertable_id integer PRIMARY KEY REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
   -- The schema of the function. Equals TRUE for "timescaledb_experimental", FALSE otherwise.
   experimental bool NOT NULL,
@@ -27,3 +27,16 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 -- the update scripts, so we don't have to do it here.
 
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+
+CREATE FUNCTION @extschema@.delete_data_node(
+    node_name              NAME,
+    if_exists              BOOLEAN = FALSE,
+    force                  BOOLEAN = FALSE,
+    repartition            BOOLEAN = TRUE,
+	drop_database          BOOLEAN = FALSE
+) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION @extschema@.get_telemetry_report() RETURNS jsonb
+    AS '@MODULE_PATHNAME@', 'ts_telemetry_get_report_jsonb'
+LANGUAGE C STABLE PARALLEL SAFE;
+
