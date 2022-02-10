@@ -14,9 +14,17 @@ ts_scan_iterator_set_index(ScanIterator *iterator, CatalogTable table, int index
 }
 
 void
+ts_scan_iterator_end(ScanIterator *iterator)
+{
+	ts_scanner_end_scan(&iterator->ctx);
+}
+
+void
 ts_scan_iterator_close(ScanIterator *iterator)
 {
-	ts_scanner_end_and_close_scan(&iterator->ctx);
+	/* Ending a scan is a no-op if already ended */
+	ts_scanner_end_scan(&iterator->ctx);
+	ts_scanner_close(&iterator->ctx);
 }
 
 TSDLLEXPORT void

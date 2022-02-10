@@ -1,5 +1,11 @@
-set(SOURCES adt_tests.c symbol_conflict.c test_time_to_internal.c
-            test_with_clause_parser.c test_time_utils.c test_utils.c)
+set(SOURCES
+    adt_tests.c
+    symbol_conflict.c
+    test_time_to_internal.c
+    test_with_clause_parser.c
+    test_time_utils.c
+    test_utils.c
+    test_scanner.c)
 
 include(${PROJECT_SOURCE_DIR}/src/build-defs.cmake)
 
