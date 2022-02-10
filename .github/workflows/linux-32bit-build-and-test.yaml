@@ -29,7 +29,7 @@ jobs:
             ignores: append-13 debug_notice transparent_decompression-13 transparent_decompress_chunk-13 pg_dump
             pg_major: 13
           - pg: "14.1"
-            ignores: append-14 debug_notice transparent_decompression-14 transparent_decompress_chunk-14 pg_dump
+            ignores: append-14 debug_notice transparent_decompression-14 transparent_decompress_chunk-14 pg_dump memoize
             pg_major: 14
 
     steps:
