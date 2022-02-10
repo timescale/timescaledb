@@ -64,6 +64,7 @@ CREATE OR REPLACE FUNCTION test_error_injection(TEXT)
 RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_test_error_injection'
 LANGUAGE C VOLATILE STRICT;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT test_error_injection('test_error');
  test_error_injection 
 ----------------------
@@ -89,6 +90,32 @@ SELECT debug_point_release('test_error');
 SELECT test_error_injection('test_error');
  test_error_injection 
 ----------------------
+ 
+(1 row)
+
+-- Test Scanner
+RESET ROLE;
+CREATE OR REPLACE FUNCTION test.scanner() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_test_scanner' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Create two chunks to scan in the test
+CREATE TABLE hyper (time timestamptz, temp float);
+SELECT create_hypertable('hyper', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable  
+--------------------
+ (1,public,hyper,t)
+(1 row)
+
+INSERT INTO hyper VALUES ('2021-01-01', 1.0), ('2022-01-01', 2.0);
+SELECT test.scanner();
+NOTICE:  1. Scan: "_timescaledb_internal._hyper_1_1_chunk"
+NOTICE:  1. Scan: "_timescaledb_internal._hyper_1_2_chunk"
+NOTICE:  2. Scan with filter: "_timescaledb_internal._hyper_1_1_chunk"
+NOTICE:  3. ReScan: "_timescaledb_internal._hyper_1_2_chunk"
+NOTICE:  4. IndexScan: "_timescaledb_internal._hyper_1_2_chunk"
+ scanner 
+---------
  
 (1 row)
 
