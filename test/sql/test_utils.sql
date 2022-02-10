@@ -55,6 +55,7 @@ CREATE OR REPLACE FUNCTION test_error_injection(TEXT)
 RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_test_error_injection'
 LANGUAGE C VOLATILE STRICT;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT test_error_injection('test_error');
 
@@ -65,3 +66,15 @@ SELECT test_error_injection('test_error');
 
 SELECT debug_point_release('test_error');
 SELECT test_error_injection('test_error');
+
+-- Test Scanner
+RESET ROLE;
+CREATE OR REPLACE FUNCTION test.scanner() RETURNS VOID
+    AS :MODULE_PATHNAME, 'ts_test_scanner' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+-- Create two chunks to scan in the test
+CREATE TABLE hyper (time timestamptz, temp float);
+SELECT create_hypertable('hyper', 'time');
+INSERT INTO hyper VALUES ('2021-01-01', 1.0), ('2022-01-01', 2.0);
+SELECT test.scanner();
