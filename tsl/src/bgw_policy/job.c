@@ -260,7 +260,11 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 	boundary = policy_data.boundary;
 	if (IS_INTEGER_TYPE(policy_data.boundary_type))
 	{
-		elog(LOG, "%s: %s dropping data older than %ld", message, relname, DatumGetInt64(boundary));
+		elog(LOG,
+			 "%s: %s dropping data older than %s",
+			 message,
+			 relname,
+			 DatumGetCString(DirectFunctionCall1(int8out, boundary)));
 	}
 	switch (policy_data.boundary_type)
 	{
