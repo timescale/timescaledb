@@ -196,7 +196,7 @@ WHERE job_type = 'drop_chunks'
 -- migrate cagg jobs
 --- timescale functions cannot be invoked in latest-dev.sql
 --- this is a mapping for get_time_type
-CREATE FUNCTION pg_temp.ts_tmp_get_time_type(htid integer)
+CREATE FUNCTION _timescaledb_internal.ts_tmp_get_time_type(htid integer)
 RETURNS OID LANGUAGE SQL AS
 $BODY$
   SELECT dim.column_type
@@ -205,7 +205,7 @@ $BODY$
         and dim.interval_length is not null;
 $BODY$;
 --- this is a mapping for _timescaledb_internal.to_interval
-CREATE FUNCTION pg_temp.ts_tmp_get_interval( intval bigint)
+CREATE FUNCTION _timescaledb_internal.ts_tmp_get_interval( intval bigint)
 RETURNS INTERVAL LANGUAGE SQL AS
 $BODY$
    SELECT format('%sd %ss', intval/86400000000, (intval%86400000000)/1E6)::interval; 
@@ -219,14 +219,14 @@ SET
   proc_name = 'policy_refresh_continuous_aggregate',
   job_type = 'custom',
   config = 
-    CASE WHEN pg_temp.ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
+    CASE WHEN _timescaledb_internal.ts_tmp_get_time_type( cagg.raw_hypertable_id ) IN  ('TIMESTAMP'::regtype, 'DATE'::regtype, 'TIMESTAMPTZ'::regtype) 
     THEN
     jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
         CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
             THEN NULL 
-            ELSE pg_temp.ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
+            ELSE _timescaledb_internal.ts_tmp_get_interval(cagg.ignore_invalidation_older_than)::TEXT 
         END 
-    , 'end_offset', pg_temp.ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
+    , 'end_offset', _timescaledb_internal.ts_tmp_get_interval(cagg.refresh_lag)::TEXT)
     ELSE
     jsonb_build_object('mat_hypertable_id', cagg.mat_hypertable_id, 'start_offset', 
         CASE WHEN cagg.ignore_invalidation_older_than IS NULL OR cagg.ignore_invalidation_older_than = 9223372036854775807 
@@ -247,8 +247,8 @@ WHERE job_type = 'continuous_aggregate'
   AND job.id = cagg.job_id ;
 
 --drop tmp functions created for cont agg job migration
-DROP FUNCTION pg_temp.ts_tmp_get_time_type;
-DROP FUNCTION pg_temp.ts_tmp_get_interval;
+DROP FUNCTION _timescaledb_internal.ts_tmp_get_time_type;
+DROP FUNCTION _timescaledb_internal.ts_tmp_get_interval;
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_reorder;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_config.bgw_policy_compress_chunks;
@@ -272,14 +272,14 @@ ALTER TABLE _timescaledb_internal.bgw_job_stat DROP CONSTRAINT IF EXISTS bgw_job
 ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT IF EXISTS bgw_policy_chunk_stats_job_id_fkey;
 
 -- remember sequence values so they can be restored in new sequence
-CREATE TABLE pg_temp.tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
+CREATE TABLE _timescaledb_internal.tmp_bgw_job_seq_value AS SELECT last_value, is_called FROM _timescaledb_config.bgw_job_id_seq;
 
 DROP TABLE _timescaledb_config.bgw_job;
 
 CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq MINVALUE 1000;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
-SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM pg_temp.tmp_bgw_job_seq_value;
-DROP TABLE pg_temp.tmp_bgw_job_seq_value;
+SELECT setval('_timescaledb_config.bgw_job_id_seq', last_value, is_called) FROM _timescaledb_internal.tmp_bgw_job_seq_value;
+DROP TABLE _timescaledb_internal.tmp_bgw_job_seq_value;
 
 CREATE TABLE _timescaledb_config.bgw_job (
     id                  INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
