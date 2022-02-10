@@ -18,7 +18,6 @@ typedef struct ScanIterator
 {
 	ScannerCtx ctx;
 	TupleInfo *tinfo;
-	InternalScannerCtx ictx;
 	MemoryContext scankey_mcxt;
 	ScanKeyData scankey[EMBEDDED_SCAN_KEY_SIZE];
 } ScanIterator;
@@ -27,6 +26,10 @@ typedef struct ScanIterator
 	(ScanIterator)                                                                                   \
 	{                                                                                                \
 		.ctx = {                                                                                   \
+			.internal = {													\
+				.ended = true,											\
+				.closed = true,											\
+			},															\
 			.table = catalog_get_table_id(ts_catalog_get(), catalog_table_id),                     \
 			.nkeys = 0,                                                                            \
 			.scandirection = ForwardScanDirection,                                                 \
@@ -34,10 +37,6 @@ typedef struct ScanIterator
 			.result_mctx = mctx,                                                                   \
 		},																\
 		.scankey_mcxt = CurrentMemoryContext, \
-		.ictx = { \
-			.ended = true, \
-			.closed = true, \
-		}, \
 	}
 
 static inline TupleInfo *
@@ -80,14 +79,14 @@ static inline void
 ts_scan_iterator_start_scan(ScanIterator *iterator)
 {
 	MemoryContext oldmcxt = MemoryContextSwitchTo(iterator->scankey_mcxt);
-	ts_scanner_start_scan(&(iterator)->ctx, &(iterator)->ictx);
+	ts_scanner_start_scan(&(iterator)->ctx);
 	MemoryContextSwitchTo(oldmcxt);
 }
 
 static inline TupleInfo *
 ts_scan_iterator_next(ScanIterator *iterator)
 {
-	iterator->tinfo = ts_scanner_next(&(iterator)->ctx, &(iterator)->ictx);
+	iterator->tinfo = ts_scanner_next(&(iterator)->ctx);
 	return iterator->tinfo;
 }
 

@@ -63,8 +63,30 @@ typedef ScanTupleResult (*tuple_found_func)(TupleInfo *ti, void *data);
 typedef ScanFilterResult (*tuple_filter_func)(const TupleInfo *ti, void *data);
 typedef void (*postscan_func)(int num_tuples, void *data);
 
+typedef union ScanDesc
+{
+	IndexScanDesc index_scan;
+	TableScanDesc table_scan;
+} ScanDesc;
+
+/*
+ * InternalScannerCtx is used for internal state during scanning and shouldn't
+ * be initialized or touched by the user.
+ */
+typedef struct InternalScannerCtx
+{
+	Relation tablerel, indexrel;
+	TupleInfo tinfo;
+	ScanDesc scan;
+	bool registered_snapshot;
+	bool closed;
+	bool ended;
+} InternalScannerCtx;
+
 typedef struct ScannerCtx
 {
+	InternalScannerCtx internal;
+	/* Fields below this line can be initialized by the user */
 	Oid table;
 	Oid index;
 	ScanKey scankey;
@@ -113,42 +135,11 @@ typedef struct ScannerCtx
 extern TSDLLEXPORT int ts_scanner_scan(ScannerCtx *ctx);
 extern TSDLLEXPORT bool ts_scanner_scan_one(ScannerCtx *ctx, bool fail_if_not_found,
 											const char *item_type);
-
-/*
- * Internal types and functions below.
- *
- * The below functions and types are really only exposed for the scan_iterator.
- * The type definitions are needed for struct embedding and the functions are needed
- * for iteration.
- */
-typedef union ScanDesc
-{
-	IndexScanDesc index_scan;
-	TableScanDesc table_scan;
-} ScanDesc;
-/*
- * InternalScannerCtx is the context passed to Scanner functions.
- * It holds a pointer to the user-given ScannerCtx as well as
- * internal state used during scanning. Should not be used outside scanner.c
- * but is embedded in ScanIterator.
- */
-typedef struct InternalScannerCtx
-{
-	Relation tablerel, indexrel;
-	TupleInfo tinfo;
-	ScanDesc scan;
-	ScannerCtx *sctx;
-	bool registered_snapshot;
-	bool closed;
-	bool ended;
-} InternalScannerCtx;
-
-extern TSDLLEXPORT void ts_scanner_start_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
-extern TSDLLEXPORT void ts_scanner_end_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
-extern TSDLLEXPORT void ts_scanner_end_and_close_scan(ScannerCtx *ctx, InternalScannerCtx *ictx);
-extern TSDLLEXPORT void ts_scanner_rescan(ScannerCtx *ctx, InternalScannerCtx *ictx,
-										  const ScanKey scankey);
-extern TSDLLEXPORT TupleInfo *ts_scanner_next(ScannerCtx *ctx, InternalScannerCtx *ictx);
+extern TSDLLEXPORT void ts_scanner_start_scan(ScannerCtx *ctx);
+extern TSDLLEXPORT void ts_scanner_end_scan(ScannerCtx *ctx);
+extern TSDLLEXPORT void ts_scanner_end_and_close_scan(ScannerCtx *ctx);
+extern TSDLLEXPORT void ts_scanner_rescan(ScannerCtx *ctx, const ScanKey scankey);
+extern TSDLLEXPORT TupleInfo *ts_scanner_next(ScannerCtx *ctx);
 extern TSDLLEXPORT ItemPointer ts_scanner_get_tuple_tid(TupleInfo *ti);
 extern TSDLLEXPORT HeapTuple ts_scanner_fetch_heap_tuple(const TupleInfo *ti, bool materialize,
 														 bool *should_free);
