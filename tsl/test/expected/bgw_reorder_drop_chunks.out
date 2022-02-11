@@ -451,7 +451,7 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+-------------------------+-------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler            | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler            | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Retention Policy [1001] | applying retention policy to hypertable: "test_drop_chunks_table" dropping data ...
+      0 |         0 | Retention Policy [1001] | applying retention policy to hypertable "test_drop_chunks_table": dropping data ...
 (3 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
@@ -490,7 +490,7 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+-------------------------+-------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler            | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler            | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Retention Policy [1001] | applying retention policy to hypertable: "test_drop_chunks_table" dropping data ...
+      0 |         0 | Retention Policy [1001] | applying retention policy to hypertable "test_drop_chunks_table": dropping data ...
       0 |     25000 | DB Scheduler            | [TESTING] Wait until 50000, started at 25000
 (4 rows)
 
@@ -540,12 +540,12 @@ SELECT * FROM sorted_bgw_log;
 --------+-----------+-------------------------+-------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler            | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler            | [TESTING] Wait until 25000, started at 0
-      0 |         0 | Retention Policy [1001] | applying retention policy to hypertable: "test_drop_chunks_table" dropping data ...
+      0 |         0 | Retention Policy [1001] | applying retention policy to hypertable "test_drop_chunks_table": dropping data ...
       0 |     25000 | DB Scheduler            | [TESTING] Wait until 50000, started at 25000
       0 |     50000 | DB Scheduler            | [TESTING] Wait until 1000000, started at 50000
       1 |   1000000 | DB Scheduler            | [TESTING] Registered new background worker
       2 |   1000000 | DB Scheduler            | [TESTING] Wait until 10050000, started at 1000000
-      0 |   1000000 | Retention Policy [1001] | applying retention policy to hypertable: "test_drop_chunks_table" dropping data ...
+      0 |   1000000 | Retention Policy [1001] | applying retention policy to hypertable "test_drop_chunks_table": dropping data ...
 (8 rows)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
