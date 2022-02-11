@@ -41,6 +41,7 @@ ORDER BY m1.time;
                Heap Fetches: 25190
    ->  Memoize (actual rows=1 loops=68370)
          Cache Key: m1."time"
+         Cache Mode: binary
          Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
          ->  Limit (actual rows=1 loops=13674)
                ->  Custom Scan (ChunkAppend) on metrics m2 (actual rows=1 loops=13674)
@@ -54,7 +55,7 @@ ORDER BY m1.time;
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (actual rows=1 loops=5038)
                            Index Cond: ("time" = m1."time")
                            Heap Fetches: 5038
-(24 rows)
+(25 rows)
 
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
@@ -103,6 +104,7 @@ ORDER BY m1.time;
                      Heap Fetches: 5038
    ->  Memoize (actual rows=1 loops=68370)
          Cache Key: m1."time"
+         Cache Mode: binary
          Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
          ->  Limit (actual rows=1 loops=13674)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=1 loops=13674)
@@ -134,7 +136,7 @@ ORDER BY m1.time;
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
                            Heap Fetches: 0
-(60 rows)
+(61 rows)
 
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
@@ -167,6 +169,7 @@ ORDER BY m1.time;
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
          ->  Memoize (actual rows=1 loops=68370)
                Cache Key: m1_1."time"
+               Cache Mode: binary
                Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
                ->  Limit (actual rows=1 loops=13674)
                      ->  Custom Scan (ChunkAppend) on metrics_compressed m2 (actual rows=1 loops=13674)
@@ -189,7 +192,7 @@ ORDER BY m1.time;
                                  ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=5038)
                                        Filter: ((_ts_meta_min_1 <= m1_1."time") AND (_ts_meta_max_1 >= m1_1."time"))
                                        Rows Removed by Filter: 2
-(35 rows)
+(36 rows)
 
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
@@ -234,6 +237,7 @@ ORDER BY m1.time;
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
          ->  Memoize (actual rows=1 loops=68370)
                Cache Key: m1_1."time"
+               Cache Mode: binary
                Hits: 54696  Misses: 13674  Evictions: 0  Overflows: 0 
                ->  Limit (actual rows=1 loops=13674)
                      ->  Custom Scan (ChunkAppend) on metrics_space_compressed m2 (actual rows=1 loops=13674)
@@ -280,7 +284,7 @@ ORDER BY m1.time;
                                  Filter: (m1_1."time" = "time")
                                  ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                        Filter: ((_ts_meta_min_1 <= m1_1."time") AND (_ts_meta_max_1 >= m1_1."time"))
-(71 rows)
+(72 rows)
 
 -- get results for all the queries
 -- run queries with and without memoize
