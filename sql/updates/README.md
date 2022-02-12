@@ -1,3 +1,32 @@
+## General principles for statements in update/downgrade scripts
+
+1. The `search_path` for these scripts will be locked down to
+  `pg_catalog`. Locking down `search_path` happens in `pre-update.sql`.
+  Therefore all object references need to be fully qualified unless
+  they reference objects from `pg_catalog`. Use `@extschema@` to refer
+  to the target schema of the installation (resolves to `public` by
+  default).
+2. Creating objects must not use IF NOT EXISTS as this will
+  introduce privilege escalation vulnerabilities.
+3. All functions should have explicit `search_path`. Setting explicit
+  `search_path` will prevent SQL function inlining for functions and
+  transaction control for procedures so for some functions/procedures
+  it is acceptable to not have explicit `search_path`. Special care
+  needs to be taken with those functions/procedures by either setting
+  `search_path` in function body or having only fully qualified object
+  references including operators.
+4. When generating the install scripts `CREATE OR REPLACE` will be
+  changed to `CREATE` to prevent users from precreating extension
+  objects. Since we need `CREATE OR REPLACE` for update scripts and
+  we don't want to maintain two versions of the sql files containing
+  the function definitions we use `CREATE OR REPLACE` in those.
+5. Any object added in a new version needs to have an equivalent
+  `CREATE` statement in the update script without `OR REPLACE` to
+  prevent precreation of the object.
+6. The creation of new metadata tables need to be part of modfiles,
+   similar to `ALTER`s of such tables. Otherwise, later modfiles
+   cannot rely on those tables being present.
+
 ## Extension updates
 
 This directory contains "modfiles" (SQL scripts) with modifications
@@ -20,25 +49,6 @@ by using multiple modfiles in order. There are two types of modfiles:
   update script for `0.4.0` to the current version. These files
   typically contain fixes for bugs that are specific to the origin
   version, but are no longer present in the transition modfiles.
-
-To ensure that this update process works, there are a few principles
-to consider.
-
-1. Modfiles should, in most cases, only contain `ALTER` or `DROP`
-   commands that change or remove objects. In some cases,
-   modifications of metadata are also necessary.
-2. `DROP FUNCTION` needs to be idempotent. In most cases that means
-   commands should have an `IF EXISTS` clause. The reason is that
-   some modfiles might try to, e.g., `DROP` functions that aren't
-   present because they only exist in an intermediate version of the
-   database, which is skipped over.
-3. Modfiles cannot rely on objects or functions that are present in a
-   previous version of the extension. This is because a particular
-   modfile should work when upgrading from any previous version of the
-   extension, where those functions or objects aren't present yet.
-4. The creation of new metadata tables need to be part of modfiles,
-   similar to `ALTER`s of such tables. Otherwise, later modfiles
-   cannot rely on those tables being present.
 
 Notes on post_update.sql
    We use a special config var (timescaledb.update_script_stage )
