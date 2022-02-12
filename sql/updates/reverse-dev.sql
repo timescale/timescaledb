@@ -1,6 +1,4 @@
 
-SET LOCAL search_path TO pg_catalog;
-
 DROP PROCEDURE IF EXISTS @extschema@.recompress_chunk;
 DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_status;
 DROP FUNCTION IF EXISTS @extschema@.delete_data_node;
@@ -118,6 +116,4 @@ END $$;
 
 -- revert changes to continuous aggregates view definition
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
-
-SET LOCAL search_path TO @extschema@;
 
