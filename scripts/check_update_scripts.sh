@@ -3,7 +3,7 @@
 SCRIPT_DIR=$(dirname ${0})
 SRC_DIR=$(dirname ${SCRIPT_DIR})
 
-if grep -ir "IF NOT EXISTS" ${SRC_DIR}/sql; then
+if grep -i "IF NOT EXISTS" ${SRC_DIR}/sql/*.sql ${SRC_DIR}/sql/*/*.sql; then
   cat <<EOF
 
 Update scripts must unconditionally add new objects and fail when the object
