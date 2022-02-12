@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: ["12.9", "13.5", "14.1"]
+        pg: ["12.10", "13.6", "14.2"]
         os: [ubuntu-20.04]
     env:
       PG_SRC_DIR: pgbuild
