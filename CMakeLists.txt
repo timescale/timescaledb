@@ -568,7 +568,8 @@ execute_process(
   COMMAND ${PG_CONFIG} --configure
   OUTPUT_VARIABLE PG_CONFIGURE_FLAGS
   OUTPUT_STRIP_TRAILING_WHITESPACE)
-string(REGEX MATCH "--with-openssl" PG_USE_OPENSSL "${PG_CONFIGURE_FLAGS}")
+string(REGEX MATCH "--with-(ssl=)?openssl" PG_USE_OPENSSL
+             "${PG_CONFIGURE_FLAGS}")
 
 if(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
   message(

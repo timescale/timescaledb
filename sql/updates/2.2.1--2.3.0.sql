@@ -1,8 +1,8 @@
 -- Recreate _timescaledb_catalog.chunk table --
-CREATE TABLE pg_temp.chunk_tmp
+CREATE TABLE _timescaledb_internal.chunk_tmp
 AS SELECT * from _timescaledb_catalog.chunk;
 
-CREATE TABLE pg_temp.tmp_chunk_seq_value AS
+CREATE TABLE _timescaledb_internal.tmp_chunk_seq_value AS
 SELECT last_value, is_called FROM _timescaledb_catalog.chunk_id_seq;
 
 --drop foreign keys on chunk table
@@ -53,14 +53,14 @@ SELECT id, hypertable_id, schema_name, table_name,
       ELSE 1
     END
   )
-FROM pg_temp.chunk_tmp;
+FROM _timescaledb_internal.chunk_tmp;
 
 --add indexes to the chunk table
 CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
 CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
 
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
-SELECT setval('_timescaledb_catalog.chunk_id_seq', last_value, is_called) FROM pg_temp.tmp_chunk_seq_value;
+SELECT setval('_timescaledb_catalog.chunk_id_seq', last_value, is_called) FROM _timescaledb_internal.tmp_chunk_seq_value;
 
 -- add self referential foreign key
 ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_compressed_chunk_id_fkey FOREIGN KEY ( compressed_chunk_id )
@@ -87,8 +87,8 @@ compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id
 REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE; 
 
 --cleanup
-DROP TABLE pg_temp.chunk_tmp;
-DROP TABLE pg_temp.tmp_chunk_seq_value;
+DROP TABLE _timescaledb_internal.chunk_tmp;
+DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
 
 GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;

@@ -22,11 +22,11 @@ import sys
 event_type = sys.argv[1]
 
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.9"
+PG12_LATEST = "12.10"
 PG13_EARLIEST = "13.2"
-PG13_LATEST = "13.5"
+PG13_LATEST = "13.6"
 PG14_EARLIEST = "14.0"
-PG14_LATEST = "14.1"
+PG14_LATEST = "14.2"
 
 m = {"include": [],}
 
@@ -136,7 +136,7 @@ if event_type != "pull_request":
   m["include"].append(build_debug_config(pg13_debug_earliest))
 
   # add debug test for first supported PG14 version
-  m["include"].append(build_debug_config({"pg": PG14_EARLIEST}))
+  m["include"].append(build_debug_config({"pg": PG14_EARLIEST, "installcheck_args": "IGNORES='memoize'"}))
 
   # add debug test for MacOS
   m["include"].append(build_debug_config(macos_config({})))

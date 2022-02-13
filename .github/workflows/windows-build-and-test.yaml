@@ -17,11 +17,11 @@ jobs:
         build_type: [ Debug, Release ]
         include:
           - pg: 12
-            pkg_version: 12.9.1
+            pkg_version: 12.10.1
           - pg: 13
-            pkg_version: 13.5.1
+            pkg_version: 13.6.1
           - pg: 14
-            pkg_version: 14.1.1
+            pkg_version: 14.2.1
             build_args: -DUSE_OPENSSL=OFF
     env:
       # PostgreSQL configuration
