@@ -280,7 +280,7 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 
 	verbose_log = policy_retention_get_verbose_log(config);
 	elevel = (verbose_log) ? LOG : DEBUG1;
-	log_retention_window(LOG, &policy_data, "applying retention policy to hypertable");
+	log_retention_window(elevel, &policy_data, "applying retention policy to hypertable");
 
 	chunk_invoke_drop_chunks(policy_data.object_relid,
 							 policy_data.boundary,
