@@ -86,7 +86,7 @@ strip_path(const char *filename)
 		MemoryContextSwitchTo(oldctx);                                                             \
 		if (!this_has_panicked)                                                                    \
 		{                                                                                          \
-			elog(ERROR, "failed to panic @ line %d", __LINE__);                                    \
+			elog(ERROR, "failed to panic @ %s:%d", strip_path(__FILE__), __LINE__);                \
 		}                                                                                          \
 	} while (0)
 
