@@ -4,7 +4,16 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## Unreleased
+## 2.6.0 (2022-02-16)
+This release is medium priority for upgrade. We recommend that you upgrade at the next available opportunity.
+
+This release adds major new features since the 2.5.2 release, including:
+
+* Compression in continuous aggregates
+* Experimental support for timezones in continuous aggregates
+* Experimental support for monthly buckets in continuous aggregates
+
+The release also includes several bug fixes. Telemetry reports now include new and more detailed statistics on regular tables and views, compression, distributed hypertables, and continuous aggregates, which will help us improve TimescaleDB.  
 
 **Features**
 * #3768 Allow ALTER TABLE ADD COLUMN with DEFAULT on compressed hypertable
@@ -22,6 +31,9 @@ accidentally triggering the load of a previous DB version.**
 * #4015 Eliminate float rounding instabilities in interpolate
 * #4019 Update ts_extension_oid in transitioning state
 * #4073 Fix buffer overflow in partition scheme
+
+**Improvements**
+* Query planning performance is improved for hypertables with a large number of chunks.
 
 **Thanks**
 * @fvannee for reporting a first/last memory leak

@@ -68,7 +68,7 @@ jobs:
           cp build_abi/install_lib/* `pg_config --pkglibdir`
           chown -R postgres /mnt
           set -o pipefail
-          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t regresscheck-shared | tee installcheck.log
+          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t regresscheck-shared IGNORES="memoize" | tee installcheck.log
         EOF
 
     - name: Show regression diffs
