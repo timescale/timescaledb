@@ -84,6 +84,15 @@ policy_retention_get_drop_after_interval(const Jsonb *config)
 	return interval;
 }
 
+bool
+policy_retention_get_verbose_log(const Jsonb *config)
+{
+	bool found;
+	bool verbose_log = ts_jsonb_get_bool_field(config, CONFIG_KEY_VERBOSE_LOG, &found);
+
+	return found ? verbose_log : false;
+}
+
 static Hypertable *
 validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 {

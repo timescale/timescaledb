@@ -17,5 +17,6 @@ extern Datum policy_retention_remove(PG_FUNCTION_ARGS);
 int32 policy_retention_get_hypertable_id(const Jsonb *config);
 int64 policy_retention_get_drop_after_int(const Jsonb *config);
 Interval *policy_retention_get_drop_after_interval(const Jsonb *config);
+bool policy_retention_get_verbose_log(const Jsonb *config);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_RETENTION_API_H */

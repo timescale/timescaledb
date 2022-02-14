@@ -315,5 +315,11 @@ INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '8 months', 1)
 
 SELECT add_retention_policy('test_drop_chunks_table_tsntz', INTERVAL '4 months') as drop_chunks_job_id \gset
 
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+-- Test that retention policy is being logged
+SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
+ FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_job_id;
+set client_min_messages TO LOG;
+CALL run_job(:drop_chunks_job_id);
+set client_min_messages TO NOTICE;
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100);
 SELECT * FROM sorted_bgw_log;

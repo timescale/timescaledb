@@ -610,7 +610,19 @@ INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '6 months', 2)
 INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '4 months', 3);
 INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '8 months', 1);
 SELECT add_retention_policy('test_drop_chunks_table_tsntz', INTERVAL '4 months') as drop_chunks_job_id \gset
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+-- Test that retention policy is being logged
+SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
+ FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_job_id;
+                                                              alter_job                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ (1003,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 4}",-infinity)
+(1 row)
+
+set client_min_messages TO LOG;
+CALL run_job(:drop_chunks_job_id);
+LOG:  applying retention policy to hypertable "test_drop_chunks_table_tsntz": dropping data older than 10-14-2021
+set client_min_messages TO NOTICE;
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
@@ -630,7 +642,7 @@ SELECT * FROM sorted_bgw_log;
       0 |  10050000 | DB Scheduler            | [TESTING] Registered new background worker
       1 |  10050000 | DB Scheduler            | [TESTING] Registered new background worker
       2 |  10050000 | DB Scheduler            | [TESTING] Registered new background worker
-      3 |  10050000 | DB Scheduler            | [TESTING] Wait until 10075000, started at 10050000
+      3 |  10050000 | DB Scheduler            | [TESTING] Wait until 10150000, started at 10050000
       0 |  10050000 | Retention Policy [1001] | applying retention policy to hypertable "test_drop_chunks_table": dropping data ...
       0 |  10050000 | Retention Policy [1002] | applying retention policy to hypertable "test_drop_chunks_table_date": dropping ...
       0 |  10050000 | Retention Policy [1003] | applying retention policy to hypertable "test_drop_chunks_table_tsntz": dropping...

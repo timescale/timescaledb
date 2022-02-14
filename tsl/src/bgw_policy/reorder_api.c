@@ -99,7 +99,7 @@ check_valid_index(Hypertable *ht, Name index_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid reorder index"),
-				 errhint("The reorder index must by an index on hypertable \"%s\".",
+				 errhint("The reorder index must be an index on hypertable \"%s\".",
 						 NameStr(ht->fd.table_name))));
 
 	ReleaseSysCache(idxtuple);
