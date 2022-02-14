@@ -458,3 +458,40 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace2
 (4 rows)
 
+--TEST with compression bug 4000
+--compress chunk and then  move chunk and index to different tablespaces
+ALTER TABLE cluster_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'location');
+SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk') as ch;
+                   ch                   
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
+SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', verbose=>TRUE);
+ move_chunk 
+------------
+ 
+(1 row)
+
+SELECT * FROM test.show_subtables('cluster_test');
+                 Child                  | Tablespace  
+----------------------------------------+-------------
+ _timescaledb_internal._hyper_1_1_chunk | 
+ _timescaledb_internal._hyper_1_2_chunk | tablespace2
+(2 rows)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
+                 Table                  |                              Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace  
+----------------------------------------+------------------------------------------------------------------+------------+------+--------+---------+-----------+-------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | tablespace1
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace1
+(4 rows)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal.compress_hyper%_chunk');
+                     Table                      |                                         Index                                         |             Columns              | Expr | Unique | Primary | Exclusion | Tablespace  
+------------------------------------------------+---------------------------------------------------------------------------------------+----------------------------------+------+--------+---------+-----------+-------------
+ _timescaledb_internal.compress_hyper_2_3_chunk | _timescaledb_internal.compress_hyper_2_3_chunk__compressed_hypertable_2_location__ts_ | {location,_ts_meta_sequence_num} |      | f      | f       | f         | tablespace1
+(1 row)
+

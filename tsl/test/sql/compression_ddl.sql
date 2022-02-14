@@ -139,7 +139,6 @@ SELECT compress_chunk(:'UNCOMPRESSED_CHUNK_NAME');
 SELECT count(*)
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
-
 --
 -- DROP CHUNKS
 --
@@ -404,7 +403,6 @@ AS sub;
 
 DROP TABLE test1 CASCADE;
 DROP TABLESPACE tablespace1;
-DROP TABLESPACE tablespace2;
 
 -- Triggers are NOT fired for compress/decompress
 CREATE TABLE test1 ("Time" timestamptz, i integer);
@@ -462,6 +460,33 @@ SELECT decompress_chunk(show_chunks, if_compressed => TRUE) AS decompressed_chun
 
 ALTER TABLE i2844 SET (timescaledb.compress = FALSE);
 
--- compression alter schema tests
+-- TEST compression alter schema tests
 \ir include/compression_alter.sql
 
+--TEST tablespaces for compressed chunks with attach_tablespace interface --
+CREATE TABLE test2 (timec timestamptz, i integer, t integer);
+SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '1 day');
+
+SELECT attach_tablespace('tablespace2', 'test2');
+
+INSERT INTO test2 SELECT t,  gen_rand_minstd(), 22 
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 13:00', '1 hour') t;
+
+ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = 'i', timescaledb.compress_orderby = 'timec');
+
+SELECT relname FROM pg_class
+WHERE reltablespace in 
+  ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
+
+SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
+
+-- the chunk, compressed chunk + index + toast tables are in tablespace2 now .
+-- toast table names differ across runs. So we use count to verify the results
+-- instead of printing the table/index names
+SELECT count(*) FROM (
+SELECT relname FROM pg_class
+WHERE reltablespace in 
+  ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2'))q;
+
+DROP TABLE test2 CASCADE;
+DROP TABLESPACE tablespace2;
