@@ -64,9 +64,18 @@ BEGIN
     ELSIF chunk_rec.status = 3 AND recompress_enabled IS TRUE THEN
        PERFORM @extschema@.decompress_chunk(chunk_rec.oid, if_compressed => true);
        COMMIT;
+       -- SET LOCAL is only active until end of transaction.
+       -- While we could use SET at the start of the function we do not
+       -- want to bleed out search_path to caller, so we do SET LOCAL
+       -- again after COMMIT
        PERFORM @extschema@.compress_chunk(chunk_rec.oid);
     END IF;
     COMMIT;
+    -- SET LOCAL is only active until end of transaction.
+    -- While we could use SET at the start of the function we do not
+    -- want to bleed out search_path to caller, so we do SET LOCAL
+    -- again after COMMIT
+    SET LOCAL search_path TO pg_catalog;
     IF verbose_log THEN
        RAISE LOG 'job % completed processing chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
     END IF;

@@ -69,6 +69,11 @@ BEGIN
     WHEN 3 THEN
         PERFORM @extschema@.decompress_chunk(chunk);
         COMMIT;
+        -- SET LOCAL is only active until end of transaction.
+        -- While we could use SET at the start of the function we do not
+        -- want to bleed out search_path to caller, so we do SET LOCAL
+        -- again after COMMIT
+        SET LOCAL search_path TO pg_catalog;
     END CASE;
     PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
 END
