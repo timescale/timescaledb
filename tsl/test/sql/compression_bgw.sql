@@ -205,11 +205,7 @@ SELECT add_compression_policy AS job_id
 -- job compresses only 1 chunk at a time --
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
- FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-set client_min_messages TO LOG;
 CALL run_job(:job_id);
-set client_min_messages TO NOTICE;
 
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;

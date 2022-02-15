@@ -333,17 +333,7 @@ SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
 (1 row)
 
-SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
- FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                              alter_job                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity)
-(1 row)
-
-set client_min_messages TO LOG;
 CALL run_job(:job_id);
-LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
-set client_min_messages TO NOTICE;
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
  count 
