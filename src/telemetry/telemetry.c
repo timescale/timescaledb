@@ -385,6 +385,7 @@ build_telemetry_report()
 	JsonbValue key;
 	JsonbValue *result;
 	TelemetryStats relstats;
+	VersionOSInfo osinfo;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 
@@ -400,6 +401,18 @@ build_telemetry_report()
 	ts_jsonb_add_str(parse_state,
 					 REQ_INSTALL_TIME,
 					 format_iso8601(ts_telemetry_metadata_get_install_timestamp()));
+	ts_jsonb_add_str(parse_state, REQ_INSTALL_METHOD, TIMESCALEDB_INSTALL_METHOD);
+
+	if (ts_version_get_os_info(&osinfo))
+	{
+		ts_jsonb_add_str(parse_state, REQ_OS, osinfo.sysname);
+		ts_jsonb_add_str(parse_state, REQ_OS_VERSION, osinfo.version);
+		ts_jsonb_add_str(parse_state, REQ_OS_RELEASE, osinfo.release);
+		if (osinfo.has_pretty_version)
+			ts_jsonb_add_str(parse_state, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
+	}
+	else
+		ts_jsonb_add_str(parse_state, REQ_OS, "Unknown");
 
 	ts_jsonb_add_str(parse_state, REQ_PS_VERSION, get_pgversion_string());
 	ts_jsonb_add_str(parse_state, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);

@@ -368,10 +368,14 @@ WHERE key != 'os_name_pretty';
 ------------------------------
  db_uuid
  license
+ os_name
  relations
+ os_release
+ os_version
  data_volume
  db_metadata
  build_os_name
+ install_method
  installed_time
  last_tuned_time
  build_os_version
@@ -389,7 +393,7 @@ WHERE key != 'os_name_pretty';
  num_user_defined_actions
  build_architecture_bit_size
  num_continuous_aggs_policies
-(23 rows)
+(27 rows)
 
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT t FROM get_telemetry_report() t;
