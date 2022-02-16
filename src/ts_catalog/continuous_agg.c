@@ -282,6 +282,7 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 	ts_scanner_foreach(&iterator)
 	{
 		const char *bucket_width_str;
+		const char *origin_str;
 		Datum values[Natts_continuous_aggs_bucket_function];
 		bool isnull[Natts_continuous_aggs_bucket_function];
 
@@ -314,7 +315,14 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 			DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
 
 		Assert(!isnull[Anum_continuous_aggs_bucket_function_origin - 1]);
-		bf->origin = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
+		origin_str = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
+		if (strlen(origin_str) == 0)
+			TIMESTAMP_NOBEGIN(bf->origin);
+		else
+			bf->origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
+															   CStringGetDatum(origin_str),
+															   ObjectIdGetDatum(InvalidOid),
+															   Int32GetDatum(-1)));
 
 		Assert(!isnull[Anum_continuous_aggs_bucket_function_timezone - 1]);
 		bf->timezone =
@@ -416,7 +424,8 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 static const char *
 bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
 {
-	char *bucket_width_str;
+	const char *bucket_width_str;
+	const char *origin_str = "";
 	StringInfo str;
 
 	if (NULL == bf)
@@ -424,17 +433,23 @@ bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
 
 	str = makeStringInfo();
 
-	/* We are pretty sure that user can't place ';' character in these fields */
-	Assert(strstr(bf->origin, ";") == NULL);
+	/* We are pretty sure that user can't place ';' character in this field */
 	Assert(strstr(bf->timezone, ";") == NULL);
 
 	bucket_width_str =
 		DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(bf->bucket_width)));
+
+	if (!TIMESTAMP_NOT_FINITE(bf->origin))
+	{
+		origin_str =
+			DatumGetCString(DirectFunctionCall1(timestamp_out, TimestampGetDatum(bf->origin)));
+	}
+
 	appendStringInfo(str,
 					 "%d;%s;%s;%s;",
 					 BUCKET_FUNCTION_SERIALIZE_VERSION,
 					 bucket_width_str,
-					 bf->origin,
+					 origin_str,
 					 bf->timezone);
 
 	return str->data;
@@ -491,7 +506,15 @@ bucket_function_deserialize(const char *str)
 	Assert(strlen(strings[1]) > 0);
 	bf->bucket_width = DatumGetIntervalP(
 		DirectFunctionCall3(interval_in, CStringGetDatum(strings[1]), InvalidOid, -1));
-	bf->origin = strings[2];
+
+	if (strlen(strings[2]) == 0)
+		TIMESTAMP_NOBEGIN(bf->origin);
+	else
+		bf->origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
+														   CStringGetDatum(strings[2]),
+														   ObjectIdGetDatum(InvalidOid),
+														   Int32GetDatum(-1)));
+
 	bf->timezone = strings[3];
 	return bf;
 }
@@ -1510,15 +1533,40 @@ generic_time_bucket_ng(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 
 	if (strlen(bf->timezone) > 0)
 	{
-		return DirectFunctionCall3(ts_time_bucket_ng_timezone,
-								   IntervalPGetDatum(bf->bucket_width),
-								   timestamp,
-								   CStringGetTextDatum(bf->timezone));
+		if (TIMESTAMP_NOT_FINITE(bf->origin))
+		{
+			/* using default origin */
+			return DirectFunctionCall3(ts_time_bucket_ng_timezone,
+									   IntervalPGetDatum(bf->bucket_width),
+									   timestamp,
+									   CStringGetTextDatum(bf->timezone));
+		}
+		else
+		{
+			/* custom origin specified */
+			return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
+									   IntervalPGetDatum(bf->bucket_width),
+									   timestamp,
+									   TimestampTzGetDatum((TimestampTz) bf->origin),
+									   CStringGetTextDatum(bf->timezone));
+		}
 	}
 
-	return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
-							   IntervalPGetDatum(bf->bucket_width),
-							   timestamp);
+	if (TIMESTAMP_NOT_FINITE(bf->origin))
+	{
+		/* using default origin */
+		return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
+								   IntervalPGetDatum(bf->bucket_width),
+								   timestamp);
+	}
+	else
+	{
+		/* custom origin specified */
+		return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
+								   IntervalPGetDatum(bf->bucket_width),
+								   timestamp,
+								   TimestampGetDatum(bf->origin));
+	}
 }
 
 /*

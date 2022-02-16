@@ -39,6 +39,7 @@ typedef struct FuncInfo
 	const char *funcname;
 	FuncOrigin origin;
 	bool is_bucketing_func;
+	bool allowed_in_cagg_definition;
 	int nargs;
 	Oid arg_types[FUNC_CACHE_MAX_FUNC_ARGS];
 	group_estimate_func group_estimate;

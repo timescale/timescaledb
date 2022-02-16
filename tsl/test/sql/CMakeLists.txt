@@ -19,8 +19,11 @@ set(TEST_FILES_postgresql
     cagg_policy.sql
     cagg_refresh.sql
     cagg_watermark.sql
-    cagg_experimental.sql
     dist_views.sql
+    exp_cagg_next_gen.sql
+    exp_cagg_monthly.sql
+    exp_cagg_origin.sql
+    exp_cagg_timezone.sql
     move.sql
     partialize_finalize.sql
     reorder.sql
@@ -54,8 +57,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_tableam.sql
     cagg_usage.sql
     cagg_policy_run.sql
-    cagg_monthly.sql
-    cagg_with_timezone.sql
     data_fetcher.sql
     data_node_bootstrap.sql
     data_node.sql

@@ -1033,11 +1033,11 @@ RESET timescaledb.materializations_per_refresh_window;
 \set DATA_NODE_3 :TEST_DBNAME _3
 SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
-     node_name     |   host    | port  |     database      | node_created | database_created | extension_created 
--------------------+-----------+-------+-------------------+--------------+------------------+-------------------
- db_cagg_monthly_1 | localhost | 55432 | db_cagg_monthly_1 | t            | t                | t
- db_cagg_monthly_2 | localhost | 55432 | db_cagg_monthly_2 | t            | t                | t
- db_cagg_monthly_3 | localhost | 55432 | db_cagg_monthly_3 | t            | t                | t
+       node_name       |   host    | port  |       database        | node_created | database_created | extension_created 
+-----------------------+-----------+-------+-----------------------+--------------+------------------+-------------------
+ db_exp_cagg_monthly_1 | localhost | 55432 | db_exp_cagg_monthly_1 | t            | t                | t
+ db_exp_cagg_monthly_2 | localhost | 55432 | db_exp_cagg_monthly_2 | t            | t                | t
+ db_exp_cagg_monthly_3 | localhost | 55432 | db_exp_cagg_monthly_3 | t            | t                | t
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
