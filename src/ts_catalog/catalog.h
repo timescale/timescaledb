@@ -22,7 +22,7 @@
  * The TimescaleDB catalog contains schema metadata for hypertables, among other
  * things. The metadata is stored in regular tables. This header file contains
  * definitions for those tables and should match any table declarations in
- * sql/common/tables.sql.
+ * sql/pre_install/tables.sql.
  *
  * A source file that includes this header has access to a catalog object,
  * which contains cached information about catalog tables, such as relation

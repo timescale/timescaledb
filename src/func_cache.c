@@ -178,6 +178,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
 		.arg_types = { INTERVALOID, TIMESTAMPOID },
@@ -187,6 +188,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID },
@@ -196,6 +198,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID },
@@ -205,6 +208,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
@@ -214,6 +218,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
 		.arg_types = { INTERVALOID, DATEOID },
@@ -223,6 +228,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, DATEOID, DATEOID },
@@ -232,6 +238,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
 		.arg_types = { INT2OID, INT2OID },
@@ -241,6 +248,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INT2OID, INT2OID, INT2OID },
@@ -250,6 +258,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
 		.arg_types = { INT4OID, INT4OID },
@@ -259,6 +268,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INT4OID, INT4OID, INT4OID },
@@ -268,6 +278,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
 		.arg_types = { INT8OID, INT8OID },
@@ -277,6 +288,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INT8OID, INT8OID, INT8OID },
@@ -286,6 +298,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket_ng",
 		.nargs = 2,
 		.arg_types = { INTERVALOID, DATEOID },
@@ -295,6 +308,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket_ng",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, DATEOID, DATEOID },
@@ -304,6 +318,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket_ng",
 		.nargs = 2,
 		.arg_types = { INTERVALOID, TIMESTAMPOID },
@@ -313,6 +328,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket_ng",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID },
@@ -322,6 +338,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket_ng",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TEXTOID },
@@ -329,8 +346,19 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_sort_transform,
 	},
 	{
+		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
+		.funcname = "time_bucket_ng",
+		.nargs = 4,
+		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TEXTOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID, TIMESTAMPOID },
@@ -340,6 +368,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
@@ -349,6 +378,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INTERVALOID, DATEOID, DATEOID, DATEOID },
@@ -358,6 +388,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INT2OID, INT2OID, INT2OID, INT2OID },
@@ -367,6 +398,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INT4OID, INT4OID, INT4OID, INT4OID },
@@ -376,6 +408,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
 		.nargs = 4,
 		.arg_types = { INT8OID, INT8OID, INT8OID, INT8OID },
@@ -386,6 +419,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_POSTGRES,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "date_trunc",
 		.nargs = 2,
 		.arg_types = { TEXTOID, TIMESTAMPOID },
@@ -395,6 +429,7 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_POSTGRES,
 		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = false,
 		.funcname = "date_trunc",
 		.nargs = 2,
 		.arg_types = { TEXTOID, TIMESTAMPTZOID },
