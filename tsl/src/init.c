@@ -128,6 +128,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.partialize_agg = tsl_partialize_agg,
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
+	.finalize_partial = tsl_finalize_partial,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,

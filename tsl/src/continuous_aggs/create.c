@@ -78,7 +78,7 @@
 #include "deparse.h"
 #include "timezones.h"
 
-#define FINALFN "finalize_agg"
+#define FINALFN "finalize_partial"
 #define PARTIALFN "partialize_agg"
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define MATPARTCOL_INTERVAL_FACTOR 10
@@ -1269,8 +1269,8 @@ get_input_types_array_datum(Aggref *original_aggregate)
 	return result;
 }
 
-/* creates an aggref of the form:
- * finalize-agg(
+/* creates an FuncExpr of the form:
+ * finalize-partial(
  *                "sum(int)" TEXT,
  *                collation_schema_name NAME, collation_name NAME,
  *                input_types_array NAME[N][2],
@@ -1279,43 +1279,20 @@ get_input_types_array_datum(Aggref *original_aggregate)
  *             )
  * here sum(int) is the input aggregate "inp" in the parameter-list
  */
-static Aggref *
-get_finalize_aggref(Aggref *inp, Var *partial_state_var)
+static FuncExpr *
+get_finalize_partial_funcexpr(Aggref *inp, Var *partial_state_var)
 {
-	Aggref *aggref;
-	TargetEntry *te;
+	FuncExpr *finalize_partial;
 	char *agggregate_signature;
 	Const *aggregate_signature_const, *collation_schema_const, *collation_name_const,
 		*input_types_const, *return_type_const;
-	Oid name_array_type_oid = get_array_type(NAMEOID);
 	Var *partial_bytea_var;
-	List *tlist = NIL;
-	int tlist_attno = 1;
-	List *argtypes = NIL;
+	List *funcargs = NIL;
 	char *collation_name = NULL, *collation_schema_name = NULL;
 	Datum collation_name_datum = (Datum) 0;
 	Datum collation_schema_datum = (Datum) 0;
 	Oid finalfnoid = get_finalizefnoid();
 
-	argtypes = list_make5_oid(TEXTOID, NAMEOID, NAMEOID, name_array_type_oid, BYTEAOID);
-	argtypes = lappend_oid(argtypes, inp->aggtype);
-
-	aggref = makeNode(Aggref);
-	aggref->aggfnoid = finalfnoid;
-	aggref->aggtype = inp->aggtype;
-	aggref->aggcollid = inp->aggcollid;
-	aggref->inputcollid = inp->inputcollid;
-	aggref->aggtranstype = InvalidOid; /* will be set by planner */
-	aggref->aggargtypes = argtypes;
-	aggref->aggdirectargs = NULL; /*relevant for hypothetical set aggs*/
-	aggref->aggorder = NULL;
-	aggref->aggdistinct = NULL;
-	aggref->aggfilter = NULL;
-	aggref->aggstar = false;
-	aggref->aggvariadic = false;
-	aggref->aggkind = AGGKIND_NORMAL;
-	aggref->aggsplit = AGGSPLIT_SIMPLE;
-	aggref->location = -1;
 	/* construct the arguments */
 	agggregate_signature = format_procedure_qualified(inp->aggfnoid);
 	aggregate_signature_const = makeConst(TEXTOID,
@@ -1326,8 +1303,9 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 										  false,
 										  false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) aggregate_signature_const, tlist_attno++, NULL, false);
-	tlist = lappend(tlist, te);
+	funcargs = lappend(funcargs, aggregate_signature_const);
+
+	// elog(NOTICE, "Input Collation %d", inp->inputcollid);
 
 	if (OidIsValid(inp->inputcollid))
 	{
@@ -1336,7 +1314,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 		Form_pg_collation colltup;
 		tp = SearchSysCache1(COLLOID, ObjectIdGetDatum(inp->inputcollid));
 		if (!HeapTupleIsValid(tp))
-			elog(ERROR, "cache lookup failed for collation %u", inp->inputcollid);
+			elog(ERROR, "XX cache lookup failed for collation %u", inp->inputcollid);
 		colltup = (Form_pg_collation) GETSTRUCT(tp);
 		collation_name = pstrdup(NameStr(colltup->collname));
 		collation_name_datum = DirectFunctionCall1(namein, CStringGetDatum(collation_name));
@@ -1355,8 +1333,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 									   (collation_schema_name == NULL) ? true : false,
 									   false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) collation_schema_const, tlist_attno++, NULL, false);
-	tlist = lappend(tlist, te);
+	funcargs = lappend(funcargs, collation_schema_const);
 
 	collation_name_const = makeConst(NAMEOID,
 									 -1,
@@ -1366,8 +1343,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 									 (collation_name == NULL) ? true : false,
 									 false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) collation_name_const, tlist_attno++, NULL, false);
-	tlist = lappend(tlist, te);
+	funcargs = lappend(funcargs, collation_name_const);
 
 	input_types_const = makeConst(get_array_type(NAMEOID),
 								  -1,
@@ -1377,21 +1353,26 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 								  false,
 								  false /* passbyval */
 	);
-	te = makeTargetEntry((Expr *) input_types_const, tlist_attno++, NULL, false);
-	tlist = lappend(tlist, te);
+	funcargs = lappend(funcargs, input_types_const);
 
+	// @TODO: makeConst instead of copyObject
 	partial_bytea_var = copyObject(partial_state_var);
-	te = makeTargetEntry((Expr *) partial_bytea_var, tlist_attno++, NULL, false);
-	tlist = lappend(tlist, te);
+	funcargs = lappend(funcargs, partial_bytea_var);
 
 	return_type_const = makeNullConst(inp->aggtype, -1, inp->aggcollid);
-	te = makeTargetEntry((Expr *) return_type_const, tlist_attno++, NULL, false);
-	tlist = lappend(tlist, te);
+	funcargs = lappend(funcargs, return_type_const);
 
-	Assert(tlist_attno == 7);
-	aggref->args = tlist;
-	return aggref;
+	finalize_partial =
+		makeFuncExpr(finalfnoid,
+					 inp->aggtype,
+					 funcargs,
+					 inp->aggcollid,
+					 inp->inputcollid,
+					 COERCE_EXPLICIT_CALL);
+
+	return finalize_partial;
 }
+
 
 /* creates a partialize expr for the passed in agg:
  * partialize_agg( agg)
@@ -1521,7 +1502,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			colcollation = exprCollation((Node *) tle->expr);
 			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
 			part_te = (TargetEntry *) copyObject(input);
-			/*need to project all the partial entries so that materialization table is filled */
+			/* need to project all the partial entries so that materialization table is filled */
 			part_te->resjunk = false;
 			part_te->resno = matcolno;
 
@@ -1548,23 +1529,26 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	return var;
 }
 
-static Aggref *
+static FuncExpr *
 add_partialize_column(Aggref *agg_to_partialize, AggPartCxt *cxt)
 {
-	Aggref *newagg;
+	FuncExpr *newfn;
 	Var *var;
-	/* step 1: create partialize( aggref) column
-	 * for materialization table */
+	/*
+	 * step 1: create partialize(aggref) column
+	 * for materialization table
+	 */
 	var = mattablecolumninfo_addentry(cxt->mattblinfo,
 									  (Node *) agg_to_partialize,
 									  cxt->original_query_resno);
 	cxt->addcol = true;
-	/* step 2: create finalize_agg expr using var
-	 * for the clumn added to the materialization table
+	/*
+	 * step 2: create finalize_partial expr using var
+	 * for the column added to the materialization table
 	 */
-	/* This is a var for the column we created */
-	newagg = get_finalize_aggref(agg_to_partialize, var);
-	return newagg;
+	newfn = get_finalize_partial_funcexpr(agg_to_partialize, var);
+
+	return newfn;
 }
 
 static Node *
@@ -1572,9 +1556,11 @@ add_aggregate_partialize_mutator(Node *node, AggPartCxt *cxt)
 {
 	if (node == NULL)
 		return NULL;
-	/* modify the aggref and create a partialize(aggref) expr
+
+	/*
+	 * Modify the aggref and create a partialize(aggref) expr
 	 * for the materialization.
-	 * Add a corresponding  columndef for the mat table.
+	 * Add a corresponding columndef for the mat table.
 	 * Replace the aggref with the ts_internal_cagg_final fn.
 	 * using a Var for the corresponding column in the mat table.
 	 * All new Vars have varno = 1 (for RTE 1)
@@ -1584,8 +1570,8 @@ add_aggregate_partialize_mutator(Node *node, AggPartCxt *cxt)
 		if (cxt->ignore_aggoid == ((Aggref *) node)->aggfnoid)
 			return node; /*don't process this further */
 
-		Aggref *newagg = add_partialize_column((Aggref *) node, cxt);
-		return (Node *) newagg;
+		FuncExpr *newfn = add_partialize_column((Aggref *) node, cxt);
+		return (Node *) newfn;
 	}
 	return expression_tree_mutator(node, add_aggregate_partialize_mutator, cxt);
 }
@@ -1597,12 +1583,16 @@ typedef struct Cagg_havingcxt
 	AggPartCxt agg_cxt;
 } cagg_havingcxt;
 
-/* This function modifies the passed in havingQual by mapping exprs to
+/*
+ * This function modifies the passed in havingQual by mapping exprs to
  * columns in materialization table or finalized aggregate form.
+ *
  * Note that HAVING clause can contain only exprs from group-by or aggregates
  * and GROUP BY clauses cannot be aggregates.
+ *
  * (By the time we process havingQuals, all the group by exprs have been
  * processed and have associated columns in the materialization hypertable).
+ *
  * Example, if  the original query has
  * GROUP BY  colA + colB, colC
  *   HAVING colA + colB + sum(colD) > 10 OR count(colE) = 10
@@ -1610,7 +1600,6 @@ typedef struct Cagg_havingcxt
  * The transformed havingqual would be
  * HAVING   matCol3 + finalize_agg( sum(matCol4) > 10
  *       OR finalize_agg( count(matCol5)) = 10
- *
  *
  * Note: GROUP BY exprs always appear in the query's targetlist.
  * Some of the aggregates from the havingQual  might also already appear in the targetlist.
@@ -1624,13 +1613,16 @@ create_replace_having_qual_mutator(Node *node, cagg_havingcxt *cxt)
 {
 	if (node == NULL)
 		return NULL;
-	/* See if we already have a column in materialization hypertable for this
+
+	/*
+	 * See if we already have a column in materialization hypertable for this
 	 * expr. We do this by checking the existing targetlist
 	 * entries for the query.
 	 */
 	ListCell *lc, *lc2;
 	List *origtlist = cxt->origq_tlist;
 	List *modtlist = cxt->finalizeq_tlist;
+
 	forboth (lc, origtlist, lc2, modtlist)
 	{
 		TargetEntry *te = (TargetEntry *) lfirst(lc);
@@ -1640,17 +1632,19 @@ create_replace_having_qual_mutator(Node *node, cagg_havingcxt *cxt)
 			return (Node *) modte->expr;
 		}
 	}
-	/* didn't find a match in targetlist. If it is an aggregate, create a partialize column for
-	 * it in materialization hypertable and return corresponding finalize
+
+	/*
+	 * Didn't find a match in targetlist. If it is an aggregate, create a partialize
+	 * column for it in materialization hypertable and return corresponding finalize
 	 * expr.
 	 */
 	if (IsA(node, Aggref))
 	{
 		AggPartCxt *agg_cxt = &(cxt->agg_cxt);
 		agg_cxt->addcol = false;
-		Aggref *newagg = add_partialize_column((Aggref *) node, agg_cxt);
+		FuncExpr *newfn = add_partialize_column((Aggref *) node, agg_cxt);
 		Assert(agg_cxt->addcol == true);
-		return (Node *) newagg;
+		return (Node *) newfn;
 	}
 	return expression_tree_mutator(node, create_replace_having_qual_mutator, cxt);
 }
@@ -1659,9 +1653,14 @@ static Node *
 finalizequery_create_havingqual(FinalizeQueryInfo *inp, MatTableColumnInfo *mattblinfo)
 {
 	Query *orig_query = inp->final_userquery;
+
 	if (orig_query->havingQual == NULL)
 		return NULL;
+
 	Node *havingQual = copyObject(orig_query->havingQual);
+
+	// elog(NOTICE, "havingQual %s", nodeToString(havingQual));
+
 	Assert(inp->final_seltlist != NULL);
 	cagg_havingcxt hcxt = { .origq_tlist = orig_query->targetList,
 							.finalizeq_tlist = inp->final_seltlist,
@@ -1669,6 +1668,7 @@ finalizequery_create_havingqual(FinalizeQueryInfo *inp, MatTableColumnInfo *matt
 							.agg_cxt.original_query_resno = 0,
 							.agg_cxt.ignore_aggoid = get_finalizefnoid(),
 							.agg_cxt.addcol = false };
+
 	return create_replace_having_qual_mutator(havingQual, &hcxt);
 }
 
@@ -1698,27 +1698,38 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 	cxt.mattblinfo = mattblinfo;
 	cxt.ignore_aggoid = InvalidOid;
 
-	/* We want all the entries in the targetlist (resjunk or not)
-	 * in the materialization  table defintion so we include group-by/having clause etc.
-	 * We have to do 3 things here: 1) create a column for mat table , 2) partialize_expr to
-	 * populate it and 3) modify the target entry to be a finalize_expr that selects from the
-	 * materialization table
+	/*
+	 * We want all the entries in the targetlist (resjunk or not)
+	 * in the materialization table defintion so we include group-by/having clause etc.
+	 *
+	 * We have to do 3 things here:
+	 *  1) create a column for mat table
+	 *  2) partialize_expr to populate it
+	 *  3) modify the target entry to be a finalize_expr that selects from the
+	 *     materialization table
 	 */
 	foreach (lc, orig_query->targetList)
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		TargetEntry *modte = copyObject(tle);
+
 		cxt.addcol = false;
 		cxt.original_query_resno = resno;
+
+		// elog(NOTICE, "\n");
+		// elog(NOTICE, "BEFORE %s", nodeToString(modte));
 
 		/* if tle has aggrefs , get the corresponding
 		 * finalize_agg expression and save it in modte
 		 * also add correspong materialization table column info
 		 * for the aggrefs in tle. */
-		// @TODO: check cagg version here
 		modte = (TargetEntry *) expression_tree_mutator((Node *) modte,
 														add_aggregate_partialize_mutator,
 														&cxt);
+		// elog(NOTICE, "\n");
+		// elog(NOTICE, "AFTER %s", nodeToString(modte));
+		modte->ressortgroupref = 0;
+
 		/* We need columns for non-aggregate targets
 		 * if it is not a resjunk OR appears in the grouping clause
 		 */
@@ -1730,6 +1741,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 			/* fix the expression for the target entry */
 			modte->expr = (Expr *) var;
 		}
+
 		/* Construct the targetlist for the query on the
 		 * materialization table. The TL maps 1-1 with the original
 		 * query:
@@ -1755,6 +1767,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 	/* all grouping clause elements are in targetlist already.
 	   so let's check the having clause */
 	inp->final_havingqual = finalizequery_create_havingqual(inp, mattblinfo);
+	// elog(NOTICE, "final_havingqual %s", nodeToString(inp->final_havingqual));
 }
 
 /* Create select query with the finalize aggregates
@@ -1808,6 +1821,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	}
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
+	final_selquery->hasAggs = false;
 	final_selquery->rtable = inp->final_userquery->rtable; /*fixed up above */
 	/* fixup from list. No quals on original table should be
 	 * present here - they should be on the query that populates the mattable (partial_selquery)
@@ -1817,10 +1831,10 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	fromexpr->quals = NULL;
 	final_selquery->jointree = fromexpr;
 	final_selquery->targetList = inp->final_seltlist;
-	//final_selquery->groupClause = inp->final_userquery->groupClause;
 	final_selquery->sortClause = inp->final_userquery->sortClause;
-	/* copy the having clause too */
-	final_selquery->havingQual = inp->final_havingqual;
+
+	/* copy the having clause to the where clause */
+	final_selquery->jointree->quals = inp->final_havingqual;
 
 	return final_selquery;
 }

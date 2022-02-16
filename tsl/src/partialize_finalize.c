@@ -257,7 +257,7 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 };
 
 static FATransitionState *
-fa_transition_state_init(MemoryContext *fa_context, FAPerQueryState *qstate, AggState *fa_aggstate)
+fa_transition_state_init(MemoryContext *fa_context, FAPerQueryState *qstate)
 {
 	FATransitionState *tstate = NULL;
 	tstate = (FATransitionState *) MemoryContextAlloc(*fa_context, sizeof(*tstate));
@@ -272,12 +272,13 @@ fa_transition_state_init(MemoryContext *fa_context, FAPerQueryState *qstate, Agg
 }
 
 static FAPerQueryState *
-fa_perquery_state_init(FunctionCallInfo fcinfo)
+fa_perquery_state_init(FunctionCallInfo fcinfo, bool call_from_agg)
 {
-	char *inner_agg_input_coll_schema = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
-	char *inner_agg_input_coll_name = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
-	ArrayType *input_types = PG_ARGISNULL(4) ? NULL : PG_GETARG_ARRAYTYPE_P(4);
-	Oid inner_agg_fn_oid = aggfnoid_from_aggname(PG_GETARG_TEXT_PP(1));
+	int idx = !call_from_agg ? -1 : 0;
+	Oid inner_agg_fn_oid = aggfnoid_from_aggname(PG_GETARG_TEXT_PP(++idx));
+	char *inner_agg_input_coll_schema = PG_ARGISNULL(++idx) ? NULL : NameStr(*PG_GETARG_NAME(idx));
+	char *inner_agg_input_coll_name = PG_ARGISNULL(++idx) ? NULL : NameStr(*PG_GETARG_NAME(idx));
+	ArrayType *input_types = PG_ARGISNULL(++idx) ? NULL : PG_GETARG_ARRAYTYPE_P(idx);
 
 	Oid collation = collation_oid_from_name(inner_agg_input_coll_schema, inner_agg_input_coll_name);
 	FAPerQueryState *tstate;
@@ -285,7 +286,8 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 	Form_pg_aggregate inner_agg_form;
 	MemoryContext qcontext = fcinfo->flinfo->fn_mcxt;
 	MemoryContext oldcontext = MemoryContextSwitchTo(qcontext);
-	AggState *fa_aggstate = (AggState *) fcinfo->context;
+	AggState *fa_aggstate =
+		(fcinfo->context && IsA(fcinfo->context, AggState)) ? (AggState *) fcinfo->context : NULL;
 	bool aggfinalextra;
 
 	/* look up catalog entry and populate what we need */
@@ -348,7 +350,7 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 		if (TypeCategory(tstate->combine_meta.transtype) != TYPCATEGORY_PSEUDOTYPE)
 			column_type = tstate->combine_meta.transtype;
 		else
-			column_type = get_fn_expr_argtype(fcinfo->flinfo, 6);
+			column_type = get_fn_expr_argtype(fcinfo->flinfo, (!call_from_agg ? 5 : 6));
 
 		getTypeBinaryInputInfo(column_type,
 							   &tstate->combine_meta.recv_fn,
@@ -403,7 +405,9 @@ fa_perquery_state_init(FunctionCallInfo fcinfo)
 				FC_SET_NULL(tstate->final_meta.finalfn_fcinfo, i);
 		}
 	}
-	fcinfo->flinfo->fn_extra = (void *) tstate;
+
+	if (call_from_agg)
+		fcinfo->flinfo->fn_extra = (void *) tstate;
 
 	MemoryContextSwitchTo(oldcontext);
 
@@ -426,6 +430,7 @@ group_state_advance(FAPerGroupState *per_group_state, FACombineFnMeta *combine_m
 	per_group_state->trans_value = FunctionCallInvoke(combine_meta->combfn_fcinfo);
 	per_group_state->trans_value_isnull = combine_meta->combfn_fcinfo->isnull;
 };
+
 /*
  * The parameters for tsl_finalize_agg_sfunc (see util_aggregates.sql sql input names)
  * tstate The internal state of the aggregate
@@ -466,10 +471,10 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 		FAPerQueryState *qstate = (FAPerQueryState *) fcinfo->flinfo->fn_extra;
 		if (qstate == NULL)
 		{
-			qstate = fa_perquery_state_init(fcinfo);
+			qstate = fa_perquery_state_init(fcinfo, true);
 			Assert(fcinfo->flinfo->fn_extra != NULL);
 		}
-		tstate = fa_transition_state_init(&fa_context, qstate, (AggState *) fcinfo->context);
+		tstate = fa_transition_state_init(&fa_context, qstate);
 		/* initial trans_value = the partial state of the inner agg from first invocation */
 		tstate->per_group_state->trans_value =
 			inner_agg_deserialize(&tstate->per_query_state->combine_meta,
@@ -518,7 +523,8 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(tstate);
 }
 
-/* tsl_finalize_agg_ffunc:
+/*
+ * tsl_finalize_agg_ffunc:
  * apply the finalize function on the state we have accumulated
  */
 Datum
@@ -584,4 +590,83 @@ tsl_partialize_agg(PG_FUNCTION_ARGS)
 	getTypeBinaryOutputInfo(arg_type, &send_fn, &type_is_varlena);
 
 	PG_RETURN_BYTEA_P(OidSendFunctionCall(send_fn, arg));
+}
+
+/*
+ * Cache to store per-query and transition state during function calls
+ */
+typedef struct
+{
+	FAPerQueryState *qstate;
+	FATransitionState *tstate;
+} FinalizePartialCache;
+
+/*
+ * tsl_finalize_partial:
+ * apply the finalize function on the state we have accumulated
+ * without an aggregate context
+ */
+
+Datum
+tsl_finalize_partial(PG_FUNCTION_ARGS)
+{
+	FinalizePartialCache *cache;
+	bytea *inner_agg_serialized_state = PG_ARGISNULL(4) ? NULL : PG_GETARG_BYTEA_P(4);
+	bool inner_agg_serialized_state_isnull = PG_ARGISNULL(4) ? true : false;
+
+	cache = (FinalizePartialCache *) fcinfo->flinfo->fn_extra;
+
+	if (cache == NULL)
+	{
+		fcinfo->flinfo->fn_extra =
+			MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(FinalizePartialCache));
+
+		cache = (FinalizePartialCache *) fcinfo->flinfo->fn_extra;
+
+		MemoryContext oldctx = MemoryContextSwitchTo(fcinfo->flinfo->fn_mcxt);
+		EState *estate = CreateExecutorState();
+		ExprContext *econtext = GetPerTupleExprContext(estate);
+		AggState *aggstate = makeNode(AggState);
+		aggstate->curaggcontext = econtext;
+		fcinfo->context = (Node *) aggstate;
+
+		cache->qstate = fa_perquery_state_init(fcinfo, false);
+		cache->tstate = fa_transition_state_init(&fcinfo->flinfo->fn_mcxt, cache->qstate);
+		fcinfo->flinfo->fn_extra = cache;
+		MemoryContextSwitchTo(oldctx);
+	}
+
+	/* initial trans_value = the partial state of the inner agg from first invocation */
+	cache->tstate->per_group_state->trans_value =
+		inner_agg_deserialize(&cache->tstate->per_query_state->combine_meta,
+							  inner_agg_serialized_state,
+							  inner_agg_serialized_state_isnull,
+							  &cache->tstate->per_group_state->trans_value_isnull);
+	cache->tstate->per_group_state->trans_value_initialized =
+		!(cache->tstate->per_group_state->trans_value_isnull);
+
+	if (OidIsValid(cache->tstate->per_query_state->final_meta.finalfnoid))
+	{
+		/* don't execute if strict and the trans value is NULL or there are extra args (all extra
+		 * args are always NULL) */
+		if (!(cache->tstate->per_query_state->final_meta.finalfn.fn_strict &&
+			  cache->tstate->per_group_state->trans_value_isnull) &&
+			!(cache->tstate->per_query_state->final_meta.finalfn.fn_strict &&
+			  cache->tstate->per_query_state->final_meta.finalfn_fcinfo->nargs > 1))
+		{
+			FunctionCallInfo finalfn_fcinfo =
+				cache->tstate->per_query_state->final_meta.finalfn_fcinfo;
+			FC_ARG(finalfn_fcinfo, 0) = cache->tstate->per_group_state->trans_value;
+			FC_NULL(finalfn_fcinfo, 0) = cache->tstate->per_group_state->trans_value_isnull;
+			finalfn_fcinfo->isnull = false;
+
+			cache->tstate->per_group_state->trans_value = FunctionCallInvoke(finalfn_fcinfo);
+			cache->tstate->per_group_state->trans_value_isnull = finalfn_fcinfo->isnull;
+		}
+	}
+
+	if (cache->tstate->per_group_state->trans_value_isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(cache->tstate->per_group_state->trans_value);
 }

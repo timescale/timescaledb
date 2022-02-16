@@ -90,6 +90,7 @@ typedef struct CrossModuleFunctions
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
 	PGFunction finalize_agg_ffunc;
+	PGFunction finalize_partial;
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_invalidation_trigger;

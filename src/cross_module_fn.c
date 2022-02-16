@@ -49,6 +49,7 @@ CROSSMODULE_WRAPPER(copy_chunk_cleanup_proc);
 CROSSMODULE_WRAPPER(partialize_agg);
 CROSSMODULE_WRAPPER(finalize_agg_sfunc);
 CROSSMODULE_WRAPPER(finalize_agg_ffunc);
+CROSSMODULE_WRAPPER(finalize_partial);
 
 /* compression functions */
 CROSSMODULE_WRAPPER(compressed_data_decompress_forward);
@@ -371,6 +372,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
+	.finalize_partial = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,

@@ -1128,15 +1128,15 @@ select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test
 from conditions
 group by time_bucket(100, timec);
 NOTICE:  refreshing continuous aggregate "mat_ffunc_test"
-SELECT * FROM mat_ffunc_test;
+SELECT * FROM mat_ffunc_test ORDER BY time_bucket;
 WARNING:  type integer text
 WARNING:  type integer text
 WARNING:  type integer text
  time_bucket | aggregate_to_test_ffunc_extra 
 -------------+-------------------------------
-         200 | 
            0 | 
          100 | 
+         200 | 
 (3 rows)
 
 DROP MATERIALIZED view mat_ffunc_test;
@@ -1148,15 +1148,15 @@ select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigin
 from conditions
 group by time_bucket(100, timec);
 NOTICE:  refreshing continuous aggregate "mat_ffunc_test"
-SELECT * FROM mat_ffunc_test;
+SELECT * FROM mat_ffunc_test ORDER BY time_bucket;
 WARNING:  type integer bigint
 WARNING:  type integer bigint
 WARNING:  type integer bigint
  time_bucket | aggregate_to_test_ffunc_extra 
 -------------+-------------------------------
-         200 |                              
            0 |                              
          100 |                              
+         200 |                              
 (3 rows)
 
 --refresh mat view test when time_bucket is not projected --

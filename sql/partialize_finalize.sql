@@ -23,3 +23,9 @@ CREATE OR REPLACE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT,  i
     FINALFUNC = _timescaledb_internal.finalize_agg_ffunc,
     FINALFUNC_EXTRA
 );
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_partial(
+aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
+RETURNS anyelement
+AS '@MODULE_PATHNAME@', 'ts_finalize_partial'
+LANGUAGE C IMMUTABLE ;

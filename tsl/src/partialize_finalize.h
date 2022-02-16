@@ -18,4 +18,6 @@ extern Datum tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS);
 extern Datum tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS);
 extern Datum tsl_partialize_agg(PG_FUNCTION_ARGS);
 
+extern Datum tsl_finalize_partial(PG_FUNCTION_ARGS);
+
 #endif

@@ -844,7 +844,7 @@ select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 1, 3, 'test
 from conditions
 group by time_bucket(100, timec);
 
-SELECT * FROM mat_ffunc_test;
+SELECT * FROM mat_ffunc_test ORDER BY time_bucket;
 
 DROP MATERIALIZED view mat_ffunc_test;
 
@@ -855,7 +855,7 @@ select time_bucket(100, timec), aggregate_to_test_ffunc_extra(timec, 4, 5, bigin
 from conditions
 group by time_bucket(100, timec);
 
-SELECT * FROM mat_ffunc_test;
+SELECT * FROM mat_ffunc_test ORDER BY time_bucket;
 
 --refresh mat view test when time_bucket is not projected --
 DROP MATERIALIZED VIEW mat_ffunc_test;
