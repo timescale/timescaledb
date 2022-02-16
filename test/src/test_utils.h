@@ -30,12 +30,7 @@ strip_path(const char *filename)
 #define TestFailure(fmt, ...)                                                                      \
 	do                                                                                             \
 	{                                                                                              \
-		elog(ERROR,                                                                                \
-			 "TestFailure @ %s %s:%d | " fmt "",                                                   \
-			 strip_path(__FILE__),                                                                 \
-			 __func__,                                                                             \
-			 __LINE__,                                                                             \
-			 ##__VA_ARGS__);                                                                       \
+		elog(ERROR, "TestFailure | " fmt "", ##__VA_ARGS__);                                       \
 		pg_unreachable();                                                                          \
 	} while (0)
 
@@ -86,7 +81,7 @@ strip_path(const char *filename)
 		MemoryContextSwitchTo(oldctx);                                                             \
 		if (!this_has_panicked)                                                                    \
 		{                                                                                          \
-			elog(ERROR, "failed to panic @ line %d", __LINE__);                                    \
+			elog(ERROR, "failed to panic");                                                        \
 		}                                                                                          \
 	} while (0)
 
