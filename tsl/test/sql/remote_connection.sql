@@ -56,6 +56,7 @@ INSERT INTO "S 1"."T 1"
 -- run tests
 -- ===================================================================
 
+\set VERBOSITY verbose
 SELECT * FROM test.get_connection_stats();
 \set ON_ERROR_STOP 0
 SELECT test.send_remote_query_that_generates_exception();
