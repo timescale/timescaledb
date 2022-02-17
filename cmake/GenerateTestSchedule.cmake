@@ -23,7 +23,13 @@ function(generate_test_schedule OUTPUT_FILE)
   cmake_parse_arguments(_generate "${options}" "${oneValueArgs}"
                         "${multiValueArgs}" ${ARGN})
 
-  list(SORT _generate_TEST_FILES)
+  # Depending on the configuration we might end up
+  # with an empty schedule here. On older cmake versions < 3.14
+  # trying to sort an empty list will produce an error, so
+  # we check for empty list here.
+  if(_generate_TEST_FILES)
+    list(SORT _generate_TEST_FILES)
+  endif()
   file(REMOVE ${OUTPUT_FILE})
 
   # We put the solo tests in the test file first. Note that we do not generate
