@@ -12,8 +12,9 @@ file(REMOVE ${ISOLATION_TEST_SCHEDULE})
 
 set(TEST_TEMPLATES)
 
-set(TEST_TEMPLATES_DEBUG dropchunks_race.spec.in
-                         multi_transaction_indexing.spec.in)
+set(TEST_TEMPLATES_DEBUG
+    dropchunks_race.spec.in multi_transaction_indexing.spec.in
+    concurrent_query_and_drop_chunks.spec.in)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES ${TEST_TEMPLATES_DEBUG})

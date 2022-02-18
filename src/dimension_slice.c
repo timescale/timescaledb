@@ -616,17 +616,25 @@ ts_dimension_slice_scan_for_existing(const DimensionSlice *slice, const ScanTupL
 		CurrentMemoryContext);
 }
 
+DimensionSlice *
+ts_dimension_slice_from_tuple(TupleInfo *ti)
+{
+	DimensionSlice *slice;
+	MemoryContext old;
+
+	lock_result_ok_or_abort(ti);
+	old = MemoryContextSwitchTo(ti->mctx);
+	slice = dimension_slice_from_slot(ti->slot);
+	MemoryContextSwitchTo(old);
+
+	return slice;
+}
+
 static ScanTupleResult
 dimension_slice_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionSlice **slice = data;
-	MemoryContext old;
-
-	lock_result_ok_or_abort(ti);
-
-	old = MemoryContextSwitchTo(ti->mctx);
-	*slice = dimension_slice_from_slot(ti->slot);
-	MemoryContextSwitchTo(old);
+	*slice = ts_dimension_slice_from_tuple(ti);
 	return SCAN_DONE;
 }
 
@@ -659,6 +667,43 @@ ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLo
 										mctx);
 
 	return slice;
+}
+
+ScanIterator
+ts_dimension_slice_scan_iterator_create(MemoryContext result_mcxt)
+{
+	ScanIterator it = ts_scan_iterator_create(DIMENSION_SLICE, AccessShareLock, result_mcxt);
+	it.ctx.index = catalog_get_index(ts_catalog_get(), DIMENSION_SLICE, DIMENSION_SLICE_ID_IDX);
+	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
+
+	return it;
+}
+
+void
+ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id,
+											  const ScanTupLock *tuplock)
+{
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_dimension_slice_id_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(slice_id));
+	it->ctx.tuplock = tuplock;
+}
+
+DimensionSlice *
+ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id,
+										   const ScanTupLock *tuplock)
+{
+	TupleInfo *ti;
+
+	ts_dimension_slice_scan_iterator_set_slice_id(it, slice_id, tuplock);
+	ts_scan_iterator_start_or_restart_scan(it);
+	ti = ts_scan_iterator_next(it);
+	Assert(ti);
+	Assert(ts_scan_iterator_next(it) == NULL);
+	return ts_dimension_slice_from_tuple(ti);
 }
 
 DimensionSlice *

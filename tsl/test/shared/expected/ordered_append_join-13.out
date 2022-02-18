@@ -1733,8 +1733,8 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=1 loops=1)

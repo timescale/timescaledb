@@ -7,6 +7,7 @@ set(SOURCES
     chunk_adaptive.c
     chunk_constraint.c
     chunk_index.c
+    chunk_scan.c
     constraint.c
     cross_module_fn.c
     copy.c
