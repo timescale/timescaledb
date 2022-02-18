@@ -306,15 +306,15 @@ no space constraint
                  QUERY PLAN                 
 --------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: ("time" < 10)
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: ("time" < 10)
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: ("time" < 10)
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: ("time" < 10)
 (11 rows)
 
@@ -357,9 +357,9 @@ only space constraint
    ->  Append
          ->  Seq Scan on _hyper_2_106_chunk
                Filter: ('dev5'::text = device_id)
-         ->  Seq Scan on _hyper_2_111_chunk
-               Filter: ('dev5'::text = device_id)
          ->  Seq Scan on _hyper_2_109_chunk
+               Filter: ('dev5'::text = device_id)
+         ->  Seq Scan on _hyper_2_111_chunk
                Filter: ('dev5'::text = device_id)
 (9 rows)
 
@@ -369,15 +369,15 @@ unhandled space constraint
                               QUERY PLAN                              
 ----------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: (("time" < 10) AND (device_id > 'dev5'::text))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: (("time" < 10) AND (device_id > 'dev5'::text))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: (("time" < 10) AND (device_id > 'dev5'::text))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND (device_id > 'dev5'::text))
 (11 rows)
 
@@ -387,15 +387,15 @@ use of OR - does not filter chunks
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: (("time" < 10) AND ((device_id = 'dev5'::text) OR (device_id = 'dev6'::text)))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: (("time" < 10) AND ((device_id = 'dev5'::text) OR (device_id = 'dev6'::text)))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: (("time" < 10) AND ((device_id = 'dev5'::text) OR (device_id = 'dev6'::text)))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND ((device_id = 'dev5'::text) OR (device_id = 'dev6'::text)))
 (11 rows)
 
@@ -452,11 +452,11 @@ IN statement - two chunks
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_105_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
          ->  Seq Scan on _hyper_2_105_chunk
+               Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
 (7 rows)
 
@@ -477,15 +477,15 @@ NOT IN - does not filter chunks
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: (("time" < 10) AND (device_id <> ALL ('{dev5,dev6}'::text[])))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: (("time" < 10) AND (device_id <> ALL ('{dev5,dev6}'::text[])))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: (("time" < 10) AND (device_id <> ALL ('{dev5,dev6}'::text[])))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND (device_id <> ALL ('{dev5,dev6}'::text[])))
 (11 rows)
 
@@ -506,11 +506,11 @@ ANY
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_105_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
-               Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
          ->  Seq Scan on _hyper_2_105_chunk
+               Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND (device_id = ANY ('{dev5,dev6}'::text[])))
 (7 rows)
 
@@ -589,15 +589,15 @@ Multi AND
                         QUERY PLAN                        
 ----------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: (("time" < 10) AND ("time" < 100))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: (("time" < 10) AND ("time" < 100))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: (("time" < 10) AND ("time" < 100))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND ("time" < 100))
 (11 rows)
 
@@ -643,15 +643,15 @@ Time dimension chunk filtering works for ANY with single argument
                        QUERY PLAN                        
 ---------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: ("time" < ANY ('{1}'::integer[]))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: ("time" < ANY ('{1}'::integer[]))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: ("time" < ANY ('{1}'::integer[]))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: ("time" < ANY ('{1}'::integer[]))
 (11 rows)
 
@@ -661,15 +661,15 @@ Time dimension chunk filtering works for ALL with single argument
                        QUERY PLAN                        
 ---------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: ("time" < ALL ('{1}'::integer[]))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: ("time" < ALL ('{1}'::integer[]))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: ("time" < ALL ('{1}'::integer[]))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: ("time" < ALL ('{1}'::integer[]))
 (11 rows)
 
@@ -679,15 +679,15 @@ Time dimension chunk filtering works for ALL with multiple arguments
                             QUERY PLAN                            
 ------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_2_106_chunk.value
+   Sort Key: _hyper_2_103_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_2_106_chunk
+         ->  Seq Scan on _hyper_2_103_chunk
                Filter: ("time" < ALL ('{1,10,20,30}'::integer[]))
          ->  Seq Scan on _hyper_2_104_chunk
                Filter: ("time" < ALL ('{1,10,20,30}'::integer[]))
          ->  Seq Scan on _hyper_2_105_chunk
                Filter: ("time" < ALL ('{1,10,20,30}'::integer[]))
-         ->  Seq Scan on _hyper_2_103_chunk
+         ->  Seq Scan on _hyper_2_106_chunk
                Filter: ("time" < ALL ('{1,10,20,30}'::integer[]))
 (11 rows)
 
@@ -726,11 +726,11 @@ these should work since they are immutable functions
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_3_117_chunk.value
+   Sort Key: _hyper_3_116_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_3_117_chunk
-               Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
          ->  Seq Scan on _hyper_3_116_chunk
+               Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_3_117_chunk
                Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
 (7 rows)
 
@@ -738,11 +738,11 @@ these should work since they are immutable functions
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_3_117_chunk.value
+   Sort Key: _hyper_3_116_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_3_117_chunk
-               Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
          ->  Seq Scan on _hyper_3_116_chunk
+               Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_3_117_chunk
                Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
 (7 rows)
 
@@ -750,11 +750,11 @@ these should work since they are immutable functions
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_3_117_chunk.value
+   Sort Key: _hyper_3_116_chunk.value
    ->  Append
-         ->  Seq Scan on _hyper_3_117_chunk
-               Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
          ->  Seq Scan on _hyper_3_116_chunk
+               Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_3_117_chunk
                Filter: ("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone)
 (7 rows)
 
@@ -1442,15 +1442,15 @@ value to be able to exclude chunks (similar to a closed dimension).
                        QUERY PLAN                       
 --------------------------------------------------------
  Sort
-   Sort Key: _hyper_4_125_chunk.value
+   Sort Key: _hyper_4_124_chunk.value
    ->  Append
+         ->  Seq Scan on _hyper_4_124_chunk
+               Filter: ("time" < '4'::double precision)
          ->  Seq Scan on _hyper_4_125_chunk
                Filter: ("time" < '4'::double precision)
          ->  Seq Scan on _hyper_4_126_chunk
                Filter: ("time" < '4'::double precision)
          ->  Seq Scan on _hyper_4_127_chunk
-               Filter: ("time" < '4'::double precision)
-         ->  Seq Scan on _hyper_4_124_chunk
                Filter: ("time" < '4'::double precision)
 (11 rows)
 
@@ -2482,13 +2482,13 @@ SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timesta
          ->  Nested Loop
                ->  Merge Append
                      Sort Key: o2_m2_1."time"
-                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2_1
+                     ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_1
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_2
+                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_2
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_3
+                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2_3
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
                ->  Append
@@ -2550,13 +2550,13 @@ SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timesta
          ->  Nested Loop
                ->  Merge Append
                      Sort Key: o2_m2_1."time"
-                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2_1
+                     ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_1
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_2
+                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_2
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_3
+                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2_3
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
                ->  Append

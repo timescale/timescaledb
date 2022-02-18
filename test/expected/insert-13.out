@@ -252,8 +252,8 @@ VALUES ('2001-02-01', 98, 'dev1'),
 SELECT * FROM date_col_test WHERE time > '2001-01-01';
     time    | temp | device 
 ------------+------+--------
- 03-02-2001 |   98 | dev1
  02-01-2001 |   98 | dev1
+ 03-02-2001 |   98 | dev1
 (2 rows)
 
 -- Out-of-order insertion regression test.
@@ -352,9 +352,9 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
    ->  Insert on chunk_assert_fail
          ->  Custom Scan (ChunkDispatch)
                ->  Append
-                     ->  Index Scan using _hyper_5_12_chunk_chunk_assert_fail_i_idx on _hyper_5_12_chunk
-                           Index Cond: (i = 1)
                      ->  Index Scan using _hyper_5_11_chunk_chunk_assert_fail_i_idx on _hyper_5_11_chunk
+                           Index Cond: (i = 1)
+                     ->  Index Scan using _hyper_5_12_chunk_chunk_assert_fail_i_idx on _hyper_5_12_chunk
                            Index Cond: (i = 1)
 (8 rows)
 
@@ -441,9 +441,9 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
                      ->  Append
-                           ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
-                                 Index Cond: ("time" < 'infinity'::timestamp without time zone)
                            ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
+                                 Index Cond: ("time" < 'infinity'::timestamp without time zone)
+                           ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
                                  Index Cond: ("time" < 'infinity'::timestamp without time zone)
 (9 rows)
 
@@ -480,9 +480,9 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
                      ->  Append
-                           ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
-                                 Index Cond: ("time" > '-infinity'::timestamp without time zone)
                            ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
+                                 Index Cond: ("time" > '-infinity'::timestamp without time zone)
+                           ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
                                  Index Cond: ("time" > '-infinity'::timestamp without time zone)
 (9 rows)
 

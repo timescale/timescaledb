@@ -64,6 +64,7 @@
 #include "scan_iterator.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "extension.h"
+#include "chunk_scan.h"
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
@@ -129,18 +130,6 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
 
-#define IS_VALID_CHUNK(chunk)                                                                      \
-	((chunk) && !(chunk)->fd.dropped && (chunk)->fd.id > 0 && (chunk)->fd.hypertable_id > 0 &&     \
-	 OidIsValid((chunk)->table_id) && OidIsValid((chunk)->hypertable_relid) &&                     \
-	 (chunk)->constraints && (chunk)->cube &&                                                      \
-	 (chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints &&               \
-	 ((chunk)->relkind == RELKIND_RELATION ||                                                      \
-	  ((chunk)->relkind == RELKIND_FOREIGN_TABLE && (chunk)->data_nodes != NIL)))
-
-#define ASSERT_IS_VALID_CHUNK(chunk) Assert(IS_VALID_CHUNK(chunk))
-
-#define ASSERT_IS_NULL_OR_VALID_CHUNK(chunk) Assert(chunk == NULL || IS_VALID_CHUNK(chunk))
-
 /*
  * The chunk status field values are persisted in the database and must never be changed.
  * Those values are used as flags and must always be powers of 2 to allow bitwise operations.
@@ -196,8 +185,8 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 	return heap_form_tuple(desc, values, nulls);
 }
 
-static void
-chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
+void
+ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 {
 	bool should_free;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
@@ -235,6 +224,7 @@ chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 	if (should_free)
 		heap_freetuple(tuple);
 }
+
 int64
 ts_chunk_primary_dimension_start(const Chunk *chunk)
 {
@@ -1111,17 +1101,6 @@ chunk_create_table(Chunk *chunk, const Hypertable *ht)
 	return chunk->table_id;
 }
 
-static void
-init_scan_by_chunk_id(ScanIterator *iterator, int32 chunk_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_idx_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(chunk_id));
-}
-
 /*
  * Creates only a table for a chunk.
  * Either table name or chunk id needs to be provided.
@@ -1518,8 +1497,8 @@ ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind)
  * is not "valid", dimension slices and constraints are fully
  * rescanned/recreated.
  */
-static Chunk *
-chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub *stub)
+Chunk *
+ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub *stub)
 {
 	Chunk *chunk = NULL;
 	int num_constraints_hint = stub ? stub->constraints->num_constraints : 2;
@@ -1531,7 +1510,7 @@ chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub
 		*chunkptr = MemoryContextAllocZero(ti->mctx, sizeof(Chunk));
 
 	chunk = *chunkptr;
-	chunk_formdata_fill(&chunk->fd, ti);
+	ts_chunk_formdata_fill(&chunk->fd, ti);
 
 	/*
 	 * When searching for the chunk stub matching the dimensional point, we
@@ -1561,7 +1540,11 @@ chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub
 		ts_hypercube_slice_sort(chunk->cube);
 	}
 	else
-		chunk->cube = ts_hypercube_from_constraints(chunk->constraints, ti->mctx);
+	{
+		ScanIterator it = ts_dimension_slice_scan_iterator_create(ti->mctx);
+		chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
+		ts_scan_iterator_close(&it);
+	}
 
 	return chunk;
 }
@@ -1603,11 +1586,11 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	ChunkStubScanCtx *stubctx = arg;
 	Chunk *chunk;
 
-	chunk = chunk_build_from_tuple_and_stub(&stubctx->chunk, ti, stubctx->stub);
+	chunk = ts_chunk_build_from_tuple_and_stub(&stubctx->chunk, ti, stubctx->stub);
 	Assert(!chunk->fd.dropped);
 
 	/* Fill in table relids. Note that we cannot do this in
-	 * chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
+	 * ts_chunk_build_from_tuple_and_stub() since chunk_resurrect() also uses
 	 * that function and, in that case, the chunk object is needed to create
 	 * the data table and related objects. */
 	chunk->table_id = get_relname_relid(chunk->fd.table_name.data,
@@ -1914,7 +1897,7 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 	Assert(NULL != stub->cube);
 
 	iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
-	init_scan_by_chunk_id(&iterator, stub->id);
+	ts_chunk_scan_iterator_set_chunk_id(&iterator, stub->id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -1922,7 +1905,7 @@ chunk_resurrect(const Hypertable *ht, const ChunkStub *stub)
 		HeapTuple new_tuple;
 
 		Assert(count == 0 && chunk == NULL);
-		chunk = chunk_build_from_tuple_and_stub(NULL, ti, stub);
+		chunk = ts_chunk_build_from_tuple_and_stub(NULL, ti, stub);
 		Assert(chunk->fd.dropped);
 
 		/* Create data table and related objects */
@@ -2070,142 +2053,6 @@ chunks_find_all_in_range_limit(const Hypertable *ht, const Dimension *time_dim,
 	dimension_slice_and_chunk_constraint_join(ctx, slices);
 
 	*num_found += hash_get_num_entries(ctx->htab);
-}
-
-static ChunkResult
-append_chunk_common(ChunkScanCtx *scanctx, ChunkStub *stub, Chunk **chunk)
-{
-	ChunkStubScanCtx stubctx = {
-		.stub = stub,
-	};
-
-	*chunk = NULL;
-
-	if (!chunk_stub_is_complete(stub, scanctx->space))
-		return CHUNK_IGNORED;
-
-	/* Fill in the rest of the chunk's data from the chunk table */
-	*chunk = chunk_create_from_stub(&stubctx);
-
-	if (stubctx.is_dropped)
-		return CHUNK_IGNORED;
-
-	Assert(OidIsValid((*chunk)->table_id));
-
-	if (scanctx->lockmode != NoLock)
-		LockRelationOid((*chunk)->table_id, scanctx->lockmode);
-
-	return CHUNK_PROCESSED;
-}
-
-static ChunkResult
-append_chunk_oid(ChunkScanCtx *scanctx, ChunkStub *stub)
-{
-	Chunk *chunk;
-	ChunkResult res = append_chunk_common(scanctx, stub, &chunk);
-
-	if (res == CHUNK_PROCESSED)
-	{
-		Assert(chunk != NULL);
-		scanctx->data = lappend_oid(scanctx->data, chunk->table_id);
-	}
-
-	return res;
-}
-
-static ChunkResult
-append_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
-{
-	Chunk *chunk;
-	ChunkResult res = append_chunk_common(scanctx, stub, &chunk);
-
-	if (res == CHUNK_PROCESSED)
-	{
-		Chunk **chunks = scanctx->data;
-
-		Assert(chunk != NULL);
-		Assert(scanctx->num_processed < scanctx->num_complete_chunks);
-
-		if (NULL == chunks)
-		{
-			Assert(scanctx->num_complete_chunks > 0);
-			scanctx->data = chunks = palloc(sizeof(Chunk *) * scanctx->num_complete_chunks);
-		}
-
-		chunks[scanctx->num_processed] = chunk;
-	}
-
-	return res;
-}
-
-static void *
-chunk_find_all(const Hypertable *ht, const List *dimension_vecs, on_chunk_stub_func on_chunk,
-			   LOCKMODE lockmode, unsigned int *num_chunks)
-{
-	ChunkScanCtx ctx;
-	ListCell *lc;
-	int num_processed;
-
-	/* The scan context will keep the state accumulated during the scan */
-	chunk_scan_ctx_init(&ctx, ht->space, NULL);
-
-	/* Do not abort the scan when one chunk is found */
-	ctx.early_abort = false;
-	ctx.lockmode = lockmode;
-
-	/* Scan all dimensions for slices enclosing the point */
-	foreach (lc, dimension_vecs)
-	{
-		const DimensionVec *vec = lfirst(lc);
-
-		dimension_slice_and_chunk_constraint_join(&ctx, vec);
-	}
-
-	ctx.data = NULL;
-	num_processed = chunk_scan_ctx_foreach_chunk_stub(&ctx, on_chunk, 0);
-
-	if (NULL != num_chunks)
-		*num_chunks = num_processed;
-
-	chunk_scan_ctx_destroy(&ctx);
-
-	return ctx.data;
-}
-
-Chunk **
-ts_chunk_find_all(const Hypertable *ht, const List *dimension_vecs, LOCKMODE lockmode,
-				  unsigned int *num_chunks)
-{
-	Chunk **chunks = chunk_find_all(ht, dimension_vecs, append_chunk, lockmode, num_chunks);
-
-#ifdef USE_ASSERT_CHECKING
-	/* Assert that we never return dropped chunks */
-	int i;
-
-	for (i = 0; i < *num_chunks; i++)
-		ASSERT_IS_VALID_CHUNK(chunks[i]);
-#endif
-
-	return chunks;
-}
-
-List *
-ts_chunk_find_all_oids(const Hypertable *ht, const List *dimension_vecs, LOCKMODE lockmode)
-{
-	List *chunks = chunk_find_all(ht, dimension_vecs, append_chunk_oid, lockmode, NULL);
-
-#ifdef USE_ASSERT_CHECKING
-	/* Assert that we never return dropped chunks */
-	ListCell *lc;
-
-	foreach (lc, chunks)
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(lfirst_oid(lc), true);
-		ASSERT_IS_VALID_CHUNK(chunk);
-	}
-#endif
-
-	return chunks;
 }
 
 /* show_chunks SQL function handler */
@@ -2460,12 +2307,16 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 			ChunkConstraint *cc = &ccs->constraints[j];
 			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
 			MemoryContext old;
+			ScanIterator it;
 
 			/* Dropped chunks do not contain valid data and must not be returned */
 			if (!chunk)
 				continue;
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
-			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, mctx);
+
+			it = ts_dimension_slice_scan_iterator_create(mctx);
+			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
+			ts_scan_iterator_close(&it);
 
 			/* Allocate the list on the same memory context as the chunks */
 			old = MemoryContextSwitchTo(mctx);
@@ -2707,7 +2558,7 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 	ts_scanner_foreach(iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(iterator);
-		chunk_formdata_fill(form, ti);
+		ts_chunk_formdata_fill(form, ti);
 
 		if (!form->dropped)
 			count++;
@@ -2788,7 +2639,7 @@ chunk_simple_scan_by_id(int32 chunk_id, FormData_chunk *form, bool missing_ok)
 	};
 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
-	init_scan_by_chunk_id(&iterator, chunk_id);
+	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk_id);
 
 	return chunk_simple_scan(&iterator, form, missing_ok, displaykey);
 }
@@ -2926,7 +2777,7 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	ChunkDeleteResult res;
 	int i;
 
-	chunk_formdata_fill(&form, ti);
+	ts_chunk_formdata_fill(&form, ti);
 
 	if (preserve_chunk_catalog_row && form.dropped)
 		return CHUNK_ALREADY_MARKED_DROPPED;
@@ -3340,7 +3191,7 @@ chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 	HeapTuple new_tuple;
 
-	chunk_formdata_fill(&form, ti);
+	ts_chunk_formdata_fill(&form, ti);
 
 	namestrcpy(&form.schema_name, NameStr(update->schema_name));
 	namestrcpy(&form.table_name, NameStr(update->table_name));
@@ -3362,7 +3213,7 @@ chunk_tuple_update_status(TupleInfo *ti, void *data)
 	CatalogSecurityContext sec_ctx;
 	HeapTuple new_tuple;
 
-	chunk_formdata_fill(&form, ti);
+	ts_chunk_formdata_fill(&form, ti);
 	form.status = update->status;
 	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
@@ -3524,7 +3375,7 @@ chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
 
-	chunk_formdata_fill(&form, ti);
+	ts_chunk_formdata_fill(&form, ti);
 	if (is_compressed)
 	{
 		form.compressed_chunk_id = compressed_chunk_id;
@@ -3614,7 +3465,7 @@ chunk_rename_schema_name(TupleInfo *ti, void *data)
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
 
-	chunk_formdata_fill(&form, ti);
+	ts_chunk_formdata_fill(&form, ti);
 	/* Rename schema name */
 	namestrcpy(&form.schema_name, (char *) data);
 	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
@@ -4266,4 +4117,67 @@ ts_chunk_status(PG_FUNCTION_ARGS)
 	Oid chunk_relid = PG_GETARG_OID(0);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, /* fail_if_not_found */ true);
 	PG_RETURN_INT32(chunk->fd.status);
+}
+
+/*
+ * Lock the chunk if the lockmode demands it.
+ *
+ * Also check that the chunk relation actually exists after the lock is
+ * acquired. Return true if no locking is necessary or the chunk relation
+ * exists and the lock was successfully acquired. Otherwise return false.
+ */
+bool
+ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode)
+{
+	/* No lock is requested, so assume relation exists */
+	if (chunk_lockmode != NoLock)
+	{
+		/* Get the lock to synchronize against concurrent drop */
+		LockRelationOid(chunk_oid, chunk_lockmode);
+
+		/*
+		 * Now that we have the lock, double-check to see if the relation
+		 * really exists or not.  If not, assume it was dropped while we
+		 * waited to acquire lock, and ignore it.
+		 */
+		if (!SearchSysCacheExists1(RELOID, ObjectIdGetDatum(chunk_oid)))
+		{
+			/* Release useless lock */
+			UnlockRelationOid(chunk_oid, chunk_lockmode);
+			/* And ignore this relation */
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int
+ts_chunk_oid_cmp(const void *p1, const void *p2)
+{
+	const Chunk *c1 = *((const Chunk **) p1);
+	const Chunk *c2 = *((const Chunk **) p2);
+
+	return oid_cmp(&c1->table_id, &c2->table_id);
+}
+
+ScanIterator
+ts_chunk_scan_iterator_create(MemoryContext result_mcxt)
+{
+	ScanIterator it = ts_scan_iterator_create(CHUNK, AccessShareLock, result_mcxt);
+	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
+
+	return it;
+}
+
+void
+ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
+{
+	it->ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
 }
