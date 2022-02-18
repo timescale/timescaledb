@@ -4192,22 +4192,22 @@ GROUP BY 1
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
                ->  Custom Scan (DataNodeScan)
                      Output: hyper_1."time", (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
                ->  Custom Scan (DataNodeScan)
                      Output: hyper_2."time", (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT "time", _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
 (27 rows)
 
 
@@ -4233,22 +4233,22 @@ GROUP BY 1
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_1."time")), (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_2."time")), (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
 (27 rows)
 
 
@@ -4314,22 +4314,22 @@ ORDER BY 1,2
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_1."time")), hyper_1.device, (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_2."time")), hyper_2.device, (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
 (28 rows)
 
 
@@ -4356,22 +4356,22 @@ ORDER BY 1,2
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (date_trunc('month'::text, hyper_1."time")), hyper_1.device, (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (date_trunc('month'::text, hyper_2."time")), hyper_2.device, (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT date_trunc('month'::text, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY date_trunc('month'::text, "time") ASC NULLS LAST, device ASC NULLS LAST
 (28 rows)
 
 
@@ -4399,22 +4399,22 @@ ORDER BY 1,2
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_1."time")), hyper_1.device, (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_2."time")), hyper_2.device, (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) AND ((device > 4)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
 (28 rows)
 
 EXPLAIN (verbose, costs off)
@@ -4440,22 +4440,22 @@ ORDER BY 1,2
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)), _timescaledb_internal.partialize_agg(max(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)), _timescaledb_internal.partialize_agg(max(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_1."time")), hyper_1.device, (PARTIAL avg(hyper_1.temp)), (PARTIAL max(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)), _timescaledb_internal.partialize_agg(max(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)), _timescaledb_internal.partialize_agg(max(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: (time_bucket('@ 2 days'::interval, hyper_2."time")), hyper_2.device, (PARTIAL avg(hyper_2.temp)), (PARTIAL max(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)), _timescaledb_internal.partialize_agg(max(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT public.time_bucket('@ 2 days'::interval, "time"), device, _timescaledb_internal.partialize_agg(avg(temp)), _timescaledb_internal.partialize_agg(max(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2 ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
 (29 rows)
 
 
@@ -4481,22 +4481,22 @@ GROUP BY 1
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
                ->  Custom Scan (DataNodeScan)
                      Output: hyper_1.device, (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
                ->  Custom Scan (DataNodeScan)
                      Output: hyper_2.device, (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1
 (27 rows)
 
 
@@ -4526,8 +4526,8 @@ GROUP BY 1
                            Filter: ((hyper.temp * random()) >= '0'::double precision)
                            Data node: data_node_1
                            Fetcher Type: Row by row
-                           Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                           Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY location ASC NULLS LAST
+                           Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                           Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY location ASC NULLS LAST
                ->  Partial GroupAggregate
                      Output: hyper_1.location, PARTIAL avg(hyper_1.temp)
                      Group Key: hyper_1.location
@@ -4536,8 +4536,8 @@ GROUP BY 1
                            Filter: ((hyper_1.temp * random()) >= '0'::double precision)
                            Data node: data_node_2
                            Fetcher Type: Row by row
-                           Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                           Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY location ASC NULLS LAST
+                           Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                           Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY location ASC NULLS LAST
                ->  Partial GroupAggregate
                      Output: hyper_2.location, PARTIAL avg(hyper_2.temp)
                      Group Key: hyper_2.location
@@ -4546,8 +4546,8 @@ GROUP BY 1
                            Filter: ((hyper_2.temp * random()) >= '0'::double precision)
                            Data node: data_node_3
                            Fetcher Type: Row by row
-                           Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY location ASC NULLS LAST
+                           Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                           Remote SQL: SELECT location, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY location ASC NULLS LAST
 (37 rows)
 
 
@@ -4574,8 +4574,8 @@ ORDER BY 1,2
                      Output: time_bucket('@ 2 days'::interval, hyper."time"), hyper.device, hyper.temp
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
          ->  Partial GroupAggregate
                Output: (time_bucket('@ 2 days'::interval, hyper_1."time")), hyper_1.device, PARTIAL avg(hyper_1.temp), PARTIAL sum((hyper_1.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: time_bucket('@ 2 days'::interval, hyper_1."time"), hyper_1.device
@@ -4583,8 +4583,8 @@ ORDER BY 1,2
                      Output: time_bucket('@ 2 days'::interval, hyper_1."time"), hyper_1.device, hyper_1.temp
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
          ->  Partial GroupAggregate
                Output: (time_bucket('@ 2 days'::interval, hyper_2."time")), hyper_2.device, PARTIAL avg(hyper_2.temp), PARTIAL sum((hyper_2.temp * (((random() <= '1'::double precision))::integer)::double precision))
                Group Key: time_bucket('@ 2 days'::interval, hyper_2."time"), hyper_2.device
@@ -4592,8 +4592,8 @@ ORDER BY 1,2
                      Output: time_bucket('@ 2 days'::interval, hyper_2."time"), hyper_2.device, hyper_2.temp
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('2 days'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
 (32 rows)
 
 
@@ -5161,20 +5161,20 @@ ORDER BY 1,2
                                  Output: hyper_1."time", hyper_1.device, hyper_1.temp
                                  Data node: data_node_1
                                  Fetcher Type: Row by row
-                                 Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                                 Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('00:01:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                                 Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                                 Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('00:01:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                            ->  Custom Scan (DataNodeScan) on public.hyper hyper_2
                                  Output: hyper_2."time", hyper_2.device, hyper_2.temp
                                  Data node: data_node_2
                                  Fetcher Type: Row by row
-                                 Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                                 Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('00:01:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                                 Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                                 Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('00:01:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                            ->  Custom Scan (DataNodeScan) on public.hyper hyper_3
                                  Output: hyper_3."time", hyper_3.device, hyper_3.temp
                                  Data node: data_node_3
                                  Fetcher Type: Row by row
-                                 Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                                 Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('00:01:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
+                                 Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                                 Remote SQL: SELECT "time", device, temp FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) ORDER BY public.time_bucket('00:01:00'::interval, "time") ASC NULLS LAST, device ASC NULLS LAST
                ->  Hash
                      Output: top_n.device
                      ->  Subquery Scan on top_n
@@ -5196,22 +5196,22 @@ ORDER BY 1,2
                                                                Relations: Aggregate on (public.hyper)
                                                                Data node: data_node_1
                                                                Fetcher Type: Row by row
-                                                               Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                                                               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
+                                                               Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                                                               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
                                                          ->  Custom Scan (DataNodeScan)
                                                                Output: hyper_5.device, (PARTIAL avg(hyper_5.temp))
                                                                Relations: Aggregate on (public.hyper)
                                                                Data node: data_node_2
                                                                Fetcher Type: Row by row
-                                                               Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                                                               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
+                                                               Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                                                               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
                                                          ->  Custom Scan (DataNodeScan)
                                                                Output: hyper_6.device, (PARTIAL avg(hyper_6.temp))
                                                                Relations: Aggregate on (public.hyper)
                                                                Data node: data_node_3
                                                                Fetcher Type: Row by row
-                                                               Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                                                               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
+                                                               Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                                                               Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
 (68 rows)
 
 
@@ -5378,22 +5378,22 @@ GROUP BY 1,2
                Relations: Aggregate on (public.hyper)
                Data node: data_node_1
                Fetcher Type: Row by row
-               Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
+               Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
          ->  Custom Scan (DataNodeScan)
                Output: hyper_1."time", hyper_1.device, (avg(hyper_1.temp))
                Relations: Aggregate on (public.hyper)
                Data node: data_node_2
                Fetcher Type: Row by row
-               Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
+               Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
          ->  Custom Scan (DataNodeScan)
                Output: hyper_2."time", hyper_2.device, (avg(hyper_2.temp))
                Relations: Aggregate on (public.hyper)
                Data node: data_node_3
                Fetcher Type: Row by row
-               Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
+               Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+               Remote SQL: SELECT "time", device, avg(temp) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1, 2
 (24 rows)
 
 
@@ -5587,22 +5587,22 @@ ORDER BY 1
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_1
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_1_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_13_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 7, 1, 6, 2, 5]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: hyper_1.device, (PARTIAL avg(hyper_1.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_2
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_14_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_7_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[6, 5, 7, 1, 2, 4, 3]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
                ->  Custom Scan (DataNodeScan)
                      Output: hyper_2.device, (PARTIAL avg(hyper_2.temp))
                      Relations: Aggregate on (public.hyper)
                      Data node: data_node_3
                      Fetcher Type: Row by row
-                     Chunks: _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[3, 4, 2, 1]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
+                     Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
+                     Remote SQL: SELECT device, _timescaledb_internal.partialize_agg(avg(temp)) FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) AND (("time" >= '2019-01-01 00:00:00-08'::timestamp with time zone)) GROUP BY 1 ORDER BY device ASC NULLS LAST
 (28 rows)
 
 

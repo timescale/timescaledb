@@ -178,13 +178,13 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
  * Given a set of constraints, build the corresponding hypercube.
  */
 Hypercube *
-ts_hypercube_from_constraints(const ChunkConstraints *constraints, MemoryContext mctx)
+ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator *slice_it)
 {
 	Hypercube *hc;
 	int i;
 	MemoryContext old;
 
-	old = MemoryContextSwitchTo(mctx);
+	old = MemoryContextSwitchTo(ts_scan_iterator_get_result_memory_context(slice_it));
 	hc = ts_hypercube_alloc(constraints->num_dimension_constraints);
 	MemoryContextSwitchTo(old);
 
@@ -213,9 +213,9 @@ ts_hypercube_from_constraints(const ChunkConstraints *constraints, MemoryContext
 			 * ephemeral recovery mode), so we only take the lock if we are not
 			 * in recovery mode.
 			 */
-			slice = ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-														   tuplock_ptr,
-														   mctx);
+			slice = ts_dimension_slice_scan_iterator_get_by_id(slice_it,
+															   cc->fd.dimension_slice_id,
+															   tuplock_ptr);
 			Assert(slice != NULL);
 			hc->slices[hc->num_slices++] = slice;
 		}

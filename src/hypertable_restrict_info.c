@@ -19,6 +19,7 @@
 #include "hypercube.h"
 #include "dimension_vector.h"
 #include "partitioning.h"
+#include "chunk_scan.h"
 
 typedef struct DimensionRestrictInfo
 {
@@ -561,21 +562,8 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 									   LOCKMODE lockmode, unsigned int *num_chunks)
 {
 	List *dimension_vecs = gather_restriction_dimension_vectors(hri);
-
 	Assert(hri->num_dimensions == ht->space->num_dimensions);
-
-	return ts_chunk_find_all(ht, dimension_vecs, lockmode, num_chunks);
-}
-
-static Chunk **
-hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht, LOCKMODE lockmode,
-									unsigned int *num_chunks)
-{
-	List *dimension_vecs = gather_restriction_dimension_vectors(hri);
-
-	Assert(hri->num_dimensions == ht->space->num_dimensions);
-
-	return ts_chunk_find_all(ht, dimension_vecs, lockmode, num_chunks);
+	return ts_chunk_scan_by_constraints(ht->space, dimension_vecs, lockmode, num_chunks);
 }
 
 /*
@@ -627,7 +615,7 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 
 	if (chunks == NULL)
 	{
-		chunks = hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
+		chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, lockmode, num_chunks);
 	}
 
 	if (*num_chunks == 0)

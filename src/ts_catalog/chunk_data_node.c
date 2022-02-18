@@ -316,3 +316,26 @@ ts_chunk_data_node_scan_by_node_name_and_hypertable_id(const char *node_name, in
 	MemoryContextSwitchTo(old);
 	return results;
 }
+
+ScanIterator
+ts_chunk_data_nodes_scan_iterator_create(MemoryContext result_mcxt)
+{
+	ScanIterator it = ts_scan_iterator_create(CHUNK_DATA_NODE, AccessShareLock, result_mcxt);
+	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
+
+	return it;
+}
+
+void
+ts_chunk_data_nodes_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
+{
+	it->ctx.index = catalog_get_index(ts_catalog_get(),
+									  CHUNK_DATA_NODE,
+									  CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX);
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_chunk_data_node_chunk_id_node_name_idx_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+}
