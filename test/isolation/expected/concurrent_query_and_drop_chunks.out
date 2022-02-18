@@ -1,0 +1,41 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s2_query s1_wp_enable s2_query s1_drop_chunks s1_wp_release s2_show_num_chunks
+step s2_query: SELECT * FROM measurements ORDER BY 1;
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 03 10:30:00 2020 PST|     1|   1
+Sun Jan 03 10:30:00 2021 PST|     2|   2
+(2 rows)
+
+step s1_wp_enable: SELECT debug_waitpoint_enable('expanded_chunks');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_query: SELECT * FROM measurements ORDER BY 1; <waiting ...>
+step s1_drop_chunks: SELECT count(*) FROM drop_chunks('measurements', TIMESTAMPTZ '2020-03-01');
+count
+-----
+    1
+(1 row)
+
+step s1_wp_release: SELECT debug_waitpoint_release('expanded_chunks');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_query: <... completed>
+time                        |device|temp
+----------------------------+------+----
+Sun Jan 03 10:30:00 2021 PST|     2|   2
+(1 row)
+
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('measurements') ORDER BY 1;
+count
+-----
+    1
+(1 row)
+

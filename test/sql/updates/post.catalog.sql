@@ -47,7 +47,19 @@ SELECT obj::regclass::text
 FROM (SELECT unnest(extconfig) AS obj FROM pg_extension WHERE extname='timescaledb') AS objects
 ORDER BY obj::regclass::text;
 
-SELECT * FROM _timescaledb_catalog.chunk ORDER BY id, hypertable_id;
+-- Show dropped chunks
+SELECT *
+FROM  _timescaledb_catalog.chunk c
+WHERE c.dropped
+ORDER BY c.id, c.hypertable_id;
+
+-- Show chunks that are not dropped and include owner in the output
+SELECT c.*, cl.relowner::regrole
+FROM  _timescaledb_catalog.chunk c
+INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
+WHERE NOT c.dropped
+ORDER BY c.id, c.hypertable_id;
+
 SELECT * FROM _timescaledb_catalog.chunk_constraint ORDER BY chunk_id, dimension_slice_id, constraint_name;
 SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
@@ -57,4 +69,3 @@ SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 -- the indexes and in particular not the column name in the index
 -- which will be different in a restored database and an updated
 -- database for columns that were renamed before the update.
-\dt+ _timescaledb_internal._hyper*

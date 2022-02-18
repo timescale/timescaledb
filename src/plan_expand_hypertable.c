@@ -928,17 +928,24 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
  */
 static Chunk **
 get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-					unsigned int *num_chunks)
+					LOCKMODE chunk_lockmode, unsigned int *num_chunks)
 {
 	Const *chunks_arg;
 	ArrayIterator chunk_id_iterator;
 	ArrayType *chunk_id_arr;
+	unsigned int chunk_id_arr_size;
 	Datum elem = (Datum) NULL;
 	bool isnull;
 	Expr *expr;
 	bool reverse;
 	int order_attno;
+	Chunk **unlocked_chunks = NULL;
 	Chunk **chunks = NULL;
+	unsigned int unlocked_chunk_count = 0;
+	Oid prev_chunk_oid = InvalidOid;
+	bool chunk_sort_needed = false;
+	int i;
+
 	*num_chunks = 0;
 
 	Assert(ctx->chunk_exclusion_func->args->length == 2);
@@ -958,9 +965,14 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid number of array dimensions for chunks_in")));
+
+	chunk_id_arr_size = ArrayGetNItems(ARR_NDIM(chunk_id_arr), ARR_DIMS(chunk_id_arr));
+
+	if (chunk_id_arr_size == 0)
+		return NULL;
+
 	/* allocate an array of "Chunk *" and set it up below */
-	chunks = (Chunk **) palloc0(sizeof(Chunk *) *
-								ArrayGetNItems(ARR_NDIM(chunk_id_arr), ARR_DIMS(chunk_id_arr)));
+	unlocked_chunks = (Chunk **) palloc(sizeof(Chunk *) * chunk_id_arr_size);
 
 	chunk_id_iterator = array_create_iterator(chunk_id_arr, 0, NULL);
 	while (array_iterate(chunk_id_iterator, &elem, &isnull))
@@ -980,12 +992,45 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 								chunk_id,
 								NameStr(ht->fd.table_name))));
 
-			chunks[(*num_chunks)++] = chunk;
+			if (OidIsValid(prev_chunk_oid) && prev_chunk_oid > chunk->table_id)
+				chunk_sort_needed = true;
+
+			prev_chunk_oid = chunk->table_id;
+			unlocked_chunks[unlocked_chunk_count++] = chunk;
 		}
 		else
 			elog(ERROR, "chunk id can't be NULL");
 	}
 	array_free_iterator(chunk_id_iterator);
+
+	/*
+	 * Sort chunks if needed for locking in Oid order in order to avoid
+	 * deadlocks. In most cases, the access node sends the chunk ID array in
+	 * Oid order, so no sorting is needed. (Note that chunk ID and Oid are
+	 * different, but often result in the same order.)
+	 */
+	if (unlocked_chunk_count > 1 && chunk_sort_needed)
+		qsort(unlocked_chunks, unlocked_chunk_count, sizeof(Chunk *), ts_chunk_oid_cmp);
+
+	chunks = palloc(sizeof(Chunk *) * unlocked_chunk_count);
+
+	for (i = 0; i < unlocked_chunk_count; i++)
+	{
+		if (ts_chunk_lock_if_exists(unlocked_chunks[i]->table_id, chunk_lockmode))
+			chunks[(*num_chunks)++] = unlocked_chunks[i];
+	}
+
+	pfree(unlocked_chunks);
+
+	/*
+	 * Chunks could have been concurrently removed or locking was not
+	 * successful. If no chunks could be locked, then return.
+	 */
+	if (*num_chunks == 0)
+	{
+		pfree(chunks);
+		return NULL;
+	}
 
 	/*
 	 * If fdw_private has not been setup by caller there is no point checking
@@ -1013,7 +1058,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 		return ts_hypertable_restrict_info_get_chunks_ordered(NULL,
 															  ht,
 															  chunks,
-															  AccessShareLock,
+															  chunk_lockmode,
 															  reverse,
 															  nested_oids,
 															  num_chunks);
@@ -1038,10 +1083,11 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 {
 	bool reverse;
 	int order_attno;
+	LOCKMODE lockmode = AccessShareLock;
 
 	if (ctx->chunk_exclusion_func != NULL)
 	{
-		return get_explicit_chunks(ctx, root, rel, ht, num_chunks);
+		return get_explicit_chunks(ctx, root, rel, ht, lockmode, num_chunks);
 	}
 
 	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
@@ -1078,13 +1124,13 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
 															  NULL,
-															  AccessShareLock,
+															  lockmode,
 															  reverse,
 															  nested_oids,
 															  num_chunks);
 	}
 
-	return find_children_chunks(hri, ht, AccessShareLock, num_chunks);
+	return find_children_chunks(hri, ht, lockmode, num_chunks);
 }
 
 /*
