@@ -487,14 +487,6 @@ SELECT * FROM t3;
 DELETE FROM t3 USING t3 t3_other WHERE t3.x = t3_other.x AND t3.y = t3_other.y;
 SELECT * FROM t3;
 
--- Test join against inheritance tree
-
-create temp table t2a () inherits (t2);
-
-insert into t2a values (200, 2001);
-
-select * from t1 left join t2 on (t1.a = t2.a);
-
 -- Test matching of column name with wrong alias
 
 -- select t1.x from t1 join t3 on (t1.a = t3.x);
