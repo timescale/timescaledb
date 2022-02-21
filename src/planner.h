@@ -14,6 +14,7 @@
 #include "export.h"
 #include "guc.h"
 
+typedef struct Chunk Chunk;
 typedef struct TsFdwRelInfo TsFdwRelInfo;
 typedef struct TimescaleDBPrivate
 {
@@ -26,6 +27,9 @@ typedef struct TimescaleDBPrivate
 	List *serverids;
 	Relids server_relids;
 	TsFdwRelInfo *fdw_relation_info;
+
+	/* Cached chunk data for the chunk relinfo. */
+	Chunk *chunk;
 } TimescaleDBPrivate;
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);

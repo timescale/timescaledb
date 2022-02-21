@@ -33,6 +33,7 @@
 #include "relinfo.h"
 #include "remote/connection.h"
 #include "scan_exec.h"
+#include "planner.h"
 
 /* Default CPU cost to start up a foreign query. */
 #define DEFAULT_FDW_STARTUP_COST 100.0
@@ -262,20 +263,6 @@ estimate_tuples_and_pages_using_shared_buffers(PlannerInfo *root, Hypertable *ht
 static void
 estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 {
-	/*
-	 * In any case, cache the chunk info for this chunk.
-	 *
-	 * Ideally, we would look up the chunks in a centralized manner in
-	 * ts_plan_expand_hypertable(), but that code path is not used by UPDATES
-	 * which use expand_inherited_rtentry() instead. For now, do this lookup
-	 * here where we need the chunk, to avoid complicating things. After we have
-	 * chunk exclusion for UPDATEs, we can revisit this.
-	 */
-	RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunk_rel);
-	Assert(!chunk_private->chunk);
-	chunk_private->chunk = ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
-
 	const int parent_relid = bms_next_member(chunk_rel->top_parent_relids, -1);
 	if (parent_relid < 0)
 	{
@@ -292,6 +279,20 @@ estimate_chunk_size(PlannerInfo *root, RelOptInfo *chunk_rel)
 			estimate_tuples_and_pages_using_shared_buffers(root, NULL, chunk_rel);
 		}
 		return;
+	}
+
+	/*
+	 * Check if we have the chunk info cached for this chunk relation. For
+	 * SELECTs, we should have cached it when we performed chunk exclusion.
+	 * The UPDATEs use a completely different code path that doesn't do chunk
+	 * exclusion, so we'll have to look up this info now.
+	 */
+	TimescaleDBPrivate *chunk_private = ts_get_private_reloptinfo(chunk_rel);
+	if (chunk_private->chunk == NULL)
+	{
+		RangeTblEntry *chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+		chunk_private->chunk =
+			ts_chunk_get_by_relid(chunk_rte->relid, true /* fail_if_not_found */);
 	}
 
 	RelOptInfo *parent_info = root->simple_rel_array[parent_relid];
