@@ -110,7 +110,7 @@ set(SOLO_TESTS_postgresql
 set(TEST_FILES_max_bgw_8)
 set(SOLO_TESTS_max_bgw_8 bgw_db_scheduler)
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES_max_bgw_8 bgw_db_scheduler.sql)
+  list(APPEND TEST_FILES_max_bgw_8 bgw_db_scheduler.sql dist_move_chunk.sql)
 endif()
 
 set(TEST_TEMPLATES
