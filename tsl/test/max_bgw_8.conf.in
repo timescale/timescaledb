@@ -1,6 +1,6 @@
 # This section has to be equivalent to test/postgresql.conf
 shared_preload_libraries=timescaledb
-max_worker_processes=16
+max_worker_processes=24
 autovacuum=false
 random_page_cost=1.0
 @TELEMETRY_DEFAULT_SETTING@
