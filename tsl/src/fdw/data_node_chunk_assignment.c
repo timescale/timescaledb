@@ -18,6 +18,7 @@
 #include "chunk.h"
 #include "ts_catalog/chunk_data_node.h"
 #include "relinfo.h"
+#include "planner.h"
 
 /*
  * Find an existing data node chunk assignment or initialize a new one.
@@ -58,7 +59,7 @@ DataNodeChunkAssignment *
 data_node_chunk_assignment_assign_chunk(DataNodeChunkAssignments *scas, RelOptInfo *chunkrel)
 {
 	DataNodeChunkAssignment *sca = get_or_create_sca(scas, chunkrel->serverid, NULL);
-	TsFdwRelInfo *chunk_private = fdw_relinfo_get(chunkrel);
+	TimescaleDBPrivate *chunk_private = ts_get_private_reloptinfo(chunkrel);
 	MemoryContext old;
 
 	/* Should never assign the same chunk twice */

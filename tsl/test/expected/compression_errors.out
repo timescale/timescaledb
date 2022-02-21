@@ -494,25 +494,3 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 CALL run_job(:compressjob_id);
 ERROR:  job 1001 has null config
 CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 21 at RAISE
--- Create a hypertable and add a rogue inherited table to it. 
-CREATE TABLE i165 (time timestamptz PRIMARY KEY);
-SELECT create_hypertable('i165','time');
- create_hypertable  
---------------------
- (23,public,i165,t)
-(1 row)
-
-ALTER TABLE i165 SET (timescaledb.compress);
-SELECT compress_chunk(show_chunks('i165'));
- compress_chunk 
-----------------
-(0 rows)
-
-CREATE TABLE extras (more_magic bool) INHERITS (i165);
-INSERT INTO i165 (time) VALUES
-       (generate_series(TIMESTAMP '2019-08-01', TIMESTAMP '2019-08-10', INTERVAL '10 minutes'));
-\set VERBOSITY default
-SELECT * FROM i165;
-ERROR:  chunk not found
-DETAIL:  schema_name: public, table_name: extras
-\set VERBOSITY terse
