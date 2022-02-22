@@ -67,7 +67,8 @@ ts_dimension_vec_sort(DimensionVec **vecptr)
 {
 	DimensionVec *vec = *vecptr;
 
-	qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
+	if (vec->num_slices > 1)
+		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
 
 	return vec;
 }
@@ -77,7 +78,8 @@ ts_dimension_vec_sort_reverse(DimensionVec **vecptr)
 {
 	DimensionVec *vec = *vecptr;
 
-	qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices_reverse);
+	if (vec->num_slices > 1)
+		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices_reverse);
 
 	return vec;
 }

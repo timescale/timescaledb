@@ -367,14 +367,13 @@ ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id)
 {
 	it->ctx.index = catalog_get_index(ts_catalog_get(),
 									  CHUNK_CONSTRAINT,
-									  CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX);
+									  CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX);
 	ts_scan_iterator_scan_key_reset(it);
-	ts_scan_iterator_scan_key_init(
-		it,
-		Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_dimension_slice_id,
-		BTEqualStrategyNumber,
-		F_INT4EQ,
-		Int32GetDatum(slice_id));
+	ts_scan_iterator_scan_key_init(it,
+								   Anum_chunk_constraint_dimension_slice_id_idx_dimension_slice_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(slice_id));
 }
 
 void
@@ -382,10 +381,10 @@ ts_chunk_constraint_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
 {
 	it->ctx.index = catalog_get_index(ts_catalog_get(),
 									  CHUNK_CONSTRAINT,
-									  CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX);
+									  CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX);
 	ts_scan_iterator_scan_key_reset(it);
 	ts_scan_iterator_scan_key_init(it,
-								   Anum_chunk_constraint_chunk_id_dimension_slice_id_idx_chunk_id,
+								   Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(chunk_id));
