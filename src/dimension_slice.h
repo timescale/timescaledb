@@ -76,20 +76,25 @@ extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSli
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 
 extern TSDLLEXPORT DimensionSlice *ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n);
-extern TSDLLEXPORT int
-ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_id,
-												  StrategyNumber start_strategy, int64 start_value,
-												  StrategyNumber end_strategy, int64 end_value);
+extern TSDLLEXPORT int32 ts_dimension_slice_oldest_valid_chunk_for_reorder(
+	int32 job_id, int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
+	StrategyNumber end_strategy, int64 end_value);
 extern TSDLLEXPORT List *ts_dimension_slice_get_chunkids_to_compress(
 	int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
 	StrategyNumber end_strategy, int64 end_value, bool compress, bool recompress, int32 numchunks);
 
 extern DimensionSlice *ts_dimension_slice_from_tuple(TupleInfo *ti);
-extern ScanIterator ts_dimension_slice_scan_iterator_create(MemoryContext result_mcxt);
+extern ScanIterator ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock,
+															MemoryContext result_mcxt);
 extern void ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id,
 														  const ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id,
 																  const ScanTupLock *tuplock);
+
+extern int ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 dimension_id,
+													  StrategyNumber start_strategy,
+													  int64 start_value,
+													  StrategyNumber end_strategy, int64 end_value);
 
 #define dimension_slice_insert(slice) ts_dimension_slice_insert_multi(&(slice), 1)
 

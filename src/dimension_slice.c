@@ -153,6 +153,7 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionVec **slices = data;
 	DimensionSlice *slice;
+	MemoryContext old;
 
 	switch (ti->lockresult)
 	{
@@ -169,8 +170,11 @@ dimension_vec_tuple_found(TupleInfo *ti, void *data)
 			break;
 	}
 
+	old = MemoryContextSwitchTo(ti->mctx);
 	slice = dimension_slice_from_slot(ti->slot);
+	Assert(NULL != slice);
 	*slices = ts_dimension_vec_add_slice(slices, slice);
+	MemoryContextSwitchTo(old);
 
 	return SCAN_CONTINUE;
 }
@@ -264,24 +268,28 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 	return ts_dimension_vec_sort(&slices);
 }
 
-static void
-dimension_slice_scan_with_strategies(int32 dimension_id, StrategyNumber start_strategy,
-									 int64 start_value, StrategyNumber end_strategy,
-									 int64 end_value, void *data, tuple_found_func tuple_found,
-									 int limit, const ScanTupLock *tuplock)
+int
+ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 dimension_id,
+										   StrategyNumber start_strategy, int64 start_value,
+										   StrategyNumber end_strategy, int64 end_value)
 {
-	ScanKeyData scankey[3];
-	int nkeys = 1;
+	Catalog *catalog = ts_catalog_get();
+
+	it->ctx.index = catalog_get_index(catalog,
+									  DIMENSION_SLICE,
+									  DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX);
+	ts_scan_iterator_scan_key_reset(it);
+	ts_scan_iterator_scan_key_init(
+		it,
+		Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(dimension_id));
 
 	/*
 	 * Perform an index scan for slices matching the dimension's ID and which
 	 * enclose the coordinate.
 	 */
-	ScanKeyInit(&scankey[0],
-				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(dimension_id));
 	if (start_strategy != InvalidStrategy)
 	{
 		Oid opno = get_opfamily_member(INTEGER_BTREE_FAM_OID, INT8OID, INT8OID, start_strategy);
@@ -289,11 +297,12 @@ dimension_slice_scan_with_strategies(int32 dimension_id, StrategyNumber start_st
 
 		Assert(OidIsValid(proc));
 
-		ScanKeyInit(&scankey[nkeys++],
-					Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
-					start_strategy,
-					proc,
-					Int64GetDatum(start_value));
+		ts_scan_iterator_scan_key_init(
+			it,
+			Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+			start_strategy,
+			proc,
+			Int64GetDatum(start_value));
 	}
 	if (end_strategy != InvalidStrategy)
 	{
@@ -325,22 +334,15 @@ dimension_slice_scan_with_strategies(int32 dimension_id, StrategyNumber start_st
 			end_value = PG_INT64_MAX;
 		}
 
-		ScanKeyInit(&scankey[nkeys++],
-					Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
-					end_strategy,
-					proc,
-					Int64GetDatum(end_value));
+		ts_scan_iterator_scan_key_init(
+			it,
+			Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+			end_strategy,
+			proc,
+			Int64GetDatum(end_value));
 	}
 
-	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
-										scankey,
-										nkeys,
-										tuple_found,
-										data,
-										limit,
-										AccessShareLock,
-										tuplock,
-										CurrentMemoryContext);
+	return it->ctx.nkeys;
 }
 
 /*
@@ -354,16 +356,45 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 									int limit, const ScanTupLock *tuplock)
 {
 	DimensionVec *slices = ts_dimension_vec_create(limit > 0 ? limit : DIMENSION_VEC_DEFAULT_SIZE);
+	ScanIterator it = ts_dimension_slice_scan_iterator_create(tuplock, CurrentMemoryContext);
 
-	dimension_slice_scan_with_strategies(dimension_id,
-										 start_strategy,
-										 start_value,
-										 end_strategy,
-										 end_value,
-										 &slices,
-										 dimension_vec_tuple_found,
-										 limit,
-										 tuplock);
+	ts_dimension_slice_scan_iterator_set_range(&it,
+											   dimension_id,
+											   start_strategy,
+											   start_value,
+											   end_strategy,
+											   end_value);
+	it.ctx.limit = limit;
+
+	ts_scanner_foreach(&it)
+	{
+		const TupleInfo *ti = ts_scan_iterator_tuple_info(&it);
+		DimensionSlice *slice;
+		MemoryContext old;
+
+		switch (ti->lockresult)
+		{
+			case TM_SelfModified:
+			case TM_Ok:
+				old = MemoryContextSwitchTo(ti->mctx);
+				slice = dimension_slice_from_slot(ti->slot);
+				Assert(NULL != slice);
+				slices = ts_dimension_vec_add_slice(&slices, slice);
+				MemoryContextSwitchTo(old);
+				break;
+			case TM_Deleted:
+			case TM_Updated:
+				/* Treat as not found */
+				break;
+			default:
+				elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
+				pg_unreachable();
+				break;
+		}
+	}
+
+	Assert(limit <= 0 || slices->num_slices <= limit);
+	ts_scan_iterator_close(&it);
 
 	return ts_dimension_vec_sort(&slices);
 }
@@ -670,11 +701,11 @@ ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLo
 }
 
 ScanIterator
-ts_dimension_slice_scan_iterator_create(MemoryContext result_mcxt)
+ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock, MemoryContext result_mcxt)
 {
 	ScanIterator it = ts_scan_iterator_create(DIMENSION_SLICE, AccessShareLock, result_mcxt);
-	it.ctx.index = catalog_get_index(ts_catalog_get(), DIMENSION_SLICE, DIMENSION_SLICE_ID_IDX);
 	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
+	it.ctx.tuplock = tuplock;
 
 	return it;
 }
@@ -683,6 +714,7 @@ void
 ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id,
 											  const ScanTupLock *tuplock)
 {
+	it->ctx.index = catalog_get_index(ts_catalog_get(), DIMENSION_SLICE, DIMENSION_SLICE_ID_IDX);
 	ts_scan_iterator_scan_key_reset(it);
 	ts_scan_iterator_scan_key_init(it,
 								   Anum_dimension_slice_id_idx_id,
@@ -903,101 +935,59 @@ ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n)
 	return ret;
 }
 
-typedef struct ChunkStatInfo
-{
-	int32 chunk_id;
-	int32 job_id;
-} ChunkStatInfo;
-
-/* Check that a a) job has not already been executed for the chunk and b) chunk is not compressed
- * (a compressed chunk should not be reordered).*/
-static ScanTupleResult
-dimension_slice_check_chunk_stats_tuple_found(TupleInfo *ti, void *data)
-{
-	ListCell *lc;
-	DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
-	List *chunk_ids = NIL;
-	ChunkStatInfo *info = data;
-
-	ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
-
-	foreach (lc, chunk_ids)
-	{
-		/* Look for a chunk that a) doesn't have a job stat (reorder ) and b) is not compressed
-		 * (should not reorder a compressed chunk) */
-		int chunk_id = lfirst_int(lc);
-		BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(info->job_id, chunk_id);
-
-		if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
-			ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
-		{
-			/* Save the chunk_id */
-			info->chunk_id = chunk_id;
-			return SCAN_DONE;
-		}
-	}
-
-	return SCAN_CONTINUE;
-}
-
-int
+int32
 ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_id,
 												  StrategyNumber start_strategy, int64 start_value,
 												  StrategyNumber end_strategy, int64 end_value)
 {
-	ChunkStatInfo info = {
-		.job_id = job_id,
-		.chunk_id = -1,
-	};
+	int32 result_chunk_id = -1;
+	ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
+	bool done = false;
 
-	dimension_slice_scan_with_strategies(dimension_id,
-										 start_strategy,
-										 start_value,
-										 end_strategy,
-										 end_value,
-										 &info,
-										 dimension_slice_check_chunk_stats_tuple_found,
-										 -1,
-										 NULL);
+	ts_dimension_slice_scan_iterator_set_range(&it,
+											   dimension_id,
+											   start_strategy,
+											   start_value,
+											   end_strategy,
+											   end_value);
+	ts_scan_iterator_start_scan(&it);
 
-	return info.chunk_id;
-}
-
-typedef struct CompressChunkSearch
-{
-	List *chunk_ids; /* list of chunk ids that match search */
-	int32 maxchunks; /*max number of chunks to return */
-	bool compress;
-	bool recompress;
-} CompressChunkSearch;
-
-static ScanTupleResult
-dimension_slice_check_is_chunk_uncompressed_tuple_found(TupleInfo *ti, void *data)
-{
-	ListCell *lc;
-	DimensionSlice *slice = dimension_slice_from_slot(ti->slot);
-	List *chunk_ids = NIL;
-	CompressChunkSearch *d = data;
-
-	ts_chunk_constraint_scan_by_dimension_slice_to_list(slice, &chunk_ids, CurrentMemoryContext);
-
-	foreach (lc, chunk_ids)
+	while (!done)
 	{
-		int32 chunk_id = lfirst_int(lc);
-		ChunkCompressionStatus st = ts_chunk_get_compression_status(chunk_id);
-		if ((d->compress && st == CHUNK_COMPRESS_NONE) ||
-			(d->recompress && st == CHUNK_COMPRESS_UNORDERED))
+		const TupleInfo *ti = ts_scan_iterator_next(&it);
+		ListCell *lc;
+		DimensionSlice *slice;
+		List *chunk_ids = NIL;
+
+		if (NULL == ti)
+			break;
+
+		slice = dimension_slice_from_slot(ti->slot);
+		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
+															&chunk_ids,
+															CurrentMemoryContext);
+
+		foreach (lc, chunk_ids)
 		{
-			/* found a chunk that is not compressed or needs recompress
-			 * caller needs to check the correct chunk status
-			 */
-			d->chunk_ids = lappend_int(d->chunk_ids, chunk_id);
-			if (d->maxchunks > 0 && list_length(d->chunk_ids) >= d->maxchunks)
-				return SCAN_DONE;
+			/* Look for a chunk that a) doesn't have a job stat (reorder ) and b) is not compressed
+			 * (should not reorder a compressed chunk) */
+			int32 chunk_id = lfirst_int(lc);
+			BgwPolicyChunkStats *chunk_stat = ts_bgw_policy_chunk_stats_find(job_id, chunk_id);
+
+			if ((chunk_stat == NULL || chunk_stat->fd.num_times_job_run == 0) &&
+				ts_chunk_get_compression_status(chunk_id) == CHUNK_COMPRESS_NONE)
+			{
+				/* Save the chunk_id */
+				result_chunk_id = chunk_id;
+				done = true;
+				break;
+			}
 		}
 	}
 
-	return SCAN_CONTINUE;
+	ts_scan_iterator_close(&it);
+
+	return result_chunk_id;
 }
 
 List *
@@ -1006,19 +996,58 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 											int64 end_value, bool compress, bool recompress,
 											int32 numchunks)
 {
-	CompressChunkSearch data = { .compress = compress,
-								 .recompress = recompress,
-								 .chunk_ids = NIL,
-								 .maxchunks = numchunks > 0 ? numchunks : -1 };
-	dimension_slice_scan_with_strategies(dimension_id,
-										 start_strategy,
-										 start_value,
-										 end_strategy,
-										 end_value,
-										 &data,
-										 dimension_slice_check_is_chunk_uncompressed_tuple_found,
-										 -1,
-										 NULL);
+	List *chunk_ids = NIL;
+	int32 maxchunks = numchunks > 0 ? numchunks : -1;
+	ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
+	bool done = false;
 
-	return data.chunk_ids;
+	ts_dimension_slice_scan_iterator_set_range(&it,
+											   dimension_id,
+											   start_strategy,
+											   start_value,
+											   end_strategy,
+											   end_value);
+	ts_scan_iterator_start_scan(&it);
+
+	while (!done)
+	{
+		DimensionSlice *slice;
+		TupleInfo *ti;
+		ListCell *lc;
+		List *slice_chunk_ids = NIL;
+
+		ti = ts_scan_iterator_next(&it);
+
+		if (NULL == ti)
+			break;
+
+		slice = dimension_slice_from_slot(ti->slot);
+		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
+															&slice_chunk_ids,
+															CurrentMemoryContext);
+		foreach (lc, slice_chunk_ids)
+		{
+			int32 chunk_id = lfirst_int(lc);
+			ChunkCompressionStatus st = ts_chunk_get_compression_status(chunk_id);
+
+			if ((compress && st == CHUNK_COMPRESS_NONE) ||
+				(recompress && st == CHUNK_COMPRESS_UNORDERED))
+			{
+				/* found a chunk that is not compressed or needs recompress
+				 * caller needs to check the correct chunk status
+				 */
+				chunk_ids = lappend_int(chunk_ids, chunk_id);
+
+				if (maxchunks > 0 && list_length(chunk_ids) >= maxchunks)
+				{
+					done = true;
+					break;
+				}
+			}
+		}
+	}
+
+	ts_scan_iterator_close(&it);
+
+	return chunk_ids;
 }

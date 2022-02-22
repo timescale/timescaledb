@@ -870,9 +870,9 @@ SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAM
 SELECT * FROM original_chunk_constraints_metadata;
  chunk_id | dimension_slice_id |      constraint_name      | hypertable_constraint_name 
 ----------+--------------------+---------------------------+----------------------------
-       10 |                 15 | constraint_15             | 
        10 |                    | 10_1_chunkapi_device_fkey | chunkapi_device_fkey
        10 |                    | 10_2_chunkapi_pkey        | chunkapi_pkey
+       10 |                 15 | constraint_15             | 
 (3 rows)
 
 SELECT
@@ -885,9 +885,9 @@ INNER JOIN _timescaledb_catalog.chunk ch ON (con.chunk_id = ch.id)
 WHERE ch.schema_name = :'CHUNK_SCHEMA' AND ch.table_name = :'CHUNK_NAME';
  chunk_id | dimension_slice_id |      constraint_name      | hypertable_constraint_name 
 ----------+--------------------+---------------------------+----------------------------
-       11 |                 16 | constraint_16             | 
        11 |                    | 11_3_chunkapi_device_fkey | chunkapi_device_fkey
        11 |                    | 11_4_chunkapi_pkey        | chunkapi_pkey
+       11 |                 16 | constraint_16             | 
 (3 rows)
 
 DROP TABLE original_chunk_constraints;

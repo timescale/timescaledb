@@ -300,27 +300,37 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 	 * constraints. Scan the chunk constraints again to get all
 	 * constraints.
 	 */
-	for (i = 0; i < chunk_count; i++)
+
+	if (chunk_count > 0)
 	{
-		Chunk *chunk = chunks[i];
-		int num_constraints_hint = chunk->constraints->num_constraints;
+		/*
+		 * This chunk constraint scan uses a different index, so need to close
+		 * and restart the scan.
+		 */
+		ts_scan_iterator_close(&constr_it);
 
-		chunk->constraints = ts_chunk_constraints_alloc(num_constraints_hint, orig_mcxt);
-
-		ts_chunk_constraint_scan_iterator_set_chunk_id(&constr_it, chunk->fd.id);
-		ts_scan_iterator_rescan(&constr_it);
-
-		while (ts_scan_iterator_next(&constr_it) != NULL)
+		for (i = 0; i < chunk_count; i++)
 		{
-			TupleInfo *constr_ti = ts_scan_iterator_tuple_info(&constr_it);
-			MemoryContextSwitchTo(per_tuple_mcxt);
-			ts_chunk_constraints_add_from_tuple(chunk->constraints, constr_ti);
-			MemoryContextSwitchTo(work_mcxt);
+			Chunk *chunk = chunks[i];
+			int num_constraints_hint = chunk->constraints->num_constraints;
+
+			chunk->constraints = ts_chunk_constraints_alloc(num_constraints_hint, orig_mcxt);
+
+			ts_chunk_constraint_scan_iterator_set_chunk_id(&constr_it, chunk->fd.id);
+			ts_scan_iterator_start_or_restart_scan(&constr_it);
+
+			while (ts_scan_iterator_next(&constr_it) != NULL)
+			{
+				TupleInfo *constr_ti = ts_scan_iterator_tuple_info(&constr_it);
+				MemoryContextSwitchTo(per_tuple_mcxt);
+				ts_chunk_constraints_add_from_tuple(chunk->constraints, constr_ti);
+				MemoryContextSwitchTo(work_mcxt);
+			}
 		}
 	}
 
-	Assert(CurrentMemoryContext == work_mcxt);
 	ts_scan_iterator_close(&constr_it);
+	Assert(CurrentMemoryContext == work_mcxt);
 
 	/*
 	 * Step 4: Fill in data nodes for remote chunks.

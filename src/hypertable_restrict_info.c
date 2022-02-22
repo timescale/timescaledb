@@ -20,10 +20,11 @@
 #include "dimension_vector.h"
 #include "partitioning.h"
 #include "chunk_scan.h"
+#include "scan_iterator.h"
 
 typedef struct DimensionRestrictInfo
 {
-	Dimension *dimension;
+	const Dimension *dimension;
 } DimensionRestrictInfo;
 
 typedef struct DimensionRestrictInfoOpen
@@ -50,7 +51,7 @@ typedef struct DimensionValues
 } DimensionValues;
 
 static DimensionRestrictInfoOpen *
-dimension_restrict_info_open_create(Dimension *d)
+dimension_restrict_info_open_create(const Dimension *d)
 {
 	DimensionRestrictInfoOpen *new = palloc(sizeof(DimensionRestrictInfoOpen));
 
@@ -61,7 +62,7 @@ dimension_restrict_info_open_create(Dimension *d)
 }
 
 static DimensionRestrictInfoClosed *
-dimension_restrict_info_closed_create(Dimension *d)
+dimension_restrict_info_closed_create(const Dimension *d)
 {
 	DimensionRestrictInfoClosed *new = palloc(sizeof(DimensionRestrictInfoClosed));
 
@@ -72,7 +73,7 @@ dimension_restrict_info_closed_create(Dimension *d)
 }
 
 static DimensionRestrictInfo *
-dimension_restrict_info_create(Dimension *d)
+dimension_restrict_info_create(const Dimension *d)
 {
 	switch (d->type)
 	{
@@ -232,71 +233,6 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 	}
 }
 
-static DimensionVec *
-dimension_restrict_info_open_slices(DimensionRestrictInfoOpen *dri)
-{
-	/* basic idea: slice_end > lower_bound && slice_start < upper_bound */
-	return ts_dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
-											   dri->upper_strategy,
-											   dri->upper_bound,
-											   dri->lower_strategy,
-											   dri->lower_bound,
-											   0,
-											   NULL);
-}
-
-static DimensionVec *
-dimension_restrict_info_closed_slices(DimensionRestrictInfoClosed *dri)
-{
-	if (dri->strategy == BTEqualStrategyNumber)
-	{
-		/* slice_end >= value && slice_start <= value */
-		ListCell *cell;
-		DimensionVec *dim_vec = ts_dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
-
-		foreach (cell, dri->partitions)
-		{
-			int i;
-			int32 partition = lfirst_int(cell);
-			DimensionVec *tmp = ts_dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
-																	BTLessEqualStrategyNumber,
-																	partition,
-																	BTGreaterEqualStrategyNumber,
-																	partition,
-																	0,
-																	NULL);
-
-			for (i = 0; i < tmp->num_slices; i++)
-				dim_vec = ts_dimension_vec_add_unique_slice(&dim_vec, tmp->slices[i]);
-		}
-		return dim_vec;
-	}
-
-	/* get all slices */
-	return ts_dimension_slice_scan_range_limit(dri->base.dimension->fd.id,
-											   InvalidStrategy,
-											   -1,
-											   InvalidStrategy,
-											   -1,
-											   0,
-											   NULL);
-}
-
-static DimensionVec *
-dimension_restrict_info_slices(DimensionRestrictInfo *dri)
-{
-	switch (dri->dimension->type)
-	{
-		case DIMENSION_TYPE_OPEN:
-			return dimension_restrict_info_open_slices((DimensionRestrictInfoOpen *) dri);
-		case DIMENSION_TYPE_CLOSED:
-			return dimension_restrict_info_closed_slices((DimensionRestrictInfoClosed *) dri);
-		default:
-			elog(ERROR, "unknown dimension type");
-			return NULL;
-	}
-}
-
 typedef struct HypertableRestrictInfo
 {
 	int num_base_restrictions; /* number of base restrictions
@@ -406,7 +342,6 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		return false;
 
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
-
 	dimvalues = func_get_dim_values(c, use_or);
 	return dimension_restrict_info_add(dri, strategy, c->constcollid, dimvalues);
 }
@@ -525,32 +460,133 @@ ts_hypertable_restrict_info_has_restrictions(HypertableRestrictInfo *hri)
 	return hri->num_base_restrictions > 0;
 }
 
-static List *
-gather_restriction_dimension_vectors(HypertableRestrictInfo *hri)
+/*
+ * Scan for dimension slices matching query constraints.
+ *
+ * Matching slices are appended to to the given dimension vector. Note that we
+ * keep the table and index open as long as we do not change the number of
+ * scan keys. If the keys change, but the number of keys is the same, we can
+ * simply "rescan". If the number of keys change, however, we need to end the
+ * scan and start again.
+ */
+static DimensionVec *
+scan_and_append_slices(ScanIterator *it, int old_nkeys, DimensionVec **dv, bool unique)
 {
-	int i;
+	if (old_nkeys != -1 && old_nkeys != it->ctx.nkeys)
+		ts_scan_iterator_end(it);
+
+	ts_scan_iterator_start_or_restart_scan(it);
+
+	while (ts_scan_iterator_next(it))
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(it);
+		DimensionSlice *slice = ts_dimension_slice_from_tuple(ti);
+
+		if (NULL != slice)
+		{
+			if (unique)
+				*dv = ts_dimension_vec_add_unique_slice(dv, slice);
+			else
+				*dv = ts_dimension_vec_add_slice(dv, slice);
+		}
+	}
+
+	return *dv;
+}
+
+static List *
+gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
+{
 	List *dimension_vecs = NIL;
+	ScanIterator it;
+	int i;
+	int old_nkeys = -1;
+
+	it = ts_dimension_slice_scan_iterator_create(NULL, CurrentMemoryContext);
 
 	for (i = 0; i < hri->num_dimensions; i++)
 	{
-		DimensionRestrictInfo *dri = hri->dimension_restriction[i];
-		DimensionVec *dv;
+		const DimensionRestrictInfo *dri = hri->dimension_restriction[i];
+		DimensionVec *dv = ts_dimension_vec_create(DIMENSION_VEC_DEFAULT_SIZE);
 
 		Assert(NULL != dri);
 
-		dv = dimension_restrict_info_slices(dri);
+		switch (dri->dimension->type)
+		{
+			case DIMENSION_TYPE_OPEN:
+			{
+				const DimensionRestrictInfoOpen *open = (const DimensionRestrictInfoOpen *) dri;
+
+				ts_dimension_slice_scan_iterator_set_range(&it,
+														   open->base.dimension->fd.id,
+														   open->upper_strategy,
+														   open->upper_bound,
+														   open->lower_strategy,
+														   open->lower_bound);
+
+				dv = scan_and_append_slices(&it, old_nkeys, &dv, false);
+				break;
+			}
+			case DIMENSION_TYPE_CLOSED:
+			{
+				const DimensionRestrictInfoClosed *closed =
+					(const DimensionRestrictInfoClosed *) dri;
+
+				if (closed->strategy == BTEqualStrategyNumber)
+				{
+					/* slice_end >= value && slice_start <= value */
+					ListCell *cell;
+
+					foreach (cell, closed->partitions)
+					{
+						int32 partition = lfirst_int(cell);
+
+						ts_dimension_slice_scan_iterator_set_range(&it,
+																   dri->dimension->fd.id,
+																   BTLessEqualStrategyNumber,
+																   partition,
+																   BTGreaterEqualStrategyNumber,
+																   partition);
+
+						dv = scan_and_append_slices(&it, old_nkeys, &dv, true);
+					}
+				}
+				else
+				{
+					ts_dimension_slice_scan_iterator_set_range(&it,
+															   dri->dimension->fd.id,
+															   InvalidStrategy,
+															   -1,
+															   InvalidStrategy,
+															   -1);
+					dv = scan_and_append_slices(&it, old_nkeys, &dv, false);
+				}
+
+				break;
+			}
+			default:
+				elog(ERROR, "unknown dimension type");
+				return NULL;
+		}
 
 		Assert(dv->num_slices >= 0);
 
 		/*
-		 * If there are no matching slices in any single dimension, the result
-		 * will be empty
+		 * If there is a dimension where no slices match, the result will be
+		 * empty.
 		 */
 		if (dv->num_slices == 0)
+		{
+			ts_scan_iterator_close(&it);
 			return NIL;
+		}
 
+		dv = ts_dimension_vec_sort(&dv);
 		dimension_vecs = lappend(dimension_vecs, dv);
+		old_nkeys = it.ctx.nkeys;
 	}
+
+	ts_scan_iterator_close(&it);
 
 	Assert(list_length(dimension_vecs) == hri->num_dimensions);
 

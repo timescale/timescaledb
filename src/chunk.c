@@ -1541,7 +1541,7 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	}
 	else
 	{
-		ScanIterator it = ts_dimension_slice_scan_iterator_create(ti->mctx);
+		ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, ti->mctx);
 		chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
 		ts_scan_iterator_close(&it);
 	}
@@ -2314,7 +2314,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 				continue;
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
 
-			it = ts_dimension_slice_scan_iterator_create(mctx);
+			it = ts_dimension_slice_scan_iterator_create(NULL, mctx);
 			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
 			ts_scan_iterator_close(&it);
 

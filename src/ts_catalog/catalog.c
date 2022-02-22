@@ -159,7 +159,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CHUNK_CONSTRAINT_INDEX,
 		.names = (char *[]) {
 			[CHUNK_CONSTRAINT_CHUNK_ID_CONSTRAINT_NAME_IDX] = "chunk_constraint_chunk_id_constraint_name_key",
-			[CHUNK_CONSTRAINT_CHUNK_ID_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_chunk_id_dimension_slice_id_idx",
+			[CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_dimension_slice_id_idx",
 		},
 	},
 	[CHUNK_INDEX] = {

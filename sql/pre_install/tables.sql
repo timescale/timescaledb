@@ -165,9 +165,8 @@ CREATE TABLE _timescaledb_catalog.chunk_constraint (
   UNIQUE (chunk_id, constraint_name)
 );
 
+CREATE INDEX chunk_constraint_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (dimension_slice_id);
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint', '');
-
-CREATE INDEX chunk_constraint_chunk_id_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (chunk_id, dimension_slice_id);
 
 CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 
