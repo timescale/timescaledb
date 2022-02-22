@@ -100,6 +100,17 @@ TRUNCATE non_disttable1, non_disttable2;
 -- Truncating one distributed hypertable should be OK
 TRUNCATE disttable;
 
+-- RENAME TO
+ALTER TABLE disttable RENAME TO disttable2;
+ALTER TABLE disttable2 RENAME TO disttable;
+
+-- SET SCHEMA
+ALTER TABLE disttable SET SCHEMA some_schema;
+ALTER TABLE some_schema.disttable SET SCHEMA public;
+\set ON_ERROR_STOP 0
+ALTER TABLE disttable SET SCHEMA some_unexist_schema;
+\set ON_ERROR_STOP 1
+
 -- Test unsupported operations on distributed hypertable
 \set ON_ERROR_STOP 0
 
@@ -117,10 +128,6 @@ TRUNCATE disttable, non_disttable1;
 TRUNCATE disttable, non_disttable2;
 
 CLUSTER disttable USING disttable_description_idx;
-
-ALTER TABLE disttable RENAME TO disttable2;
-ALTER TABLE disttable SET SCHEMA some_unexist_schema;
-ALTER TABLE disttable SET SCHEMA some_schema;
 
 DROP TABLE non_disttable1, disttable;
 DROP TABLE disttable, non_disttable2;
