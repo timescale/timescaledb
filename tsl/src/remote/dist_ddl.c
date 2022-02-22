@@ -1223,9 +1223,6 @@ dist_ddl_end(EventTriggerData *command)
 	{
 		HypertableType type = dist_ddl_state_get_hypertable_type();
 
-		if (type == HYPERTABLE_DISTRIBUTED)
-			dist_ddl_error_raise_unsupported();
-
 		/* Ensure this operation is executed by the access node session. */
 		if (type == HYPERTABLE_DISTRIBUTED_MEMBER)
 			dist_ddl_error_if_not_allowed_data_node_session();
