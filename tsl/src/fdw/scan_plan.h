@@ -52,5 +52,7 @@ extern void fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root
 								   UpperRelationKind stage, RelOptInfo *input_rel,
 								   RelOptInfo *output_rel, void *extra,
 								   CreateUpperPathFunc create_paths);
+extern Expr *find_em_expr_for_input_target(PlannerInfo *root, EquivalenceClass *ec,
+										   PathTarget *target);
 
 #endif /* TIMESCALEDB_TSL_FDW_SCAN_PLAN_H */

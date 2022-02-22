@@ -498,6 +498,8 @@ fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid, Oid local
 	fdw_estimate_path_cost_size(root,
 								rel,
 								NIL,
+								NIL,
+								NULL,
 								&fpinfo->rows,
 								&fpinfo->width,
 								&fpinfo->startup_cost,

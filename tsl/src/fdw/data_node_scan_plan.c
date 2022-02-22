@@ -542,6 +542,7 @@ static CustomScanMethods data_node_scan_plan_methods = {
 typedef struct DataNodeScanPath
 {
 	CustomPath cpath;
+	List *dns_private;
 } DataNodeScanPath;
 
 static Plan *
@@ -690,6 +691,7 @@ data_node_scan_upper_path_create(PlannerInfo *root, RelOptInfo *rel, PathTarget 
 	scanpath->cpath.path.startup_cost = startup_cost;
 	scanpath->cpath.path.total_cost = total_cost;
 	scanpath->cpath.path.pathkeys = pathkeys;
+	scanpath->dns_private = private;
 
 	return &scanpath->cpath.path;
 }

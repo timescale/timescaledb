@@ -25,27 +25,27 @@ explain (verbose, costs off)
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: 1
-   ->  Nested Loop
+   ->  Merge Join
          Output: 1
-         Join Filter: (t1.id = (t2.id + 1))
+         Merge Cond: (t1.id = ((t2.id + 1)))
          ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1
                Output: t1.id
                Data node: data_node_1
                Fetcher Type: Cursor
                Chunks: _dist_hyper_X_X_chunk
-               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST
          ->  Materialize
-               Output: t2.id
+               Output: t2.id, ((t2.id + 1))
                ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2
-                     Output: t2.id
+                     Output: t2.id, (t2.id + 1)
                      Data node: data_node_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY (id + 1) ASC NULLS LAST
 (19 rows)
 
 set timescaledb.remote_data_fetcher = 'rowbyrow';
@@ -57,27 +57,27 @@ explain (verbose, costs off)
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: 1
-   ->  Nested Loop
+   ->  Merge Join
          Output: 1
-         Join Filter: (t1.id = (t2.id + 1))
+         Merge Cond: (t1.id = ((t2.id + 1)))
          ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1
                Output: t1.id
                Data node: data_node_1
                Fetcher Type: Row by row
                Chunks: _dist_hyper_X_X_chunk
-               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST
          ->  Materialize
-               Output: t2.id
+               Output: t2.id, ((t2.id + 1))
                ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2
-                     Output: t2.id
+                     Output: t2.id, (t2.id + 1)
                      Data node: data_node_1
                      Fetcher Type: Row by row
                      Chunks: _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY (id + 1) ASC NULLS LAST
 (19 rows)
 
 -- Check once again that 'auto' is used after 'rowbyrow'.

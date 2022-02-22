@@ -36,6 +36,111 @@
 #include "chunk.h"
 
 /*
+ * get_useful_ecs_for_relation
+ *		Determine which EquivalenceClasses might be involved in useful
+ *		orderings of this relation.
+ *
+ * This function is in some respects a mirror image of the core function
+ * pathkeys_useful_for_merging: for a regular table, we know what indexes
+ * we have and want to test whether any of them are useful.  For a foreign
+ * table, we don't know what indexes are present on the remote side but
+ * want to speculate about which ones we'd like to use if they existed.
+ *
+ * This function returns a list of potentially-useful equivalence classes,
+ * but it does not guarantee that an EquivalenceMember exists which contains
+ * Vars only from the given relation.  For example, given ft1 JOIN t1 ON
+ * ft1.x + t1.x = 0, this function will say that the equivalence class
+ * containing ft1.x + t1.x is potentially useful.  Supposing ft1 is remote and
+ * t1 is local (or on a different server), it will turn out that no useful
+ * ORDER BY clause can be generated.  It's not our job to figure that out
+ * here; we're only interested in identifying relevant ECs.
+ */
+static List *
+get_useful_ecs_for_relation(PlannerInfo *root, RelOptInfo *rel)
+{
+	List *useful_eclass_list = NIL;
+	ListCell *lc;
+	Relids relids;
+
+	/*
+	 * First, consider whether any active EC is potentially useful for a merge
+	 * join against this relation.
+	 */
+	if (rel->has_eclass_joins)
+	{
+		foreach (lc, root->eq_classes)
+		{
+			EquivalenceClass *cur_ec = (EquivalenceClass *) lfirst(lc);
+
+			if (eclass_useful_for_merging(root, cur_ec, rel))
+				useful_eclass_list = lappend(useful_eclass_list, cur_ec);
+		}
+	}
+
+	/*
+	 * Next, consider whether there are any non-EC derivable join clauses that
+	 * are merge-joinable.  If the joininfo list is empty, we can exit
+	 * quickly.
+	 */
+	if (rel->joininfo == NIL)
+		return useful_eclass_list;
+
+	/* If this is a child rel, we must use the topmost parent rel to search. */
+	if (IS_OTHER_REL(rel))
+	{
+		Assert(!bms_is_empty(rel->top_parent_relids));
+		relids = rel->top_parent_relids;
+	}
+	else
+		relids = rel->relids;
+
+	/* Check each join clause in turn. */
+	foreach (lc, rel->joininfo)
+	{
+		RestrictInfo *restrictinfo = (RestrictInfo *) lfirst(lc);
+
+		/* Consider only mergejoinable clauses */
+		if (restrictinfo->mergeopfamilies == NIL)
+			continue;
+
+		/* Make sure we've got canonical ECs. */
+		update_mergeclause_eclasses(root, restrictinfo);
+
+		/*
+		 * restrictinfo->mergeopfamilies != NIL is sufficient to guarantee
+		 * that left_ec and right_ec will be initialized, per comments in
+		 * distribute_qual_to_rels.
+		 *
+		 * We want to identify which side of this merge-joinable clause
+		 * contains columns from the relation produced by this RelOptInfo. We
+		 * test for overlap, not containment, because there could be extra
+		 * relations on either side.  For example, suppose we've got something
+		 * like ((A JOIN B ON A.x = B.x) JOIN C ON A.y = C.y) LEFT JOIN D ON
+		 * A.y = D.y.  The input rel might be the joinrel between A and B, and
+		 * we'll consider the join clause A.y = D.y. relids contains a
+		 * relation not involved in the join class (B) and the equivalence
+		 * class for the left-hand side of the clause contains a relation not
+		 * involved in the input rel (C).  Despite the fact that we have only
+		 * overlap and not containment in either direction, A.y is potentially
+		 * useful as a sort column.
+		 *
+		 * Note that it's even possible that relids overlaps neither side of
+		 * the join clause.  For example, consider A LEFT JOIN B ON A.x = B.x
+		 * AND A.x = 1.  The clause A.x = 1 will appear in B's joininfo list,
+		 * but overlaps neither side of B.  In that case, we just skip this
+		 * join clause, since it doesn't suggest a useful sort order for this
+		 * relation.
+		 */
+		if (bms_overlap(relids, restrictinfo->right_ec->ec_relids))
+			useful_eclass_list = list_append_unique_ptr(useful_eclass_list, restrictinfo->right_ec);
+		else if (bms_overlap(relids, restrictinfo->left_ec->ec_relids))
+			useful_eclass_list = list_append_unique_ptr(useful_eclass_list, restrictinfo->left_ec);
+	}
+
+	return useful_eclass_list;
+}
+
+/*
  * get_useful_pathkeys_for_relation
  *		Determine which orderings of a relation might be useful.
  *
@@ -48,12 +153,16 @@ static List *
 get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 {
 	List *useful_pathkeys_list = NIL;
+	List *useful_eclass_list;
 	ListCell *lc;
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(rel);
+	EquivalenceClass *query_ec = NULL;
 
 	/*
 	 * Pushing the query_pathkeys to the data node is always worth
 	 * considering, because it might let us avoid a local sort.
 	 */
+	fpinfo->qp_is_pushdown_safe = false;
 	if (root->query_pathkeys)
 	{
 		bool query_pathkeys_ok = true;
@@ -83,7 +192,63 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel)
 		}
 
 		if (query_pathkeys_ok)
+		{
 			useful_pathkeys_list = list_make1(list_copy(root->query_pathkeys));
+			fpinfo->qp_is_pushdown_safe = true;
+		}
+	}
+
+	/*
+	 * Having the remote side do the
+	 * sort generally won't be any worse than doing it locally, and it might
+	 * be much better if the remote side can generate data in the right order
+	 * without needing a sort at all.  However, what we're going to do next is
+	 * try to generate pathkeys that seem promising for possible merge joins,
+	 * and that's more speculative.
+	 *
+	 * The below relies on decent ANALYZE statistics on the AN
+	 */
+
+	/* Get the list of interesting EquivalenceClasses. */
+	useful_eclass_list = get_useful_ecs_for_relation(root, rel);
+
+	/* Extract unique EC for query, if any, so we don't consider it again. */
+	if (list_length(root->query_pathkeys) == 1)
+	{
+		PathKey *query_pathkey = linitial(root->query_pathkeys);
+
+		query_ec = query_pathkey->pk_eclass;
+	}
+
+	/*
+	 * As a heuristic, the only pathkeys we consider here are those of length
+	 * one.  It's surely possible to consider more, but since each one we
+	 * choose to consider will generate a round-trip to the remote side, we
+	 * need to be a bit cautious here.  It would sure be nice to have a local
+	 * cache of information about remote index definitions...
+	 */
+	foreach (lc, useful_eclass_list)
+	{
+		EquivalenceClass *cur_ec = lfirst(lc);
+		Expr *em_expr;
+		PathKey *pathkey;
+
+		/* If redundant with what we did above, skip it. */
+		if (cur_ec == query_ec)
+			continue;
+
+		/* If no pushable expression for this rel, skip it. */
+		em_expr = find_em_expr_for_rel(cur_ec, rel);
+		if (em_expr == NULL || !is_foreign_expr(root, rel, em_expr))
+			continue;
+
+		/* Looks like we can generate a pathkey, so let's do it. */
+		pathkey = make_canonical_pathkey(root,
+										 cur_ec,
+										 linitial_oid(cur_ec->ec_opfamilies),
+										 BTLessStrategyNumber,
+										 false);
+		useful_pathkeys_list = lappend(useful_pathkeys_list, list_make1(pathkey));
 	}
 
 	return useful_pathkeys_list;
@@ -114,7 +279,9 @@ add_paths_with_pathkeys_for_rel(PlannerInfo *root, RelOptInfo *rel, Path *epq_pa
 
 		fdw_estimate_path_cost_size(root,
 									rel,
+									NIL,
 									useful_pathkeys,
+									NULL,
 									&rows,
 									&width,
 									&startup_cost,
@@ -915,7 +1082,15 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 		return;
 
 	/* Estimate the cost of push down */
-	fdw_estimate_path_cost_size(root, grouped_rel, NIL, &rows, &width, &startup_cost, &total_cost);
+	fdw_estimate_path_cost_size(root,
+								grouped_rel,
+								NIL,
+								NIL,
+								NULL,
+								&rows,
+								&width,
+								&startup_cost,
+								&total_cost);
 
 	/* Now update this information in the fpinfo */
 	fpinfo->rows = rows;
@@ -942,6 +1117,415 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 		fdw_add_upper_paths_with_pathkeys_for_rel(root, grouped_rel, NULL, create_path);
 }
 
+/*
+ * add_foreign_ordered_paths
+ *		Add foreign paths for performing the final sort remotely.
+ *
+ * Given input_rel contains the source-data Paths.  The paths are added to the
+ * given ordered_rel.
+ */
+static void
+add_foreign_ordered_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ordered_rel,
+						  CreateUpperPathFunc create_path)
+{
+	Query *parse = root->parse;
+	TsFdwRelInfo *ifpinfo = fdw_relinfo_get(input_rel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(ordered_rel);
+	TsFdwPathExtraData *fpextra;
+	double rows;
+	int width;
+	Cost startup_cost;
+	Cost total_cost;
+	List *fdw_private;
+	Path *ordered_path;
+	ListCell *lc;
+
+	/* Shouldn't get here unless the query has ORDER BY */
+	Assert(parse->sortClause);
+
+	/* We don't support cases where there are any SRFs in the targetlist */
+	if (parse->hasTargetSRFs)
+		return;
+
+	/* Save the input_rel as outerrel in fpinfo */
+	fpinfo->outerrel = input_rel;
+
+	/*
+	 * Copy foreign table, foreign server, user mapping, FDW options etc.
+	 * details from the input relation's fpinfo.
+	 */
+	fpinfo->table = ifpinfo->table;
+	fpinfo->server = ifpinfo->server;
+	fpinfo->sca = ifpinfo->sca;
+	merge_fdw_options(fpinfo, ifpinfo, NULL);
+
+	/*
+	 * If the input_rel is a base or join relation, we would already have
+	 * considered pushing down the final sort to the remote server when
+	 * creating pre-sorted foreign paths for that relation, because the
+	 * query_pathkeys is set to the root->sort_pathkeys in that case (see
+	 * standard_qp_callback()).
+	 */
+	if (input_rel->reloptkind == RELOPT_BASEREL || input_rel->reloptkind == RELOPT_JOINREL)
+	{
+		Assert(root->query_pathkeys == root->sort_pathkeys);
+
+		/* Safe to push down if the query_pathkeys is safe to push down */
+		fpinfo->pushdown_safe = ifpinfo->qp_is_pushdown_safe;
+
+		return;
+	}
+
+	/* The input_rel should be a grouping relation */
+	Assert(input_rel->reloptkind == RELOPT_UPPER_REL && ifpinfo->stage == UPPERREL_GROUP_AGG);
+
+	/*
+	 * We try to create a path below by extending a simple foreign path for
+	 * the underlying grouping relation to perform the final sort remotely,
+	 * which is stored into the fdw_private list of the resulting path.
+	 */
+
+	/* Assess if it is safe to push down the final sort */
+	foreach (lc, root->sort_pathkeys)
+	{
+		PathKey *pathkey = (PathKey *) lfirst(lc);
+		EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
+		Expr *sort_expr;
+
+		/*
+		 * is_foreign_expr would detect volatile expressions as well, but
+		 * checking ec_has_volatile here saves some cycles.
+		 */
+		if (pathkey_ec->ec_has_volatile)
+			return;
+
+		/* Get the sort expression for the pathkey_ec */
+		sort_expr = find_em_expr_for_input_target(root, pathkey_ec, input_rel->reltarget);
+
+		/* If it's unsafe to remote, we cannot push down the final sort */
+		if (!is_foreign_expr(root, input_rel, sort_expr))
+			return;
+	}
+
+	/* Safe to push down */
+	fpinfo->pushdown_safe = true;
+
+	/* Construct TsFdwPathExtraData */
+	fpextra = (TsFdwPathExtraData *) palloc0(sizeof(TsFdwPathExtraData));
+	fpextra->target = root->upper_targets[UPPERREL_ORDERED];
+	fpextra->has_final_sort = true;
+
+	/* Estimate the costs of performing the final sort remotely */
+	fdw_estimate_path_cost_size(root,
+								input_rel,
+								NIL,
+								root->sort_pathkeys,
+								fpextra,
+								&rows,
+								&width,
+								&startup_cost,
+								&total_cost);
+
+	/*
+	 * Build the fdw_private list that will be used by GetForeignPlan.
+	 * Items in the list must match order in enum FdwPathPrivateIndex.
+	 */
+	fdw_private = list_make2(makeInteger(true), makeInteger(false));
+
+	/* Create foreign ordering path */
+	ordered_path = (Path *) create_path(root,
+										input_rel,
+										root->upper_targets[UPPERREL_ORDERED],
+										rows,
+										startup_cost,
+										total_cost,
+										root->sort_pathkeys,
+										NULL, /* no extra plan */
+										fdw_private);
+
+	/* and add it to the ordered_rel */
+	add_path(ordered_rel, (Path *) ordered_path);
+}
+
+/*
+ * add_foreign_final_paths
+ *		Add foreign paths for performing the final processing remotely.
+ *
+ * Given input_rel contains the source-data Paths.  The paths are added to the
+ * given final_rel.
+ */
+static void
+add_foreign_final_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *final_rel,
+						CreateUpperPathFunc create_path, FinalPathExtraData *extra)
+{
+	Query *parse = root->parse;
+	TsFdwRelInfo *ifpinfo = fdw_relinfo_get(input_rel);
+	TsFdwRelInfo *fpinfo = fdw_relinfo_get(final_rel);
+	bool has_final_sort = false;
+	List *pathkeys = NIL;
+	TsFdwPathExtraData *fpextra;
+	double rows;
+	int width;
+	Cost startup_cost;
+	Cost total_cost;
+	List *fdw_private;
+	Path *final_path;
+
+	/*
+	 * Currently, we only support this for SELECT commands
+	 */
+	if (parse->commandType != CMD_SELECT)
+		return;
+
+	/*
+	 * No work if there is no FOR UPDATE/SHARE clause and if there is no need
+	 * to add a LIMIT node
+	 */
+	if (!parse->rowMarks && !extra->limit_needed)
+		return;
+
+	/* We don't support cases where there are any SRFs in the targetlist */
+	if (parse->hasTargetSRFs)
+		return;
+
+	/* Save the input_rel as outerrel in fpinfo */
+	fpinfo->outerrel = input_rel;
+
+	/*
+	 * Copy foreign table, foreign server, user mapping, FDW options etc.
+	 * details from the input relation's fpinfo.
+	 */
+	fpinfo->table = ifpinfo->table;
+	fpinfo->server = ifpinfo->server;
+	fpinfo->sca = ifpinfo->sca;
+	merge_fdw_options(fpinfo, ifpinfo, NULL);
+
+	/*
+	 * If there is no need to add a LIMIT node, there might be a ForeignPath
+	 * in the input_rel's pathlist that implements all behavior of the query.
+	 * Note: we would already have accounted for the query's FOR UPDATE/SHARE
+	 * (if any) before we get here.
+	 */
+	if (!extra->limit_needed)
+	{
+		ListCell *lc;
+
+		Assert(parse->rowMarks);
+
+		/*
+		 * Grouping and aggregation are not supported with FOR UPDATE/SHARE,
+		 * so the input_rel should be a base, join, or ordered relation; and
+		 * if it's an ordered relation, its input relation should be a base or
+		 * join relation.
+		 */
+		Assert(input_rel->reloptkind == RELOPT_BASEREL || input_rel->reloptkind == RELOPT_JOINREL ||
+			   (input_rel->reloptkind == RELOPT_UPPER_REL && ifpinfo->stage == UPPERREL_ORDERED &&
+				(ifpinfo->outerrel->reloptkind == RELOPT_BASEREL ||
+				 ifpinfo->outerrel->reloptkind == RELOPT_JOINREL)));
+
+		foreach (lc, input_rel->pathlist)
+		{
+			Path *path = (Path *) lfirst(lc);
+
+			/*
+			 * apply_scanjoin_target_to_paths() uses create_projection_path()
+			 * to adjust each of its input paths if needed, whereas
+			 * create_ordered_paths() uses apply_projection_to_path() to do
+			 * that.  So the former might have put a ProjectionPath on top of
+			 * the ForeignPath; look through ProjectionPath and see if the
+			 * path underneath it is ForeignPath.
+			 */
+			if (IsA(path, ForeignPath) ||
+				(IsA(path, ProjectionPath) && IsA(((ProjectionPath *) path)->subpath, ForeignPath)))
+			{
+				/*
+				 * Create foreign final path; this gets rid of a
+				 * no-longer-needed outer plan (if any), which makes the
+				 * EXPLAIN output look cleaner
+				 */
+				final_path = create_path(root,
+										 path->parent,
+										 path->pathtarget,
+										 path->rows,
+										 path->startup_cost,
+										 path->total_cost,
+										 path->pathkeys,
+										 NULL,  /* no extra plan */
+										 NULL); /* no fdw_private */
+
+				/* and add it to the final_rel */
+				add_path(final_rel, (Path *) final_path);
+
+				/* Safe to push down */
+				fpinfo->pushdown_safe = true;
+
+				return;
+			}
+		}
+
+		/*
+		 * If we get here it means no ForeignPaths; since we would already
+		 * have considered pushing down all operations for the query to the
+		 * remote server, give up on it.
+		 */
+		return;
+	}
+
+	Assert(extra->limit_needed);
+
+	/*
+	 * If the input_rel is an ordered relation, replace the input_rel with its
+	 * input relation
+	 */
+	if (input_rel->reloptkind == RELOPT_UPPER_REL && ifpinfo->stage == UPPERREL_ORDERED)
+	{
+		input_rel = ifpinfo->outerrel;
+		ifpinfo = fdw_relinfo_get(input_rel);
+		has_final_sort = true;
+		pathkeys = root->sort_pathkeys;
+	}
+
+	/* The input_rel should be a base, join, or grouping relation */
+	Assert(input_rel->reloptkind == RELOPT_BASEREL || input_rel->reloptkind == RELOPT_JOINREL ||
+		   (input_rel->reloptkind == RELOPT_UPPER_REL && ifpinfo->stage == UPPERREL_GROUP_AGG));
+
+	/*
+	 * We try to create a path below by extending a simple foreign path for
+	 * the underlying base, join, or grouping relation to perform the final
+	 * sort (if has_final_sort) and the LIMIT restriction remotely, which is
+	 * stored into the fdw_private list of the resulting path.  (We
+	 * re-estimate the costs of sorting the underlying relation, if
+	 * has_final_sort.)
+	 */
+
+	/*
+	 * Assess if it is safe to push down the LIMIT and OFFSET to the remote
+	 * server
+	 */
+
+	/*
+	 * If the underlying relation has any local conditions, the LIMIT/OFFSET
+	 * cannot be pushed down.
+	 */
+	if (ifpinfo->local_conds)
+		return;
+
+	/*
+	 * Also, the LIMIT/OFFSET cannot be pushed down, if their expressions are
+	 * not safe to remote.
+	 */
+	if (!is_foreign_expr(root, input_rel, (Expr *) parse->limitOffset) ||
+		!is_foreign_expr(root, input_rel, (Expr *) parse->limitCount))
+		return;
+
+	/* Safe to push down */
+	fpinfo->pushdown_safe = true;
+
+	/* Construct TsFdwPathExtraData */
+	fpextra = (TsFdwPathExtraData *) palloc0(sizeof(TsFdwPathExtraData));
+	fpextra->target = root->upper_targets[UPPERREL_FINAL];
+	fpextra->has_final_sort = has_final_sort;
+	fpextra->has_limit = extra->limit_needed;
+	fpextra->limit_tuples = extra->limit_tuples;
+	fpextra->count_est = extra->count_est;
+	fpextra->offset_est = extra->offset_est;
+
+	/*
+	 * Estimate the costs of performing the final sort and the LIMIT
+	 * restriction remotely.
+	 */
+	fdw_estimate_path_cost_size(root,
+								input_rel,
+								NIL,
+								pathkeys,
+								fpextra,
+								&rows,
+								&width,
+								&startup_cost,
+								&total_cost);
+
+	/*
+	 * Build the fdw_private list that will be used by GetForeignPlan.
+	 * Items in the list must match order in enum FdwPathPrivateIndex.
+	 */
+	fdw_private = list_make2(makeInteger(has_final_sort), makeInteger(extra->limit_needed));
+
+	/*
+	 * Create foreign final path; this gets rid of a no-longer-needed outer
+	 * plan (if any), which makes the EXPLAIN output look cleaner
+	 */
+	final_path = create_path(root,
+							 input_rel,
+							 root->upper_targets[UPPERREL_FINAL],
+							 rows,
+							 startup_cost,
+							 total_cost,
+							 pathkeys,
+							 NULL, /* no extra plan */
+							 fdw_private);
+
+	/* and add it to the final_rel */
+	add_path(final_rel, (Path *) final_path);
+}
+
+/*
+ * Find an equivalence class member expression to be computed as a sort column
+ * in the given target.
+ */
+Expr *
+find_em_expr_for_input_target(PlannerInfo *root, EquivalenceClass *ec, PathTarget *target)
+{
+	ListCell *lc1;
+	int i;
+
+	i = 0;
+	foreach (lc1, target->exprs)
+	{
+		Expr *expr = (Expr *) lfirst(lc1);
+		Index sgref = get_pathtarget_sortgroupref(target, i);
+		ListCell *lc2;
+
+		/* Ignore non-sort expressions */
+		if (sgref == 0 || get_sortgroupref_clause_noerr(sgref, root->parse->sortClause) == NULL)
+		{
+			i++;
+			continue;
+		}
+
+		/* We ignore binary-compatible relabeling on both ends */
+		while (expr && IsA(expr, RelabelType))
+			expr = ((RelabelType *) expr)->arg;
+
+		/* Locate an EquivalenceClass member matching this expr, if any */
+		foreach (lc2, ec->ec_members)
+		{
+			EquivalenceMember *em = (EquivalenceMember *) lfirst(lc2);
+			Expr *em_expr;
+
+			/* Don't match constants */
+			if (em->em_is_const)
+				continue;
+
+			/* Ignore child members */
+			if (em->em_is_child)
+				continue;
+
+			/* Match if same expression (after stripping relabel) */
+			em_expr = em->em_expr;
+			while (em_expr && IsA(em_expr, RelabelType))
+				em_expr = ((RelabelType *) em_expr)->arg;
+
+			if (equal(em_expr, expr))
+				return em->em_expr;
+		}
+
+		i++;
+	}
+
+	elog(ERROR, "could not find pathkey item to sort");
+	return NULL; /* keep compiler quiet */
+}
+
 void
 fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelationKind stage,
 					   RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra,
@@ -963,25 +1547,37 @@ fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root, UpperRelat
 	if (output_rel->fdw_private)
 		return;
 
+	output_fpinfo = fdw_relinfo_alloc_or_get(output_rel);
+	output_fpinfo->type = input_fpinfo->type;
+	output_fpinfo->pushdown_safe = false;
+	output_fpinfo->stage = stage;
+
 	switch (stage)
 	{
 		case UPPERREL_GROUP_AGG:
 		case UPPERREL_PARTIAL_GROUP_AGG:
-			output_fpinfo = fdw_relinfo_alloc_or_get(output_rel);
-			output_fpinfo->type = input_fpinfo->type;
-			output_fpinfo->pushdown_safe = false;
 			add_foreign_grouping_paths(root,
 									   input_rel,
 									   output_rel,
 									   (GroupPathExtraData *) extra,
 									   create_path);
 			break;
-			/* Currently not handled (or received) */
-		case UPPERREL_DISTINCT:
 		case UPPERREL_ORDERED:
+			add_foreign_ordered_paths(root, input_rel, output_rel, create_path);
+			break;
+
+		case UPPERREL_FINAL:
+			add_foreign_final_paths(root,
+									input_rel,
+									output_rel,
+									create_path,
+									(FinalPathExtraData *) extra);
+			break;
+
+		/* Currently not handled (or received) */
 		case UPPERREL_SETOP:
 		case UPPERREL_WINDOW:
-		case UPPERREL_FINAL:
+		case UPPERREL_DISTINCT:
 #if PG15_GE
 		case UPPERREL_PARTIAL_DISTINCT:
 #endif

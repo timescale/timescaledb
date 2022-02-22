@@ -1082,19 +1082,19 @@ LIMIT 10
                            Data node: data_node_1
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_2
                            Output: t_2."time", t_2.device
                            Data node: data_node_2
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_3
                            Output: t_3."time", t_3.device
                            Data node: data_node_3
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
          ->  Materialize
                Output: join_test.device
                ->  Seq Scan on public.join_test
@@ -2159,19 +2159,19 @@ LIMIT 10
                            Data node: data_node_1
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_2
                            Output: t_2."time", t_2.device
                            Data node: data_node_2
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_3
                            Output: t_3."time", t_3.device
                            Data node: data_node_3
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
          ->  Materialize
                Output: join_test.device
                ->  Seq Scan on public.join_test
@@ -2954,19 +2954,19 @@ LIMIT 10
                            Data node: data_node_1
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_2
                            Output: t_2."time", t_2.device
                            Data node: data_node_2
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_3
                            Output: t_3."time", t_3.device
                            Data node: data_node_3
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
          ->  Materialize
                Output: join_test.device
                ->  Seq Scan on public.join_test
@@ -4000,19 +4000,19 @@ LIMIT 10
                            Data node: data_node_1
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_2
                            Output: t_2."time", t_2.device
                            Data node: data_node_2
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_3
                            Output: t_3."time", t_3.device
                            Data node: data_node_3
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
          ->  Materialize
                Output: join_test.device
                ->  Seq Scan on public.join_test
@@ -5106,19 +5106,19 @@ LIMIT 10
                            Data node: data_node_1
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_17_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_2
                            Output: t_2."time", t_2.device
                            Data node: data_node_2
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_18_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4, 5, 6, 7]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper t_3
                            Output: t_3."time", t_3.device
                            Data node: data_node_3
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_16_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4])
+                           Remote SQL: SELECT "time", device FROM public.hyper WHERE _timescaledb_internal.chunks_in(public.hyper.*, ARRAY[1, 2, 3, 4]) ORDER BY device ASC NULLS LAST
          ->  Materialize
                Output: join_test.device
                ->  Seq Scan on public.join_test
@@ -6184,8 +6184,8 @@ LIMIT 10
 
 ######### LIMIT push down cases
 
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: t."time"
    ->  Nested Loop
@@ -6199,19 +6199,19 @@ LIMIT 10
                            Data node: data_node_1
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_2_20_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8])
+                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper1d t_2
                            Output: t_2."time", t_2.device
                            Data node: data_node_2
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_2_21_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8])
+                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[8]) ORDER BY device ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.hyper1d t_3
                            Output: t_3."time", t_3.device
                            Data node: data_node_3
                            Fetcher Type: Row by row
                            Chunks: _dist_hyper_2_19_chunk
-                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5])
+                           Remote SQL: SELECT "time", device FROM public.hyper1d WHERE _timescaledb_internal.chunks_in(public.hyper1d.*, ARRAY[5]) ORDER BY device ASC NULLS LAST
          ->  Materialize
                Output: join_test.device
                ->  Seq Scan on public.join_test
