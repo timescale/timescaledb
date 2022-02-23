@@ -1971,6 +1971,24 @@ ALTER TABLE test ALTER COLUMN my_column SET NOT NULL;
 
 DROP TABLE test;
 
+-- Test insert into distributed hypertable with pruned chunks
+
+CREATE TABLE pruned_chunks_1(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT);
+SELECT table_name FROM create_distributed_hypertable('pruned_chunks_1', 'time', 'sensor_id');
+
+INSERT INTO pruned_chunks_1 VALUES  ('2020-12-09',1,32.2);
+
+CREATE TABLE pruned_chunks_2(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT);
+
+-- Convert the table to a distributed hypertable
+SELECT table_name FROM create_distributed_hypertable('pruned_chunks_2', 'time', 'sensor_id');
+
+insert into pruned_chunks_2 select * from pruned_chunks_1;
+insert into pruned_chunks_2 select * from pruned_chunks_1 WHERE time > '2022-01-01';
+
+DROP TABLE pruned_chunks_1;
+DROP TABLE pruned_chunks_2;
+
 -- Cleanup
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
