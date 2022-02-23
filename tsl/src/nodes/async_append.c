@@ -23,6 +23,7 @@
 #include "cache.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "utils.h"
 
 /*
  * AsyncAppend provides an asynchronous API during query execution that
@@ -163,7 +164,9 @@ find_data_node_scan_state_child(PlanState *state)
 				/* Data scan state can be buried under AggState or SortState  */
 				return find_data_node_scan_state_child(state->lefttree);
 			default:
-				elog(ERROR, "unexpected child node of Append or MergeAppend: %d", nodeTag(state));
+				elog(ERROR,
+					 "unexpected child node of Append or MergeAppend: %s",
+					 ts_get_node_name((Node *) state->plan));
 		}
 	}
 
@@ -192,7 +195,9 @@ get_data_node_async_scan_states(AsyncAppendState *state)
 		num_child_plans = mstate->ms_nplans;
 	}
 	else
-		elog(ERROR, "unexpected child node %u of AsyncAppend", nodeTag(state->subplan_state));
+		elog(ERROR,
+			 "unexpected child node of AsyncAppend: %s",
+			 ts_get_node_name((Node *) state->subplan_state->plan));
 
 	for (i = 0; i < num_child_plans; i++)
 		dn_plans = lappend(dn_plans, find_data_node_scan_state_child(child_plans[i]));
@@ -331,7 +336,7 @@ async_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_pa
 	cscan->custom_plans = custom_plans;
 	subplan = linitial(custom_plans);
 	if (!(IsA(subplan, MergeAppend) || IsA(subplan, Append)))
-		elog(ERROR, "unexpected child node of AsyncAppend");
+		elog(ERROR, "unexpected child node of AsyncAppend: %s", ts_get_node_name((Node *) subplan));
 
 	/* input target list */
 	cscan->custom_scan_tlist = subplan->targetlist;

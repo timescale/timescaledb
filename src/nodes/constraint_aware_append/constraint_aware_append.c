@@ -190,7 +190,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 			 */
 			return;
 		default:
-			elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(subplan));
+			elog(ERROR,
+				 "invalid child of constraint-aware append: %s",
+				 ts_get_node_name((Node *) subplan));
 	}
 
 	/*
@@ -257,7 +259,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				break;
 			}
 			default:
-				elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(plan));
+				elog(ERROR,
+					 "invalid child of constraint-aware append: %s",
+					 ts_get_node_name((Node *) plan));
 				break;
 		}
 	}
@@ -406,8 +410,8 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 			break;
 		default:
 			elog(ERROR,
-				 "invalid child of constraint-aware append: %u",
-				 nodeTag(linitial(custom_plans)));
+				 "invalid child of constraint-aware append: %s",
+				 ts_get_node_name((Node *) linitial(custom_plans)));
 			break;
 	}
 
@@ -454,7 +458,9 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 				break;
 			}
 			default:
-				elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(plan));
+				elog(ERROR,
+					 "invalid child of constraint-aware append: %s",
+					 ts_get_node_name((Node *) plan));
 				break;
 		}
 	}
@@ -513,7 +519,9 @@ ts_constraint_aware_append_path_create(PlannerInfo *root, Path *subpath)
 		case T_MergeAppendPath:
 			break;
 		default:
-			elog(ERROR, "invalid child of constraint-aware append: %u", nodeTag(subpath));
+			elog(ERROR,
+				 "invalid child of constraint-aware append: %s",
+				 ts_get_node_name((Node *) subpath));
 			break;
 	}
 
