@@ -4,6 +4,11 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## Unreleased
+
+**Bugfixes**
+* #4122 Fix segfault on INSERT into distributed hypertable
+
 ## 2.6.0 (2022-02-16)
 This release is medium priority for upgrade. We recommend that you upgrade at the next available opportunity.
 
