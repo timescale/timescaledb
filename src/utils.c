@@ -931,3 +931,69 @@ ts_relation_size(Oid relid)
 
 	return ret;
 }
+
+#define STR_VALUE(str) #str
+#define NODE_CASE(name)                                                                            \
+	case T_##name:                                                                                 \
+		return STR_VALUE(name)
+
+/*
+ * Return a string with the name of the node.
+ *
+ */
+const char *
+ts_get_node_name(Node *node)
+{
+	switch (nodeTag(node))
+	{
+		NODE_CASE(IndexPath);
+		NODE_CASE(BitmapHeapPath);
+		NODE_CASE(BitmapAndPath);
+		NODE_CASE(BitmapOrPath);
+		NODE_CASE(TidPath);
+		NODE_CASE(SubqueryScanPath);
+		NODE_CASE(ForeignPath);
+		NODE_CASE(NestPath);
+		NODE_CASE(MergePath);
+		NODE_CASE(HashPath);
+		NODE_CASE(AppendPath);
+		NODE_CASE(MergeAppendPath);
+		NODE_CASE(GroupResultPath);
+		NODE_CASE(MaterialPath);
+		NODE_CASE(UniquePath);
+		NODE_CASE(GatherPath);
+		NODE_CASE(GatherMergePath);
+		NODE_CASE(ProjectionPath);
+		NODE_CASE(ProjectSetPath);
+		NODE_CASE(SortPath);
+		NODE_CASE(GroupPath);
+		NODE_CASE(UpperUniquePath);
+		NODE_CASE(AggPath);
+		NODE_CASE(GroupingSetsPath);
+		NODE_CASE(MinMaxAggPath);
+		NODE_CASE(WindowAggPath);
+		NODE_CASE(SetOpPath);
+		NODE_CASE(RecursiveUnionPath);
+		NODE_CASE(LockRowsPath);
+		NODE_CASE(ModifyTablePath);
+		NODE_CASE(LimitPath);
+		case T_Path:
+			switch (castNode(Path, node)->pathtype)
+			{
+				NODE_CASE(SeqScan);
+				NODE_CASE(SampleScan);
+				NODE_CASE(SubqueryScan);
+				NODE_CASE(FunctionScan);
+				NODE_CASE(TableFuncScan);
+				NODE_CASE(ValuesScan);
+				NODE_CASE(CteScan);
+				NODE_CASE(WorkTableScan);
+				default:
+					return psprintf("Path (%d)", castNode(Path, node)->pathtype);
+			}
+		case T_CustomPath:
+			return psprintf("CustomPath (%s)", castNode(CustomPath, node)->methods->CustomName);
+		default:
+			return psprintf("Node (%d)", nodeTag(node));
+	}
+}

@@ -51,6 +51,7 @@
 #include "fdw/relinfo.h"
 #include "fdw/fdw_utils.h"
 #include "debug.h"
+#include "utils.h"
 
 static void append_expr(StringInfo buf, const Node *expr, const List *rtable);
 static void tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int indent,
@@ -320,160 +321,78 @@ static void
 tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 {
 	const char *ptype;
-	const char *extra_info = NULL;
 	bool join = false;
 	Path *subpath = NULL;
 	List *subpath_list = NULL;
 	int i;
 
+	ptype = ts_get_node_name((Node *) path);
 	switch (nodeTag(path))
 	{
-		case T_Path:
-			switch (path->pathtype)
-			{
-				case T_SeqScan:
-					ptype = "SeqScan";
-					break;
-				case T_SampleScan:
-					ptype = "SampleScan";
-					break;
-				case T_SubqueryScan:
-					ptype = "SubqueryScan";
-					break;
-				case T_FunctionScan:
-					ptype = "FunctionScan";
-					break;
-				case T_TableFuncScan:
-					ptype = "TableFuncScan";
-					break;
-				case T_ValuesScan:
-					ptype = "ValuesScan";
-					break;
-				case T_CteScan:
-					ptype = "CteScan";
-					break;
-				case T_WorkTableScan:
-					ptype = "WorkTableScan";
-					break;
-				default:
-					ptype = "???Path";
-					break;
-			}
-			break;
-		case T_IndexPath:
-			ptype = "IdxScan";
-			break;
-		case T_BitmapHeapPath:
-			ptype = "BitmapHeapScan";
-			break;
-		case T_BitmapAndPath:
-			ptype = "BitmapAndPath";
-			break;
-		case T_BitmapOrPath:
-			ptype = "BitmapOrPath";
-			break;
-		case T_TidPath:
-			ptype = "TidScan";
-			break;
 		case T_SubqueryScanPath:
-			ptype = "SubqueryScanScan";
 			subpath = castNode(SubqueryScanPath, path)->subpath;
 			break;
-		case T_ForeignPath:
-			ptype = "ForeignScan";
-			break;
 		case T_CustomPath:
-			ptype = "CustomScan";
 			subpath_list = castNode(CustomPath, path)->custom_paths;
-			extra_info = castNode(CustomPath, path)->methods->CustomName;
 			break;
 		case T_NestPath:
-			ptype = "NestLoop";
-			join = true;
-			break;
 		case T_MergePath:
-			ptype = "MergeJoin";
-			join = true;
-			break;
 		case T_HashPath:
-			ptype = "HashJoin";
 			join = true;
 			break;
 		case T_AppendPath:
-			ptype = "Append";
 			subpath_list = castNode(AppendPath, path)->subpaths;
 			break;
 		case T_MergeAppendPath:
-			ptype = "MergeAppend";
 			subpath_list = castNode(MergeAppendPath, path)->subpaths;
 			break;
-		case T_GroupResultPath:
-			ptype = "GroupResult";
-			break;
 		case T_MaterialPath:
-			ptype = "Material";
 			subpath = castNode(MaterialPath, path)->subpath;
 			break;
 		case T_UniquePath:
-			ptype = "Unique";
 			subpath = castNode(UniquePath, path)->subpath;
 			break;
 		case T_GatherPath:
-			ptype = "Gather";
 			subpath = castNode(GatherPath, path)->subpath;
 			break;
 		case T_GatherMergePath:
-			ptype = "GatherMerge";
 			subpath = castNode(GatherMergePath, path)->subpath;
 			break;
 		case T_ProjectionPath:
-			ptype = "Projection";
 			subpath = castNode(ProjectionPath, path)->subpath;
 			break;
 		case T_ProjectSetPath:
-			ptype = "ProjectSet";
 			subpath = castNode(ProjectSetPath, path)->subpath;
 			break;
 		case T_SortPath:
-			ptype = "Sort";
 			subpath = castNode(SortPath, path)->subpath;
 			break;
 		case T_GroupPath:
-			ptype = "Group";
 			subpath = castNode(GroupPath, path)->subpath;
 			break;
 		case T_UpperUniquePath:
-			ptype = "UpperUnique";
 			subpath = castNode(UpperUniquePath, path)->subpath;
 			break;
 		case T_AggPath:
-			ptype = "Agg";
 			subpath = castNode(AggPath, path)->subpath;
 			break;
 		case T_GroupingSetsPath:
-			ptype = "GroupingSets";
 			subpath = castNode(GroupingSetsPath, path)->subpath;
 			break;
 		case T_MinMaxAggPath:
-			ptype = "MinMaxAgg";
 			break;
 		case T_WindowAggPath:
-			ptype = "WindowAgg";
 			subpath = castNode(WindowAggPath, path)->subpath;
 			break;
 		case T_SetOpPath:
-			ptype = "SetOp";
 			subpath = castNode(SetOpPath, path)->subpath;
 			break;
 		case T_RecursiveUnionPath:
-			ptype = "RecursiveUnion";
 			break;
 		case T_LockRowsPath:
-			ptype = "LockRows";
 			subpath = castNode(LockRowsPath, path)->subpath;
 			break;
 		case T_ModifyTablePath:
-			ptype = "ModifyTable";
 #if PG14_LT
 			subpath_list = castNode(ModifyTablePath, path)->subpaths;
 #else
@@ -481,19 +400,15 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 #endif
 			break;
 		case T_LimitPath:
-			ptype = "Limit";
 			subpath = castNode(LimitPath, path)->subpath;
 			break;
 		default:
-			ptype = "???Path";
 			break;
 	}
 
 	for (i = 0; i < indent; i++)
 		appendStringInfo(buf, "\t");
 	appendStringInfo(buf, "%s", ptype);
-	if (extra_info)
-		appendStringInfo(buf, " (%s)", extra_info);
 
 	if (path->parent)
 	{

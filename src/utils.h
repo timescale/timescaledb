@@ -193,4 +193,6 @@ typedef struct RelationSize
 
 extern TSDLLEXPORT RelationSize ts_relation_size(Oid relid);
 
+extern TSDLLEXPORT const char *ts_get_node_name(Node *node);
+
 #endif /* TIMESCALEDB_UTILS_H */
