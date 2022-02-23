@@ -337,8 +337,7 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 			return NULL;
 			break;
 		default:
-			elog(ERROR, "invalid child of chunk append: %u", nodeTag(plan));
-			return NULL;
-			break;
+			elog(ERROR, "invalid child of chunk append: %s", ts_get_node_name((Node *) plan));
 	}
+	pg_unreachable();
 }

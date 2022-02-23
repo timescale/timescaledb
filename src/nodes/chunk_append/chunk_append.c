@@ -168,7 +168,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			children = castNode(MergeAppendPath, subpath)->subpaths;
 			break;
 		default:
-			elog(ERROR, "invalid child of chunk append: %u", nodeTag(subpath));
+			elog(ERROR, "invalid child of chunk append: %s", ts_get_node_name((Node *) subpath));
 			break;
 	}
 
