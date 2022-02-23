@@ -902,8 +902,11 @@ handle_returning(DataNodeDispatchState *sds)
 	Assert(sds->state == SD_RETURNING);
 	oldcontext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
-	/* No returning projection, which means we are done */
-	if (NULL == rri->ri_projectReturning)
+	/*
+	 * When all chunks are pruned rri will be NULL and there is nothing to do.
+	 * Without returning projection, nothing to do here either.
+	 */
+	if (!rri || !rri->ri_projectReturning)
 	{
 		Assert(!HAS_RETURNING(sds));
 		Assert(NIL == sds->responses);
