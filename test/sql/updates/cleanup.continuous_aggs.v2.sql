@@ -15,12 +15,6 @@ SELECT extversion < '2.0.0' AS has_refresh_mat_view,
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
-\if :has_create_mat_view
-\set :DROP_CAGG DROP MATERIALIZED VIEW
-\else
-\set :DROP_CAGG DROP VIEW
-\endif
-
 \if :has_continuous_aggs_policy
 SELECT remove_continuous_aggregate_policy('mat_drop');
 \endif
@@ -40,14 +34,17 @@ DROP VIEW mat_conflict;
 \endif
 
 DROP TABLE conflict_test;
+
 \if :has_create_mat_view
 DROP MATERIALIZED VIEW mat_inttime;
+DROP MATERIALIZED VIEW mat_inttime2;
 \else
 DROP VIEW mat_inttime;
+DROP VIEW mat_inttime2;
 \endif
 
 DROP FUNCTION integer_now_test;
-DROP TABLE int_time_test;
+DROP TABLE IF EXISTS int_time_test;
 
 \if :has_create_mat_view
 DROP MATERIALIZED VIEW mat_inval;
@@ -75,6 +72,12 @@ DROP SCHEMA cagg;
 DROP MATERIALIZED VIEW mat_before;
 \else
 DROP VIEW mat_before;
+\endif
+
+\if :has_create_mat_view
+DROP MATERIALIZED VIEW rename_cols;
+\else
+DROP VIEW rename_cols;
 \endif
 
 DROP TABLE conditions_before;

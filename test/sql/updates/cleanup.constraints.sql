@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir cleanup.bigint.sql
-\ir cleanup.constraints.sql
-\ir cleanup.timestamp.sql
+ALTER TABLE "two_Partitions"
+  DROP CONSTRAINT IF EXISTS two_Partitions_device_id_2_fkey;
 
+DROP TABLE IF EXISTS devices;

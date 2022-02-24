@@ -9,5 +9,7 @@
 \ir post.compression.sql
 \ir post.continuous_aggs.v2.sql
 \ir post.policies.sql
+\if :WITH_SUPERUSER
 \ir post.sequences.sql
+\endif
 \ir post.functions.sql
