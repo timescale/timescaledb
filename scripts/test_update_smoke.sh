@@ -41,11 +41,12 @@ DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
 CLEAN_OUT="$SCRATCHDIR/clean.out"
 RESTORE_OUT="$SCRATCHDIR/restore.out"
-TEST_VERSION=${TEST_VERSION:-v6}
+TEST_VERSION=${TEST_VERSION:-v7}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-1.7.4}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-2.0.1}
 # We do not have superuser privileges when running smoke tests.
 WITH_SUPERUSER=false
+WITH_ROLES=false
 
 while getopts "ds:t:" opt;
 do
@@ -68,7 +69,7 @@ echo "**** pg_dump at   " `which pg_dump`
 echo "**** pg_restore at" `which pg_restore`
 
 # Extra options to pass to psql
-PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_CHUNK=false"
+PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=false -v WITH_CHUNK=false"
 PSQL="psql -qX $PGOPTS"
 
 # If we are providing a URI for the connection, we parse it here and
