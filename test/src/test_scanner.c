@@ -35,7 +35,7 @@ TS_TEST_FN(ts_test_scanner)
 
 		elog(NOTICE, "1. Scan: \"%s.%s\"", NameStr(fd.schema_name), NameStr(fd.table_name));
 
-		if (chunk_id[i] == -1 && i < lengthof(chunk_id))
+		if (i < lengthof(chunk_id) && chunk_id[i] == -1)
 		{
 			chunk_id[i] = fd.id;
 			i++;
