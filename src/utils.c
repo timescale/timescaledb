@@ -908,28 +908,33 @@ RelationSize
 ts_relation_size(Oid relid)
 {
 	int64 tot_size;
-	int i = 0;
-	RelationSize ret;
-	Datum oid = ObjectIdGetDatum(relid);
-	static const char *filtyp[] = { "main", "init", "fsm", "vm" };
+	RelationSize relsize;
+	Datum reloid = ObjectIdGetDatum(relid);
+	Relation rel;
 
-	/*
-	 * For heap get size from fsm, vm, init and main as this is included in
-	 * pg_table_size calculation
-	 */
-	ret.heap_size = 0;
+	/* Open relation earlier to keep a lock during all function calls */
+	rel = try_relation_open(relid, AccessShareLock);
 
-	for (i = 0; i < lengthof(filtyp); i++)
-	{
-		ret.heap_size += DatumGetInt64(
-			DirectFunctionCall2(pg_relation_size, oid, CStringGetTextDatum(filtyp[i])));
-	}
+	/* Get to total relation size to be our calculation base */
+	tot_size = DatumGetInt64(DirectFunctionCall1(pg_total_relation_size, reloid));
 
-	ret.index_size = DatumGetInt64(DirectFunctionCall1(pg_indexes_size, relid));
-	tot_size = DatumGetInt64(DirectFunctionCall1(pg_table_size, relid));
-	ret.toast_size = tot_size - ret.heap_size;
+	/* Get the indexes size of the relation (don't consider TOAST indexes) */
+	relsize.index_size = DatumGetInt64(DirectFunctionCall1(pg_indexes_size, reloid));
 
-	return ret;
+	/* If exists an associated TOAST calculate the total size (including indexes) */
+	if (OidIsValid(rel->rd_rel->reltoastrelid))
+		relsize.toast_size =
+			DatumGetInt64(DirectFunctionCall1(pg_total_relation_size,
+											  ObjectIdGetDatum(rel->rd_rel->reltoastrelid)));
+	else
+		relsize.toast_size = 0;
+
+	relation_close(rel, AccessShareLock);
+
+	/* Calculate the HEAP size based on the total size and indexes plus toast */
+	relsize.heap_size = tot_size - (relsize.index_size + relsize.toast_size);
+
+	return relsize;
 }
 
 #define STR_VALUE(str) #str
