@@ -694,13 +694,18 @@ ts_hypertable_delete_by_id(int32 hypertable_id)
 void
 ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 {
-	ObjectAddress hypertable_addr = (ObjectAddress){
-		.classId = RelationRelationId,
-		.objectId = hypertable->main_table_relid,
-	};
+	/* The actual table might have been deleted already, but we still need to
+	 * clean up the catalog entry. */
+	if (OidIsValid(hypertable->main_table_relid))
+	{
+		ObjectAddress hypertable_addr = (ObjectAddress){
+			.classId = RelationRelationId,
+			.objectId = hypertable->main_table_relid,
+		};
 
-	/* Drop the postgres table */
-	performDeletion(&hypertable_addr, behavior, 0);
+		/* Drop the postgres table */
+		performDeletion(&hypertable_addr, behavior, 0);
+	}
 	/* Clean up catalog */
 	ts_hypertable_delete_by_name(hypertable->fd.schema_name.data, hypertable->fd.table_name.data);
 }
