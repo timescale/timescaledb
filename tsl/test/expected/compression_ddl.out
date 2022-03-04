@@ -1182,3 +1182,33 @@ WHERE reltablespace in
 DROP TABLE test2 CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_17_104_chunk
 DROP TABLESPACE tablespace2;
+-- Create a table with a compressed table and then delete the
+-- compressed table and see that the drop of the hypertable does not
+-- generate an error. This scenario can be triggered if an extension
+-- is created with compressed hypertables since the tables are dropped
+-- as part of the drop of the extension.
+CREATE TABLE issue4140("time" timestamptz NOT NULL, device_id int);
+SELECT create_hypertable('issue4140', 'time');
+    create_hypertable    
+-------------------------
+ (18,public,issue4140,t)
+(1 row)
+
+ALTER TABLE issue4140 SET(timescaledb.compress);
+SELECT format('%I.%I', schema_name, table_name)::regclass AS ctable
+FROM _timescaledb_catalog.hypertable
+WHERE id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'issue4140') \gset
+SELECT timescaledb_pre_restore();
+ timescaledb_pre_restore 
+-------------------------
+ t
+(1 row)
+
+DROP TABLE :ctable;
+SELECT timescaledb_post_restore();
+ timescaledb_post_restore 
+--------------------------
+ t
+(1 row)
+
+DROP TABLE issue4140;
