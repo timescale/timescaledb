@@ -160,7 +160,7 @@ SELECT * FROM test_dt ORDER BY time;
 SELECT * FROM "testSchema0".hypertable_detailed_size('test_ts');
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-       16384 |       81920 |       16384 |      122880 | 
+       16384 |       81920 |       24576 |      122880 | 
 (1 row)
 
 -- testing hypertable_detailed_size END

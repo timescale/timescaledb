@@ -1,0 +1,2 @@
+DROP VIEW _timescaledb_internal.hypertable_chunk_local_size;
+DROP FUNCTION _timescaledb_internal.relation_size(relation REGCLASS);

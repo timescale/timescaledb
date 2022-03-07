@@ -45,7 +45,7 @@ INSERT 0 1
 SELECT * FROM hypertable_detailed_size('"public"."two_Partitions"');
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-       32768 |      475136 |       32768 |      548864 | 
+       32768 |      475136 |       40960 |      548864 | 
 (1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_device_id_timeCustom_idx"');
@@ -153,6 +153,7 @@ SELECT * FROM chunks_detailed_size('toast_test');
  _timescaledb_internal | _hyper_4_9_chunk |        8192 |       16384 |       24576 |       49152 | 
 (1 row)
 
+--
 -- Tests for approximate_row_count()
 --
 -- Regular table
@@ -495,6 +496,12 @@ SELECT * FROM hypertable_index_size(0);
                       
 (1 row)
 
+SELECT * FROM _timescaledb_internal.relation_size(0);
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+            |           |            |           
+(1 row)
+
 SELECT * FROM hypertable_size(1);
  hypertable_size 
 -----------------
@@ -525,6 +532,12 @@ SELECT * FROM hypertable_index_size(1);
  hypertable_index_size 
 -----------------------
                       
+(1 row)
+
+SELECT * FROM _timescaledb_internal.relation_size(1);
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
 (1 row)
 
 -- Test size functions with NULL input
@@ -560,6 +573,12 @@ SELECT * FROM hypertable_index_size(NULL);
                       
 (1 row)
 
+SELECT * FROM _timescaledb_internal.relation_size(NULL);
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+            |           |            |           
+(1 row)
+
 -- Test size functions on regular table
 CREATE TABLE hypersize(time timestamptz, device int);
 CREATE INDEX hypersize_time_idx ON hypersize (time);
@@ -570,6 +589,12 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
  pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
 ------------------+---------------+-----------------+------------------------+------------------
                 0 |             0 |            8192 |                   8192 |             8192
+(1 row)
+
+SELECT * FROM _timescaledb_internal.relation_size('hypersize');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |         0 |       8192 |          0
 (1 row)
 
 SELECT * FROM hypertable_size('hypersize');
@@ -620,6 +645,12 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
                 0 |             0 |            8192 |                   8192 |             8192
 (1 row)
 
+SELECT * FROM _timescaledb_internal.relation_size('hypersize');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+       8192 |         0 |       8192 |          0
+(1 row)
+
 SELECT * FROM hypertable_size('hypersize');
  hypertable_size 
 -----------------
@@ -667,6 +698,12 @@ ORDER BY ch;
  pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size 
 ------------------+---------------+-----------------+------------------------
              8192 |          8192 |           16384 |                  24576
+(1 row)
+
+SELECT * FROM show_chunks('hypersize') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON true;
+                   ch                    | total_size | heap_size | index_size | toast_size 
+-----------------------------------------+------------+-----------+------------+------------
+ _timescaledb_internal._hyper_6_11_chunk |      24576 |      8192 |      16384 |          0
 (1 row)
 
 SELECT * FROM hypertable_size('hypersize');
