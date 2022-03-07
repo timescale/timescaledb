@@ -904,19 +904,56 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 	return Int64GetDatum(res);
 }
 
-RelationSize
-ts_relation_size(Oid relid)
+TS_FUNCTION_INFO_V1(ts_relation_size);
+Datum
+ts_relation_size(PG_FUNCTION_ARGS)
 {
-	int64 tot_size;
-	RelationSize relsize;
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	RelationSize relsize = { 0 };
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	Datum values[4] = { 0 };
+	bool nulls[4] = { false };
+
+	/* Build a tuple descriptor for our result type */
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in context "
+						"that cannot accept type record")));
+
+	if (!OidIsValid(relid))
+		PG_RETURN_NULL();
+
+	relsize = ts_relation_size_impl(relid);
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	values[0] = Int64GetDatum(relsize.total_size);
+	values[1] = Int64GetDatum(relsize.heap_size);
+	values[2] = Int64GetDatum(relsize.index_size);
+	values[3] = Int64GetDatum(relsize.toast_size);
+
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
+RelationSize
+ts_relation_size_impl(Oid relid)
+{
+	RelationSize relsize = { 0 };
 	Datum reloid = ObjectIdGetDatum(relid);
 	Relation rel;
 
 	/* Open relation earlier to keep a lock during all function calls */
 	rel = try_relation_open(relid, AccessShareLock);
 
+	if (!rel)
+		return relsize;
+
 	/* Get to total relation size to be our calculation base */
-	tot_size = DatumGetInt64(DirectFunctionCall1(pg_total_relation_size, reloid));
+	relsize.total_size = DatumGetInt64(DirectFunctionCall1(pg_total_relation_size, reloid));
 
 	/* Get the indexes size of the relation (don't consider TOAST indexes) */
 	relsize.index_size = DatumGetInt64(DirectFunctionCall1(pg_indexes_size, reloid));
@@ -932,7 +969,7 @@ ts_relation_size(Oid relid)
 	relation_close(rel, AccessShareLock);
 
 	/* Calculate the HEAP size based on the total size and indexes plus toast */
-	relsize.heap_size = tot_size - (relsize.index_size + relsize.toast_size);
+	relsize.heap_size = relsize.total_size - (relsize.index_size + relsize.toast_size);
 
 	return relsize;
 }

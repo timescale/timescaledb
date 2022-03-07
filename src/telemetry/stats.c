@@ -204,7 +204,8 @@ add_storage(StorageStats *stats, Form_pg_class class)
 {
 	RelationSize relsize;
 
-	relsize = ts_relation_size(class->oid);
+	relsize = ts_relation_size_impl(class->oid);
+	stats->relsize.total_size += relsize.total_size;
 	stats->relsize.heap_size += relsize.heap_size;
 	stats->relsize.toast_size += relsize.toast_size;
 	stats->relsize.index_size += relsize.index_size;

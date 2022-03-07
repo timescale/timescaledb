@@ -186,12 +186,13 @@ TryRegisterCustomScanMethods(const CustomScanMethods *methods)
 
 typedef struct RelationSize
 {
+	int64 total_size;
 	int64 heap_size;
 	int64 toast_size;
 	int64 index_size;
 } RelationSize;
 
-extern TSDLLEXPORT RelationSize ts_relation_size(Oid relid);
+extern TSDLLEXPORT RelationSize ts_relation_size_impl(Oid relid);
 
 extern TSDLLEXPORT const char *ts_get_node_name(Node *node);
 

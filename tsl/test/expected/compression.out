@@ -450,7 +450,7 @@ from hypertable_detailed_size('conditions');
 -[ RECORD 1 ]--+-------
 pg_size_pretty | 16 kB
 pg_size_pretty | 56 kB
-pg_size_pretty | 32 kB
+pg_size_pretty | 40 kB
 pg_size_pretty | 112 kB
 
 select * from timescaledb_information.hypertables

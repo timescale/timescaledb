@@ -128,9 +128,13 @@ ORDER BY hypertable_schema, hypertable_name;
 SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
 SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('disttable') ch;
+SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
 SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
 SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('nondisttable') ch;
+SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
 
 SELECT * FROM hypertable_size('disttable');
 SELECT * FROM hypertable_size('nondisttable');
@@ -149,7 +153,9 @@ ALTER TABLE nondisttable ADD CONSTRAINT nondisttable_pkey PRIMARY KEY (time);
 ALTER TABLE disttable ADD CONSTRAINT disttable_pkey PRIMARY KEY (time);
 
 SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
+SELECT * FROM _timescaledb_internal.relation_size('disttable');
 SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
+SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
 
 -- Note that the empty disttable is three times the size of the
 -- nondisttable since it has primary key indexes on two data nodes in
@@ -175,9 +181,13 @@ INSERT INTO disttable SELECT * FROM nondisttable;
 SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
 SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('disttable') ch;
+SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
 SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
 SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('nondisttable') ch;
+SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
 
 SELECT * FROM hypertable_size('disttable');
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;
@@ -193,9 +203,13 @@ VACUUM FULL ANALYZE disttable;
 SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_size('disttable'), pg_total_relation_size('disttable');
 SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch)
 FROM show_chunks('disttable') ch;
+SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
 SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_indexes_size('nondisttable'), pg_total_relation_size('nondisttable');
 SELECT pg_table_size(ch), pg_relation_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('nondisttable') ch;
+SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
 
 SELECT * FROM hypertable_size('disttable');
 SELECT * FROM hypertable_detailed_size('disttable') ORDER BY node_name;

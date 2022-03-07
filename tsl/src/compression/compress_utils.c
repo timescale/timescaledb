@@ -246,7 +246,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		FormData_hypertable_compression *fd = (FormData_hypertable_compression *) lfirst(lc);
 		colinfo_array[i++] = fd;
 	}
-	before_size = ts_relation_size(cxt.srcht_chunk->table_id);
+	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 	cstat = compress_chunk(cxt.srcht_chunk->table_id,
 						   compress_ht_chunk->table_id,
 						   colinfo_array,
@@ -268,7 +268,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * directly on the hypertable or chunks.
 	 */
 	ts_chunk_drop_fks(cxt.srcht_chunk);
-	after_size = ts_relation_size(compress_ht_chunk->table_id);
+	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &before_size,
 										  compress_ht_chunk->fd.id,
