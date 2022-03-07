@@ -1,0 +1,109 @@
+name: SQLsmith
+on:
+  schedule:
+    # run daily 20:00 on master branch
+    - cron: '0 2 * * *'
+jobs:
+  regress:
+    name: SQLsmith PG${{ matrix.pg }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: ["ubuntu-20.04"]
+        pg: ["14.2"]
+        cc: ["gcc"]
+        build_type: ["Debug"]
+      fail-fast: false
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+
+    steps:
+    - name: Install Linux Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install flex bison systemd-coredump gdb clang-9 llvm-9 llvm-9-dev llvm-9-tools build-essential autoconf autoconf-archive libpqxx-dev libboost-regex-dev libsqlite3-dev
+
+    # this workflow depends on the cached postgres build from the main regression
+    # workflow since that workflow runs daily there should always be a cache hit
+    - name: Cache PostgreSQL ${{ matrix.pg }}
+      id: cache-postgresql
+      uses: actions/cache@v2
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ matrix.build_type }}
+
+    # we abort on cache miss otherwise we would have to reproduce most variables
+    # of the main regression build matrix in this workflow
+    - name: Abort on cache miss
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: false
+
+    - name: Install PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+      run: |
+        make -C ~/$PG_SRC_DIR install
+        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v2
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR ${{ matrix.tsdb_build_args }}
+        make -C build
+        make -C build install
+
+    - name: Checkout sqlsmith
+      uses: actions/checkout@v2
+      with:
+        repository: 'timescale/sqlsmith'
+        path: 'sqlsmith'
+        ref: 'timescaledb'
+
+    - name: Build SQLsmith
+      run: |
+        cd sqlsmith
+        autoreconf -i
+        ./configure
+        make
+
+    - name: Setup test environment
+      run: |
+        mkdir ~/pgdata
+        ~/$PG_INSTALL_DIR/bin/initdb ~/pgdata
+        ~/$PG_INSTALL_DIR/bin/pg_ctl -D ~/pgdata start -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" -o "-cmax_prepared_transactions=100"
+        psql -h /tmp postgres -c 'CREATE DATABASE smith;'
+        psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
+        psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
+
+    # we run these in a loop to reinitialize the random number generator
+    # 10 times 10000 queries seems to take roughly 40 minutes in CI
+    - name: Run SQLsmith
+      run: |
+        cd sqlsmith
+        for i in `seq 1 10`; do ./sqlsmith --seed=$((16#$(openssl rand -hex 3))) --exclude-catalog --target="host=/tmp dbname=smith" --max-queries=10000; done
+
+    - name: Check for coredumps
+      if: always()
+      id: collectlogs
+      run: |
+        # wait for in progress coredumps
+        sleep 10
+        if coredumpctl list; then
+          echo "::set-output name=coredumps::true"
+          false
+        fi
+
+    - name: Stack trace
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      run: |
+        echo "bt full" | sudo coredumpctl gdb
+        ./scripts/bundle_coredumps.sh
+        false
+
+    - name: Upload Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v2
+      with:
+        name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
+        path: coredumps
