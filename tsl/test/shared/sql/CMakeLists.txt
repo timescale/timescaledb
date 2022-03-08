@@ -10,6 +10,7 @@ set(TEST_FILES_SHARED
     dist_gapfill.sql
     dist_insert.sql
     dist_queries.sql
+    extension.sql
     subtract_integer_from_now.sql)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
