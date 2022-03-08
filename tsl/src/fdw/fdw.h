@@ -12,5 +12,7 @@
 
 extern Datum timescaledb_fdw_handler(PG_FUNCTION_ARGS);
 extern Datum timescaledb_fdw_validator(PG_FUNCTION_ARGS);
+extern void get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage,
+									RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra);
 
 #endif /* TIMESCALEDB_TSL_FDW_FDW_H */

@@ -342,20 +342,19 @@ plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relation,
  *
  * Right now, we only support aggregate, grouping and having clause pushdown.
  */
-static void
+void
 get_foreign_upper_paths(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 						RelOptInfo *output_rel, void *extra)
 {
 	TsFdwRelInfo *fpinfo = input_rel->fdw_private ? fdw_relinfo_get(input_rel) : NULL;
 
-	if (fpinfo == NULL)
-		return;
-
-	/* We abuse the FDW API's GetForeignUpperPaths callback because, for some
+	/*
+	 * We abuse the FDW API's GetForeignUpperPaths callback because, for some
 	 * reason, the regular create_upper_paths_hook is never called for
 	 * partially grouped rels, so we cannot use if for server rels. See end of
-	 * PostgreSQL planner.c:create_partial_grouping_paths(). */
-	if (fpinfo->type == TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
+	 * PostgreSQL planner.c:create_partial_grouping_paths().
+	 */
+	if (fpinfo && fpinfo->type == TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
 		data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
 	else
 		fdw_create_upper_paths(fpinfo,

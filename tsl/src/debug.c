@@ -412,9 +412,11 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 
 	if (path->parent)
 	{
+		/* if there's no fdw_private then it's an UPPER REL */
 		appendStringInfo(buf,
 						 " [rel type: %s, kind: %s",
-						 get_fdw_relation_typename(path->parent),
+						 path->parent->fdw_private ? get_fdw_relation_typename(path->parent) :
+													 reloptkind_name[path->parent->reloptkind],
 						 reloptkind_name[path->parent->reloptkind]);
 		appendStringInfoString(buf, ", parent's base rels: ");
 		append_relids(buf, root, path->parent->relids);
@@ -505,7 +507,7 @@ path_is_origin(const Path *p1, const ConsideredPath *p2)
 static void
 tsl_debug_append_pruned_pathlist(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, int indent)
 {
-	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
+	TsFdwRelInfo *fdw_info = rel->fdw_private ? fdw_relinfo_get(rel) : NULL;
 	ListCell *lc1;
 
 	if (NULL == fdw_info || fdw_info->considered_paths == NIL)
@@ -556,10 +558,13 @@ tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel, UpperRelationKi
 	if (upper_stage != NULL)
 		appendStringInfo(buf, "Upper rel stage %s:\n", upperrel_stage_name[*upper_stage]);
 
+	/* if there's no fdw_private then it's an UPPER REL */
 	appendStringInfo(buf,
 					 "RELOPTINFO [rel name: %s, type: %s, kind: %s, base rel names: ",
-					 get_relation_name(root, rel),
-					 get_fdw_relation_typename(rel),
+					 rel->fdw_private ? get_relation_name(root, rel) :
+										reloptkind_name[rel->reloptkind],
+					 rel->fdw_private ? get_fdw_relation_typename(rel) :
+										reloptkind_name[rel->reloptkind],
 					 reloptkind_name[rel->reloptkind]);
 	append_relids(buf, root, rel->relids);
 	appendStringInfoChar(buf, ']');

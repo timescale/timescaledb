@@ -521,10 +521,6 @@ data_node_scan_create_upper_paths(PlannerInfo *root, UpperRelationKind stage, Re
 
 	fpinfo = fdw_relinfo_get(input_rel);
 
-	/* Verify that this is a data node rel */
-	if (NULL == fpinfo || fpinfo->type != TS_FDW_RELINFO_HYPERTABLE_DATA_NODE)
-		return;
-
 	fdw_create_upper_paths(fpinfo,
 						   root,
 						   stage,

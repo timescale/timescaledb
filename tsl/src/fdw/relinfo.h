@@ -64,6 +64,9 @@ typedef struct TsFdwRelInfo
 	/* Bitmap of attr numbers we need to fetch from the remote data node. */
 	Bitmapset *attrs_used;
 
+	/* True means that the query_pathkeys is safe to push down */
+	bool qp_is_pushdown_safe;
+
 	/* Cost and selectivity of local_conds. */
 	QualCost local_conds_cost;
 	Selectivity local_conds_sel;
@@ -107,6 +110,9 @@ typedef struct TsFdwRelInfo
 	/* joinclauses contains only JOIN/ON conditions for an outer join */
 	List *joinclauses; /* List of RestrictInfo */
 
+	/* Upper relation information */
+	UpperRelationKind stage;
+
 	/* Grouping information */
 	List *grouped_tlist;
 
@@ -144,6 +150,32 @@ typedef struct TsFdwRelInfo
 	/* Cached chunk data for the chunk relinfo. */
 	struct Chunk *chunk;
 } TsFdwRelInfo;
+
+/*
+ * This enum describes what's kept in the fdw_private list for a ForeignPath.
+ * We store:
+ *
+ * 1) Boolean flag showing if the remote query has the final sort
+ * 2) Boolean flag showing if the remote query has the LIMIT clause
+ */
+enum FdwPathPrivateIndex
+{
+	/* has-final-sort flag (as an integer Value node) */
+	FdwPathPrivateHasFinalSort,
+	/* has-limit flag (as an integer Value node) */
+	FdwPathPrivateHasLimit
+};
+
+/* Struct for extra information passed to fdw_estimate_path_cost_size() */
+typedef struct TsFdwPathExtraData
+{
+	PathTarget *target;
+	bool has_final_sort;
+	bool has_limit;
+	double limit_tuples;
+	int64 count_est;
+	int64 offset_est;
+} TsFdwPathExtraData;
 
 extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid server_oid,
 										Oid local_table_id, TsFdwRelInfoType type);

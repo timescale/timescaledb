@@ -217,6 +217,24 @@ Pruned paths:
 	CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
 
 
+DEBUG:  Upper rel stage ORDERED:
+RELOPTINFO [rel name: UPPER_REL, type: UPPER_REL, kind: UPPER_REL, base rel names: ] rows=0 width=0
+Path list:
+	MergeAppendPath [rel type: UPPER_REL, kind: UPPER_REL, parent's base rels: ] rows=5 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+		CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+		CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=3 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+		CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+
+
+DEBUG:  Upper rel stage FINAL:
+RELOPTINFO [rel name: UPPER_REL, type: UPPER_REL, kind: UPPER_REL, base rel names: ] rows=0 width=0
+Path list:
+	MergeAppendPath [rel type: UPPER_REL, kind: UPPER_REL, parent's base rels: ] rows=5 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+		CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+		CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=3 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+		CustomPath (DataNodeScanPath) [rel type: DATA_NODE, kind: OTHER_UPPER_REL, parent's base rels: hyper] rows=1 with pathkeys: ((hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time, hyper.time), (hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device, hyper.device))
+
+
              time             | device | temp 
 ------------------------------+--------+------
  Thu Apr 19 13:01:00 2018 PDT |      1 |  7.6

@@ -55,6 +55,14 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 							void *extra)
 {
 	bool dist_ht = false;
+
+	/*
+	 * Certain stages like UPPERREL_SETOP do not have an input_rel passed in. So we
+	 * check for those cases before trying to get more upper paths
+	 */
+	if (!input_rel)
+		return;
+
 	switch (input_reltype)
 	{
 		case TS_REL_HYPERTABLE:
@@ -64,6 +72,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 				data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
 			break;
 		default:
+			get_foreign_upper_paths(root, stage, input_rel, output_rel, extra);
 			break;
 	}
 
