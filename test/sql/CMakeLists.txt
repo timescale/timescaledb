@@ -18,7 +18,6 @@ set(TEST_FILES
     drop_rename_hypertable.sql
     drop_schema.sql
     dump_meta.sql
-    extension.sql
     extension_scripts.sql
     generated_as_identity.sql
     grant_hypertable.sql
