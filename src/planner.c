@@ -24,43 +24,86 @@
 #include <utils/elog.h>
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
+#include <utils/memutils.h>
 #include <utils/selfuncs.h>
 #include <utils/timestamp.h>
 
 #include "compat/compat-msvc-enter.h"
-#include <optimizer/cost.h>
-#include <tcop/tcopprot.h>
-#include <optimizer/plancat.h>
-#include <nodes/nodeFuncs.h>
-#include <parser/analyze.h>
 #include <catalog/pg_constraint.h>
+#include <nodes/nodeFuncs.h>
+#include <optimizer/cost.h>
+#include <optimizer/plancat.h>
+#include <parser/analyze.h>
+#include <tcop/tcopprot.h>
 #include "compat/compat-msvc-exit.h"
 
 #include <math.h>
 
 #include "annotations.h"
+#include "chunk.h"
 #include "cross_module_fn.h"
-#include "license_guc.h"
-#include "hypertable_cache.h"
-#include "extension.h"
-#include "utils.h"
-#include "guc.h"
 #include "dimension.h"
-#include "nodes/chunk_dispatch_plan.h"
-#include "nodes/hypertable_modify.h"
-#include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/chunk_append/chunk_append.h"
-#include "partitioning.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "extension.h"
 #include "func_cache.h"
-#include "chunk.h"
-#include "planner.h"
-#include "plan_expand_hypertable.h"
+#include "guc.h"
+#include "hypertable_cache.h"
+#include "import/allpaths.h"
+#include "license_guc.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/chunk_dispatch_plan.h"
+#include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/hypertable_modify.h"
+#include "partitioning.h"
 #include "plan_add_hashagg.h"
 #include "plan_agg_bookend.h"
+#include "plan_expand_hypertable.h"
 #include "plan_partialize.h"
-#include "import/allpaths.h"
+#include "planner.h"
+#include "utils.h"
+
+#include "compat/compat.h"
+#if PG13_GE
+#include <common/hashfn.h>
+#else
+#include <utils/hashutils.h>
+#endif
+
+/* define parameters necessary to generate the baserel info hash table interface */
+typedef struct BaserelInfoEntry
+{
+	Oid reloid;
+	/* Either a chunk or plain baserel (TS_REL_OTHER). */
+	TsRelType type;
+	Hypertable *ht;
+
+	uint32 status; /* hash status */
+} BaserelInfoEntry;
+
+#define SH_PREFIX BaserelInfo
+#define SH_ELEMENT_TYPE BaserelInfoEntry
+#define SH_KEY_TYPE Oid
+#define SH_KEY reloid
+#define SH_EQUAL(tb, a, b) (a == b)
+#define SH_HASH_KEY(tb, key) murmurhash32(key)
+#define SH_SCOPE static
+#define SH_DECLARE
+#define SH_DEFINE
+
+// We don't need most of the generated functions and there is no way to not
+// generate them.
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
+// Generate the baserel info hash table functions.
+#include "lib/simplehash.h"
+#ifdef __GNUC__
+
+#pragma GCC diagnostic pop
+#endif
 
 void _planner_init(void);
 void _planner_fini(void);
@@ -96,6 +139,16 @@ static const char *TS_CTE_EXPAND = "ts_expand";
  * to the invalid value of 'auto'.
  */
 DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
+
+/*
+ * A simplehash hash table that records the chunks and their corresponding
+ * hypertables, and also the plain baserels. We use it to tell whether a
+ * relation is a hypertable chunk, inside the classify_relation function.
+ * It is valid inside the scope of timescaledb_planner().
+ * That function can be called recursively, e.g. when we evaluate a SQL function,
+ * and this cache is initialized only at the top-level call.
+ */
+static struct BaserelInfo_hash *ts_baserel_info = NULL;
 
 static void
 rte_mark_for_expansion(RangeTblEntry *rte)
@@ -328,6 +381,7 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	PlannedStmt *stmt;
 	ListCell *lc;
 	bool reset_fetcher_type = false;
+	bool reset_baserel_info = false;
 
 	/*
 	 * If we are in an aborted transaction, reject all queries.
@@ -400,6 +454,28 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 					ts_data_node_fetcher_scan_type = ts_guc_remote_data_fetcher;
 				}
 			}
+
+			if (ts_baserel_info == NULL)
+			{
+				/*
+				 * The calls to timescaledb_planner can be recursive (e.g. when
+				 * evaluating an immutable SQL function at planning time). We
+				 * want to create and destroy the per-query baserel info table
+				 * only at the top-level call, hence this flag.
+				 */
+				reset_baserel_info = true;
+
+				/*
+				 * This is a per-query cache, so we create it in the current
+				 * memory context for the top-level call of this function, which
+				 * hopefully should exist for the duration of the query. Message
+				 * or portal memory contexts could also be suitable, but they
+				 * don't exist for SPI calls.
+				 */
+				ts_baserel_info = BaserelInfo_create(CurrentMemoryContext,
+													 /* nelements = */ 1,
+													 /* private_data = */ NULL);
+			}
 		}
 
 		if (prev_planner_hook != NULL)
@@ -441,10 +517,17 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 			{
 				ts_data_node_fetcher_scan_type = AutoFetcherType;
 			}
+
+			if (reset_baserel_info)
+			{
+				BaserelInfo_destroy(ts_baserel_info);
+				ts_baserel_info = NULL;
+			}
 		}
 	}
 	PG_CATCH();
 	{
+		ts_baserel_info = NULL;
 		/* Pop the cache, but do not release since caches are auto-released on
 		 * error */
 		planner_hcache_pop(false);
@@ -509,21 +592,47 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 				reltype = TS_REL_HYPERTABLE;
 			else
 			{
-				/* This case is hit also by non-chunk BASERELs and might slow
-				 * down planning since it requires a metadata scan every
-				 * time. But there's probably no way around it if we are to
-				 * reliably identify chunk BASERELs. We should, however, be able
-				 * to identify these in the query preprocessing and cache them
-				 * there if we need to speed this up. */
-				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
-
-				if (chunk != NULL)
+				/*
+				 * This case is hit also by non-chunk BASERELs. We need a costly
+				 * chunk metadata scan to distinguish between chunk and non-chunk
+				 * baserel, so we cache the result of this lookup to avoid doing
+				 * it repeatedly.
+				 *
+				 * First, check if this reloid is in cache.
+				 */
+				bool found = false;
+				BaserelInfoEntry *entry = BaserelInfo_insert(ts_baserel_info, rte->relid, &found);
+				if (found)
 				{
-					reltype = TS_REL_CHUNK;
-					ht = get_hypertable(chunk->hypertable_relid, CACHE_FLAG_NONE);
-					Assert(ht != NULL);
-					ts_chunk_free(chunk);
+					ht = entry->ht;
+					reltype = entry->type;
+					break;
 				}
+
+				/*
+				 * This reloid is not in the chunk cache, so do the full metadata
+				 * lookup.
+				 */
+				Oid hypertable_id = ts_chunk_get_hypertable_id_by_relid(rte->relid);
+				if (hypertable_id != InvalidOid)
+				{
+					/*
+					 * This is a chunk. Look up the hypertable for it.
+					 */
+					reltype = TS_REL_CHUNK;
+
+					Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id);
+					ht = get_hypertable(hypertable_relid, CACHE_FLAG_NONE);
+					Assert(ht != NULL);
+				}
+				else
+				{
+					Assert(reltype == TS_REL_OTHER);
+				}
+
+				/* Cache the result. */
+				entry->type = reltype;
+				entry->ht = ht;
 			}
 			break;
 		case RELOPT_OTHER_MEMBER_REL:
