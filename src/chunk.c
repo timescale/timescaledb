@@ -2684,6 +2684,22 @@ ts_chunk_exists_relid(Oid relid)
 }
 
 /*
+ * Returns 0 if there is no chunk with such reloid.
+ */
+int32
+ts_chunk_get_hypertable_id_by_relid(Oid relid)
+{
+	FormData_chunk form;
+
+	if (chunk_simple_scan_by_relid(relid, &form, /* missing_ok = */ true))
+	{
+		return form.hypertable_id;
+	}
+
+	return 0;
+}
+
+/*
  * Get the relid of a chunk given its ID.
  */
 Oid
