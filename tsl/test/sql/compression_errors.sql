@@ -282,3 +282,25 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 --should fail
 CALL run_job(:compressjob_id);
+
+-- test ADD COLUMN IF NOT EXISTS
+CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
+SELECT create_hypertable('metric', 'time', 'dev_id', 10);
+ALTER TABLE metric SET (                                      
+timescaledb.compress,
+timescaledb.compress_segmentby = 'dev_id',
+timescaledb.compress_orderby = 'time DESC'
+);
+
+INSERT INTO metric(time, val, dev_id)
+SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-08-17 00:00:00'::timestamp,
+                     '2021-08-17 00:02:00'::timestamp, '1 s'::interval) s;
+SELECT compress_chunk(show_chunks('metric'));
+-- column does not exist the first time
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
+-- column already exists the second time
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
+-- also add one without IF NOT EXISTS 
+ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
+ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;

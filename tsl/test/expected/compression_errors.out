@@ -494,3 +494,36 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 CALL run_job(:compressjob_id);
 ERROR:  job 1001 has null config
 CONTEXT:  PL/pgSQL function _timescaledb_internal.policy_compression(integer,jsonb) line 21 at RAISE
+-- test ADD COLUMN IF NOT EXISTS
+CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
+SELECT create_hypertable('metric', 'time', 'dev_id', 10);
+  create_hypertable   
+----------------------
+ (23,public,metric,t)
+(1 row)
+
+ALTER TABLE metric SET (                                      
+timescaledb.compress,
+timescaledb.compress_segmentby = 'dev_id',
+timescaledb.compress_orderby = 'time DESC'
+);
+INSERT INTO metric(time, val, dev_id)
+SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-08-17 00:00:00'::timestamp,
+                     '2021-08-17 00:02:00'::timestamp, '1 s'::interval) s;
+SELECT compress_chunk(show_chunks('metric'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_23_17_chunk
+(1 row)
+
+-- column does not exist the first time
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
+-- column already exists the second time
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
+NOTICE:  column "medium" of relation "metric" already exists, skipping
+NOTICE:  column "medium" of relation "_compressed_hypertable_24" already exists, skipping
+-- also add one without IF NOT EXISTS 
+ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
+ALTER TABLE metric ADD COLUMN "medium_1" VARCHAR ;
+ERROR:  column "medium_1" of relation "metric" already exists

@@ -936,7 +936,7 @@ add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compre
 	addcol_cmd = makeNode(AlterTableCmd);
 	addcol_cmd->subtype = AT_AddColumn;
 	addcol_cmd->def = (Node *) coldef;
-	addcol_cmd->missing_ok = false;
+	addcol_cmd->missing_ok = true;
 
 	/* alter the table and add column */
 	AlterTableInternal(compress_relid, list_make1(addcol_cmd), true);
@@ -1064,9 +1064,26 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;
 	TypeName *orig_typname = orig_def->typeName;
+	HeapTuple attTuple;
+	bool new_column = false;
 
 	coloid = LookupTypeNameOid(NULL, orig_typname, false);
 	compresscolinfo_init_singlecolumn(&compress_cols, colname, coloid);
+
+	attTuple = SearchSysCache2(ATTNAME,
+							   ObjectIdGetDatum(ht->main_table_relid),
+							   PointerGetDatum(colname));
+	if (!HeapTupleIsValid(attTuple))
+	// nothing was found, this is a new column, it will be added below
+		new_column = true;
+	else
+	{
+		// int attnum = ((Form_pg_attribute) GETSTRUCT(attTuple))->attnum;
+		ReleaseSysCache(attTuple);
+
+		// if (attnum > 0)
+		// 	new_column = true;
+	}
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		int32 compress_htid = ht->fd.compressed_hypertable_id;
@@ -1077,8 +1094,10 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	{
 		Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 	}
+
 	/* add catalog entries for the new column for the hypertable */
-	compresscolinfo_add_catalog_entries(&compress_cols, orig_htid);
+	if (new_column)
+		compresscolinfo_add_catalog_entries(&compress_cols, orig_htid);
 }
 
 /* Drop a column from a table that has compression enabled
