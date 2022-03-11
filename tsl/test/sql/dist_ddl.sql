@@ -677,6 +677,18 @@ DROP INDEX disttable_device_idx;
 
 DROP TABLE disttable;
 
+-- Ensure VACUUM/ANALYZE commands can be run on a data node
+-- without enabling timescaledb.enable_client_ddl_on_data_nodes guc
+CREATE TABLE disttable(time timestamptz NOT NULL, device int);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 3);
+\c :MY_DB1
+ANALYZE disttable;
+ANALYZE;
+VACUUM disttable;
+VACUUM;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+DROP TABLE disttable;
+
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :MY_DB1;
