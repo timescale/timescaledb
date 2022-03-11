@@ -252,9 +252,9 @@ ts_chunk_scan_by_constraints(const Hyperspace *hs, const List *dimension_vecs,
 				prev_chunk_oid = chunk->table_id;
 			}
 
+			MemoryContextSwitchTo(work_mcxt);
 			/* Only one chunk should match */
 			Assert(ts_scan_iterator_next(&chunk_it) == NULL);
-			MemoryContextSwitchTo(work_mcxt);
 		}
 	}
 

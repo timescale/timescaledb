@@ -8,6 +8,10 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4122 Fix segfault on INSERT into distributed hypertable
+* #4161 Fix memory handling during scans
+
+**Thanks**
+* @abrownsword for reporting a crash in the telemetry reporter
 
 ## 2.6.0 (2022-02-16)
 This release is medium priority for upgrade. We recommend that you upgrade at the next available opportunity.
