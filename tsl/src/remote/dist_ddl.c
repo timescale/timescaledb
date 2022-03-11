@@ -853,6 +853,11 @@ dist_ddl_process_vacuum(const ProcessUtilityArgs *args)
 {
 	VacuumStmt *stmt = castNode(VacuumStmt, args->parsetree);
 
+	/* Allow execution of VACUUM/ANALYZE commands on a data node without
+	 * enabling timescaledb.enable_client_ddl_on_data_nodes GUC */
+	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
+		return;
+
 	if (!dist_ddl_state_set_hypertable(args))
 		return;
 

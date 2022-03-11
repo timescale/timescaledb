@@ -2422,6 +2422,22 @@ DROP INDEX disttable_device_idx;
 ERROR:  [data_node_1]: index "disttable_device_idx" does not exist
 \set ON_ERROR_STOP 1
 DROP TABLE disttable;
+-- Ensure VACUUM/ANALYZE commands can be run on a data node
+-- without enabling timescaledb.enable_client_ddl_on_data_nodes guc
+CREATE TABLE disttable(time timestamptz NOT NULL, device int);
+SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 3);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            19 | public      | disttable  | t
+(1 row)
+
+\c :MY_DB1
+ANALYZE disttable;
+ANALYZE;
+VACUUM disttable;
+VACUUM;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+DROP TABLE disttable;
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 DROP DATABASE :MY_DB1;
