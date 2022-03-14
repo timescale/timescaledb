@@ -1,7 +1,7 @@
 name: Regression
 on:
   schedule:
-    # run daily 20:00 on master branch
+    # run daily 20:00 on main branch
     - cron: '0 20 * * *'
   push:
     branches:

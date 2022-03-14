@@ -25,7 +25,7 @@ my $backup_name = 'my_backup';
 # Take backup
 $an->backup($backup_name);
 
-# Create streaming standby linking to master
+# Create streaming standby linking to access node
 my $an_standby = AccessNode->get_new_node('an_standby_1');
 $an_standby->init_from_backup($an, $backup_name, has_streaming => 1);
 $an_standby->start;

@@ -1,4 +1,4 @@
-- [ ] Add [CHANGELOG](https://github.com/timescale/timescaledb/blob/master/CHANGELOG.md) updates
+- [ ] Add [CHANGELOG](https://github.com/timescale/timescaledb/blob/main/CHANGELOG.md) updates
 - [ ] Needs [documentation](https://github.com/timescale/docs) updates
 
 Fixes #<issue number>.
@@ -13,7 +13,7 @@ Checklist for a pull request:
 - Try to follow [the seven rules of a great Git commit
 message](https://chris.beams.io/posts/git-commit/).
 - Ideally, the PR should be merged as a single commit.
-- Rebase on latest master code.
+- Rebase on latest main code.
 - Reference the issue(s) resolved with Fixes #<issue number>, or
   Closes #<issue number>.
 - Make sure the PR has appropriate CHANGELOG updates, including thanks

@@ -21,7 +21,7 @@ contributions.
 
 ## Getting and building TimescaleDB
 
-Please follow our README for [instructions on installing from source](https://github.com/timescale/timescaledb/blob/master/README.md#option-3---from-source).
+Please follow our README for [instructions on installing from source](https://github.com/timescale/timescaledb/blob/main/README.md#option-3---from-source).
 
 ## Style guide
 
@@ -74,8 +74,8 @@ our [Style Guide](docs/StyleGuide.md).
       repeating the commit message is preferred, which is done automatically
       by GitHub when it creates the pull request.
 
-    * Rebase your local feature branch against master (`git fetch origin`,
-      then `git rebase origin/master`) to make sure you're
+    * Rebase your local feature branch against main (`git fetch origin`,
+      then `git rebase origin/main`) to make sure you're
       submitting your changes on top of the newest version of our code.
 
     * When finalizing your PR (i.e., it has been approved for merging),
