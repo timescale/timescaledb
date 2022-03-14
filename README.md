@@ -1,6 +1,6 @@
 |Linux/macOS|Linux i386|Windows|Coverity|Code Coverage|
 |:---:|:---:|:---:|:---:|:---:|
-|[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/workflows/Regression/badge.svg?event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3ARegression+branch%3Amaster)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/workflows/Regression%20Linux%20i386/badge.svg?branch=master&event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3A%22Regression+Linux+i386%22+branch%3Amaster)|[![Windows build status](https://ci.appveyor.com/api/projects/status/15sqkl900t04hywu/branch/master?svg=true)](https://ci.appveyor.com/project/timescale/timescaledb/branch/master)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/master/graphs/badge.svg?branch=master)](https://codecov.io/gh/timescale/timescaledb)
+|[![Build Status Linux/macOS](https://github.com/timescale/timescaledb/workflows/Regression/badge.svg?event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3ARegression+branch%3Amaster)|[![Build Status Linux i386](https://github.com/timescale/timescaledb/workflows/Regression%20Linux%20i386/badge.svg?branch=main&event=schedule)](https://github.com/timescale/timescaledb/actions?query=workflow%3A%22Regression+Linux+i386%22+branch%3Amaster)|[![Windows build status](https://ci.appveyor.com/api/projects/status/15sqkl900t04hywu/branch/main?svg=true)](https://ci.appveyor.com/project/timescale/timescaledb/branch/main)|[![Coverity Scan Build Status](https://scan.coverity.com/projects/timescale-timescaledb/badge.svg)](https://scan.coverity.com/projects/timescale-timescaledb)|[![Code Coverage](https://codecov.io/gh/timescale/timescaledb/branch/main/graphs/badge.svg?branch=main)](https://codecov.io/gh/timescale/timescaledb)
 
 
 ## TimescaleDB
@@ -27,12 +27,12 @@ these other resources:
 
 For reference and clarity, all code files in this repository reference
 licensing in their header (either the Apache-2-open-source license
-or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/master/tsl/LICENSE-TIMESCALE)
+or [Timescale License (TSL)](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE)
 ). Apache-2 licensed binaries can be built by passing `-DAPACHE_ONLY=1` to `bootstrap`.
 
-[Contributors welcome.](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
+[Contributors welcome.](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md)
 
-(To build TimescaleDB from source, see instructions in [_Building from source_](https://github.com/timescale/timescaledb/blob/master/docs/BuildSource.md).)
+(To build TimescaleDB from source, see instructions in [_Building from source_](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).)
 
 ### Using TimescaleDB
 
@@ -134,7 +134,7 @@ queries, automating common operational tasks and reducing management overhead.
 We recommend following our detailed [installation instructions](https://tsdb.co/GitHubTimescaleInstall).
 
 To build from source, see instructions
-[here](https://github.com/timescale/timescaledb/blob/master/docs/BuildSource.md).
+[here](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
 
 
 ## Resources
@@ -173,6 +173,6 @@ multiple workers.
 
 ### Contributing
 
-- [Contributor instructions](https://github.com/timescale/timescaledb/blob/master/CONTRIBUTING.md)
-- [Code style guide](https://github.com/timescale/timescaledb/blob/master/docs/StyleGuide.md)
+- [Contributor instructions](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md)
+- [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md)
 

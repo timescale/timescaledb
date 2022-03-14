@@ -4,7 +4,7 @@
 
 If you are building from source for **non-development purposes**
 (i.e., you want to run TimescaleDB, not submit a patch), you should
-**always use a release-tagged commit and not build from `master`**.
+**always use a release-tagged commit and not build from `main`**.
 See the Releases tab for the latest release.
 
 **Prerequisites**:
@@ -37,7 +37,7 @@ Please see our [additional configuration instructions](https://docs.timescale.co
 
 If you are building from source for **non-development purposes**
 (i.e., you want to run TimescaleDB, not submit a patch), you should
-**always use a release-tagged commit and not build from `master`**.
+**always use a release-tagged commit and not build from `main`**.
 See the Releases tab for the latest release.
 
 **Prerequisites**:

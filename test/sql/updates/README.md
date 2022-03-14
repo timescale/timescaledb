@@ -10,7 +10,7 @@ scenarios:
 - ALTER EXTENSION UPDATE
 
 # CONTAINER_CLEAN_RERUN:
-- install master
+- install main
 - run test setup script
 
 # CONTAINER_CLEAN_RESTORE:

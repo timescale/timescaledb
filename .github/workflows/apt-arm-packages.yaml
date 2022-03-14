@@ -2,7 +2,7 @@
 name: APT ARM64 packages
 on:
   schedule:
-    # run daily 0:00 on master branch
+    # run daily 0:00 on main branch
     - cron: '0 0 * * *'
   push:
     tags:
@@ -64,7 +64,7 @@ jobs:
       run: |
         # read expected version from version.config
         # version will only be a proper version in a release branch so we use update_from_version
-        # as fallback for master
+        # as fallback for main
         if grep '^version = [0-9.]\+$' version.config; then
           version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
         else

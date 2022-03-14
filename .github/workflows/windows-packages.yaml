@@ -2,7 +2,7 @@
 name: Windows Packages
 on:
   schedule:
-    # run daily 0:00 on master branch
+    # run daily 0:00 on main branch
     - cron: '0 0 * * *'
   push:
     tags:
@@ -31,7 +31,7 @@ jobs:
       id: version
       run: |
         # version will only be a proper version in a release branch so we use update_from_version
-        # as fallback for master
+        # as fallback for main
         if (grep '^version = [0-9.]\+$' version.config)
         {
           $version=grep '^version = ' version.config | sed -e 's!^version = !!'
