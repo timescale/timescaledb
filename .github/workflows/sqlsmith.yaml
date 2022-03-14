@@ -3,6 +3,10 @@ on:
   schedule:
     # run daily 20:00 on master branch
     - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - sqlsmith
 jobs:
   regress:
     name: SQLsmith PG${{ matrix.pg }}
