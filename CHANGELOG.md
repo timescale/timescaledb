@@ -63,7 +63,7 @@ upgrade as soon as possible.
 * #4024 Fix premature cache release call
 * #4037 Fix status for dropped chunks that have catalog entries
 * #4069 Fix riinfo NULL handling in ANY construct
-* #4071 Fix extension installation privilege escalation
+* #4071 Fix extension installation privilege escalation (CVE-2022-24128)
 
 **Thanks**
 * @carlocperez for reporting crash with NULL handling in ANY construct
