@@ -60,7 +60,7 @@ typedef struct RemoteTxn
  * multiple remote commands to be executed (e.g. a join of two tables on one remote
  * node might not be pushed down and instead two different queries are sent
  * to the remote node, one for each table in the join). Since in READ
- * COMMITED the snapshot is refreshed on each command, the semantics are off
+ * COMMITTED the snapshot is refreshed on each command, the semantics are off
  * when multiple commands are meant to be part of the same one.
  *
  * This isn't great but we have no alternative unless we ensure that each access

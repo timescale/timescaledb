@@ -1665,7 +1665,7 @@ ts_hypertable_check_partitioning(const Hypertable *ht, int32 id_of_updated_dimen
 			num_nodes > first_closed_dim->fd.num_slices)
 			ereport(WARNING,
 					(errcode(ERRCODE_WARNING),
-					 errmsg("insuffient number of partitions for dimension \"%s\"",
+					 errmsg("insufficient number of partitions for dimension \"%s\"",
 							NameStr(dim->fd.column_name)),
 					 errdetail("There are not enough partitions to make"
 							   " use of all data nodes."),

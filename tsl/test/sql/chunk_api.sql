@@ -408,7 +408,7 @@ CREATE TABLE original_chunk_constraints AS
 SELECT "Constraint", "Type", "Columns", "Index"::text, "Expr", "Deferrable", "Deferred", "Validated"
 FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
 
--- Save contraints metadata
+-- Save constraints metadata
 CREATE TABLE original_chunk_constraints_metadata AS
 SELECT
     chunk_id,

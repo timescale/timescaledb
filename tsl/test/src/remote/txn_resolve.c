@@ -30,7 +30,7 @@ prepared_txn(TSConnectionId *id, const char *sql)
 }
 
 static void
-create_commited_txn(TSConnectionId *id)
+create_committed_txn(TSConnectionId *id)
 {
 	RemoteTxn *tx =
 		prepared_txn(id, "INSERT INTO public.table_modified_by_txns VALUES ('committed');");
@@ -40,7 +40,8 @@ create_commited_txn(TSConnectionId *id)
 static void
 create_prepared_txn(TSConnectionId *id)
 {
-	prepared_txn(id, "INSERT INTO public.table_modified_by_txns VALUES ('prepared not comitted');");
+	prepared_txn(id,
+				 "INSERT INTO public.table_modified_by_txns VALUES ('prepared not committed');");
 }
 
 static void
@@ -58,7 +59,7 @@ ts_test_remote_txn_resolve_create_records(PG_FUNCTION_ARGS)
 
 	id.server_id = GetForeignServerByName("loopback", false)->serverid;
 	id.user_id = GetUserId();
-	create_commited_txn(&id);
+	create_committed_txn(&id);
 
 	id.server_id = GetForeignServerByName("loopback2", false)->serverid;
 	create_prepared_txn(&id);
@@ -91,7 +92,7 @@ send_heal()
 }
 
 static void
-create_commited_txn_with_concurrent_heal(TSConnectionId *id)
+create_committed_txn_with_concurrent_heal(TSConnectionId *id)
 {
 	RemoteTxn *tx = palloc0(remote_txn_size());
 	memcpy(tx, id, sizeof(*id));
@@ -115,7 +116,7 @@ ts_test_remote_txn_resolve_create_records_with_concurrent_heal(PG_FUNCTION_ARGS)
 	TSConnectionId id = { .server_id = GetForeignServerByName("loopback2", false)->serverid,
 						  .user_id = GetUserId() };
 
-	create_commited_txn_with_concurrent_heal(&id);
+	create_committed_txn_with_concurrent_heal(&id);
 
 	PG_RETURN_VOID();
 }

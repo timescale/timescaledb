@@ -48,7 +48,7 @@ ERROR:  operation not supported
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 1);
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | disttable  | t
@@ -56,7 +56,7 @@ WARNING:  insuffient number of partitions for dimension "device"
 
 -- Increase the number of partitions. Expect warning since still too low
 SELECT * FROM set_number_partitions('disttable', 2);
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  set_number_partitions 
 -----------------------
  
@@ -2055,7 +2055,7 @@ ORDER BY 1, 2;
 -- Attach another data node but do not auto-repartition, i.e.,
 -- increase the number of slices.
 SELECT * FROM attach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', repartition => false);
-WARNING:  insuffient number of partitions for dimension "__region"
+WARNING:  insufficient number of partitions for dimension "__region"
  hypertable_id | node_hypertable_id |      node_name       
 ---------------+--------------------+----------------------
              4 |                  3 | db_dist_hypertable_2
@@ -3376,7 +3376,7 @@ id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_sc
 -- well. We're setting num_partitions lower than the number of servers
 -- and expect a warning.
 SELECT * FROM add_dimension('disttable', 'device', 1, partitioning_func => '_timescaledb_internal.get_partition_hash');
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  dimension_id | schema_name | table_name | column_name | created 
 --------------+-------------+------------+-------------+---------
            22 | public      | disttable  | device      | t
@@ -5924,7 +5924,7 @@ SELECT compress_chunk(show_chunks) FROM show_chunks('test');
 (1 row)
 
 DROP TABLE test;
--- Fix ALTER SET/DROP NULL contstraint on distributed hypertable
+-- Fix ALTER SET/DROP NULL constraint on distributed hypertable
 --
 -- #3860
 --

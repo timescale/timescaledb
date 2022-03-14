@@ -58,7 +58,7 @@ The release also includes several bug fixes. Telemetry reports now include new a
 **Bugfixes**
 * #3808 Properly handle `max_retries` option
 * #3863 Fix remote transaction heal logic
-* #3869 Fix ALTER SET/DROP NULL contstraint on distributed hypertable
+* #3869 Fix ALTER SET/DROP NULL constraint on distributed hypertable
 * #3944 Fix segfault in add_compression_policy
 * #3961 Fix crash in EXPLAIN VERBOSE on distributed hypertable
 * #4015 Eliminate float rounding instabilities in interpolate

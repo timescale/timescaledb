@@ -95,7 +95,7 @@ SELECT * FROM reference
 WHERE time < '2019-01-02 05:10'::timestamptz
 ORDER BY time;
 SELECT * FROM set_number_partitions('hyper', 2);
-psql:include/dist_query_load.sql:44: WARNING:  insuffient number of partitions for dimension "device"
+psql:include/dist_query_load.sql:44: WARNING:  insufficient number of partitions for dimension "device"
  set_number_partitions 
 -----------------------
  

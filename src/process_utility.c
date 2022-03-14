@@ -301,7 +301,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot add column with NOT NULL contraint without default "
+					 errmsg("cannot add column with NOT NULL constraint without default "
 							"to a hypertable that has compression enabled")));
 		}
 	}

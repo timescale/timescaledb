@@ -281,7 +281,7 @@ SET ROLE :ROLE_1;
 -- warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | disttable  | t
@@ -387,7 +387,7 @@ ERROR:  server "data_node_4" does not exist
 -- number_partitions lower than number of servers to raise a warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_3" }');
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | disttable  | t
@@ -811,7 +811,7 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2,
                                             replication_factor => 2,
                                             data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              5 | public      | disttable  | t
@@ -861,7 +861,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_2', 'time', 'device', 2, replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
 NOTICE:  adding not-null constraint to column "time"
-WARNING:  insuffient number of partitions for dimension "device"
+WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
              6 | public      | disttable_2 | t
