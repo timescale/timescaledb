@@ -923,13 +923,15 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 }
 
 /* Add column to internal compression table */
-static void
+static bool
 add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compress_cols)
 {
 	Oid compress_relid = compress_ht->main_table_relid;
 	ColumnDef *coldef;
 	AlterTableCmd *addcol_cmd;
 	coldef = (ColumnDef *) linitial(compress_cols->coldeflist);
+	HeapTuple attTuple;
+	bool new_column = false;
 
 	/* create altertable stmt to add column to the compressed hypertable */
 	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
@@ -938,9 +940,24 @@ add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compre
 	addcol_cmd->def = (Node *) coldef;
 	addcol_cmd->missing_ok = true;
 
+	attTuple = SearchSysCache2(ATTNAME,
+							   ObjectIdGetDatum(compress_relid),
+							   PointerGetDatum(coldef->colname));
+	if (!HeapTupleIsValid(attTuple))
+	{
+		/* the column doesn't exist yet, so it certainly can't have been skipped */
+		new_column = true;
+	}
+	else
+	{
+		ReleaseSysCache(attTuple);
+	}
+
 	/* alter the table and add column */
+	// if it's not a new column, we will get to the NOTICE: skipping. 
 	AlterTableInternal(compress_relid, list_make1(addcol_cmd), true);
 	modify_compressed_toast_table_storage(compress_cols, compress_relid);
+	return (new_column);
 }
 
 /* Drop column from internal compression table */
@@ -1064,39 +1081,26 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;
 	TypeName *orig_typname = orig_def->typeName;
-	HeapTuple attTuple;
 	bool new_column = false;
+	bool no_compression_table = false;
 
 	coloid = LookupTypeNameOid(NULL, orig_typname, false);
 	compresscolinfo_init_singlecolumn(&compress_cols, colname, coloid);
 
-	attTuple = SearchSysCache2(ATTNAME,
-							   ObjectIdGetDatum(ht->main_table_relid),
-							   PointerGetDatum(colname));
-	if (!HeapTupleIsValid(attTuple))
-	// nothing was found, this is a new column, it will be added below
-		new_column = true;
-	else
-	{
-		// int attnum = ((Form_pg_attribute) GETSTRUCT(attTuple))->attnum;
-		ReleaseSysCache(attTuple);
-
-		// if (attnum > 0)
-		// 	new_column = true;
-	}
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		int32 compress_htid = ht->fd.compressed_hypertable_id;
 		Hypertable *compress_ht = ts_hypertable_get_by_id(compress_htid);
-		add_column_to_compression_table(compress_ht, &compress_cols);
+		new_column = add_column_to_compression_table(compress_ht, &compress_cols);
 	}
 	else
 	{
+		no_compression_table = true;
 		Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 	}
 
 	/* add catalog entries for the new column for the hypertable */
-	if (new_column)
+	if (new_column || no_compression_table)
 		compresscolinfo_add_catalog_entries(&compress_cols, orig_htid);
 }
 
