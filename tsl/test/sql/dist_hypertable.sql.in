@@ -1948,7 +1948,7 @@ INSERT INTO test VALUES (now(), 0);
 SELECT compress_chunk(show_chunks) FROM show_chunks('test');
 DROP TABLE test;
 
--- Fix ALTER SET/DROP NULL contstraint on distributed hypertable
+-- Fix ALTER SET/DROP NULL constraint on distributed hypertable
 --
 -- #3860
 --

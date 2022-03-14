@@ -53,7 +53,7 @@ INSERT INTO repair_test_date VALUES
 --
 -- This way if there are constraint violations remaining that wasn't
 -- repaired properly, we will notice them when restoring the
--- contraint.
+-- constraint.
 ALTER TABLE _timescaledb_catalog.chunk_constraint
       DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
 

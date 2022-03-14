@@ -328,7 +328,7 @@ ERROR:  cannot add column with constraints to a hypertable that has compression 
 ALTER TABLE table_constr ADD COLUMN newcol integer PRIMARY KEY;
 ERROR:  cannot add column with constraints to a hypertable that has compression enabled
 ALTER TABLE table_constr ADD COLUMN newcol integer NOT NULL;
-ERROR:  cannot add column with NOT NULL contraint without default to a hypertable that has compression enabled
+ERROR:  cannot add column with NOT NULL constraint without default to a hypertable that has compression enabled
 ALTER TABLE table_constr ADD COLUMN newcol integer DEFAULT random() + random();
 ERROR:  cannot add column with non-constant default expression to a hypertable that has compression enabled
 ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer REFERENCES fortable(col); 

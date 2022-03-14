@@ -95,10 +95,10 @@ SELECT _timescaledb_internal.remote_txn_heal_data_node((SELECT OID FROM pg_forei
 (1 row)
 
 SELECT * FROM table_modified_by_txns;
-       describes       
------------------------
+       describes        
+------------------------
  committed
- prepared not comitted
+ prepared not committed
 (2 rows)
 
 SELECT count(*) FROM pg_prepared_xacts;
@@ -125,7 +125,7 @@ SELECT * FROM table_modified_by_txns;
            describes            
 --------------------------------
  committed
- prepared not comitted
+ prepared not committed
  committed with concurrent heal
 (3 rows)
 
@@ -171,10 +171,10 @@ SELECT * FROM table_modified_by_txns;
            describes            
 --------------------------------
  committed
- prepared not comitted
+ prepared not committed
  committed with concurrent heal
  committed
- prepared not comitted
+ prepared not committed
 (5 rows)
 
 SELECT count(*) FROM pg_prepared_xacts;
@@ -210,11 +210,11 @@ SELECT * FROM table_modified_by_txns;
            describes            
 --------------------------------
  committed
- prepared not comitted
+ prepared not committed
  committed with concurrent heal
  committed
- prepared not comitted
- prepared not comitted
+ prepared not committed
+ prepared not committed
 (6 rows)
 
 SELECT count(*) FROM pg_prepared_xacts;
@@ -249,12 +249,12 @@ SELECT * FROM table_modified_by_txns;
            describes            
 --------------------------------
  committed
- prepared not comitted
+ prepared not committed
  committed with concurrent heal
  committed
- prepared not comitted
- prepared not comitted
- prepared not comitted
+ prepared not committed
+ prepared not committed
+ prepared not committed
 (7 rows)
 
 SELECT count(*) FROM pg_prepared_xacts;
@@ -300,14 +300,14 @@ SELECT * FROM table_modified_by_txns;
            describes            
 --------------------------------
  committed
- prepared not comitted
+ prepared not committed
  committed with concurrent heal
  committed
- prepared not comitted
- prepared not comitted
- prepared not comitted
- prepared not comitted
- prepared not comitted
+ prepared not committed
+ prepared not committed
+ prepared not committed
+ prepared not committed
+ prepared not committed
 (9 rows)
 
 SELECT count(*) FROM pg_prepared_xacts;
@@ -352,14 +352,14 @@ SELECT * FROM table_modified_by_txns;
            describes            
 --------------------------------
  committed
- prepared not comitted
+ prepared not committed
  committed with concurrent heal
  committed
- prepared not comitted
- prepared not comitted
- prepared not comitted
- prepared not comitted
- prepared not comitted
+ prepared not committed
+ prepared not committed
+ prepared not committed
+ prepared not committed
+ prepared not committed
  non-ts-txn
 (10 rows)
 
