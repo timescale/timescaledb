@@ -54,21 +54,21 @@ get_update_attrs(RangeTblEntry *rte)
 static List *
 get_chunk_data_nodes(Oid relid)
 {
-	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+	int32 chunk_id = ts_chunk_get_id_by_relid(relid);
+	Assert(chunk_id != 0);
+
+	List *chunk_data_nodes = ts_chunk_data_node_scan_by_chunk_id(chunk_id, CurrentMemoryContext);
 	List *serveroids = NIL;
 	ListCell *lc;
 
-	if (NULL == chunk)
-		return NIL;
-
-	foreach (lc, chunk->data_nodes)
+	foreach (lc, chunk_data_nodes)
 	{
-		ChunkDataNode *cs = lfirst(lc);
+		ChunkDataNode *data_node = lfirst(lc);
 
-		serveroids = lappend_oid(serveroids, cs->foreign_server_oid);
+		serveroids = lappend_oid(serveroids, data_node->foreign_server_oid);
 	}
 
-	ts_chunk_free(chunk);
+	list_free(chunk_data_nodes);
 
 	return serveroids;
 }

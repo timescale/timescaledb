@@ -2666,6 +2666,15 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(last_id);
 }
 
+int32
+ts_chunk_get_id_by_relid(Oid relid)
+{
+	FormData_chunk form;
+
+	chunk_simple_scan_by_relid(relid, &form, /* missing_ok = */ false);
+	return form.id;
+}
+
 bool
 ts_chunk_exists_relid(Oid relid)
 {
