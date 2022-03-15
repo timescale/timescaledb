@@ -26,7 +26,6 @@
 #include "nodes/chunk_append/exec.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/explain.h"
-#include "nodes/chunk_append/planner.h"
 #include "loader/lwlocks.h"
 
 #define INVALID_SUBPLAN_INDEX -1

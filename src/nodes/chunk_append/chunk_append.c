@@ -12,13 +12,11 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "planner.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_append/planner.h"
 #include "func_cache.h"
 #include "guc.h"
 
-static bool contain_param_exec(Node *node);
-static bool contain_param_exec_walker(Node *node, void *context);
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
 								   List *join_conditions);
 
@@ -112,7 +110,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		if (contain_mutable_functions((Node *) rinfo->clause))
 			path->startup_exclusion = true;
 
-		if (ts_guc_enable_runtime_exclusion && contain_param_exec((Node *) rinfo->clause))
+		if (ts_guc_enable_runtime_exclusion && ts_contain_param((Node *) rinfo->clause))
 		{
 			ListCell *lc_var;
 
@@ -413,24 +411,6 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	*reverse = sort->sortop == tce->lt_opr ? false : true;
 
 	return true;
-}
-
-static bool
-contain_param_exec(Node *node)
-{
-	return contain_param_exec_walker(node, NULL);
-}
-
-static bool
-contain_param_exec_walker(Node *node, void *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, Param))
-		return castNode(Param, node)->paramkind == PARAM_EXEC;
-
-	return expression_tree_walker(node, contain_param_exec_walker, context);
 }
 
 /*
