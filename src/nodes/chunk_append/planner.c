@@ -21,7 +21,6 @@
 #include <parser/parsetree.h>
 
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_append/planner.h"
 #include "nodes/chunk_append/exec.h"
 #include "nodes/chunk_append/transform.h"
 #include "import/planner.h"

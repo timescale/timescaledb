@@ -69,7 +69,6 @@ static planner_hook_type prev_planner_hook;
 static set_rel_pathlist_hook_type prev_set_rel_pathlist_hook;
 static get_relation_info_hook_type prev_get_relation_info_hook;
 static create_upper_paths_hook_type prev_create_upper_paths_hook;
-static bool contain_param(Node *node);
 static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, int rtno, List *outer_sortcl,
 										List *outer_tlist);
 
@@ -599,7 +598,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
 					if (contain_mutable_functions((Node *) rinfo->clause) ||
-						contain_param((Node *) rinfo->clause))
+						ts_contain_param((Node *) rinfo->clause))
 						return true;
 				}
 				return false;
@@ -1225,8 +1224,8 @@ contain_param_exec_walker(Node *node, void *context)
 	return expression_tree_walker(node, contain_param_exec_walker, context);
 }
 
-static bool
-contain_param(Node *node)
+bool
+ts_contain_param(Node *node)
 {
 	return contain_param_exec_walker(node, NULL);
 }

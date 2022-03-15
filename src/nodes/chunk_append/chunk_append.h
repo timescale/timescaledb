@@ -7,6 +7,7 @@
 #define TIMESCALEDB_CHUNK_APPEND_H
 
 #include <postgres.h>
+#include <nodes/extensible.h>
 
 #include "hypertable.h"
 
@@ -23,10 +24,17 @@ typedef struct ChunkAppendPath
 extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										 Path *subpath, bool parallel_aware, bool ordered,
 										 List *nested_oids);
+extern Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
+										 List *tlist, List *clauses, List *custom_plans);
 
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 											  List *join_conditions, int *order_attno,
 											  bool *reverse);
+
 extern TSDLLEXPORT bool ts_is_chunk_append_path(Path *path);
+
+extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
+
+void _chunk_append_init(void);
 
 #endif /* TIMESCALEDB_CHUNK_APPEND_H */
