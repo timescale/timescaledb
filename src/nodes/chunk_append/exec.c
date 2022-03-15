@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <miscadmin.h>
+#include <catalog/pg_collation.h>
 #include <executor/executor.h>
 #include <executor/nodeSubplan.h>
 #include <nodes/bitmapset.h>
@@ -18,23 +19,79 @@
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <utils/builtins.h>
 #include <utils/memutils.h>
+#include <utils/ruleutils.h>
 #include <utils/typcache.h>
 
 #include <math.h>
 
-#include "nodes/chunk_append/exec.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_append/explain.h"
 #include "loader/lwlocks.h"
 
 #define INVALID_SUBPLAN_INDEX -1
 #define NO_MATCHING_SUBPLANS -2
 
+typedef struct ParallelChunkAppendState
+{
+	int next_plan;
+	bool finished[FLEXIBLE_ARRAY_MEMBER];
+} ParallelChunkAppendState;
+
+typedef struct ChunkAppendState
+{
+	CustomScanState csstate;
+	PlanState **subplanstates;
+
+	MemoryContext exclusion_ctx;
+
+	int num_subplans;
+	int first_partial_plan;
+	int filtered_first_partial_plan;
+	int current;
+
+	Oid ht_reloid;
+	bool startup_exclusion;
+	bool runtime_exclusion;
+	bool runtime_initialized;
+	uint32 limit;
+
+	/* list of subplans after planning */
+	List *initial_subplans;
+	/* list of constraints indexed like initial_subplans */
+	List *initial_constraints;
+	/* list of restrictinfo clauses indexed like initial_subplans */
+	List *initial_ri_clauses;
+
+	/* list of subplans after startup exclusion */
+	List *filtered_subplans;
+	/* list of relation constraints after startup exclusion */
+	List *filtered_constraints;
+	/* list of restrictinfo clauses after startup exclusion */
+	List *filtered_ri_clauses;
+
+	/* valid subplans for runtime exclusion */
+	Bitmapset *valid_subplans;
+	Bitmapset *params;
+
+	/* sort options if this append is ordered, only used for EXPLAIN */
+	List *sort_options;
+
+	/* number of loops and exclusions for EXPLAIN */
+	int runtime_number_loops;
+	int runtime_number_exclusions;
+
+	LWLock *lock;
+	ParallelContext *pcxt;
+	ParallelChunkAppendState *pstate;
+	void (*choose_next_subplan)(struct ChunkAppendState *);
+} ChunkAppendState;
+
 static TupleTableSlot *chunk_append_exec(CustomScanState *node);
 static void chunk_append_begin(CustomScanState *node, EState *estate, int eflags);
 static void chunk_append_end(CustomScanState *node);
 static void chunk_append_rescan(CustomScanState *node);
+static void chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 static Size chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt);
 static void chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt,
 										void *coordinate);
@@ -47,7 +104,7 @@ static CustomExecMethods chunk_append_state_methods = {
 	.ExecCustomScan = chunk_append_exec,
 	.EndCustomScan = chunk_append_end,
 	.ReScanCustomScan = chunk_append_rescan,
-	.ExplainCustomScan = ts_chunk_append_explain,
+	.ExplainCustomScan = chunk_append_explain,
 	.EstimateDSMCustomScan = chunk_append_estimate_dsm,
 	.InitializeDSMCustomScan = chunk_append_initialize_dsm,
 	.ReInitializeDSMCustomScan = chunk_append_reinitialize_dsm,
@@ -65,6 +122,10 @@ static List *constify_restrictinfo_params(PlannerInfo *root, EState *state, List
 
 static void initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes);
 static LWLock *chunk_append_get_lock_pointer(void);
+
+static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, ExplainState *es);
+static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
+								   bool nullsFirst);
 
 Node *
 ts_chunk_append_state_create(CustomScan *cscan)
@@ -928,4 +989,152 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 	}
 	state->initial_constraints = constraints;
 	state->filtered_constraints = constraints;
+}
+
+/*
+ * Output additional information for EXPLAIN of a custom-scan plan node.
+ * This callback is optional. Common data stored in the ScanState,
+ * such as the target list and scan relation, will be shown even without
+ * this callback, but the callback allows the display of additional,
+ * private state.
+ */
+static void
+chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+{
+	ChunkAppendState *state = (ChunkAppendState *) node;
+
+	if (state->sort_options != NIL)
+		show_sort_group_keys(state, ancestors, es);
+
+	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+		ExplainPropertyBool("Startup Exclusion", state->startup_exclusion, es);
+
+	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+		ExplainPropertyBool("Runtime Exclusion", state->runtime_exclusion, es);
+
+	if (state->startup_exclusion)
+		ExplainPropertyInteger("Chunks excluded during startup",
+							   NULL,
+							   list_length(state->initial_subplans) - list_length(node->custom_ps),
+							   es);
+
+	if (state->runtime_exclusion && state->runtime_number_loops > 0)
+	{
+		int avg_excluded = state->runtime_number_exclusions / state->runtime_number_loops;
+		ExplainPropertyInteger("Chunks excluded during runtime", NULL, avg_excluded, es);
+	}
+}
+
+/*
+ * adjusted from postgresql explain.c
+ * since we have to keep the state in custom_private our sort state
+ * is in lists instead of arrays
+ */
+static void
+show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
+{
+	Plan *plan = state->csstate.ss.ps.plan;
+	List *context;
+	List *result = NIL;
+	StringInfoData sortkeybuf;
+	bool useprefix;
+	int keyno;
+	int nkeys = list_length(linitial(state->sort_options));
+	List *sort_indexes = linitial(state->sort_options);
+	List *sort_ops = lsecond(state->sort_options);
+	List *sort_collations = lthird(state->sort_options);
+	List *sort_nulls = lfourth(state->sort_options);
+
+	if (nkeys <= 0)
+		return;
+
+	initStringInfo(&sortkeybuf);
+
+	/* Set up deparsing context */
+#if PG13_GE
+	context = set_deparse_context_plan(es->deparse_cxt, plan, ancestors);
+#else
+	context = set_deparse_context_planstate(es->deparse_cxt, (Node *) state, ancestors);
+#endif
+	useprefix = (list_length(es->rtable) > 1 || es->verbose);
+
+	for (keyno = 0; keyno < nkeys; keyno++)
+	{
+		/* find key expression in tlist */
+		AttrNumber keyresno = list_nth_oid(sort_indexes, keyno);
+		TargetEntry *target =
+			get_tle_by_resno(castNode(CustomScan, plan)->custom_scan_tlist, keyresno);
+		char *exprstr;
+
+		if (!target)
+			elog(ERROR, "no tlist entry for key %d", keyresno);
+		/* Deparse the expression, showing any top-level cast */
+		exprstr = deparse_expression((Node *) target->expr, context, useprefix, true);
+		resetStringInfo(&sortkeybuf);
+		appendStringInfoString(&sortkeybuf, exprstr);
+		/* Append sort order information, if relevant */
+		if (sort_ops != NIL)
+			show_sortorder_options(&sortkeybuf,
+								   (Node *) target->expr,
+								   list_nth_oid(sort_ops, keyno),
+								   list_nth_oid(sort_collations, keyno),
+								   list_nth_oid(sort_nulls, keyno));
+		/* Emit one property-list item per sort key */
+		result = lappend(result, pstrdup(sortkeybuf.data));
+	}
+
+	ExplainPropertyList("Order", result, es);
+}
+
+/* copied verbatim from postgresql explain.c */
+static void
+show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
+					   bool nullsFirst)
+{
+	Oid sortcoltype = exprType(sortexpr);
+	bool reverse = false;
+	TypeCacheEntry *typentry;
+
+	typentry = lookup_type_cache(sortcoltype, TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
+
+	/*
+	 * Print COLLATE if it's not default.  There are some cases where this is
+	 * redundant, eg if expression is a column whose declared collation is
+	 * that collation, but it's hard to distinguish that here.
+	 */
+	if (OidIsValid(collation) && collation != DEFAULT_COLLATION_OID)
+	{
+		char *collname = get_collation_name(collation);
+
+		if (collname == NULL)
+			elog(ERROR, "cache lookup failed for collation %u", collation);
+		appendStringInfo(buf, " COLLATE %s", quote_identifier(collname));
+	}
+
+	/* Print direction if not ASC, or USING if non-default sort operator */
+	if (sortOperator == typentry->gt_opr)
+	{
+		appendStringInfoString(buf, " DESC");
+		reverse = true;
+	}
+	else if (sortOperator != typentry->lt_opr)
+	{
+		char *opname = get_opname(sortOperator);
+
+		if (opname == NULL)
+			elog(ERROR, "cache lookup failed for operator %u", sortOperator);
+		appendStringInfo(buf, " USING %s", opname);
+		/* Determine whether operator would be considered ASC or DESC */
+		(void) get_equality_op_for_ordering_op(sortOperator, &reverse);
+	}
+
+	/* Add NULLS FIRST/LAST only if it wouldn't be default */
+	if (nullsFirst && !reverse)
+	{
+		appendStringInfoString(buf, " NULLS FIRST");
+	}
+	else if (!nullsFirst && reverse)
+	{
+		appendStringInfoString(buf, " NULLS LAST");
+	}
 }

@@ -26,6 +26,7 @@ extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hyp
 										 List *nested_oids);
 extern Plan *ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 										 List *tlist, List *clauses, List *custom_plans);
+extern Node *ts_chunk_append_state_create(CustomScan *cscan);
 
 extern bool ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 											  List *join_conditions, int *order_attno,
