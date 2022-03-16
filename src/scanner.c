@@ -172,13 +172,16 @@ TSDLLEXPORT void
 ts_scanner_rescan(ScannerCtx *ctx, const ScanKey scankey)
 {
 	Scanner *scanner = scanner_ctx_get_scanner(ctx);
+	MemoryContext oldmcxt;
 
 	/* If scankey is NULL, the existing scan key was already updated or the
 	 * old should be reused */
 	if (NULL != scankey)
 		memcpy(ctx->scankey, scankey, sizeof(*ctx->scankey));
 
+	oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
 	scanner->rescan(ctx);
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 static void
@@ -186,6 +189,9 @@ prepare_scan(ScannerCtx *ctx)
 {
 	ctx->internal.ended = false;
 	ctx->internal.registered_snapshot = false;
+
+	if (ctx->internal.scan_mcxt == NULL)
+		ctx->internal.scan_mcxt = CurrentMemoryContext;
 
 	if (ctx->snapshot == NULL)
 	{
@@ -213,8 +219,10 @@ prepare_scan(ScannerCtx *ctx)
 		 * hypertables compared to regular tables under SERIALIZABLE
 		 * mode.
 		 */
+		MemoryContext oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
 		ctx->snapshot = RegisterSnapshot(GetSnapshotData(SnapshotSelf));
 		ctx->internal.registered_snapshot = true;
+		MemoryContextSwitchTo(oldmcxt);
 	}
 }
 
@@ -222,11 +230,18 @@ TSDLLEXPORT Relation
 ts_scanner_open(ScannerCtx *ctx)
 {
 	Scanner *scanner = scanner_ctx_get_scanner(ctx);
+	MemoryContext oldmcxt;
+	Relation rel;
 
 	Assert(NULL == ctx->tablerel);
-	prepare_scan(ctx);
 
-	return scanner->openscan(ctx);
+	prepare_scan(ctx);
+	Assert(ctx->internal.scan_mcxt != NULL);
+	oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
+	rel = scanner->openscan(ctx);
+	MemoryContextSwitchTo(oldmcxt);
+
+	return rel;
 }
 
 /*
@@ -240,6 +255,7 @@ ts_scanner_start_scan(ScannerCtx *ctx)
 	InternalScannerCtx *ictx = &ctx->internal;
 	Scanner *scanner;
 	TupleDesc tuple_desc;
+	MemoryContext oldmcxt;
 
 	if (ictx->started)
 	{
@@ -269,6 +285,9 @@ ts_scanner_start_scan(ScannerCtx *ctx)
 			ctx->index = RelationGetRelid(ctx->indexrel);
 	}
 
+	Assert(ctx->internal.scan_mcxt != NULL);
+	oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
+
 	scanner = scanner_ctx_get_scanner(ctx);
 	scanner->beginscan(ctx);
 
@@ -277,6 +296,7 @@ ts_scanner_start_scan(ScannerCtx *ctx)
 	ictx->tinfo.scanrel = ctx->tablerel;
 	ictx->tinfo.mctx = ctx->result_mctx == NULL ? CurrentMemoryContext : ctx->result_mctx;
 	ictx->tinfo.slot = MakeSingleTupleTableSlot(tuple_desc, table_slot_callbacks(ctx->tablerel));
+	MemoryContextSwitchTo(oldmcxt);
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)
@@ -307,6 +327,11 @@ scanner_cleanup(ScannerCtx *ctx)
 		ExecDropSingleTupleTableSlot(ictx->tinfo.slot);
 		ictx->tinfo.slot = NULL;
 	}
+
+	if (NULL != ictx->scan_mcxt)
+	{
+		ictx->scan_mcxt = NULL;
+	}
 }
 
 TSDLLEXPORT void
@@ -314,6 +339,7 @@ ts_scanner_end_scan(ScannerCtx *ctx)
 {
 	InternalScannerCtx *ictx = &ctx->internal;
 	Scanner *scanner = scanner_ctx_get_scanner(ctx);
+	MemoryContext oldmcxt;
 
 	if (ictx->ended)
 		return;
@@ -322,7 +348,10 @@ ts_scanner_end_scan(ScannerCtx *ctx)
 	if (ctx->postscan != NULL)
 		ctx->postscan(ictx->tinfo.count, ctx->data);
 
+	oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
 	scanner->endscan(ctx);
+	MemoryContextSwitchTo(oldmcxt);
+
 	scanner_cleanup(ctx);
 	ictx->ended = true;
 	ictx->started = false;
@@ -348,7 +377,14 @@ ts_scanner_next(ScannerCtx *ctx)
 {
 	InternalScannerCtx *ictx = &ctx->internal;
 	Scanner *scanner = scanner_ctx_get_scanner(ctx);
-	bool is_valid = ts_scanner_limit_reached(ctx) ? false : scanner->getnext(ctx);
+	bool is_valid = false;
+
+	if (!ts_scanner_limit_reached(ctx))
+	{
+		MemoryContext oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
+		is_valid = scanner->getnext(ctx);
+		MemoryContextSwitchTo(oldmcxt);
+	}
 
 	while (is_valid)
 	{
@@ -375,7 +411,15 @@ ts_scanner_next(ScannerCtx *ctx)
 			/* stop at a valid tuple */
 			return &ictx->tinfo;
 		}
-		is_valid = ts_scanner_limit_reached(ctx) ? false : scanner->getnext(ctx);
+
+		if (ts_scanner_limit_reached(ctx))
+			is_valid = false;
+		else
+		{
+			MemoryContext oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
+			is_valid = scanner->getnext(ctx);
+			MemoryContextSwitchTo(oldmcxt);
+		}
 	}
 
 	if (!(ctx->flags & SCANNER_F_NOEND))
