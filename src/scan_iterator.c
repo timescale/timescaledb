@@ -44,7 +44,7 @@ ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumbe
 	 * sure the scan key is initialized on the long-lived scankey memory
 	 * context.
 	 */
-	oldmcxt = MemoryContextSwitchTo(iterator->scankey_mcxt);
+	oldmcxt = MemoryContextSwitchTo(iterator->ctx.internal.scan_mcxt);
 	ScanKeyInit(&iterator->scankey[iterator->ctx.nkeys++],
 				attributeNumber,
 				strategy,
@@ -56,7 +56,5 @@ ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumbe
 TSDLLEXPORT void
 ts_scan_iterator_rescan(ScanIterator *iterator)
 {
-	MemoryContext oldmcxt = MemoryContextSwitchTo(iterator->scankey_mcxt);
 	ts_scanner_rescan(&iterator->ctx, NULL);
-	MemoryContextSwitchTo(oldmcxt);
 }
