@@ -337,13 +337,10 @@ get_chunk_compression_stats(StatsContext *statsctx, const Chunk *chunk,
 							Form_compression_chunk_size compr_stats)
 {
 	TupleInfo *ti;
-	MemoryContext oldmcxt;
 
 	if (!ts_chunk_is_compressed(chunk))
 		return false;
 
-	/* Need to execute the scan functions on the long-lived memory context */
-	oldmcxt = MemoryContextSwitchTo(statsctx->compressed_chunk_stats_iterator.scankey_mcxt);
 	ts_scan_iterator_scan_key_reset(&statsctx->compressed_chunk_stats_iterator);
 	ts_scan_iterator_scan_key_init(&statsctx->compressed_chunk_stats_iterator,
 								   Anum_compression_chunk_size_pkey_chunk_id,
@@ -352,7 +349,6 @@ get_chunk_compression_stats(StatsContext *statsctx, const Chunk *chunk,
 								   Int32GetDatum(chunk->fd.id));
 	ts_scan_iterator_start_or_restart_scan(&statsctx->compressed_chunk_stats_iterator);
 	ti = ts_scan_iterator_next(&statsctx->compressed_chunk_stats_iterator);
-	MemoryContextSwitchTo(oldmcxt);
 
 	if (ti)
 	{
