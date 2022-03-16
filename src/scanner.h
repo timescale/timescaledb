@@ -85,6 +85,12 @@ typedef struct InternalScannerCtx
 {
 	TupleInfo tinfo;
 	ScanDesc scan;
+	/*
+	 * PG scan functions must be called on a memory context that lives
+	 * throughout the entire scan. Use the scan_mcxt to ensure that
+	 * functions aren't called on, e.g., a per-tuple context.
+	 */
+	MemoryContext scan_mcxt;
 	bool registered_snapshot;
 	bool started;
 	bool ended;
