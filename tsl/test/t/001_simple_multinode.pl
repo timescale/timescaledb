@@ -8,7 +8,7 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 17;
+use Test::More tests => 19;
 
 #Initialize all the multi-node instances
 my $an = AccessNode->create('an');
@@ -52,6 +52,42 @@ $dn2->psql_is(
 	"_timescaledb_internal._dist_hyper_1_2_chunk",
 	'DN2 shows correct set of chunks');
 
+# Check that remote parameterized queries are handled correctly via EXPLAIN
+$an->safe_psql(
+	'postgres',
+	qq[
+    CREATE TABLE conditions_dist2 (
+        time TIMESTAMPTZ NOT NULL,
+        location TEXT NOT NULL,
+        temperature DOUBLE PRECISION NULL,
+        humidity DOUBLE PRECISION NULL );
+    SELECT create_distributed_hypertable('conditions_dist2', 'time', 'location');
+    INSERT INTO conditions_dist2
+    SELECT '2022-01-18 00:00:00' :: timestamptz + ( i || ' sec' ) :: interval,
+       i :: text, i, i FROM   generate_series(1, 10) i;
+    ]);
+
+my ($cmdret, $stdout, $stderr) = $an->psql(
+	'postgres',
+	qq[
+    SET timescaledb.enable_remote_explain = ON;
+    EXPLAIN (verbose) SELECT location, RESULT.time_array, RESULT.value_array
+        FROM conditions_dist2 series INNER JOIN LATERAL (
+        SELECT array_agg(TIME) AS time_array, array_agg(humidity) AS value_array
+        FROM (
+            SELECT TIME, humidity AS humidity FROM conditions_dist2 metric
+            WHERE metric.location = series.location AND TIME >= '2022-01-18T05:58:00Z'
+            AND TIME <= '2022-01-19T06:01:00Z' ORDER BY TIME ) AS time_ordered_rows
+        ) AS RESULT ON (RESULT.value_array IS NOT NULL);
+    ]);
+
+# Check that output contains message for parameterized remote query
+is($cmdret, 0);
+like(
+	$stdout,
+	qr/Remote EXPLAIN: Unavailable due to parameterized query/,
+	'Expected EXPLAIN output for parameterized query');
+
 # Check that distributed tables in non-default schema and also containing user created types
 # in another schema are created properly
 $query = q[CREATE SCHEMA myschema];
@@ -76,14 +112,13 @@ $an->psql_is(
 	q[2018-03-02 01:00:00|(Kilimanjaro,"Diamond St")],
 	'AN shows correct data with UDT from different schema');
 
-
 # Test behavior of size utillities when a data node is not responding
 $an->psql_is(
 	'postgres', "SELECT * FROM hypertable_size('myschema.test')",
 	q[81920],   'AN hypertable_size() returns correct size');
 
 $dn1->stop('fast');
-my ($cmdret, $stdout, $stderr) =
+($cmdret, $stdout, $stderr) =
   $an->psql('postgres', "SELECT * FROM hypertable_size('myschema.test')");
 
 # Check that hypertable_size() returns error when dn1 is down

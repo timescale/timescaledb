@@ -480,8 +480,13 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 		/* fsstate should be set up but better check again to avoid crashes */
 		if (ts_guc_enable_remote_explain && fsstate)
 		{
-			const char *data_node_explain =
-				get_data_node_explain(fsstate->query, fsstate->conn, es);
+			char *data_node_explain;
+
+			/* EXPLAIN barfs on parameterized queries, so check that first */
+			if (fsstate->num_params >= 1)
+				data_node_explain = "Unavailable due to parameterized query";
+			else
+				data_node_explain = get_data_node_explain(fsstate->query, fsstate->conn, es);
 			ExplainPropertyText("Remote EXPLAIN", data_node_explain, es);
 		}
 	}

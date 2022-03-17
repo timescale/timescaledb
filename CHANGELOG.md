@@ -9,9 +9,11 @@ accidentally triggering the load of a previous DB version.**
 **Bugfixes**
 * #4122 Fix segfault on INSERT into distributed hypertable
 * #4161 Fix memory handling during scans
+* #3974 Fix remote EXPLAIN with parameterized queries
 
 **Thanks**
 * @abrownsword for reporting a crash in the telemetry reporter
+* @daydayup863 for reporting issue with remote explain
 
 ## 2.6.0 (2022-02-16)
 This release is medium priority for upgrade. We recommend that you upgrade at the next available opportunity.
