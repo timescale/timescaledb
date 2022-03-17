@@ -91,7 +91,7 @@ GROUP BY 2, 3;
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=745 loops=1)
          Hypertable: merge_sort
-         Chunks left after exclusion: 5
+         Chunks excluded during startup: 0
          ->  Merge Append (actual rows=745 loops=1)
                Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=120 loops=1)
@@ -137,7 +137,7 @@ GROUP BY 2, 3;
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=528 loops=1)
          Hypertable: merge_sort
-         Chunks left after exclusion: 4
+         Chunks excluded during startup: 1
          ->  Merge Append (actual rows=528 loops=1)
                Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                ->  Sort (actual rows=71 loops=1)

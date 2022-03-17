@@ -19,6 +19,7 @@ typedef struct ConstraintAwareAppendState
 	CustomScanState csstate;
 	Plan *subplan;
 	Size num_append_subplans;
+	Size num_chunks_excluded;
 } ConstraintAwareAppendState;
 
 typedef struct Hypertable Hypertable;
