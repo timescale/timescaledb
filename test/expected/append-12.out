@@ -1992,7 +1992,7 @@ ORDER BY time DESC, device_id;
 --------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ConstraintAwareAppend) (actual rows=7776 loops=1)
    Hypertable: metrics_timestamptz
-   Chunks left after exclusion: 2
+   Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7776 loops=1)
          Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
          ->  Index Only Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032 loops=1)

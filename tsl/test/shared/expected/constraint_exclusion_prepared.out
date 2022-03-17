@@ -490,7 +490,7 @@ FROM (
          Sort Method: top-N heapsort 
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
                Hypertable: metrics
-               Chunks left after exclusion: 2
+               Chunks excluded during startup: 1
                ->  Append (actual rows=33590 loops=1)
                      ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
@@ -507,7 +507,7 @@ FROM (
          Sort Method: top-N heapsort 
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
                Hypertable: metrics
-               Chunks left after exclusion: 2
+               Chunks excluded during startup: 1
                ->  Append (actual rows=33590 loops=1)
                      ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
@@ -524,7 +524,7 @@ FROM (
          Sort Method: top-N heapsort 
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
                Hypertable: metrics
-               Chunks left after exclusion: 2
+               Chunks excluded during startup: 1
                ->  Append (actual rows=33590 loops=1)
                      ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
@@ -541,7 +541,7 @@ FROM (
          Sort Method: top-N heapsort 
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
                Hypertable: metrics
-               Chunks left after exclusion: 2
+               Chunks excluded during startup: 1
                ->  Append (actual rows=33590 loops=1)
                      ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
@@ -558,7 +558,7 @@ FROM (
          Sort Method: top-N heapsort 
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=33590 loops=1)
                Hypertable: metrics
-               Chunks left after exclusion: 2
+               Chunks excluded during startup: 1
                ->  Append (actual rows=33590 loops=1)
                      ->  Seq Scan on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
@@ -1247,7 +1247,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1276,7 +1276,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1305,7 +1305,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1334,7 +1334,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1363,7 +1363,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1912,7 +1912,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_compressed
-         Chunks left after exclusion: 2
+         Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1935,7 +1935,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_compressed
-         Chunks left after exclusion: 2
+         Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1958,7 +1958,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_compressed
-         Chunks left after exclusion: 2
+         Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -1981,7 +1981,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_compressed
-         Chunks left after exclusion: 2
+         Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -2004,7 +2004,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_compressed
-         Chunks left after exclusion: 2
+         Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -2867,7 +2867,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space_compressed
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -2914,7 +2914,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space_compressed
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -2961,7 +2961,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space_compressed
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -3008,7 +3008,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space_compressed
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
@@ -3055,7 +3055,7 @@ FROM (
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100 loops=1)
          Hypertable: metrics_space_compressed
-         Chunks left after exclusion: 6
+         Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)

@@ -267,6 +267,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	state->num_append_subplans = list_length(*appendplans);
+	state->num_chunks_excluded = list_length(old_appendplans) - state->num_append_subplans;
 	if (state->num_append_subplans > 0)
 		node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
 }
@@ -329,7 +330,7 @@ ca_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	Oid relid = linitial_oid(linitial(cscan->custom_private));
 
 	ExplainPropertyText("Hypertable", get_rel_name(relid), es);
-	ExplainPropertyInteger("Chunks left after exclusion", NULL, state->num_append_subplans, es);
+	ExplainPropertyInteger("Chunks excluded during startup", NULL, state->num_chunks_excluded, es);
 }
 
 static CustomExecMethods constraint_aware_append_state_methods = {

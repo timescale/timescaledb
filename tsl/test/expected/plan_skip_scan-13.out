@@ -2956,7 +2956,7 @@ WHERE CLAUSES
    ->  Unique (actual rows=8 loops=1)
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=32 loops=1)
                Hypertable: skip_scan_ht
-               Chunks left after exclusion: 4
+               Chunks excluded during startup: 0
                ->  Merge Append (actual rows=32 loops=1)
                      Sort Key: _hyper_1_1_chunk.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=8 loops=1)
@@ -2980,7 +2980,7 @@ WHERE CLAUSES
  Unique (actual rows=7 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=28 loops=1)
          Hypertable: skip_scan_ht
-         Chunks left after exclusion: 4
+         Chunks excluded during startup: 0
          ->  Merge Append (actual rows=28 loops=1)
                Sort Key: _hyper_1_1_chunk.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=7 loops=1)
@@ -3027,7 +3027,7 @@ WHERE CLAUSES
  Unique (actual rows=3 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=12 loops=1)
          Hypertable: skip_scan_ht
-         Chunks left after exclusion: 4
+         Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
                Sort Key: _hyper_1_1_chunk.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
@@ -3050,7 +3050,7 @@ WHERE CLAUSES
  Unique (actual rows=3 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=12 loops=1)
          Hypertable: skip_scan_ht
-         Chunks left after exclusion: 4
+         Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
                Sort Key: _hyper_1_1_chunk.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)

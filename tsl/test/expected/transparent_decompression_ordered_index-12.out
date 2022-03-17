@@ -284,7 +284,7 @@ WHERE extract(minute FROM d.time) = 0;
    ->  Nested Loop (actual rows=12 loops=1)
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=389 loops=1)
                Hypertable: metrics_ordered_idx
-               Chunks left after exclusion: 5
+               Chunks excluded during startup: 0
                ->  Merge Append (actual rows=389 loops=1)
                      Sort Key: d_1.device_id
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=120 loops=1)
@@ -730,7 +730,7 @@ ORDER BY 1,
                Sort Method: top-N heapsort 
                ->  Custom Scan (ConstraintAwareAppend) (actual rows=53 loops=1)
                      Hypertable: metrics_ordered_idx
-                     Chunks left after exclusion: 2
+                     Chunks excluded during startup: 0
                      ->  Append (actual rows=53 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=48 loops=1)
                                  Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
@@ -766,7 +766,7 @@ ORDER BY 1,
    ->  Limit (actual rows=10 loops=1)
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=10 loops=1)
                Hypertable: metrics_ordered_idx
-               Chunks left after exclusion: 2
+               Chunks excluded during startup: 0
                ->  Merge Append (actual rows=10 loops=1)
                      Sort Key: _hyper_1_4_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=9 loops=1)
@@ -814,11 +814,11 @@ ORDER BY 1,
                Hash Cond: ((d.device_id = m.device_id) AND (d."time" = m."time"))
                ->  Custom Scan (ConstraintAwareAppend) (actual rows=0 loops=1)
                      Hypertable: metrics_ordered_idx
-                     Chunks left after exclusion: 0
+                     Chunks excluded during startup: 2
                ->  Hash (never executed)
                      ->  Custom Scan (ConstraintAwareAppend) (never executed)
                            Hypertable: metrics_ordered_idx
-                           Chunks left after exclusion: 0
+                           Chunks excluded during startup: 2
 (14 rows)
 
 --query with no results --
@@ -849,7 +849,7 @@ ORDER BY 1,
                      Sort Method: quicksort 
                      ->  Custom Scan (ConstraintAwareAppend) (actual rows=1541 loops=1)
                            Hypertable: metrics_ordered_idx
-                           Chunks left after exclusion: 5
+                           Chunks excluded during startup: 0
                            ->  Append (actual rows=1541 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=480 loops=1)
                                        Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
@@ -871,7 +871,7 @@ ORDER BY 1,
                      Sort Method: quicksort 
                      ->  Custom Scan (ConstraintAwareAppend) (actual rows=1541 loops=1)
                            Hypertable: metrics_ordered_idx
-                           Chunks left after exclusion: 5
+                           Chunks excluded during startup: 0
                            ->  Append (actual rows=1541 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=480 loops=1)
                                        Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
