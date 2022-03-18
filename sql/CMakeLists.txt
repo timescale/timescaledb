@@ -39,7 +39,7 @@ set(MOD_FILES
 # specified in version.config
 set(CURRENT_REV_FILE reverse-dev.sql)
 # Files for generating old downgrade scripts. This should only include files for
-# downgrade to from one version to its previous version since we do not support
+# downgrade from one version to its previous version since we do not support
 # skipping versions when downgrading.
 set(OLD_REV_FILES
     2.3.1--2.3.0.sql

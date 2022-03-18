@@ -214,10 +214,11 @@ spi_update_materializations(SchemaAndName partial_view, SchemaAndName materializ
 {
 	StringInfo chunk_condition = makeStringInfo();
 
-	/* chunk_id is valid if the materializaion update should be done only the given chunk.
+	/*
+	 * chunk_id is valid if the materializaion update should be done only on the given chunk.
 	 * This is used currently for refresh on chunk drop only. In other cases, manual
 	 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
-	 * not provided, i.e., invlaid.
+	 * not provided, i.e., invalid.
 	 */
 	if (chunk_id != INVALID_CHUNK_ID)
 		appendStringInfo(chunk_condition, "AND chunk_id = %d", chunk_id);
@@ -308,5 +309,5 @@ spi_insert_materializations(SchemaAndName partial_view, SchemaAndName materializ
 								0 /*count*/);
 
 	if (res < 0)
-		elog(ERROR, "could materialize values into the materialization table");
+		elog(ERROR, "could not materialize values into the materialization table");
 }
