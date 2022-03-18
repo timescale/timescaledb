@@ -42,7 +42,7 @@
  * Invalidation processing for continuous aggregates.
  *
  * Invalidations track the regions/intervals [start, end] of a continuous
- * aggregate that are out-of-date relative the source hypertable on top of
+ * aggregate that are out-of-date relative to the source hypertable on top of
  * which the aggregate is defined. When a continuous aggregate is out-of-date
  * across one or more regions, it can be refreshed with a window covering
  * those regions in order to bring it up-to-date with the source data again.

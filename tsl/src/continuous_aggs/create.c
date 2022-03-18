@@ -7,7 +7,7 @@
 /* This file contains the code for processing continuous aggregate
  * DDL statements which are of the form:
  *
- * CREATE VIEW <name> WITH (ts_continuous = [option] )
+ * CREATE MATERIALIZED VIEW <name> WITH (ts_continuous = [option] )
  * AS  <select query>
  * The entry point for the code is
  * tsl_process_continuous_agg_viewstmt
@@ -1174,7 +1174,7 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 {
 	Aggref *aggref;
 	TargetEntry *te;
-	char *agggregate_signature;
+	char *aggregate_signature;
 	Const *aggregate_signature_const, *collation_schema_const, *collation_name_const,
 		*input_types_const, *return_type_const;
 	Oid name_array_type_oid = get_array_type(NAMEOID);
@@ -1207,12 +1207,12 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 	aggref->aggsplit = AGGSPLIT_SIMPLE;
 	aggref->location = -1;
 	/* construct the arguments */
-	agggregate_signature = format_procedure_qualified(inp->aggfnoid);
+	aggregate_signature = format_procedure_qualified(inp->aggfnoid);
 	aggregate_signature_const = makeConst(TEXTOID,
 										  -1,
 										  DEFAULT_COLLATION_OID,
 										  -1,
-										  CStringGetTextDatum(agggregate_signature),
+										  CStringGetTextDatum(aggregate_signature),
 										  false,
 										  false /* passbyval */
 	);
