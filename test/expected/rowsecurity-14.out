@@ -2265,19 +2265,20 @@ INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Update on b1
-   Update on b1 b1_1
-   Update on _hyper_8_41_chunk b1_2
-   ->  Result
-         ->  Append
-               ->  Seq Scan on b1 b1_1
-                     Filter: ((a > 0) AND (a = 4) AND ((a % 2) = 0) AND f_leak(b))
-               ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk b1_2
-                     Index Cond: ((a > 0) AND (a = 4))
-                     Filter: (((a % 2) = 0) AND f_leak(b))
-(10 rows)
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on b1
+         Update on b1 b1_1
+         Update on _hyper_8_41_chunk b1_2
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on b1 b1_1
+                           Filter: ((a > 0) AND (a = 4) AND ((a % 2) = 0) AND f_leak(b))
+                     ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk b1_2
+                           Index Cond: ((a > 0) AND (a = 4))
+                           Filter: (((a % 2) = 0) AND f_leak(b))
+(11 rows)
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
@@ -4354,19 +4355,20 @@ SELECT * FROM current_check;
 
 -- Plan should be a subquery TID scan
 EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
-                            QUERY PLAN                             
--------------------------------------------------------------------
- Update on current_check
-   Update on current_check current_check_1
-   Update on _hyper_21_104_chunk current_check_2
-   ->  Append
-         ->  Tid Scan on current_check current_check_1
-               TID Cond: CURRENT OF current_check_cursor
-               Filter: ((currentid = 4) AND ((currentid % 2) = 0))
-         ->  Tid Scan on _hyper_21_104_chunk current_check_2
-               TID Cond: CURRENT OF current_check_cursor
-               Filter: ((currentid = 4) AND ((currentid % 2) = 0))
-(10 rows)
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on current_check
+         Update on current_check current_check_1
+         Update on _hyper_21_104_chunk current_check_2
+         ->  Append
+               ->  Tid Scan on current_check current_check_1
+                     TID Cond: CURRENT OF current_check_cursor
+                     Filter: ((currentid = 4) AND ((currentid % 2) = 0))
+               ->  Tid Scan on _hyper_21_104_chunk current_check_2
+                     TID Cond: CURRENT OF current_check_cursor
+                     Filter: ((currentid = 4) AND ((currentid % 2) = 0))
+(11 rows)
 
 -- Similarly can only delete row 4
 FETCH ABSOLUTE 1 FROM current_check_cursor;

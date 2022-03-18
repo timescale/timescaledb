@@ -480,12 +480,12 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	cscan->scan.plan.targetlist = copyObject(root->processed_tlist);
 
 	/*
-	 * For DELETE processed_tlist will have ROWID_VAR. We need to remove
+	 * For UPDATE/DELETE processed_tlist will have ROWID_VAR. We need to remove
 	 * those because set_customscan_references will bail if it sees
 	 * ROWID_VAR entries in the targetlist.
 	 */
 #if PG14_GE
-	if (mt->operation == CMD_DELETE)
+	if (mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE)
 	{
 		ListCell *lc;
 		foreach (lc, cscan->scan.plan.targetlist)
@@ -500,8 +500,9 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 		}
 	}
 #else
-	/* We only route DELETEs through our CustomNode for PG 14+ because
-	 * the codepath for earlier versions is different. */
+	/*
+	 * For postgres versions < PG14 we only route INSERT through our custom node.
+	 */
 	Assert(mt->operation == CMD_INSERT);
 #endif
 	cscan->custom_scan_tlist = cscan->scan.plan.targetlist;

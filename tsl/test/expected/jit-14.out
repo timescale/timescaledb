@@ -141,13 +141,14 @@ SELECT * FROM jit_test_interval WHERE id >= 23 and id < 73 ORDER BY id;
 
 :PREFIX
 UPDATE jit_test_interval SET temp = temp * 2.3 WHERE id >= 23 and id < 73;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
- Update on public.jit_test_interval
-   ->  Index Scan using jit_test_interval_id_idx on public.jit_test_interval
-         Output: (temp * '2.3'::double precision), ctid
-         Index Cond: ((jit_test_interval.id >= 23) AND (jit_test_interval.id < 73))
-(4 rows)
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on public.jit_test_interval
+         ->  Index Scan using jit_test_interval_id_idx on public.jit_test_interval
+               Output: (temp * '2.3'::double precision), ctid
+               Index Cond: ((jit_test_interval.id >= 23) AND (jit_test_interval.id < 73))
+(5 rows)
 
 :PREFIX
 SELECT * FROM jit_test_interval ORDER BY id;

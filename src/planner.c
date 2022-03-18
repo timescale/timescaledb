@@ -1137,9 +1137,10 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist)
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 
 #if PG14_GE
-			/* We only route DELETEs through our CustomNode for PG 14+ because
+			/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
 			 * the codepath for earlier versions is different. */
-			if (mt->operation == CMD_INSERT || mt->operation == CMD_DELETE)
+			if (mt->operation == CMD_INSERT || mt->operation == CMD_UPDATE ||
+				mt->operation == CMD_DELETE)
 #else
 			if (mt->operation == CMD_INSERT)
 #endif
