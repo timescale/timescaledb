@@ -59,7 +59,8 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 	if (res != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI in materializer");
 
-	/* pin the start of new_materialization to the end of new_materialization,
+	/*
+	 * Pin the start of new_materialization to the end of new_materialization,
 	 * we are not allowed to materialize beyond that point
 	 */
 	if (new_materialization_range.start > new_materialization_range.end)
@@ -82,11 +83,14 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 			int64_min(invalidation_range.start, new_materialization_range.start);
 	}
 
-	/* Then insert the materializations.
+	/*
+	 * Then insert the materializations.
+	 *
 	 * We insert them in two groups:
-	 * [lowest_invalidated, greatest_invalidated] and
-	 * [start_of_new_materialization, end_of_new_materialization]
-	 * eventually, we may want more precise deletions and insertions for the invalidated ranges.
+	 *   [lowest_invalidated, greatest_invalidated] and
+	 *   [start_of_new_materialization, end_of_new_materialization]
+	 *
+	 * Eventually, we may want more precise deletions and insertions for the invalidated ranges.
 	 * if greatest_invalidated == end_of_new_materialization then we only perform 1 insertion.
 	 * to prevent values from being inserted multiple times.
 	 */
@@ -172,9 +176,11 @@ time_range_internal_to_max_time_value(Oid type)
 static Datum
 internal_to_time_value_or_infinite(int64 internal, Oid time_type, bool *is_infinite_out)
 {
-	/* MIN and MAX can occur due to NULL thresholds, or due to a lack of invalidations. Since our
+	/*
+	 * MIN and MAX can occur due to NULL thresholds, or due to a lack of invalidations. Since our
 	 * regular conversion function errors in those cases, and we want to use those as markers for an
-	 * open threshold in one direction, we special case this here*/
+	 * open threshold in one direction, we special case this here
+	 */
 	if (internal == PG_INT64_MIN)
 	{
 		if (is_infinite_out != NULL)
@@ -214,10 +220,9 @@ spi_update_materializations(SchemaAndName partial_view, SchemaAndName materializ
 {
 	StringInfo chunk_condition = makeStringInfo();
 
-	/* chunk_id is valid if the materializaion update should be done only the given chunk.
-	 * This is used currently for refresh on chunk drop only. In other cases, manual
-	 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
-	 * not provided, i.e., invlaid.
+	/*
+	 * chunk_id is valid just for backward compatibility with caggs that store it in
+	 * the materialized hypertable.
 	 */
 	if (chunk_id != INVALID_CHUNK_ID)
 		appendStringInfo(chunk_condition, "AND chunk_id = %d", chunk_id);

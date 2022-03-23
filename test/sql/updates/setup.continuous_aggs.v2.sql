@@ -25,15 +25,15 @@ CREATE TYPE custom_type AS (high int, low int);
 CREATE TABLE conditions_before (
       timec       TIMESTAMPTZ       NOT NULL,
       location    TEXT              NOT NULL,
-      temperature DOUBLE PRECISION  NULL,
-      humidity    DOUBLE PRECISION  NULL,
-      lowp        double precision NULL,
-      highp       double precision null,
-      allnull     double precision null,
-      highlow     custom_type null,
-      bit_int     smallint,
-      good_life   boolean
-    );
+      temperature DOUBLE PRECISION,
+      humidity    DOUBLE PRECISION,
+      lowp        DOUBLE PRECISION,
+      highp       DOUBLE PRECISION,
+      allnull     DOUBLE PRECISION,
+      highlow     custom_type,
+      bit_int     SMALLINT,
+      good_life   BOOLEAN
+);
 
 SELECT table_name FROM create_hypertable( 'conditions_before', 'timec');
 
