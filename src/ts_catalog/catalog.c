@@ -21,6 +21,7 @@
 #include "compat/compat.h"
 #include "ts_catalog/catalog.h"
 #include "extension.h"
+#include "cache_invalidate.h"
 
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[HYPERTABLE] = {
@@ -311,6 +312,7 @@ const static InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 static const char *cache_proxy_table_names[_MAX_CACHE_TYPES] = {
 	[CACHE_TYPE_HYPERTABLE] = "cache_inval_hypertable",
 	[CACHE_TYPE_BGW_JOB] = "cache_inval_bgw_job",
+	[CACHE_TYPE_EXTENSION] = "cache_inval_extension",
 };
 
 /* Catalog information for the current database. */
@@ -474,6 +476,9 @@ ts_catalog_get(void)
 			get_relname_relid(cache_proxy_table_names[i],
 							  s_catalog.extension_schema_id[TS_CACHE_SCHEMA]);
 
+	ts_cache_invalidate_set_proxy_tables(s_catalog.caches[CACHE_TYPE_HYPERTABLE].inval_proxy_id,
+										 s_catalog.caches[CACHE_TYPE_BGW_JOB].inval_proxy_id);
+
 	for (i = 0; i < _MAX_INTERNAL_FUNCTIONS; i++)
 	{
 		InternalFunctionDef def = internal_function_definitions[i];
@@ -507,6 +512,8 @@ ts_catalog_reset(void)
 {
 	s_catalog.initialized = false;
 	database_info.database_id = InvalidOid;
+
+	ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
 }
 
 static CatalogTable
