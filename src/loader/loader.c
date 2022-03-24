@@ -99,9 +99,10 @@ extern void TSDLLEXPORT _PG_init(void);
 extern void TSDLLEXPORT _PG_fini(void);
 
 /* was the versioned-extension loaded*/
-static bool loaded = false;
 static bool loader_present = true;
 
+/* The shared object library version loaded, as a string. Will be all
+ * zero-initialized if no extension is loaded. */
 static char soversion[MAX_VERSION_LEN];
 
 /* GUC to disable the load */
@@ -122,6 +123,13 @@ static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *qu
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 												   JumbleState *jstate);
 #endif
+
+static bool
+extension_is_loaded(void)
+{
+	/* The extension is loaded when the version is set to a non-null string */
+	return soversion[0] != '\0';
+}
 
 extern char *
 ts_loader_extension_version(void)
@@ -249,7 +257,7 @@ should_load_on_alter_extension(Node *utility_stmt)
 		return true;
 
 	/* disallow loading two .so from different versions */
-	if (loaded)
+	if (extension_is_loaded())
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("extension \"%s\" cannot be updated after the old version has already been "
@@ -270,7 +278,8 @@ should_load_on_create_extension(Node *utility_stmt)
 	if (!is_extension)
 		return false;
 
-	if (!loaded)
+	/* If set, a library has already been loaded */
+	if (!extension_is_loaded())
 		return true;
 
 	/*
@@ -670,25 +679,25 @@ static void inline do_load()
 	char soname[MAX_SO_NAME_LEN];
 	post_parse_analyze_hook_type old_hook;
 
+	/* If the right version of the library is already loaded, we will just
+	 * skip the actual loading. If the wrong version of the library is loaded,
+	 * we need to kill the session since it will not be able to continue
+	 * operate. */
+	if (extension_is_loaded())
+	{
+		if (strcmp(soversion, version) == 0)
+			return;
+		ereport(FATAL,
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("\"%s\" already loaded with a different version", EXTENSION_NAME),
+				 errdetail("The new version is \"%s\", this session is using version \"%s\". The "
+						   "session will be restarted.",
+						   version,
+						   soversion)));
+	}
+
 	strlcpy(soversion, version, MAX_VERSION_LEN);
-
-	/*
-	 * An inval_relcache callback can be called after previous checks of
-	 * loaded had found it to be false. But the inval_relcache callback may
-	 * load the extension setting it to true. Thus it needs to be rechecked
-	 * here again by the outer call after inval_relcache completes. This is
-	 * double-check locking, in effect.
-	 */
-	if (loaded)
-		return;
-
 	snprintf(soname, MAX_SO_NAME_LEN, "%s-%s", EXTENSION_SO, version);
-
-	/*
-	 * Set to true whether or not the load succeeds to prevent reloading if
-	 * failure happened after partial load.
-	 */
-	loaded = true;
 
 	/*
 	 * In a parallel worker, we're not responsible for loading libraries, it's
@@ -740,27 +749,23 @@ static void inline do_load()
 
 static void inline extension_check()
 {
-	if (!loaded)
+	enum ExtensionState state = extension_current_state();
+
+	switch (state)
 	{
-		enum ExtensionState state = extension_current_state();
-
-		switch (state)
-		{
-			case EXTENSION_STATE_TRANSITIONING:
-
-				/*
-				 * Always load as soon as the extension is transitioning. This
-				 * is necessary so that the extension load before any CREATE
-				 * FUNCTION calls. Otherwise, the CREATE FUNCTION calls will
-				 * load the .so without capturing the post_parse_analyze_hook.
-				 */
-			case EXTENSION_STATE_CREATED:
-				do_load();
-				return;
-			case EXTENSION_STATE_UNKNOWN:
-			case EXTENSION_STATE_NOT_INSTALLED:
-				return;
-		}
+		case EXTENSION_STATE_TRANSITIONING:
+			/*
+			 * Always load as soon as the extension is transitioning. This is
+			 * necessary so that the extension load before any CREATE FUNCTION
+			 * calls. Otherwise, the CREATE FUNCTION calls will load the .so
+			 * without capturing the post_parse_analyze_hook.
+			 */
+		case EXTENSION_STATE_CREATED:
+			do_load();
+			return;
+		case EXTENSION_STATE_UNKNOWN:
+		case EXTENSION_STATE_NOT_INSTALLED:
+			return;
 	}
 }
 
@@ -777,7 +782,7 @@ call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query)
 call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 #endif
 {
-	if (loaded && extension_post_parse_analyze_hook != NULL)
+	if (extension_is_loaded() && extension_post_parse_analyze_hook != NULL)
 	{
 #if PG14_LT
 		extension_post_parse_analyze_hook(pstate, query);
