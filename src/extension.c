@@ -8,8 +8,10 @@
 #include <access/transam.h>
 #include <commands/event_trigger.h>
 #include <catalog/namespace.h>
+#include <catalog/objectaccess.h>
 #include <utils/lsyscache.h>
 #include <utils/inval.h>
+#include <fmgr.h>
 
 #include "compat/compat-msvc-enter.h" /* To label externs in extension.h and
 								 * miscadmin.h correctly */
@@ -62,7 +64,20 @@ static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
  * often need it during the planning, so we cache it here. We update it when
  * the extension status is updated.
  */
-Oid ts_extension_oid = InvalidOid;
+static Oid ts_extension_oid = InvalidOid;
+
+Oid
+ts_extension_get_oid(void)
+{
+	if (OidIsValid(ts_extension_oid))
+	{
+		Assert(ts_extension_oid == get_extension_oid(EXTENSION_NAME, true));
+		return ts_extension_oid;
+	}
+
+	ts_extension_oid = get_extension_oid(EXTENSION_NAME, false);
+	return ts_extension_oid;
+}
 
 static bool
 extension_loader_present()
@@ -139,8 +154,7 @@ extension_set_state(enum ExtensionState newstate)
 			break;
 		case EXTENSION_STATE_CREATED:
 			ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
-			extension_proxy_oid = get_relname_relid(EXTENSION_PROXY_TABLE,
-													get_namespace_oid(CACHE_SCHEMA_NAME, false));
+			extension_proxy_oid = get_proxy_table_relid();
 			ts_catalog_reset();
 			break;
 		case EXTENSION_STATE_NOT_INSTALLED:
@@ -156,16 +170,23 @@ extension_set_state(enum ExtensionState newstate)
 static void
 extension_update_state()
 {
-	static bool in_recursion = false;
-	/* Since the state of the extension is determined by the snapshot of the transaction there
-	 * is no point processing recursive calls as the outer call will always set the correct state.
-	 * This also prevents deep recursion during `AcceptInvalidationMessages`.
-	 */
-	if (in_recursion)
-		return;
-
-	in_recursion = true;
 	enum ExtensionState new_state = extension_current_state();
+
+	/* Never actually set the state to "not installed" since there is no good
+	 * way to get out of it in case the extension is installed again in
+	 * another backend. After the extension has been dropped, the proxy table
+	 * no longer exists and when the extension is reinstalled, the proxy table
+	 * will have a different relid. Therefore, there is no way to identify the
+	 * invalidation on the proxy table when CREATE EXTENSION is issued in
+	 * another backend. Nor is it allowed to lookup the new relid in the
+	 * invalidation callback, since that may lead to bad behavior.
+	 *
+	 * Instead, set the state to "unknown" so that a "slow path" lookup of the
+	 * actual state has to be made next time the state is queried.
+	 */
+	if (new_state == EXTENSION_STATE_NOT_INSTALLED)
+		new_state = EXTENSION_STATE_UNKNOWN;
+
 	extension_set_state(new_state);
 	/*
 	 * Update the extension oid. Note that it is only safe to run
@@ -182,7 +203,6 @@ extension_update_state()
 	{
 		ts_extension_oid = InvalidOid;
 	}
-	in_recursion = false;
 }
 
 Oid
@@ -239,49 +259,21 @@ ts_experimental_schema_name(void)
 }
 
 /*
- *	Called upon all Relcache invalidate events.
- *	Returns whether or not to invalidate the entire extension.
+ * Invalidate the state of the extension (i.e., whether the extension is
+ * installed or not in the current database).
+ *
+ * Since this function is called from a relcache invalidation callback, it
+ * must not, directly or indirectly, call functions that use the cache. This
+ * includes, e.g., table scans.
+ *
+ * Instead, the function just invalidates the state so that the true state is
+ * resolved lazily when needed.
  */
-bool
-ts_extension_invalidate(Oid relid)
+void
+ts_extension_invalidate(void)
 {
-	bool invalidate_all = false;
-
-	switch (extstate)
-	{
-		case EXTENSION_STATE_NOT_INSTALLED:
-			/* This event may mean we just added the proxy table */
-		case EXTENSION_STATE_UNKNOWN:
-			/* Can we recompute the state now? */
-		case EXTENSION_STATE_TRANSITIONING:
-			/* Has the create/drop extension finished? */
-			extension_update_state();
-			break;
-		case EXTENSION_STATE_CREATED:
-
-			/*
-			 * Here we know the proxy table oid so only listen to potential
-			 * drops on that oid. Note that an invalid oid passed in the
-			 * invalidation event applies to all tables.
-			 */
-			if (extension_proxy_oid == relid || !OidIsValid(relid))
-			{
-				extension_update_state();
-				if (EXTENSION_STATE_CREATED != extstate)
-				{
-					/*
-					 * note this state may be UNKNOWN but should be
-					 * conservative
-					 */
-					invalidate_all = true;
-				}
-			}
-			break;
-		default:
-			elog(ERROR, "unknown state: %d", extstate);
-			break;
-	}
-	return invalidate_all;
+	extstate = EXTENSION_STATE_UNKNOWN;
+	extension_proxy_oid = InvalidOid;
 }
 
 bool
@@ -307,6 +299,8 @@ ts_extension_is_loaded(void)
 	switch (extstate)
 	{
 		case EXTENSION_STATE_CREATED:
+			Assert(OidIsValid(ts_extension_oid));
+			Assert(OidIsValid(extension_proxy_oid));
 			return true;
 		case EXTENSION_STATE_NOT_INSTALLED:
 		case EXTENSION_STATE_UNKNOWN:
@@ -352,4 +346,10 @@ const char *
 ts_extension_get_version(void)
 {
 	return extension_version();
+}
+
+bool
+ts_extension_is_proxy_table_relid(Oid relid)
+{
+	return relid == extension_proxy_oid;
 }

@@ -20,6 +20,7 @@
 
 #include "bgw/scheduler.h"
 #include "cross_module_fn.h"
+#include "cache_invalidate.h"
 
 /*
  * Notes on the way cache invalidation works.
@@ -59,45 +60,44 @@ cache_invalidate_relcache_all(void)
 	ts_bgw_job_cache_invalidate_callback();
 }
 
+static Oid hypertable_proxy_table_oid = InvalidOid;
+static Oid bgw_proxy_table_oid = InvalidOid;
+
+void
+ts_cache_invalidate_set_proxy_tables(Oid hypertable_proxy_oid, Oid bgw_proxy_oid)
+{
+	hypertable_proxy_table_oid = hypertable_proxy_oid;
+	bgw_proxy_table_oid = bgw_proxy_oid;
+}
+
 /*
  * This function is called when any relcache is invalidated.
  * Should route the invalidation to the correct cache.
+ *
+ * NOTE that the callback should not call any functions that could invoke the
+ * relcache or syscache to query information during the invalidation. That
+ * might lead to bad things happening.
  */
 static void
-cache_invalidate_callback(Datum arg, Oid relid)
+cache_invalidate_relcache_callback(Datum arg, Oid relid)
 {
-	static bool in_recursion = false;
-
-	if (ts_extension_invalidate(relid))
+	if (!OidIsValid(relid))
 	{
 		cache_invalidate_relcache_all();
-		return;
 	}
-
-	if (!ts_extension_is_loaded())
-		return;
-
-	/* The cache invalidation can be called indirectly further down in the
-	 * call chain by calling `get_namespace_oid`, which can trigger a
-	 * recursive cache invalidation callback. To prevent infinite recursion,
-	 * we stop it here and instead consider the cache as invalidated, which
-	 * will allow the `get_namespace_oid` to retrieve the OID from the heap
-	 * table and return it properly. */
-	if (!in_recursion)
+	else if (ts_extension_is_proxy_table_relid(relid))
 	{
-		Catalog *catalog;
-		in_recursion = true;
-		catalog = ts_catalog_get();
-		in_recursion = false;
-
-		if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_HYPERTABLE))
-			ts_hypertable_cache_invalidate_callback();
-
-		if (relid == ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB))
-			ts_bgw_job_cache_invalidate_callback();
-
-		if (relid == InvalidOid)
-			cache_invalidate_relcache_all();
+		ts_extension_invalidate();
+		cache_invalidate_relcache_all();
+		ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
+	}
+	else if (relid == hypertable_proxy_table_oid)
+	{
+		ts_hypertable_cache_invalidate_callback();
+	}
+	else if (relid == bgw_proxy_table_oid)
+	{
+		ts_bgw_job_cache_invalidate_callback();
 	}
 }
 
@@ -182,7 +182,7 @@ _cache_invalidate_init(void)
 {
 	RegisterXactCallback(cache_invalidate_xact_end, NULL);
 	RegisterSubXactCallback(cache_invalidate_subxact_end, NULL);
-	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
+	CacheRegisterRelcacheCallback(cache_invalidate_relcache_callback, PointerGetDatum(NULL));
 
 	/* Specific syscache callbacks */
 	CacheRegisterSyscacheCallback(FOREIGNSERVEROID,
