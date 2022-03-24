@@ -6,10 +6,12 @@
 #ifndef TIMESCALEDB_EXTENSION_H
 #define TIMESCALEDB_EXTENSION_H
 #include <postgres.h>
+#include <nodes/parsenodes.h>
+
 #include "extension_constants.h"
 #include "export.h"
 
-extern bool ts_extension_invalidate(Oid relid);
+extern void ts_extension_invalidate(void);
 extern TSDLLEXPORT bool ts_extension_is_loaded(void);
 extern void ts_extension_check_version(const char *so_version);
 extern void ts_extension_check_server_version(void);
@@ -18,7 +20,10 @@ extern TSDLLEXPORT char *ts_extension_schema_name(void);
 extern const char *ts_experimental_schema_name(void);
 extern const char *ts_extension_get_so_name(void);
 extern TSDLLEXPORT const char *ts_extension_get_version(void);
-
-extern TSDLLEXPORT Oid ts_extension_oid;
+extern bool ts_drop_owned_statement_drops_timescaledb_extension(const DropOwnedStmt *stmt);
+extern bool ts_extension_is_proxy_table_relid(Oid relid);
+extern TSDLLEXPORT Oid ts_extension_get_oid(void);
+extern void _ts_extension_init(void);
+extern void _ts_extension_fini(void);
 
 #endif /* TIMESCALEDB_EXTENSION_H */

@@ -37,10 +37,11 @@ enum ExtensionState
 {
 	/*
 	 * NOT_INSTALLED means that this backend knows that the extension is not
-	 * present.  In this state we know that the proxy table is not present.
-	 * Thus, the only way to get out of this state is a RelCacheInvalidation
-	 * indicating that the proxy table was added. This is the state returned
-	 * during DROP EXTENSION.
+	 * present. In this state we know that the proxy table is not present.
+	 * This state is never saved since there is no real way to get out of it
+	 * since we cannot signal via the proxy table as its relid is not known
+	 * post installation without a full lookup, which is not allowed in the
+	 * relcache calllback.
 	 */
 	EXTENSION_STATE_NOT_INSTALLED,
 
@@ -110,14 +111,15 @@ extension_version(void)
 	return sql_version;
 }
 
-static bool inline proxy_table_exists()
+static Oid
+get_proxy_table_relid()
 {
 	Oid nsid = get_namespace_oid(CACHE_SCHEMA_NAME, true);
 
 	if (!OidIsValid(nsid))
-		return false;
+		return InvalidOid;
 
-	return OidIsValid(get_relname_relid(EXTENSION_PROXY_TABLE, nsid));
+	return get_relname_relid(EXTENSION_PROXY_TABLE, nsid);
 }
 
 static bool inline extension_exists()
@@ -142,6 +144,8 @@ static bool inline extension_is_transitioning()
 static enum ExtensionState
 extension_current_state()
 {
+	Oid proxy_relid;
+
 	/*
 	 * NormalProcessingMode necessary to avoid accessing cache before its
 	 * ready (which may result in an infinite loop). More concretely we need
@@ -162,7 +166,10 @@ extension_current_state()
 	 * EXTENSION proxy_table_exists() will return false right away, while
 	 * extension_exists will return true until the end of the command
 	 */
-	if (proxy_table_exists())
+
+	proxy_relid = get_proxy_table_relid();
+
+	if (OidIsValid(proxy_relid))
 	{
 		Assert(extension_exists());
 		return EXTENSION_STATE_CREATED;
