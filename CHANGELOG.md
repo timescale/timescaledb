@@ -10,6 +10,7 @@ accidentally triggering the load of a previous DB version.**
 * #4122 Fix segfault on INSERT into distributed hypertable
 * #4161 Fix memory handling during scans
 * #3974 Fix remote EXPLAIN with parameterized queries
+* #4192 Abort sessions after extension reload
 
 **Thanks**
 * @abrownsword for reporting a crash in the telemetry reporter
