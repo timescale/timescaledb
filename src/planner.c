@@ -400,13 +400,9 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	{
 		PreprocessQueryContext context = { 0 };
 		context.rootquery = parse;
+
 		if (ts_extension_is_loaded())
 		{
-			/*
-			 * Some debug checks.
-			 */
-			Assert(ts_extension_oid == get_extension_oid(EXTENSION_NAME, /* missing_ok = */ false));
-
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */

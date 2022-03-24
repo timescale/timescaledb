@@ -17,6 +17,7 @@
 #include <parser/analyze.h>
 #include "compat/compat.h"
 #include "export.h"
+#include "extension.h"
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
@@ -30,9 +31,6 @@ extern void PGDLLEXPORT _PG_fini(void);
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
-bool ts_extension_invalidate(Oid relid);
-bool ts_extension_is_loaded(void);
-void ts_extension_check_version(const char *actual_version);
 bool ts_license_guc_check_hook(char **newval, void **extra, GucSource source);
 void ts_license_guc_assign_hook(const char *newval, void *extra);
 
@@ -41,7 +39,8 @@ TS_FUNCTION_INFO_V1(ts_post_load_init);
 static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
-	ts_extension_invalidate(relid);
+	if (ts_extension_is_proxy_table_relid(relid))
+		ts_extension_invalidate();
 }
 
 static void
