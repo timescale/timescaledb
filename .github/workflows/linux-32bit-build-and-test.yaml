@@ -116,3 +116,13 @@ jobs:
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postgres.log
+
+    - name: Save TAP test logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: |
+          build/test/tmp_check/log
+          build/tsl/test/tmp_check/log
+

@@ -76,7 +76,7 @@ endif()
 
 if(TAP_CHECKS)
   add_custom_target(
-    provecheck
+    provecheck-t
     COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
     COMMAND
       CONFDIR=${CMAKE_BINARY_DIR}/tsl/test PATH="${PG_BINDIR}:$ENV{PATH}"
@@ -84,7 +84,7 @@ if(TAP_CHECKS)
       CM_SRC_DIR=${CMAKE_SOURCE_DIR} PG_LIBDIR=${PG_LIBDIR}
       ${PRIMARY_TEST_DIR}/pg_prove.sh
     USES_TERMINAL)
-  list(APPEND _install_checks provecheck)
+  list(APPEND _install_checks provecheck-t)
 elseif(REQUIRE_ALL_TESTS)
   message(
     FATAL_ERROR
