@@ -151,18 +151,18 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postgres.log
-
+      
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
@@ -172,7 +172,17 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
+
+    - name: Save TAP test logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: |
+          build/test/tmp_check/log
+          build/tsl/test/tmp_check/log
+

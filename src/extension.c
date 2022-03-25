@@ -353,3 +353,20 @@ ts_extension_is_proxy_table_relid(Oid relid)
 {
 	return relid == extension_proxy_oid;
 }
+
+#ifdef TS_DEBUG
+static const char *extstate_str[] = {
+	[EXTENSION_STATE_UNKNOWN] = "unknown",
+	[EXTENSION_STATE_TRANSITIONING] = "transitioning",
+	[EXTENSION_STATE_CREATED] = "created",
+	[EXTENSION_STATE_NOT_INSTALLED] = "not installed",
+};
+
+TS_FUNCTION_INFO_V1(ts_extension_get_state);
+
+Datum
+ts_extension_get_state(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TEXT_P(cstring_to_text(extstate_str[extstate]));
+}
+#endif
