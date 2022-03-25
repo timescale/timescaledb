@@ -25,14 +25,21 @@ then
     then
         exit 0
     fi
-    FINAL_TESTS="t/*.pl"
+    FINAL_TESTS=$(ls -1 t/*.pl 2>/dev/null)
 else
     FINAL_TESTS=$PROVE_TESTS
+fi
+
+if [ -z "$FINAL_TESTS" ]
+then
+	echo "No TAP tests to run for the current configuration, skipping..."
+	exit 0;
 fi
 
 ${PROVE} \
     -I "${SRC_DIR}/src/test/perl" \
     -I "${CM_SRC_DIR}/test/perl" \
     -I "${PG_LIBDIR}/pgxs/src/test/perl" \
+    -I "${PG_PKGLIBDIR}/pgxs/src/test/perl" \
     -I "${PG_LIBDIR}/postgresql/pgxs/src/test/perl" \
     $FINAL_TESTS

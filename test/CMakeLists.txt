@@ -75,6 +75,24 @@ elseif(REQUIRE_ALL_TESTS)
       "All tests were required but 'pg_isolation_regress' could not be found")
 endif()
 
+if(TAP_CHECKS)
+  add_custom_target(
+    provecheck
+    COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/tmp_check
+    COMMAND
+      CONFDIR=${CMAKE_BINARY_DIR}/test PATH="${PG_BINDIR}:$ENV{PATH}"
+      PG_REGRESS=${PG_REGRESS} SRC_DIR=${PG_SOURCE_DIR}
+      CM_SRC_DIR=${CMAKE_SOURCE_DIR} PG_LIBDIR=${PG_LIBDIR}
+      PG_PKGLIBDIR=${PG_PKGLIBDIR} ${PRIMARY_TEST_DIR}/pg_prove.sh
+    USES_TERMINAL)
+  list(APPEND _install_checks provecheck)
+elseif(REQUIRE_ALL_TESTS)
+  message(
+    FATAL_ERROR
+      "All tests were required but TAP_CHECKS was off (see previous messages why)"
+  )
+endif()
+
 # We add the installcheck target even when _install_checks is empty as tsl code
 # might add dependencies to it even when regress checks are disabled.
 add_custom_target(installcheck DEPENDS ${_install_checks})
@@ -94,6 +112,7 @@ add_custom_target(installchecklocal DEPENDS ${_local_install_checks})
 
 add_subdirectory(sql)
 add_subdirectory(isolation)
+add_subdirectory(t)
 
 if(PG_SOURCE_DIR)
   add_subdirectory(pgtest)
