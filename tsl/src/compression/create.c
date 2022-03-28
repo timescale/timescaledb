@@ -1064,13 +1064,26 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;
 	TypeName *orig_typname = orig_def->typeName;
-
+	
 	coloid = LookupTypeNameOid(NULL, orig_typname, false);
 	compresscolinfo_init_singlecolumn(&compress_cols, colname, coloid);
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		int32 compress_htid = ht->fd.compressed_hypertable_id;
 		Hypertable *compress_ht = ts_hypertable_get_by_id(compress_htid);
+		HeapTuple attTuple;
+		/* 
+		* do not proceed with column addition in case it already exists
+		* as it should simply be skipped then
+		*/
+		attTuple = SearchSysCache2(ATTNAME,
+								ObjectIdGetDatum(compress_ht->main_table_relid),
+								PointerGetDatum(colname));
+		if (HeapTupleIsValid(attTuple))
+		{
+			ReleaseSysCache(attTuple);
+			return;
+		}
 		add_column_to_compression_table(compress_ht, &compress_cols);
 	}
 	else
