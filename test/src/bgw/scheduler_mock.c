@@ -248,8 +248,7 @@ static pqsigfunc prev_signal_func = NULL;
 
 static void log_terminate_signal(SIGNAL_ARGS)
 {
-	elog(WARNING, "Job got term signal");
-
+	write_stderr("job got term signal\n");
 	if (prev_signal_func != NULL)
 		prev_signal_func(postgres_signal_arg);
 }

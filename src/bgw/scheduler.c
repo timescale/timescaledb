@@ -834,13 +834,9 @@ ts_bgw_scheduler_setup_mctx()
 
 static void handle_sigterm(SIGNAL_ARGS)
 {
-	/*
-	 * do not use a level >= ERROR because we don't want to exit here but
-	 * rather only during CHECK_FOR_INTERRUPTS
-	 */
-	ereport(LOG,
-			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("terminating TimescaleDB job scheduler due to administrator command")));
+	/* Do not use anything that calls malloc() inside a signal handler since
+	 * malloc() is not signal-safe. This includes ereport() */
+	write_stderr("terminating TimescaleDB job scheduler due to administrator command\n");
 	die(postgres_signal_arg);
 }
 

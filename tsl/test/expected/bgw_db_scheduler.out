@@ -748,16 +748,14 @@ SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                                          msg                                          
---------+------------------+---------------------------------------------------------------------------------------
+ msg_no | application_name |                         msg                         
+--------+------------------+-----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
-      1 | test_job_3_long  | Job got term signal
-      2 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
-      3 | test_job_3_long  | terminating connection due to administrator command
+      1 | test_job_3_long  | terminating connection due to administrator command
       2 | DB Scheduler     | job 1004 failed
-(7 rows)
+(5 rows)
 
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
 FROM _timescaledb_internal.bgw_job_stat;
@@ -781,21 +779,19 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                                          msg                                          
---------+------------------+---------------------------------------------------------------------------------------
+ msg_no | application_name |                         msg                         
+--------+------------------+-----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
-      1 | test_job_3_long  | Job got term signal
-      2 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
-      3 | test_job_3_long  | terminating connection due to administrator command
+      1 | test_job_3_long  | terminating connection due to administrator command
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       2 | DB Scheduler     | job 1004 failed
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(12 rows)
+(10 rows)
 
 --Test sending a SIGHUP to a job
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -921,17 +917,14 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                                          msg                                          
---------+------------------+---------------------------------------------------------------------------------------
+ msg_no | application_name |                         msg                         
+--------+------------------+-----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      2 | DB Scheduler     | terminating TimescaleDB job scheduler due to administrator command
-      3 | DB Scheduler     | terminating connection due to administrator command
+      2 | DB Scheduler     | terminating connection due to administrator command
       0 | test_job_3_long  | Before sleep job 3
-      1 | test_job_3_long  | Job got term signal
-      2 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
-      3 | test_job_3_long  | terminating connection due to administrator command
-(8 rows)
+      1 | test_job_3_long  | terminating connection due to administrator command
+(5 rows)
 
 --After a SIGTERM to scheduler and jobs, the jobs are considered crashed and there is a imposed wait of 5 min before a job can be run.
 --See that there is no run again because of the crash-imposed wait (not run with the 10ms retry_period)
@@ -963,23 +956,20 @@ FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 SELECT * FROM sorted_bgw_log;
- msg_no | application_name |                                          msg                                          
---------+------------------+---------------------------------------------------------------------------------------
-      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+ msg_no | application_name |                         msg                         
+--------+------------------+-----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Registered new background worker
+      0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      2 | DB Scheduler     | terminating TimescaleDB job scheduler due to administrator command
-      3 | DB Scheduler     | terminating connection due to administrator command
+      2 | DB Scheduler     | terminating connection due to administrator command
       0 | test_job_3_long  | Before sleep job 3
-      1 | test_job_3_long  | Job got term signal
-      2 | test_job_3_long  | terminating TimescaleDB background job "test_job_3_long" due to administrator command
-      3 | test_job_3_long  | terminating connection due to administrator command
+      1 | test_job_3_long  | terminating connection due to administrator command
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       1 | DB Scheduler     | [TESTING] Registered new background worker
       2 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
-(14 rows)
+(11 rows)
 
 CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
