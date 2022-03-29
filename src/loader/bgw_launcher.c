@@ -713,7 +713,8 @@ static void launcher_sigterm(SIGNAL_ARGS)
 {
 	/* Do not use anything that calls malloc() inside a signal handler since
 	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB background worker launcher due to administrator command");
+	write_stderr(
+		"terminating TimescaleDB background worker launcher due to administrator command\n");
 	die(postgres_signal_arg);
 }
 
@@ -807,7 +808,7 @@ static void entrypoint_sigterm(SIGNAL_ARGS)
 {
 	/* Do not use anything that calls malloc() inside a signal handler since
 	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB scheduler entrypoint due to administrator command");
+	write_stderr("terminating TimescaleDB scheduler entrypoint due to administrator command\n");
 	die(postgres_signal_arg);
 }
 

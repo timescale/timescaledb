@@ -807,14 +807,10 @@ ts_bgw_job_timeout_at(BgwJob *job, TimestampTz start_time)
 
 static void handle_sigterm(SIGNAL_ARGS)
 {
-	/*
-	 * do not use a level >= ERROR because we don't want to exit here but
-	 * rather only during CHECK_FOR_INTERRUPTS
-	 */
-	ereport(LOG,
-			(errcode(ERRCODE_ADMIN_SHUTDOWN),
-			 errmsg("terminating TimescaleDB background job \"%s\" due to administrator command",
-					MyBgworkerEntry->bgw_name)));
+	/* Do not use anything that calls malloc() inside a signal handler since
+	 * malloc() is not signal-safe. This includes ereport() */
+	write_stderr("terminating TimescaleDB background job \"%s\" due to administrator command\n",
+				 MyBgworkerEntry->bgw_name);
 	die(postgres_signal_arg);
 }
 
