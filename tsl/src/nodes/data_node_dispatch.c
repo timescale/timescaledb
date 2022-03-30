@@ -493,8 +493,8 @@ send_batch_to_data_node(DataNodeDispatchState *sds, DataNodeState *ss)
 
 	if (HAS_RETURNING(sds) && tuplefactory_is_binary(sds->tupfactory))
 		response_type = FORMAT_BINARY;
-	else if (ts_guc_enable_connection_binary_data)
-		response_type = FORMAT_BINARY;
+	else
+		response_type = FORMAT_TEXT;
 
 	/* Send tuples */
 	switch (sds->state)

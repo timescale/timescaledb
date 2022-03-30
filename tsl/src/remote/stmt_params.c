@@ -102,7 +102,7 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 	{
 		typefnoid = data_format_get_type_output_func(TIDOID,
 													 &isbinary,
-													 !ts_guc_enable_connection_binary_data);
+													 false);
 		fmgr_info(typefnoid, &params->conv_funcs[idx]);
 		params->formats[idx] = isbinary ? FORMAT_BINARY : FORMAT_TEXT;
 		idx++;
@@ -116,7 +116,7 @@ stmt_params_create(List *target_attr_nums, bool ctid, TupleDesc tuple_desc, int 
 
 		typefnoid = data_format_get_type_output_func(attr->atttypid,
 													 &isbinary,
-													 !ts_guc_enable_connection_binary_data);
+													 false);
 		params->formats[idx] = isbinary ? FORMAT_BINARY : FORMAT_TEXT;
 
 		fmgr_info(typefnoid, &params->conv_funcs[idx++]);

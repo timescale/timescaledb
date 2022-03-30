@@ -388,8 +388,6 @@ store_returning_result(TsFdwModifyState *fmstate, TupleTableSlot *slot, PGresult
 static int
 response_type(AttConvInMetadata *att_conv_metadata)
 {
-	if (!ts_guc_enable_connection_binary_data)
-		return FORMAT_TEXT;
 	return att_conv_metadata == NULL || att_conv_metadata->binary ? FORMAT_BINARY : FORMAT_TEXT;
 }
 

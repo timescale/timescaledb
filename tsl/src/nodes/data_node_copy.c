@@ -119,7 +119,7 @@ data_node_copy_begin(CustomScanState *node, EState *estate, int eflags)
 	List *target_attrs = list_nth(cscan->custom_private, CustomScanPrivateTargetAttrs);
 	bool set_processed = intVal(list_nth(cscan->custom_private, CustomScanPrivateSetProcessed));
 	bool binary_possible = intVal(list_nth(cscan->custom_private, CustomScanPrivateBinaryPossible));
-	bool use_binary_encoding = ts_guc_enable_connection_binary_data;
+	bool use_binary_encoding = true;
 	PlanState *ps;
 	CopyStmt copy_stmt = {
 		.type = T_CopyStmt,

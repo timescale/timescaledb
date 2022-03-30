@@ -189,7 +189,7 @@ tuplefactory_create(Relation rel, ScanState *ss, List *retrieved_attrs)
 		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
 
 	tf =
-		tuplefactory_create_common(tupdesc, retrieved_attrs, !ts_guc_enable_connection_binary_data);
+		tuplefactory_create_common(tupdesc, retrieved_attrs, false);
 	tf->errpos.rel = rel;
 	tf->errpos.cur_attno = 0;
 	tf->errpos.ss = ss;

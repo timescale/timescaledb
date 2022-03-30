@@ -331,7 +331,7 @@ get_connections_for_chunk(RemoteCopyContext *context, int32 chunk_id, const List
 static bool
 copy_should_send_binary()
 {
-	return ts_guc_enable_connection_binary_data;
+	return true;
 }
 
 /*
