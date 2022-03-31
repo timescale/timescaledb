@@ -13,6 +13,10 @@
 typedef struct RowByRowFetcher
 {
 	DataFetcher state;
+
+	/* Data for virtual tuples of the current retrieved batch. */
+	Datum *batch_values;
+	bool *batch_nulls;
 } RowByRowFetcher;
 
 static void row_by_row_fetcher_send_fetch_request(DataFetcher *df);
@@ -20,8 +24,7 @@ static void row_by_row_fetcher_reset(RowByRowFetcher *fetcher);
 static int row_by_row_fetcher_fetch_data(DataFetcher *df);
 static void row_by_row_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 static void row_by_row_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
-static HeapTuple row_by_row_fetcher_get_next_tuple(DataFetcher *df);
-static HeapTuple row_by_row_fetcher_get_tuple(DataFetcher *df, int row);
+static void row_by_row_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
 static void row_by_row_fetcher_rescan(DataFetcher *df);
 static void row_by_row_fetcher_close(DataFetcher *df);
 
@@ -30,8 +33,7 @@ static DataFetcherFuncs funcs = {
 	.fetch_data = row_by_row_fetcher_fetch_data,
 	.set_fetch_size = row_by_row_fetcher_set_fetch_size,
 	.set_tuple_mctx = row_by_row_fetcher_set_tuple_memcontext,
-	.get_next_tuple = row_by_row_fetcher_get_next_tuple,
-	.get_tuple = row_by_row_fetcher_get_tuple,
+	.store_next_tuple = row_by_row_fetcher_store_next_tuple,
 	.rewind = row_by_row_fetcher_rescan,
 	.close = row_by_row_fetcher_close,
 };
@@ -149,7 +151,14 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 	 */
 	MemoryContextReset(fetcher->state.batch_mctx);
 	oldcontext = MemoryContextSwitchTo(fetcher->state.batch_mctx);
-	fetcher->state.tuples = palloc0(fetcher->state.fetch_size * sizeof(HeapTuple));
+	const int nattrs = tuplefactory_get_nattrs(fetcher->state.tf);
+	const int total = nattrs * fetcher->state.fetch_size;
+	fetcher->batch_nulls = palloc(sizeof(bool) * total);
+	for (int i = 0; i < total; i++)
+	{
+		fetcher->batch_nulls[i] = true;
+	}
+	fetcher->batch_values = palloc0(sizeof(Datum) * total);
 
 	PG_TRY();
 	{
@@ -199,8 +208,19 @@ row_by_row_fetcher_complete(RowByRowFetcher *fetcher)
 			 * it explicitly, otherwise same as batch_mctx */
 			MemoryContextSwitchTo(fetcher->state.tuple_mctx);
 
-			fetcher->state.tuples[i] =
-				tuplefactory_make_tuple(fetcher->state.tf, res, 0, PQbinaryTuples(res));
+			PG_USED_FOR_ASSERTS_ONLY ItemPointer ctid =
+				tuplefactory_make_virtual_tuple(fetcher->state.tf,
+												res,
+												0,
+												PQbinaryTuples(res),
+												&fetcher->batch_values[i * nattrs],
+												&fetcher->batch_nulls[i * nattrs]);
+
+			/*
+			 * This fetcher uses virtual tuples that can't hold ctid, so if we're
+			 * receiving a ctid here, we're doing something wrong.
+			 */
+			Assert(ctid == NULL);
 
 			async_response_result_close(response);
 			response = NULL;
@@ -259,20 +279,43 @@ row_by_row_fetcher_fetch_data(DataFetcher *df)
 	return row_by_row_fetcher_complete(fetcher);
 }
 
-static HeapTuple
-row_by_row_fetcher_get_tuple(DataFetcher *df, int row)
+static void
+row_by_row_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot)
 {
 	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
 
-	return data_fetcher_get_tuple(&fetcher->state, row);
+	ExecClearTuple(slot);
+
+	if (row >= df->num_tuples)
+	{
+		if (df->eof || df->funcs->fetch_data(df) == 0)
+		{
+			return;
+		}
+
+		row = 0;
+		Assert(row == df->next_tuple_idx);
+	}
+
+	Assert(fetcher->batch_values != NULL);
+	Assert(fetcher->batch_nulls != NULL);
+	Assert(row >= 0 && row < df->num_tuples);
+
+	const int nattrs = tuplefactory_get_nattrs(fetcher->state.tf);
+	slot->tts_values = &fetcher->batch_values[nattrs * row];
+	slot->tts_isnull = &fetcher->batch_nulls[nattrs * row];
+	ExecStoreVirtualTuple(slot);
 }
 
-static HeapTuple
-row_by_row_fetcher_get_next_tuple(DataFetcher *df)
+static void
+row_by_row_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
 {
-	RowByRowFetcher *fetcher = cast_fetcher(RowByRowFetcher, df);
+	row_by_row_fetcher_store_tuple(df, df->next_tuple_idx, slot);
 
-	return data_fetcher_get_next_tuple(&fetcher->state);
+	if (!TupIsNull(slot))
+		df->next_tuple_idx++;
+
+	Assert(df->next_tuple_idx <= df->num_tuples);
 }
 
 DataFetcher *

@@ -283,23 +283,12 @@ TupleTableSlot *
 fdw_scan_iterate(ScanState *ss, TsFdwScanState *fsstate)
 {
 	TupleTableSlot *slot = ss->ss_ScanTupleSlot;
-	HeapTuple tuple;
 	DataFetcher *fetcher = fsstate->fetcher;
 
 	if (NULL == fetcher)
 		fetcher = create_data_fetcher(ss, fsstate);
 
-	tuple = fetcher->funcs->get_next_tuple(fetcher);
-
-	if (NULL == tuple)
-		return ExecClearTuple(slot);
-
-	/*
-	 * Return the next tuple. Must force the tuple into the slot since
-	 * CustomScan initializes ss_ScanTupleSlot to a VirtualTupleTableSlot
-	 * while we're storing a HeapTuple.
-	 */
-	ExecForceStoreHeapTuple(tuple, slot, false);
+	fetcher->funcs->store_next_tuple(fetcher, slot);
 
 	return slot;
 }

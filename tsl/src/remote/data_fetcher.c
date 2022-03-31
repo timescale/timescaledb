@@ -51,14 +51,17 @@ data_fetcher_validate(DataFetcher *df)
 				 errhint("Shouldn't fetch new data before consuming existing.")));
 }
 
-HeapTuple
-data_fetcher_get_tuple(DataFetcher *df, int row)
+void
+data_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot)
 {
 	if (row >= df->num_tuples)
 	{
 		/* No point in another fetch if we already detected EOF, though. */
 		if (df->eof || df->funcs->fetch_data(df) == 0)
-			return NULL;
+		{
+			ExecClearTuple(slot);
+			return;
+		}
 
 		/* More data was fetched so need to reset row index */
 		row = 0;
@@ -68,20 +71,23 @@ data_fetcher_get_tuple(DataFetcher *df, int row)
 	Assert(df->tuples != NULL);
 	Assert(row >= 0 && row < df->num_tuples);
 
-	return df->tuples[row];
+	/*
+	 * Return the next tuple. Must force the tuple into the slot since
+	 * CustomScan initializes ss_ScanTupleSlot to a VirtualTupleTableSlot
+	 * while we're storing a HeapTuple.
+	 */
+	ExecForceStoreHeapTuple(df->tuples[row], slot, /* shouldFree = */ false);
 }
 
-HeapTuple
-data_fetcher_get_next_tuple(DataFetcher *df)
+void
+data_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
 {
-	HeapTuple tuple = data_fetcher_get_tuple(df, df->next_tuple_idx);
+	data_fetcher_store_tuple(df, df->next_tuple_idx, slot);
 
-	if (tuple != NULL)
+	if (!TupIsNull(slot))
 		df->next_tuple_idx++;
 
 	Assert(df->next_tuple_idx <= df->num_tuples);
-
-	return tuple;
 }
 
 void
