@@ -50,8 +50,7 @@ static void cursor_fetcher_send_fetch_request(DataFetcher *df);
 static int cursor_fetcher_fetch_data(DataFetcher *df);
 static void cursor_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 static void cursor_fetcher_set_tuple_memcontext(DataFetcher *df, MemoryContext mctx);
-static HeapTuple cursor_fetcher_get_next_tuple(DataFetcher *df);
-static HeapTuple cursor_fetcher_get_tuple(DataFetcher *df, int row);
+static void cursor_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
 static void cursor_fetcher_rewind(DataFetcher *df);
 static void cursor_fetcher_close(DataFetcher *df);
 
@@ -60,8 +59,7 @@ static DataFetcherFuncs funcs = {
 	.fetch_data = cursor_fetcher_fetch_data,
 	.set_fetch_size = cursor_fetcher_set_fetch_size,
 	.set_tuple_mctx = cursor_fetcher_set_tuple_memcontext,
-	.get_next_tuple = cursor_fetcher_get_next_tuple,
-	.get_tuple = cursor_fetcher_get_tuple,
+	.store_next_tuple = cursor_fetcher_store_next_tuple,
 	.rewind = cursor_fetcher_rewind,
 	.close = cursor_fetcher_close,
 };
@@ -384,20 +382,12 @@ cursor_fetcher_fetch_data(DataFetcher *df)
 	return cursor_fetcher_fetch_data_complete(cursor);
 }
 
-static HeapTuple
-cursor_fetcher_get_tuple(DataFetcher *df, int row)
+static void
+cursor_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
 {
 	CursorFetcher *cursor = cast_fetcher(CursorFetcher, df);
 
-	return data_fetcher_get_tuple(&cursor->state, row);
-}
-
-static HeapTuple
-cursor_fetcher_get_next_tuple(DataFetcher *df)
-{
-	CursorFetcher *cursor = cast_fetcher(CursorFetcher, df);
-
-	return data_fetcher_get_next_tuple(&cursor->state);
+	data_fetcher_store_next_tuple(&cursor->state, slot);
 }
 
 static void

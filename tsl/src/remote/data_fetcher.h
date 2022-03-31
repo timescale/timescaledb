@@ -28,8 +28,7 @@ typedef struct DataFetcherFuncs
 	/* Set the fetch (batch) size */
 	void (*set_fetch_size)(DataFetcher *data_fetcher, int fetch_size);
 	void (*set_tuple_mctx)(DataFetcher *data_fetcher, MemoryContext mctx);
-	HeapTuple (*get_next_tuple)(DataFetcher *data_fetcher);
-	HeapTuple (*get_tuple)(DataFetcher *data_fetcher, int row);
+	void (*store_next_tuple)(DataFetcher *data_fetcher, TupleTableSlot *slot);
 	void (*rewind)(DataFetcher *data_fetcher);
 	void (*close)(DataFetcher *data_fetcher);
 } DataFetcherFuncs;
@@ -67,8 +66,8 @@ extern void data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *s
 							  StmtParams *params, Relation rel, ScanState *ss,
 							  List *retrieved_attrs);
 
-extern HeapTuple data_fetcher_get_tuple(DataFetcher *df, int row);
-extern HeapTuple data_fetcher_get_next_tuple(DataFetcher *df);
+extern void data_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot);
+extern void data_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);
 extern void data_fetcher_set_fetch_size(DataFetcher *df, int fetch_size);
 extern void data_fetcher_set_tuple_mctx(DataFetcher *df, MemoryContext mctx);
 extern void data_fetcher_validate(DataFetcher *df);

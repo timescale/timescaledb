@@ -231,24 +231,23 @@ tuplefactory_reset_mctx(TupleFactory *tf)
 	MemoryContextReset(tf->temp_mctx);
 }
 
-HeapTuple
-tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
+int
+tuplefactory_get_nattrs(TupleFactory *tf)
 {
-	HeapTuple tuple;
+	return tf->tupdesc->natts;
+}
+
+ItemPointer
+tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int format, Datum *values,
+								bool *nulls)
+{
 	ItemPointer ctid = NULL;
-	MemoryContext oldcontext;
 	ListCell *lc;
 	int j;
 	StringInfo buf;
 
 	Assert(row < PQntuples(res));
 
-	/*
-	 * Do the following work in a temp context that we reset after each tuple.
-	 * This cleans up not only the data we have direct access to, but any
-	 * cruft the I/O functions might leak.
-	 */
-	oldcontext = MemoryContextSwitchTo(tf->temp_mctx);
 	buf = makeStringInfo();
 
 	/* Install error callback */
@@ -290,27 +289,27 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 		{
 			/* ordinary column */
 			Assert(i <= tf->tupdesc->natts);
-			tf->nulls[i - 1] = (valstr == NULL);
+			nulls[i - 1] = (valstr == NULL);
 
 			if (format == FORMAT_TEXT)
 			{
 				Assert(!tf->attconv->binary);
 				/* Apply the input function even to nulls, to support domains */
-				tf->values[i - 1] = InputFunctionCall(&tf->attconv->conv_funcs[i - 1],
-													  valstr,
-													  tf->attconv->ioparams[i - 1],
-													  tf->attconv->typmods[i - 1]);
+				values[i - 1] = InputFunctionCall(&tf->attconv->conv_funcs[i - 1],
+												  valstr,
+												  tf->attconv->ioparams[i - 1],
+												  tf->attconv->typmods[i - 1]);
 			}
 			else
 			{
 				Assert(tf->attconv->binary);
 				if (valstr != NULL)
-					tf->values[i - 1] = ReceiveFunctionCall(&tf->attconv->conv_funcs[i - 1],
-															buf,
-															tf->attconv->ioparams[i - 1],
-															tf->attconv->typmods[i - 1]);
+					values[i - 1] = ReceiveFunctionCall(&tf->attconv->conv_funcs[i - 1],
+														buf,
+														tf->attconv->ioparams[i - 1],
+														tf->attconv->typmods[i - 1]);
 				else
-					tf->values[i - 1] = PointerGetDatum(NULL);
+					values[i - 1] = PointerGetDatum(NULL);
 			}
 		}
 		else if (i == SelfItemPointerAttributeNumber)
@@ -341,12 +340,27 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 	if (j > 0 && j != PQnfields(res))
 		elog(ERROR, "remote query result does not match the foreign table");
 
+	return ctid;
+}
+
+HeapTuple
+tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
+{
+	/*
+	 * Do the following work in a temp context that we reset after each tuple.
+	 * This cleans up not only the data we have direct access to, but any
+	 * cruft the I/O functions might leak.
+	 */
+	MemoryContext oldcontext = MemoryContextSwitchTo(tf->temp_mctx);
+
+	ItemPointer ctid = tuplefactory_make_virtual_tuple(tf, res, row, format, tf->values, tf->nulls);
+
 	/*
 	 * Build the result tuple in caller's memory context.
 	 */
 	MemoryContextSwitchTo(oldcontext);
 
-	tuple = heap_form_tuple(tf->tupdesc, tf->values, tf->nulls);
+	HeapTuple tuple = heap_form_tuple(tf->tupdesc, tf->values, tf->nulls);
 
 	/*
 	 * If we have a CTID to return, install it in both t_self and t_ctid.
