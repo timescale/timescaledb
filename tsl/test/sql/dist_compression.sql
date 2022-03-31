@@ -610,3 +610,45 @@ INNER JOIN _timescaledb_catalog.hypertable ht
 WHERE attname NOT IN ('time','device','o1','o2')
 ORDER BY 1;
 
+-- test ADD COLUMN IF NOT EXISTS on a distributed hypertable
+CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
+ 
+SELECT create_distributed_hypertable('metric', 'time');
+ALTER TABLE metric SET (                                     
+timescaledb.compress,
+timescaledb.compress_segmentby = 'dev_id',
+timescaledb.compress_orderby = 'time DESC'
+);
+ 
+INSERT INTO metric(time, val, dev_id)
+SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-07-01 00:00:00'::timestamp,
+                    '2021-08-17 00:02:00'::timestamp, '30 s'::interval) s;
+
+SELECT compress_chunk(chunk)
+FROM show_chunks('metric') AS chunk
+ORDER BY chunk;
+
+-- make sure we have chunks on all data nodes
+select * from timescaledb_information.chunks where hypertable_name like 'metric';
+-- perform all combinations
+-- [IF NOT EXISTS] - []
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" varchar;
+-- [IF NOT EXISTS] - ["medium"]
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" varchar;
+-- [] - []
+ALTER TABLE metric ADD COLUMN "medium_1" varchar;
+-- [] - ["medium_1"]
+\set ON_ERROR_STOP 0
+ALTER TABLE metric ADD COLUMN "medium_1" varchar;
+ 
+SELECT * FROM metric limit 5;
+SELECT * FROM metric where medium is not null;
+
+-- INSERTs operate normally on the added column
+INSERT INTO metric (time, val, dev_id, medium) 
+SELECT s.*, 3.14+1, 1, 'medium_value_text'
+FROM generate_series('2021-08-18 00:00:00'::timestamp,
+                    '2021-08-19 00:02:00'::timestamp, '30 s'::interval) s;
+
+SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;

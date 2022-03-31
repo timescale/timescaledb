@@ -1388,3 +1388,88 @@ ORDER BY 1;
  c2
 (1 row)
 
+-- test ADD COLUMN IF NOT EXISTS on a distributed hypertable
+CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
+ 
+SELECT create_distributed_hypertable('metric', 'time');
+ create_distributed_hypertable 
+-------------------------------
+ (10,public,metric,t)
+(1 row)
+
+ALTER TABLE metric SET (                                     
+timescaledb.compress,
+timescaledb.compress_segmentby = 'dev_id',
+timescaledb.compress_orderby = 'time DESC'
+);
+ 
+INSERT INTO metric(time, val, dev_id)
+SELECT s.*, 3.14+1, 1
+FROM generate_series('2021-07-01 00:00:00'::timestamp,
+                    '2021-08-17 00:02:00'::timestamp, '30 s'::interval) s;
+SELECT compress_chunk(chunk)
+FROM show_chunks('metric') AS chunk
+ORDER BY chunk;
+                compress_chunk                 
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_10_36_chunk
+ _timescaledb_internal._dist_hyper_10_37_chunk
+ _timescaledb_internal._dist_hyper_10_38_chunk
+ _timescaledb_internal._dist_hyper_10_39_chunk
+ _timescaledb_internal._dist_hyper_10_40_chunk
+ _timescaledb_internal._dist_hyper_10_41_chunk
+ _timescaledb_internal._dist_hyper_10_42_chunk
+(7 rows)
+
+-- make sure we have chunks on all data nodes
+select * from timescaledb_information.chunks where hypertable_name like 'metric';
+ hypertable_schema | hypertable_name |     chunk_schema      |       chunk_name        | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace |       data_nodes        
+-------------------+-----------------+-----------------------+-------------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+-------------------------
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_36_chunk | time              | timestamp with time zone | Wed Jun 30 17:00:00 2021 PDT | Wed Jul 07 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_2}
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_37_chunk | time              | timestamp with time zone | Wed Jul 07 17:00:00 2021 PDT | Wed Jul 14 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_3}
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_38_chunk | time              | timestamp with time zone | Wed Jul 14 17:00:00 2021 PDT | Wed Jul 21 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_1}
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_39_chunk | time              | timestamp with time zone | Wed Jul 21 17:00:00 2021 PDT | Wed Jul 28 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_2}
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_40_chunk | time              | timestamp with time zone | Wed Jul 28 17:00:00 2021 PDT | Wed Aug 04 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_3}
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_41_chunk | time              | timestamp with time zone | Wed Aug 04 17:00:00 2021 PDT | Wed Aug 11 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_1}
+ public            | metric          | _timescaledb_internal | _dist_hyper_10_42_chunk | time              | timestamp with time zone | Wed Aug 11 17:00:00 2021 PDT | Wed Aug 18 17:00:00 2021 PDT |                     |                   | t             |                  | {db_dist_compression_2}
+(7 rows)
+
+-- perform all combinations
+-- [IF NOT EXISTS] - []
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" varchar;
+-- [IF NOT EXISTS] - ["medium"]
+ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" varchar;
+NOTICE:  column "medium" of relation "metric" already exists, skipping
+-- [] - []
+ALTER TABLE metric ADD COLUMN "medium_1" varchar;
+-- [] - ["medium_1"]
+\set ON_ERROR_STOP 0
+ALTER TABLE metric ADD COLUMN "medium_1" varchar;
+ERROR:  column "medium_1" of relation "metric" already exists
+ 
+SELECT * FROM metric limit 5;
+             time             | val  | dev_id | medium | medium_1 
+------------------------------+------+--------+--------+----------
+ Wed Jul 21 16:59:30 2021 PDT | 4.14 |      1 |        | 
+ Wed Jul 21 16:59:00 2021 PDT | 4.14 |      1 |        | 
+ Wed Jul 21 16:58:30 2021 PDT | 4.14 |      1 |        | 
+ Wed Jul 21 16:58:00 2021 PDT | 4.14 |      1 |        | 
+ Wed Jul 21 16:57:30 2021 PDT | 4.14 |      1 |        | 
+(5 rows)
+
+SELECT * FROM metric where medium is not null;
+ time | val | dev_id | medium | medium_1 
+------+-----+--------+--------+----------
+(0 rows)
+
+-- INSERTs operate normally on the added column
+INSERT INTO metric (time, val, dev_id, medium) 
+SELECT s.*, 3.14+1, 1, 'medium_value_text'
+FROM generate_series('2021-08-18 00:00:00'::timestamp,
+                    '2021-08-19 00:02:00'::timestamp, '30 s'::interval) s;
+SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
+             time             | val  | dev_id |      medium       | medium_1 
+------------------------------+------+--------+-------------------+----------
+ Wed Aug 18 00:00:00 2021 PDT | 4.14 |      1 | medium_value_text | 
+(1 row)
+
