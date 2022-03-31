@@ -1063,10 +1063,17 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 	Oid coloid;
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;
-	TypeName *orig_typname = orig_def->typeName;
 
+	FormData_hypertable_compression *ht_comp =
+		ts_hypertable_compression_get_by_pkey(orig_htid, colname);
+	/* don't add column if it already exists */
+	if (ht_comp)
+		return;
+
+	TypeName *orig_typname = orig_def->typeName;
 	coloid = LookupTypeNameOid(NULL, orig_typname, false);
 	compresscolinfo_init_singlecolumn(&compress_cols, colname, coloid);
+
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		int32 compress_htid = ht->fd.compressed_hypertable_id;
