@@ -32,9 +32,10 @@ jobs:
 
           resp_code=$(curl --request GET \
             --url https://api.github.com/orgs/timescale/members/${{ github.event.pull_request.user.login }} \
-            --header 'authorization: Bearer $AUTH_TOKEN' \
-            --header 'content-type: application/json' \
+            -H "Authorization: OAuth $AUTH_TOKEN"
             --write-out "%{response_code}")
+
+          echo $resp_code
 
           if [[ $resp_code == '204' ]]
           then
