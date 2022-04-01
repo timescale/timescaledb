@@ -1,0 +1,81 @@
+name: Assign PR to member who opened
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  author_check_membership:
+    name: Find author ID and check Timescale team member status
+    runs-on: ubuntu-latest
+    outputs: 
+      continue_workflow: ${{ steps.set_output.outputs.run_jobs }}
+    steps:
+      - name: check who opened
+        id: set_output
+        env: 
+          OWNER: ${{ github.repository_owner }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.event.repository.name }}
+          PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
+          PULL_REQUEST_TITLE : ${{ github.event.pull_request.title }}
+          PULL_REQUEST_AUTHOR_NAME : ${{ github.event.pull_request.user.login }}
+        run: |
+          # find and store the opener's ID
+          user_id="$(gh api graphql -f author=$PULL_REQUEST_AUTHOR_NAME -f query='
+          query find_auth_id($author: String!){
+            user(login: $author){
+              id
+            }
+          }' --jq '.data.user.id')"
+          echo "PULL_REQUEST_AUTHOR_ID=$user_id" >> $GITHUB_ENV
+
+          resp_code=$(curl --request GET \
+            --url https://api.github.com/orgs/timescale/members/${{ github.event.pull_request.user.login }} \
+            --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header 'content-type: application/json' \
+            --write-out "%{response_code}")
+
+          if [[ $resp_code == '204' ]]
+          then
+          # is a Timescaler
+            echo "::set-output name=run_jobs::true"
+          else 
+            echo "::set-output name=run_jobs::false"
+          fi
+
+  add_pr_to_board:
+    name: Assign PR to author 
+    runs-on: ubuntu-latest
+    needs: [author_check_membership]
+    if: needs.author_check_membership.outputs.continue_workflow == 'true'
+    steps:
+      - name: get PR node id
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
+        run: |
+          pr_id="$(gh api graphql -f owner=$OWNER -f repo=$REPO -F number=$PULL_REQUEST_NUMBER -f query='
+            query find_pr_id($owner: String!, $repo: String!, $number: Int!){
+              repository(owner: $owner, name: $repo){
+                pullRequest(number: $number){
+                  id
+                }
+              }
+            }' --jq '.data.repository.pullRequest.id')"
+          echo "PR_ID=$pr_id" >> $GITHUB_ENV
+          # projid="PN_kwHOAqMKH84ABDkk"
+          # echo "PROJECT_ID=$projid" >> GITHUB_ENV
+      - name: assign the PR to the person who opened it
+        env: 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          gh api graphql -f assignee=$PULL_REQUEST_AUTHOR_ID -f pr=$PR_ID -f query='
+            mutation($pr:ID!, $assignee:ID!){
+              addAssigneesToAssignable(input: {assignableId: $pr, assigneeIds: [$assignee]}) {
+                clientMutationId
+              }
+            }'
