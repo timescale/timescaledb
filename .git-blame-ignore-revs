@@ -1,0 +1,17 @@
+# This file contains a list of commits that are not likely what you
+# are looking for in a blame, such as mass reformatting or renaming.
+# You can set this file as a default ignore file for blame by running
+# the following command.
+#
+# $ git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# formatting with pgindent
+32c45b75b27e3f690236a9d1c8d13a025316ad2f
+# Fix formatting to comply with pgindent
+2ec065b53823e50dd1ac1d7cf925ae5f90e293ea
+# Fix formatting issues
+3e42150e3b0402ae865d9a827d8d178568a0d27e
+# Run clang-format on code
+34edba16a9385a4b0353e8e07a19dba98d7e3fb9
+# Run pg_format on SQL files
+3f5872ec61650519e2c5e6fe1dfb60d07696cac7
