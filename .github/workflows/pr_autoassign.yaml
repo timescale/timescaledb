@@ -19,6 +19,7 @@ jobs:
           PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
           PULL_REQUEST_TITLE : ${{ github.event.pull_request.title }}
           PULL_REQUEST_AUTHOR_NAME : ${{ github.event.pull_request.user.login }}
+          AUTH_TOKEN: ${{ secrets.ORG_TIMESCALEDB_AUTOMATION }}
         run: |
           # find and store the opener's ID
           user_id="$(gh api graphql -f author=$PULL_REQUEST_AUTHOR_NAME -f query='
@@ -31,7 +32,7 @@ jobs:
 
           resp_code=$(curl --request GET \
             --url https://api.github.com/orgs/timescale/members/${{ github.event.pull_request.user.login }} \
-            --header 'authorization: Bearer ${{ secrets.ORG_TIMESCALEDB_AUTOMATION }}' \
+            --header 'authorization: Bearer $AUTH_TOKEN' \
             --header 'content-type: application/json' \
             --write-out "%{response_code}")
 
