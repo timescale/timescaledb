@@ -31,7 +31,7 @@ jobs:
 
           resp_code=$(curl --request GET \
             --url https://api.github.com/orgs/timescale/members/${{ github.event.pull_request.user.login }} \
-            --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header 'authorization: Bearer ${{ secrets.ORG_TIMESCALEDB_AUTOMATION }}' \
             --header 'content-type: application/json' \
             --write-out "%{response_code}")
 
