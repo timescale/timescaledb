@@ -32,7 +32,7 @@ jobs:
 
           resp_code=$(curl --request GET \
             --url https://api.github.com/orgs/timescale/members/${{ github.event.pull_request.user.login }} \
-            -H "Authorization: OAuth $AUTH_TOKEN"
+            -H "Authorization: OAuth $AUTH_TOKEN" \
             --write-out "%{response_code}")
 
           echo $resp_code
