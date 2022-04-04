@@ -65,15 +65,6 @@ policy_compression_get_maxchunks_per_job(const Jsonb *config)
 	return (found && maxchunks > 0) ? maxchunks : 0;
 }
 
-bool
-policy_compression_get_verbose_log(const Jsonb *config)
-{
-	bool found;
-	bool verbose_log = ts_jsonb_get_bool_field(config, CONFIG_KEY_VERBOSE_LOG, &found);
-
-	return found ? verbose_log : false;
-}
-
 int32
 policy_compression_get_hypertable_id(const Jsonb *config)
 {

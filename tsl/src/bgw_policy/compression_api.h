@@ -24,6 +24,5 @@ bool policy_compression_get_recompress(const Jsonb *config);
 int32 policy_compression_get_maxchunks_per_job(const Jsonb *config);
 int64 policy_recompression_get_recompress_after_int(const Jsonb *config);
 Interval *policy_recompression_get_recompress_after_interval(const Jsonb *config);
-bool policy_compression_get_verbose_log(const Jsonb *config);
 
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_COMPRESSION_API_H */

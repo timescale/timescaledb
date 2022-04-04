@@ -132,3 +132,12 @@ get_open_dimension_for_hypertable(const Hypertable *ht)
 	}
 	return open_dim;
 }
+
+bool
+policy_get_verbose_log(const Jsonb *config)
+{
+	bool found;
+	bool verbose_log = ts_jsonb_get_bool_field(config, CONFIG_KEY_VERBOSE_LOG, &found);
+
+	return found ? verbose_log : false;
+}

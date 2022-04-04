@@ -285,3 +285,55 @@ SELECT show_chunks('test_drop_chunks_table');
 
 --test that views work
 SELECT * FROM timescaledb_information.job_stats;
+
+
+-- Test that add_retention_policy also works with timestamp (without time zone) and date types
+-- and that the policy execution is being logged
+
+-- Test for date
+CREATE TABLE test_drop_chunks_table_date(time date, drop_order int);
+SELECT create_hypertable('test_drop_chunks_table_date', 'time', chunk_time_interval => INTERVAL '1 week');
+
+INSERT INTO test_drop_chunks_table_date VALUES (now() - INTERVAL '2 month',  4);
+INSERT INTO test_drop_chunks_table_date VALUES (now(),                       5);
+INSERT INTO test_drop_chunks_table_date VALUES (now() - INTERVAL '6 months', 2);
+INSERT INTO test_drop_chunks_table_date VALUES (now() - INTERVAL '4 months', 3);
+INSERT INTO test_drop_chunks_table_date VALUES (now() - INTERVAL '8 months', 1);
+
+-- Clear the job stats and reset timer, this will also clear the bgw_log
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_config.bgw_job;
+SELECT ts_bgw_params_reset_time();
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+
+-- Test for timestamp 
+CREATE TABLE test_drop_chunks_table_tsntz(time date, drop_order int);
+SELECT create_hypertable('test_drop_chunks_table_tsntz', 'time', chunk_time_interval => INTERVAL '1 week');
+
+INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '2 month',  4);
+INSERT INTO test_drop_chunks_table_tsntz VALUES (now(),                       5);
+INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '6 months', 2);
+INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '4 months', 3);
+INSERT INTO test_drop_chunks_table_tsntz VALUES (now() - INTERVAL '8 months', 1);
+
+-- Add retention policies for both tables
+SELECT add_retention_policy('test_drop_chunks_table_date', INTERVAL '4 months') as drop_chunks_date_job_id \gset
+SELECT add_retention_policy('test_drop_chunks_table_tsntz', INTERVAL '4 months') as drop_chunks_tsntz_job_id \gset
+
+-- Test that retention policy is being logged
+SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
+ FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_date_job_id;
+
+SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
+ FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_tsntz_job_id;
+
+CALL run_job(:drop_chunks_date_job_id);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
+
+CALL run_job(:drop_chunks_tsntz_job_id);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
+
+SELECT * FROM sorted_bgw_log;

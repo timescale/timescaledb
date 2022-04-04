@@ -56,6 +56,27 @@
 #define REORDER_SKIP_RECENT_DIM_SLICES_N 3
 
 static void
+log_retention_boundary(int elevel, PolicyRetentionData *policy_data, const char *message)
+{
+	char *relname;
+	Datum boundary;
+	Oid outfuncid = InvalidOid;
+	bool isvarlena;
+
+	getTypeOutputInfo(policy_data->boundary_type, &outfuncid, &isvarlena);
+
+	relname = get_rel_name(policy_data->object_relid);
+	boundary = policy_data->boundary;
+
+	if (OidIsValid(outfuncid))
+		elog(elevel,
+			 "%s \"%s\": dropping data older than %s",
+			 message,
+			 relname,
+			 DatumGetCString(OidFunctionCall1(outfuncid, boundary)));
+}
+
+static void
 enable_fast_restart(int32 job_id, const char *job_name)
 {
 	BgwJobStat *job_stat = ts_bgw_job_stat_find(job_id);
@@ -250,8 +271,13 @@ bool
 policy_retention_execute(int32 job_id, Jsonb *config)
 {
 	PolicyRetentionData policy_data;
+	bool verbose_log;
 
 	policy_retention_read_and_validate_config(config, &policy_data);
+
+	verbose_log = policy_get_verbose_log(config);
+	if (verbose_log)
+		log_retention_boundary(LOG, &policy_data, "applying retention policy to hypertable");
 
 	chunk_invoke_drop_chunks(policy_data.object_relid,
 							 policy_data.boundary,
@@ -552,6 +578,13 @@ job_execute(BgwJob *job)
 	StringInfo query;
 	Portal portal = ActivePortal;
 
+	if (job->fd.config)
+		elog(DEBUG1,
+			 "Executing %s with parameters %s",
+			 NameStr(job->fd.proc_name),
+			 DatumGetCString(DirectFunctionCall1(jsonb_out, JsonbPGetDatum(job->fd.config))));
+	else
+		elog(DEBUG1, "Executing %s with no parameters", NameStr(job->fd.proc_name));
 	/* Create a portal if there's no active */
 	if (!PortalIsValid(portal))
 	{
