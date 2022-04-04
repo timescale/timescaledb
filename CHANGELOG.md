@@ -14,6 +14,7 @@ accidentally triggering the load of a previous DB version.**
 * #4161 Fix memory handling during scans
 * #3974 Fix remote EXPLAIN with parameterized queries
 * #4192 Abort sessions after extension reload
+* #4159 Fix ADD COLUMN IF NOT EXISTS error on compressed hypertable
 
 **Thanks**
 * @abrownsword for reporting a crash in the telemetry reporter
