@@ -780,6 +780,7 @@ dist_ddl_process_alter_table(const ProcessUtilityArgs *args)
 			case AT_AlterColumnType:
 				exec_type = set_alter_table_exec_type(exec_type, DIST_DDL_EXEC_ON_END);
 				break;
+			case AT_ChangeOwner:
 			case AT_ReplaceRelOptions:
 			case AT_ResetRelOptions:
 			case AT_SetRelOptions:
