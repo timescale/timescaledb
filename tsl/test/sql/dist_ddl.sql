@@ -111,6 +111,18 @@ ALTER TABLE some_schema.disttable SET SCHEMA public;
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
 \set ON_ERROR_STOP 1
 
+-- OWNER TO
+RESET ROLE;
+ALTER TABLE disttable OWNER TO :ROLE_2;
+
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable';
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable';
+$$);
+
+ALTER TABLE disttable OWNER TO :ROLE_1;
+SET ROLE :ROLE_1;
+
 -- Test unsupported operations on distributed hypertable
 \set ON_ERROR_STOP 0
 
