@@ -8,6 +8,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Features**
 * #4169 Add support for chunk exclusion on DELETE on PG14
+* #4120 Add logging for retention policy
 
 **Bugfixes**
 * #4122 Fix segfault on INSERT into distributed hypertable

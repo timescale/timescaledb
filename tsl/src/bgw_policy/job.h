@@ -16,7 +16,7 @@
 #include "bgw_policy/chunk_stats.h"
 
 /* Add config keys common across job types here */
-#define CONFIG_KEY_VERBOSE_LOG "verbose_log" /*used only by compression now*/
+#define CONFIG_KEY_VERBOSE_LOG "verbose_log" /*used only by retention now*/
 
 typedef struct PolicyReorderData
 {
