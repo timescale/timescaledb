@@ -66,15 +66,6 @@ data_node_scan_next(CustomScanState *node)
 	slot = fdw_scan_iterate(&node->ss, &sss->fsstate);
 	MemoryContextSwitchTo(oldcontext);
 
-	/* Raise an error when system column is requsted, eg. tableoid */
-	if (sss->systemcol && !TupIsNull(slot))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("system columns are not accessible on distributed hypertables with current "
-						"settings"),
-				 errhint("Set timescaledb.enable_per_data_node_queries=false to query system "
-						 "columns.")));
-
 	return slot;
 }
 

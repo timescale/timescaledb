@@ -634,6 +634,15 @@ data_node_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_
 		bms_free(attrs_used);
 	}
 
+	/* Raise an error when system column is requsted, eg. tableoid */
+	if (scaninfo.systemcol)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("system columns are not accessible on distributed hypertables with current "
+						"settings"),
+				 errhint("Set timescaledb.enable_per_data_node_queries=false to query system "
+						 "columns.")));
+
 	/* Should have determined the fetcher type by now. */
 	Assert(ts_data_node_fetcher_scan_type != AutoFetcherType);
 
