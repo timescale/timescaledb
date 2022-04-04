@@ -462,6 +462,52 @@ ALTER TABLE some_schema.disttable SET SCHEMA public;
 ALTER TABLE disttable SET SCHEMA some_unexist_schema;
 ERROR:  schema "some_unexist_schema" does not exist
 \set ON_ERROR_STOP 1
+-- OWNER TO
+RESET ROLE;
+ALTER TABLE disttable OWNER TO :ROLE_2;
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable';
+ tableowner  
+-------------
+ test_role_2
+(1 row)
+
+SELECT * FROM test.remote_exec(NULL, $$
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable';
+$$);
+NOTICE:  [data_node_1]: 
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable'
+NOTICE:  [data_node_1]:
+tableowner 
+-----------
+test_role_2
+(1 row)
+
+
+NOTICE:  [data_node_2]: 
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable'
+NOTICE:  [data_node_2]:
+tableowner 
+-----------
+test_role_2
+(1 row)
+
+
+NOTICE:  [data_node_3]: 
+SELECT tableowner FROM pg_tables WHERE tablename = 'disttable'
+NOTICE:  [data_node_3]:
+tableowner 
+-----------
+test_role_2
+(1 row)
+
+
+ remote_exec 
+-------------
+ 
+(1 row)
+
+ALTER TABLE disttable OWNER TO :ROLE_1;
+SET ROLE :ROLE_1;
 -- Test unsupported operations on distributed hypertable
 \set ON_ERROR_STOP 0
 -- test set_replication_factor on non-hypertable

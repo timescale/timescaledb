@@ -46,6 +46,7 @@ The release also includes several bug fixes. Telemetry reports now include new a
 * #4015 Eliminate float rounding instabilities in interpolate
 * #4019 Update ts_extension_oid in transitioning state
 * #4073 Fix buffer overflow in partition scheme
+* #4180 ALTER TABLE OWNER TO does not work for distributed hypertable
 
 **Improvements**
 * Query planning performance is improved for hypertables with a large number of chunks.
