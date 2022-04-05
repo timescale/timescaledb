@@ -20,7 +20,7 @@ jobs:
           PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
           PULL_REQUEST_TITLE : ${{ github.event.pull_request.title }}
           PULL_REQUEST_AUTHOR_NAME : ${{ github.event.pull_request.user.login }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v1
         with: 
           name: jobdata
           path: pr_auth_id.txt
@@ -76,7 +76,7 @@ jobs:
 
           # echo "PROJECT_ID=$projid" >> GITHUB_ENV
       - name: assign the PR to the person who opened it
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v1
         with: 
           name: jobdata
         env: 
