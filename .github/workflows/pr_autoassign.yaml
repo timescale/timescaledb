@@ -20,10 +20,6 @@ jobs:
           PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
           PULL_REQUEST_TITLE : ${{ github.event.pull_request.title }}
           PULL_REQUEST_AUTHOR_NAME : ${{ github.event.pull_request.user.login }}
-        uses: actions/upload-artifact@v2
-        with: 
-          name: jobdata
-          path: pr_auth_id.txt
         run: |
           # find and store the opener's ID
           user_id="$(gh api graphql -f author=$PULL_REQUEST_AUTHOR_NAME -f query='
@@ -51,6 +47,13 @@ jobs:
             echo "::set-output name=run_jobs::false"
           fi
 
+      - name: upload user_id
+        uses: actions/upload-artifact@v2
+        with: 
+          name: jobdata
+          path: pr_auth_id.txt
+
+
   add_pr_to_board:
     name: Assign PR to author 
     runs-on: ubuntu-latest
@@ -75,10 +78,13 @@ jobs:
           echo "PR_ID=$pr_id" >> $GITHUB_ENV
 
           # echo "PROJECT_ID=$projid" >> GITHUB_ENV
-      - name: assign the PR to the person who opened it
+
+      - name: download user_id
         uses: actions/download-artifact@v2
         with: 
           name: jobdata
+          
+      - name: assign the PR to the person who opened it
         env: 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
