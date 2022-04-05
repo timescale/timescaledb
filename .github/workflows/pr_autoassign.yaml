@@ -20,6 +20,10 @@ jobs:
           PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
           PULL_REQUEST_TITLE : ${{ github.event.pull_request.title }}
           PULL_REQUEST_AUTHOR_NAME : ${{ github.event.pull_request.user.login }}
+        uses: actions/upload-artifact@v2
+        with: 
+          name: jobdata
+          path: pr_auth_id.txt
         run: |
           # find and store the opener's ID
           user_id="$(gh api graphql -f author=$PULL_REQUEST_AUTHOR_NAME -f query='
@@ -28,7 +32,9 @@ jobs:
               id
             }
           }' --jq '.data.user.id')"
-          echo "PULL_REQUEST_AUTHOR_ID=$user_id" >> $GITHUB_ENV
+          
+          echo $user_id > pr_auth_id.txt
+          # echo "PULL_REQUEST_AUTHOR_ID=$user_id" >> $GITHUB_ENV
 
           resp_code=$(curl --request GET \
             --url https://api.github.com/orgs/timescale/members/${{ github.event.pull_request.user.login }} \
@@ -70,11 +76,16 @@ jobs:
 
           # echo "PROJECT_ID=$projid" >> GITHUB_ENV
       - name: assign the PR to the person who opened it
+        uses: actions/download-artifact@v2
+        with: 
+          name: jobdata
         env: 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
         run: |
+          PULL_REQUEST_AUTHOR_ID=$(cat pr_auth_id.txt)
+          
           gh api graphql -f assignee=$PULL_REQUEST_AUTHOR_ID -f pr=$PR_ID -f query='
             mutation($pr:ID!, $assignee:ID!){
               addAssigneesToAssignable(input: {assignableId: $pr, assigneeIds: [$assignee]}) {
