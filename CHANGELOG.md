@@ -11,12 +11,22 @@ accidentally triggering the load of a previous DB version.**
 * #4169 Add support for chunk exclusion on DELETE to PG14
 * #4209 Add support for chunk exclusion on UPDATE to PG14
 
+## 2.6.1 (2022-04-11)
+This release is patch release. We recommend that you upgrade at the next available opportunity.
+
 **Bugfixes**
-* #3974 Fix remote EXPLAIN with parameterized queries
+* #4121 Fix RENAME TO/SET SCHEMA on distributed hypertable
 * #4122 Fix segfault on INSERT into distributed hypertable
-* #4161 Fix memory handling during scans
-* #4192 Abort sessions after extension reload
+* #4142 Ignore invalid relid when deleting hypertable
 * #4159 Fix ADD COLUMN IF NOT EXISTS error on compressed hypertable
+* #4161 Fix memory handling during scans
+* #4176 Fix remote EXPLAIN with parameterized queries
+* #4181 Fix spelling errors and omissions
+* #4186 Fix owner change for distributed hypertable
+* #4192 Abort sessions after extension reload
+* #4193 Fix relcache callback handling causing crashes
+* #4199 Remove signal-unsafe calls from signal handlers
+* #4219 Do not modify aggregation state in finalize
 
 **Thanks**
 * @abrownsword for reporting a crash in the telemetry reporter
