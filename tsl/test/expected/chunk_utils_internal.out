@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 --  These tests work for PG14 or greater
+-- Remember to corordinate any changes to freeze_chunk functionality with the Cloud
+-- Storage team.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
@@ -84,6 +86,12 @@ SELECT * from test1.hyper1 ORDER BY 1;
 (3 rows)
 
 \set ON_ERROR_STOP 1
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+ drop_chunk 
+------------
+ t
+(1 row)
+
 -- TEST freeze_chunk api on a chunk that is compressed
 CREATE TABLE public.table_to_compress (time date NOT NULL, acq_id bigint, value bigint);
 CREATE INDEX idx_table_to_compress_acq_id ON public.table_to_compress(acq_id);
@@ -193,9 +201,82 @@ SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
 SELECT  compress_chunk( :'CHNAME');
 ERROR:  compress_chunk not permitted on frozen chunk "_hyper_2_7_chunk" 
 \set ON_ERROR_STOP 1
+--TEST dropping a frozen chunk
+--DO NOT CHANGE this behavior ---
+-- frozen chunks can be dropped.
+SELECT _timescaledb_internal.drop_chunk(:'CHNAME');
+ drop_chunk 
+------------
+ t
+(1 row)
+
+SELECT count(*) 
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'table_to_compress' and hypertable_schema = 'public';
+ count 
+-------
+     0
+(1 row)
+
 --TEST error freeze a non-chunk
 CREATE TABLE nochunk_tab( a timestamp, b integer);
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.freeze_chunk('nochunk_tab');
 ERROR:  chunk not found
 \set ON_ERROR_STOP 1
+--TEST dropping frozen chunk in the presence of caggs
+SELECT * FROM test1.hyper1 ORDER BY 1;
+ time | temp 
+------+------
+   30 |  0.5
+   31 |   31
+(2 rows)
+
+CREATE OR REPLACE FUNCTION hyper_dummy_now() RETURNS BIGINT
+LANGUAGE SQL IMMUTABLE AS  'SELECT 100::BIGINT';
+SELECT set_integer_now_func('test1.hyper1', 'hyper_dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW hyper1_cagg WITH (timescaledb.continuous)
+AS SELECT time_bucket( 5, "time") as bucket, count(*)
+FROM test1.hyper1 GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "hyper1_cagg"
+SELECT * FROM hyper1_cagg ORDER BY 1;
+ bucket | count 
+--------+-------
+     30 |     2
+(1 row)
+
+--now freeze chunk and drop it
+--cagg data is unaffected  
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
+ORDER BY chunk_name LIMIT 1
+\gset
+SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+ drop_chunk 
+------------
+ t
+(1 row)
+
+SELECT * from test1.hyper1 ORDER BY 1;
+ time | temp 
+------+------
+(0 rows)
+
+SELECT * FROM hyper1_cagg ORDER BY 1;
+ bucket | count 
+--------+-------
+     30 |     2
+(1 row)
+
