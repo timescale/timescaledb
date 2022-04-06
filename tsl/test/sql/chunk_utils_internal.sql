@@ -3,6 +3,8 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 --  These tests work for PG14 or greater
+-- Remember to corordinate any changes to freeze_chunk functionality with the Cloud
+-- Storage team.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA test1;
@@ -51,6 +53,7 @@ INSERT INTO test1.hyper1 VALUES ( 11, 11);
 INSERT INTO test1.hyper1 VALUES ( 31, 31);
 SELECT * from test1.hyper1 ORDER BY 1;
 \set ON_ERROR_STOP 1
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
 
 -- TEST freeze_chunk api on a chunk that is compressed
 CREATE TABLE public.table_to_compress (time date NOT NULL, acq_id bigint, value bigint);
@@ -111,9 +114,41 @@ SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
 SELECT  compress_chunk( :'CHNAME');
 \set ON_ERROR_STOP 1
 
+--TEST dropping a frozen chunk
+--DO NOT CHANGE this behavior ---
+-- frozen chunks can be dropped.
+SELECT _timescaledb_internal.drop_chunk(:'CHNAME');
+SELECT count(*) 
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'table_to_compress' and hypertable_schema = 'public';
+
 --TEST error freeze a non-chunk
 CREATE TABLE nochunk_tab( a timestamp, b integer);
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_internal.freeze_chunk('nochunk_tab');
 \set ON_ERROR_STOP 1
 
+--TEST dropping frozen chunk in the presence of caggs
+SELECT * FROM test1.hyper1 ORDER BY 1;
+
+CREATE OR REPLACE FUNCTION hyper_dummy_now() RETURNS BIGINT
+LANGUAGE SQL IMMUTABLE AS  'SELECT 100::BIGINT';
+SELECT set_integer_now_func('test1.hyper1', 'hyper_dummy_now');
+
+CREATE MATERIALIZED VIEW hyper1_cagg WITH (timescaledb.continuous)
+AS SELECT time_bucket( 5, "time") as bucket, count(*)
+FROM test1.hyper1 GROUP BY 1;
+SELECT * FROM hyper1_cagg ORDER BY 1;
+
+--now freeze chunk and drop it
+--cagg data is unaffected  
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
+ORDER BY chunk_name LIMIT 1
+\gset
+
+SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+SELECT * from test1.hyper1 ORDER BY 1;
+SELECT * FROM hyper1_cagg ORDER BY 1;

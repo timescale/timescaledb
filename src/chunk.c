@@ -68,6 +68,7 @@
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_freeze_chunk);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
@@ -3985,6 +3986,23 @@ ts_chunk_freeze_chunk(PG_FUNCTION_ARGS)
 	LockRelationOid(chunk_relid, ShareLock);
 	bool ret = ts_chunk_set_frozen(chunk);
 	PG_RETURN_BOOL(ret);
+}
+
+Datum
+ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	char *chunk_table_name = get_rel_name(chunk_relid);
+	char *chunk_schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
+
+	const Chunk *ch = ts_chunk_get_by_name_with_memory_context(chunk_schema_name,
+															   chunk_table_name,
+															   CurrentMemoryContext,
+															   true);
+	Assert(ch != NULL);
+	/* do not drop any chunk dependencies */
+	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
+	PG_RETURN_BOOL(true);
 }
 
 Datum
