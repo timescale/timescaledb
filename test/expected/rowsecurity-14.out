@@ -2265,19 +2265,19 @@ INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
  Custom Scan (HypertableModify)
    ->  Update on b1
          Update on b1 b1_1
          Update on _hyper_8_41_chunk b1_2
-         ->  Result
-               ->  Append
-                     ->  Seq Scan on b1 b1_1
-                           Filter: ((a > 0) AND (a = 4) AND ((a % 2) = 0) AND f_leak(b))
-                     ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk b1_2
-                           Index Cond: ((a > 0) AND (a = 4))
-                           Filter: (((a % 2) = 0) AND f_leak(b))
+         ->  Custom Scan (ChunkAppend) on b1
+               Chunks excluded during startup: 0
+               ->  Seq Scan on b1 b1_1
+                     Filter: ((a > 0) AND (a = 4) AND ((a % 2) = 0) AND f_leak(b))
+               ->  Index Scan using _hyper_8_41_chunk_b1_a_idx on _hyper_8_41_chunk b1_2
+                     Index Cond: ((a > 0) AND (a = 4))
+                     Filter: (((a % 2) = 0) AND f_leak(b))
 (11 rows)
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);

@@ -7,13 +7,14 @@ accidentally triggering the load of a previous DB version.**
 ## Unreleased
 
 **Features**
-* #4169 Add support for chunk exclusion on DELETE on PG14
 * #4120 Add logging for retention policy
+* #4169 Add support for chunk exclusion on DELETE to PG14
+* #4209 Add support for chunk exclusion on UPDATE to PG14
 
 **Bugfixes**
+* #3974 Fix remote EXPLAIN with parameterized queries
 * #4122 Fix segfault on INSERT into distributed hypertable
 * #4161 Fix memory handling during scans
-* #3974 Fix remote EXPLAIN with parameterized queries
 * #4192 Abort sessions after extension reload
 * #4159 Fix ADD COLUMN IF NOT EXISTS error on compressed hypertable
 
