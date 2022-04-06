@@ -518,14 +518,21 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(tstate);
 }
 
-/* tsl_finalize_agg_ffunc:
- * apply the finalize function on the state we have accumulated
+/*
+ * Apply the finalize function on the state we have accumulated
+ *
+ * The state passed down to this function can be used by other aggregate
+ * functions so it is important to not change the state when computing the
+ * final result.
  */
 Datum
 tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
 {
 	FATransitionState *tstate = PG_ARGISNULL(0) ? NULL : (FATransitionState *) PG_GETARG_POINTER(0);
 	MemoryContext fa_context, old_context;
+	Datum result = tstate->per_group_state->trans_value;
+	bool result_isnull = tstate->per_group_state->trans_value_isnull;
+
 	Assert(tstate != NULL);
 	if (!AggCheckCallContext(fcinfo, &fa_context))
 	{
@@ -533,6 +540,7 @@ tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
 		elog(ERROR, "finalize_agg_ffunc called in non-aggregate context");
 	}
 	old_context = MemoryContextSwitchTo(fa_context);
+
 	if (OidIsValid(tstate->per_query_state->final_meta.finalfnoid))
 	{
 		/* don't execute if strict and the trans value is NULL or there are extra args (all extra
@@ -547,15 +555,15 @@ tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
 			FC_NULL(finalfn_fcinfo, 0) = tstate->per_group_state->trans_value_isnull;
 			finalfn_fcinfo->isnull = false;
 
-			tstate->per_group_state->trans_value = FunctionCallInvoke(finalfn_fcinfo);
-			tstate->per_group_state->trans_value_isnull = finalfn_fcinfo->isnull;
+			result = FunctionCallInvoke(finalfn_fcinfo);
+			result_isnull = finalfn_fcinfo->isnull;
 		}
 	}
 	MemoryContextSwitchTo(old_context);
-	if (tstate->per_group_state->trans_value_isnull)
+	if (result_isnull)
 		PG_RETURN_NULL();
 	else
-		PG_RETURN_DATUM(tstate->per_group_state->trans_value);
+		PG_RETURN_DATUM(result);
 }
 
 /*
