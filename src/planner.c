@@ -679,17 +679,18 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
-	if (!(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE) ||
+	if (
+#if PG14_LT
+		root->parse->commandType != CMD_SELECT ||
+#else
+		/*
+		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
+		 */
+		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
+		 bms_num_members(root->all_baserels) > 1) ||
+#endif
 		!ts_guc_enable_chunk_append || hypertable_is_distributed(ht))
 		return false;
-
-#if PG14_GE
-	/*
-	 * We only support chunk exclusion on DELETE when no JOIN is involved on PG14+.
-	 */
-	if (root->parse->commandType == CMD_DELETE && bms_num_members(root->all_baserels) > 1)
-		return false;
-#endif
 
 	switch (nodeTag(path))
 	{
@@ -932,7 +933,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 
 	if (reltype == TS_REL_HYPERTABLE &&
 #if PG14_GE
-		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE)
+		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE ||
+		 root->parse->commandType == CMD_UPDATE)
 #else
 		/*
 		 * For PG < 14 commandType will be CMD_SELECT even when planning DELETE so we

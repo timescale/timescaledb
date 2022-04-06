@@ -539,6 +539,12 @@ hypertable_modify_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 	{
 		cscan->scan.plan.targetlist =
 			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
+
+		if (mt->operation == CMD_UPDATE && ts_is_chunk_append_plan(mt->plan.lefttree))
+		{
+			mt->plan.lefttree->targetlist =
+				ts_replace_rowid_vars(root, mt->plan.lefttree->targetlist, mt->nominalRelation);
+		}
 	}
 #else
 	/*
