@@ -1703,3 +1703,38 @@ where view_name = 'test_morecols_cagg';
  test_morecols_cagg | t                 | t
 (1 row)
 
+CREATE TABLE issue3248(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON issue3248(time DESC);
+CREATE INDEX ON issue3248(device_id,time DESC);
+SELECT create_hypertable('issue3248','time',create_default_indexes:=false);
+    create_hypertable    
+-------------------------
+ (46,public,issue3248,t)
+(1 row)
+
+ALTER TABLE issue3248 DROP COLUMN filler_1;
+INSERT INTO issue3248(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','8h') gtime(time),
+     generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE issue3248 DROP COLUMN filler_2;
+INSERT INTO issue3248(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','8h') gtime(time),
+     generate_series(1,5,1) gdevice(device_id);
+ALTER TABLE issue3248 DROP COLUMN filler_3;
+INSERT INTO issue3248(time,device_id,v0,v1,v2,v3)
+SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL
+FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','8h') gtime(time),
+     generate_series(1,5,1) gdevice(device_id);
+ANALYZE issue3248;
+CREATE materialized view issue3248_cagg WITH (timescaledb.continuous)
+AS SELECT time_bucket('1h',time), device_id, min(v0), max(v1), avg(v2)
+FROM issue3248 GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "issue3248_cagg"
+SELECT
+  FROM issue3248 AS m,
+       LATERAL(SELECT m FROM issue3248_cagg WHERE avg IS NULL LIMIT 1) AS lat;
+--
+(0 rows)
+
