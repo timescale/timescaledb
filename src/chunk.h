@@ -37,6 +37,17 @@ typedef enum ChunkCompressionStatus
 	CHUNK_DROPPED
 } ChunkCompressionStatus;
 
+typedef enum ChunkOperation
+{
+	CHUNK_DROP = 0,
+	CHUNK_INSERT,
+	CHUNK_UPDATE,
+	CHUNK_DELETE,
+	CHUNK_SELECT,
+	CHUNK_COMPRESS,
+	CHUNK_DECOMPRESS
+} ChunkOperation;
+
 typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct Hyperspace Hyperspace;
@@ -149,6 +160,8 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_foun
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_relid(Oid relid);
+extern bool ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id,
+														   int32 *chunk_status);
 extern Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
@@ -162,8 +175,6 @@ extern TSDLLEXPORT void ts_chunk_drop_fks(const Chunk *const chunk);
 extern TSDLLEXPORT void ts_chunk_create_fks(const Chunk *const chunk);
 extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern int ts_chunk_delete_by_name(const char *schema, const char *table, DropBehavior behavior);
-extern TSDLLEXPORT bool ts_chunk_add_status(Chunk *chunk, int32 status);
-extern TSDLLEXPORT bool ts_chunk_set_status(Chunk *chunk, int32 status);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
@@ -171,6 +182,7 @@ extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, in
 extern void ts_chunks_rename_schema_name(char *old_schema, char *new_schema);
 
 extern TSDLLEXPORT bool ts_chunk_set_unordered(Chunk *chunk);
+extern TSDLLEXPORT bool ts_chunk_set_frozen(Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
@@ -185,6 +197,9 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chun
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk);
+extern TSDLLEXPORT void ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid,
+																	 int32 chunk_status,
+																	 ChunkOperation cmd);
 
 extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 chunk_id);

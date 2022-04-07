@@ -147,6 +147,9 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing hyperspace for hypertable")));
 	/* refetch the srcchunk with all attributes filled in */
 	srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
+	ts_chunk_validate_chunk_status_for_operation(srcchunk->table_id,
+												 srcchunk->fd.status,
+												 CHUNK_COMPRESS);
 	cxt->srcht = srcht;
 	cxt->compress_ht = compress_ht;
 	cxt->srcht_chunk = srcchunk;
@@ -318,6 +321,9 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 		return false;
 	}
 
+	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk_relid,
+												 uncompressed_chunk->fd.status,
+												 CHUNK_DECOMPRESS);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
 	/* acquire locks on src and compress hypertable and src chunk */

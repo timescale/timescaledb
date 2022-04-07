@@ -5935,6 +5935,29 @@ SELECT table_name FROM create_distributed_hypertable('pruned_chunks_2', 'time', 
 
 insert into pruned_chunks_2 select * from pruned_chunks_1;
 insert into pruned_chunks_2 select * from pruned_chunks_1 WHERE time > '2022-01-01';
+-- TEST freeze_chunk api. does not work for distributed chunks
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'pruned_chunks_1' 
+ORDER BY chunk_name LIMIT 1
+\gset
+\set ON_ERROR_STOP 0
+SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyper_36_107_chunk"
+\set ON_ERROR_STOP 1
+--TEST freeze_chunk api for regular hypertables. Works only for >= PG14
+CREATE TABLE freeze_1(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT);
+SELECT table_name FROM create_hypertable('freeze_1', 'time');
+ table_name 
+------------
+ freeze_1
+(1 row)
+
+INSERT INTO freeze_1 VALUES  ('2020-12-09',1,32.2);
+\set ON_ERROR_STOP 0
+SELECT  _timescaledb_internal.freeze_chunk( ch) FROM ( select show_chunks('freeze_1') ch ) q;
+ERROR:  freeze chunk supported only for PG14 or greater
+\set ON_ERROR_STOP 1
 DROP TABLE pruned_chunks_1;
 DROP TABLE pruned_chunks_2;
 -- Cleanup
