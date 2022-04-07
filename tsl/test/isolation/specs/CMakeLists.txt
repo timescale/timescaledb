@@ -16,6 +16,10 @@ if(PG_VERSION VERSION_GREATER "12.7"
   list(APPEND TEST_TEMPLATES_MODULE_DEBUG deadlock_recompress_chunk.spec.in)
 endif()
 
+if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
+  list(APPEND TEST_TEMPLATES_MODULE_DEBUG freeze_chunk.spec.in)
+endif()
+
 list(
   APPEND
   TEST_FILES

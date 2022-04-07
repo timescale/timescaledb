@@ -68,11 +68,14 @@
 
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
+TS_FUNCTION_INFO_V1(ts_chunk_freeze_chunk);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
+
+static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
 static const char *
 DatumGetNameString(Datum datum)
@@ -158,6 +161,12 @@ static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 n
  * chunks.
  */
 #define CHUNK_STATUS_COMPRESSED_UNORDERED 2
+/*
+ * A chunk is in frozen state (i.e no inserts/updates/deletes into this chunk are
+ * permitted.
+ *
+ */
+#define CHUNK_STATUS_FROZEN 4
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -2700,6 +2709,24 @@ ts_chunk_get_hypertable_id_by_relid(Oid relid)
 }
 
 /*
+ * Returns false if there is no chunk with such reloid.
+ */
+bool
+ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id, int32 *chunk_status)
+{
+	FormData_chunk form;
+
+	Assert(hypertable_id != NULL && chunk_status != NULL);
+	if (chunk_simple_scan_by_relid(relid, &form, /* missing_ok = */ true))
+	{
+		*hypertable_id = form.hypertable_id;
+		*chunk_status = form.status;
+		return true;
+	}
+	return false;
+}
+
+/*
  * Get the relid of a chunk given its ID.
  */
 Oid
@@ -3270,6 +3297,7 @@ chunk_update_form(FormData_chunk *form)
 
 /* update the status flag for chunk. Should not be called directly
  * Use chunk_update_status instead
+ * Acquires RowExclusiveLock
  */
 static bool
 chunk_update_status_internal(FormData_chunk *form)
@@ -3372,17 +3400,37 @@ ts_chunk_set_unordered(Chunk *chunk)
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_UNORDERED);
 }
 
+/*No inserts,updates and deletes are permitted on a frozen chunk.
+ * Compression policies etc do not run on a frozen chunk.
+ * Only valid operation is dropping the chunk
+ */
 bool
-ts_chunk_add_status(Chunk *chunk, int32 status)
+ts_chunk_set_frozen(Chunk *chunk)
 {
-	return ts_chunk_set_status(chunk, ts_set_flags_32(chunk->fd.status, status));
+#if PG14_GE
+	return ts_chunk_add_status(chunk, CHUNK_STATUS_FROZEN);
+#else
+	elog(ERROR, "freeze chunk supported only for PG14 or greater");
+	return false;
+#endif
 }
 
-bool
-ts_chunk_set_status(Chunk *chunk, int32 status)
+static bool
+ts_chunk_add_status(Chunk *chunk, int32 status)
 {
-	chunk->fd.status = status;
-
+	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %x ",
+						   chunk->fd.id,
+						   status,
+						   chunk->fd.status)));
+	}
+	uint32 mstatus = ts_set_flags_32(chunk->fd.status, status);
+	chunk->fd.status = mstatus;
 	return chunk_update_status(&chunk->fd);
 }
 
@@ -3909,6 +3957,36 @@ find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_matht)
 	return ht;
 }
 
+/* Data in a frozen chunk cannot be modified. So any operation
+ * that rewrites data for a frozen chunk will be blocked.
+ * Note that a frozen chunk can still be dropped.
+ */
+Datum
+ts_chunk_freeze_chunk(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Assert(chunk != NULL);
+	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("operation not supported on distributed chunk or foreign table \"%s\"",
+						get_rel_name(chunk_relid))));
+	}
+	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
+		PG_RETURN_BOOL(true);
+	/* get Share lock. will wait for other concurrent transactions that are
+	 * modifying the chunk. Does not block SELECTs on the chunk.
+	 * Does not block other DDL on the chunk table.
+	 */
+	DEBUG_WAITPOINT("freeze_chunk_before_lock");
+	LockRelationOid(chunk_relid, ShareLock);
+	bool ret = ts_chunk_set_frozen(chunk);
+	PG_RETURN_BOOL(ret);
+}
+
 Datum
 ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 {
@@ -4113,6 +4191,55 @@ ts_chunk_is_uncompressed_or_unordered(const Chunk *chunk)
 {
 	return (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED_UNORDERED) ||
 			!ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED));
+}
+
+static const char *
+get_chunk_operation_str(ChunkOperation cmd)
+{
+	switch (cmd)
+	{
+		case CHUNK_INSERT:
+			return "Insert";
+		case CHUNK_DELETE:
+			return "Delete";
+		case CHUNK_UPDATE:
+			return "Update";
+		case CHUNK_COMPRESS:
+			return "compress_chunk";
+		case CHUNK_DECOMPRESS:
+			return "decompress_chunk";
+		case CHUNK_DROP:
+			return "drop_chunk";
+		default:
+			return "Unsupported";
+	}
+}
+
+void
+ts_chunk_validate_chunk_status_for_operation(Oid chunk_relid, int32 chunk_status,
+											 ChunkOperation cmd)
+{
+	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))
+	{
+		/* Data modification is not premitted on a frozen chunk */
+		switch (cmd)
+		{
+			case CHUNK_INSERT:
+			case CHUNK_DELETE:
+			case CHUNK_UPDATE:
+			case CHUNK_COMPRESS:
+			case CHUNK_DECOMPRESS:
+			{
+				elog(ERROR,
+					 "%s not permitted on frozen chunk \"%s\" ",
+					 get_chunk_operation_str(cmd),
+					 get_rel_name(chunk_relid));
+				break;
+			}
+			default:
+				break; /*supported operations */
+		}
+	}
 }
 
 Datum

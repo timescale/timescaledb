@@ -1,0 +1,190 @@
+Parsed test spec with 7 sessions
+
+starting permutation: s2_wp_enable ins_s2_insert s2_wp_release s1_freeze ins_s2_commit ins_s2_query s1_status
+step s2_wp_enable: SELECT debug_waitpoint_enable('freeze_chunk_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step ins_s2_insert: BEGIN ; INSERT INTO measurements values('2020-01-03 12:30', 2, 2.0   );
+step s2_wp_release: SELECT debug_waitpoint_release('freeze_chunk_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step ins_s2_commit: COMMIT;
+step s1_freeze: <... completed>
+freeze_chunk
+------------
+t           
+(1 row)
+
+step ins_s2_query: SELECT * FROM measurements ORDER BY 1;
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 03 10:30:00 2020 PST|     1|   1
+Fri Jan 03 11:30:00 2020 PST|     2|   2
+Fri Jan 03 12:30:00 2020 PST|     2|   2
+(3 rows)
+
+step s1_status: SELECT ch.status  FROM _timescaledb_catalog.chunk ch 
+                   WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable 
+                   WHERE table_name = 'measurements');
+status
+------
+     4
+(1 row)
+
+
+starting permutation: upd_s2_wp_enable upd_s2_update upd_s2_wp_release s1_freeze upd_s2_commit upd_s2_query s1_status
+step upd_s2_wp_enable: SELECT debug_waitpoint_enable('freeze_chunk_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step upd_s2_update: BEGIN ; UPDATE measurements SET temp = 200 WHERE device = 2;
+step upd_s2_wp_release: SELECT debug_waitpoint_release('freeze_chunk_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step upd_s2_commit: COMMIT;
+step s1_freeze: <... completed>
+freeze_chunk
+------------
+t           
+(1 row)
+
+step upd_s2_query: SELECT * FROM measurements ORDER BY 1;
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 03 10:30:00 2020 PST|     1|   1
+Fri Jan 03 11:30:00 2020 PST|     2| 200
+(2 rows)
+
+step s1_status: SELECT ch.status  FROM _timescaledb_catalog.chunk ch 
+                   WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable 
+                   WHERE table_name = 'measurements');
+status
+------
+     4
+(1 row)
+
+
+starting permutation: del_s2_wp_enable del_s2_delete del_s2_wp_release s1_freeze del_s2_commit del_s2_query s1_status
+step del_s2_wp_enable: SELECT debug_waitpoint_enable('freeze_chunk_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step del_s2_delete: BEGIN ; DELETE FROM measurements WHERE device = 2;
+step del_s2_wp_release: SELECT debug_waitpoint_release('freeze_chunk_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step del_s2_commit: COMMIT;
+step s1_freeze: <... completed>
+freeze_chunk
+------------
+t           
+(1 row)
+
+step del_s2_query: SELECT * FROM measurements ORDER BY 1;
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 03 10:30:00 2020 PST|     1|   1
+(1 row)
+
+step s1_status: SELECT ch.status  FROM _timescaledb_catalog.chunk ch 
+                   WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable 
+                   WHERE table_name = 'measurements');
+status
+------
+     4
+(1 row)
+
+
+starting permutation: sel_s2_wp_enable sel_s2_query sel_s2_wp_release s1_freeze sel_s2_commit s1_status
+step sel_s2_wp_enable: SELECT debug_waitpoint_enable('freeze_chunk_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step sel_s2_query: BEGIN; SELECT * FROM measurements ORDER BY 1;
+time                        |device|temp
+----------------------------+------+----
+Fri Jan 03 10:30:00 2020 PST|     1|   1
+Fri Jan 03 11:30:00 2020 PST|     2|   2
+(2 rows)
+
+step sel_s2_wp_release: SELECT debug_waitpoint_release('freeze_chunk_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q;
+freeze_chunk
+------------
+t           
+(1 row)
+
+step sel_s2_commit: COMMIT;
+step s1_status: SELECT ch.status  FROM _timescaledb_catalog.chunk ch 
+                   WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable 
+                   WHERE table_name = 'measurements');
+status
+------
+     4
+(1 row)
+
+
+starting permutation: LockChunk1 comp_s2_compress s1_freeze UnlockChunk comp_s2_commit s1_status
+step LockChunk1: 
+  BEGIN;
+  SELECT
+    lock_chunktable(format('%I.%I',ch.schema_name, ch.table_name))
+  FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
+  WHERE ch.hypertable_id = ht.id AND ht.table_name like 'measurements'
+  ORDER BY ch.id LIMIT 1;
+
+lock_chunktable
+---------------
+               
+(1 row)
+
+step comp_s2_compress: BEGIN; SELECT CASE WHEN compress_chunk(ch) IS NOT NULL THEN 'Success' ELSE 'Failed' END  as COL FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step UnlockChunk: ROLLBACK;
+step comp_s2_compress: <... completed>
+col    
+-------
+Success
+(1 row)
+
+step comp_s2_commit: COMMIT;
+step s1_freeze: <... completed>
+freeze_chunk
+------------
+t           
+(1 row)
+
+step s1_status: SELECT ch.status  FROM _timescaledb_catalog.chunk ch 
+                   WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable 
+                   WHERE table_name = 'measurements');
+status
+------
+     4
+(1 row)
+

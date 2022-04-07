@@ -80,3 +80,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk_table(
        schema_name NAME,
        table_name NAME)
 RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_create_empty_table' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.freeze_chunk(
+   chunk REGCLASS)
+RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_freeze_chunk' LANGUAGE C VOLATILE;

@@ -2,6 +2,7 @@ DROP VIEW _timescaledb_internal.hypertable_chunk_local_size;
 DROP FUNCTION _timescaledb_internal.relation_size(relation REGCLASS);
 DROP INDEX _timescaledb_catalog.chunk_constraint_dimension_slice_id_idx;
 CREATE INDEX chunk_constraint_chunk_id_dimension_slice_id_idx ON _timescaledb_catalog.chunk_constraint (chunk_id, dimension_slice_id);
+DROP FUNCTION _timescaledb_internal.freeze_chunk(chunk REGCLASS);
 
 DO
 $$
@@ -100,3 +101,4 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_lo
         REFERENCES _timescaledb_catalog.continuous_agg(mat_hypertable_id) ON DELETE CASCADE;
 
 ANALYZE _timescaledb_catalog.continuous_agg;
+
