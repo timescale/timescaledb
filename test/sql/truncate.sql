@@ -110,3 +110,40 @@ TRUNCATE "two_Partitions", truncate_normal CASCADE;
 SELECT * FROM test.show_subtables('"two_Partitions"');
 SELECT * FROM "two_Partitions";
 SELECT * FROM truncate_normal, truncate_nested;
+
+-- test TRUNCATE can be performed by a user 
+-- with TRUNCATE privilege who is not table owner
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE ROLE owner WITH LOGIN;
+CREATE ROLE truncator WITH LOGIN;
+CREATE DATABASE test_trunc_ht OWNER owner;
+
+\c test_trunc_ht :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+
+\c test_trunc_ht owner
+CREATE TABLE test_hypertable (time TIMESTAMP WITHOUT TIME ZONE NOT NULL, value DOUBLE PRECISION);
+SELECT create_hypertable('test_hypertable', 'time');
+
+-- fail since we don't have TRUNCATE privileges yet
+\set ON_ERROR_STOP 0
+
+\c test_trunc_ht truncator
+TRUNCATE TABLE test_hypertable;
+
+\set ON_ERROR_STOP 1
+
+\c test_trunc_ht owner
+GRANT TRUNCATE ON test_hypertable TO truncator;
+
+-- now succeed after privilege was granted
+\c test_trunc_ht truncator;
+TRUNCATE TABLE test_hypertable;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test_trunc_ht;
+DROP ROLE owner;
+DROP ROLE truncator;
