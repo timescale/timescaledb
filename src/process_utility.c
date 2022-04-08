@@ -1061,8 +1061,6 @@ process_truncate(ProcessUtilityArgs *args)
 
 						agg_status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
-						ts_hypertable_permissions_check_by_id(ht->fd.id);
-
 						if ((agg_status & HypertableIsMaterialization) != 0)
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
