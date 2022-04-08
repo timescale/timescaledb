@@ -4,3 +4,4 @@
 /ordered_append_join-*.sql
 /transparent_decompress_chunk-*.sql
 /continuous_aggs_compression-*.sql
+/dist_gapfill_pushdown-*.sql
