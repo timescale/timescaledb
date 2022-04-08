@@ -10,7 +10,7 @@ TEST_VERSION=${TEST_VERSION:-v2}
 TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_update_test' || mkdir -p /tmp/${RANDOM})}
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
-PG_VERSION=${PG_VERSION:-12.0}
+PG_VERSION=${PG_VERSION:-14.2}
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
@@ -95,7 +95,7 @@ docker_pgtest() {
     local database=${3:-single}
     set +e
     >&2 echo -e "\033[1m$1\033[0m: $2"
-    if ! docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database -f $2 > ${TEST_TMPDIR}/$1.out
+    if ! docker exec $1 psql -X -v ECHO=ALL -v ON_ERROR_STOP=1 -h localhost -U postgres -d $database $PGOPTS -f $2 > ${TEST_TMPDIR}/$1.out
     then
       docker_logs $1
       exit 1
@@ -110,7 +110,7 @@ docker_pgdiff_all() {
     docker_pgtest ${CONTAINER_UPDATED} $1 $database
     docker_pgtest ${CONTAINER_CLEAN_RESTORE} $1 $database
     docker_pgtest ${CONTAINER_CLEAN_RERUN} $1 $database
-    echo "Diffing updated container vs restored. Updated: ${CONTAINER_UPDATED} restored: ${CONTAINER_CLEAN_RESTORE}" 
+    echo "Diffing updated container vs restored. Updated: ${CONTAINER_UPDATED} restored: ${CONTAINER_CLEAN_RESTORE}"
     diff -u ${TEST_TMPDIR}/${CONTAINER_UPDATED}.out ${TEST_TMPDIR}/${CONTAINER_CLEAN_RESTORE}.out | tee ${diff_file1}
     if [ ! -s ${diff_file1} ]; then
       rm ${diff_file1}
