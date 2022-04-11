@@ -19,6 +19,7 @@
 #include <commands/tablecmds.h>
 #include <commands/cluster.h>
 #include <commands/event_trigger.h>
+#include <commands/prepare.h>
 #include <access/htup_details.h>
 #include <commands/alter.h>
 #include <access/xact.h>
@@ -68,6 +69,10 @@
 #include "compression_with_clause.h"
 #include "partitioning.h"
 #include "debug_point.h"
+
+#ifdef USE_TELEMETRY
+#include "telemetry/functions.h"
+#endif
 
 #include "cross_module_fn.h"
 
@@ -3941,6 +3946,25 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+static DDLResult
+preprocess_execute(ProcessUtilityArgs *args)
+{
+#ifdef USE_TELEMETRY
+	ListCell *lc;
+	ExecuteStmt *stmt = (ExecuteStmt *) args->parsetree;
+	PreparedStatement *entry = FetchPreparedStatement(stmt->name, false);
+	if (!entry)
+		return DDL_CONTINUE;
+
+	foreach (lc, entry->plansource->query_list)
+	{
+		Query *query = lfirst_node(Query, lc);
+		ts_telemetry_function_info_gather(query);
+	}
+#endif
+	return DDL_CONTINUE;
+}
+
 /*
  * Handle DDL commands before they have been processed by PostgreSQL.
  */
@@ -4021,6 +4045,10 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_CreateTableAsStmt:
 			handler = process_create_table_as;
+			break;
+		case T_ExecuteStmt:
+			check_read_only = false;
+			handler = preprocess_execute;
 			break;
 		default:
 			handler = NULL;

@@ -5,6 +5,9 @@
 --telemetry tests that require a community license
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
+-- function call info size is too variable for this test, so disable it
+SET timescaledb.telemetry_level='no_functions';
+
 SELECT setseed(1);
 
 -- Create a materialized view from the telemetry report so that we
