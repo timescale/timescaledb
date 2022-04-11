@@ -12,6 +12,7 @@
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
+#include <utils/regproc.h>
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
@@ -29,6 +30,7 @@
 #include "bgw_policy/policy.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "stats.h"
+#include "functions.h"
 
 #include "cross_module_fn.h"
 
@@ -406,6 +408,43 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 	return pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 }
 
+static void
+add_function_call_telemetry(JsonbParseState *state)
+{
+	fn_telemetry_entry_vec *functions;
+	const char *visible_extensions[(sizeof(related_extensions) / sizeof(char *)) + 1];
+
+	if (!ts_function_telemetry_on())
+	{
+		JsonbValue value = {
+			.type = jbvNull,
+		};
+
+		pushJsonbValue(&state, WJB_VALUE, &value);
+		return;
+	}
+
+	visible_extensions[0] = "timescaledb";
+	for (int i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
+		visible_extensions[i] = related_extensions[i - 1];
+
+	functions =
+		ts_function_telemetry_read(visible_extensions, sizeof(visible_extensions) / sizeof(char *));
+
+	pushJsonbValue(&state, WJB_BEGIN_OBJECT, NULL);
+
+	if (functions)
+	{
+		for (uint32 i = 0; i < functions->num_elements; i++)
+		{
+			FnTelemetryEntry *entry = fn_telemetry_entry_vec_at(functions, i);
+			ts_jsonb_add_int64(state, format_procedure(entry->fn), entry->count);
+		}
+	}
+
+	pushJsonbValue(&state, WJB_END_OBJECT, NULL);
+}
+
 #define REQ_RELS "relations"
 #define REQ_RELS_TABLES "tables"
 #define REQ_RELS_PARTITIONED_TABLES "partitioned_tables"
@@ -415,6 +454,7 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 #define REQ_RELS_DISTRIBUTED_HYPERTABLES_AN "distributed_hypertables_access_node"
 #define REQ_RELS_DISTRIBUTED_HYPERTABLES_DN "distributed_hypertables_data_node"
 #define REQ_RELS_CONTINUOUS_AGGS "continuous_aggregates"
+#define REQ_FUNCTIONS_USED "functions_used"
 
 static Jsonb *
 build_telemetry_report()
@@ -584,6 +624,13 @@ build_telemetry_report()
 	ts_telemetry_metadata_add_values(parse_state);
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
+	/* Add function call telemetry */
+	key.type = jbvString;
+	key.val.string.val = REQ_FUNCTIONS_USED;
+	key.val.string.len = strlen(REQ_FUNCTIONS_USED);
+	pushJsonbValue(&parse_state, WJB_KEY, &key);
+	add_function_call_telemetry(parse_state);
+
 	/* end of telemetry object */
 	result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
@@ -706,6 +753,8 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 		goto cleanup;
 	}
 
+	ts_function_telemetry_reset_counts();
+
 	/*
 	 * Do the version-check. Response is the body of a well-formed HTTP
 	 * response, since otherwise the previous line will throw an error.
@@ -751,6 +800,6 @@ Datum
 ts_telemetry_get_report_jsonb(PG_FUNCTION_ARGS)
 {
 	Jsonb *jb = build_telemetry_report();
-
+	ts_function_telemetry_reset_counts();
 	PG_RETURN_JSONB_P(jb);
 }
