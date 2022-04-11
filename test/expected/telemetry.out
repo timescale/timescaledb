@@ -375,6 +375,7 @@ WHERE key != 'os_name_pretty';
  data_volume
  db_metadata
  build_os_name
+ functions_used
  install_method
  installed_time
  last_tuned_time
@@ -393,7 +394,7 @@ WHERE key != 'os_name_pretty';
  num_user_defined_actions
  build_architecture_bit_size
  num_continuous_aggs_policies
-(27 rows)
+(28 rows)
 
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT t FROM get_telemetry_report() t;
@@ -459,6 +460,107 @@ SELECT :'installed_time' = :'installed_time2' AS equal, length(:'installed_time'
 (1 row)
 
 RESET datestyle;
+-- test function call telemetry
+CREATE FUNCTION not_visible_in_telemetry() RETURNS INT AS $$
+    SELECT 1;
+$$ LANGUAGE SQL;
+-- drain old function call telemetry so we have fixed out put;
+SELECT FROM get_telemetry_report();
+--
+(1 row)
+
+-- call some arbirary functions
+SELECT 1 + 1, not_visible_in_telemetry(), 1 + 1, abs(-1), not_visible_in_telemetry()
+WHERE 1 + 1 = 2;
+ ?column? | not_visible_in_telemetry | ?column? | abs | not_visible_in_telemetry 
+----------+--------------------------+----------+-----+--------------------------
+        2 |                        1 |        2 |   1 |                        1
+(1 row)
+
+-- call some aggregates
+SELECT min(not_visible_in_telemetry()), sum(not_visible_in_telemetry());
+ min | sum 
+-----+-----
+   1 |   1
+(1 row)
+
+-- check that we can record from a prepared statement
+PREPARE record_from_prepared AS SELECT 1 - 1;
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+EXECUTE record_from_prepared;
+ ?column? 
+----------
+        0
+(1 row)
+
+DEALLOCATE record_from_prepared;
+SELECT get_telemetry_report()->'functions_used';
+                                                                                                        ?column?                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"abs(integer)": 1, "min(integer)": 1, "sum(integer)": 1, "get_telemetry_report()": 1, "int4eq(integer,integer)": 1, "int4mi(integer,integer)": 11, "int4pl(integer,integer)": 3, "jsonb_object_field(jsonb,text)": 1}
+(1 row)
+
+-- check the report again to see if resetting works
+SELECT get_telemetry_report()->'functions_used';
+                              ?column?                              
+--------------------------------------------------------------------
+ {"get_telemetry_report()": 1, "jsonb_object_field(jsonb,text)": 1}
+(1 row)
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.metadata;
 SET timescaledb.telemetry_level=off;
@@ -483,3 +585,7 @@ SELECT key from _timescaledb_catalog.metadata;
 -----
 (0 rows)
 
+\set ON_ERROR_STOP 0
+-- test that the telemetry gathering code doesn't break nonexistent statements
+EXECUTE noexistent_statement;
+ERROR:  prepared statement "noexistent_statement" does not exist

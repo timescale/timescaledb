@@ -12,6 +12,7 @@
 
 #ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);
+extern bool ts_function_telemetry_on(void);
 #endif
 
 extern bool ts_guc_enable_optimizations;
