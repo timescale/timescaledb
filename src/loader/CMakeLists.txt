@@ -4,6 +4,7 @@ set(SOURCES
     bgw_counter.c
     bgw_launcher.c
     bgw_interface.c
+    function_telemetry.c
     lwlocks.c
     seclabel.c)
 

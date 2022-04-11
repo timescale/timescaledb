@@ -210,6 +210,43 @@ SELECT :'installed_time' = :'installed_time2' AS equal, length(:'installed_time'
 
 RESET datestyle;
 
+-- test function call telemetry
+CREATE FUNCTION not_visible_in_telemetry() RETURNS INT AS $$
+    SELECT 1;
+$$ LANGUAGE SQL;
+
+-- drain old function call telemetry so we have fixed out put;
+SELECT FROM get_telemetry_report();
+
+-- call some arbirary functions
+SELECT 1 + 1, not_visible_in_telemetry(), 1 + 1, abs(-1), not_visible_in_telemetry()
+WHERE 1 + 1 = 2;
+
+-- call some aggregates
+SELECT min(not_visible_in_telemetry()), sum(not_visible_in_telemetry());
+
+-- check that we can record from a prepared statement
+PREPARE record_from_prepared AS SELECT 1 - 1;
+
+-- execute 10 times to make sure turning it into generic plan works
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+EXECUTE record_from_prepared;
+
+DEALLOCATE record_from_prepared;
+
+SELECT get_telemetry_report()->'functions_used';
+
+-- check the report again to see if resetting works
+SELECT get_telemetry_report()->'functions_used';
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.metadata;
 
@@ -223,3 +260,7 @@ SELECT * FROM _timescaledb_internal.test_privacy();
 
 -- To make sure nothing was sent, we check the UUID table to make sure no exported UUID row was created
 SELECT key from _timescaledb_catalog.metadata;
+
+\set ON_ERROR_STOP 0
+-- test that the telemetry gathering code doesn't break nonexistent statements
+EXECUTE noexistent_statement;
