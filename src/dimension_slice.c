@@ -734,8 +734,8 @@ ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id,
 	ts_scan_iterator_start_or_restart_scan(it);
 	ti = ts_scan_iterator_next(it);
 	Assert(ti);
-	Assert(ts_scan_iterator_next(it) == NULL);
-	return ts_dimension_slice_from_tuple(ti);
+	Assert(ts_scan_iterator_next(it) == NULL); /* This is a heavy call, consider removing it */
+	return ti ? ts_dimension_slice_from_tuple(ti) : NULL;
 }
 
 DimensionSlice *
