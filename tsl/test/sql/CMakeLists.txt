@@ -10,18 +10,19 @@ set(TEST_CONFIGURATIONS postgresql max_bgw_8)
 set(TEST_FILES_postgresql
     bgw_custom.sql
     bgw_policy.sql
-    compression_bgw.sql
-    compression_permissions.sql
-    compression_qualpushdown.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_permissions.sql
     cagg_policy.sql
     cagg_refresh.sql
     cagg_watermark.sql
+    compressed_collation.sql
+    compression_bgw.sql
+    compression_permissions.sql
+    compression_qualpushdown.sql
     dist_views.sql
-    exp_cagg_next_gen.sql
     exp_cagg_monthly.sql
+    exp_cagg_next_gen.sql
     exp_cagg_origin.sql
     exp_cagg_timezone.sql
     move.sql
