@@ -221,7 +221,7 @@ simple8brle_serialized_recv(StringInfo buffer)
 	data->num_elements = num_elements;
 	data->num_blocks = num_blocks;
 
-	for (i = 0; i < data->num_blocks + num_selector_slots; i++)
+	for (i = 0; i < num_blocks + num_selector_slots; i++)
 		data->slots[i] = pq_getmsgint64(buffer);
 
 	return data;
