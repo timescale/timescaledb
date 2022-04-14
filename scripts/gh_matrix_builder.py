@@ -111,7 +111,7 @@ def macos_config(overrides):
     "tsdb_build_args": "-DASSERTIONS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
-    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher pg_dump remote_connection'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher pg_dump remote_connection compressed_collation'",
     "extra_packages": "",
   })
   base_config.update(overrides)

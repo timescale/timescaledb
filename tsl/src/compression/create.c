@@ -270,6 +270,9 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	for (attno = 0; attno < tupdesc->natts; attno++)
 	{
 		Oid attroid = InvalidOid;
+		int32 typmod = -1;
+		Oid collid = 0;
+
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno);
 		ColumnDef *coldef;
 		if (attr->attisdropped)
@@ -287,6 +290,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 			if (segorder_colindex[attno] <= seg_attnolen)
 			{
 				attroid = attr->atttypid; /*segment by columns have original type */
+				typmod = attr->atttypmod;
+				collid = attr->attcollation;
 				cc->col_meta[colno].segmentby_column_index = segorder_colindex[attno];
 			}
 			else
@@ -307,7 +312,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		{
 			cc->col_meta[colno].algo_id = 0; // invalid algo number
 		}
-		coldef = makeColumnDef(NameStr(attr->attname), attroid, -1 /*typmod*/, 0 /*collation*/);
+		coldef = makeColumnDef(NameStr(attr->attname), attroid, typmod, collid);
 		cc->coldeflist = lappend(cc->coldeflist, coldef);
 		colno++;
 	}
