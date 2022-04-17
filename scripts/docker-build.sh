@@ -77,12 +77,13 @@ build_timescaledb()
     # Build and install the extension with debug symbols and assertions
     tar -c -C ${BASE_DIR} {cmake,src,sql,test,scripts,tsl,version.config,CMakeLists.txt,timescaledb.control.in} | docker cp - ${BUILD_CONTAINER_NAME}:/build/
     if ! docker exec -u root ${BUILD_CONTAINER_NAME} /bin/bash -c " \
-    	cd /build/debug \
-    	&& cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src \
-    	&& make && make install \
-    	&& echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample \
-    	&& echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample \
-    	&& cd / && rm -rf /build"
+        cd /build/debug \
+        && git config --global --add safe.directory /src \
+        && cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src \
+        && make && make install \
+        && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample \
+        && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample \
+        && cd / && rm -rf /build"
     then
       echo "Building timescaledb failed"
       return 1
