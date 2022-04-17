@@ -69,13 +69,13 @@
 #include "indexing.h"
 #include "reorder.h"
 
-extern void timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
-								  Oid destination_tablespace, Oid index_tablespace);
+static void reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
+						Oid destination_tablespace, Oid index_tablespace);
 
 #define REORDER_ACCESS_EXCLUSIVE_DEADLOCK_TIMEOUT "101000"
 
-static void timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
-									   Oid destination_tablespace, Oid index_tablespace);
+static void rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
+							 Oid destination_tablespace, Oid index_tablespace);
 static void copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 						   bool *pSwapToastByContent, TransactionId *pFreezeXid,
 						   MultiXactId *pCutoffMulti);
@@ -377,12 +377,12 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	 * transaction) to already have that mark set
 	 */
 	ts_chunk_index_mark_clustered(cim.chunkoid, cim.indexoid);
-	timescale_reorder_rel(cim.chunkoid,
-						  cim.indexoid,
-						  verbose,
-						  wait_id,
-						  destination_tablespace,
-						  index_tablespace);
+	reorder_rel(cim.chunkoid,
+				cim.indexoid,
+				verbose,
+				wait_id,
+				destination_tablespace,
+				index_tablespace);
 	ts_cache_release(hcache);
 }
 
@@ -419,7 +419,7 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid, ChunkInde
 /* The following functions are based on their equivalents in postgres's cluster.c */
 
 /*
- * timescale_reorder_rel
+ * reorder_rel
  *
  * This clusters the table by creating a new, clustered table and
  * swapping the relfilenodes of the new table and the old table, so
@@ -427,9 +427,9 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid, ChunkInde
  *
  * Indexes are rebuilt in the same manner.
  */
-void
-timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
-					  Oid destination_tablespace, Oid index_tablespace)
+static void
+reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destination_tablespace,
+			Oid index_tablespace)
 {
 	Relation OldHeap;
 	HeapTuple tuple;
@@ -528,19 +528,14 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 	/* Check heap and index are valid to cluster on */
 	check_index_is_clusterable(OldHeap, indexOid, true, ExclusiveLock);
 
-	/* timescale_rebuild_relation does all the dirty work */
-	timescale_rebuild_relation(OldHeap,
-							   indexOid,
-							   verbose,
-							   wait_id,
-							   destination_tablespace,
-							   index_tablespace);
+	/* rebuild_relation does all the dirty work */
+	rebuild_relation(OldHeap, indexOid, verbose, wait_id, destination_tablespace, index_tablespace);
 
-	/* NB: timescale_rebuild_relation does table_close() on OldHeap */
+	/* NB: rebuild_relation does table_close() on OldHeap */
 }
 
 /*
- * timescale_rebuild_relation: rebuild an existing relation in index or physical order
+ * rebuild_relation: rebuild an existing relation in index or physical order
  *
  * OldHeap: table to rebuild --- must be opened and exclusive-locked!
  * indexOid: index to cluster by, or InvalidOid to rewrite in physical order.
@@ -548,8 +543,8 @@ timescale_reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
  * NB: this routine closes OldHeap at the right time; caller should not.
  */
 static void
-timescale_rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
-						   Oid destination_tablespace, Oid index_tablespace)
+rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
+				 Oid destination_tablespace, Oid index_tablespace)
 {
 	Oid tableOid = RelationGetRelid(OldHeap);
 	Oid tableSpace = OidIsValid(destination_tablespace) ? destination_tablespace :
