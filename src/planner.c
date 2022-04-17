@@ -1277,8 +1277,8 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 }
 
 static void
-timescale_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
-								  RelOptInfo *output_rel, void *extra)
+timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
+									RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra)
 {
 	Query *parse = root->parse;
 	bool partials_found = false;
@@ -1471,7 +1471,7 @@ _planner_init(void)
 	get_relation_info_hook = timescaledb_get_relation_info_hook;
 
 	prev_create_upper_paths_hook = create_upper_paths_hook;
-	create_upper_paths_hook = timescale_create_upper_paths_hook;
+	create_upper_paths_hook = timescaledb_create_upper_paths_hook;
 }
 
 void

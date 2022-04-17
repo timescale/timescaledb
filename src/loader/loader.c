@@ -597,7 +597,7 @@ loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
 }
 
 static void
-timescale_shmem_startup_hook(void)
+timescaledb_shmem_startup_hook(void)
 {
 	if (prev_shmem_startup_hook)
 		prev_shmem_startup_hook();
@@ -656,7 +656,7 @@ _PG_init(void)
 	prev_shmem_startup_hook = shmem_startup_hook;
 
 	post_parse_analyze_hook = post_analyze_hook;
-	shmem_startup_hook = timescale_shmem_startup_hook;
+	shmem_startup_hook = timescaledb_shmem_startup_hook;
 
 	/* register utility hook to handle a distributed database drop */
 	prev_ProcessUtility_hook = ProcessUtility_hook;
