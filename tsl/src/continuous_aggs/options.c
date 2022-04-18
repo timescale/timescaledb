@@ -233,21 +233,26 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 	if (!with_clause_options[ContinuousEnabled].is_default)
 		elog(ERROR, "cannot disable continuous aggregates");
 
-	/* whenever materialized_only is specified, we force a view defintion rewrite
-	 * Do not optimize. post-update.sql often relies on this behavior to update
-	 * cagg view defintions
-	 */
 	if (!with_clause_options[ContinuousViewOptionMaterializedOnly].is_default)
 	{
+		bool materialized_only =
+			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
+
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
-		agg->data.materialized_only =
-			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
+
+		if (materialized_only == agg->data.materialized_only)
+		{
+			/* nothing changed, so just return */
+			ts_cache_release(hcache);
+			return;
+		}
+
 		Assert(mat_ht != NULL);
 
-		cagg_update_view_definition(agg, mat_ht);
-		update_materialized_only(agg, agg->data.materialized_only);
+		cagg_flip_realtime_view_definition(agg, mat_ht);
+		update_materialized_only(agg, materialized_only);
 		ts_cache_release(hcache);
 	}
 	if (!with_clause_options[ContinuousViewOptionCompress].is_default)

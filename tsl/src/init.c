@@ -148,6 +148,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_drop_dist_ht_invalidation_trigger = remote_drop_dist_ht_invalidation_trigger,
 	.invalidation_process_hypertable_log = tsl_invalidation_process_hypertable_log,
 	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
+	.cagg_try_repair = tsl_cagg_try_repair,
 
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,

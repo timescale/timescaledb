@@ -3,6 +3,7 @@
 set -o pipefail
 
 SCRIPT_DIR=$(dirname $0)
+BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_repair_test' || mkdir -p /tmp/${RANDOM})}
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-repair_test}
@@ -22,7 +23,7 @@ for tag in ${TAGS}; do
 done
 
 # Need to wait on each pid in a loop to return the exit status of each
-for pid in ${!tests[@]}; do
+for pid in "${!tests[@]}"; do
     echo "Waiting for test pid $pid"
     wait $pid
     exit_code=$?
@@ -32,10 +33,12 @@ for pid in ${!tests[@]}; do
         FAIL_COUNT=$((FAIL_COUNT + 1))
         FAILED_TEST=${tests[$pid]}
         if [ -f ${TEST_TMPDIR}/${FAILED_TEST}.log ]; then
-            echo "###### Failed test log below #####"
+            echo "###### Failed $UPDATE_TO_TAG test log below #####"
             cat ${TEST_TMPDIR}/${FAILED_TEST}.log
         fi
     fi
+    echo "###### test log $UPDATE_TO_TAG below #####"
+    cat ${TEST_TMPDIR}/${tests[$pid]}.log
 done
 
 if [ "$KEEP_TEMP_DIRS" = "false" ]; then

@@ -177,3 +177,5 @@ SELECT DISTINCT
   WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
 
 DROP VIEW slices;
+
+\ir setup.repair.cagg.sql

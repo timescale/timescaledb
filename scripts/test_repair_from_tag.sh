@@ -14,7 +14,7 @@ UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
 
 # Extra options to pass to psql
-PGOPTS="-v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=false"
+PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v TEST_REPAIR=true -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=false"
 PSQL="psql -qX $PGOPTS"
 
 DOCKEROPTS="--env TIMESCALEDB_TELEMETRY=off --env POSTGRES_HOST_AUTH_METHOD=trust"
@@ -39,14 +39,15 @@ docker_pgcmd() {
              d)
                  database=$OPTARG
                  ;;
+             *)
+                 ;;
         esac
     done
     shift $((OPTIND-1))
 
     echo "executing pgcmd on database $database with container $1"
     set +e
-    docker_exec $1 "$PSQL -h localhost -U postgres -d $database -v VERBOSITY=verbose -c \"$2\""
-    if [ $? -ne 0 ]; then
+    if ! docker_exec $1 "$PSQL -h localhost -U postgres -d $database -v VERBOSITY=verbose -c \"$2\""; then
       docker_logs $1
       exit 1
     fi
@@ -60,6 +61,8 @@ docker_pgscript() {
         case $opt in
              d)
                  database=$OPTARG
+                 ;;
+             *)
                  ;;
         esac
     done
@@ -80,12 +83,10 @@ docker_run_vol() {
 
 wait_for_pg() {
     set +e
-    for i in {1..20}; do
+    for _ in {1..20}; do
         sleep 1
 
-        docker_exec $1 "pg_isready -U postgres"
-
-        if [[ $? == 0 ]] ; then
+        if docker_exec $1 "pg_isready -U postgres"; then
             # this makes the test less flaky, although not
             # ideal. Apperently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
@@ -117,6 +118,7 @@ docker_pgscript ${CONTAINER_ORIG} /src/test/sql/updates/setup.repair.sql
 docker rm -f ${CONTAINER_ORIG}
 
 docker_run_vol ${CONTAINER_UPDATED} ${UPDATE_VOLUME}:/var/lib/postgresql/data ${UPDATE_TO_IMAGE}:${UPDATE_TO_TAG}
+
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE"
 docker_pgscript ${CONTAINER_UPDATED} /src/test/sql/updates/post.repair.sql
 

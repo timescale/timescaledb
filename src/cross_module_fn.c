@@ -80,6 +80,7 @@ CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
 CROSSMODULE_WRAPPER(drop_dist_ht_invalidation_trigger);
 CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
 CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
+CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(data_node_ping);
 CROSSMODULE_WRAPPER(data_node_block_new_chunks);
@@ -394,6 +395,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_drop_dist_ht_invalidation_trigger = NULL,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
+	.cagg_try_repair = error_no_default_fn_pg_community,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
