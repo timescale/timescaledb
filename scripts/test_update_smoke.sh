@@ -1,4 +1,7 @@
 #!/bin/bash
+# shellcheck disable=SC2129,SC2230
+# SC2129: Consider using { cmd1; cmd2; } >> file instead of individual redirects.
+# SC2230: which is non-standard. Use builtin 'command -v' instead.
 
 # Run smoke tests to test that updating between versions work.
 #
@@ -35,7 +38,7 @@
 
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-SCRATCHDIR=`mktemp -d -t 'smoketest-XXXX'`
+SCRATCHDIR=$(mktemp -d -t 'smoketest-XXXX')
 LOGFILE="$SCRATCHDIR/update-test.log"
 DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
@@ -60,16 +63,18 @@ do
         t)
             UPDATE_TO_TAG=$OPTARG
             ;;
+        *)
+            ;;
     esac
 done
 
 shift $((OPTIND-1))
 
-echo "**** pg_dump at   " `which pg_dump`
-echo "**** pg_restore at" `which pg_restore`
+echo "**** pg_dump at   " "$(which pg_dump)"
+echo "**** pg_restore at" "$(which pg_restore)"
 
 # Extra options to pass to psql
-PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=false -v WITH_CHUNK=false"
+PGOPTS="-v TEST_VERSION=${TEST_VERSION} -v WITH_SUPERUSER=${WITH_SUPERUSER} -v WITH_ROLES=${WITH_ROLES} -v WITH_CHUNK=false"
 PSQL="psql -qX $PGOPTS"
 
 # If we are providing a URI for the connection, we parse it here and
@@ -81,6 +86,7 @@ PSQL="psql -qX $PGOPTS"
 # set PGPASSWORD or has the password in a .pgpass file, it will be
 # picked up and used for the connection.
 if [[ $# -gt 0 ]]; then
+    # shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
     parts=($(echo $1 | perl -mURI::Split=uri_split -ne '@F = uri_split($_); print join(" ", split(qr/[:@]/, $F[1]), substr($F[2], 1))'))
     export PGUSER=${parts[0]}
     if [[ ${#parts[@]} -eq 5 ]]; then
@@ -126,10 +132,11 @@ cd ${BASE_DIR}/test/sql/updates
 
 $PSQL -c '\conninfo'
 
+# shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
 missing=($(missing_versions $UPDATE_FROM_TAG $UPDATE_TO_TAG))
 if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "ERROR: Missing version(s) ${missing[@]} of 'timescaledb'"
-    echo "Available versions: " $($PSQL -tc "SELECT version FROM pg_available_extension_versions WHERE name = 'timescaledb'")
+    echo "ERROR: Missing version(s) ${missing[*]} of 'timescaledb'"
+    echo "Available versions: " "$($PSQL -tc "SELECT version FROM pg_available_extension_versions WHERE name = 'timescaledb'")"
     exit 1
 fi
 
@@ -174,7 +181,7 @@ $PSQL -f setup.${TEST_VERSION}.sql >>$LOGFILE 2>&1
 echo "---- Run the post scripts on Clean to get output CleanOut ----"
 $PSQL -f post.${TEST_VERSION}.sql >$CLEAN_OUT
 
-$PSQL -f cleanup.${TEST_VERSION}.sql 2>&1 >>$LOGFILE
+$PSQL -f cleanup.${TEST_VERSION}.sql >>$LOGFILE 2>&1
 
 echo "---- Create a ${UPDATE_TO_TAG} version Restore ----"
 $PSQL -c "DROP EXTENSION IF EXISTS timescaledb CASCADE" >>$LOGFILE 2>&1

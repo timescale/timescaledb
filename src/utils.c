@@ -1092,3 +1092,24 @@ ts_get_node_name(Node *node)
 			return psprintf("Node (%d)", nodeTag(node));
 	}
 }
+
+/*
+ * Implementation marked unused in PostgreSQL lsyscache.c
+ */
+int
+ts_get_relnatts(Oid relid)
+{
+	HeapTuple tp;
+	Form_pg_class reltup;
+	int result;
+
+	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+	if (!HeapTupleIsValid(tp))
+		return InvalidAttrNumber;
+
+	reltup = (Form_pg_class) GETSTRUCT(tp);
+	result = reltup->relnatts;
+
+	ReleaseSysCache(tp);
+	return result;
+}

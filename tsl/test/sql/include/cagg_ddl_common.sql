@@ -1202,3 +1202,73 @@ where view_name = 'test_setting_cagg';
 SELECT count(*) from test_setting_cagg ORDER BY 1;
 
 -- END TEST with multiple settings
+
+-- Test View Target Entries that contain both aggrefs and Vars in the same expression
+CREATE TABLE transactions
+(
+    "time" timestamp with time zone NOT NULL,
+    dummy1 integer,
+    dummy2 integer,
+    dummy3 integer,
+    dummy4 integer,
+    dummy5 integer,
+    amount integer,
+    fiat_value integer
+);
+
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('transactions', 'time', replication_factor => 2);
+\else
+SELECT create_hypertable('transactions', 'time');
+\endif
+
+INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+
+INSERT INTO transactions VALUES ( '2018-01-02 09:30:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:20:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+
+INSERT INTO transactions VALUES ( '2018-11-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 10:40:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 11:50:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 12:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 13:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+
+INSERT INTO transactions VALUES ( '2018-11-02 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-02 10:30:00-08', 0, 0, 0, 0, 0, -1, 10);
+
+CREATE materialized view cashflows(
+    bucket,
+  	amount,
+    cashflow,
+    cashflow2
+) WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only = true
+) AS
+SELECT time_bucket ('1 day', time) AS bucket,
+	amount,
+  CASE
+      WHEN amount < 0 THEN (0 - sum(fiat_value))
+      ELSE sum(fiat_value)
+  END AS cashflow,
+  amount + sum(fiat_value)
+FROM transactions
+GROUP BY bucket, amount;
+
+SELECT h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name AS "PART_VIEW_NAME",
+       direct_view_name AS "DIRECT_VIEW_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cashflows'
+\gset
+
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+\d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
+\d+ "_timescaledb_internal".:"PART_VIEW_NAME"
+\d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
+\d+ 'cashflows'
+
+SELECT * FROM cashflows;

@@ -72,7 +72,7 @@ tsl_process_rename_cmd(Oid relid, Cache *hcache, const RenameStmt *stmt)
 			{
 				ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
 				Assert(ht);
-				cagg_update_view_definition(cagg, ht);
+				cagg_rename_view_columns(cagg);
 			}
 		}
 

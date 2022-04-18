@@ -114,6 +114,7 @@ typedef struct CrossModuleFunctions
 	void (*remote_drop_dist_ht_invalidation_trigger)(int32 raw_hypertable_id);
 	PGFunction invalidation_process_hypertable_log;
 	PGFunction invalidation_process_cagg_log;
+	PGFunction cagg_try_repair;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;

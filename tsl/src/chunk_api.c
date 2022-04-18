@@ -33,6 +33,7 @@
 #include "error_utils.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
+#include "utils.h"
 
 #include "remote/async.h"
 #include "remote/dist_txn.h"
@@ -1389,27 +1390,6 @@ fetch_remote_chunk_stats(Hypertable *ht, FunctionCallInfo fcinfo, bool col_stats
 	ts_dist_cmd_close_response(cmdres);
 }
 
-/*
- * Implementation marked unused in PostgresQL lsyscache.c
- */
-static int
-get_relnatts(Oid relid)
-{
-	HeapTuple tp;
-	Form_pg_class reltup;
-	int result;
-
-	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-	if (!HeapTupleIsValid(tp))
-		return InvalidAttrNumber;
-
-	reltup = (Form_pg_class) GETSTRUCT(tp);
-	result = reltup->relnatts;
-
-	ReleaseSysCache(tp);
-	return result;
-}
-
 static void *
 chunk_api_generate_relstats_context(List *oids)
 {
@@ -1457,7 +1437,7 @@ chunk_api_generate_colstats_context(List *oids, Oid ht_relid)
 
 	ctx->chunk_oids = list_copy(oids);
 	ctx->col_id = 1;
-	ctx->nattrs = get_relnatts(ht_relid);
+	ctx->nattrs = ts_get_relnatts(ht_relid);
 
 	return ctx;
 }

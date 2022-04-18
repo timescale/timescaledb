@@ -13,6 +13,7 @@ accidentally triggering the load of a previous DB version.**
 
 **Bugfixes**
 * #4225 Fix TRUNCATE error as non-owner on hypertable
+* #3899 Fix segfault in Continuous Aggregates
 
 ## 2.6.1 (2022-04-11)
 This release is patch release. We recommend that you upgrade at the next available opportunity.
