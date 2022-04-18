@@ -120,12 +120,10 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
    Delete on _hyper_1_3_chunk
    Delete on _hyper_1_4_chunk
    ->  Hash Join
-         Hash Cond: ("two_Partitions_1".series_1 = "two_Partitions".series_1)
+         Hash Cond: (_hyper_1_1_chunk_1.series_1 = "two_Partitions".series_1)
          ->  HashAggregate
-               Group Key: "two_Partitions_1".series_1
+               Group Key: _hyper_1_1_chunk_1.series_1
                ->  Append
-                     ->  Seq Scan on "two_Partitions" "two_Partitions_1"
-                           Filter: (series_1 > (series_val())::double precision)
                      ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
                            Index Cond: (series_1 > (series_val())::double precision)
                      ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
@@ -137,14 +135,12 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
          ->  Hash
                ->  Seq Scan on "two_Partitions"
    ->  Hash Join
-         Hash Cond: (_hyper_1_1_chunk.series_1 = "two_Partitions_1".series_1)
+         Hash Cond: (_hyper_1_1_chunk.series_1 = _hyper_1_1_chunk_1.series_1)
          ->  Seq Scan on _hyper_1_1_chunk
          ->  Hash
                ->  HashAggregate
-                     Group Key: "two_Partitions_1".series_1
+                     Group Key: _hyper_1_1_chunk_1.series_1
                      ->  Append
-                           ->  Seq Scan on "two_Partitions" "two_Partitions_1"
-                                 Filter: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
@@ -154,14 +150,12 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                            ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
    ->  Hash Join
-         Hash Cond: (_hyper_1_2_chunk.series_1 = "two_Partitions_1".series_1)
+         Hash Cond: (_hyper_1_2_chunk.series_1 = _hyper_1_1_chunk_1.series_1)
          ->  Seq Scan on _hyper_1_2_chunk
          ->  Hash
                ->  HashAggregate
-                     Group Key: "two_Partitions_1".series_1
+                     Group Key: _hyper_1_1_chunk_1.series_1
                      ->  Append
-                           ->  Seq Scan on "two_Partitions" "two_Partitions_1"
-                                 Filter: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
@@ -171,14 +165,12 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                            ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
    ->  Hash Join
-         Hash Cond: (_hyper_1_3_chunk.series_1 = "two_Partitions_1".series_1)
+         Hash Cond: (_hyper_1_3_chunk.series_1 = _hyper_1_1_chunk_1.series_1)
          ->  Seq Scan on _hyper_1_3_chunk
          ->  Hash
                ->  HashAggregate
-                     Group Key: "two_Partitions_1".series_1
+                     Group Key: _hyper_1_1_chunk_1.series_1
                      ->  Append
-                           ->  Seq Scan on "two_Partitions" "two_Partitions_1"
-                                 Filter: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
@@ -188,14 +180,12 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                            ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
    ->  Hash Join
-         Hash Cond: (_hyper_1_4_chunk.series_1 = "two_Partitions_1".series_1)
+         Hash Cond: (_hyper_1_4_chunk.series_1 = _hyper_1_1_chunk_1.series_1)
          ->  Seq Scan on _hyper_1_4_chunk
          ->  Hash
                ->  HashAggregate
-                     Group Key: "two_Partitions_1".series_1
+                     Group Key: _hyper_1_1_chunk_1.series_1
                      ->  Append
-                           ->  Seq Scan on "two_Partitions" "two_Partitions_1"
-                                 Filter: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_1_chunk _hyper_1_1_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_2_chunk _hyper_1_2_chunk_1
@@ -204,7 +194,7 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
                                  Index Cond: (series_1 > (series_val())::double precision)
                            ->  Index Scan using "_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx" on _hyper_1_4_chunk _hyper_1_4_chunk_1
                                  Index Cond: (series_1 > (series_val())::double precision)
-(91 rows)
+(81 rows)
 
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 

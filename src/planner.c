@@ -1042,7 +1042,19 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
-			/* empty child is not of interest */
+			/* When postgres expands an inheritance tree it also adds the
+			 * parent hypertable as child relation. Since for a hypertable the
+			 * parent will never have any data we can mark this relation as
+			 * dummy relation so it gets ignored in later steps. This is only
+			 * relevant for code paths that use the postgres inheritance code
+			 * as we don't include the hypertable as child when expanding the
+			 * hypertable ourself.
+			 * We do exclude distributed hypertables for now to not alter
+			 * the trigger behaviour on access nodes, which would otherwise
+			 * no longer fire.
+			 */
+			if (root->parse->commandType == CMD_DELETE && !hypertable_is_distributed(ht))
+				mark_dummy_rel(rel);
 			break;
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
@@ -1260,7 +1272,7 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			if (mt->operation == CMD_INSERT)
 #endif
 			{
-				RangeTblEntry *rte = planner_rt_fetch(linitial_int(mt->resultRelations), root);
+				RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 				Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
 				if (ht && (mt->operation == CMD_INSERT || !hypertable_is_distributed(ht)))
