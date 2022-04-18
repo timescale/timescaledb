@@ -606,7 +606,7 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	}
 #endif
 
-	Index rti = linitial_int(mtpath->resultRelations);
+	Index rti = mtpath->nominalRelation;
 
 	if (root->parse->onConflict && OidIsValid(root->parse->onConflict->constraint))
 		ereport(ERROR,

@@ -46,7 +46,6 @@ set(TEST_FILES
     tableam.sql
     tablespace.sql
     timestamp.sql
-    triggers.sql
     truncate.sql
     upsert.sql
     util.sql
@@ -67,6 +66,7 @@ set(TEST_TEMPLATES
     plan_expand_hypertable.sql.in
     plan_hypertable_inline.sql.in
     rowsecurity.sql.in
+    triggers.sql.in
     update.sql.in)
 
 # tests that fail or are unreliable when run in parallel bgw tests need to run
