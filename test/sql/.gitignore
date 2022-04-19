@@ -3,6 +3,7 @@
 /append-*.sql
 /cluster-*.sql
 /constraint-*.sql
+/cursor-*.sql
 /copy-*.sql
 /ddl-*.sql
 /delete-*.sql
