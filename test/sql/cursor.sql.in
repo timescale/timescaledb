@@ -13,14 +13,9 @@ INSERT INTO cursor_test SELECT '2002-01-01',1,0.5;
 BEGIN;
 DECLARE c1 SCROLL CURSOR FOR SELECT * FROM cursor_test;
 FETCH NEXT FROM c1;
--- this will produce an error because PostgreSQL checks
+-- this will produce an error on PG < 14 because PostgreSQL checks
 -- for the existence of a scan node with the relation id for every relation
 -- used in the update plan in the plan of the cursor.
---
--- constraint exclusion will make this easier to hit
--- because constraint exclusion only works for SELECT
--- and UPDATE statements will still have parent tables in
--- the generated plans
 UPDATE cursor_test SET temp = 0.7 WHERE CURRENT OF c1;
 COMMIT;
 

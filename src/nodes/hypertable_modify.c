@@ -127,7 +127,7 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	 * we need to set the hypertable as the rootRelation otherwise
 	 * statement trigger defined only on the hypertable will not fire.
 	 */
-	if (mt->operation == CMD_DELETE)
+	if (mt->operation == CMD_DELETE || mt->operation == CMD_UPDATE)
 		mt->rootRelation = mt->nominalRelation;
 
 	ps = ExecInitNode(&mt->plan, estate, eflags);

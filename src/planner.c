@@ -1042,19 +1042,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
-			/* When postgres expands an inheritance tree it also adds the
-			 * parent hypertable as child relation. Since for a hypertable the
-			 * parent will never have any data we can mark this relation as
-			 * dummy relation so it gets ignored in later steps. This is only
-			 * relevant for code paths that use the postgres inheritance code
-			 * as we don't include the hypertable as child when expanding the
-			 * hypertable ourself.
-			 * We do exclude distributed hypertables for now to not alter
-			 * the trigger behaviour on access nodes, which would otherwise
-			 * no longer fire.
-			 */
-			if (root->parse->commandType == CMD_DELETE && !hypertable_is_distributed(ht))
-				mark_dummy_rel(rel);
 			break;
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
@@ -1163,6 +1150,20 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			break;
 		}
 		case TS_REL_HYPERTABLE_CHILD:
+			/* When postgres expands an inheritance tree it also adds the
+			 * parent hypertable as child relation. Since for a hypertable the
+			 * parent will never have any data we can mark this relation as
+			 * dummy relation so it gets ignored in later steps. This is only
+			 * relevant for code paths that use the postgres inheritance code
+			 * as we don't include the hypertable as child when expanding the
+			 * hypertable ourself.
+			 * We do exclude distributed hypertables for now to not alter
+			 * the trigger behaviour on access nodes, which would otherwise
+			 * no longer fire.
+			 */
+			if (IS_UPDL_CMD(root->parse) && !hypertable_is_distributed(ht))
+				mark_dummy_rel(rel);
+			break;
 		case TS_REL_OTHER:
 			break;
 	}

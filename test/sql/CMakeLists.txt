@@ -10,7 +10,6 @@ set(TEST_FILES
     create_chunks.sql
     create_hypertable.sql
     create_table.sql
-    cursor.sql
     ddl_errors.sql
     drop_extension.sql
     drop_hypertable.sql
@@ -61,6 +60,7 @@ set(TEST_TEMPLATES
     cluster.sql.in
     constraint.sql.in
     copy.sql.in
+    cursor.sql.in
     ddl.sql.in
     delete.sql.in
     partitionwise.sql.in
