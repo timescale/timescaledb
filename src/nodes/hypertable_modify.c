@@ -121,7 +121,16 @@ hypertable_modify_begin(CustomScanState *node, EState *estate, int eflags)
 	List *chunk_dispatch_states = NIL;
 	ListCell *lc;
 
-	ps = ExecInitNode(&state->mt->plan, estate, eflags);
+	ModifyTable *mt = castNode(ModifyTable, &state->mt->plan);
+	/*
+	 * To make statement trigger defined on the hypertable work
+	 * we need to set the hypertable as the rootRelation otherwise
+	 * statement trigger defined only on the hypertable will not fire.
+	 */
+	if (mt->operation == CMD_DELETE)
+		mt->rootRelation = mt->nominalRelation;
+
+	ps = ExecInitNode(&mt->plan, estate, eflags);
 	node->custom_ps = list_make1(ps);
 	mtstate = castNode(ModifyTableState, ps);
 

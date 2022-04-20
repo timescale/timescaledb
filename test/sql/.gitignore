@@ -16,5 +16,4 @@
 /plan_hypertable_inline-*.sql
 /plan_ordered_append-*.sql
 /rowsecurity-*.sql
-/triggers-*.sql
 /update-*.sql
