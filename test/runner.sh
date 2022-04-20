@@ -100,6 +100,7 @@ export TEST_DBNAME
 
 # we strip out any output between <exclude_from_test></exclude_from_test>
 # and the part about memory usage in EXPLAIN ANALYZE output of Sort nodes
+# also ignore the Postgres rehashing catalog debug messages from 'src/backend/utils/cache/catcache.c'
 ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
@@ -127,4 +128,9 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
-     "$@" -d ${TEST_DBNAME} 2>&1 | sed -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' -e 's! Memory: [0-9]\{1,\}kB!!' -e 's! Memory Usage: [0-9]\{1,\}kB!!' -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!'
+     "$@" -d ${TEST_DBNAME} 2>&1 | \
+          sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
+               -e 's! Memory: [0-9]\{1,\}kB!!' \
+               -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
+               -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
+          grep -v 'DEBUG:  rehashing catalog cache id'

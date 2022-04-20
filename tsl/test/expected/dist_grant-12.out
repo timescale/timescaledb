@@ -1042,7 +1042,6 @@ DEBUG:  [data1]: GRANT ALL ON DATABASE db_dist_grant_1 TO cluster_super_user
 DEBUG:  [data2]: GRANT ALL ON DATABASE db_dist_grant_2 TO cluster_super_user 
 DEBUG:  [data3]: GRANT ALL ON DATABASE db_dist_grant_3 TO cluster_super_user 
 DEBUG:  [data4]: GRANT ALL ON DATABASE db_dist_grant_4 TO cluster_super_user 
-DEBUG:  rehashing catalog cache id 77 for pg_user_mapping; 5 tups, 2 buckets
 GRANT TEMP ON DATABASE :TEST_DBNAME TO :ROLE_CLUSTER_SUPERUSER;
 DEBUG:  [data1]: GRANT temp ON DATABASE db_dist_grant_1 TO cluster_super_user 
 DEBUG:  [data2]: GRANT temp ON DATABASE db_dist_grant_2 TO cluster_super_user 
@@ -1126,7 +1125,6 @@ DEBUG:  skipping dist DDL on object: REVOKE ALL ON SCHEMA public FROM default_pe
 GRANT ALL ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 DEBUG:  skipping dist DDL on object: GRANT ALL ON SCHEMA public TO default_perm_user;
 REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM :ROLE_DEFAULT_PERM_USER;
-DEBUG:  rehashing catalog cache id 7 for pg_attribute; 257 tups, 128 buckets
 DEBUG:  skipping dist DDL on object: REVOKE ALL ON ALL TABLES  IN SCHEMA public FROM default_perm_user;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
 DEBUG:  skipping dist DDL on object: GRANT ALL ON ALL TABLES IN SCHEMA public TO default_perm_user;
