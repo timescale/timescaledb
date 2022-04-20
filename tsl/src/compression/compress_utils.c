@@ -98,7 +98,7 @@ static void
 get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 {
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-	if (status == HypertableIsNotContinuousAgg)
+	if (status == HypertableIsNotContinuousAgg || status == HypertableIsRawTable)
 		namestrcpy(objname, NameStr(ht->fd.table_name));
 	else if (status == HypertableIsMaterialization)
 	{
