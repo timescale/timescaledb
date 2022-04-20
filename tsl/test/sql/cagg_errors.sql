@@ -602,3 +602,6 @@ FROM
 
 CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
 
+--TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
+--Check error handling for this case
+SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;
