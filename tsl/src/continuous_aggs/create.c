@@ -2128,7 +2128,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	ts_catalog_restore_user(&sec_ctx);
 	PRINT_MATINTERNAL_NAME(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-	is_create_mattbl_index = with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default;
+	is_create_mattbl_index =
+		DatumGetBool(with_clause_options[ContinuousViewOptionCreateGroupIndex].parsed);
 	mattablecolumninfo_create_materialization_table(&mattblinfo,
 													materialize_hypertable_id,
 													mat_rel,
