@@ -88,7 +88,7 @@ docker_pgcmd() {
 
 docker_pgscript() {
     local database=${3:-single}
-    docker_exec $1 "psql -h localhost -U postgres -d $database $PGOPTS -v ON_ERROR_STOP=1 -f $2"
+    docker_exec $1 "psql --set VERBOSITY=verbose --set ECHO=all -h localhost -U postgres -d $database $PGOPTS -v ON_ERROR_STOP=1 -f $2"
 }
 
 docker_pgtest() {

@@ -6,6 +6,8 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
+If you use compression with a non-default collation on a segmentby-column you might have to recompress the affected hypertable.
+
 **Features**
 * #4120 Add logging for retention policy
 * #4169 Add support for chunk exclusion on DELETE to PG14
@@ -15,6 +17,7 @@ accidentally triggering the load of a previous DB version.**
 * #3899 Fix segfault in Continuous Aggregates
 * #4225 Fix TRUNCATE error as non-owner on hypertable
 * #4259 Fix logic bug in extension update script
+* #4236 Fix potential wrong order of results for compressed hypertable with a non-default collation
 
 **Thanks**
 * @jsoref for fixing various misspellings in code, comments and documentation
