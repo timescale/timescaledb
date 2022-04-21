@@ -166,6 +166,7 @@ typedef struct ConstifyTableOidContext
 {
 	Index chunk_index;
 	Oid chunk_relid;
+	bool made_changes;
 } ConstifyTableOidContext;
 
 static Node *
@@ -182,8 +183,11 @@ constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 			return node;
 
 		if (var->varattno == TableOidAttributeNumber)
+		{
+			ctx->made_changes = true;
 			return (
 				Node *) makeConst(OIDOID, -1, InvalidOid, 4, (Datum) ctx->chunk_relid, false, true);
+		}
 
 		/*
 		 * we doublecheck system columns here because projection will
@@ -204,9 +208,16 @@ constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
 	ConstifyTableOidContext ctx = {
 		.chunk_index = chunk_index,
 		.chunk_relid = chunk_relid,
+		.made_changes = false,
 	};
 
-	return (List *) constify_tableoid_walker((Node *) node, &ctx);
+	List *result = (List *) constify_tableoid_walker((Node *) node, &ctx);
+	if (ctx.made_changes)
+	{
+		return result;
+	}
+
+	return node;
 }
 
 /*
@@ -223,7 +234,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
 
-	if (node->ss.ps.ps_ProjInfo)
+	PlanState *ps = &node->ss.ps;
+	if (ps->ps_ProjInfo)
 	{
 		/*
 		 * if we are projecting we need to constify tableoid references here
@@ -234,15 +246,18 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		 * our targetlist might still get modified by parent nodes pushing
 		 * down targetlist.
 		 */
-		List *tlist = node->ss.ps.plan->targetlist;
-		PlanState *ps = &node->ss.ps;
-		tlist = constify_tableoid(tlist, cscan->scan.scanrelid, state->chunk_relid);
+		List *tlist = ps->plan->targetlist;
+		List *modified_tlist = constify_tableoid(tlist, cscan->scan.scanrelid, state->chunk_relid);
 
-		ps->ps_ProjInfo = ExecBuildProjectionInfo(tlist,
-												  ps->ps_ExprContext,
-												  ps->ps_ResultTupleSlot,
-												  ps,
-												  node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
+		if (modified_tlist != tlist)
+		{
+			ps->ps_ProjInfo =
+				ExecBuildProjectionInfo(modified_tlist,
+										ps->ps_ExprContext,
+										ps->ps_ResultTupleSlot,
+										ps,
+										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
+		}
 	}
 
 	state->hypertable_compression_info = ts_hypertable_compression_get(state->hypertable_id);
