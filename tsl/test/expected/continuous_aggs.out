@@ -1738,3 +1738,71 @@ SELECT
 --
 (0 rows)
 
+-- test that option create_group_indexes is taken into account
+SET client_min_messages = ERROR;
+CREATE TABLE test_group_idx (
+time timestamptz,
+symbol int,
+value numeric
+);
+select create_hypertable('test_group_idx', 'time');
+      create_hypertable       
+------------------------------
+ (48,public,test_group_idx,t)
+(1 row)
+
+insert into test_group_idx
+select t, round(random()*10), random()*5
+from generate_series('2020-01-01', '2020-02-25', INTERVAL '12 hours') t;
+create materialized view cagg_index_true
+with (timescaledb.continuous, timescaledb.create_group_indexes = true) as 
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol 
+from test_group_idx 
+group by bucket, symbol;
+create materialized view cagg_index_false
+with (timescaledb.continuous, timescaledb.create_group_indexes = false) as 
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol 
+from test_group_idx 
+group by bucket, symbol;
+create materialized view cagg_index_default
+with (timescaledb.continuous) as 
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol 
+from test_group_idx 
+group by bucket, symbol;
+-- see corresponding materialization_hypertables 
+select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
+where view_name like 'cagg_index_%';
+     view_name      | materialization_hypertable_name 
+--------------------+---------------------------------
+ cagg_index_default | _materialized_hypertable_51
+ cagg_index_false   | _materialized_hypertable_50
+ cagg_index_true    | _materialized_hypertable_49
+(3 rows)
+
+-- now make sure a group index has been created when explicitly asked for
+select i.*
+from pg_indexes i
+join pg_class c
+    on schemaname = relnamespace::regnamespace::text
+    and tablename = relname
+where tablename in (select materialization_hypertable_name from timescaledb_information.continuous_aggregates
+where view_name like 'cagg_index_%')
+order by tablename;
+      schemaname       |          tablename          |                   indexname                   | tablespace |                                                                     indexdef                                                                      
+-----------------------+-----------------------------+-----------------------------------------------+------------+---------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal | _materialized_hypertable_49 | _materialized_hypertable_49_bucket_idx        |            | CREATE INDEX _materialized_hypertable_49_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (bucket DESC)
+ _timescaledb_internal | _materialized_hypertable_49 | _materialized_hypertable_49_symbol_bucket_idx |            | CREATE INDEX _materialized_hypertable_49_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (symbol, bucket DESC)
+ _timescaledb_internal | _materialized_hypertable_50 | _materialized_hypertable_50_bucket_idx        |            | CREATE INDEX _materialized_hypertable_50_bucket_idx ON _timescaledb_internal._materialized_hypertable_50 USING btree (bucket DESC)
+ _timescaledb_internal | _materialized_hypertable_51 | _materialized_hypertable_51_bucket_idx        |            | CREATE INDEX _materialized_hypertable_51_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (bucket DESC)
+ _timescaledb_internal | _materialized_hypertable_51 | _materialized_hypertable_51_symbol_bucket_idx |            | CREATE INDEX _materialized_hypertable_51_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (symbol, bucket DESC)
+(5 rows)
+

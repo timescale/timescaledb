@@ -18,6 +18,7 @@ If you use compression with a non-default collation on a segmentby-column you mi
 * #4225 Fix TRUNCATE error as non-owner on hypertable
 * #4259 Fix logic bug in extension update script
 * #4236 Fix potential wrong order of results for compressed hypertable with a non-default collation
+* #4255 Fix option "timescaledb.create_group_indexes"
 
 **Thanks**
 * @jsoref for fixing various misspellings in code, comments and documentation

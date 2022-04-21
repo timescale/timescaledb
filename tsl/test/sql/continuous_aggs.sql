@@ -1226,3 +1226,58 @@ FROM issue3248 GROUP BY 1,2;
 SELECT
   FROM issue3248 AS m,
        LATERAL(SELECT m FROM issue3248_cagg WHERE avg IS NULL LIMIT 1) AS lat;
+
+-- test that option create_group_indexes is taken into account
+SET client_min_messages = ERROR;
+
+CREATE TABLE test_group_idx (
+time timestamptz,
+symbol int,
+value numeric
+);
+
+select create_hypertable('test_group_idx', 'time');
+
+insert into test_group_idx
+select t, round(random()*10), random()*5
+from generate_series('2020-01-01', '2020-02-25', INTERVAL '12 hours') t;
+
+create materialized view cagg_index_true
+with (timescaledb.continuous, timescaledb.create_group_indexes = true) as 
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol 
+from test_group_idx 
+group by bucket, symbol;
+
+create materialized view cagg_index_false
+with (timescaledb.continuous, timescaledb.create_group_indexes = false) as 
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol 
+from test_group_idx 
+group by bucket, symbol;
+
+create materialized view cagg_index_default
+with (timescaledb.continuous) as 
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol 
+from test_group_idx 
+group by bucket, symbol;
+
+-- see corresponding materialization_hypertables 
+select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
+where view_name like 'cagg_index_%';
+-- now make sure a group index has been created when explicitly asked for
+select i.*
+from pg_indexes i
+join pg_class c
+    on schemaname = relnamespace::regnamespace::text
+    and tablename = relname
+where tablename in (select materialization_hypertable_name from timescaledb_information.continuous_aggregates
+where view_name like 'cagg_index_%')
+order by tablename;
