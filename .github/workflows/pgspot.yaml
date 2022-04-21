@@ -1,0 +1,68 @@
+name: pgspot
+on:
+  pull_request:
+  push:
+    branches:
+      - prerelease_test
+
+jobs:
+  pgspot:
+    runs-on: ubuntu-latest
+    env:
+      # time_bucket with offset is intentional without explicit search_path to allow for inlining
+      # _timescaledb_internal.policy_compression and _timescaledb_internal.policy_compression_execute
+      # do not have explicit search_path because this would prevent them doing transaction control
+      PGSPOT_OPTS: --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts timestamp,"offset" interval)'
+        --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts timestamptz,"offset" interval)'
+        --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts date,"offset" interval)'
+        --proc-without-search-path 'extschema.recompress_chunk(chunk regclass,if_not_compressed boolean = FALSE)'
+        --proc-without-search-path '_timescaledb_internal.policy_compression(job_id integer,config jsonb)'
+        --proc-without-search-path '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
+
+    steps:
+
+    - name: Setup python 3.10
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+
+    - name: Checkout timescaledb
+      uses: actions/checkout@v2
+
+    - name: Checkout pgspot
+      uses: actions/checkout@v2
+      with:
+        repository: 'timescale/pgspot'
+        ref: '0.1.1'
+        submodules: true
+        path: 'pgspot'
+
+    - name: Install packages
+      run: |
+        python -m pip install -r pgspot/requirements.txt
+
+    - name: Build timescaledb sqlfiles
+      run: |
+        git fetch --tags
+        ./bootstrap -DGENERATE_DOWNGRADE_SCRIPT=ON
+        make -C build sqlfile sqlupdatescripts
+        ls -la build/sql/timescaledb--*.sql
+
+    - name: Run pgspot
+      run: |
+        version=$(grep '^version = ' version.config | sed -e 's!^[^=]\+ = !!')
+        update_from=$(grep '^update_from_version = ' version.config | sed -e 's!^[^=]\+ = !!')
+        downgrade_to=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
+
+        # Show files used
+        ls -la build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+
+        # The next pgspot execution tests the installation script by itself
+        python pgspot/pgspot ${{ env.PGSPOT_OPTS }} build/sql/timescaledb--${version}.sql
+        # The next pgspot execution tests the update script to the latest version
+        # we prepend the installation script here so pgspot can correctly keep track of created objects
+        python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
+        # The next pgspot execution tests the downgrade script to the previous version
+        # we prepend the installation script here so pgspot can correctly keep track of created objects
+        python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+
