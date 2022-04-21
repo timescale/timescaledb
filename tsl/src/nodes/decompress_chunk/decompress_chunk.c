@@ -492,21 +492,15 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 }
 
 static void
-compressed_reltarget_add_whole_row_var(RelOptInfo *compressed_rel)
-{
-	compressed_rel->reltarget->exprs =
-		lappend(compressed_rel->reltarget->exprs,
-				makeVar(compressed_rel->relid, 0, get_atttype(compressed_rel->relid, 0), -1, 0, 0));
-}
-
-static void
 compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compressed_relid,
-										const char *column_name)
+										const char *column_name, Bitmapset **attrs_used)
 {
 	AttrNumber attnum = get_attnum(compressed_relid, column_name);
+	Assert(attnum > 0);
+	*attrs_used = bms_add_member(*attrs_used, attnum);
+
 	Oid typid, collid;
 	int32 typmod;
-	Assert(attnum > 0);
 	get_atttypetypmodcoll(compressed_relid, attnum, &typid, &typmod, &collid);
 	compressed_rel->reltarget->exprs =
 		lappend(compressed_rel->reltarget->exprs,
@@ -520,6 +514,9 @@ static void
 compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info,
 							   bool needs_sequence_num)
 {
+	bool have_whole_row_var = false;
+	Bitmapset *attrs_used = NULL;
+
 	Oid compressed_relid = info->compressed_rte->relid;
 	ListCell *lc;
 	foreach (lc, info->chunk_rel->reltarget->exprs)
@@ -541,8 +538,8 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			 */
 			if (chunk_var->varattno <= 0)
 			{
-				compressed_reltarget_add_whole_row_var(compressed_rel);
-				return;
+				have_whole_row_var = true;
+				continue;
 			}
 
 			column_name = get_attname(info->chunk_rte->relid, chunk_var->varattno, false);
@@ -551,7 +548,10 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 
 			Assert(column_info != NULL);
 
-			compressed_reltarget_add_var_for_column(compressed_rel, compressed_relid, column_name);
+			compressed_reltarget_add_var_for_column(compressed_rel,
+													compressed_relid,
+													column_name,
+													&attrs_used);
 
 			/* if the column is an orderby, add it's metadata columns too */
 			if (column_info->orderby_column_index > 0)
@@ -559,11 +559,13 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
 														compression_column_segment_min_name(
-															column_info));
+															column_info),
+														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
 														compression_column_segment_max_name(
-															column_info));
+															column_info),
+														&attrs_used);
 			}
 		}
 	}
@@ -571,14 +573,56 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 	/* always add the count column */
 	compressed_reltarget_add_var_for_column(compressed_rel,
 											compressed_relid,
-											COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+											COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+											&attrs_used);
 
 	/* add the segment order column if we may try to order by it */
 	if (needs_sequence_num)
 	{
 		compressed_reltarget_add_var_for_column(compressed_rel,
 												compressed_relid,
-												COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+												COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+												&attrs_used);
+	}
+
+	/*
+	 * It doesn't make sense to request a whole-row var from the compressed
+	 * chunk scan. If it is requested, just fetch the rest of columns. The
+	 * whole-row var will be created by the projection of DecompressChunk node.
+	 */
+	if (have_whole_row_var)
+	{
+		for (int i = 1; i <= info->chunk_rel->max_attr; i++)
+		{
+			char *column_name = get_attname(info->chunk_rte->relid,
+											i,
+											/* missing_ok = */ false);
+			AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, column_name);
+			if (chunk_attno == InvalidAttrNumber)
+			{
+				/* Skip the dropped column. */
+				continue;
+			}
+
+			AttrNumber compressed_attno = get_attnum(info->compressed_rte->relid, column_name);
+			if (compressed_attno == InvalidAttrNumber)
+			{
+				elog(ERROR,
+					 "column '%s' not found in the compressed chunk '%s'",
+					 column_name,
+					 get_rel_name(info->compressed_rte->relid));
+			}
+
+			if (bms_is_member(compressed_attno, attrs_used))
+			{
+				continue;
+			}
+
+			compressed_reltarget_add_var_for_column(compressed_rel,
+													compressed_relid,
+													column_name,
+													&attrs_used);
+		}
 	}
 }
 
