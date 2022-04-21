@@ -12,8 +12,9 @@ accidentally triggering the load of a previous DB version.**
 * #4209 Add support for chunk exclusion on UPDATE to PG14
 
 **Bugfixes**
-* #4225 Fix TRUNCATE error as non-owner on hypertable
 * #3899 Fix segfault in Continuous Aggregates
+* #4225 Fix TRUNCATE error as non-owner on hypertable
+* #4259 Fix logic bug in extension update script
 
 ## 2.6.1 (2022-04-11)
 This release is patch release. We recommend that you upgrade at the next available opportunity.
