@@ -16,6 +16,9 @@ accidentally triggering the load of a previous DB version.**
 * #4225 Fix TRUNCATE error as non-owner on hypertable
 * #4259 Fix logic bug in extension update script
 
+**Thanks**
+* @jsoref for fixing various misspellings in code, comments and documentation
+
 ## 2.6.1 (2022-04-11)
 This release is patch release. We recommend that you upgrade at the next available opportunity.
 
