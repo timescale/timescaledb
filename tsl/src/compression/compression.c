@@ -1594,16 +1594,25 @@ compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 
 	ExecClearTuple(out_slot);
 
+	/* ExecClearTuple above will leave dropped columns as non-null, which will
+	 * cause a segmentation fault in `heap_compute_data_size` since that
+	 * function expects dropped columns to have the null bit set. Since the
+	 * null bits are set below for all columns except */
+	memset(out_slot->tts_isnull,
+		   true,
+		   sizeof(*out_slot->tts_isnull) * out_slot->tts_tupleDescriptor->natts);
+
 	invalues = in_slot->tts_values;
 	out_values = out_slot->tts_values;
 	out_isnull = out_slot->tts_isnull;
 
-	/* Possible optimization:
-	 * Can we do a pass through compression without a full copy?
-	 * full copy needed for multiple values. But we are dealing only with a single value,
-	 * so just need the result of transformation after passing it through the compressor function
-	 * This probably needs a bit of rewrte of the compression algorithm code
+	/* Possible optimization: Can we do a pass through compression without a
+	 * full copy?  full copy needed for multiple values. But we are dealing
+	 * only with a single value, so just need the result of transformation
+	 * after passing it through the compressor function This probably needs a
+	 * bit of rewrite of the compression algorithm code
 	 */
+	Assert(row_compressor->n_input_columns == in_slot->tts_tupleDescriptor->natts);
 	for (int col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];

@@ -938,3 +938,38 @@ FROM
 INSERT INTO :TABLENAME SELECT;
 ERROR:  direct insert into internal compressed hypertable is not supported
 \set ON_ERROR_STOP 1
+-- Test that inserting into a compressed table works even when the
+-- column has been dropped.
+CREATE TABLE test4 (
+    timestamp timestamp without time zone not null,
+    ident text not null,
+    one double precision,
+    two double precision
+);
+SELECT * FROM create_hypertable('test4', 'timestamp');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            20 | public      | test4      | t
+(1 row)
+
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-10-14 17:50:16.207', '2' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-11-14 17:50:16.207', '1' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2021-12-14 17:50:16.207', '3' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-01-14 17:50:16.207', '4' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-02-14 17:50:16.207', '5' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-03-14 17:50:16.207', '6' );
+INSERT INTO test4 ( timestamp, ident ) VALUES ( '2022-04-14 17:50:16.207', '7' );
+ALTER TABLE test4 SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'timestamp',
+    timescaledb.compress_segmentby = 'ident'
+);
+select count(compress_chunk(ch)) FROM show_chunks('test4') ch;
+ count 
+-------
+     7
+(1 row)
+
+ALTER TABLE test4 DROP COLUMN two;
+INSERT INTO test4 VALUES ('2021-10-14 17:50:16.207', '7', NULL);
+INSERT INTO test4 (timestamp, ident) VALUES ('2021-10-14 17:50:16.207', '7');
