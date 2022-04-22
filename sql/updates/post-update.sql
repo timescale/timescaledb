@@ -7,7 +7,7 @@ DECLARE
 BEGIN
     SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
     IF ts_version >= '2.7.0' THEN
-            CREATE OR REPLACE PROCEDURE @extschema@.post_update_cagg_try_repair(
+            CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
                 cagg_view REGCLASS
             ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
     END IF;
@@ -26,11 +26,11 @@ BEGIN
             EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
         ELSE
             SET log_error_verbosity TO VERBOSE;
-            CALL @extschema@.post_update_cagg_try_repair(vname);
+            CALL _timescaledb_internal.post_update_cagg_try_repair(vname);
         END IF;
     END LOOP;
     IF ts_version >= '2.7.0' THEN
-            DROP PROCEDURE IF EXISTS @extschema@.post_update_cagg_try_repair;
+            DROP PROCEDURE IF EXISTS _timescaledb_internal.post_update_cagg_try_repair;
     END IF;
     EXCEPTION WHEN OTHERS THEN RAISE;
 END
