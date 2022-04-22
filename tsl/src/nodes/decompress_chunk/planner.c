@@ -56,7 +56,7 @@ make_compressed_scan_meta_targetentry(DecompressChunkPath *path, char *column_na
 	 */
 	Assert(get_atttype(path->info->compressed_rte->relid, compressed_attno) == INT4OID);
 	scan_var = makeVar(path->info->compressed_rel->relid, compressed_attno, INT4OID, -1, 0, 0);
-	path->varattno_map = lappend_int(path->varattno_map, id);
+	path->decompression_map = lappend_int(path->decompression_map, id);
 
 	return makeTargetEntry((Expr *) scan_var, tle_index, NULL, false);
 }
@@ -110,7 +110,7 @@ make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno,
 						   -1,
 						   0,
 						   0);
-	path->varattno_map = lappend_int(path->varattno_map, chunk_attno);
+	path->decompression_map = lappend_int(path->decompression_map, chunk_attno);
 
 	return makeTargetEntry((Expr *) scan_var, tle_index, NULL, false);
 }
@@ -131,7 +131,7 @@ build_scan_tlist(DecompressChunkPath *path)
 	TargetEntry *tle;
 	int bit;
 
-	path->varattno_map = NIL;
+	path->decompression_map = NIL;
 
 	/* add count column */
 	tle = make_compressed_scan_meta_targetentry(path,
@@ -382,7 +382,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	settings = list_make3_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse);
-	cscan->custom_private = list_make2(settings, dcpath->varattno_map);
+	cscan->custom_private = list_make2(settings, dcpath->decompression_map);
 
 	return &cscan->scan.plan;
 }

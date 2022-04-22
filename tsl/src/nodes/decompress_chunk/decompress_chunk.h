@@ -43,12 +43,12 @@ typedef struct DecompressChunkPath
 	CustomPath cpath;
 	CompressionInfo *info;
 	/*
-	 * varattno_map maps targetlist entries of the compressed scan
-	 * to tuple attribute number of the uncompressed chunk
-	 * negative values are special columns in the compressed scan
-	 * that do not have a representation in the uncompressed chunk
+	 * decompression_map maps targetlist entries of the compressed scan to tuple
+	 * attribute number of the uncompressed chunk. Negative values are special
+	 * columns in the compressed scan that do not have a representation in the
+	 * uncompressed chunk, but are still used for decompression.
 	 */
-	List *varattno_map;
+	List *decompression_map;
 	List *compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;

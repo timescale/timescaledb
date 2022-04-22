@@ -38,7 +38,20 @@ typedef struct DecompressChunkColumnState
 {
 	DecompressChunkColumnType type;
 	Oid typid;
-	AttrNumber attno;
+
+	/*
+	 * Attno of the decompressed column in the output of DecompressChunk node.
+	 * Negative values are special columns that do not have a representation in
+	 * the uncompressed chunk, but are still used for decompression. They should
+	 * have the respective `type` field.
+	 */
+	AttrNumber output_attno;
+
+	/*
+	 * Attno of the compressed column in the input compressed chunk scan.
+	 */
+	AttrNumber compressed_scan_attno;
+
 	union
 	{
 		struct
@@ -57,7 +70,7 @@ typedef struct DecompressChunkColumnState
 typedef struct DecompressChunkState
 {
 	CustomScanState csstate;
-	List *varattno_map;
+	List *decompression_map;
 	int num_columns;
 	DecompressChunkColumnState *columns;
 
@@ -97,7 +110,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	state->hypertable_id = linitial_int(settings);
 	state->chunk_relid = lsecond_int(settings);
 	state->reverse = lthird_int(settings);
-	state->varattno_map = lsecond(cscan->custom_private);
+	state->decompression_map = lsecond(cscan->custom_private);
 
 	return (Node *) state;
 }
@@ -115,23 +128,35 @@ initialize_column_state(DecompressChunkState *state)
 	ScanState *ss = (ScanState *) state;
 	TupleDesc desc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
 	ListCell *lc;
-	int i;
 
-	state->num_columns = list_length(state->varattno_map);
-
-	state->columns = palloc0(state->num_columns * sizeof(DecompressChunkColumnState));
-
-	for (i = 0, lc = list_head(state->varattno_map); i < state->num_columns;
-		 lc = lnext_compat(state->varattno_map, lc), i++)
+	if (list_length(state->decompression_map) == 0)
 	{
-		DecompressChunkColumnState *column = &state->columns[i];
-		column->attno = lfirst_int(lc);
+		elog(ERROR, "no columns specified to decompress");
+	}
 
-		if (column->attno > 0)
+	state->columns =
+		palloc0(list_length(state->decompression_map) * sizeof(DecompressChunkColumnState));
+
+	AttrNumber next_compressed_scan_attno = 0;
+	state->num_columns = 0;
+	foreach (lc, state->decompression_map)
+	{
+		next_compressed_scan_attno++;
+
+		AttrNumber output_attno = lfirst_int(lc);
+		Assert(output_attno != 0);
+
+		DecompressChunkColumnState *column = &state->columns[state->num_columns];
+		state->num_columns++;
+
+		column->output_attno = output_attno;
+		column->compressed_scan_attno = next_compressed_scan_attno;
+
+		if (output_attno > 0)
 		{
 			/* normal column that is also present in uncompressed chunk */
 			Form_pg_attribute attribute =
-				TupleDescAttr(desc, AttrNumberGetAttrOffset(lfirst_int(lc)));
+				TupleDescAttr(desc, AttrNumberGetAttrOffset(output_attno));
 			FormData_hypertable_compression *ht_info =
 				get_column_compressioninfo(state->hypertable_compression_info,
 										   NameStr(attribute->attname));
@@ -146,7 +171,7 @@ initialize_column_state(DecompressChunkState *state)
 		else
 		{
 			/* metadata columns */
-			switch (column->attno)
+			switch (column->output_attno)
 			{
 				case DECOMPRESS_CHUNK_COUNT_ID:
 					column->type = COUNT_COLUMN;
@@ -155,7 +180,7 @@ initialize_column_state(DecompressChunkState *state)
 					column->type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
-					elog(ERROR, "Invalid column attno \"%d\"", column->attno);
+					elog(ERROR, "Invalid column attno \"%d\"", column->output_attno);
 					break;
 			}
 		}
@@ -288,7 +313,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 		{
 			case COMPRESSED_COLUMN:
 			{
-				value = slot_getattr(slot, AttrOffsetGetAttrNumber(i), &isnull);
+				value = slot_getattr(slot, column->compressed_scan_attno, &isnull);
 				if (!isnull)
 				{
 					CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
@@ -304,7 +329,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 				break;
 			}
 			case SEGMENTBY_COLUMN:
-				value = slot_getattr(slot, AttrOffsetGetAttrNumber(i), &isnull);
+				value = slot_getattr(slot, column->compressed_scan_attno, &isnull);
 				if (!isnull)
 					column->segmentby.value = value;
 				else
@@ -313,7 +338,7 @@ initialize_batch(DecompressChunkState *state, TupleTableSlot *slot)
 				column->segmentby.isnull = isnull;
 				break;
 			case COUNT_COLUMN:
-				value = slot_getattr(slot, AttrOffsetGetAttrNumber(i), &isnull);
+				value = slot_getattr(slot, column->compressed_scan_attno, &isnull);
 				state->counter = DatumGetInt32(value);
 				/* count column should never be NULL */
 				Assert(!isnull);
@@ -423,7 +448,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 					break;
 				case COMPRESSED_COLUMN:
 				{
-					AttrNumber attr = AttrNumberGetAttrOffset(column->attno);
+					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
 					if (!column->compressed.iterator)
 					{
@@ -459,7 +484,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 				}
 				case SEGMENTBY_COLUMN:
 				{
-					AttrNumber attr = AttrNumberGetAttrOffset(column->attno);
+					AttrNumber attr = AttrNumberGetAttrOffset(column->output_attno);
 
 					slot->tts_values[attr] = column->segmentby.value;
 					slot->tts_isnull[attr] = column->segmentby.isnull;
