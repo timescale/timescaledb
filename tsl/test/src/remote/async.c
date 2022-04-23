@@ -226,11 +226,6 @@ test_node_death()
 	async_response_report_error(response, WARNING);
 	response = async_request_set_wait_any_response_deadline(set, TS_NO_TIMEOUT);
 	TestAssertTrue(response == NULL);
-	/* No socket error */
-	TestEnsureError(remote_connection_cancel_query(conn));
-
-	set = async_request_set_create();
-	TestEnsureError(async_request_set_add_sql(set, conn, "SELECT 1"));
 
 	/* test error throwing in async_request_set_wait_any_result */
 	conn = get_connection();
