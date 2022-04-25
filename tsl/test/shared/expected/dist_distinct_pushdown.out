@@ -43,10 +43,9 @@ select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
-         Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
-(8 rows)
+(7 rows)
 
 -- A case where we have a filter on the DISTINCT ON column.
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
@@ -65,10 +64,9 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
-         Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
-(8 rows)
+(7 rows)
 
 -- A somewhat dumb case where the DISTINCT ON column is deduced to be constant
 -- and not added to pathkeys.
@@ -90,10 +88,9 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0') or
          ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
                Output: distinct_on_distributed.ts, distinct_on_distributed.id
                Data node: data_node_1
-               Fetcher Type: Row by row
                Chunks: _dist_hyper_X_X_chunk
                Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = 0))
-(11 rows)
+(10 rows)
 
 -- All above but with disabled local sort, to try to force more interesting plans where the sort
 -- is pushed down.
@@ -113,10 +110,9 @@ select ts, id from distinct_on_distributed order by id, ts desc limit 1;
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
-         Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST LIMIT 1
-(8 rows)
+(7 rows)
 
 select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
             ts            | id 
@@ -136,10 +132,9 @@ select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
-         Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
-(8 rows)
+(7 rows)
 
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
             ts            | id 
@@ -157,10 +152,9 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
-         Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
-(8 rows)
+(7 rows)
 
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
             ts            | id 
@@ -177,9 +171,8 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0') or
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
-         Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
          Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) AND ((id = 0)) ORDER BY ts DESC NULLS FIRST
-(8 rows)
+(7 rows)
 
 reset enable_sort;

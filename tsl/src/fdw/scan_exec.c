@@ -22,6 +22,7 @@
 #include "remote/row_by_row_fetcher.h"
 #include "remote/cursor_fetcher.h"
 #include "guc.h"
+#include "planner.h"
 
 /*
  * Indexes of FDW-private information stored in fdw_private lists.
@@ -128,13 +129,32 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 
 	oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
 
-	if (fsstate->fetcher_type == CursorFetcherType)
+	TupleFactory *tf = tuplefactory_create_for_scan(ss, fsstate->retrieved_attrs);
+
+	if (!tuplefactory_is_binary(tf) && fsstate->planned_fetcher_type == RowByRowFetcherType)
 	{
-		fetcher = cursor_fetcher_create_for_scan(fsstate->conn,
-												 ss,
-												 fsstate->retrieved_attrs,
-												 fsstate->query,
-												 params);
+		if (ts_guc_remote_data_fetcher == AutoFetcherType)
+		{
+			/*
+			 * The user-set fetcher type was auto, and the planner decided to
+			 * use row-by-row fetcher, but at execution time (now) we found out
+			 * there is no binary serialization for some data types. In this
+			 * case we can revert to cursor fetcher which supports text
+			 * serialization.
+			 */
+			fsstate->planned_fetcher_type = CursorFetcherType;
+		}
+		else
+		{
+			ereport(ERROR,
+					(errmsg("cannot use row-by-row fetcher because some of the column types do not "
+							"have binary serialization")));
+		}
+	}
+
+	if (fsstate->planned_fetcher_type == CursorFetcherType)
+	{
+		fetcher = cursor_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
 	}
 	else
 	{
@@ -142,12 +162,8 @@ create_data_fetcher(ScanState *ss, TsFdwScanState *fsstate)
 		 * The fetcher type must have been determined by the planner at this
 		 * point, so we shouldn't see 'auto' here.
 		 */
-		Assert(fsstate->fetcher_type == RowByRowFetcherType);
-		fetcher = row_by_row_fetcher_create_for_scan(fsstate->conn,
-													 ss,
-													 fsstate->retrieved_attrs,
-													 fsstate->query,
-													 params);
+		Assert(fsstate->planned_fetcher_type == RowByRowFetcherType);
+		fetcher = row_by_row_fetcher_create_for_scan(fsstate->conn, fsstate->query, params, tf);
 	}
 
 	fsstate->fetcher = fetcher;
@@ -439,9 +455,9 @@ fdw_scan_explain(ScanState *ss, List *fdw_private, ExplainState *es, TsFdwScanSt
 
 		ExplainPropertyText("Data node", server->servername, es);
 
-		/* fsstate can be NULL, so check that first */
-		if (fsstate)
-			ExplainPropertyText("Fetcher Type", explain_fetcher_type(fsstate->fetcher_type), es);
+		/* fsstate or fetcher can be NULL, so check that first */
+		if (fsstate && fsstate->fetcher)
+			ExplainPropertyText("Fetcher Type", explain_fetcher_type(fsstate->fetcher->type), es);
 
 		if (chunk_oids != NIL)
 		{

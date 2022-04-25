@@ -31,14 +31,20 @@ typedef struct TsFdwScanState
 	List *retrieved_attrs; /* list of retrieved attribute numbers */
 
 	/* for remote query execution */
-	struct TSConnection *conn;	/* connection for the scan */
-	struct DataFetcher *fetcher;  /* fetches tuples from data node */
-	int num_params;				  /* number of parameters passed to query */
-	FmgrInfo *param_flinfo;		  /* output conversion functions for them */
-	List *param_exprs;			  /* executable expressions for param values */
-	const char **param_values;	/* textual values of query parameters */
-	int fetch_size;				  /* number of tuples per fetch */
-	DataFetcherType fetcher_type; /* the type of data fetcher to use  */
+	struct TSConnection *conn;   /* connection for the scan */
+	struct DataFetcher *fetcher; /* fetches tuples from data node */
+	int num_params;				 /* number of parameters passed to query */
+	FmgrInfo *param_flinfo;		 /* output conversion functions for them */
+	List *param_exprs;			 /* executable expressions for param values */
+	const char **param_values;   /* textual values of query parameters */
+	int fetch_size;				 /* number of tuples per fetch */
+	/*
+	 * The type of data fetcher to use. Note that we still can revert to
+	 * cursor fetcher if row-by-row fetcher was chosen automatically, but binary
+	 * serialization turns out to be unavailable for some of the data types. We
+	 * only check this when we execute the query.
+	 */
+	DataFetcherType planned_fetcher_type;
 	int row_counter;
 } TsFdwScanState;
 

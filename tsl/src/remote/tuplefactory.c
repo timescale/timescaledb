@@ -90,22 +90,25 @@ conversion_error_callback(void *arg)
 	{
 		/* error occurred in a scan against a foreign join */
 		ScanState *ss = errpos->ss;
-		ForeignScan *fsplan;
+		List *tlist;
 		EState *estate = ss->ps.state;
 		TargetEntry *tle;
 
 		if (IsA(ss->ps.plan, ForeignScan))
-			fsplan = (ForeignScan *) ss->ps.plan;
+		{
+			ForeignScan *fsplan = (ForeignScan *) ss->ps.plan;
+			tlist = fsplan->fdw_scan_tlist;
+		}
 		else if (IsA(ss->ps.plan, CustomScan))
 		{
 			CustomScan *csplan = (CustomScan *) ss->ps.plan;
 
-			fsplan = linitial(csplan->custom_private);
+			tlist = csplan->scan.plan.targetlist;
 		}
 		else
 			elog(ERROR, "unknown scan node type %u in error callback", nodeTag(ss->ps.plan));
 
-		tle = list_nth_node(TargetEntry, fsplan->fdw_scan_tlist, errpos->cur_attno - 1);
+		tle = list_nth_node(TargetEntry, tlist, errpos->cur_attno - 1);
 
 		/*
 		 * Target list can have Vars and expressions.  For Vars, we can get
@@ -279,12 +282,16 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 		}
 
 		/*
+		 * Note that this attno is an index inside fdw_scan_tlist, not inside
+		 * tupdesc.
+		 */
+		tf->errpos.cur_attno = j + 1;
+
+		/*
 		 * convert value to internal representation
 		 *
 		 * Note: we ignore system columns other than ctid and oid in result
 		 */
-		tf->errpos.cur_attno = i;
-
 		if (i > 0)
 		{
 			/* ordinary column */

@@ -38,19 +38,6 @@ static DataFetcherFuncs funcs = {
 	.close = row_by_row_fetcher_close,
 };
 
-static RowByRowFetcher *
-create_row_by_row_fetcher(TSConnection *conn, const char *stmt, StmtParams *params, Relation rel,
-						  ScanState *ss, List *retrieved_attrs)
-{
-	RowByRowFetcher *fetcher = palloc0(sizeof(RowByRowFetcher));
-
-	data_fetcher_init(&fetcher->state, conn, stmt, params, rel, ss, retrieved_attrs);
-	fetcher->state.type = RowByRowFetcherType;
-	fetcher->state.funcs = &funcs;
-
-	return fetcher;
-}
-
 static void
 row_by_row_fetcher_set_fetch_size(DataFetcher *df, int fetch_size)
 {
@@ -319,25 +306,14 @@ row_by_row_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot)
 }
 
 DataFetcher *
-row_by_row_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_attrs,
-								  const char *stmt, StmtParams *params)
+row_by_row_fetcher_create_for_scan(TSConnection *conn, const char *stmt, StmtParams *params,
+								   TupleFactory *tf)
 {
-	RowByRowFetcher *fetcher;
+	RowByRowFetcher *fetcher = palloc0(sizeof(RowByRowFetcher));
 
-	Assert(rel != NULL);
-	fetcher = create_row_by_row_fetcher(conn, stmt, params, rel, NULL, retrieved_attrs);
-
-	return &fetcher->state;
-}
-
-DataFetcher *
-row_by_row_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-								   const char *stmt, StmtParams *params)
-{
-	RowByRowFetcher *fetcher;
-
-	Assert(ss != NULL);
-	fetcher = create_row_by_row_fetcher(conn, stmt, params, NULL, ss, retrieved_attrs);
+	data_fetcher_init(&fetcher->state, conn, stmt, params, tf);
+	fetcher->state.type = RowByRowFetcherType;
+	fetcher->state.funcs = &funcs;
 
 	return &fetcher->state;
 }

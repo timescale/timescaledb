@@ -289,3 +289,12 @@ INSERT INTO test_gapfill_overlap VALUES
 ('2020-07-06 06:01', 'forty-six', 3.1),
 ('2020-07-07 09:11', 'eleven', 10303.12),
 ('2020-07-08 08:01', 'ten', 64);
+
+-- Distributed table with custom type that has no binary output
+CREATE TABLE disttable_with_ct(time timestamptz, txn_id rxid, val float, info text);
+SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor => 2);
+
+-- Insert data with custom type
+INSERT INTO disttable_with_ct VALUES
+    ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
+    ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
