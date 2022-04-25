@@ -165,6 +165,7 @@ data_node_scan_state_create(CustomScan *cscan)
 	dnss->async_state.init = create_fetcher;
 	dnss->async_state.send_fetch_request = send_fetch_request;
 	dnss->async_state.fetch_data = fetch_data;
-	dnss->fsstate.fetcher_type = intVal(list_nth(cscan->custom_private, DataNodeScanFetcherType));
+	dnss->fsstate.planned_fetcher_type =
+		intVal(list_nth(cscan->custom_private, DataNodeScanFetcherType));
 	return (Node *) dnss;
 }

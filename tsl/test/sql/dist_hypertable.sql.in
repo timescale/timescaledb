@@ -1664,6 +1664,15 @@ SET timescaledb.enable_connection_binary_data=false;
 SELECT * FROM disttable ORDER BY 1;
 SELECT count(*) FROM disttable;
 
+-- Binary format should lead to data incompatibility in PG 13 and earlier,
+-- because the highlow data type has different oids on data and access nodes.
+-- Use this to test the deserialization error reporting. Newer PG version
+-- ignore this oid mismatch for non-builtin types.
+SET timescaledb.enable_connection_binary_data=true;
+\set ON_ERROR_STOP 0
+SELECT * FROM disttable ORDER BY 1;
+\set ON_ERROR_STOP 1
+
 -- Show that DataNodeCopy is NOT used when source hypertable and target hypertable
 -- of the SELECT are both distributed. Try subselects with LIMIT, RETURNING and
 -- different distributed hypertable as source

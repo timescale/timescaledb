@@ -15,7 +15,7 @@
 
 void
 data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt, StmtParams *params,
-				  Relation rel, ScanState *ss, List *retrieved_attrs)
+				  TupleFactory *tf)
 {
 	Assert(df != NULL);
 	Assert(stmt != NULL);
@@ -25,10 +25,7 @@ data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt, StmtPar
 	df->conn = conn;
 	df->stmt = pstrdup(stmt);
 	df->stmt_params = params;
-	if (rel == NULL)
-		df->tf = tuplefactory_create_for_scan(ss, retrieved_attrs);
-	else
-		df->tf = tuplefactory_create_for_rel(rel, retrieved_attrs);
+	df->tf = tf;
 
 	tuplefactory_set_per_tuple_mctx_reset(df->tf, false);
 	df->batch_mctx =

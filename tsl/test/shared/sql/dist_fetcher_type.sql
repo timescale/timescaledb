@@ -10,22 +10,26 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
 
+-- This query should choose row-by-row fetcher.
+select 1 x from distinct_on_distributed t1
+limit 1;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select 1 x from distinct_on_distributed t1
+limit 1;
+
 set timescaledb.remote_data_fetcher = 'cursor';
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
 
-explain (verbose, costs off)
+explain (analyze, verbose, costs off, timing off, summary off)
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
 
+-- This query can't work with rowbyrow fetcher.
 set timescaledb.remote_data_fetcher = 'rowbyrow';
-select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
-where t1.id = t2.id + 1
-limit 1;
-
-explain (verbose, costs off)
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
@@ -62,3 +66,18 @@ WHERE
   )
 ORDER BY 1,2;
 RESET jit;
+
+
+-- Row by row fetcher should fail on a custom type that has no binary
+-- serialization.
+set timescaledb.remote_data_fetcher = 'rowbyrow';
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select time, txn_id, val, substring(info for 20) from disttable_with_ct;
+
+-- Cursor fetcher should be chosen automatically if we have a data type with no
+-- binary serialization.
+set timescaledb.remote_data_fetcher = 'auto';
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from disttable_with_ct;
