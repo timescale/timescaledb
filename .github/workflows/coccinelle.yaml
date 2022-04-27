@@ -1,3 +1,4 @@
+# Check our codebase for defective programming patterns
 name: Coccinelle
 on:
   pull_request:

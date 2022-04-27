@@ -30,6 +30,6 @@ Expression name.var1;
 ```
 var1 inside this block will be the match from the `name` block.
 
-https://github.com/coccinelle/coccinelle
-https://coccinelle.gitlabpages.inria.fr/website/
-https://coccinelle.gitlabpages.inria.fr/website/docs/main_grammar.html
+- https://github.com/coccinelle/coccinelle
+- https://coccinelle.gitlabpages.inria.fr/website/
+- https://coccinelle.gitlabpages.inria.fr/website/docs/main_grammar.html

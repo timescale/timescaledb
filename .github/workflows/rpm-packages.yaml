@@ -1,3 +1,4 @@
+# Test rpm package installation for latest version
 name: RPM packages
 on:
   schedule:

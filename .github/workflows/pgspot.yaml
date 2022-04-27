@@ -1,3 +1,4 @@
+# Test our extension sql scripts are following security best practices
 name: pgspot
 on:
   pull_request:

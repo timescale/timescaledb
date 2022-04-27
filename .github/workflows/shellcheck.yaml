@@ -1,3 +1,4 @@
+# Test our shell scripts for bugs
 name: Shellcheck
 on:
   pull_request:
