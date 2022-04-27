@@ -1,4 +1,4 @@
-# This workflow tests installing our ubuntu and debian packages.
+# Test installing our ubuntu and debian packages for the latest version.
 name: APT packages
 on:
   schedule:
