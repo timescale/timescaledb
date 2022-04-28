@@ -251,6 +251,7 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 	ListCell *lc;
 	foreach (lc, chunk_data_nodes)
 	{
+		TSConnection *connection = NULL;
 		ChunkDataNode *cdn = lfirst(lc);
 		TSConnectionId required_id = remote_connection_id(cdn->foreign_server_oid, userid);
 
@@ -258,18 +259,18 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 		foreach (lc2, state->data_node_connections)
 		{
 			DataNodeConnection *entry = (DataNodeConnection *) lfirst(lc2);
+			connection = entry->connection;
 			if (required_id.server_id == entry->id.server_id
 				&& required_id.user_id == entry->id.user_id)
 			{
-				Assert(remote_connection_get_status(entry->connection) == CONN_COPY_IN);
-				result = lappend(result, entry->connection);
+				result = lappend(result, connection);
 				break;
 			}
 		}
 
 		if (lc2 == NULL)
 		{
-			TSConnection *connection = remote_dist_txn_get_connection(required_id, REMOTE_TXN_NO_PREP_STMT);
+			connection = remote_dist_txn_get_connection(required_id, REMOTE_TXN_NO_PREP_STMT);
 			start_remote_copy_on_new_connection(state, connection);
 
 			DataNodeConnection *entry = palloc(sizeof(DataNodeConnection));
@@ -279,6 +280,34 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 			state->data_node_connections = lappend(state->data_node_connections,
 				entry);
 			result = lappend(result, connection);
+		}
+
+		if (remote_connection_get_status(connection) == CONN_PROCESSING)
+		{
+			elog(ERROR, "wrong status CONN_PROCESSING for connection to data node %d when performing distributed COPY\n", required_id.server_id);
+		}
+
+		if (remote_connection_get_status(connection) == CONN_IDLE)
+		{
+			TSConnectionError err;
+			if (!remote_connection_begin_copy(connection, state->outgoing_copy_cmd,
+				state->using_binary, &err))
+			{
+				remote_connection_error_elog(&err, ERROR);
+			}
+
+			if(!list_member(state->connections_in_use, connection))
+			{
+				/*
+				 * The normal distributed insert path (not dist_copy, but
+				 * data_node_copy) doesn't reset the connections when it creates
+				 * a new chunk. So the connection status will be idle after we
+				 * created a new chunk, but it will still be in the list of
+				 * active connections. Don't add duplicates.
+				 */
+				state->connections_in_use = lappend(state->connections_in_use,
+					connection);
+			}
 		}
 	}
 
