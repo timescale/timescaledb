@@ -69,6 +69,7 @@
 TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
+TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_freeze_chunk);
 TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
@@ -169,6 +170,12 @@ static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
  *
  */
 #define CHUNK_STATUS_FROZEN 4
+
+/* A OSM table  is added as a chunk to the hypertable.
+ * This is different from a distributed hypertable chunk that
+ * is managed by the Timescale extension.
+ */
+#define CHUNK_STATUS_FOREIGN 8
 
 static HeapTuple
 chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
@@ -4358,4 +4365,113 @@ ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(chunk_id));
+}
+
+#include "hypercube.h"
+static Hypercube *
+fill_hypercube_for_foreign_table_chunk(Hyperspace *hs)
+{
+	Hypercube *cube = ts_hypercube_alloc(hs->num_dimensions);
+	Point *p = ts_point_create(hs->num_dimensions);
+	Assert(hs->num_dimensions == 1); // does not work with partitioned range
+	for (int i = 0; i < hs->num_dimensions; i++)
+	{
+		const Dimension *dim = &hs->dimensions[i];
+		Assert(dim->type == DIMENSION_TYPE_OPEN);
+		Oid dimtype = ts_dimension_get_partition_type(dim);
+		Datum val = Int64GetDatum(ts_time_get_min(dimtype));
+		p->coordinates[p->num_coords++] = ts_time_value_to_internal(val, dimtype);
+		cube->slices[i] = ts_dimension_calculate_default_slice(dim, p->coordinates[i]);
+		cube->num_slices++;
+	}
+	Assert(cube->num_slices == 1);
+	return cube;
+}
+
+/* adds foreign table as a chunk to the hypertable.
+ * creates a dummy chunk constraint for the time dimension.
+ * These constraints are recorded in the chunk-dimension slice metadata.
+ * They are NOT added as CHECK constraints on the foreign table.
+ *
+ * Does not add any inheritable constraints or indexes that are already
+ * defined on the hypertable.
+ */
+static void
+add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
+{
+	Hyperspace *hs = parent_ht->space;
+	Catalog *catalog = ts_catalog_get();
+	CatalogSecurityContext sec_ctx;
+	Chunk *chunk;
+	char *relschema = get_namespace_name(get_rel_namespace(relid));
+	char *relname = get_rel_name(relid);
+
+	Oid ht_ownerid = ts_rel_get_owner(parent_ht->main_table_relid);
+
+	if (!has_privs_of_role(GetUserId(), ht_ownerid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 errmsg("must be owner of hypertable \"%s\"",
+						get_rel_name(parent_ht->main_table_relid))));
+
+	Assert(get_rel_relkind(relid) == RELKIND_FOREIGN_TABLE);
+	if (hs->num_dimensions > 1)
+		elog(ERROR,
+			 "cannot attach a  foreign table to a hypertable that has more than 1 dimension");
+	/* Create a new chunk based on the hypercube */
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
+								 hs->num_dimensions,
+								 RELKIND_RELATION);
+	ts_catalog_restore_user(&sec_ctx);
+
+	/* fill in the correct table_name for the chunk*/
+	chunk->fd.hypertable_id = hs->hypertable_id;
+	chunk->cube = fill_hypercube_for_foreign_table_chunk(hs);
+	chunk->hypertable_relid = parent_ht->main_table_relid;
+	chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
+
+	namestrcpy(&chunk->fd.schema_name, relschema);
+	namestrcpy(&chunk->fd.table_name, relname);
+	chunk->fd.status = CHUNK_STATUS_FOREIGN;
+
+	/* Insert chunk */
+	ts_chunk_insert_lock(chunk, RowExclusiveLock);
+
+	/* insert dimension slices if they do not exist.
+	 * Then add dimension constraints for the chunk
+	 */
+	ts_dimension_slice_insert_multi(chunk->cube->slices, chunk->cube->num_slices);
+	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
+	/* check constraints are not automatically created for foreign tables.
+	 * See: ts_chunk_constraints_add_dimension_constraints.
+	 */
+	ts_chunk_constraints_insert_metadata(chunk->constraints);
+}
+
+/* Internal API used by OSM extension. OSM table is a foreign table that is
+ * attached as a chunk of the hypertable. A chunk needs dimension constraints. We
+ * add dummy constraints for the OSM chunk and then attach it to the hypertable.
+ * OSM extension is responsible for maintaining any constraints on this table.
+ */
+Datum
+ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid ftable_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	bool ret = false;
+
+	Cache *hcache;
+	Hypertable *par_ht =
+		ts_hypertable_cache_get_cache_and_entry(hypertable_relid, CACHE_FLAG_MISSING_OK, &hcache);
+	if (par_ht == NULL)
+		elog(ERROR, "\"%s\" is not a hypertable", get_rel_name(hypertable_relid));
+	if (get_rel_relkind(ftable_relid) == RELKIND_FOREIGN_TABLE)
+	{
+		add_foreign_table_as_chunk(ftable_relid, par_ht);
+		ret = true;
+	}
+	ts_cache_release(hcache);
+
+	PG_RETURN_BOOL(ret);
 }

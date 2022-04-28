@@ -3,8 +3,11 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 --  These tests work for PG14 or greater
--- Remember to corordinate any changes to freeze_chunk functionality with the Cloud
--- Storage team.
+-- Remember to corordinate any changes to functionality with the Cloud
+-- Storage team. Tests for the following API:
+-- * freeze_chunk
+-- * drop_chunk
+-- * attach_foreign_table_chunk
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA test1;
@@ -152,3 +155,62 @@ SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
 SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
 SELECT * from test1.hyper1 ORDER BY 1;
 SELECT * FROM hyper1_cagg ORDER BY 1;
+
+--TEST for attaching a foreign table as a chunk
+--need superuser access to create foreign data server
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE postgres_fdw_db;
+GRANT ALL PRIVILEGES ON DATABASE postgres_fdw_db TO :ROLE_4;
+
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_table( timec timestamptz NOT NULL , acq_id bigint, value bigint);
+INSERT INTO fdw_table VALUES( '2020-01-01 01:00', 100, 1000);
+
+--create foreign server and user mappings as superuser
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SELECT current_setting('port') as "PORTNO" \gset
+
+CREATE EXTENSION postgres_fdw;
+CREATE SERVER s3_server FOREIGN DATA WRAPPER postgres_fdw 
+OPTIONS ( host 'localhost', dbname 'postgres_fdw_db', port :'PORTNO');
+GRANT USAGE ON FOREIGN SERVER s3_server TO :ROLE_4;
+
+CREATE USER MAPPING FOR :ROLE_4 SERVER s3_server 
+OPTIONS (  user :'ROLE_4' , password :'ROLE_4_PASS');
+
+ALTER USER MAPPING FOR :ROLE_4 SERVER s3_server
+OPTIONS (ADD password_required 'false');
+
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_fdw_table
+(timec timestamptz NOT NULL, acq_id bigint, value bigint)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_table');
+GRANT SELECT ON  child_fdw_table TO :ROLE_4;
+
+--now attach foreign table as a chunk of the hypertable.
+\c :TEST_DBNAME :ROLE_4;
+CREATE TABLE ht_try(timec timestamptz NOT NULL, acq_id bigint, value bigint);
+SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 day');
+INSERT INTO ht_try VALUES ('2020-05-05 01:00', 222, 222);
+
+SELECT * FROM child_fdw_table;
+
+SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table');
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks 
+WHERE hypertable_name = 'ht_try' ORDER BY 1;
+
+SELECT * FROM ht_try ORDER BY 1;
+
+-- TEST error have to be hypertable owner to attach a chunk to it
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table');
+
+-- TEST error try to attach to non hypertable
+CREATE TABLE non_ht (time bigint, temp float);
+SELECT _timescaledb_internal.attach_osm_table_chunk('non_ht', 'child_fdw_table');
+ 
+\set ON_ERROR_STOP 1
