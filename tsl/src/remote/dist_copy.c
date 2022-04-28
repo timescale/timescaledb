@@ -32,14 +32,6 @@
 #define DEFAULT_PG_DELIMITER '\t'
 #define DEFAULT_PG_NULL_VALUE "\\N"
 
-/* This will maintain a list of connections associated with a given chunk so we don't have to keep
- * looking them up every time.
- */
-typedef struct ChunkConnectionList
-{
-	int32 chunk_id;
-	List *connections;
-} ChunkConnectionList;
 
 /* This contains the information needed to parse a dimension attribute out of a row of text copy
  * data
@@ -54,12 +46,18 @@ typedef struct CopyDimensionInfo
 	int32 atttypmod;
 } CopyDimensionInfo;
 
+typedef struct DataNodeConnection
+{
+	TSConnectionId id;
+	TSConnection *connection;
+} DataNodeConnection;
+
 /* This contains information about connections currently in use by the copy as well as how to create
  * and end the copy command.
  */
 typedef struct CopyConnectionState
 {
-	List *cached_connections;
+	List *data_node_connections;
 	List *connections_in_use;
 	bool using_binary;
 	const char *outgoing_copy_cmd;
@@ -245,29 +243,46 @@ start_remote_copy_on_new_connection(CopyConnectionState *state, TSConnection *co
 		remote_connection_error_elog(&err, ERROR);
 }
 
-static const ChunkConnectionList *
+static const List *
 create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 								 const List *chunk_data_nodes, Oid userid)
 {
-	ChunkConnectionList *chunk_connections;
+	List *result = NIL;
 	ListCell *lc;
-
-	chunk_connections = palloc0(sizeof(ChunkConnectionList));
-	chunk_connections->chunk_id = chunk_id;
-	chunk_connections->connections = NIL;
-
 	foreach (lc, chunk_data_nodes)
 	{
 		ChunkDataNode *cdn = lfirst(lc);
-		TSConnectionId id = remote_connection_id(cdn->foreign_server_oid, userid);
-		TSConnection *connection = remote_dist_txn_get_connection(id, REMOTE_TXN_NO_PREP_STMT);
+		TSConnectionId required_id = remote_connection_id(cdn->foreign_server_oid, userid);
 
-		start_remote_copy_on_new_connection(state, connection);
-		chunk_connections->connections = lappend(chunk_connections->connections, connection);
+		ListCell *lc2;
+		foreach (lc2, state->data_node_connections)
+		{
+			DataNodeConnection *entry = (DataNodeConnection *) lfirst(lc2);
+			if (required_id.server_id == entry->id.server_id
+				&& required_id.user_id == entry->id.user_id)
+			{
+				Assert(remote_connection_get_status(entry->connection) == CONN_COPY_IN);
+				result = lappend(result, entry->connection);
+				break;
+			}
+		}
+
+		if (lc2 == NULL)
+		{
+			TSConnection *connection = remote_dist_txn_get_connection(required_id, REMOTE_TXN_NO_PREP_STMT);
+			start_remote_copy_on_new_connection(state, connection);
+
+			DataNodeConnection *entry = palloc(sizeof(DataNodeConnection));
+			entry->connection = connection;
+			entry->id = required_id;
+
+			state->data_node_connections = lappend(state->data_node_connections,
+				entry);
+			result = lappend(result, connection);
+		}
 	}
-	state->cached_connections = lappend(state->cached_connections, chunk_connections);
 
-	return chunk_connections;
+	return result;
 }
 
 static void
@@ -296,33 +311,10 @@ get_connections_for_chunk(RemoteCopyContext *context, int32 chunk_id, const List
 {
 	CopyConnectionState *state = &context->connection_state;
 	MemoryContext oldmctx;
-	ListCell *lc;
-	List *conns;
-
-	foreach (lc, state->cached_connections)
-	{
-		ChunkConnectionList *chunkconns = lfirst(lc);
-
-		if (chunkconns->chunk_id == chunk_id)
-		{
-#ifdef USE_ASSERT_CHECKING
-			ListCell *lc2;
-
-			/* Check that connections are in COPY_IN mode */
-			foreach (lc2, chunkconns->connections)
-			{
-				TSConnection *conn = lfirst(lc2);
-
-				Assert(remote_connection_get_status(conn) == CONN_COPY_IN);
-			}
-#endif /* USE_ASSERT_CHECKING */
-			return chunkconns->connections;
-		}
-	}
 
 	oldmctx = MemoryContextSwitchTo(context->mctx);
-	conns =
-		create_connection_list_for_chunk(state, chunk_id, chunk_data_nodes, userid)->connections;
+	const List *conns =
+		create_connection_list_for_chunk(state, chunk_id, chunk_data_nodes, userid);
 	MemoryContextSwitchTo(oldmctx);
 
 	return conns;
@@ -610,7 +602,7 @@ remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_c
 	context->mctx = mctx;
 	context->binary_operation = binary_copy;
 	context->connection_state.connections_in_use = NIL;
-	context->connection_state.cached_connections = NIL;
+	context->connection_state.data_node_connections = NIL;
 	context->connection_state.using_binary = binary_copy;
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
 
@@ -754,9 +746,9 @@ static void
 reset_copy_connection_state(CopyConnectionState *state)
 {
 	finish_outstanding_copies(state);
-	list_free(state->cached_connections);
+	list_free(state->data_node_connections);
 	list_free(state->connections_in_use);
-	state->cached_connections = NIL;
+	state->data_node_connections = NIL;
 	state->connections_in_use = NIL;
 }
 
