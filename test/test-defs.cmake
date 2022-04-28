@@ -6,12 +6,15 @@ set(TEST_ROLE_DEFAULT_PERM_USER_2 default_perm_user_2)
 set(TEST_ROLE_1 test_role_1)
 set(TEST_ROLE_2 test_role_2)
 set(TEST_ROLE_3 test_role_3)
+set(TEST_ROLE_4 test_role_4)
 set(TEST_ROLE_READ_ONLY test_role_read_only)
 
 # TEST_ROLE_2 has password in passfile
 set(TEST_ROLE_2_PASS pass)
 # TEST_ROLE_3 does not have password in passfile
 set(TEST_ROLE_3_PASS pass)
+# TEST_ROLE_4 does not have password in passfile
+set(TEST_ROLE_4_PASS pass)
 
 set(TEST_INPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
@@ -64,7 +67,7 @@ set(PG_REGRESS_OPTS_BASE --host=${TEST_PGHOST}
                          --dlpath=${PROJECT_BINARY_DIR}/src)
 
 set(PG_REGRESS_OPTS_EXTRA
-    --create-role=${TEST_ROLE_SUPERUSER},${TEST_ROLE_DEFAULT_PERM_USER},${TEST_ROLE_DEFAULT_PERM_USER_2},${TEST_ROLE_CLUSTER_SUPERUSER},${TEST_ROLE_1},${TEST_ROLE_2},${TEST_ROLE_3},${TEST_ROLE_READ_ONLY}
+    --create-role=${TEST_ROLE_SUPERUSER},${TEST_ROLE_DEFAULT_PERM_USER},${TEST_ROLE_DEFAULT_PERM_USER_2},${TEST_ROLE_CLUSTER_SUPERUSER},${TEST_ROLE_1},${TEST_ROLE_2},${TEST_ROLE_3},${TEST_ROLE_4},${TEST_ROLE_READ_ONLY}
     --dbname=${TEST_DBNAME}
     --launcher=${PRIMARY_TEST_DIR}/runner.sh)
 
@@ -112,6 +115,7 @@ if(PG_REGRESS)
       TEST_ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY}
       TEST_ROLE_2_PASS=${TEST_ROLE_2_PASS}
       TEST_ROLE_3_PASS=${TEST_ROLE_3_PASS}
+      TEST_ROLE_4_PASS=${TEST_ROLE_4_PASS}
       TEST_DBNAME=${TEST_DBNAME}
       TEST_INPUT_DIR=${TEST_INPUT_DIR}
       TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR}

@@ -41,6 +41,8 @@ TEST_ROLE_2=${TEST_ROLE_2:-test_role_2}
 TEST_ROLE_2_PASS=${TEST_ROLE_2_PASS:-pass}
 TEST_ROLE_3=${TEST_ROLE_3:-test_role_3}
 TEST_ROLE_3_PASS=${TEST_ROLE_3_PASS:-pass}
+TEST_ROLE_4=${TEST_ROLE_4:-test_role_4}
+TEST_ROLE_4_PASS=${TEST_ROLE_4_PASS:-pass}
 TEST_ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY:-test_role_read_only}
 
 shift
@@ -72,6 +74,7 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
           GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_1};
           GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_2};
           GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_3};
+          GRANT CREATE ON SCHEMA public TO ${TEST_ROLE_4};
         END IF;
       END
     \$\$ LANGUAGE PLPGSQL;
@@ -81,6 +84,7 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
     ALTER USER ${TEST_ROLE_1} WITH CREATEDB CREATEROLE;
     ALTER USER ${TEST_ROLE_2} WITH CREATEDB PASSWORD '${TEST_ROLE_2_PASS}';
     ALTER USER ${TEST_ROLE_3} WITH CREATEDB PASSWORD '${TEST_ROLE_3_PASS}';
+    ALTER USER ${TEST_ROLE_4} WITH CREATEDB PASSWORD '${TEST_ROLE_4_PASS}';
 EOF
   ${PSQL} "$@" -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
   touch ${TEST_OUTPUT_DIR}/.pg_init/done
@@ -122,9 +126,11 @@ ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_1=${TEST_ROLE_1} \
      -v ROLE_2=${TEST_ROLE_2} \
      -v ROLE_3=${TEST_ROLE_3} \
+     -v ROLE_4=${TEST_ROLE_4} \
      -v ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY} \
      -v ROLE_2_PASS=${TEST_ROLE_2_PASS} \
      -v ROLE_3_PASS=${TEST_ROLE_3_PASS} \
+     -v ROLE_4_PASS=${TEST_ROLE_4_PASS} \
      -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
      -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
      -v TEST_SUPPORT_FILE=${TEST_SUPPORT_FILE} \
