@@ -3765,7 +3765,6 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 				break;
 		}
 	}
-
 	ts_cache_release(hcache);
 }
 

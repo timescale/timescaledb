@@ -14,3 +14,5 @@ CREATE FUNCTION @extschema@.detach_data_node(
     repartition            BOOLEAN = TRUE
 ) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
+
+DROP FUNCTION _timescaledb_internal.attach_osm_table_chunk( hypertable REGCLASS, chunk REGCLASS);
