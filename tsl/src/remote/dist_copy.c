@@ -56,8 +56,21 @@ typedef struct DataNodeConnection
  */
 typedef struct CopyConnectionState
 {
+	/*
+	 * Cached connections to data nodes.
+	 * Why do we need another layer of caching, when there is dist_txn layer
+	 * already? The API it provides is one function that "does everything
+	 * automatically", namely it's going to stop the COPY each time we request
+	 * the connection. This is not something we want to do for each row when
+	 * we're trying to do bulk copy.
+	 */
 	List *data_node_connections;
+
+	/*
+	 * Connections to which we have written something and have to finalize them.
+	 */
 	List *connections_in_use;
+
 	bool using_binary;
 	const char *outgoing_copy_cmd;
 } CopyConnectionState;
