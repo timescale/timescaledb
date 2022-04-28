@@ -16,6 +16,16 @@
 \set DN_DBNAME_5 :TEST_DBNAME _5
 \set DN_DBNAME_6 :TEST_DBNAME _6
 
+-- View to see dimension partitions. Note RIGHT JOIN to see that
+-- dimension partitions are cleaned up (deleted) properly.
+CREATE VIEW hypertable_partitions AS
+SELECT table_name, dimension_id, range_start, data_nodes
+FROM _timescaledb_catalog.hypertable h
+INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
+RIGHT JOIN _timescaledb_catalog.dimension_partition dp ON (dp.dimension_id = d.id)
+ORDER BY dimension_id, range_start;
+GRANT SELECT ON hypertable_partitions TO :ROLE_1;
+
 -- Add data nodes using TimescaleDB data_node management API.
 SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
 SELECT * FROM add_data_node('data_node_2', 'localhost', database => :'DN_DBNAME_2');
@@ -77,7 +87,6 @@ ALTER SERVER data_node_1 OWNER TO CURRENT_USER;
 -- List foreign data nodes
 SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
 
--- Delete a data node
 SELECT * FROM delete_data_node('data_node_3');
 
 -- List data nodes
@@ -98,6 +107,7 @@ SELECT * FROM delete_data_node('data_node_2');
 
 -- No data nodes left
 SELECT node_name, "options" FROM timescaledb_information.data_nodes ORDER BY node_name;
+SELECT * FROM hypertable_partitions;
 
 -- Cleanup databases
 RESET ROLE;
@@ -154,6 +164,9 @@ SELECT column_name, num_slices
 FROM _timescaledb_catalog.dimension
 WHERE column_name = 'device';
 
+-- Dimension partitions should be created
+SELECT * FROM hypertable_partitions;
+
 -- All data nodes with USAGE should be added.
 SELECT hdn.node_name
 FROM _timescaledb_catalog.hypertable_data_node hdn, _timescaledb_catalog.hypertable h
@@ -200,6 +213,7 @@ DROP TABLE disttable;
 -- data node mappings should be cleaned up
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM hypertable_partitions;
 
 -- Now create tables as cluster user
 CREATE TABLE disttable(time timestamptz, device int, temp float);
@@ -277,11 +291,15 @@ SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node
 
 -- Deleting a data node removes the "foreign" chunk table(s) that
 -- reference that data node as "primary" and should also remove the
--- hypertable_data_node and chunk_data_node mappings for that data node.  In
--- the future we might want to fallback to a replica data node for those
--- chunks that have multiple data nodes so that the chunk is not removed
--- unnecessarily. We use force => true b/c data_node_2 contains chunks.
+-- hypertable_data_node and chunk_data_node mappings for that data
+-- node.  In the future we might want to fallback to a replica data
+-- node for those chunks that have multiple data nodes so that the
+-- chunk is not removed unnecessarily. We use force => true b/c
+-- data_node_2 contains chunks.  Dimension partitions should also be
+-- updated to reflect the loss of the data node.
+SELECT * FROM hypertable_partitions;
 SELECT * FROM delete_data_node('data_node_2', force => true);
+SELECT * FROM hypertable_partitions;
 
 SELECT * FROM test.show_subtables('disttable');
 SELECT foreign_table_name, foreign_server_name
@@ -446,6 +464,7 @@ SELECT * FROM test.show_subtables('disttable');
 SELECT * FROM _timescaledb_catalog.chunk;
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
 SELECT * FROM _timescaledb_catalog.chunk_data_node;
+SELECT * FROM hypertable_partitions;
 
 -- Add additional hypertable
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
@@ -488,10 +507,15 @@ SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1', 'devices'
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_1', 'devices');
 \set ON_ERROR_STOP 1
 
--- Force block all data nodes
+-- Force block all data nodes. Dimension partition information should
+-- be updated to elide blocked data nodes
+SELECT * FROM hypertable_partitions;
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_2', force => true);
+SELECT * FROM hypertable_partitions;
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_1', force => true);
+SELECT * FROM hypertable_partitions;
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_3', force => true);
+SELECT * FROM hypertable_partitions;
 
 -- All data nodes are blocked
 SELECT * FROM _timescaledb_catalog.hypertable_data_node;
@@ -503,8 +527,11 @@ INSERT INTO disttable VALUES ('2019-11-02 02:45', 1, 13.3);
 
 -- unblock data nodes for all hypertables
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_1');
+SELECT * FROM hypertable_partitions;
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_2');
+SELECT * FROM hypertable_partitions;
 SELECT * FROM timescaledb_experimental.allow_new_chunks('data_node_3');
+SELECT * FROM hypertable_partitions;
 
 SELECT table_name, node_name, block_chunks
 FROM _timescaledb_catalog.hypertable_data_node dn,
@@ -536,7 +563,11 @@ SELECT * FROM detach_data_node('data_node_3', 'devices');
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => true);
 
 -- force detach data node to become under-replicated for new data
+SELECT * FROM hypertable_partitions;
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
+-- Dimension partitions should be updated to no longer list the data
+-- node for the hypertable
+SELECT * FROM hypertable_partitions;
 
 SELECT foreign_table_name, foreign_server_name
 FROM information_schema.foreign_tables

@@ -122,6 +122,9 @@ CREATE TRIGGER z_test_trigger_all_after
 --- hypertable and some triggers after so that we test both cases.
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device_id', 3, chunk_time_interval => 10, data_nodes => ARRAY[:'DATA_NODE_1', :'DATA_NODE_2']);
 
+SELECT * FROM _timescaledb_catalog.dimension_partition
+ORDER BY 1,2;
+
 -- FAILURE cases
 \set ON_ERROR_STOP 0
 
@@ -251,6 +254,8 @@ $$);
 -- Attach a new data node and show that the hypertable is created on
 -- the node, including its triggers.
 SELECT attach_data_node(:'DATA_NODE_3', 'hyper');
+SELECT * FROM _timescaledb_catalog.dimension_partition
+ORDER BY 1,2;
 
 -- Show that triggers are created on the new data node after attaching
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'],

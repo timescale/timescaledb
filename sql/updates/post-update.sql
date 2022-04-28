@@ -123,3 +123,12 @@ BEGIN
     END IF;
   END IF;
 END $$;
+
+
+-- Create dimension partition information for existing space-partitioned hypertables
+CREATE FUNCTION _timescaledb_internal.update_dimension_partition(hypertable REGCLASS) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_partition_update' LANGUAGE C VOLATILE;
+SELECT _timescaledb_internal.update_dimension_partition(format('%I.%I', h.schema_name, h.table_name))
+FROM _timescaledb_catalog.hypertable h
+INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
+WHERE d.interval_length IS NULL; 
+DROP FUNCTION _timescaledb_internal.update_dimension_partition;

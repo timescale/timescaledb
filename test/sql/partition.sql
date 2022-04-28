@@ -301,3 +301,9 @@ SELECT create_hypertable('part_time_func_null_ret', 'time', time_partitioning_fu
 INSERT INTO part_time_func_null_ret VALUES (1530214157.134, 23.4, 'dev1'),
                                            (1533214157.8734, 22.3, 'dev7');
 \set ON_ERROR_STOP 1
+
+-- Test manually refreshing dimension partitions used in update
+-- script. Mostly to keep codecov happy.
+CREATE FUNCTION _timescaledb_internal.update_dimension_partition(hypertable REGCLASS) RETURNS VOID AS :MODULE_PATHNAME, 'ts_dimension_partition_update' LANGUAGE C VOLATILE;
+SELECT _timescaledb_internal.update_dimension_partition('part_custom_dim');
+DROP FUNCTION _timescaledb_internal.update_dimension_partition;

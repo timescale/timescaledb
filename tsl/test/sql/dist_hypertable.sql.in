@@ -16,6 +16,7 @@
 \set DATA_NODE_1 :TEST_DBNAME _1
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
+\set DATA_NODE_4 :TEST_DBNAME _4
 \set TABLESPACE_1 :TEST_DBNAME _1
 \set TABLESPACE_2 :TEST_DBNAME _2
 SELECT
@@ -27,6 +28,16 @@ SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+
+-- View to see dimension partitions. Note RIGHT JOIN to see that
+-- dimension partitions are cleaned up (deleted) properly.
+CREATE VIEW hypertable_partitions AS
+SELECT table_name, dimension_id, range_start, data_nodes
+FROM _timescaledb_catalog.hypertable h
+INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
+RIGHT JOIN _timescaledb_catalog.dimension_partition dp ON (dp.dimension_id = d.id)
+ORDER BY dimension_id, range_start;
+GRANT SELECT ON hypertable_partitions TO :ROLE_1;
 
 -- Import testsupport.sql file to data nodes
 \unset ECHO
@@ -63,12 +74,18 @@ CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color in
 
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 1);
 
--- Increase the number of partitions. Expect warning since still too low
+-- Increase the number of partitions. Expect warning since still too
+-- low. Dimension partitions should be updated to reflect new
+-- partitioning.
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 SELECT * FROM set_number_partitions('disttable', 2);
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 
 -- Set number of partitions equal to the number of servers should not
 -- raise a warning.
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 SELECT * FROM set_number_partitions('disttable', 3, 'device');
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 
 -- Show the number of slices
 SELECT h.table_name, d.column_name, d.num_slices
@@ -79,8 +96,21 @@ AND h.table_name = 'disttable';
 -- This table tests both 1-dimensional tables and under-replication
 -- (replication_factor > num_data_nodes).
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
+
+\set ON_ERROR_STOP 0
+-- can't create an under-replicated hypertable
+SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
+\set ON_ERROR_STOP 1
+-- can create under-replicated hypertable byf force detaching a data node
+RESET ROLE;
+SELECT * FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_4 TO PUBLIC;
+SET ROLE :ROLE_1;
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 
+--create new session to clear out connections
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM delete_data_node(:'DATA_NODE_4', force => true, drop_database => true);
 SET ROLE :ROLE_1;
 
 CREATE OR REPLACE FUNCTION test_trigger()
@@ -224,6 +254,7 @@ FROM show_chunks('disttable');
 -- Show that there are assigned node_chunk_id:s in chunk data node mappings
 SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 
+SELECT * FROM hypertable_partitions;
 -- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
@@ -584,7 +615,10 @@ CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __reg
 SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region',
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, replication_factor => 2,
-data_nodes => ARRAY[:'DATA_NODE_3']);
+data_nodes => ARRAY[:'DATA_NODE_2', :'DATA_NODE_3']);
+
+-- Test detach and attach data node
+SELECT * FROM detach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', force => true, drop_remote_data => true);
 
 -- Test attach_data_node. First show dimensions and currently attached
 -- servers.  The number of slices in the space dimension should equal
@@ -1189,7 +1223,12 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     FROM show_chunks('hyper');
 $$);
 
+-- Dimension partitions should be updated to account for replication
+-- to additional data nodes
+SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
 SELECT * FROM set_replication_factor('hyper', 3);
+SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
+
 INSERT INTO hyper VALUES ('2017-01-02 07:11', 1, 1.7);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
@@ -1205,6 +1244,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 $$);
 
 SELECT * FROM set_replication_factor('hyper', 2);
+SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
 
 INSERT INTO hyper VALUES ('2017-03-01 06:01', 1, 15.1);
 

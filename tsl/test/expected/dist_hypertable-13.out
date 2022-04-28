@@ -9,6 +9,7 @@ psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
 \set DATA_NODE_1 :TEST_DBNAME _1
 \set DATA_NODE_2 :TEST_DBNAME _2
 \set DATA_NODE_3 :TEST_DBNAME _3
+\set DATA_NODE_4 :TEST_DBNAME _4
 \set TABLESPACE_1 :TEST_DBNAME _1
 \set TABLESPACE_2 :TEST_DBNAME _2
 SELECT
@@ -25,6 +26,15 @@ FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
 (3 rows)
 
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- View to see dimension partitions. Note RIGHT JOIN to see that
+-- dimension partitions are cleaned up (deleted) properly.
+CREATE VIEW hypertable_partitions AS
+SELECT table_name, dimension_id, range_start, data_nodes
+FROM _timescaledb_catalog.hypertable h
+INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
+RIGHT JOIN _timescaledb_catalog.dimension_partition dp ON (dp.dimension_id = d.id)
+ORDER BY dimension_id, range_start;
+GRANT SELECT ON hypertable_partitions TO :ROLE_1;
 -- Import testsupport.sql file to data nodes
 \unset ECHO
 SET ROLE :ROLE_1;
@@ -54,7 +64,15 @@ WARNING:  insufficient number of partitions for dimension "device"
              1 | public      | disttable  | t
 (1 row)
 
--- Increase the number of partitions. Expect warning since still too low
+-- Increase the number of partitions. Expect warning since still too
+-- low. Dimension partitions should be updated to reflect new
+-- partitioning.
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+ table_name | dimension_id |     range_start      |       data_nodes       
+------------+--------------+----------------------+------------------------
+ disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
+(1 row)
+
 SELECT * FROM set_number_partitions('disttable', 2);
 WARNING:  insufficient number of partitions for dimension "device"
  set_number_partitions 
@@ -62,13 +80,35 @@ WARNING:  insufficient number of partitions for dimension "device"
  
 (1 row)
 
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+ table_name | dimension_id |     range_start      |       data_nodes       
+------------+--------------+----------------------+------------------------
+ disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
+ disttable  |            2 |           1073741823 | {db_dist_hypertable_2}
+(2 rows)
+
 -- Set number of partitions equal to the number of servers should not
 -- raise a warning.
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+ table_name | dimension_id |     range_start      |       data_nodes       
+------------+--------------+----------------------+------------------------
+ disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
+ disttable  |            2 |           1073741823 | {db_dist_hypertable_2}
+(2 rows)
+
 SELECT * FROM set_number_partitions('disttable', 3, 'device');
  set_number_partitions 
 -----------------------
  
 (1 row)
+
+SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
+ table_name | dimension_id |     range_start      |       data_nodes       
+------------+--------------+----------------------+------------------------
+ disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
+ disttable  |            2 |            715827882 | {db_dist_hypertable_2}
+ disttable  |            2 |           1431655764 | {db_dist_hypertable_3}
+(3 rows)
 
 -- Show the number of slices
 SELECT h.table_name, d.column_name, d.num_slices
@@ -84,11 +124,35 @@ AND h.table_name = 'disttable';
 -- This table tests both 1-dimensional tables and under-replication
 -- (replication_factor > num_data_nodes).
 CREATE TABLE underreplicated(time timestamptz, device int, temp float);
+\set ON_ERROR_STOP 0
+-- can't create an under-replicated hypertable
+SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
+ERROR:  replication factor too large for hypertable "underreplicated"
+\set ON_ERROR_STOP 1
+-- can create under-replicated hypertable byf force detaching a data node
+RESET ROLE;
+SELECT * FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
+      node_name       |   host    | port  |       database       | node_created | database_created | extension_created 
+----------------------+-----------+-------+----------------------+--------------+------------------+-------------------
+ db_dist_hypertable_4 | localhost | 55432 | db_dist_hypertable_4 | t            | t                | t
+(1 row)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_4 TO PUBLIC;
+SET ROLE :ROLE_1;
 SELECT * FROM create_hypertable('underreplicated', 'time', replication_factor => 4);
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
              2 | public      | underreplicated | t
+(1 row)
+
+--create new session to clear out connections
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+SELECT * FROM delete_data_node(:'DATA_NODE_4', force => true, drop_database => true);
+WARNING:  insufficient number of data nodes for distributed hypertable "underreplicated"
+ delete_data_node 
+------------------
+ t
 (1 row)
 
 SET ROLE :ROLE_1;
@@ -184,11 +248,10 @@ INSERT INTO disttable VALUES
  Custom Scan (HypertableModify)
  Insert on distributed hypertable disttable
    ->  Insert on disttable
-         ->  Custom Scan (DataNodeDispatch)
-               Batch size: 1000
+         ->  Custom Scan (DataNodeCopy)
                ->  Custom Scan (ChunkDispatch)
                      ->  Result
-(7 rows)
+(6 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE)
 INSERT INTO disttable VALUES
@@ -199,15 +262,14 @@ INSERT INTO disttable VALUES
  Insert on distributed hypertable public.disttable
    Data nodes: db_dist_hypertable_1, db_dist_hypertable_2, db_dist_hypertable_3
    ->  Insert on public.disttable
-         ->  Custom Scan (DataNodeDispatch)
+         ->  Custom Scan (DataNodeCopy)
                Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
-               Batch size: 1000
-               Remote SQL: INSERT INTO public.disttable("time", device, temp) VALUES ($1, $2, $3), ..., ($2998, $2999, $3000)
+               Remote SQL: COPY public.disttable ("time", device, temp) FROM STDIN WITH (FORMAT binary)
                ->  Custom Scan (ChunkDispatch)
                      Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
                      ->  Result
                            Output: 'Sun Jan 01 06:01:00 2017 PST'::timestamp with time zone, 1, NULL::integer, '1.1'::double precision
-(12 rows)
+(11 rows)
 
 -- Create some chunks through insertion
 INSERT INTO disttable VALUES
@@ -363,6 +425,14 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
         5 |             2 | db_dist_hypertable_2
         6 |             2 | db_dist_hypertable_3
 (6 rows)
+
+SELECT * FROM hypertable_partitions;
+ table_name | dimension_id |     range_start      |       data_nodes       
+------------+--------------+----------------------+------------------------
+ disttable  |            2 | -9223372036854775808 | {db_dist_hypertable_1}
+ disttable  |            2 |            715827882 | {db_dist_hypertable_2}
+ disttable  |            2 |           1431655764 | {db_dist_hypertable_3}
+(3 rows)
 
 -- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
@@ -1954,12 +2024,20 @@ CREATE TABLE "Table\\Schema"."Param_Table"("time Col %#^#@$#" timestamptz, __reg
 SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'time Col %#^#@$#', partitioning_column => '__region',
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, replication_factor => 2,
-data_nodes => ARRAY[:'DATA_NODE_3']);
-WARNING:  only one data node was assigned to the hypertable
+data_nodes => ARRAY[:'DATA_NODE_2', :'DATA_NODE_3']);
 NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
  hypertable_id |  schema_name  | table_name  | created 
 ---------------+---------------+-------------+---------
              4 | Table\\Schema | Param_Table | t
+(1 row)
+
+-- Test detach and attach data node
+SELECT * FROM detach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', force => true, drop_remote_data => true);
+WARNING:  insufficient number of data nodes for distributed hypertable "Param_Table"
+NOTICE:  the number of partitions in dimension "__region" of hypertable "Param_Table" was decreased to 1
+ detach_data_node 
+------------------
+                1
 (1 row)
 
 -- Test attach_data_node. First show dimensions and currently attached
@@ -2023,7 +2101,7 @@ SELECT * FROM attach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', 
 WARNING:  insufficient number of partitions for dimension "__region"
  hypertable_id | node_hypertable_id |      node_name       
 ---------------+--------------------+----------------------
-             4 |                  3 | db_dist_hypertable_2
+             4 |                  4 | db_dist_hypertable_2
 (1 row)
 
 -- Number of slices should not be increased
@@ -2117,7 +2195,7 @@ id|schema_name  |table_name     |associated_schema_name|associated_table_prefix|
 --+-------------+---------------+----------------------+-----------------------+--------------+------------------------+------------------------+-----------------+-----------------+------------------------+------------------
  1|public       |disttable      |_timescaledb_internal |_dist_hyper_1          |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
  2|public       |underreplicated|_timescaledb_internal |_dist_hyper_2          |             1|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
- 3|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
+ 4|Table\\Schema|Param_Table    |T3sTSch               |test*pre_              |             2|_timescaledb_internal   |calculate_chunk_interval|                0|                0|                        |                -1
 (3 rows)
 
 
@@ -2129,8 +2207,8 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
  1|            1|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
  2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
  3|            2|time            |timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
- 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                       |                
+ 6|            4|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                  |   604800000000|                       |                
+ 7|            4|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash|               |                       |                
 (5 rows)
 
 
@@ -2185,7 +2263,7 @@ ts_insert_blocker|     7|_timescaledb_internal.insert_blocker
 
 -- Verify that repartitioning works as expected on detach_data_node
 SELECT * FROM detach_data_node(:'DATA_NODE_1', '"Table\\Schema"."Param_Table"', repartition => true);
-NOTICE:  the number of partitions in dimension "__region" was decreased to 2
+NOTICE:  the number of partitions in dimension "__region" of hypertable "Param_Table" was decreased to 2
  detach_data_node 
 ------------------
                 1
@@ -2302,7 +2380,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM attach_data_node(:'DATA_NODE_2', 'dimented_table');
  hypertable_id | node_hypertable_id |      node_name       
 ---------------+--------------------+----------------------
-             5 |                  4 | db_dist_hypertable_2
+             5 |                  5 | db_dist_hypertable_2
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -2348,12 +2426,12 @@ id|hypertable_id|column_name     |column_type             |aligned|num_slices|pa
  1|            1|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
  2|            1|device          |integer                 |f      |         3|_timescaledb_internal   |get_partition_hash   |               |                       |                
  3|            2|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 4|            3|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 5|            3|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 6|            4|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 7|            4|column1         |integer                 |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
- 8|            4|column2         |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
- 9|            4|column3         |integer                 |f      |         4|_timescaledb_internal   |get_partition_for_key|               |                       |                
+ 6|            4|time Col %#^#@$#|timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
+ 7|            4|__region        |text                    |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
+ 8|            5|time            |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
+ 9|            5|column1         |integer                 |f      |         4|_timescaledb_internal   |get_partition_hash   |               |                       |                
+10|            5|column2         |timestamp with time zone|t      |          |                        |                     |   604800000000|                       |                
+11|            5|column3         |integer                 |f      |         4|_timescaledb_internal   |get_partition_for_key|               |                       |                
 (9 rows)
 
 
@@ -3176,10 +3254,10 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      15|            8|_timescaledb_internal|_dist_hyper_10_27_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
-      16|            8|_timescaledb_internal|_dist_hyper_10_29_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
-      17|            8|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      18|            8|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      15|            9|_timescaledb_internal|_dist_hyper_10_27_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [-9223372036854775808, 715827882]}
+      16|            9|_timescaledb_internal|_dist_hyper_10_29_chunk|r      |{"time": [1482969600000000, 1483574400000000], "device": [715827882, 1431655764]}          
+      17|            9|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      18|            9|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
 (4 rows)
 
 
@@ -3248,8 +3326,8 @@ FROM show_chunks('disttable_drop_chunks')
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      17|            8|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
-      18|            8|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
+      17|            9|_timescaledb_internal|_dist_hyper_10_30_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [-9223372036854775808, 715827882]}
+      18|            9|_timescaledb_internal|_dist_hyper_10_31_chunk|r      |{"time": [1530144000000000, 1530748800000000], "device": [715827882, 1431655764]}          
 (2 rows)
 
 
@@ -3348,7 +3426,7 @@ WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_2]:
 id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func|interval_length|integer_now_func_schema|integer_now_func
 --+-------------+-----------+-----------+-------+----------+------------------------+-----------------+---------------+-----------------------+----------------
-18|           10|time       |bigint     |t      |          |                        |                 |        1000000|                       |                
+20|           11|time       |bigint     |t      |          |                        |                 |        1000000|                       |                
 (1 row)
 
 
@@ -3399,8 +3477,8 @@ WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_2]:
 id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
 --+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-19|           10|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                       |                
-18|           10|time       |bigint     |t      |          |                        |                  |        1000000|                       |                
+21|           11|device     |integer    |f      |         1|_timescaledb_internal   |get_partition_hash|               |                       |                
+20|           11|time       |bigint     |t      |          |                        |                  |        1000000|                       |                
 (2 rows)
 
 
@@ -3465,8 +3543,8 @@ WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
 NOTICE:  [db_dist_hypertable_2]:
 id|hypertable_id|column_name|column_type|aligned|num_slices|partitioning_func_schema|partitioning_func |interval_length|integer_now_func_schema|integer_now_func
 --+-------------+-----------+-----------+-------+----------+------------------------+------------------+---------------+-----------------------+----------------
-19|           10|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
-18|           10|time       |bigint     |t      |          |                        |                  |     2000000000|public                 |dummy_now       
+21|           11|device     |integer    |f      |         3|_timescaledb_internal   |get_partition_hash|               |                       |                
+20|           11|time       |bigint     |t      |          |                        |                  |     2000000000|public                 |dummy_now       
 (2 rows)
 
 
@@ -3837,8 +3915,8 @@ NOTICE:  [db_dist_hypertable_2]:
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                           
 --------+-------------+---------------------+-----------------------+-------+---------------------------------------------------------------------------------
-      23|           15|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}
-      24|           15|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}
+      23|           16|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}
+      24|           16|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}
 (2 rows)
 
 
@@ -3858,12 +3936,30 @@ chunk_id|hypertable_id|schema_name          |table_name             |relkind|sli
  
 (1 row)
 
+-- Dimension partitions should be updated to account for replication
+-- to additional data nodes
+SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
+ table_name | dimension_id |     range_start      |       data_nodes       
+------------+--------------+----------------------+------------------------
+ hyper      |           29 | -9223372036854775808 | {db_dist_hypertable_1}
+ hyper      |           29 |            715827882 | {db_dist_hypertable_2}
+ hyper      |           29 |           1431655764 | {db_dist_hypertable_3}
+(3 rows)
+
 SELECT * FROM set_replication_factor('hyper', 3);
 WARNING:  hypertable "hyper" is under-replicated
  set_replication_factor 
 ------------------------
  
 (1 row)
+
+SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
+ table_name | dimension_id |     range_start      |                            data_nodes                            
+------------+--------------+----------------------+------------------------------------------------------------------
+ hyper      |           29 | -9223372036854775808 | {db_dist_hypertable_1,db_dist_hypertable_2,db_dist_hypertable_3}
+ hyper      |           29 |            715827882 | {db_dist_hypertable_2,db_dist_hypertable_3,db_dist_hypertable_1}
+ hyper      |           29 |           1431655764 | {db_dist_hypertable_3,db_dist_hypertable_1,db_dist_hypertable_2}
+(3 rows)
 
 INSERT INTO hyper VALUES ('2017-01-02 07:11', 1, 1.7);
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
@@ -3888,8 +3984,8 @@ NOTICE:  [db_dist_hypertable_2]:
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                           
 --------+-------------+---------------------+-----------------------+-------+---------------------------------------------------------------------------------
-      23|           15|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}
-      24|           15|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}
+      23|           16|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}
+      24|           16|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}
 (2 rows)
 
 
@@ -3933,9 +4029,9 @@ NOTICE:  [db_dist_hypertable_2]:
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      23|           15|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
-      24|           15|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
-      25|           15|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      23|           16|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
+      24|           16|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
+      25|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
 (3 rows)
 
 
@@ -3963,6 +4059,14 @@ WARNING:  hypertable "hyper" is under-replicated
  
 (1 row)
 
+SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
+ table_name | dimension_id |     range_start      |                 data_nodes                  
+------------+--------------+----------------------+---------------------------------------------
+ hyper      |           29 | -9223372036854775808 | {db_dist_hypertable_1,db_dist_hypertable_2}
+ hyper      |           29 |            715827882 | {db_dist_hypertable_2,db_dist_hypertable_3}
+ hyper      |           29 |           1431655764 | {db_dist_hypertable_3,db_dist_hypertable_1}
+(3 rows)
+
 INSERT INTO hyper VALUES ('2017-03-01 06:01', 1, 15.1);
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
@@ -3988,10 +4092,10 @@ NOTICE:  [db_dist_hypertable_2]:
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      23|           15|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
-      24|           15|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
-      25|           15|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
-      26|           15|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+      23|           16|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
+      24|           16|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
+      25|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
 (4 rows)
 
 
@@ -4044,11 +4148,11 @@ NOTICE:  [db_dist_hypertable_2]:
 NOTICE:  [db_dist_hypertable_2]:
 chunk_id|hypertable_id|schema_name          |table_name             |relkind|slices                                                                                     
 --------+-------------+---------------------+-----------------------+-------+-------------------------------------------------------------------------------------------
-      23|           15|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
-      24|           15|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
-      25|           15|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
-      26|           15|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
-      27|           15|_timescaledb_internal|_dist_hyper_17_54_chunk|r      |{"time": [1491048000000000, 1491112800000000], "device": [715827882, 1431655764]}          
+      23|           16|_timescaledb_internal|_dist_hyper_17_47_chunk|r      |{"time": [1483336800000000, 1483401600000000], "device": [715827882, 1431655764]}          
+      24|           16|_timescaledb_internal|_dist_hyper_17_50_chunk|r      |{"time": [1515801600000000, 1515866400000000], "device": [715827882, 1431655764]}          
+      25|           16|_timescaledb_internal|_dist_hyper_17_52_chunk|r      |{"time": [1485928800000000, 1485993600000000], "device": [-9223372036854775808, 715827882]}
+      26|           16|_timescaledb_internal|_dist_hyper_17_53_chunk|r      |{"time": [1488326400000000, 1488391200000000], "device": [-9223372036854775808, 715827882]}
+      27|           16|_timescaledb_internal|_dist_hyper_17_54_chunk|r      |{"time": [1491048000000000, 1491112800000000], "device": [715827882, 1431655764]}          
 (5 rows)
 
 

@@ -24,6 +24,7 @@
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
+#include <nodes/parsenodes.h>
 #include <nodes/value.h>
 #include <parser/parse_func.h>
 #include <storage/lmgr.h>
@@ -1652,7 +1653,8 @@ ts_hypertable_check_partitioning(const Hypertable *ht, int32 id_of_updated_dimen
 }
 
 extern int16
-ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call)
+ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_dist_call,
+							   int num_data_nodes, const char *hypertable_name)
 {
 	bool valid = replication_factor >= 1 && replication_factor <= PG_INT16_MAX;
 
@@ -1683,6 +1685,17 @@ ts_validate_replication_factor(int32 replication_factor, bool is_null, bool is_d
 						ts_cm_functions->is_access_node_session();
 		}
 	}
+
+	if (num_data_nodes < replication_factor)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 errmsg("replication factor too large for hypertable \"%s\"", hypertable_name),
+				 errdetail("The hypertable has %d data nodes attached, while "
+						   "the replication factor is %d.",
+						   num_data_nodes,
+						   replication_factor),
+				 errhint("Decrease the replication factor or attach more data "
+						 "nodes to the hypertable.")));
 
 	if (!valid)
 		ereport(ERROR,
@@ -1804,19 +1817,20 @@ ts_hypertable_create_internal(PG_FUNCTION_ARGS, bool is_dist_call)
 		/* Release previously pinned cache */
 		ts_cache_release(hcache);
 
+		/* Validate data nodes and check permissions on them if this is a
+		 * distributed hypertable. */
+		if (replication_factor_in > 0)
+			data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
+
 		/*
 		 * Ensure replication factor is a valid value and convert it to
 		 * catalog table format
 		 */
 		replication_factor = ts_validate_replication_factor(replication_factor_in,
 															replication_factor_is_null,
-															is_dist_call);
-
-		/* Validate data nodes and check permissions on them if this is a
-		 * distributed hypertable. */
-		if (replication_factor > 0)
-			data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
-
+															is_dist_call,
+															list_length(data_nodes),
+															get_rel_name(table_relid));
 		if (NULL != space_dim_name)
 		{
 			int16 num_partitions = PG_ARGISNULL(3) ? -1 : PG_GETARG_INT16(3);
@@ -2098,11 +2112,14 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	{
 		space_dim_info->ht = time_dim_info->ht;
 		ts_dimension_add_from_info(space_dim_info);
+		ts_dimension_partition_info_recreate(space_dim_info->dimension_id,
+											 space_dim_info->num_slices,
+											 data_node_names,
+											 replication_factor);
 	}
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
 	ts_cache_release(hcache);
-
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Verify that existing indexes are compatible with a hypertable */
@@ -2476,8 +2493,9 @@ assert_chunk_data_nodes_is_a_set(const List *chunk_data_nodes)
 
 	foreach (lc, chunk_data_nodes)
 	{
-		HypertableDataNode *node = lfirst(lc);
-		chunk_data_node_oids = bms_add_member(chunk_data_node_oids, node->foreign_server_oid);
+		const char *nodename = lfirst(lc);
+		const ForeignServer *server = GetForeignServerByName(nodename, false);
+		chunk_data_node_oids = bms_add_member(chunk_data_node_oids, server->serverid);
 	}
 
 	Assert(list_length(chunk_data_nodes) == bms_num_members(chunk_data_node_oids));
@@ -2487,25 +2505,53 @@ assert_chunk_data_nodes_is_a_set(const List *chunk_data_nodes)
 /*
  * Assign data nodes to a chunk.
  *
- * A chunk is assigned up to replication_factor number of data nodes. Assignment
- * happens similar to tablespaces, i.e., based on dimension type.
+ * For space-partitioned tables, the first "closed" space dimension should
+ * have explicit partitioning information to map the chunk to a set of data
+ * nodes (dimension partition metadata). Otherwise compute the set of data
+ * nodes dynamically.
+ *
+ * A chunk should be assigned up to replication_factor number of data
+ * nodes. Dynamic assignment happens similar to tablespaces, i.e., based on
+ * dimension type.
+ *
+ * Returns a list of data node name strings (char *).
  */
 List *
 ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube)
 {
 	List *chunk_data_nodes = NIL;
-	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, true);
-	int num_assigned = MIN(ht->fd.replication_factor, list_length(available_nodes));
-	int n, i;
+	const Dimension *space_dim = hyperspace_get_closed_dimension(ht->space, 0);
 
-	n = hypertable_get_chunk_round_robin_index(ht, cube);
-
-	for (i = 0; i < num_assigned; i++)
+	if (NULL != space_dim && NULL != space_dim->dimension_partitions)
 	{
-		int j = (n + i) % list_length(available_nodes);
-
-		chunk_data_nodes = lappend(chunk_data_nodes, list_nth(available_nodes, j));
+		const DimensionSlice *slice =
+			ts_hypercube_get_slice_by_dimension_id(cube, space_dim->fd.id);
+		const DimensionPartition *dp =
+			ts_dimension_partition_find(space_dim->dimension_partitions, slice->fd.range_start);
+		chunk_data_nodes = dp->data_nodes;
 	}
+	else
+	{
+		List *available_nodes = ts_hypertable_get_available_data_nodes(ht, false);
+		int num_assigned = MIN(ht->fd.replication_factor, list_length(available_nodes));
+		int n, i;
+
+		n = hypertable_get_chunk_round_robin_index(ht, cube);
+
+		for (i = 0; i < num_assigned; i++)
+		{
+			int j = (n + i) % list_length(available_nodes);
+			HypertableDataNode *hdn = list_nth(available_nodes, j);
+			chunk_data_nodes = lappend(chunk_data_nodes, NameStr(hdn->fd.node_name));
+		}
+	}
+
+	if (chunk_data_nodes == NIL)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
+				 (errmsg("insufficient number of data nodes"),
+				  errhint("Increase the number of available data nodes on hypertable \"%s\".",
+						  get_rel_name(ht->main_table_relid)))));
 
 	if (list_length(chunk_data_nodes) < ht->fd.replication_factor)
 		ereport(WARNING,
@@ -2551,7 +2597,7 @@ get_hypertable_data_node(const HypertableDataNode *node)
 
 static List *
 get_hypertable_data_node_values(const Hypertable *ht, hypertable_data_node_filter filter,
-								get_value value)
+								get_value valuefunc)
 {
 	List *list = NULL;
 	ListCell *cell;
@@ -2560,7 +2606,7 @@ get_hypertable_data_node_values(const Hypertable *ht, hypertable_data_node_filte
 	{
 		HypertableDataNode *node = lfirst(cell);
 		if (filter == NULL || filter(node))
-			list = lappend(list, value(node));
+			list = lappend(list, valuefunc(node));
 	}
 
 	return list;
@@ -2572,19 +2618,30 @@ ts_hypertable_get_data_node_name_list(const Hypertable *ht)
 	return get_hypertable_data_node_values(ht, NULL, get_hypertable_data_node_name);
 }
 
-List *
-ts_hypertable_get_available_data_nodes(const Hypertable *ht, bool error_if_missing)
+static List *
+get_available_data_nodes(const Hypertable *ht, get_value valuefunc, bool error_if_missing)
 {
-	List *available_nodes = get_hypertable_data_node_values(ht,
-															filter_non_blocked_data_nodes,
-															get_hypertable_data_node);
+	List *available_nodes =
+		get_hypertable_data_node_values(ht, filter_non_blocked_data_nodes, valuefunc);
 	if (available_nodes == NIL && error_if_missing)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
 				 (errmsg("insufficient number of data nodes"),
-				  errhint("Increase the number of available data nodes on hypertable \"%s\"",
+				  errhint("Increase the number of available data nodes on hypertable \"%s\".",
 						  get_rel_name(ht->main_table_relid)))));
 	return available_nodes;
+}
+
+List *
+ts_hypertable_get_available_data_nodes(const Hypertable *ht, bool error_if_missing)
+{
+	return get_available_data_nodes(ht, get_hypertable_data_node, error_if_missing);
+}
+
+List *
+ts_hypertable_get_available_data_node_names(const Hypertable *ht, bool error_if_missing)
+{
+	return get_available_data_nodes(ht, get_hypertable_data_node_name, error_if_missing);
 }
 
 static List *
@@ -2687,5 +2744,27 @@ ts_hypertable_has_compression_table(const Hypertable *ht)
 		Assert(ht->fd.compression_state == HypertableCompressionEnabled);
 		return true;
 	}
+	return false;
+}
+
+bool
+ts_hypertable_update_dimension_partitions(const Hypertable *ht)
+{
+	const Dimension *space_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	if (NULL != space_dim)
+	{
+		List *data_node_names = NIL;
+
+		if (hypertable_is_distributed(ht))
+			data_node_names = ts_hypertable_get_available_data_node_names(ht, false);
+
+		ts_dimension_partition_info_recreate(space_dim->fd.id,
+											 space_dim->fd.num_slices,
+											 data_node_names,
+											 ht->fd.replication_factor);
+		return true;
+	}
+
 	return false;
 }

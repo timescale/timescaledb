@@ -95,6 +95,15 @@ SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device_id', 3, chu
              1 | public      | hyper      | t
 (1 row)
 
+SELECT * FROM _timescaledb_catalog.dimension_partition
+ORDER BY 1,2;
+ dimension_id |     range_start      |      data_nodes      
+--------------+----------------------+----------------------
+            2 | -9223372036854775808 | {db_dist_triggers_1}
+            2 |            715827882 | {db_dist_triggers_2}
+            2 |           1431655764 | {db_dist_triggers_1}
+(3 rows)
+
 -- FAILURE cases
 \set ON_ERROR_STOP 0
 -- Check that CREATE TRIGGER fails if a trigger already exists on a data node.
@@ -298,6 +307,15 @@ SELECT attach_data_node(:'DATA_NODE_3', 'hyper');
 --------------------------
  (1,1,db_dist_triggers_3)
 (1 row)
+
+SELECT * FROM _timescaledb_catalog.dimension_partition
+ORDER BY 1,2;
+ dimension_id |     range_start      |      data_nodes      
+--------------+----------------------+----------------------
+            2 | -9223372036854775808 | {db_dist_triggers_1}
+            2 |            715827882 | {db_dist_triggers_2}
+            2 |           1431655764 | {db_dist_triggers_3}
+(3 rows)
 
 -- Show that triggers are created on the new data node after attaching
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'],

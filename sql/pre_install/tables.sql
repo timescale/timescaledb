@@ -128,7 +128,32 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '')
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
 
--- A dimension slice defines a keyspace range along a dimension axis.
+-- A dimension partition represents the current division of a (space)
+-- dimension into partitions, and the mapping of those partitions to
+-- data nodes. When a chunk is created, it will use the partition and
+-- data nodes information in this table to decide range and node
+-- placement of the chunk.
+--
+-- Normally, only closed/space dimensions are pre-partitioned and
+-- present in this table. The dimension stretches from -INF to +INF
+-- and the range_start value for a partition represents where the
+-- partition starts, stretching to the start of the next partition
+-- (non-inclusive). There is no range_end since it is implicit by the
+-- start of the next partition and thus uses less space. Having no end
+-- also makes it easier to split partitions by inserting a new row
+-- instead of potentially updating multiple rows.
+CREATE TABLE _timescaledb_catalog.dimension_partition (
+  dimension_id integer NOT NULL REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE,
+  range_start bigint NOT NULL,
+  data_nodes name[] NULL,
+  UNIQUE (dimension_id, range_start)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_partition', '');
+
+-- A dimension slice defines a keyspace range along a dimension
+-- axis. A chunk references a slice in each of its dimensions, forming
+-- a hypercube.
 CREATE TABLE _timescaledb_catalog.dimension_slice (
   id serial NOT NULL,
   dimension_id integer NOT NULL,

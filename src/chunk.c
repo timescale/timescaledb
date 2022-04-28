@@ -970,9 +970,8 @@ chunk_assign_data_nodes(const Chunk *chunk, const Hypertable *ht)
 
 	foreach (lc, htnodes)
 	{
-		HypertableDataNode *htnode = lfirst(lc);
-		ForeignServer *foreign_server =
-			GetForeignServerByName(NameStr(htnode->fd.node_name), false);
+		const char *dn = lfirst(lc);
+		ForeignServer *foreign_server = GetForeignServerByName(dn, false);
 		ChunkDataNode *chunk_data_node = palloc0(sizeof(ChunkDataNode));
 
 		/*

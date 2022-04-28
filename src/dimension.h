@@ -13,6 +13,7 @@
 #include <catalog/pg_type.h>
 
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/dimension_partition.h"
 #include "export.h"
 #include "time_utils.h"
 
@@ -34,6 +35,7 @@ typedef struct Dimension
 	AttrNumber column_attno;
 	Oid main_table_relid;
 	PartitioningInfo *partitioning;
+	DimensionPartitionInfo *dimension_partitions;
 } Dimension;
 
 #define IS_OPEN_DIMENSION(d) ((d)->type == DIMENSION_TYPE_OPEN)

@@ -551,7 +551,7 @@ RESET ROLE;
 TRUNCATE disttable;
 SELECT * FROM delete_data_node('data_node_1', force => true);
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
-NOTICE:  the number of partitions in dimension "device" was decreased to 1
+NOTICE:  the number of partitions in dimension "device" of hypertable "disttable" was decreased to 1
  delete_data_node 
 ------------------
  t
