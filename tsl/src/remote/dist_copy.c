@@ -32,7 +32,6 @@
 #define DEFAULT_PG_DELIMITER '\t'
 #define DEFAULT_PG_NULL_VALUE "\\N"
 
-
 /* This contains the information needed to parse a dimension attribute out of a row of text copy
  * data
  */
@@ -228,21 +227,6 @@ calculate_hyperspace_point_from_fields(char **data, CopyDimensionInfo *dimension
 	return p;
 }
 
-static void
-start_remote_copy_on_new_connection(CopyConnectionState *state, TSConnection *connection)
-{
-	TSConnectionError err;
-
-	state->connections_in_use = list_append_unique_ptr(state->connections_in_use, connection);
-
-	if (remote_connection_get_status(connection) == CONN_IDLE &&
-		!remote_connection_begin_copy(connection,
-									  state->outgoing_copy_cmd,
-									  state->using_binary,
-									  &err))
-		remote_connection_error_elog(&err, ERROR);
-}
-
 static const List *
 create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 								 const List *chunk_data_nodes, Oid userid)
@@ -260,8 +244,8 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 		{
 			DataNodeConnection *entry = (DataNodeConnection *) lfirst(lc2);
 			connection = entry->connection;
-			if (required_id.server_id == entry->id.server_id
-				&& required_id.user_id == entry->id.user_id)
+			if (required_id.server_id == entry->id.server_id &&
+				required_id.user_id == entry->id.user_id)
 			{
 				result = lappend(result, connection);
 				break;
@@ -271,32 +255,35 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 		if (lc2 == NULL)
 		{
 			connection = remote_dist_txn_get_connection(required_id, REMOTE_TXN_NO_PREP_STMT);
-			start_remote_copy_on_new_connection(state, connection);
 
 			DataNodeConnection *entry = palloc(sizeof(DataNodeConnection));
 			entry->connection = connection;
 			entry->id = required_id;
 
-			state->data_node_connections = lappend(state->data_node_connections,
-				entry);
+			state->data_node_connections = lappend(state->data_node_connections, entry);
 			result = lappend(result, connection);
 		}
 
 		if (remote_connection_get_status(connection) == CONN_PROCESSING)
 		{
-			elog(ERROR, "wrong status CONN_PROCESSING for connection to data node %d when performing distributed COPY\n", required_id.server_id);
+			elog(ERROR,
+				 "wrong status CONN_PROCESSING for connection to data node %d when performing "
+				 "distributed COPY\n",
+				 required_id.server_id);
 		}
 
 		if (remote_connection_get_status(connection) == CONN_IDLE)
 		{
 			TSConnectionError err;
-			if (!remote_connection_begin_copy(connection, state->outgoing_copy_cmd,
-				state->using_binary, &err))
+			if (!remote_connection_begin_copy(connection,
+											  state->outgoing_copy_cmd,
+											  state->using_binary,
+											  &err))
 			{
 				remote_connection_error_elog(&err, ERROR);
 			}
 
-			if(!list_member(state->connections_in_use, connection))
+			if (!list_member(state->connections_in_use, connection))
 			{
 				/*
 				 * The normal distributed insert path (not dist_copy, but
@@ -305,8 +292,7 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 				 * created a new chunk, but it will still be in the list of
 				 * active connections. Don't add duplicates.
 				 */
-				state->connections_in_use = lappend(state->connections_in_use,
-					connection);
+				state->connections_in_use = lappend(state->connections_in_use, connection);
 			}
 		}
 	}
@@ -342,8 +328,7 @@ get_connections_for_chunk(RemoteCopyContext *context, int32 chunk_id, const List
 	MemoryContext oldmctx;
 
 	oldmctx = MemoryContextSwitchTo(context->mctx);
-	const List *conns =
-		create_connection_list_for_chunk(state, chunk_id, chunk_data_nodes, userid);
+	const List *conns = create_connection_list_for_chunk(state, chunk_id, chunk_data_nodes, userid);
 	MemoryContextSwitchTo(oldmctx);
 
 	return conns;
