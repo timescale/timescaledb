@@ -17,6 +17,7 @@
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "ts_catalog/tablespace.h"
+#include "ts_catalog/dimension_partition.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"
@@ -155,12 +156,15 @@ extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(const Hypertable 
 extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(const Hypertable *ht);
 extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(const Hypertable *ht,
 																bool error_if_missing);
+extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_names(const Hypertable *ht,
+																	 bool error_if_missing);
 extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(const Hypertable *ht);
 extern TSDLLEXPORT HypertableType ts_hypertable_get_type(const Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_func_call_on_data_nodes(const Hypertable *ht,
 															  FunctionCallInfo fcinfo);
 extern TSDLLEXPORT int16 ts_validate_replication_factor(int32 replication_factor, bool is_null,
-														bool is_dist_call);
+														bool is_dist_call, int num_data_nodes,
+														const char *hypertable_name);
 extern TSDLLEXPORT Datum ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
@@ -168,6 +172,7 @@ extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
 												   const char *name);
+extern TSDLLEXPORT bool ts_hypertable_update_dimension_partitions(const Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

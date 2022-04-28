@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include "cache.h"
 #include <postgres.h>
 
 #include <access/htup_details.h>
@@ -46,6 +47,7 @@
 #include "mb/pg_wchar.h"
 #include "chunk.h"
 #include "ts_catalog/chunk_data_node.h"
+#include "ts_catalog/dimension_partition.h"
 #include "ts_catalog/hypertable_data_node.h"
 
 #define TS_DEFAULT_POSTGRES_PORT 5432
@@ -844,7 +846,7 @@ data_node_attach(PG_FUNCTION_ARGS)
 	HypertableDataNode *node;
 	Cache *hcache;
 	Hypertable *ht;
-	Dimension *dim;
+	Dimension *space_dim;
 	List *result;
 	int num_nodes;
 	ListCell *lc;
@@ -922,10 +924,15 @@ data_node_attach(PG_FUNCTION_ARGS)
 	result = hypertable_assign_data_nodes(ht->fd.id, list_make1((char *) node_name));
 	Assert(result->length == 1);
 
+	/* Refresh the cached hypertable entry to get the attached node */
+	ts_cache_release(hcache);
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_hypertable_cache_get_entry(hcache, table_id, CACHE_FLAG_NONE);
+
 	/* Get the first closed (space) dimension, which is the one along which we
 	 * partition across data nodes. */
-	dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
-	num_nodes = list_length(ht->data_nodes) + 1;
+	space_dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
+	num_nodes = list_length(ht->data_nodes);
 
 	if (num_nodes > MAX_NUM_HYPERTABLE_DATA_NODES)
 		ereport(ERROR,
@@ -937,32 +944,39 @@ data_node_attach(PG_FUNCTION_ARGS)
 	/* If there are less slices (partitions) in the space dimension than there
 	 * are data nodes, we'd like to expand the number of slices to be able to
 	 * make use of the new data node. */
-	if (NULL != dim && num_nodes > dim->fd.num_slices)
+	if (NULL != space_dim)
 	{
-		if (repartition)
-		{
-			ts_dimension_set_number_of_slices(dim, num_nodes & 0xFFFF);
+		List *data_node_names = NIL;
 
-			ereport(NOTICE,
-					(errmsg("the number of partitions in dimension \"%s\" was increased to %u",
-							NameStr(dim->fd.column_name),
-							num_nodes),
-					 errdetail("To make use of all attached data nodes, a distributed "
-							   "hypertable needs at least as many partitions in the first "
-							   "closed (space) dimension as there are attached data nodes.")));
-		}
-		else
+		if (num_nodes > space_dim->fd.num_slices)
 		{
-			/* Raise a warning if the number of partitions are too few to make
-			 * use of all data nodes. Need to refresh cache first to get the
-			 * updated data node list. */
-			int dimension_id = dim->fd.id;
+			if (repartition)
+			{
+				ts_dimension_set_number_of_slices(space_dim, num_nodes & 0xFFFF);
 
-			ts_cache_release(hcache);
-			hcache = ts_hypertable_cache_pin();
-			ht = ts_hypertable_cache_get_entry(hcache, table_id, CACHE_FLAG_NONE);
-			ts_hypertable_check_partitioning(ht, dimension_id);
+				ereport(NOTICE,
+						(errmsg("the number of partitions in dimension \"%s\" was increased to %u",
+								NameStr(space_dim->fd.column_name),
+								num_nodes),
+						 errdetail("To make use of all attached data nodes, a distributed "
+								   "hypertable needs at least as many partitions in the first "
+								   "closed (space) dimension as there are attached data nodes.")));
+			}
+			else
+			{
+				/* Raise a warning if the number of partitions are too few to make
+				 * use of all data nodes. Need to refresh cache first to get the
+				 * updated data node list. */
+				int dimension_id = space_dim->fd.id;
+				ts_hypertable_check_partitioning(ht, dimension_id);
+			}
 		}
+
+		data_node_names = ts_hypertable_get_available_data_node_names(ht, true);
+		ts_dimension_partition_info_recreate(space_dim->fd.id,
+											 num_nodes,
+											 data_node_names,
+											 ht->fd.replication_factor);
 	}
 
 	node = linitial(result);
@@ -984,8 +998,7 @@ typedef enum OperationType
 } OperationType;
 
 static void
-check_replication_for_new_data(const char *node_name, Hypertable *ht, bool force,
-							   OperationType op_type)
+check_replication_for_new_data(const char *node_name, Hypertable *ht, bool force)
 {
 	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, false);
 
@@ -1063,7 +1076,7 @@ data_node_detach_or_delete_validate(const char *node_name, Hypertable *ht, bool 
 							NameStr(ht->fd.table_name))));
 	}
 
-	check_replication_for_new_data(node_name, ht, force, op_type);
+	check_replication_for_new_data(node_name, ht, force);
 
 	return chunk_data_nodes;
 }
@@ -1082,10 +1095,13 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 	{
 		HypertableDataNode *node = lfirst(lc);
 		Oid relid = ts_hypertable_id_to_relid(node->fd.hypertable_id);
-		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(hcache, node->fd.hypertable_id);
+		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_NONE);
 		bool has_privs = ts_hypertable_has_privs_of(relid, GetUserId());
+		bool update_dimension_partitions = false;
+		Dimension *space_dim;
 
 		Assert(ht != NULL);
+		space_dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 
 		if (!has_privs)
 		{
@@ -1131,24 +1147,33 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 
 			if (repartition)
 			{
-				Dimension *dim =
-					ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_CLOSED, 0);
 				int num_nodes = list_length(ht->data_nodes) - 1;
 
-				if (dim != NULL && num_nodes < dim->fd.num_slices && num_nodes > 0)
+				if (space_dim != NULL && num_nodes < space_dim->fd.num_slices && num_nodes > 0)
 				{
-					ts_dimension_set_number_of_slices(dim, num_nodes & 0xFFFF);
+					ts_dimension_set_number_of_slices(space_dim, num_nodes & 0xFFFF);
 
 					ereport(NOTICE,
-							(errmsg("the number of partitions in dimension \"%s\" was decreased to "
-									"%u",
-									NameStr(dim->fd.column_name),
+							(errmsg("the number of partitions in dimension \"%s\" of hypertable "
+									"\"%s\" was decreased to %u",
+									NameStr(space_dim->fd.column_name),
+									get_rel_name(ht->main_table_relid),
 									num_nodes),
 							 errdetail(
 								 "To make efficient use of all attached data nodes, the number of "
 								 "space partitions was set to match the number of data nodes.")));
 				}
 			}
+
+			/* Update dimension partitions. First remove the detach/deleted
+			 * data node from the list of remaining nodes so that it is not
+			 * used in the new partitioning scheme.
+			 *
+			 * Note that the cached dimension partition info in the Dimension
+			 * object is not updated. The cache will be invalidated and
+			 * released at the end of this function.
+			 */
+			update_dimension_partitions = NULL != space_dim;
 
 			if (op_type == OP_DETACH && drop_remote_data)
 			{
@@ -1176,12 +1201,23 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 					continue;
 				}
 
-				check_replication_for_new_data(node_name, ht, force, OP_BLOCK);
+				check_replication_for_new_data(node_name, ht, force);
 			}
 			node->fd.block_chunks = block_chunks;
 			removed += ts_hypertable_data_node_update(node);
+			update_dimension_partitions = NULL != space_dim;
+		}
+
+		if (update_dimension_partitions)
+		{
+			/* Refresh the cached hypertable to get the updated list of data nodes */
+			ts_cache_release(hcache);
+			hcache = ts_hypertable_cache_pin();
+			ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_NONE);
+			ts_hypertable_update_dimension_partitions(ht);
 		}
 	}
+
 	ts_cache_release(hcache);
 	return removed;
 }

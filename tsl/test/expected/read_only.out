@@ -158,7 +158,7 @@ ERROR:  cannot execute detach_data_node() in a read-only transaction
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
 SELECT * FROM detach_data_node(:'DATA_NODE_2', 'disttable');
-NOTICE:  the number of partitions in dimension "device" was decreased to 1
+NOTICE:  the number of partitions in dimension "device" of hypertable "disttable" was decreased to 1
  detach_data_node 
 ------------------
                 1

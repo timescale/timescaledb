@@ -196,6 +196,15 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 													  NameStr(d->fd.column_name),
 													  d->type,
 													  main_table_relid);
+
+		/* Closed "space" partitions might be explicitly partitioned if it is
+		 * the "first" space dimension. If it is not the first, the dimension
+		 * partitions state will be NULL */
+		if (IS_CLOSED_DIMENSION(d))
+			d->dimension_partitions = ts_dimension_partition_info_get(d->fd.id);
+		else
+			d->dimension_partitions = NULL;
+
 		MemoryContextSwitchTo(old);
 	}
 
@@ -210,7 +219,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 					   values[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)]));
 	}
 
-	if (d->type == DIMENSION_TYPE_CLOSED)
+	if (IS_CLOSED_DIMENSION(d))
 		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
 	else
 		d->fd.interval_length =
@@ -659,6 +668,8 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 	if (NULL != delete_slices && *delete_slices)
 		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id), false);
 
+	/* delete all dimension partitions */
+	ts_dimension_partition_info_delete(DatumGetInt32(dimension_id));
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
@@ -1138,6 +1149,7 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 	{
 		Assert(IS_CLOSED_DIMENSION(dim));
 		dim->fd.num_slices = *num_slices;
+		ts_hypertable_update_dimension_partitions(ht);
 	}
 
 	if (NULL != integer_now_func)
@@ -1540,6 +1552,21 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		 */
 		ts_hypertable_set_num_dimensions(info.ht, info.ht->space->num_dimensions + 1);
 		dimension_id = ts_dimension_add_from_info(&info);
+
+		/* If adding the first space dimension, also add dimension partition metadata */
+		if (info.type == DIMENSION_TYPE_CLOSED)
+		{
+			const Dimension *space_dim = hyperspace_get_closed_dimension(info.ht->space, 0);
+
+			if (space_dim != NULL)
+			{
+				List *data_nodes = ts_hypertable_get_available_data_nodes(info.ht, false);
+				ts_dimension_partition_info_recreate(dimension_id,
+													 info.num_slices,
+													 data_nodes,
+													 info.ht->fd.replication_factor);
+			}
+		}
 
 		/* Verify that existing indexes are compatible with a hypertable */
 

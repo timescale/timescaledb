@@ -10,6 +10,7 @@
 #include "export.h"
 #include "hypercube.h"
 #include "dimension_vector.h"
+#include "ts_catalog/dimension_partition.h"
 
 /*
  * A hypercube represents the partition bounds of a hypertable chunk.
@@ -291,15 +292,26 @@ ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p, const Sc
 		const Dimension *dim = &hs->dimensions[i];
 		int64 value = p->coordinates[i];
 		bool found = false;
+		bool check_for_existing_slice = false;
 
 		/* Assert that dimensions are in ascending order */
 		Assert(i == 0 || dim->fd.id > hs->dimensions[i - 1].fd.id);
 
+		if (NULL != dim->dimension_partitions)
+		{
+			const DimensionPartition *dp =
+				ts_dimension_partition_find(dim->dimension_partitions, value);
+
+			cube->slices[i] =
+				ts_dimension_slice_create(dp->dimension_id, dp->range_start, dp->range_end);
+			check_for_existing_slice = true;
+			found = true;
+		}
 		/*
 		 * If this is an aligned dimension, we'd like to reuse any existing
 		 * slice that covers the coordinate in the dimension
 		 */
-		if (dim->fd.aligned)
+		else if (dim->fd.aligned)
 		{
 			DimensionVec *vec;
 
@@ -319,7 +331,11 @@ ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p, const Sc
 			 * the range of a new slice
 			 */
 			cube->slices[i] = ts_dimension_calculate_default_slice(dim, value);
+			check_for_existing_slice = true;
+		}
 
+		if (check_for_existing_slice)
+		{
 			/*
 			 * Check if there's already an existing slice with the calculated
 			 * range. If a slice already exists, use that slice's ID instead

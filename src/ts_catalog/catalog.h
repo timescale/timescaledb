@@ -36,6 +36,7 @@ typedef enum CatalogTable
 	HYPERTABLE = 0,
 	HYPERTABLE_DATA_NODE,
 	DIMENSION,
+	DIMENSION_PARTITION,
 	DIMENSION_SLICE,
 	CHUNK,
 	CHUNK_CONSTRAINT,
@@ -287,6 +288,51 @@ enum
 	DIMENSION_ID_IDX = 0,
 	DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX,
 	_MAX_DIMENSION_INDEX,
+};
+
+/******************************
+ *
+ * Dimension partition table definitions
+ *
+ ******************************/
+
+#define DIMENSION_PARTITION_TABLE_NAME "dimension_partition"
+
+enum Anum_dimension_partition
+{
+	Anum_dimension_partition_dimension_id = 1,
+	Anum_dimension_partition_range_start,
+	Anum_dimension_partition_data_nodes,
+	_Anum_dimension_partition_max,
+};
+
+#define Natts_dimension_partition (_Anum_dimension_partition_max - 1)
+
+typedef struct FormData_dimension_partition
+{
+	int32 dimension_id;
+	int64 range_start;
+	/* Variable-length fields start here. The first variable-length field can
+	 * still be accessed directly via the C struct */
+	ArrayType *data_nodes;
+} FormData_dimension_partition;
+
+typedef FormData_dimension_partition *Form_dimension_partition;
+
+enum Anum_dimension_partition_dimension_id_range_start_idx
+{
+	Anum_dimension_partition_dimension_id_range_start_idx_dimension_id = 1,
+	Anum_dimension_partition_dimension_id_range_start_idx_range_start,
+	_Anum_dimension_partition_dimension_id_range_start_idx_max,
+};
+
+#define Natts_dimension_partition_dimension_id_range_start_idx                                     \
+	(_Anum_dimension_partition_dimension_id_range_start_idx_max - 1)
+
+enum
+{
+	DIMENSION_PARTITION_DIMENSION_ID_RANGE_START_IDX = 0,
+	_MAX_DIMENSION_PARTITION_INDEX,
 };
 
 /******************************

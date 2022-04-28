@@ -230,26 +230,22 @@ static void
 update_replication_factor(Hypertable *const ht, const int32 replication_factor_in)
 {
 	const int16 replication_factor =
-		ts_validate_replication_factor(replication_factor_in, false, true);
+		ts_validate_replication_factor(replication_factor_in,
+									   false,
+									   true,
+									   list_length(ht->data_nodes),
+									   get_rel_name(ht->main_table_relid));
 
 	ht->fd.replication_factor = replication_factor;
 	ts_hypertable_update(ht);
-	if (list_length(ht->data_nodes) < replication_factor)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
-				 errmsg("replication factor too large for hypertable \"%s\"",
-						NameStr(ht->fd.table_name)),
-				 errdetail("The hypertable has %d data nodes attached, while "
-						   "the replication factor is %d.",
-						   list_length(ht->data_nodes),
-						   replication_factor),
-				 errhint("Decrease the replication factor or attach more data "
-						 "nodes to the hypertable.")));
+
 	if (hypertable_is_underreplicated(ht, replication_factor))
 		ereport(WARNING,
 				(errcode(ERRCODE_WARNING),
 				 errmsg("hypertable \"%s\" is under-replicated", NameStr(ht->fd.table_name)),
 				 errdetail("Some chunks have less than %d replicas.", replication_factor)));
+
+	ts_hypertable_update_dimension_partitions(ht);
 }
 
 Datum
