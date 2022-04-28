@@ -254,6 +254,9 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 
 		if (lc2 == NULL)
 		{
+			/*
+			 * Did not find a cached connection, create a new one and cache it.
+			 */
 			connection = remote_dist_txn_get_connection(required_id, REMOTE_TXN_NO_PREP_STMT);
 
 			DataNodeConnection *entry = palloc(sizeof(DataNodeConnection));
