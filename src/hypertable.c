@@ -331,18 +331,6 @@ ts_hypertable_get_time_type(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(time_type);
 }
 
-typedef struct ChunkStoreEntry
-{
-	MemoryContext mcxt;
-	Chunk *chunk;
-} ChunkStoreEntry;
-
-static void
-chunk_store_entry_free(void *cse)
-{
-	MemoryContextDelete(((ChunkStoreEntry *) cse)->mcxt);
-}
-
 static bool
 hypertable_is_compressed_or_materialization(const Hypertable *ht)
 {
@@ -1044,38 +1032,36 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 	return ht;
 }
 
-static ChunkStoreEntry *
-hypertable_chunk_store_add(const Hypertable *h, const Chunk *chunk)
+/*
+ * Add the chunk to the cache that allows fast lookup of chunks
+ * for a given hyperspace Point.
+ */
+static Chunk *
+hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 {
-	ChunkStoreEntry *cse;
-	MemoryContext old_mcxt, chunk_mcxt;
-
-	chunk_mcxt = AllocSetContextCreate(ts_subspace_store_mcxt(h->chunk_cache),
-									   "chunk cache entry memory context",
-									   ALLOCSET_SMALL_SIZES);
+	MemoryContext old_mcxt;
 
 	/* Add the chunk to the subspace store */
-	old_mcxt = MemoryContextSwitchTo(chunk_mcxt);
-	cse = palloc(sizeof(ChunkStoreEntry));
-	cse->mcxt = chunk_mcxt;
-	cse->chunk = ts_chunk_copy(chunk);
-	ts_subspace_store_add(h->chunk_cache, chunk->cube, cse, chunk_store_entry_free);
+	old_mcxt = MemoryContextSwitchTo(ts_subspace_store_mcxt(h->chunk_cache));
+	Chunk *cached_chunk = ts_chunk_copy(input_chunk);
+	ts_subspace_store_add(h->chunk_cache,
+						  cached_chunk->cube,
+						  cached_chunk,
+						  /* object_free = */ NULL);
 	MemoryContextSwitchTo(old_mcxt);
 
-	return cse;
+	return cached_chunk;
 }
 
 static inline Chunk *
 hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not_exists,
 					 bool lock_chunk_slices)
 {
-	Chunk *chunk;
-	ChunkStoreEntry *cse = ts_subspace_store_get(h->chunk_cache, point);
+	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
 
-	if (cse != NULL)
+	if (chunk != NULL)
 	{
-		Assert(NULL != cse->chunk);
-		return cse->chunk;
+		return chunk;
 	}
 
 	/*
@@ -1099,9 +1085,9 @@ hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not
 	Assert(chunk != NULL);
 
 	/* Also add the chunk to the hypertable's chunk store */
-	cse = hypertable_chunk_store_add(h, chunk);
+	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
 
-	return chunk;
+	return cached_chunk;
 }
 
 /* finds the chunk for a given point, returning NULL if none exists */
