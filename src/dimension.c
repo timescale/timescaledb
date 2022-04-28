@@ -901,8 +901,8 @@ ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value, O
 	return value;
 }
 
-static Point *
-point_create(int16 num_dimensions)
+Point *
+ts_point_create(int16 num_dimensions)
 {
 	Point *p = palloc0(POINT_SIZE(num_dimensions));
 
@@ -915,7 +915,7 @@ point_create(int16 num_dimensions)
 TSDLLEXPORT Point *
 ts_hyperspace_calculate_point(const Hyperspace *hs, TupleTableSlot *slot)
 {
-	Point *p = point_create(hs->num_dimensions);
+	Point *p = ts_point_create(hs->num_dimensions);
 	int i;
 
 	for (i = 0; i < hs->num_dimensions; i++)
