@@ -8,7 +8,7 @@
 DROP MATERIALIZED VIEW IF EXISTS mat_test;
 
 CREATE MATERIALIZED VIEW mat_test
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.finalized=false)
 as :QUERY
  WITH NO DATA;
 

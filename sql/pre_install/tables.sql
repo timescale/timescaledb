@@ -40,7 +40,7 @@
 CREATE SEQUENCE _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
 
 CREATE TABLE _timescaledb_catalog.hypertable (
-  id INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'), 
+  id INTEGER PRIMARY KEY DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'),
   schema_name name NOT NULL CHECK (schema_name != '_timescaledb_catalog'),
   table_name name NOT NULL,
   associated_schema_name name NOT NULL,
@@ -271,6 +271,7 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_schema name NOT NULL,
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
+  finalized bool NOT NULL DEFAULT TRUE,
   UNIQUE (user_view_schema, user_view_name),
   UNIQUE (partial_view_schema, partial_view_name)
 );
