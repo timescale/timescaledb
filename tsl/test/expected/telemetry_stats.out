@@ -263,7 +263,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                       +
      },                                             +
      "continuous_aggregates": {                     +
-         "heap_size": 98304,                        +
+         "heap_size": 90112,                        +
          "toast_size": 16384,                       +
          "compression": {                           +
              "compressed_heap_size": 0,             +
@@ -420,7 +420,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "num_compressed_caggs": 1,             +
              "compressed_toast_size": 8192,         +
              "num_compressed_chunks": 1,            +
-             "uncompressed_heap_size": 57344,       +
+             "uncompressed_heap_size": 49152,       +
              "uncompressed_row_count": 452,         +
              "compressed_indexes_size": 16384,      +
              "uncompressed_toast_size": 8192,       +
@@ -898,7 +898,7 @@ FROM relations;
              continuous_aggregates              
 ------------------------------------------------
  {                                             +
-     "heap_size": 180224,                      +
+     "heap_size": 172032,                      +
      "toast_size": 40960,                      +
      "compression": {                          +
          "compressed_heap_size": 40960,        +
@@ -906,7 +906,7 @@ FROM relations;
          "num_compressed_caggs": 1,            +
          "compressed_toast_size": 8192,        +
          "num_compressed_chunks": 1,           +
-         "uncompressed_heap_size": 57344,      +
+         "uncompressed_heap_size": 49152,      +
          "uncompressed_row_count": 452,        +
          "compressed_indexes_size": 16384,     +
          "uncompressed_toast_size": 8192,      +

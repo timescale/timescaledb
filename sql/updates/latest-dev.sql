@@ -72,3 +72,17 @@ GROUP BY
 END LOOP;
 END
 $$;
+
+-- Get rid of chunk_id from materialization hypertables
+DROP FUNCTION IF EXISTS timescaledb_experimental.refresh_continuous_aggregate(REGCLASS, REGCLASS);
+
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg
+  ADD COLUMN finalized BOOL;
+
+UPDATE _timescaledb_catalog.continuous_agg SET finalized = FALSE;
+
+ALTER TABLE _timescaledb_catalog.continuous_agg
+  ALTER COLUMN finalized SET NOT NULL,
+  ALTER COLUMN finalized SET DEFAULT TRUE;
