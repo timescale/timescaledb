@@ -247,7 +247,7 @@ static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, int64 bucket_width, bool materialized_only,
-						  const char *direct_schema, const char *direct_view)
+						  const char *direct_schema, const char *direct_view, const bool finalized)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -284,6 +284,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(finalized);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -1580,7 +1581,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	return var;
 }
 
-/*add internal columns for the materialization table */
+/* add internal columns for the materialization table */
 static void
 mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *usertbl_rte,
 							   int32 usertbl_htid)
@@ -2098,29 +2099,36 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	Query *final_selquery;
 	Query *partial_selquery;	/* query to populate the mattable*/
 	Query *orig_userview_query; /* copy of the original user query for dummy view */
-	RangeTblEntry *usertbl_rte;
 	Oid nspid;
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 materialize_hypertable_id;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
+	bool finalized = DatumGetBool(with_clause_options[ContinuousViewOptionFinalized].parsed);
 
-	/* assign the column_name aliases in CREATE VIEW to the query. No other modifications to
-	 * panquery */
+	/*
+	 * Assign the column_name aliases in CREATE VIEW to the query. No other modifications to
+	 * panquery
+	 */
 	fixup_userview_query_tlist(panquery, stmt->aliases);
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(panquery->groupClause));
 	finalizequery_init(&finalqinfo, panquery, &mattblinfo);
 
-	/* invalidate all options on the stmt before using it
+	/*
+	 * Invalidate all options on the stmt before using it
 	 * The options are valid only for internal use (ts_continuous)
 	 */
 	stmt->options = NULL;
 
-	/* Step 0: add any internal columns needed for materialization based
-		on the user query's table
-	*/
-	usertbl_rte = list_nth(panquery->rtable, 0);
-	mattablecolumninfo_addinternal(&mattblinfo, usertbl_rte, origquery_ht->htid);
+	/*
+	 * Step 0: add any internal columns needed for materialization based
+	 *         on the user query's table
+	 */
+	if (!finalized)
+	{
+		RangeTblEntry *usertbl_rte = list_nth(panquery->rtable, 0);
+		mattablecolumninfo_addinternal(&mattblinfo, usertbl_rte, origquery_ht->htid);
+	}
 
 	/* Step 1: create the materialization table */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -2181,7 +2189,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  origquery_ht->bucket_width,
 							  materialized_only,
 							  dum_rel->schemaname,
-							  dum_rel->relname);
+							  dum_rel->relname,
+							  finalized);
 
 	if (origquery_ht->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
@@ -2328,24 +2337,6 @@ remove_old_and_new_rte_from_query(Query *query)
 	Assert(list_length(query->rtable) >= 1);
 }
 
-static bool
-found_finalize_fn_walker(Node *node, Oid *finalfnoidp)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, Aggref))
-	{
-		Aggref *aggref = castNode(Aggref, node);
-		if (aggref->aggfnoid == *finalfnoidp)
-			return true;
-	}
-	else
-		return false;
-
-	return expression_tree_walker(node, found_finalize_fn_walker, (void *) finalfnoidp);
-}
-
 /*
  * Test the view definition of an existing continuous aggregate for errors and attempt to rebuild
  * it if required.
@@ -2372,19 +2363,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		final_query = destroy_union_query(final_query);
 	}
 
-	bool found_finalize_fn = false;
-	Oid finalfnoid = get_finalizefnoid();
-	foreach (lc1, final_query->targetList)
-	{
-		TargetEntry *te = (TargetEntry *) lfirst(lc1);
-		/* Detect whether this is a continuous aggregate with partials or not. */
-		if (expression_tree_walker((Node *) te, found_finalize_fn_walker, (void *) &finalfnoid))
-		{ /* This continuous aggregate has at least one finalize call, stop looking for more. */
-			found_finalize_fn = true;
-			break;
-		}
-	}
-	if (!found_finalize_fn)
+	if (agg->data.finalized)
 	{ /* This continuous aggregate does not have partials, do not check for defects. */
 		relation_close(user_view_rel, NoLock);
 		elog(INFO,
@@ -2410,6 +2389,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 
 	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(direct_query->groupClause));
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
+
 	RangeTblEntry *usertbl_rte = list_nth(direct_query->rtable, 0);
 	mattablecolumninfo_addinternal(&mattblinfo, usertbl_rte, 0);
 

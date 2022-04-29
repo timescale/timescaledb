@@ -55,6 +55,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_invalidation_dist_ht.sql
     cagg_multi.sql
     continuous_aggs.sql
+    continuous_aggs_deprecated.sql
     cagg_tableam.sql
     cagg_usage.sql
     cagg_policy_run.sql
