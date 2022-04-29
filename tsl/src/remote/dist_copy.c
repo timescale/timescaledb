@@ -75,13 +75,6 @@ typedef struct CopyConnectionState
 
 	bool using_binary;
 	const char *outgoing_copy_cmd;
-
-	/*
-	 * The last chunk we inserted into. Normally the data arrives ordered by
-	 * chunks, so we first check if the next row still matches the last chunk,
-	 * before we do an expensive full lookup of chunk for the row.
-	 */
-	 Chunk *last_chunk;
 } CopyConnectionState;
 
 /* This contains the state needed by a non-binary copy operation.
@@ -121,6 +114,15 @@ typedef struct RemoteCopyContext
 
 	/* Data for the current read row */
 	StringInfo row_data;
+
+
+	StringInfo *all_rows;
+	int max_rows;
+	int n_rows;
+	int total_bytes;
+	Datum *all_row_values;
+	bool *all_row_nulls;
+	Point **all_points;
 } RemoteCopyContext;
 
 /*
@@ -644,7 +646,14 @@ remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_c
 	context->connection_state.data_node_connections = NIL;
 	context->connection_state.using_binary = binary_copy;
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
-	context->connection_state.last_chunk = NULL;
+
+	context->max_rows = 1;
+	context->all_rows = palloc0(sizeof(StringInfo) * context->max_rows);
+	context->all_points = palloc0(sizeof(Point *) * context->max_rows);
+	context->n_rows = 0;
+	context->total_bytes = 0;
+	context->all_row_values = palloc0(list_length(attnums) * context->max_rows * sizeof(Datum));
+	context->all_row_nulls = palloc0(list_length(attnums) * context->max_rows * sizeof(bool));
 
 	if (binary_copy)
 		context->data_context = generate_binary_copy_context(per_tuple_ctx, ht, attnums);
@@ -733,17 +742,6 @@ parse_next_binary_row(CopyFromState cstate, List *attnums, BinaryCopyContext *ct
 	return generate_binary_copy_data(ctx->values, ctx->nulls, attnums, ctx->out_functions);
 }
 
-static bool
-read_next_copy_row(RemoteCopyContext *context, CopyFromState cstate)
-{
-	if (context->binary_operation)
-		context->row_data = parse_next_binary_row(cstate, context->attnums, context->data_context);
-	else
-		context->row_data = parse_next_text_row(cstate, context->attnums, context->data_context);
-
-	return context->row_data != NULL;
-}
-
 static Point *
 get_current_point_for_text_copy(TextCopyContext *ctx)
 {
@@ -782,6 +780,46 @@ get_current_point_for_binary_copy(BinaryCopyContext *ctx, const Hyperspace *hs)
 	return calculate_hyperspace_point_from_binary(ctx->values, ctx->nulls, hs);
 }
 
+static bool
+read_next_copy_row(RemoteCopyContext *context, CopyFromState cstate)
+{
+	Point *point = NULL;
+	Hypertable *ht = context->ht;
+
+	if (context->binary_operation)
+	{
+		context->row_data = parse_next_binary_row(cstate, context->attnums, context->data_context);
+	}
+	else
+	{
+		context->row_data = parse_next_text_row(cstate, context->attnums, context->data_context);
+	}
+
+	if (context->row_data == NULL)
+	{
+		return false;
+	}
+
+	if (context->binary_operation)
+	{
+		point = get_current_point_for_binary_copy(context->data_context, ht->space);
+	}
+	else
+	{
+		point = get_current_point_for_text_copy(context->data_context);
+	}
+
+	Assert(context->n_rows < context->max_rows);
+	context->all_rows[context->n_rows] = context->row_data;
+	context->all_points[context->n_rows] = point;
+
+	context->n_rows++;
+	context->total_bytes += context->row_data->len;
+
+	return true;
+}
+
+
 static void
 reset_copy_connection_state(CopyConnectionState *state)
 {
@@ -790,54 +828,10 @@ reset_copy_connection_state(CopyConnectionState *state)
 	list_free(state->connections_in_use);
 	state->data_node_connections = NIL;
 	state->connections_in_use = NIL;
-	state->last_chunk = NULL;
 }
-
-static bool
-point_in_chunk(Hypertable *ht, Point *p, Chunk *chunk)
-{
-	Assert(p->num_coords == chunk->cube->num_slices);
-	Assert(p->num_coords = ht->space->num_dimensions);
-
-	for (int i = 0; i < p->num_coords; i++)
-	{
-		Dimension *d = &ht->space->dimensions[i];
-		bool is_open = IS_OPEN_DIMENSION(d);
-		DimensionSlice *s = chunk->cube->slices[i];
-//		fprintf(stderr, "dimension %d, point %ld, min %ld, max %ld, open %d\n",
-//			i, p->coordinates[i], s->fd.range_start, s->fd.range_end,
-//			is_open);
-		bool in_range = false;
-		if (is_open)
-		{
-			in_range = s->fd.range_start <= p->coordinates[i]
-				&& p->coordinates[i] < s->fd.range_end;
-		}
-		else
-		{
-			in_range = s->fd.range_start <= p->coordinates[i]
-				&& p->coordinates[i] <= s->fd.range_end;
-		}
-		if (!in_range)
-		{
-			return false;
-		}
-	}
-
-	return true;
-}
-
 static Chunk *
 get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 {
-	int old_id = state->last_chunk != NULL ? state->last_chunk->fd.id : 0;
-
-	if (state->last_chunk != NULL && point_in_chunk(ht, p, state->last_chunk))
-	{
-		//fprintf(stderr, "cache 1 match id %d\n", old_id);
-		return state->last_chunk;
-	}
-
 	Chunk *chunk = ts_hypertable_find_chunk_if_exists(ht, p);
 
 	if (chunk == NULL)
@@ -850,9 +844,6 @@ get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 		chunk = ts_hypertable_get_or_create_chunk(ht, p);
 	}
 
-	state->last_chunk = chunk;
-
-	//fprintf(stderr, "cache 1 mismatch %d old id %d\n", chunk->fd.id, old_id);
 //	fprintf(stderr, "point ");
 //	for (int i = 0; i < p->num_coords; i++)
 //	{
@@ -884,26 +875,28 @@ static bool
 remote_copy_process_and_send_data(RemoteCopyContext *context)
 {
 	Hypertable *ht = context->ht;
-	Chunk *chunk;
-	Point *point;
-	const List *connections;
 
-	if (context->binary_operation)
-		point = get_current_point_for_binary_copy(context->data_context, ht->space);
-	else
-		point = get_current_point_for_text_copy(context->data_context);
+	for (int i = 0; i < context->n_rows; i++)
+	{
+		Chunk *chunk;
+		Point *point = context->all_points[i];
+		const List *connections;
 
-	chunk = get_target_chunk(ht, point, &context->connection_state);
-	connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
+		chunk = get_target_chunk(ht, point, &context->connection_state);
+		connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
 
-	/* for remote copy, we don't use chunk insert states on the AN.
-	 * so we need to explicitly set the chunk as unordered when copies
-	 * are directed to previously compressed chunks
-	 */
-	if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
-		ts_chunk_set_unordered(chunk);
+		/*
+		 * For remote copy, we don't use chunk insert states on the AN.
+		 * so we need to explicitly set the chunk as unordered when copies
+		 * are directed to previously compressed chunks.
+		 */
+		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
+			ts_chunk_set_unordered(chunk);
 
-	return send_copy_data(context->row_data, connections);
+		send_copy_data(context->all_rows[i], connections);
+	}
+
+	return true;
 }
 
 void
@@ -926,20 +919,37 @@ remote_distributed_copy(const CopyStmt *stmt, CopyChunkState *ccstate, List *att
 												   copy_should_send_binary());
 	uint64 processed = 0;
 
+	MemoryContext batch_context =
+		AllocSetContextCreate(CurrentMemoryContext, "Remote COPY batch", ALLOCSET_DEFAULT_SIZES);
+
 	PG_TRY();
 	{
+		MemoryContextSwitchTo(batch_context);
 		while (true)
 		{
 			ResetPerTupleExprContext(ccstate->estate);
-			MemoryContextSwitchTo(GetPerTupleMemoryContext(ccstate->estate));
+//			MemoryContextSwitchTo(GetPerTupleMemoryContext(ccstate->estate));
 
 			CHECK_FOR_INTERRUPTS();
 
-			if (!read_next_copy_row(context, ccstate->cstate))
-				break;
+			bool eof = !read_next_copy_row(context, ccstate->cstate);
+			if (!eof
+				&& context->n_rows < context->max_rows
+				&& context->total_bytes < 1024 * 1024)
+			{
+				continue;
+			}
 
 			remote_copy_process_and_send_data(context);
-			++processed;
+
+			processed += context->n_rows;
+			context->n_rows = 0;
+			MemoryContextReset(batch_context);
+
+			if (eof)
+			{
+				break;
+			}
 		}
 	}
 	PG_CATCH();
