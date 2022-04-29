@@ -131,7 +131,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	{
 		Chunk *new_chunk;
 
-		new_chunk = ts_hypertable_get_or_create_chunk(dispatch->hypertable, point);
+		new_chunk = ts_hypertable_get_or_create_chunk(dispatch->hypertable, point, NULL);
 
 		if (NULL == new_chunk)
 			elog(ERROR, "no chunk found or created");

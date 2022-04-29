@@ -8,6 +8,10 @@
 #include <catalog/namespace.h>
 #include <executor/executor.h>
 #include <libpq-fe.h>
+//#include <internal/libpq-int.h>
+
+//extern int	pqCheckOutBufferSpace(size_t bytes_needed, PGconn *conn);
+
 #include <miscadmin.h>
 #include <parser/parse_type.h>
 #include <port/pg_bswap.h>
@@ -647,7 +651,7 @@ remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_c
 	context->connection_state.using_binary = binary_copy;
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
 
-	context->max_rows = 1;
+	context->max_rows = 1024;
 	context->all_rows = palloc0(sizeof(StringInfo) * context->max_rows);
 	context->all_points = palloc0(sizeof(Point *) * context->max_rows);
 	context->n_rows = 0;
@@ -832,16 +836,16 @@ reset_copy_connection_state(CopyConnectionState *state)
 static Chunk *
 get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 {
-	Chunk *chunk = ts_hypertable_find_chunk_if_exists(ht, p);
+	bool created = false;
+	Chunk *chunk = ts_hypertable_get_or_create_chunk(ht, p, &created);
 
-	if (chunk == NULL)
+	if (created)
 	{
 		/* Here we need to create a new chunk.  However, any in-progress copy operations
 		 * will be tying up the connection we need to create the chunk on a data node.  Since
 		 * the data nodes for the new chunk aren't yet known, just close all in progress COPYs
 		 * before creating the chunk. */
 		reset_copy_connection_state(state);
-		chunk = ts_hypertable_get_or_create_chunk(ht, p);
 	}
 
 //	fprintf(stderr, "point ");
@@ -871,15 +875,70 @@ send_copy_data(StringInfo row_data, const List *connections)
 	return true;
 }
 
+static int
+point_compare(const void *a, const void *b, void *_context)
+{
+	RemoteCopyContext *context = (RemoteCopyContext *) _context;
+	int ia = *((int *) a);
+	int ib = *((int *) b);
+	Assert(0 <= ia && ia < context->n_rows);
+	Assert(0 <= ib && ib < context->n_rows);
+	Point *pa = context->all_points[ia];
+	Point *pb = context->all_points[ib];
+
+	Assert(pa->num_coords == pb->num_coords);
+
+	for (int i = 0; i < pa->num_coords; i++)
+	{
+		if (pa->coordinates[i] < pb->coordinates[i])
+		{
+			return -1;
+		}
+		else if (pa->coordinates[i] > pb->coordinates[i])
+		{
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 static bool
 remote_copy_process_and_send_data(RemoteCopyContext *context)
 {
 	Hypertable *ht = context->ht;
 
-	for (int i = 0; i < context->n_rows; i++)
+	const int n = context->n_rows;
+#define max_points 1024
+	int indices[max_points];
+	Assert(n <= max_points);
+
+	for (int i = 0; i < n; i++)
 	{
+		indices[i] = i;
+	}
+
+	qsort_arg(indices, context->n_rows, sizeof(indices[0]), point_compare, context);
+
+//	fprintf(stderr, "sorted:\n");
+//	for (int i = 0; i < n; i++)
+//	{
+//		fprintf(stderr, "%d\n", indices[i]);
+//	}
+
+//	ListCell *lc;
+//	foreach (lc, context->connection_state.data_node_connections)
+//	{
+//		DataNodeConnection *info = lfirst(lc);
+//		pqCheckOutBufferSpace(context->total_bytes,
+//			remote_connection_get_pg_conn(info->connection));
+//	}
+
+	for (int k = 0; k < n; k++)
+	{
+		const int index = indices[k];
 		Chunk *chunk;
-		Point *point = context->all_points[i];
+		Point *point = context->all_points[index];
 		const List *connections;
 
 		chunk = get_target_chunk(ht, point, &context->connection_state);
@@ -893,7 +952,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
 			ts_chunk_set_unordered(chunk);
 
-		send_copy_data(context->all_rows[i], connections);
+		send_copy_data(context->all_rows[index], connections);
 	}
 
 	return true;
@@ -935,15 +994,24 @@ remote_distributed_copy(const CopyStmt *stmt, CopyChunkState *ccstate, List *att
 			bool eof = !read_next_copy_row(context, ccstate->cstate);
 			if (!eof
 				&& context->n_rows < context->max_rows
+				/*
+				 * Try not to exceed the default libpq buffer size. The chunks
+				 * will be sorted in order of data nodes, and if we try to send
+				 * more than that to one data node, we'll stall.
+				 */
 				&& context->total_bytes < 1024 * 1024)
 			{
 				continue;
 			}
 
+//			fprintf(stderr, "next batch eof %d rows %d bytes %d\n",
+//				eof, context->n_rows, context->total_bytes);
+
 			remote_copy_process_and_send_data(context);
 
 			processed += context->n_rows;
 			context->n_rows = 0;
+			context->total_bytes = 0;
 			MemoryContextReset(batch_context);
 
 			if (eof)

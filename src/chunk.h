@@ -117,6 +117,7 @@ typedef struct ChunkScanEntry
 {
 	int32 chunk_id;
 	ChunkStub *stub;
+	int32 num_dimension_constraints;
 } ChunkScanEntry;
 
 /*
