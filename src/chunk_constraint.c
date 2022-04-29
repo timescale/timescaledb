@@ -465,7 +465,6 @@ ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice, Ch
 
 	ts_scanner_foreach(&iterator)
 	{
-		const Hyperspace *hs = ctx->space;
 		ChunkStub *stub;
 		ChunkScanEntry *entry;
 		bool found;
@@ -485,7 +484,8 @@ ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice, Ch
 
 		if (!found)
 		{
-			stub = ts_chunk_stub_create(chunk_id, 1);
+			stub = ts_chunk_stub_create(chunk_id, 0);
+			stub->constraints = (ChunkConstraints *) palloc0(sizeof(ChunkConstraints));
 			entry->stub = stub;
 			entry->num_dimension_constraints = 0;
 		}
