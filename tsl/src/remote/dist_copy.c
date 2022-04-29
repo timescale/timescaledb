@@ -681,7 +681,8 @@ parse_next_text_row(CopyFromState cstate, List *attnums, TextCopyContext *ctx)
 	StringInfo row_data = makeStringInfo();
 	int i;
 
-	if (!NextCopyFromRawFields(cstate, &ctx->fields, &ctx->nfields))
+	bool result = NextCopyFromRawFields(cstate, &ctx->fields, &ctx->nfields);
+	if (!result)
 		return NULL;
 
 	Assert(ctx->nfields == list_length(attnums));
@@ -740,7 +741,11 @@ generate_binary_copy_data(Datum *values, bool *nulls, List *attnums, FmgrInfo *o
 static StringInfo
 parse_next_binary_row(CopyFromState cstate, List *attnums, BinaryCopyContext *ctx)
 {
-	if (!NextCopyFrom(cstate, ctx->econtext, ctx->values, ctx->nulls))
+	MemoryContext old = MemoryContextSwitchTo(ctx->econtext->ecxt_per_tuple_memory);
+	bool result = NextCopyFrom(cstate, ctx->econtext, ctx->values, ctx->nulls);
+	MemoryContextSwitchTo(old);
+
+	if (!result)
 		return NULL;
 
 	return generate_binary_copy_data(ctx->values, ctx->nulls, attnums, ctx->out_functions);
