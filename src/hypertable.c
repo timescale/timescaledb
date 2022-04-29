@@ -1055,8 +1055,11 @@ hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not
 
 	if (chunk != NULL)
 	{
+		//fprintf(stderr, "cache 2 match\n");
 		return chunk;
 	}
+
+	//fprintf(stderr, "cache 2 mismatch\n");
 
 	/*
 	 * ts_chunk_find() must execute on a per-tuple memory context since it
@@ -1080,7 +1083,6 @@ hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not
 
 	/* Also add the chunk to the hypertable's chunk store */
 	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
-	ts_chunk_free(chunk);
 
 	return cached_chunk;
 }

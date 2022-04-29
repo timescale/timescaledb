@@ -15,19 +15,21 @@
 #include <utils/lsyscache.h>
 
 #include "compat/compat.h"
-#include "dist_copy.h"
+#include "chunk.h"
 #include "copy.h"
+#include "data_node.h"
+#include "dimension.h"
+#include "dimension_slice.h"
+#include "dist_copy.h"
+#include "guc.h"
+#include "hypercube.h"
+#include "hypertable.h"
 #include "nodes/chunk_dispatch.h"
 #include "nodes/chunk_insert_state.h"
-#include "dimension.h"
-#include "hypertable.h"
 #include "partitioning.h"
-#include "chunk.h"
-#include "ts_catalog/chunk_data_node.h"
-#include "guc.h"
 #include "remote/connection_cache.h"
 #include "remote/dist_txn.h"
-#include "data_node.h"
+#include "ts_catalog/chunk_data_node.h"
 
 #define DEFAULT_PG_DELIMITER '\t'
 #define DEFAULT_PG_NULL_VALUE "\\N"
@@ -73,6 +75,13 @@ typedef struct CopyConnectionState
 
 	bool using_binary;
 	const char *outgoing_copy_cmd;
+
+	/*
+	 * The last chunk we inserted into. Normally the data arrives ordered by
+	 * chunks, so we first check if the next row still matches the last chunk,
+	 * before we do an expensive full lookup of chunk for the row.
+	 */
+	 Chunk *last_chunk;
 } CopyConnectionState;
 
 /* This contains the state needed by a non-binary copy operation.
@@ -635,6 +644,7 @@ remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_c
 	context->connection_state.data_node_connections = NIL;
 	context->connection_state.using_binary = binary_copy;
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
+	context->connection_state.last_chunk = NULL;
 
 	if (binary_copy)
 		context->data_context = generate_binary_copy_context(per_tuple_ctx, ht, attnums);
@@ -780,11 +790,54 @@ reset_copy_connection_state(CopyConnectionState *state)
 	list_free(state->connections_in_use);
 	state->data_node_connections = NIL;
 	state->connections_in_use = NIL;
+	state->last_chunk = NULL;
+}
+
+static bool
+point_in_chunk(Hypertable *ht, Point *p, Chunk *chunk)
+{
+	Assert(p->num_coords == chunk->cube->num_slices);
+	Assert(p->num_coords = ht->space->num_dimensions);
+
+	for (int i = 0; i < p->num_coords; i++)
+	{
+		Dimension *d = &ht->space->dimensions[i];
+		bool is_open = IS_OPEN_DIMENSION(d);
+		DimensionSlice *s = chunk->cube->slices[i];
+//		fprintf(stderr, "dimension %d, point %ld, min %ld, max %ld, open %d\n",
+//			i, p->coordinates[i], s->fd.range_start, s->fd.range_end,
+//			is_open);
+		bool in_range = false;
+		if (is_open)
+		{
+			in_range = s->fd.range_start <= p->coordinates[i]
+				&& p->coordinates[i] < s->fd.range_end;
+		}
+		else
+		{
+			in_range = s->fd.range_start <= p->coordinates[i]
+				&& p->coordinates[i] <= s->fd.range_end;
+		}
+		if (!in_range)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 static Chunk *
 get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 {
+	int old_id = state->last_chunk != NULL ? state->last_chunk->fd.id : 0;
+
+	if (state->last_chunk != NULL && point_in_chunk(ht, p, state->last_chunk))
+	{
+		//fprintf(stderr, "cache 1 match id %d\n", old_id);
+		return state->last_chunk;
+	}
+
 	Chunk *chunk = ts_hypertable_find_chunk_if_exists(ht, p);
 
 	if (chunk == NULL)
@@ -796,6 +849,16 @@ get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 		reset_copy_connection_state(state);
 		chunk = ts_hypertable_get_or_create_chunk(ht, p);
 	}
+
+	state->last_chunk = chunk;
+
+	//fprintf(stderr, "cache 1 mismatch %d old id %d\n", chunk->fd.id, old_id);
+//	fprintf(stderr, "point ");
+//	for (int i = 0; i < p->num_coords; i++)
+//	{
+//		fprintf(stderr, "%ld, ", p->coordinates[i]);
+//	}
+//	fprintf(stderr, "\n");
 
 	return chunk;
 }

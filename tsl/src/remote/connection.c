@@ -2118,6 +2118,9 @@ bool
 remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binary,
 							 TSConnectionError *err)
 {
+//	fprintf(stderr, "begin copy on connection %p\n", conn);
+//	mybt();
+
 	PGconn *pg_conn = remote_connection_get_pg_conn(conn);
 	PGresult *volatile res = NULL;
 
@@ -2133,7 +2136,8 @@ remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binar
 								 "connection not IDLE when beginning COPY",
 								 conn);
 
-	res = PQexec(pg_conn, copycmd);
+	res = PQexec(pg_conn, psprintf("%s /* connection %p */", copycmd,
+		conn));
 
 	if (PQresultStatus(res) != PGRES_COPY_IN)
 	{
@@ -2191,6 +2195,9 @@ send_end_binary_copy_data(const TSConnection *conn, TSConnectionError *err)
 bool
 remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 {
+//	fprintf(stderr, "end copy on connection %p\n", conn);
+//	mybt();
+
 	PGresult *res;
 	bool success;
 
