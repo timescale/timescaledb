@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-SET LOCAL search_path TO pg_catalog;
+SET LOCAL search_path TO pg_catalog, pg_temp;
 
 CREATE SCHEMA _timescaledb_catalog;
 CREATE SCHEMA _timescaledb_internal;
