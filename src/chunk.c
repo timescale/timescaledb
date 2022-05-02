@@ -2039,7 +2039,7 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 	ctx.early_abort = true;
 
 	/* Scan all dimensions for slices enclosing the point */
-	for (int i = 0; i < ctx->space->num_dimensions; i++)
+	for (int i = 0; i < ctx.space->num_dimensions; i++)
 	{
 		DimensionVec *vec;
 		ScanTupLock tuplock = {
@@ -2047,12 +2047,12 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 			.waitpolicy = LockWaitBlock,
 		};
 
-		vec = ts_dimension_slice_scan_limit(ctx->space->dimensions[i].fd.id,
+		vec = ts_dimension_slice_scan_limit(ctx.space->dimensions[i].fd.id,
 											p->coordinates[i],
 											0,
 											lock_slices ? &tuplock : NULL);
 
-		dimension_slice_and_chunk_constraint_join_lite(ctx, vec);
+		dimension_slice_and_chunk_constraint_join_lite(&ctx, vec);
 	}
 
 	/* Find the stub that has N matching dimension constraints */
