@@ -26,7 +26,7 @@ DECLARE
 BEGIN
     SELECT current_database() INTO db;
     EXECUTE format($$ALTER DATABASE %I RESET timescaledb.restoring $$, db);
-    RESET timescaledb.restoring;
+    SET SESSION timescaledb.restoring = 'off';
     PERFORM _timescaledb_internal.restart_background_workers();
 
     --try to restore the backed up uuid, if the restore did not set one
