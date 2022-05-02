@@ -33,7 +33,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         repository: 'timescale/pgspot'
-        ref: '0.1.1'
+        ref: '0.2.0'
         submodules: true
         path: 'pgspot'
 
@@ -64,5 +64,8 @@ jobs:
         python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
         # The next pgspot execution tests the downgrade script to the previous version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+        # skip this check for 2.6.1 since the search_path in 2.6.1 is not considered safe by pgspot
+        if [ "${downgrade_to}" != "2.6.1" ]; then
+          python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+        fi
 

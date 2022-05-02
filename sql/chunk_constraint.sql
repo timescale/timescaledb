@@ -63,11 +63,11 @@ BEGIN
     IF def IS NOT NULL THEN
         -- to allow for custom types with operators outside of pg_catalog
         -- we set search_path to @extschema@
-        SET LOCAL search_path TO @extschema@;
+        SET LOCAL search_path TO @extschema@, pg_temp;
         EXECUTE pg_catalog.format(
             $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
             chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name, def
         );
     END IF;
 END
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
