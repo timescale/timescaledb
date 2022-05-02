@@ -1032,6 +1032,10 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 	return ht;
 }
 
+/*
+ * Add the chunk to the cache that allows fast lookup of chunks
+ * for a given hyperspace Point.
+ */
 static Chunk *
 hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 {
@@ -1040,8 +1044,10 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 	/* Add the chunk to the subspace store */
 	old_mcxt = MemoryContextSwitchTo(ts_subspace_store_mcxt(h->chunk_cache));
 	Chunk *cached_chunk = ts_chunk_copy(input_chunk);
-	ts_subspace_store_add(h->chunk_cache, cached_chunk->cube, cached_chunk,
-		/* object_free = */ NULL);
+	ts_subspace_store_add(h->chunk_cache,
+						  cached_chunk->cube,
+						  cached_chunk,
+						  /* object_free = */ NULL);
 	MemoryContextSwitchTo(old_mcxt);
 
 	return cached_chunk;
