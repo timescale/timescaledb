@@ -2026,7 +2026,7 @@ chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slice
 }
 
 static Chunk *
-chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
+chunk_find_lite(const Hypertable *ht, const Point *p)
 {
 	ChunkStub *stub;
 	Chunk *chunk = NULL;
@@ -2042,15 +2042,11 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 	for (int i = 0; i < ctx.space->num_dimensions; i++)
 	{
 		DimensionVec *vec;
-		ScanTupLock tuplock = {
-			.lockmode = LockTupleKeyShare,
-			.waitpolicy = LockWaitBlock,
-		};
 
 		vec = ts_dimension_slice_scan_limit(ctx.space->dimensions[i].fd.id,
 											p->coordinates[i],
 											0,
-											lock_slices ? &tuplock : NULL);
+											NULL);
 
 		dimension_slice_and_chunk_constraint_join_lite(&ctx, vec);
 	}
@@ -2073,7 +2069,14 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 Chunk *
 ts_chunk_find(const Hypertable *ht, const Point *p, bool lock_slices)
 {
-	return chunk_find_lite(ht, p, lock_slices);
+	if (lock_slices)
+	{
+		return chunk_find(ht, p, /* resurrect = */ false, /* lock_slices = */ true);
+	}
+	else
+	{
+		return chunk_find_lite(ht, p);
+	}
 }
 
 /*
