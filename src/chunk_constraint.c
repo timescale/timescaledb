@@ -576,7 +576,7 @@ ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkSc
 		}
 
 		/*
-		 * We have only te dimension constraints here, because we're searching
+		 * We have only the dimension constraints here, because we're searching
 		 * by dimension slice id. See the assert above.
 		 */
 		entry->num_dimension_constraints++;
