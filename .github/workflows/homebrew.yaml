@@ -1,3 +1,4 @@
+# Test installation of our homebrew tap for latest version
 name: Homebrew
 on:
   schedule:

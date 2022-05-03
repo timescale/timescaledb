@@ -1,4 +1,4 @@
-# GitHub Actions configuration for TimescaleDB
+# Test installation of windows package for latest version
 name: Windows Packages
 on:
   schedule:

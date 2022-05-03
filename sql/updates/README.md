@@ -1,11 +1,11 @@
 ## General principles for statements in update/downgrade scripts
 
 1. The `search_path` for these scripts will be locked down to
-  `pg_catalog`. Locking down `search_path` happens in `pre-update.sql`.
-  Therefore all object references need to be fully qualified unless
-  they reference objects from `pg_catalog`. Use `@extschema@` to refer
-  to the target schema of the installation (resolves to `public` by
-  default).
+  `pg_catalog, pg_temp`. Locking down `search_path` happens in
+  `pre-update.sql`. Therefore all object references need to be fully
+  qualified unless they reference objects from `pg_catalog`.
+  Use `@extschema@` to refer to the target schema of the installation
+  (resolves to `public` by default).
 2. Creating objects must not use IF NOT EXISTS as this will
   introduce privilege escalation vulnerabilities.
 3. All functions should have explicit `search_path`. Setting explicit

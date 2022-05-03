@@ -56,7 +56,7 @@ BEGIN
          RETURN ret;
     END CASE;
 END
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.interval_to_usec(
        chunk_interval INTERVAL
@@ -64,7 +64,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.interval_to_usec(
 RETURNS BIGINT LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS
 $BODY$
     SELECT (int_sec * 1000000)::bigint from extract(epoch from chunk_interval) as int_sec;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.time_to_internal(time_val ANYELEMENT)
 RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_time_to_internal' LANGUAGE C VOLATILE STRICT;

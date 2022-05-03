@@ -35,7 +35,7 @@ BEGIN
 
   -- procedures with SET clause cannot execute transaction
   -- control so we adjust search_path in procedure body
-  SET LOCAL search_path TO pg_catalog;
+  SET LOCAL search_path TO pg_catalog, pg_temp;
 
   SELECT format('%I.%I', schema_name, table_name) INTO htoid
   FROM _timescaledb_catalog.hypertable
@@ -75,7 +75,7 @@ BEGIN
     -- While we could use SET at the start of the function we do not
     -- want to bleed out search_path to caller, so we do SET LOCAL
     -- again after COMMIT
-    SET LOCAL search_path TO pg_catalog;
+    SET LOCAL search_path TO pg_catalog, pg_temp;
     IF verbose_log THEN
        RAISE LOG 'job % completed processing chunk %.%', job_id, chunk_rec.schema_name, chunk_rec.table_name;
     END IF;
@@ -106,7 +106,7 @@ BEGIN
 
   -- procedures with SET clause cannot execute transaction
   -- control so we adjust search_path in procedure body
-  SET LOCAL search_path TO pg_catalog;
+  SET LOCAL search_path TO pg_catalog, pg_temp;
 
   IF config IS NULL THEN
     RAISE EXCEPTION 'job % has null config', job_id;
