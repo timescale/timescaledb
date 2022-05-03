@@ -16,7 +16,7 @@ BEGIN
     RETURN true;
 END
 $BODY$
-LANGUAGE PLPGSQL SET search_path TO pg_catalog;
+LANGUAGE PLPGSQL SET search_path TO pg_catalog, pg_temp;
 
 
 CREATE OR REPLACE FUNCTION @extschema@.timescaledb_post_restore() RETURNS BOOL AS
@@ -38,4 +38,4 @@ BEGIN
     RETURN true;
 END
 $BODY$
-LANGUAGE PLPGSQL SET search_path TO pg_catalog;
+LANGUAGE PLPGSQL SET search_path TO pg_catalog, pg_temp;

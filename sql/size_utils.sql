@@ -153,7 +153,7 @@ $BODY$
 		(SELECT * FROM _hypertable_sizes
          UNION ALL
          SELECT * FROM _chunk_sizes) AS sizes;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_remote_size(
     schema_name_in name,
@@ -186,7 +186,7 @@ $BODY$
     LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_hypertable_info(
         srv.node_name, schema_name_in, table_name_in) entry ON TRUE
     GROUP BY srv.node_name;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get relation size of hypertable
 -- like pg_relation_size(hypertable)
@@ -237,7 +237,7 @@ BEGIN
 			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name);
         END CASE;
 END;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 --- returns total-bytes for a hypertable (includes table + index)
 CREATE OR REPLACE FUNCTION @extschema@.hypertable_size(
@@ -249,7 +249,7 @@ $BODY$
    -- hypertable), so sum them up:
    SELECT sum(total_bytes)::bigint
    FROM @extschema@.hypertable_detailed_size(hypertable);
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_local_size(
     schema_name_in name,
@@ -277,7 +277,7 @@ $BODY$
    WHERE
       ch.hypertable_schema = schema_name_in
       AND ch.hypertable_name = table_name_in;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 ---should return same information as chunks_local_size--
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_remote_size(
@@ -318,7 +318,7 @@ $BODY$
         srv.node_name, schema_name_in, table_name_in) entry ON TRUE
 	WHERE
 	    entry.chunk_name IS NOT NULL;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get relation size of the chunks of an hypertable
 -- hypertable - hypertable to get size of
@@ -371,7 +371,7 @@ BEGIN
             FROM _timescaledb_internal.chunks_local_size(schema_name, table_name) chl;
         END CASE;
 END;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 ---------- end of detailed size functions ------
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
@@ -400,7 +400,7 @@ BEGIN
         RETURN time_value;
     END CASE;
 END
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Convenience function to return approximate row count
 --
@@ -424,7 +424,7 @@ $BODY$
   SELECT COALESCE((SUM(reltuples) FILTER (WHERE reltuples > 0 AND relkind <> 'p')), 0)::BIGINT
   FROM inherited_id
   JOIN pg_class USING (oid);
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------- stats related to compression ------
 CREATE OR REPLACE VIEW _timescaledb_internal.compressed_chunk_stats AS
@@ -505,7 +505,7 @@ $BODY$
     WHERE
         ch.hypertable_schema = schema_name_in
         AND ch.hypertable_name = table_name_in;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_remote_stats (schema_name_in name, table_name_in name)
     RETURNS TABLE (
@@ -541,7 +541,7 @@ $BODY$
     LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_compressed_chunk_stats (
         srv.node_name, schema_name_in, table_name_in) ch ON TRUE
 	WHERE ch.chunk_name IS NOT NULL;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get per chunk compression statistics for a hypertable that has
 -- compression enabled
@@ -602,7 +602,7 @@ BEGIN
             _timescaledb_internal.compressed_chunk_local_stats (schema_name, table_name);
     END CASE;
 END;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get compression statistics for a hypertable that has
 -- compression enabled
@@ -639,7 +639,7 @@ $BODY$
 	    @extschema@.chunk_compression_stats(hypertable) ch
     GROUP BY
         ch.node_name;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------------Get index size for hypertables -------
 --schema_name      - schema_name for hypertable index
@@ -681,7 +681,7 @@ $BODY$
 		 AND c.oid = i.indrelid
 		 AND h.schema_name = schema_name_in
 		 AND h.table_name = c.relname;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_index_size (node_name name, schema_name_in name, index_name_in name)
 RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
@@ -710,7 +710,7 @@ $BODY$
          ) AS srv
     JOIN LATERAL _timescaledb_internal.data_node_index_size(
         srv.node_name, schema_name_in, index_name_in) entry ON TRUE;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get sizes of indexes on a hypertable
 --
@@ -761,6 +761,6 @@ BEGIN
 
    RETURN index_bytes;
 END;
-$BODY$ SET search_path TO pg_catalog;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------------End index size for hypertables -------

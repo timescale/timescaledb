@@ -1,3 +1,4 @@
+# Run regression tests under memory sanitizer
 name: Sanitizer test
 on:
   schedule:

@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 -- This file is always prepended to all upgrade and downgrade scripts.
-SET LOCAL search_path TO pg_catalog;
+SET LOCAL search_path TO pg_catalog, pg_temp;
 
 -- Disable parallel execution for the duration of the update process.
 -- This avoids version mismatch errors that would have beeen triggered by the

@@ -1,4 +1,4 @@
-# GitHub Actions configuration for TimescaleDB
+# Test building the extension on Windows
 name: Regression Windows
 on:
   push:

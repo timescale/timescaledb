@@ -49,7 +49,7 @@ BEGIN
 
     -- procedures with SET clause cannot execute transaction
     -- control so we adjust search_path in procedure body
-    SET LOCAL search_path TO pg_catalog;
+    SET LOCAL search_path TO pg_catalog, pg_temp;
 
     status := _timescaledb_internal.chunk_status(chunk);
 
@@ -73,7 +73,7 @@ BEGIN
         -- While we could use SET at the start of the function we do not
         -- want to bleed out search_path to caller, so we do SET LOCAL
         -- again after COMMIT
-        SET LOCAL search_path TO pg_catalog;
+        SET LOCAL search_path TO pg_catalog, pg_temp;
     END CASE;
     PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
 END

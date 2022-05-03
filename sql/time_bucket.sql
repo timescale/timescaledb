@@ -55,6 +55,6 @@ $BODY$;
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE, "offset" INTERVAL)
     RETURNS DATE LANGUAGE SQL IMMUTABLE PARALLEL SAFE STRICT AS
 $BODY$
-    SELECT (@extschema@.time_bucket(bucket_width, ts OPERATOR(pg_catalog.-) "offset") OPERATOR(pg_catalog.+) "offset")::date;
+    SELECT (@extschema@.time_bucket(bucket_width, ts OPERATOR(pg_catalog.-) "offset") OPERATOR(pg_catalog.+) "offset")::pg_catalog.date;
 $BODY$;
 

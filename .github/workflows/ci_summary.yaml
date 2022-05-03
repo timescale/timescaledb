@@ -1,3 +1,4 @@
+# Send summary report of nightly CI runs to slack channel
 name: CI Summary
 on:
   schedule:
