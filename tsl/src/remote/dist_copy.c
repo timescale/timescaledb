@@ -849,14 +849,14 @@ get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 	bool created = false;
 	Chunk *chunk = ts_hypertable_get_or_create_chunk(ht, p, &created);
 
-	if (created)
-	{
-		/* Here we need to create a new chunk.  However, any in-progress copy operations
-		 * will be tying up the connection we need to create the chunk on a data node.  Since
-		 * the data nodes for the new chunk aren't yet known, just close all in progress COPYs
-		 * before creating the chunk. */
-		reset_copy_connection_state(state);
-	}
+//	if (created)
+//	{
+//		/* Here we need to create a new chunk.  However, any in-progress copy operations
+//		 * will be tying up the connection we need to create the chunk on a data node.  Since
+//		 * the data nodes for the new chunk aren't yet known, just close all in progress COPYs
+//		 * before creating the chunk. */
+//		reset_copy_connection_state(state);
+//	}
 
 //	fprintf(stderr, "point ");
 //	for (int i = 0; i < p->num_coords; i++)
@@ -1005,7 +1005,9 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		}
 	}
 
-	MemoryContext *old = MemoryContextSwitchTo(context->mctx);
+	//reset_copy_connection_state(state);
+
+	MemoryContext old = MemoryContextSwitchTo(context->mctx);
 	ListCell *lc;
 	foreach (lc, data_nodes)
 	{
@@ -1078,6 +1080,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	for (;;)
 	{
 		bool have_more_data = false;
+		bool all_connections_busy = true;
 
 		foreach(lc, data_nodes)
 		{
@@ -1093,12 +1096,35 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 			for (; dn->rows_sent < dn->rows_total; dn->rows_sent++)
 			{
 				StringInfo row_data = context->all_rows[dn->row_indices[dn->rows_sent]];
-				TSConnectionError err;
+				PGconn *pg_conn = remote_connection_get_pg_conn(dn->connection);
 
-				if (!remote_connection_put_copy_data(dn->connection,
-					row_data->data, row_data->len, &err))
+				int res = PQflush(pg_conn);
+
+				if (res == -1)
 				{
-					remote_connection_error_elog(&err, ERROR);
+					ereport(ERROR,
+						errcode(ERRCODE_CONNECTION_EXCEPTION),
+						errmsg("could not flush COPY data"));
+				}
+				else if (res == 0)
+				{
+					/* OK, can continue */
+					all_connections_busy = false;
+				}
+				else
+				{
+					Assert(res == 1);
+					fprintf(stderr, "%d busy (2)!\n", dn->server_oid);
+					break;
+				}
+
+				res = PQputCopyData( pg_conn, row_data->data, row_data->len);
+
+				if (res == -1)
+				{
+					ereport(ERROR,
+						errcode(ERRCODE_CONNECTION_EXCEPTION),
+						errmsg("could not send COPY data"));
 				}
 			}
 		}
@@ -1106,6 +1132,18 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		if (!have_more_data)
 		{
 			break;
+		}
+
+		if (all_connections_busy)
+		{
+			fprintf(stderr, "sleep!\n");
+
+			CHECK_FOR_INTERRUPTS();
+
+			(void) WaitLatch(MyLatch,
+							 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+							 100,
+							 WAIT_EVENT_PG_SLEEP);
 		}
 	}
 

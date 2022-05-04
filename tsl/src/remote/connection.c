@@ -2154,6 +2154,15 @@ remote_connection_begin_copy(TSConnection *conn, const char *copycmd, bool binar
 	if (binary && !send_binary_copy_header(conn, err))
 		goto err_end_copy;
 
+	if (PQsetnonblocking(pg_conn, 1))
+	{
+		(void) fill_simple_error(err,
+			ERRCODE_CONNECTION_EXCEPTION,
+			"failed to set the connection into nonblocking mode",
+			conn);
+		goto err_end_copy;
+	}
+
 	conn->binary_copy = binary;
 	conn->status = CONN_COPY_IN;
 
@@ -2172,7 +2181,7 @@ remote_connection_put_copy_data(TSConnection *conn, const char *buffer, size_t l
 
 	res = PQputCopyData(remote_connection_get_pg_conn(conn), buffer, len);
 
-	if (res != 1)
+	if (res == -1)
 		return fill_connection_error(err,
 									 ERRCODE_CONNECTION_EXCEPTION,
 									 "could not send COPY data",
@@ -2206,6 +2215,42 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 								 ERRCODE_INTERNAL_ERROR,
 								 "connection not in COPY_IN state when ending COPY",
 								 conn);
+
+	for (;;)
+	{
+		int res = PQflush(conn->pg_conn);
+
+		if (res == 1)
+		{
+			/* FIXME */
+			fprintf(stderr, "wait for flush\n");
+
+			(void) WaitLatch(MyLatch,
+							 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+							 100,
+							 WAIT_EVENT_PG_SLEEP);
+		}
+		else if (res == 0)
+		{
+			break;
+		}
+		else
+		{
+			return fill_simple_error(err,
+				ERRCODE_CONNECTION_EXCEPTION,
+				"failed to flush the COPY connection",
+				conn);
+		}
+	}
+
+
+	if (PQsetnonblocking(conn->pg_conn, 0))
+	{
+		return fill_simple_error(err,
+			ERRCODE_CONNECTION_EXCEPTION,
+			"failed to set the connection into blocking mode",
+			conn);
+	}
 
 	if (conn->binary_copy && !send_end_binary_copy_data(conn, err))
 		return false;
