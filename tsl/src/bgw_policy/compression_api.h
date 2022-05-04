@@ -25,4 +25,8 @@ int32 policy_compression_get_maxchunks_per_job(const Jsonb *config);
 int64 policy_recompression_get_recompress_after_int(const Jsonb *config);
 Interval *policy_recompression_get_recompress_after_interval(const Jsonb *config);
 
+Datum policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
+									  Oid compress_after_type, bool if_not_exists);
+bool policy_compression_remove_internal(Oid user_rel_oid, bool if_exists);
+
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_COMPRESSION_API_H */

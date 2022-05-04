@@ -24,11 +24,7 @@
 #include "time_utils.h"
 #include "policy_utils.h"
 #include "time_utils.h"
-
-#define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
-#define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
-#define CONFIG_KEY_START_OFFSET "start_offset"
-#define CONFIG_KEY_END_OFFSET "end_offset"
+#include "bgw_policy/policies_v2.h"
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -339,21 +335,6 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 	return converted;
 }
 
-typedef struct CaggPolicyOffset
-{
-	Datum value;
-	Oid type;
-	bool isnull;
-	const char *name;
-} CaggPolicyOffset;
-
-typedef struct CaggPolicyConfig
-{
-	Oid partition_type;
-	CaggPolicyOffset offset_start;
-	CaggPolicyOffset offset_end;
-} CaggPolicyConfig;
-
 /*
  * Convert an interval to a 128 integer value.
  *
@@ -488,23 +469,22 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 }
 
 static void
-parse_offset_arg(const ContinuousAgg *cagg, const FunctionCallInfo fcinfo, CaggPolicyOffset *offset,
-				 int argnum)
+parse_offset_arg(const ContinuousAgg *cagg, Oid offset_type, NullableDatum arg,
+				 CaggPolicyOffset *offset)
 {
-	offset->isnull = PG_ARGISNULL(argnum);
+	offset->isnull = arg.isnull;
 
 	if (!offset->isnull)
 	{
-		Oid type = get_fn_expr_argtype(fcinfo->flinfo, argnum);
-		Datum arg = PG_GETARG_DATUM(argnum);
-
-		offset->value = convert_interval_arg(cagg->partition_type, arg, &type, offset->name);
-		offset->type = type;
+		offset->value =
+			convert_interval_arg(cagg->partition_type, arg.value, &offset_type, offset->name);
+		offset->type = offset_type;
 	}
 }
 
 static void
-parse_cagg_policy_config(const ContinuousAgg *cagg, const FunctionCallInfo fcinfo,
+parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
+						 NullableDatum start_offset, Oid end_offset_type, NullableDatum end_offset,
 						 CaggPolicyConfig *config)
 {
 	MemSet(config, 0, sizeof(CaggPolicyConfig));
@@ -518,29 +498,28 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, const FunctionCallInfo fcinf
 	config->offset_start.name = CONFIG_KEY_START_OFFSET;
 	config->offset_end.name = CONFIG_KEY_END_OFFSET;
 
-	parse_offset_arg(cagg, fcinfo, &config->offset_start, 1);
-	parse_offset_arg(cagg, fcinfo, &config->offset_end, 2);
+	parse_offset_arg(cagg, start_offset_type, start_offset, &config->offset_start);
+	parse_offset_arg(cagg, end_offset_type, end_offset, &config->offset_end);
 
 	Assert(config->offset_start.type == config->offset_end.type);
 	validate_window_size(cagg, config);
 }
 
 Datum
-policy_refresh_cagg_add(PG_FUNCTION_ARGS)
+policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
+								 Oid end_offset_type, NullableDatum end_offset,
+								 Interval refresh_interval, bool if_not_exists)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	ContinuousAgg *cagg;
 	CaggPolicyConfig policyconf;
 	int32 job_id;
-	Interval refresh_interval;
-	Oid cagg_oid, owner_id;
+	Oid owner_id;
 	List *jobs;
 	JsonbParseState *parse_state = NULL;
-	bool if_not_exists;
 
 	/* Verify that the owner can create a background worker */
-	cagg_oid = PG_GETARG_OID(0);
 	owner_id = ts_cagg_permissions_check(cagg_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
 
@@ -550,15 +529,12 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
 
-	parse_cagg_policy_config(cagg, fcinfo, &policyconf);
-
-	if (PG_ARGISNULL(3))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot use NULL schedule interval")));
-
-	refresh_interval = *PG_GETARG_INTERVAL_P(3);
-	if_not_exists = PG_GETARG_BOOL(4);
+	parse_cagg_policy_config(cagg,
+							 start_offset_type,
+							 start_offset,
+							 end_offset_type,
+							 end_offset,
+							 &policyconf);
 
 	/* Make sure there is only 1 refresh policy on the cagg */
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
@@ -650,10 +626,41 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 }
 
 Datum
-policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
+policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 {
-	Oid cagg_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
+	Oid cagg_oid, start_offset_type, end_offset_type;
+	Interval refresh_interval;
+	bool if_not_exists;
+	NullableDatum start_offset, end_offset;
+
+	cagg_oid = PG_GETARG_OID(0);
+
+	if (PG_ARGISNULL(3))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot use NULL refresh_schedule_interval")));
+
+	start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	start_offset.value = PG_GETARG_DATUM(1);
+	start_offset.isnull = PG_ARGISNULL(1);
+	end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
+	end_offset.value = PG_GETARG_DATUM(2);
+	end_offset.isnull = PG_ARGISNULL(2);
+	refresh_interval = *PG_GETARG_INTERVAL_P(3);
+	if_not_exists = PG_GETARG_BOOL(4);
+
+	return policy_refresh_cagg_add_internal(cagg_oid,
+											start_offset_type,
+											start_offset,
+											end_offset_type,
+											end_offset,
+											refresh_interval,
+											if_not_exists);
+}
+
+Datum
+policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
+{
 	int32 mat_htid;
 
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
@@ -680,13 +687,22 @@ policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errmsg("continuous aggregate policy not found for \"%s\", skipping",
 							get_rel_name(cagg_oid))));
-			PG_RETURN_VOID();
+			PG_RETURN_BOOL(false);
 		}
 	}
 	Assert(list_length(jobs) == 1);
 	BgwJob *job = linitial(jobs);
 
 	ts_bgw_job_delete_by_id(job->fd.id);
+	PG_RETURN_BOOL(true);
+}
 
+Datum
+policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
+{
+	Oid cagg_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+
+	(void) policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
 	PG_RETURN_VOID();
 }

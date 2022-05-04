@@ -19,6 +19,7 @@
 #include "bgw/job.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/policies_v2.h"
 
 /*
  * Default scheduled interval for compress jobs = default chunk length.
@@ -37,10 +38,8 @@
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
 
-#define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
 #define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_COMPRESS_AFTER "compress_after"
 #define CONFIG_KEY_RECOMPRESS_AFTER "recompress_after"
 #define CONFIG_KEY_RECOMPRESS "recompress"
 #define CONFIG_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
@@ -168,9 +167,9 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 	}
 }
 
-/* compression policies are added to hypertables or continuous aggregates */
 Datum
-policy_compression_add(PG_FUNCTION_ARGS)
+policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
+								Oid compress_after_type, bool if_not_exists)
 {
 	/* The function is not STRICT but we can't allow required args to be NULL
 	 * so we need to act like a strict function in those cases */
@@ -192,8 +191,6 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	const Dimension *dim;
 	Oid owner_id;
 	bool is_cagg = false;
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	hcache = ts_hypertable_cache_pin();
 	hypertable = validate_compress_chunks_hypertable(hcache, user_rel_oid, &is_cagg);
@@ -330,16 +327,28 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(job_id);
 }
 
-/* remove compression policy from ht or cagg */
+/* compression policies are added to hypertables or continuous aggregates */
 Datum
-policy_compression_remove(PG_FUNCTION_ARGS)
+policy_compression_add(PG_FUNCTION_ARGS)
 {
 	Oid user_rel_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
-	Hypertable *ht;
-	Cache *hcache;
+	Datum compress_after_datum = PG_GETARG_DATUM(1);
+	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	bool if_not_exists = PG_GETARG_BOOL(2);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_compression_add_internal(user_rel_oid,
+										   compress_after_datum,
+										   compress_after_type,
+										   if_not_exists);
+}
+
+bool
+policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
+{
+	Hypertable *ht;
+	Cache *hcache;
 
 	ht = ts_hypertable_cache_get_cache_and_entry(user_rel_oid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (!ht)
@@ -393,6 +402,18 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 	ts_bgw_job_delete_by_id(job->fd.id);
 
 	PG_RETURN_BOOL(true);
+}
+
+/* remove compression policy from ht or cagg */
+Datum
+policy_compression_remove(PG_FUNCTION_ARGS)
+{
+	Oid user_rel_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_compression_remove_internal(user_rel_oid, if_exists);
 }
 
 /* compare cagg job config  with compression job config. If there is an overlap, then
