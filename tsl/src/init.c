@@ -13,6 +13,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/reorder_api.h"
+#include "bgw_policy/policies_v2.h"
 #include "chunk.h"
 #include "chunk_api.h"
 #include "compression/api.h"
@@ -129,6 +130,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.copy_chunk_proc = tsl_copy_chunk_proc,
 	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
 	.subscription_exec = tsl_subscription_exec,
+
+	.policies_add = policies_add,
+	.policies_remove = policies_remove,
+	.policies_alter = policies_alter,
+	.policies_show = policies_show,
 
 	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,
