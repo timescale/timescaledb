@@ -118,6 +118,14 @@ typedef struct CaggsInfoData
 	List *bucket_functions;
 } CaggsInfo;
 
+typedef struct CaggPolicyOffset
+{
+	Datum value;
+	Oid type;
+	bool isnull;
+	const char *name;
+} CaggPolicyOffset;
+
 extern TSDLLEXPORT const CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
 														   ArrayType *bucket_widths,
