@@ -383,3 +383,53 @@ DROP MATERIALIZED VIEW metrics_cagg;
 SELECT count(*) FROM timescaledb_information.jobs
 WHERE hypertable_name = :'MAT_TABLE_NAME';
 
+-- add test case for issue 4252
+CREATE TABLE IF NOT EXISTS sensor_data(
+time TIMESTAMPTZ NOT NULL,
+sensor_id INTEGER,
+temperature DOUBLE PRECISION,
+cpu DOUBLE PRECISION);
+
+SELECT create_hypertable('sensor_data','time');
+
+INSERT INTO sensor_data(time, sensor_id, cpu, temperature)
+SELECT 
+time,
+sensor_id,
+extract(dow from time) AS cpu,
+extract(doy from time) AS temperature
+FROM 
+generate_series('2022-05-05'::timestamp at time zone 'UTC' - interval '6 weeks', '2022-05-05'::timestamp at time zone 'UTC', interval '5 hours') as g1(time),
+generate_series(1,1000,1) as g2(sensor_id);
+
+CREATE materialized view deals_best_weekly
+WITH (timescaledb.continuous) AS
+SELECT 
+time_bucket('7 days', "time") AS bucket, 
+avg(temperature) AS avg_temp, 
+max(cpu) AS max_rating 
+FROM sensor_data 
+GROUP BY bucket
+WITH NO DATA;
+
+CREATE materialized view deals_best_daily
+WITH (timescaledb.continuous) AS
+SELECT 
+time_bucket('1 day', "time") AS bucket, 
+avg(temperature) AS avg_temp, 
+max(cpu) AS max_rating 
+FROM sensor_data 
+GROUP BY bucket
+WITH NO DATA;
+
+ALTER materialized view deals_best_weekly set (timescaledb.materialized_only=true);
+ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true);
+
+-- we have data from 6 weeks before to May 5 2022 (Thu)
+CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
+SELECT * FROM deals_best_weekly;
+CALL refresh_continuous_aggregate('deals_best_daily', '2022-04-20', '2022-05-04');
+SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
+-- expect to get an up-to-date notice
+CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
+SELECT * FROM deals_best_weekly;
