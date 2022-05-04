@@ -51,7 +51,61 @@ RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'
 LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION @extschema@.remove_continuous_aggregate_policy(continuous_aggregate REGCLASS, if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION @extschema@.remove_continuous_aggregate_policy(
+    continuous_aggregate REGCLASS,
+    if_not_exists BOOL = false, -- deprecating this argument, if_exists overrides it
+    if_exists BOOL = NULL) -- when NULL get the value from if_not_exists
+
 RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_remove'
-LANGUAGE C VOLATILE STRICT;
+LANGUAGE C VOLATILE;
+
+/* 1 step policies */
+
+/* Add policies */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.add_policies(
+    relation REGCLASS,
+    if_not_exists BOOL = false,
+    refresh_start_offset "any" = NULL,
+    refresh_end_offset "any" = NULL,
+    compress_after "any" = NULL,
+    drop_after "any" = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_add'
+LANGUAGE C VOLATILE;
+
+/* Remove policies */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.remove_policies(
+    relation REGCLASS,
+    if_exists BOOL = false,
+    VARIADIC policy_names TEXT[] = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_remove'
+LANGUAGE C VOLATILE;
+
+/* Remove all policies */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.remove_all_policies(
+    relation REGCLASS,
+    if_exists BOOL = false)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_remove_all'
+LANGUAGE C VOLATILE;
+
+/* Alter policies */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.alter_policies(
+    relation REGCLASS,
+    if_exists BOOL = false,
+    refresh_start_offset "any" = NULL,
+    refresh_end_offset "any" = NULL,
+    compress_after "any" = NULL,
+    drop_after "any" = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_alter'
+LANGUAGE C VOLATILE;
+
+/* Show policies info */
+CREATE OR REPLACE FUNCTION timescaledb_experimental.show_policies(
+    relation REGCLASS)
+RETURNS SETOF JSONB
+AS '@MODULE_PATHNAME@', 'ts_policies_show'
+LANGUAGE C  VOLATILE;

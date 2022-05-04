@@ -19,13 +19,7 @@
 #include "bgw/job.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/continuous_aggregate_api.h"
-
-/*
- * Default scheduled interval for compress jobs = default chunk length.
- * If this is non-timestamp based hypertable, then default is 1 day
- */
-#define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 day"), InvalidOid, -1))
+#include "bgw_policy/policies_v2.h"
 
 /* Default max runtime is unlimited for compress chunks */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -37,31 +31,15 @@
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
 
-#define POLICY_COMPRESSION_PROC_NAME "policy_compression"
-#define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
-#define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_COMPRESS_AFTER "compress_after"
-#define CONFIG_KEY_RECOMPRESS_AFTER "recompress_after"
-#define CONFIG_KEY_RECOMPRESS "recompress"
-#define CONFIG_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
-
 static Hypertable *validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid,
 													   bool *is_cagg);
-
-bool
-policy_compression_get_recompress(const Jsonb *config)
-{
-	bool found;
-	bool recompress = ts_jsonb_get_bool_field(config, CONFIG_KEY_RECOMPRESS, &found);
-
-	return found ? recompress : true;
-}
 
 int32
 policy_compression_get_maxchunks_per_job(const Jsonb *config)
 {
 	bool found;
-	int32 maxchunks = ts_jsonb_get_int32_field(config, CONFIG_KEY_MAXCHUNKS_TO_COMPRESS, &found);
+	int32 maxchunks =
+		ts_jsonb_get_int32_field(config, POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS, &found);
 	return (found && maxchunks > 0) ? maxchunks : 0;
 }
 
@@ -69,7 +47,8 @@ int32
 policy_compression_get_hypertable_id(const Jsonb *config)
 {
 	bool found;
-	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
+	int32 hypertable_id =
+		ts_jsonb_get_int32_field(config, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, &found);
 
 	if (!found)
 		ereport(ERROR,
@@ -83,12 +62,14 @@ int64
 policy_compression_get_compress_after_int(const Jsonb *config)
 {
 	bool found;
-	int64 compress_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_COMPRESS_AFTER, &found);
+	int64 compress_after =
+		ts_jsonb_get_int64_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER)));
 
 	return compress_after;
 }
@@ -96,12 +77,14 @@ policy_compression_get_compress_after_int(const Jsonb *config)
 Interval *
 policy_compression_get_compress_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_COMPRESS_AFTER);
+	Interval *interval =
+		ts_jsonb_get_interval_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_COMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER)));
 
 	return interval;
 }
@@ -110,12 +93,14 @@ int64
 policy_recompression_get_recompress_after_int(const Jsonb *config)
 {
 	bool found;
-	int64 compress_after = ts_jsonb_get_int64_field(config, CONFIG_KEY_RECOMPRESS_AFTER, &found);
+	int64 compress_after =
+		ts_jsonb_get_int64_field(config, POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_RECOMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 
 	return compress_after;
 }
@@ -123,12 +108,14 @@ policy_recompression_get_recompress_after_int(const Jsonb *config)
 Interval *
 policy_recompression_get_recompress_after_interval(const Jsonb *config)
 {
-	Interval *interval = ts_jsonb_get_interval_field(config, CONFIG_KEY_RECOMPRESS_AFTER);
+	Interval *interval =
+		ts_jsonb_get_interval_field(config, POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER);
 
 	if (interval == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job", CONFIG_KEY_RECOMPRESS_AFTER)));
+				 errmsg("could not find %s in config for job",
+						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
 
 	return interval;
 }
@@ -168,32 +155,19 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 	}
 }
 
-/* compression policies are added to hypertables or continuous aggregates */
 Datum
-policy_compression_add(PG_FUNCTION_ARGS)
+policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
+								Oid compress_after_type, Interval *default_schedule_interval,
+								bool user_defined_schedule_interval, bool if_not_exists)
 {
-	/* The function is not STRICT but we can't allow required args to be NULL
-	 * so we need to act like a strict function in those cases */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
-		PG_RETURN_NULL();
-
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
-	Oid user_rel_oid = PG_GETARG_OID(0);
-	Datum compress_after_datum = PG_GETARG_DATUM(1);
-	Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	bool if_not_exists = PG_GETARG_BOOL(2);
-	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
-	Interval *default_schedule_interval =
-		PG_ARGISNULL(3) ? DEFAULT_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
 	Hypertable *hypertable;
 	Cache *hcache;
 	const Dimension *dim;
 	Oid owner_id;
 	bool is_cagg = false;
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	hcache = ts_hypertable_cache_pin();
 	hypertable = validate_compress_chunks_hypertable(hcache, user_rel_oid, &is_cagg);
@@ -223,8 +197,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		}
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
+
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_COMPRESS_AFTER,
+														POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 														partitioning_type,
 														compress_after_type,
 														compress_after_datum))
@@ -247,7 +222,6 @@ policy_compression_add(PG_FUNCTION_ARGS)
 			PG_RETURN_INT32(-1);
 		}
 	}
-
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
 	{
@@ -264,38 +238,39 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	ts_jsonb_add_int32(parse_state, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
 	validate_compress_after_type(partitioning_type, compress_after_type);
 	switch (compress_after_type)
 	{
 		case INTERVALOID:
 			ts_jsonb_add_interval(parse_state,
-								  CONFIG_KEY_COMPRESS_AFTER,
+								  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 								  DatumGetIntervalP(compress_after_datum));
 			break;
 		case INT2OID:
 			ts_jsonb_add_int64(parse_state,
-							   CONFIG_KEY_COMPRESS_AFTER,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt16(compress_after_datum));
 			break;
 		case INT4OID:
 			ts_jsonb_add_int64(parse_state,
-							   CONFIG_KEY_COMPRESS_AFTER,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt32(compress_after_datum));
 			break;
 		case INT8OID:
 			ts_jsonb_add_int64(parse_state,
-							   CONFIG_KEY_COMPRESS_AFTER,
+							   POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							   DatumGetInt64(compress_after_datum));
 			break;
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("unsupported datatype for %s: %s",
-							CONFIG_KEY_COMPRESS_AFTER,
+							POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
 	}
-	/* If this is a compression policy for a cagg, verify that
+	/*
+	 * If this is a compression policy for a cagg, verify that
 	 * compress_after > refresh_start of cagg policy. We do not want
 	 * to compress regions that can be refreshed by the cagg policy.
 	 */
@@ -326,20 +301,44 @@ policy_compression_add(PG_FUNCTION_ARGS)
 										config);
 
 	ts_cache_release(hcache);
-
+	ereport(LOG, errmsg("compress step 7"));
 	PG_RETURN_INT32(job_id);
 }
 
-/* remove compression policy from ht or cagg */
+/* compression policies are added to hypertables or continuous aggregates */
 Datum
-policy_compression_remove(PG_FUNCTION_ARGS)
+policy_compression_add(PG_FUNCTION_ARGS)
 {
+	/*
+	 * The function is not STRICT but we can't allow required args to be NULL
+	 * so we need to act like a strict function in those cases
+	 */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
 	Oid user_rel_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
-	Hypertable *ht;
-	Cache *hcache;
+	Datum compress_after_datum = PG_GETARG_DATUM(1);
+	Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	bool if_not_exists = PG_GETARG_BOOL(2);
+	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
+	Interval *default_schedule_interval =
+		PG_ARGISNULL(3) ? DEFAULT_COMPRESSION_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_compression_add_internal(user_rel_oid,
+										   compress_after_datum,
+										   compress_after_type,
+										   default_schedule_interval,
+										   user_defined_schedule_interval,
+										   if_not_exists);
+}
+
+bool
+policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
+{
+	Hypertable *ht;
+	Cache *hcache;
 
 	ht = ts_hypertable_cache_get_cache_and_entry(user_rel_oid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (!ht)
@@ -393,6 +392,18 @@ policy_compression_remove(PG_FUNCTION_ARGS)
 	ts_bgw_job_delete_by_id(job->fd.id);
 
 	PG_RETURN_BOOL(true);
+}
+
+/* remove compression policy from ht or cagg */
+Datum
+policy_compression_remove(PG_FUNCTION_ARGS)
+{
+	Oid user_rel_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_compression_remove_internal(user_rel_oid, if_exists);
 }
 
 /* compare cagg job config  with compression job config. If there is an overlap, then

@@ -24,11 +24,7 @@
 #include "time_utils.h"
 #include "policy_utils.h"
 #include "time_utils.h"
-
-#define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
-#define CONFIG_KEY_MAT_HYPERTABLE_ID "mat_hypertable_id"
-#define CONFIG_KEY_START_OFFSET "start_offset"
-#define CONFIG_KEY_END_OFFSET "end_offset"
+#include "bgw_policy/policies_v2.h"
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -42,12 +38,13 @@ policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
 {
 	bool found;
 	int32 mat_hypertable_id =
-		ts_jsonb_get_int32_field(config, CONFIG_KEY_MAT_HYPERTABLE_ID, &found);
+		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID, &found);
 
 	if (!found)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find \"%s\" in config for job", CONFIG_KEY_MAT_HYPERTABLE_ID)));
+				 errmsg("could not find \"%s\" in config for job",
+						POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID)));
 
 	return mat_hypertable_id;
 }
@@ -116,7 +113,7 @@ int64
 policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config)
 {
 	bool start_isnull;
-	int64 res = get_time_from_config(dim, config, CONFIG_KEY_START_OFFSET, &start_isnull);
+	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_START_OFFSET, &start_isnull);
 	/* interpret NULL as min value for that type */
 	if (start_isnull)
 		return ts_time_get_min(ts_dimension_get_partition_type(dim));
@@ -127,7 +124,7 @@ int64
 policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config)
 {
 	bool end_isnull;
-	int64 res = get_time_from_config(dim, config, CONFIG_KEY_END_OFFSET, &end_isnull);
+	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_END_OFFSET, &end_isnull);
 	if (end_isnull)
 		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
 	return res;
@@ -189,7 +186,7 @@ policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Dat
 		Assert(IS_INTEGER_TYPE(cmp_type));
 		int64 cmpval = ts_interval_value_to_internal(cmp_interval, cmp_type);
 		int64 refresh_start =
-			ts_jsonb_get_int64_field(cagg_config, CONFIG_KEY_START_OFFSET, &found);
+			ts_jsonb_get_int64_field(cagg_config, POL_REFRESH_CONF_KEY_START_OFFSET, &found);
 		if (!found) /*this is a null value */
 			return false;
 		ret = (refresh_start < cmpval);
@@ -197,7 +194,8 @@ policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Dat
 	else
 	{
 		Assert(cmp_type == INTERVALOID);
-		Interval *refresh_start = ts_jsonb_get_interval_field(cagg_config, CONFIG_KEY_START_OFFSET);
+		Interval *refresh_start =
+			ts_jsonb_get_interval_field(cagg_config, POL_REFRESH_CONF_KEY_START_OFFSET);
 		if (refresh_start == NULL) /* NULL refresh_start */
 			return false;
 		Datum res =
@@ -339,21 +337,6 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 	return converted;
 }
 
-typedef struct CaggPolicyOffset
-{
-	Datum value;
-	Oid type;
-	bool isnull;
-	const char *name;
-} CaggPolicyOffset;
-
-typedef struct CaggPolicyConfig
-{
-	Oid partition_type;
-	CaggPolicyOffset offset_start;
-	CaggPolicyOffset offset_end;
-} CaggPolicyConfig;
-
 /*
  * Convert an interval to a 128 integer value.
  *
@@ -384,7 +367,7 @@ interval_to_int128(const Interval *interval)
 	return span;
 }
 
-static int64
+int64
 interval_to_int64(Datum interval, Oid type)
 {
 	switch (type)
@@ -488,23 +471,22 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 }
 
 static void
-parse_offset_arg(const ContinuousAgg *cagg, const FunctionCallInfo fcinfo, CaggPolicyOffset *offset,
-				 int argnum)
+parse_offset_arg(const ContinuousAgg *cagg, Oid offset_type, NullableDatum arg,
+				 CaggPolicyOffset *offset)
 {
-	offset->isnull = PG_ARGISNULL(argnum);
+	offset->isnull = arg.isnull;
 
 	if (!offset->isnull)
 	{
-		Oid type = get_fn_expr_argtype(fcinfo->flinfo, argnum);
-		Datum arg = PG_GETARG_DATUM(argnum);
-
-		offset->value = convert_interval_arg(cagg->partition_type, arg, &type, offset->name);
-		offset->type = type;
+		offset->value =
+			convert_interval_arg(cagg->partition_type, arg.value, &offset_type, offset->name);
+		offset->type = offset_type;
 	}
 }
 
 static void
-parse_cagg_policy_config(const ContinuousAgg *cagg, const FunctionCallInfo fcinfo,
+parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
+						 NullableDatum start_offset, Oid end_offset_type, NullableDatum end_offset,
 						 CaggPolicyConfig *config)
 {
 	MemSet(config, 0, sizeof(CaggPolicyConfig));
@@ -515,32 +497,30 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, const FunctionCallInfo fcinf
 	config->offset_end.value = ts_time_datum_get_min(config->partition_type);
 	config->offset_start.type = config->offset_end.type =
 		IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
-	config->offset_start.name = CONFIG_KEY_START_OFFSET;
-	config->offset_end.name = CONFIG_KEY_END_OFFSET;
-
-	parse_offset_arg(cagg, fcinfo, &config->offset_start, 1);
-	parse_offset_arg(cagg, fcinfo, &config->offset_end, 2);
+	config->offset_start.name = POL_REFRESH_CONF_KEY_START_OFFSET;
+	config->offset_end.name = POL_REFRESH_CONF_KEY_END_OFFSET;
+	parse_offset_arg(cagg, start_offset_type, start_offset, &config->offset_start);
+	parse_offset_arg(cagg, end_offset_type, end_offset, &config->offset_end);
 
 	Assert(config->offset_start.type == config->offset_end.type);
 	validate_window_size(cagg, config);
 }
 
 Datum
-policy_refresh_cagg_add(PG_FUNCTION_ARGS)
+policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
+								 Oid end_offset_type, NullableDatum end_offset,
+								 Interval refresh_interval, bool if_not_exists)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	ContinuousAgg *cagg;
 	CaggPolicyConfig policyconf;
 	int32 job_id;
-	Interval refresh_interval;
-	Oid cagg_oid, owner_id;
+	Oid owner_id;
 	List *jobs;
 	JsonbParseState *parse_state = NULL;
-	bool if_not_exists;
 
 	/* Verify that the owner can create a background worker */
-	cagg_oid = PG_GETARG_OID(0);
 	owner_id = ts_cagg_permissions_check(cagg_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
 
@@ -550,15 +530,19 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
 
-	parse_cagg_policy_config(cagg, fcinfo, &policyconf);
+	if (!start_offset.isnull)
+		start_offset.isnull =
+			ts_if_offset_is_infinity(start_offset.value, start_offset_type, true /* is_start */);
+	if (!end_offset.isnull)
+		end_offset.isnull =
+			ts_if_offset_is_infinity(end_offset.value, end_offset_type, false /* is_start */);
 
-	if (PG_ARGISNULL(3))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot use NULL schedule interval")));
-
-	refresh_interval = *PG_GETARG_INTERVAL_P(3);
-	if_not_exists = PG_GETARG_BOOL(4);
+	parse_cagg_policy_config(cagg,
+							 start_offset_type,
+							 start_offset,
+							 end_offset_type,
+							 end_offset,
+							 &policyconf);
 
 	/* Make sure there is only 1 refresh policy on the cagg */
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
@@ -580,12 +564,12 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 		BgwJob *existing = linitial(jobs);
 
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_START_OFFSET,
+														POL_REFRESH_CONF_KEY_START_OFFSET,
 														cagg->partition_type,
 														policyconf.offset_start.type,
 														policyconf.offset_start.value) &&
 			policy_config_check_hypertable_lag_equality(existing->fd.config,
-														CONFIG_KEY_END_OFFSET,
+														POL_REFRESH_CONF_KEY_END_OFFSET,
 														cagg->partition_type,
 														policyconf.offset_end.type,
 														policyconf.offset_end.value))
@@ -615,22 +599,23 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_MAT_HYPERTABLE_ID, cagg->data.mat_hypertable_id);
+	ts_jsonb_add_int32(parse_state,
+					   POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID,
+					   cagg->data.mat_hypertable_id);
 	if (!policyconf.offset_start.isnull)
 		json_add_dim_interval_value(parse_state,
-									CONFIG_KEY_START_OFFSET,
+									POL_REFRESH_CONF_KEY_START_OFFSET,
 									policyconf.offset_start.type,
 									policyconf.offset_start.value);
 	else
-		ts_jsonb_add_null(parse_state, CONFIG_KEY_START_OFFSET);
-
+		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_START_OFFSET);
 	if (!policyconf.offset_end.isnull)
 		json_add_dim_interval_value(parse_state,
-									CONFIG_KEY_END_OFFSET,
+									POL_REFRESH_CONF_KEY_END_OFFSET,
 									policyconf.offset_end.type,
 									policyconf.offset_end.value);
 	else
-		ts_jsonb_add_null(parse_state, CONFIG_KEY_END_OFFSET);
+		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
@@ -650,10 +635,41 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 }
 
 Datum
-policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
+policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 {
-	Oid cagg_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
+	Oid cagg_oid, start_offset_type, end_offset_type;
+	Interval refresh_interval;
+	bool if_not_exists;
+	NullableDatum start_offset, end_offset;
+
+	cagg_oid = PG_GETARG_OID(0);
+
+	if (PG_ARGISNULL(3))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot use NULL refresh_schedule_interval")));
+
+	start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	start_offset.value = PG_GETARG_DATUM(1);
+	start_offset.isnull = PG_ARGISNULL(1);
+	end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
+	end_offset.value = PG_GETARG_DATUM(2);
+	end_offset.isnull = PG_ARGISNULL(2);
+	refresh_interval = *PG_GETARG_INTERVAL_P(3);
+	if_not_exists = PG_GETARG_BOOL(4);
+
+	return policy_refresh_cagg_add_internal(cagg_oid,
+											start_offset_type,
+											start_offset,
+											end_offset_type,
+											end_offset,
+											refresh_interval,
+											if_not_exists);
+}
+
+Datum
+policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
+{
 	int32 mat_htid;
 
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
@@ -680,13 +696,25 @@ policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errmsg("continuous aggregate policy not found for \"%s\", skipping",
 							get_rel_name(cagg_oid))));
-			PG_RETURN_VOID();
+			PG_RETURN_BOOL(false);
 		}
 	}
 	Assert(list_length(jobs) == 1);
 	BgwJob *job = linitial(jobs);
 
 	ts_bgw_job_delete_by_id(job->fd.id);
+	PG_RETURN_BOOL(true);
+}
 
+Datum
+policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
+{
+	Oid cagg_oid = PG_GETARG_OID(0);
+	bool if_not_exists = PG_GETARG_BOOL(1); /* Deprecating this argument */
+	bool if_exists;
+
+	/* For backward compatibility, we use IF_NOT_EXISTS when IF_EXISTS is not given */
+	if_exists = PG_ARGISNULL(2) ? if_not_exists : PG_GETARG_BOOL(2);
+	(void) policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
 	PG_RETURN_VOID();
 }
