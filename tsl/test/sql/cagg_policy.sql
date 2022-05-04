@@ -41,6 +41,35 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
+
+-- Test 1 step policy for integer type buckets
+ALTER materialized view mat_m1 set (timescaledb.compress = true);
+-- No policy is added if one errors out
+SELECT add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, refresh_schedule_interval =>'1 h'::interval, compress_after => 11, drop_after => 20);
+SELECT show_policies('mat_m1');
+
+-- All policies are added in one step
+SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, refresh_schedule_interval =>'1 h'::interval, compress_after => 11, drop_after => 20);
+SELECT show_policies('mat_m1');
+
+-- Alter policies
+SELECT alter_policies('mat_m1', refresh_schedule_interval =>'2 h'::interval, compress_after=>11, drop_after => 15);
+SELECT show_policies('mat_m1');
+
+-- Remove one or more policy
+SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
+SELECT show_policies('mat_m1');
+
+-- Add one policy
+SELECT add_policies('mat_m1', refresh_start_offset => 10, refresh_end_offset => 1, refresh_schedule_interval =>'1 h'::interval);
+SELECT show_policies('mat_m1');
+
+-- Remove all policies
+SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
+SELECT show_policies('mat_m1');
+
+ALTER materialized view mat_m1 set (timescaledb.compress = false);
+
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 , '1 h'::interval);
 SELECT add_continuous_aggregate_policy('mat_m1', '1 day'::interval, 10 );
@@ -100,6 +129,50 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
+
+-- Test 1 step policy for timestamp type buckets
+ALTER materialized view max_mat_view_date set (timescaledb.compress = true);
+-- Only works for cagg
+SELECT add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, refresh_schedule_interval =>'1 h'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT show_policies('continuous_agg_max_mat_date');
+SELECT alter_policies('continuous_agg_max_mat_date', compress_after=>'16 days'::interval);
+SELECT remove_policies('continuous_agg_max_mat_date', false, 'policy_refresh_continuous_aggregate');
+
+-- No policy is added if one errors out
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, refresh_schedule_interval =>'1 h'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT show_policies('max_mat_view_date');
+
+-- Refresh schedule interval cannot be NULL
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+
+-- All policies are added in one step
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 days'::interval, refresh_end_offset => '1 day'::interval, refresh_schedule_interval =>'1 h'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
+SELECT show_policies('max_mat_view_date');
+
+-- Alter policies
+SELECT alter_policies('max_mat_view_date', refresh_schedule_interval =>'2 h', compress_after=>'16 days'::interval, drop_after => '20 days'::interval);
+SELECT show_policies('max_mat_view_date');
+
+-- Remove one or more policy
+-- Code coverage: no policy names provided
+SELECT remove_policies('max_mat_view_date', false);
+
+-- Code coverage: incorrect name of policy
+SELECT remove_policies('max_mat_view_date', false, 'refresh_policy');
+
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
+SELECT show_policies('max_mat_view_date');
+
+-- Add one policy
+SELECT add_policies('max_mat_view_date', refresh_start_offset => '15 day'::interval, refresh_end_offset => '1 day'::interval, refresh_schedule_interval =>'1 h'::interval);
+SELECT show_policies('max_mat_view_date');
+
+-- Remove all policies
+SELECT remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
+SELECT show_policies('max_mat_view_date');
+
+ALTER materialized view max_mat_view_date set (timescaledb.compress = false);
+
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '2 days', 10, '1 day'::interval);
 --start_interval < end_interval
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '1 day'::interval, '2 days'::interval , '1 day'::interval) ;
