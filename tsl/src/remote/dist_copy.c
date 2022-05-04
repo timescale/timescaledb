@@ -651,7 +651,12 @@ remote_copy_begin(const CopyStmt *stmt, Hypertable *ht, ExprContext *per_tuple_c
 	context->connection_state.using_binary = binary_copy;
 	context->connection_state.outgoing_copy_cmd = deparse_copy_cmd(stmt, ht, binary_copy);
 
+#ifndef NDEBUG
+	context->max_rows = 7;
+#else
 	context->max_rows = 1024;
+#endif
+
 	context->all_rows = palloc0(sizeof(StringInfo) * context->max_rows);
 	context->all_points = palloc0(sizeof(Point *) * context->max_rows);
 	context->n_rows = 0;
@@ -908,6 +913,16 @@ point_compare(const void *a, const void *b, void *_context)
 	return 0;
 }
 
+typedef struct DataNodeRows
+{
+	int data_node_id;
+	Oid server_oid;
+	TSConnection *connection;
+	int rows_sent;
+	int rows_total;
+	int *row_indices;
+} DataNodeRows;
+
 static bool
 remote_copy_process_and_send_data(RemoteCopyContext *context)
 {
@@ -939,15 +954,15 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 //			remote_connection_get_pg_conn(info->connection));
 //	}
 
+	List *data_nodes = NIL;
+
 	for (int k = 0; k < n; k++)
 	{
 		const int index = indices[k];
-		Chunk *chunk;
 		Point *point = context->all_points[index];
-		const List *connections;
 
-		chunk = get_target_chunk(ht, point, &context->connection_state);
-		connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
+		Chunk *chunk = get_target_chunk(ht, point, &context->connection_state);
+		//connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
 
 		/*
 		 * For remote copy, we don't use chunk insert states on the AN.
@@ -957,7 +972,141 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		if (ts_chunk_is_compressed(chunk) && (!ts_chunk_is_unordered(chunk)))
 			ts_chunk_set_unordered(chunk);
 
-		send_copy_data(context->all_rows[index], connections);
+		//send_copy_data(context->all_rows[index], connections);
+		ListCell *lc;
+		foreach(lc, chunk->data_nodes)
+		{
+			ChunkDataNode *chunk_data_node = lfirst(lc);
+			DataNodeRows *data_node_rows = NULL;
+			ListCell *lc2;
+			foreach(lc2, data_nodes)
+			{
+				data_node_rows = lfirst(lc2);
+				if (chunk_data_node->foreign_server_oid == data_node_rows->server_oid)
+				{
+					break;
+				}
+			}
+
+			if (lc2 == NULL)
+			{
+				data_node_rows = palloc(sizeof(DataNodeRows));
+				data_node_rows->server_oid = chunk_data_node->foreign_server_oid;
+				data_node_rows->rows_sent = 0;
+				data_node_rows->rows_total = 0;
+				data_node_rows->row_indices = palloc(sizeof(int) * context->n_rows);
+				data_nodes = lappend(data_nodes, data_node_rows);
+			}
+
+			Assert(data_node_rows->server_oid == chunk_data_node->foreign_server_oid);
+
+			data_node_rows->row_indices[data_node_rows->rows_total] = index;
+			data_node_rows->rows_total++;
+		}
+	}
+
+	MemoryContext *old = MemoryContextSwitchTo(context->mctx);
+	ListCell *lc;
+	foreach (lc, data_nodes)
+	{
+		DataNodeRows *data_node = lfirst(lc);
+
+		ListCell *lc2;
+		foreach(lc2, context->connection_state.data_node_connections)
+		{
+			DataNodeConnection *entry = (DataNodeConnection *) lfirst(lc2);
+			if (data_node->server_oid == entry->id.server_id)
+			{
+				data_node->connection = entry->connection;
+				break;
+			}
+		}
+
+		if (lc2 == NULL)
+		{
+			/*
+			 * Did not find a cached connection, create a new one and cache it.
+			 */
+			TSConnectionId required_id = remote_connection_id(data_node->server_oid, GetUserId());
+			data_node->connection = remote_dist_txn_get_connection(required_id, REMOTE_TXN_NO_PREP_STMT);
+
+			DataNodeConnection *entry = palloc(sizeof(DataNodeConnection));
+			entry->connection = data_node->connection;
+			entry->id = required_id;
+
+			context->connection_state.data_node_connections
+				= lappend(context->connection_state.data_node_connections, entry);
+		}
+
+		if (remote_connection_get_status(data_node->connection) == CONN_PROCESSING)
+		{
+			elog(ERROR,
+				 "wrong status CONN_PROCESSING for connection to data node %d when performing "
+				 "distributed COPY\n",
+				 data_node->server_oid);
+		}
+
+		if (remote_connection_get_status(data_node->connection) == CONN_IDLE)
+		{
+			TSConnectionError err;
+			if (!remote_connection_begin_copy(data_node->connection,
+											  context->connection_state.outgoing_copy_cmd,
+											  context->connection_state.using_binary,
+											  &err))
+			{
+				remote_connection_error_elog(&err, ERROR);
+			}
+
+			if (!list_member(context->connection_state.connections_in_use,
+				data_node->connection))
+			{
+				/*
+				 * The normal distributed insert path (not dist_copy, but
+				 * data_node_copy) doesn't reset the connections when it creates
+				 * a new chunk. So the connection status will be idle after we
+				 * created a new chunk, but it will still be in the list of
+				 * active connections. Don't add duplicates.
+				 */
+				context->connection_state.connections_in_use
+					= lappend(context->connection_state.connections_in_use,
+					 data_node->connection);
+			}
+		}
+	}
+	MemoryContextSwitchTo(old);
+
+	for (;;)
+	{
+		bool have_more_data = false;
+
+		foreach(lc, data_nodes)
+		{
+			DataNodeRows *dn = lfirst(lc);
+
+			if (dn->rows_sent == dn->rows_total)
+			{
+				continue;
+			}
+
+			have_more_data = true;
+
+			for (; dn->rows_sent < dn->rows_total; dn->rows_sent++)
+			{
+				StringInfo row_data = context->all_rows[dn->row_indices[dn->rows_sent]];
+				TSConnectionError err;
+
+				if (!remote_connection_put_copy_data(dn->connection,
+					row_data->data, row_data->len, &err))
+				{
+					remote_connection_error_elog(&err, ERROR);
+				}
+			}
+		}
+
+		if (!have_more_data)
+		{
+			break;
+		}
 	}
 
 	return true;
