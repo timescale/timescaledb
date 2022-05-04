@@ -780,7 +780,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * won't be refreshed when the threshold is moved forward in the
 	 * future. The invalidation threshold should already be aligned on bucket
 	 * boundary. */
-	if (refresh_window_arg->end > invalidation_threshold)
+	if (refresh_window.end > invalidation_threshold)
 		refresh_window.end = invalidation_threshold;
 
 	/* Capping the end might have made the window 0, or negative, so
