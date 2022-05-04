@@ -20,10 +20,7 @@ extern TSDLLEXPORT char *ts_extension_schema_name(void);
 extern const char *ts_experimental_schema_name(void);
 extern const char *ts_extension_get_so_name(void);
 extern TSDLLEXPORT const char *ts_extension_get_version(void);
-extern bool ts_drop_owned_statement_drops_timescaledb_extension(const DropOwnedStmt *stmt);
 extern bool ts_extension_is_proxy_table_relid(Oid relid);
 extern TSDLLEXPORT Oid ts_extension_get_oid(void);
-extern void _ts_extension_init(void);
-extern void _ts_extension_fini(void);
 
 #endif /* TIMESCALEDB_EXTENSION_H */
