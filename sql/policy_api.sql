@@ -55,3 +55,48 @@ CREATE OR REPLACE FUNCTION @extschema@.remove_continuous_aggregate_policy(contin
 RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_remove'
 LANGUAGE C VOLATILE STRICT;
+
+/* 1 step policies */
+
+/* Add policies */
+CREATE OR REPLACE FUNCTION @extschema@.add_policies(
+    relation REGCLASS,
+    if_not_exists BOOL = false,
+    refresh_start_offset "any" = NULL,
+    refresh_end_offset "any" = NULL,
+    refresh_schedule_interval INTERVAL = NULL,
+    compress_after "any" = NULL,
+    drop_after "any" = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_add'
+LANGUAGE C VOLATILE;
+
+/* Remove policies */
+CREATE OR REPLACE FUNCTION @extschema@.remove_policies(
+    relation REGCLASS,
+    if_not_exists BOOL = false,
+    VARIADIC policy_names TEXT[] = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_remove'
+LANGUAGE C VOLATILE;
+
+/* Alter policies */
+CREATE OR REPLACE FUNCTION @extschema@.alter_policies(
+    relation REGCLASS,
+    if_not_exists BOOL = false,
+    refresh_start_offset "any" = NULL,
+    refresh_end_offset "any" = NULL,
+    refresh_schedule_interval INTERVAL = NULL,
+    compress_after "any" = NULL,
+    drop_after "any" = NULL)
+RETURNS BOOL
+AS '@MODULE_PATHNAME@', 'ts_policies_alter'
+LANGUAGE C VOLATILE;
+
+/* Show policies info */
+CREATE OR REPLACE FUNCTION @extschema@.show_policies(
+    relation REGCLASS,
+    if_not_exists BOOL = false)
+RETURNS SETOF JSONB
+AS '@MODULE_PATHNAME@', 'ts_policies_show'
+LANGUAGE C  VOLATILE;

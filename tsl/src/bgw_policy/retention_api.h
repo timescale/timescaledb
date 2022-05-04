@@ -18,4 +18,7 @@ int32 policy_retention_get_hypertable_id(const Jsonb *config);
 int64 policy_retention_get_drop_after_int(const Jsonb *config);
 Interval *policy_retention_get_drop_after_interval(const Jsonb *config);
 
+Datum policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
+									bool if_not_exists);
+Datum policy_retention_remove_internal(Oid table_oid, bool if_exists);
 #endif /* TIMESCALEDB_TSL_BGW_POLICY_RETENTION_API_H */
