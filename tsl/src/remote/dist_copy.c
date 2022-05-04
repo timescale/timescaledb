@@ -833,16 +833,6 @@ read_next_copy_row(RemoteCopyContext *context, CopyFromState cstate)
 	return true;
 }
 
-
-static void
-reset_copy_connection_state(CopyConnectionState *state)
-{
-	finish_outstanding_copies(state);
-	list_free(state->data_node_connections);
-	list_free(state->connections_in_use);
-	state->data_node_connections = NIL;
-	state->connections_in_use = NIL;
-}
 static Chunk *
 get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
 {
