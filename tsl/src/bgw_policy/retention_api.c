@@ -25,10 +25,9 @@
 #include "utils.h"
 #include "jsonb_utils.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
 
-#define POLICY_RETENTION_PROC_NAME "policy_retention"
 #define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
-#define CONFIG_KEY_DROP_AFTER "drop_after"
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -133,14 +132,10 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 }
 
 Datum
-policy_retention_add(PG_FUNCTION_ARGS)
+policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum, bool if_not_exists)
 {
 	NameData application_name;
 	int32 job_id;
-	Oid ht_oid = PG_GETARG_OID(0);
-	Datum window_datum = PG_GETARG_DATUM(1);
-	bool if_not_exists = PG_GETARG_BOOL(2);
-	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	Hypertable *hypertable;
 	Cache *hcache;
 
@@ -155,8 +150,6 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Interval default_retry_period = { .time = 5 * USECS_PER_MINUTE };
 	/* Right now, there is an infinite number of retries for drop_chunks jobs */
 	int default_max_retries = -1;
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/* Verify that the hypertable owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -279,14 +272,23 @@ policy_retention_add(PG_FUNCTION_ARGS)
 }
 
 Datum
-policy_retention_remove(PG_FUNCTION_ARGS)
+policy_retention_add(PG_FUNCTION_ARGS)
 {
-	Oid table_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
-	Cache *hcache;
-	Hypertable *hypertable;
+	Oid ht_oid = PG_GETARG_OID(0);
+	Datum window_datum = PG_GETARG_DATUM(1);
+	bool if_not_exists = PG_GETARG_BOOL(2);
+	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_retention_add_internal(ht_oid, window_type, window_datum, if_not_exists);
+}
+
+Datum
+policy_retention_remove_internal(Oid table_oid, bool if_exists)
+{
+	Cache *hcache;
+	Hypertable *hypertable;
 
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_oid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (!hypertable)
@@ -330,7 +332,7 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errmsg("retention policy not found for hypertable \"%s\", skipping",
 							get_rel_name(table_oid))));
-			PG_RETURN_NULL();
+			PG_RETURN_BOOL(false);
 		}
 	}
 	Assert(list_length(jobs) == 1);
@@ -338,5 +340,16 @@ policy_retention_remove(PG_FUNCTION_ARGS)
 
 	ts_bgw_job_delete_by_id(job->fd.id);
 
-	PG_RETURN_NULL();
+	PG_RETURN_BOOL(true);
+}
+
+Datum
+policy_retention_remove(PG_FUNCTION_ARGS)
+{
+	Oid table_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	return policy_retention_remove_internal(table_oid, if_exists);
 }
