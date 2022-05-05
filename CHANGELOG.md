@@ -12,6 +12,7 @@ If you use compression with a non-default collation on a segmentby-column you mi
 * #4120 Add logging for retention policy
 * #4169 Add support for chunk exclusion on DELETE to PG14
 * #4209 Add support for chunk exclusion on UPDATE to PG14
+* #4301 Add support for bulk inserts in COPY operator
 
 **Bugfixes**
 * #3899 Fix segfault in Continuous Aggregates
