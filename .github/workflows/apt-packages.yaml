@@ -21,8 +21,8 @@ jobs:
       fail-fast: false
       matrix:
         # Debian images:  9 (stretch), 10 (buster), 11 (bullseye)
-        # Ubuntu images:  18.04 LTS (bionic), 19.10 (eoan), 20.04 LTS (focal), 21.04 (hirsute), 21.10 (impish)
-        image: [ "debian:9-slim", "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:hirsute", "ubuntu:impish"]
+        # Ubuntu images:  18.04 LTS (bionic), 20.04 LTS (focal), 21.04 (hirsute), 21.10 (impish), 22.04 (jammy)
+        image: [ "debian:9-slim", "debian:10-slim", "debian:11-slim", "ubuntu:bionic", "ubuntu:focal", "ubuntu:hirsute", "ubuntu:impish", "ubuntu:jammy"]
         pg: [ 12, 13, 14 ]
         license: [ "TSL", "Apache"]
         include:
