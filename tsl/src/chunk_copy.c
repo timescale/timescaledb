@@ -370,16 +370,20 @@ chunk_copy_stage_init(ChunkCopy *cc)
 {
 	int32 id;
 
-	/*
-	 * Get the operation id for this chunk move/copy activity. The naming
-	 * convention is "ts_copy_seq-id_chunk-id".
-	 */
-	id = ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_COPY_OPERATION);
-	snprintf(cc->fd.operation_id.data,
-			 sizeof(cc->fd.operation_id.data),
-			 "ts_copy_%d_%d",
-			 id,
-			 cc->chunk->fd.id);
+	/* check if the user has specified the operation id, if not generate one */
+	if (cc->fd.operation_id.data[0] == '\0')
+	{
+		/*
+		 * Get the operation id for this chunk move/copy activity. The naming
+		 * convention is "ts_copy_seq-id_chunk-id".
+		 */
+		id = ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_COPY_OPERATION);
+		snprintf(cc->fd.operation_id.data,
+				 sizeof(cc->fd.operation_id.data),
+				 "ts_copy_%d_%d",
+				 id,
+				 cc->chunk->fd.id);
+	}
 
 	/* Persist the Formdata entry in the catalog */
 	chunk_copy_operation_insert(&cc->fd);
@@ -799,12 +803,18 @@ chunk_copy_execute(ChunkCopy *cc)
 }
 
 void
-chunk_copy(Oid chunk_relid, const char *src_node, const char *dst_node, bool delete_on_src_node)
+chunk_copy(Oid chunk_relid, const char *src_node, const char *dst_node, const char *op_id,
+		   bool delete_on_src_node)
 {
 	ChunkCopy cc;
 	const MemoryContext oldcontext = CurrentMemoryContext;
 
-	/* Populate copy structure */
+	/* Populate copy structure. First set up the operation id if it's provided */
+	if (op_id)
+		snprintf(cc.fd.operation_id.data, sizeof(cc.fd.operation_id.data), "%s", op_id);
+	else
+		cc.fd.operation_id.data[0] = '\0';
+
 	chunk_copy_setup(&cc, chunk_relid, src_node, dst_node, delete_on_src_node);
 
 	/* Execute chunk copy in separate stages */

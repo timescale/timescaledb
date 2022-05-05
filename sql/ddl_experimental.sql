@@ -24,13 +24,15 @@ AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
 CREATE OR REPLACE PROCEDURE timescaledb_experimental.move_chunk(
     chunk REGCLASS,
     source_node NAME = NULL,
-    destination_node NAME = NULL)
+    destination_node NAME = NULL,
+    operation_id NAME = NULL)
 AS '@MODULE_PATHNAME@', 'ts_move_chunk_proc' LANGUAGE C;
 
 CREATE OR REPLACE PROCEDURE timescaledb_experimental.copy_chunk(
     chunk REGCLASS,
     source_node NAME = NULL,
-    destination_node NAME = NULL)
+    destination_node NAME = NULL,
+    operation_id NAME = NULL)
 AS '@MODULE_PATHNAME@', 'ts_copy_chunk_proc' LANGUAGE C;
 
 -- A copy_chunk or move_chunk procedure call involves multiple nodes and

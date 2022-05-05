@@ -59,8 +59,10 @@ while ($curr_index < $arrSize)
 {
 	#Enable the error at each stage
 	#Call the move_chunk procedure which should error out now
+	#We provide the operation id ourselves
+	$operation_id = "ts_cloud_" . $curr_index . "_1";
 	($ret, $stdout, $stderr) = $an->psql('postgres',
-		"SELECT error_injection_on('$stages[$curr_index]'); CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2');"
+		"SELECT error_injection_on('$stages[$curr_index]'); CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2', operation_id => '$operation_id');"
 	);
 	is($ret, 3,
 		"move_chunk fails as expected in stage '$stages[$curr_index]'");
@@ -71,7 +73,6 @@ while ($curr_index < $arrSize)
 
 	#The earlier debug error point gets released automatically since it's a session lock
 	#Call the cleanup procedure to make things right
-	$operation_id = "ts_copy_" . $curr_index . "_1";
 	$an->safe_psql('postgres',
 		"CALL timescaledb_experimental.cleanup_copy_chunk_operation(operation_id=>'$operation_id');"
 	);
