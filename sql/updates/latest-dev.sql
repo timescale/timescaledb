@@ -86,3 +86,7 @@ UPDATE _timescaledb_catalog.continuous_agg SET finalized = FALSE;
 ALTER TABLE _timescaledb_catalog.continuous_agg
   ALTER COLUMN finalized SET NOT NULL,
   ALTER COLUMN finalized SET DEFAULT TRUE;
+
+DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk(REGCLASS, NAME, NAME);
+
+DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk(REGCLASS, NAME, NAME);

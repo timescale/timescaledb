@@ -103,3 +103,5 @@ ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_lo
 
 ANALYZE _timescaledb_catalog.continuous_agg;
 
+DROP PROCEDURE timescaledb_experimental.move_chunk(REGCLASS, NAME, NAME, NAME);
+DROP PROCEDURE timescaledb_experimental.copy_chunk(REGCLASS, NAME, NAME, NAME);
