@@ -338,6 +338,50 @@ finish_outstanding_copies(const CopyConnectionState *state)
 	TSConnectionError err;
 	bool failure = false;
 
+	/*
+	 * Flush all connections simultaneously instead of doing this one-by-one in
+	 * remote_connection_end_copy(). Should switch to using poll().
+	 */
+	for (;;)
+	{
+		bool flushed_all = true;
+		foreach (lc, state->connections_in_use)
+		{
+			TSConnection *conn = lfirst(lc);
+			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+			int res = PQflush(pg_conn);
+
+			if (res == -1)
+			{
+				ereport(ERROR,
+					errcode(ERRCODE_CONNECTION_EXCEPTION),
+					errmsg("could not flush COPY data"));
+			}
+			else if (res == 0)
+			{
+				/* Flushed. */
+			}
+			else
+			{
+				Assert(res == 1);
+				flushed_all = false;
+			}
+		}
+
+		if (flushed_all)
+		{
+			break;
+		}
+
+		CHECK_FOR_INTERRUPTS();
+
+		fprintf(stderr, "sleep (4)!\n");
+		(void) WaitLatch(MyLatch,
+						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+						 10,
+						 WAIT_EVENT_PG_SLEEP);
+	}
+
 	foreach (lc, state->connections_in_use)
 	{
 		TSConnection *conn = lfirst(lc);
@@ -913,53 +957,53 @@ typedef struct DataNodeRows
 	int *row_indices;
 } DataNodeRows;
 
-static void
-flush_data_nodes(List *data_nodes)
-{
-	for (;;)
-	{
-		bool flushed_all = true;
-		ListCell *lc;
-		foreach(lc, data_nodes)
-		{
-			int res;
-			DataNodeRows *dn = lfirst(lc);
-			PGconn *pg_conn = remote_connection_get_pg_conn(dn->connection);
-
-			res = PQflush(pg_conn);
-
-			if (res == -1)
-			{
-				ereport(ERROR,
-					errcode(ERRCODE_CONNECTION_EXCEPTION),
-					errmsg("could not flush COPY data"));
-			}
-			else if (res == 0)
-			{
-				/* OK, can continue */
-			}
-			else
-			{
-				Assert(res == 1);
-				fprintf(stderr, "%d busy (2)!\n", dn->server_oid);
-				flushed_all = false;
-			}
-		}
-
-		if (flushed_all)
-		{
-			break;
-		}
-
-		CHECK_FOR_INTERRUPTS();
-
-		fprintf(stderr, "sleep (3)!\n");
-		(void) WaitLatch(MyLatch,
-						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
-						 100,
-						 WAIT_EVENT_PG_SLEEP);
-	}
-}
+//static void
+//flush_data_nodes(List *data_nodes)
+//{
+//	for (;;)
+//	{
+//		bool flushed_all = true;
+//		ListCell *lc;
+//		foreach(lc, data_nodes)
+//		{
+//			int res;
+//			DataNodeRows *dn = lfirst(lc);
+//			PGconn *pg_conn = remote_connection_get_pg_conn(dn->connection);
+//
+//			res = PQflush(pg_conn);
+//
+//			if (res == -1)
+//			{
+//				ereport(ERROR,
+//					errcode(ERRCODE_CONNECTION_EXCEPTION),
+//					errmsg("could not flush COPY data"));
+//			}
+//			else if (res == 0)
+//			{
+//				/* OK, can continue */
+//			}
+//			else
+//			{
+//				Assert(res == 1);
+//				fprintf(stderr, "%d busy (2)!\n", dn->server_oid);
+//				flushed_all = false;
+//			}
+//		}
+//
+//		if (flushed_all)
+//		{
+//			break;
+//		}
+//
+//		CHECK_FOR_INTERRUPTS();
+//
+//		fprintf(stderr, "sleep (3)!\n");
+//		(void) WaitLatch(MyLatch,
+//						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
+//						 10,
+//						 WAIT_EVENT_PG_SLEEP);
+//	}
+//}
 
 static bool
 remote_copy_process_and_send_data(RemoteCopyContext *context)
@@ -1115,11 +1159,17 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	}
 	MemoryContextSwitchTo(old);
 
-	/*
-	 * Flush before sending more data to avoid endlessly growing the output
-	 * buffer of the libpq connection.
-	 */
-	flush_data_nodes(data_nodes);
+//	/*
+//	 * Flush before sending more data to avoid endlessly growing the output
+//	 * buffer of the libpq connection.
+//	 *
+//	 * FIXME 1) move this before creating more chunks + add to end_copy
+//	 * 2) use all hypertable nodes, why not? + an efficient multiplexed flush
+//	 * on them.
+//	 * 3) no need to flush all the time, pqmsgend flushes if we've accumulated
+//	 * more than 8k.
+//	 */
+//	flush_data_nodes(data_nodes);
 
 	foreach(lc, data_nodes)
 	{
@@ -1133,9 +1183,8 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 
 			/*
 			 * It can't really return 0 ("would block") until it runs out
-			 * of memory. It just grows buffer while it can, so we have to
-			 * flush explicitly at some point. Will do this at the batch
-			 * end. The batch size is supposed to fit well into memory.
+			 * of memory. It just grows buffer and tries to flush in
+			 * pqPutMsgEnd().
 			 */
 			res = PQputCopyData( pg_conn, row_data->data, row_data->len);
 
@@ -1157,11 +1206,11 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		}
 	}
 
-	/*
-	 * Flush after sending using our efficient multiplexed flusher, so that it's
-	 * not done eventually in an inefficient per-connection way.
-	 */
-	flush_data_nodes(data_nodes);
+//	/*
+//	 * Flush after sending using our efficient multiplexed flusher, so that it's
+//	 * not done eventually in an inefficient per-connection way.
+//	 */
+//	flush_data_nodes(data_nodes);
 
 	return true;
 }

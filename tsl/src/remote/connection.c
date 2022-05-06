@@ -2227,7 +2227,7 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 
 			(void) WaitLatch(MyLatch,
 							 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
-							 100,
+							 10,
 							 WAIT_EVENT_PG_SLEEP);
 		}
 		else if (res == 0)
