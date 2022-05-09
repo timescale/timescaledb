@@ -127,6 +127,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.move_chunk_proc = tsl_move_chunk_proc,
 	.copy_chunk_proc = tsl_copy_chunk_proc,
 	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
+	.subscription_exec = tsl_subscription_exec,
 
 	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,

@@ -35,6 +35,10 @@ CREATE OR REPLACE PROCEDURE timescaledb_experimental.copy_chunk(
     operation_id NAME = NULL)
 AS '@MODULE_PATHNAME@', 'ts_copy_chunk_proc' LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION timescaledb_experimental.subscription_exec(
+    subscription_command TEXT
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_subscription_exec' LANGUAGE C VOLATILE;
+
 -- A copy_chunk or move_chunk procedure call involves multiple nodes and
 -- depending on the data size can take a long time. Failures are possible
 -- when this long running activity is ongoing. We need to be able to recover

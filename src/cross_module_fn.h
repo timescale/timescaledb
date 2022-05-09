@@ -81,6 +81,7 @@ typedef struct CrossModuleFunctions
 	PGFunction move_chunk;
 	PGFunction move_chunk_proc;
 	PGFunction copy_chunk_proc;
+	PGFunction subscription_exec;
 	PGFunction copy_chunk_cleanup_proc;
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);

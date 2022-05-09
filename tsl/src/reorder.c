@@ -21,6 +21,7 @@
 #include <access/transam.h>
 #include <access/xact.h>
 #include <access/xlog.h>
+#include <catalog/pg_authid.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -40,7 +41,9 @@
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <storage/smgr.h>
+#include <tcop/tcopprot.h>
 #include <utils/acl.h>
+#include <utils/builtins.h>
 #include <utils/fmgroids.h>
 #include <utils/guc.h>
 #include <utils/inval.h>
@@ -255,6 +258,80 @@ Datum
 tsl_copy_chunk_proc(PG_FUNCTION_ARGS)
 {
 	tsl_copy_or_move_chunk_proc(fcinfo, false);
+
+	PG_RETURN_VOID();
+}
+
+Datum
+tsl_subscription_exec(PG_FUNCTION_ARGS)
+{
+	Oid save_userid;
+	int save_sec_context;
+	const char *subscription_cmd = PG_ARGISNULL(0) ? NULL : text_to_cstring(PG_GETARG_TEXT_P(0));
+	int res;
+	List *parsetree_list;
+	ListCell *parsetree_item;
+
+	/*
+	 * Subscription command needs a superuser
+	 * so switch to that context. But first check that the passed in user has atleast
+	 * REPLICATION privileges to justify the use of this function
+	 */
+	if (!superuser() && !has_rolreplication(GetUserId()))
+		ereport(ERROR,
+				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
+				 (errmsg("must be superuser or replication role to use this function"))));
+
+	GetUserIdAndSecContext(&save_userid, &save_sec_context);
+	SetUserIdAndSecContext(BOOTSTRAP_SUPERUSERID, save_sec_context | SECURITY_LOCAL_USERID_CHANGE);
+
+	/*
+	 * Parse the SQL string into a list of raw parse trees.
+	 */
+	parsetree_list = pg_parse_query(subscription_cmd);
+
+	/*
+	 * Check that we have received a "SUBSCRIPTION" related command only. Anything else
+	 * needs to error out
+	 */
+	foreach (parsetree_item, parsetree_list)
+	{
+		RawStmt *parsetree = lfirst_node(RawStmt, parsetree_item);
+
+		/* We are only interested in "CREATE/DROP SUBSCRIPTION" and "ALTER SUBSCRIPTION" stmts */
+		switch (nodeTag(parsetree->stmt))
+		{
+			case T_CreateSubscriptionStmt:
+				break;
+
+			case T_AlterSubscriptionStmt:
+				break;
+
+			case T_DropSubscriptionStmt:
+				break;
+
+			default:
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("this function only accepts SUBSCRIPTION commands")));
+		}
+	}
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	res = SPI_execute(subscription_cmd, false /* read_only */, 0 /*count*/);
+
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("error in subscription cmd \"%s\"", subscription_cmd))));
+
+	res = SPI_finish();
+	Assert(res == SPI_OK_FINISH);
+
+	/* Restore the earlier user */
+	SetUserIdAndSecContext(save_userid, save_sec_context);
 
 	PG_RETURN_VOID();
 }

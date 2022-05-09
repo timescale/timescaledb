@@ -133,7 +133,7 @@ ROLLBACK;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
-ERROR:  must be superuser to copy/move chunk to data node
+ERROR:  must be superuser or replication role to copy/move chunk to data node
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_1;
 -- can't run copy/move chunk on a data node
