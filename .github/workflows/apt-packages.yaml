@@ -78,6 +78,8 @@ jobs:
         fi
 
     - name: Test Downgrade
+      # ubuntu:jammy only has 1 released version at the moment so downgrade will not be possible
+      if: matrix.image != 'ubuntu:jammy'
       run: |
         # since this runs nightly on main we have to get the previous version from the last released version and not current branch
         prev_version=$(wget --quiet -O - https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config | grep update_from_version | sed -e 's!update_from_version = !!')
