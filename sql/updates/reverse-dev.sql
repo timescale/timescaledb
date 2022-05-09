@@ -22,3 +22,9 @@ DROP FUNCTION _timescaledb_internal.unfreeze_chunk( chunk REGCLASS);
 -- Drop dimension partition metadata table
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_partition;
 DROP TABLE IF EXISTS _timescaledb_catalog.dimension_partition;
+DROP FUNCTION IF EXISTS @extschema@.add_policies;
+DROP FUNCTION IF EXISTS @extschema@.remove_policies;
+DROP FUNCTION IF EXISTS @extschema@.alter_policies;
+DROP FUNCTION IF EXISTS @extschema@.show_policies;
+DROP FUNCTION IF EXISTS @extschema@.remove_continuous_aggregate_policy(REGCLASS, BOOL, BOOL);
+
