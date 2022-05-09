@@ -8,7 +8,7 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 272;
+use Test::More tests => 274;
 
 #Initialize all the multi-node instances
 my $an  = AccessNode->create('an');
@@ -83,9 +83,45 @@ while ($curr_index < $arrSize)
 	$curr_index++;
 }
 
+for my $node ($an, $dn1, $dn2)
+{
+	$node->safe_psql('postgres', "CREATE ROLE testrole LOGIN");
+}
+
+#Error out the move if user doesn't have superuser nor replication perms
+($ret, $stdout, $stderr) = $an->psql('postgres',
+	"SET ROLE testrole; CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2')"
+);
+
+like(
+	$stderr,
+	qr/must be superuser or replication role to copy\/move chunk to data node/,
+	'Expected failure due to no credentials');
+
+#Provide REPLICATION creds to this user now
+for my $node ($an, $dn1, $dn2)
+{
+	$node->safe_psql('postgres', "ALTER ROLE testrole REPLICATION;");
+}
+
+#Check that function errors out if any non SUBSCRIPTON command is passed to it
+($ret, $stdout, $stderr) = $an->psql('postgres',
+	"SET ROLE testrole; SELECT timescaledb_experimental.subscription_exec('DROP ROLE testrole')"
+);
+
+like(
+	$stderr,
+	qr/this function only accepts SUBSCRIPTION commands/,
+	'Expected failure due to wrong command to function');
+
+#Also grant it ownership of the table and related permissions
+$an->safe_psql('postgres',
+	"ALTER TABLE test OWNER TO testrole; GRANT ALL PRIVILEGES ON DATABASE postgres TO testrole; GRANT USAGE, SELECT ON SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq TO testrole; GRANT USAGE ON FOREIGN SERVER dn1, dn2 TO testrole;"
+);
+
 #Move chunk _timescaledb_internal._dist_hyper_1_1_chunk to DN2 from AN
 $an->safe_psql('postgres',
-	"CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2')"
+	"SET ROLE testrole; CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2')"
 );
 
 #Query datanode1 after the above move

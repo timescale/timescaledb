@@ -209,6 +209,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  timescaledb_experimental.cleanup_copy_chunk_operation(name)
  timescaledb_experimental.copy_chunk(regclass,name,name,name)
  timescaledb_experimental.move_chunk(regclass,name,name,name)
+ timescaledb_experimental.subscription_exec(text)
  timescaledb_experimental.time_bucket_ng(interval,date)
  timescaledb_experimental.time_bucket_ng(interval,date,date)
  timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone)

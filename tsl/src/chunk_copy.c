@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <foreign/foreign.h>
+#include <catalog/pg_authid.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
 #include <catalog/dependency.h>
@@ -260,10 +261,11 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 	Cache *hcache;
 	MemoryContext old, mcxt;
 
-	if (!superuser())
+	if (!superuser() && !has_rolreplication(GetUserId()))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to copy/move chunk to data node"))));
+				 (errmsg(
+					 "must be superuser or replication role to copy/move chunk to data node"))));
 
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		ereport(ERROR,
@@ -431,7 +433,7 @@ chunk_copy_stage_create_publication(ChunkCopy *cc)
 
 	/* Create publication on the source data node */
 	cmd = psprintf("CREATE PUBLICATION %s FOR TABLE %s",
-				   NameStr(cc->fd.operation_id),
+				   quote_identifier(NameStr(cc->fd.operation_id)),
 				   quote_qualified_identifier(NameStr(cc->chunk->fd.schema_name),
 											  NameStr(cc->chunk->fd.table_name)));
 
@@ -449,7 +451,7 @@ chunk_copy_stage_create_replication_slot(ChunkCopy *cc)
 	 * create the replication slot separately before creating the subscription
 	 */
 	cmd = psprintf("SELECT pg_create_logical_replication_slot('%s', 'pgoutput')",
-				   NameStr(cc->fd.operation_id));
+				   quote_identifier(NameStr(cc->fd.operation_id)));
 
 	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
 }
@@ -463,7 +465,7 @@ chunk_copy_stage_create_replication_slot_cleanup(ChunkCopy *cc)
 
 	/* Check if the slot exists on the source data node */
 	cmd = psprintf("SELECT 1 FROM pg_catalog.pg_replication_slots WHERE slot_name = '%s'",
-				   NameStr(cc->fd.operation_id));
+				   quote_identifier(NameStr(cc->fd.operation_id)));
 	dist_res =
 		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
 	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.source_node_name));
@@ -475,7 +477,8 @@ chunk_copy_stage_create_replication_slot_cleanup(ChunkCopy *cc)
 	/* Drop replication slot on the source data node only if it exists */
 	if (PQntuples(res) != 0)
 	{
-		cmd = psprintf("SELECT pg_drop_replication_slot('%s')", NameStr(cc->fd.operation_id));
+		cmd = psprintf("SELECT pg_drop_replication_slot('%s')",
+					   quote_identifier(NameStr(cc->fd.operation_id)));
 		ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
 	}
 
@@ -498,7 +501,7 @@ chunk_copy_stage_create_publication_cleanup(ChunkCopy *cc)
 
 	/* Check if the publication exists on the source data node */
 	cmd = psprintf("SELECT 1 FROM pg_catalog.pg_publication WHERE pubname = '%s'",
-				   NameStr(cc->fd.operation_id));
+				   quote_identifier(NameStr(cc->fd.operation_id)));
 	dist_res =
 		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
 	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.source_node_name));
@@ -510,7 +513,7 @@ chunk_copy_stage_create_publication_cleanup(ChunkCopy *cc)
 	/* Drop publication on the source node only if it exists */
 	if (PQntuples(res) != 0)
 	{
-		cmd = psprintf("DROP PUBLICATION %s", NameStr(cc->fd.operation_id));
+		cmd = psprintf("DROP PUBLICATION %s", quote_identifier(NameStr(cc->fd.operation_id)));
 
 		/* Drop the publication */
 		ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
@@ -519,10 +522,21 @@ chunk_copy_stage_create_publication_cleanup(ChunkCopy *cc)
 	ts_dist_cmd_close_response(dist_res);
 }
 
+/* Execute a logical SUBSCRIPTION related command on the data node */
+static void
+chunk_copy_exec_subscription_command(const char *command, List *data_nodes)
+{
+	char *cmd;
+
+	cmd = psprintf("SELECT timescaledb_experimental.subscription_exec($sql$%s$sql$)", command);
+	ts_dist_cmd_run_on_data_nodes(cmd, data_nodes, true);
+	pfree(cmd);
+}
+
 static void
 chunk_copy_stage_create_subscription(ChunkCopy *cc)
 {
-	const char *cmd;
+	char *cmd;
 	const char *connection_string;
 
 	/* Prepare connection string to the source node */
@@ -530,10 +544,11 @@ chunk_copy_stage_create_subscription(ChunkCopy *cc)
 
 	cmd = psprintf("CREATE SUBSCRIPTION %s CONNECTION '%s' PUBLICATION %s"
 				   " WITH (create_slot = false, enabled = false)",
-				   NameStr(cc->fd.operation_id),
+				   quote_identifier(NameStr(cc->fd.operation_id)),
 				   connection_string,
-				   NameStr(cc->fd.operation_id));
-	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+				   quote_identifier(NameStr(cc->fd.operation_id)));
+	chunk_copy_exec_subscription_command(cmd, list_make1(NameStr(cc->fd.dest_node_name)));
+	pfree(cmd);
 }
 
 static void
@@ -545,7 +560,7 @@ chunk_copy_stage_create_subscription_cleanup(ChunkCopy *cc)
 
 	/* Check if the subscription exists on the destination data node */
 	cmd = psprintf("SELECT 1 FROM pg_catalog.pg_subscription WHERE subname = '%s'",
-				   NameStr(cc->fd.operation_id));
+				   quote_identifier(NameStr(cc->fd.operation_id)));
 	dist_res =
 		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
 	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.dest_node_name));
@@ -557,17 +572,24 @@ chunk_copy_stage_create_subscription_cleanup(ChunkCopy *cc)
 	/* Cleanup only if the subscription exists */
 	if (PQntuples(res) != 0)
 	{
-		List *nodes = list_make1(NameStr(cc->fd.dest_node_name));
+		List *dest_dn_list = list_make1(NameStr(cc->fd.dest_node_name));
+
+		/* Stop data transfer on the destination node */
+		cmd = psprintf("ALTER SUBSCRIPTION %s DISABLE",
+					   quote_identifier(NameStr(cc->fd.operation_id)));
+		chunk_copy_exec_subscription_command(cmd, dest_dn_list);
+		pfree(cmd);
 
 		/* Disassociate the subscription from the replication slot first */
-		cmd =
-			psprintf("ALTER SUBSCRIPTION %s SET (slot_name = NONE)", NameStr(cc->fd.operation_id));
-		ts_dist_cmd_run_on_data_nodes(cmd, nodes, true);
+		cmd = psprintf("ALTER SUBSCRIPTION %s SET (slot_name = NONE)",
+					   quote_identifier(NameStr(cc->fd.operation_id)));
+		chunk_copy_exec_subscription_command(cmd, dest_dn_list);
+		pfree(cmd);
 
 		/* Drop the subscription now */
+		cmd = psprintf("DROP SUBSCRIPTION %s", quote_identifier(NameStr(cc->fd.operation_id)));
+		chunk_copy_exec_subscription_command(cmd, dest_dn_list);
 		pfree(cmd);
-		cmd = psprintf("DROP SUBSCRIPTION %s", NameStr(cc->fd.operation_id));
-		ts_dist_cmd_run_on_data_nodes(cmd, nodes, true);
 	}
 
 	ts_dist_cmd_close_response(dist_res);
@@ -576,11 +598,12 @@ chunk_copy_stage_create_subscription_cleanup(ChunkCopy *cc)
 static void
 chunk_copy_stage_sync_start(ChunkCopy *cc)
 {
-	const char *cmd;
+	char *cmd;
 
 	/* Start data transfer on the destination node */
-	cmd = psprintf("ALTER SUBSCRIPTION %s ENABLE", NameStr(cc->fd.operation_id));
-	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	cmd = psprintf("ALTER SUBSCRIPTION %s ENABLE", quote_identifier(NameStr(cc->fd.operation_id)));
+	chunk_copy_exec_subscription_command(cmd, list_make1(NameStr(cc->fd.dest_node_name)));
+	pfree(cmd);
 }
 
 static void
@@ -592,7 +615,7 @@ chunk_copy_stage_sync_start_cleanup(ChunkCopy *cc)
 
 	/* Check if the subscription exists on the destination data node */
 	cmd = psprintf("SELECT 1 FROM pg_catalog.pg_subscription WHERE subname = '%s'",
-				   NameStr(cc->fd.operation_id));
+				   quote_identifier(NameStr(cc->fd.operation_id)));
 	dist_res =
 		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
 	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.dest_node_name));
@@ -605,7 +628,8 @@ chunk_copy_stage_sync_start_cleanup(ChunkCopy *cc)
 	if (PQntuples(res) != 0)
 	{
 		/* Stop data transfer on the destination node */
-		cmd = psprintf("ALTER SUBSCRIPTION %s DISABLE", NameStr(cc->fd.operation_id));
+		cmd = psprintf("ALTER SUBSCRIPTION %s DISABLE",
+					   quote_identifier(NameStr(cc->fd.operation_id)));
 		ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
 	}
 
@@ -640,20 +664,22 @@ static void
 chunk_copy_stage_drop_subscription(ChunkCopy *cc)
 {
 	char *cmd;
+	List *dest_dn_list = list_make1(NameStr(cc->fd.dest_node_name));
 
 	/* Stop data transfer on the destination node */
-	cmd = psprintf("ALTER SUBSCRIPTION %s DISABLE", NameStr(cc->fd.operation_id));
-	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	cmd = psprintf("ALTER SUBSCRIPTION %s DISABLE", quote_identifier(NameStr(cc->fd.operation_id)));
+	chunk_copy_exec_subscription_command(cmd, dest_dn_list);
 	pfree(cmd);
 
 	/* Disassociate the subscription from the replication slot first */
-	cmd = psprintf("ALTER SUBSCRIPTION %s SET (slot_name = NONE)", NameStr(cc->fd.operation_id));
-	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	cmd = psprintf("ALTER SUBSCRIPTION %s SET (slot_name = NONE)",
+				   quote_identifier(NameStr(cc->fd.operation_id)));
+	chunk_copy_exec_subscription_command(cmd, dest_dn_list);
 	pfree(cmd);
 
 	/* Drop the subscription now */
-	cmd = psprintf("DROP SUBSCRIPTION %s", NameStr(cc->fd.operation_id));
-	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	cmd = psprintf("DROP SUBSCRIPTION %s", quote_identifier(NameStr(cc->fd.operation_id)));
+	chunk_copy_exec_subscription_command(cmd, dest_dn_list);
 	pfree(cmd);
 }
 
@@ -662,10 +688,11 @@ chunk_copy_stage_drop_publication(ChunkCopy *cc)
 {
 	char *cmd;
 
-	cmd = psprintf("SELECT pg_drop_replication_slot('%s')", NameStr(cc->fd.operation_id));
+	cmd = psprintf("SELECT pg_drop_replication_slot('%s')",
+				   quote_identifier(NameStr(cc->fd.operation_id)));
 	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
 
-	cmd = psprintf("DROP PUBLICATION %s", NameStr(cc->fd.operation_id));
+	cmd = psprintf("DROP PUBLICATION %s", quote_identifier(NameStr(cc->fd.operation_id)));
 	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
 }
 
@@ -948,10 +975,11 @@ chunk_copy_cleanup(const char *operation_id)
 	bool found = false;
 	int stage_idx;
 
-	if (!superuser())
+	if (!superuser() && !has_rolreplication(GetUserId()))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 (errmsg("must be superuser to cleanup a chunk copy operation"))));
+				 (errmsg(
+					 "must be superuser or replication role to cleanup a chunk copy operation"))));
 
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		ereport(ERROR,

@@ -105,3 +105,4 @@ ANALYZE _timescaledb_catalog.continuous_agg;
 
 DROP PROCEDURE timescaledb_experimental.move_chunk(REGCLASS, NAME, NAME, NAME);
 DROP PROCEDURE timescaledb_experimental.copy_chunk(REGCLASS, NAME, NAME, NAME);
+DROP FUNCTION IF EXISTS timescaledb_experimental.subscription_exec(TEXT);
