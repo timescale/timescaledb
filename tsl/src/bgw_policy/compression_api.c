@@ -21,13 +21,6 @@
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policies_v2.h"
 
-/*
- * Default scheduled interval for compress jobs = default chunk length.
- * If this is non-timestamp based hypertable, then default is 1 day
- */
-#define DEFAULT_SCHEDULE_INTERVAL                                                                  \
-	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 day"), InvalidOid, -1))
-
 /* Default max runtime is unlimited for compress chunks */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
@@ -169,23 +162,14 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 
 Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
-								Oid compress_after_type, bool if_not_exists)
+								Oid compress_after_type, 
+								Interval *default_schedule_interval,
+								bool user_defined_schedule_interval,
+								bool if_not_exists)
 {
-	/* The function is not STRICT but we can't allow required args to be NULL
-	 * so we need to act like a strict function in those cases */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
-		PG_RETURN_NULL();
-
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
-	Oid user_rel_oid = PG_GETARG_OID(0);
-	Datum compress_after_datum = PG_GETARG_DATUM(1);
-	Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	bool if_not_exists = PG_GETARG_BOOL(2);
-	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
-	Interval *default_schedule_interval =
-		PG_ARGISNULL(3) ? DEFAULT_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
 	Hypertable *hypertable;
 	Cache *hcache;
 	const Dimension *dim;
@@ -220,6 +204,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		}
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
+
 		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
 														CONFIG_KEY_COMPRESS_AFTER,
 														partitioning_type,
@@ -244,7 +229,6 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 			PG_RETURN_INT32(-1);
 		}
 	}
-
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
 	{
@@ -292,7 +276,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 							CONFIG_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
 	}
-	/* If this is a compression policy for a cagg, verify that
+	/*
+	 * If this is a compression policy for a cagg, verify that
 	 * compress_after > refresh_start of cagg policy. We do not want
 	 * to compress regions that can be refreshed by the cagg policy.
 	 */
@@ -323,7 +308,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										config);
 
 	ts_cache_release(hcache);
-
+	ereport(LOG, errmsg("compress step 7"));
 	PG_RETURN_INT32(job_id);
 }
 
@@ -331,16 +316,28 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
+	/* 
+	 * The function is not STRICT but we can't allow required args to be NULL
+	 * so we need to act like a strict function in those cases 
+	 */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
 	Oid user_rel_oid = PG_GETARG_OID(0);
 	Datum compress_after_datum = PG_GETARG_DATUM(1);
-	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
+	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
+	Interval *default_schedule_interval =
+		PG_ARGISNULL(3) ? DEFAULT_COMPRESSION_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	return policy_compression_add_internal(user_rel_oid,
 										   compress_after_datum,
 										   compress_after_type,
+										   default_schedule_interval,
+										   user_defined_schedule_interval,
 										   if_not_exists);
 }
 

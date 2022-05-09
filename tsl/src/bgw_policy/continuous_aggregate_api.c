@@ -28,7 +28,7 @@
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
-	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
+       DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 
 /* infinite number of retries for continuous aggregate jobs */
 #define DEFAULT_MAX_RETRIES (-1)
@@ -497,7 +497,6 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 		IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
 	config->offset_start.name = CONFIG_KEY_START_OFFSET;
 	config->offset_end.name = CONFIG_KEY_END_OFFSET;
-
 	parse_offset_arg(cagg, start_offset_type, start_offset, &config->offset_start);
 	parse_offset_arg(cagg, end_offset_type, end_offset, &config->offset_end);
 
@@ -508,7 +507,7 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
-								 Interval refresh_interval, bool if_not_exists)
+								 Interval refresh_interval, bool if_not_exists, bool is_one_step)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
@@ -528,6 +527,15 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
+
+	if (is_one_step)
+	{
+		if (!start_offset.isnull)
+			start_offset.isnull = ts_time_is_infinity_from_arg(start_offset.value, start_offset_type, cagg->partition_type);
+		if (!end_offset.isnull)
+			end_offset.isnull = ts_time_is_infinity_from_arg(end_offset.value, end_offset_type, cagg->partition_type);
+
+	}
 
 	parse_cagg_policy_config(cagg,
 							 start_offset_type,
@@ -599,7 +607,6 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 									policyconf.offset_start.value);
 	else
 		ts_jsonb_add_null(parse_state, CONFIG_KEY_START_OFFSET);
-
 	if (!policyconf.offset_end.isnull)
 		json_add_dim_interval_value(parse_state,
 									CONFIG_KEY_END_OFFSET,
@@ -655,7 +662,7 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 											end_offset_type,
 											end_offset,
 											refresh_interval,
-											if_not_exists);
+											if_not_exists, false);
 }
 
 Datum
@@ -701,8 +708,11 @@ Datum
 policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 {
 	Oid cagg_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
+	bool if_not_exists = PG_GETARG_BOOL(1); /* Deprecating this argument */
+	bool if_exists;
 
+	/* For backward compatibility, we use IF_NOT_EXISTS when IF_EXISTS is not given */
+	if_exists = PG_ARGISNULL(2) ? if_not_exists : PG_GETARG_BOOL(2);
 	(void) policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
 	PG_RETURN_VOID();
 }

@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <miscadmin.h>
 #include <utils/builtins.h>
+#include <parser/parse_coerce.h>
 
 #include "compression_api.h"
 #include "errors.h"
@@ -23,26 +24,38 @@
 #include "funcapi.h"
 #include "compat/compat.h"
 
+bool
+ts_time_is_infinity_from_arg(Datum arg, Oid argtype, Oid timetype)
+{
+	int64 ret;
+	/*
+	 * If no explicit cast was done by the user, try to convert
+	 * the argument to the time type used by the
+	 * continuous aggregate.
+	 */
+	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
+	if (argtype == INTERVALOID)
+		ret = ts_interval_value_to_internal(arg, argtype);
+	else
+		ret = ts_time_value_to_internal(arg, argtype);
+	return (ret == PG_INT64_MIN || ret == PG_INT64_MAX);
+}
+
 Datum
 policies_add(PG_FUNCTION_ARGS)
 {
 	Oid rel_oid;
-	bool if_exists;
+	bool if_not_exists;
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
 
 	rel_oid = PG_GETARG_OID(0);
-	if_exists = PG_GETARG_BOOL(1);
+	if_not_exists = PG_GETARG_BOOL(1);
 
-	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3) || !PG_ARGISNULL(4))
+	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3))
 	{
 		NullableDatum start_offset, end_offset;
-		Interval refresh_interval = { 0, 0, 0 };
+		Interval refresh_interval = *DEFAULT_REFRESH_SCHEDULE_INTERVAL;
 		Oid start_offset_type, end_offset_type;
-
-		if (PG_ARGISNULL(4))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot use NULL refresh_schedule_interval")));
 
 		start_offset.value = PG_GETARG_DATUM(2);
 		start_offset.isnull = PG_ARGISNULL(2);
@@ -51,31 +64,34 @@ policies_add(PG_FUNCTION_ARGS)
 		end_offset.isnull = PG_ARGISNULL(3);
 		end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 
-		refresh_interval = *PG_GETARG_INTERVAL_P(4);
-
 		refresh_job_id = policy_refresh_cagg_add_internal(rel_oid,
 														  start_offset_type,
 														  start_offset,
 														  end_offset_type,
 														  end_offset,
 														  refresh_interval,
-														  if_exists);
+														  if_not_exists, true);
 	}
-	if (!PG_ARGISNULL(5))
+	if (!PG_ARGISNULL(4))
 	{
-		Datum compress_after_datum = PG_GETARG_DATUM(5);
-		Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
+		Datum compress_after_datum = PG_GETARG_DATUM(4);
+		Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
 		compression_job_id = policy_compression_add_internal(rel_oid,
 															 compress_after_datum,
 															 compress_after_type,
-															 if_exists);
+															 DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
+															 false, if_not_exists);
 	}
-	if (!PG_ARGISNULL(6))
+	if (!PG_ARGISNULL(5))
 	{
-		Datum drop_after_datum = PG_GETARG_DATUM(6);
-		Oid drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 6);
-		retention_job_id =
-			policy_retention_add_internal(rel_oid, drop_after_type, drop_after_datum, if_exists);
+		Datum drop_after_datum = PG_GETARG_DATUM(5);
+		Oid drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
+
+		retention_job_id = policy_retention_add_internal(rel_oid,
+														 drop_after_type,
+														 drop_after_datum,
+														 (Interval)DEFAULT_RETENTION_SCHEDULE_INTERVAL,
+														 if_not_exists);
 	}
 	PG_RETURN_BOOL(refresh_job_id || compression_job_id || retention_job_id);
 }
@@ -115,6 +131,42 @@ policies_remove(PG_FUNCTION_ARGS)
 }
 
 Datum
+policies_remove_all(PG_FUNCTION_ARGS)
+{
+	if (PG_ARGISNULL(0))
+		PG_RETURN_BOOL(false);
+
+	Oid cagg_oid = PG_GETARG_OID(0);
+	bool if_exists = PG_GETARG_BOOL(1);
+	List *jobs;
+	ListCell *lc;
+	bool success = false;
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
+
+	if (!cagg)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
+
+
+	jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
+	foreach(lc, jobs)
+	{
+		BgwJob *job = lfirst(lc);
+		if (namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME) == 0)
+			success = policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
+		else if (namestrcmp(&(job->fd.proc_name), POLICY_COMPRESSION_PROC_NAME) == 0)
+			success = policy_compression_remove_internal(cagg_oid, if_exists);
+		else if (namestrcmp(&(job->fd.proc_name),
+								POLICY_RETENTION_PROC_NAME) == 0)
+			success = policy_retention_remove_internal(cagg_oid, if_exists);
+		else
+			ereport(NOTICE, (errmsg("No relevant policy found")));
+	}
+	PG_RETURN_BOOL(success);
+}
+
+Datum
 policies_alter(PG_FUNCTION_ARGS)
 {
 	Oid rel_oid = PG_GETARG_OID(0);
@@ -122,6 +174,9 @@ policies_alter(PG_FUNCTION_ARGS)
 	List *jobs;
 	bool if_exists = false, found;
 	int refresh_job_id = 0, compression_job_id = 0, retention_job_id = 0;
+	Interval refresh_interval;
+	NullableDatum start_offset, end_offset;
+	Oid start_offset_type, end_offset_type;
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)
@@ -129,28 +184,35 @@ policies_alter(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(rel_oid))));
 
-	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3) || !PG_ARGISNULL(4))
+	if (!PG_ARGISNULL(2) || !PG_ARGISNULL(3))
 	{
-		Interval refresh_interval;
-		NullableDatum start_offset, end_offset;
-		Oid start_offset_type, end_offset_type;
-
 		jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
-														 INTERNAL_SCHEMA_NAME,
-														 cagg->data.mat_hypertable_id);
+														INTERNAL_SCHEMA_NAME,
+														cagg->data.mat_hypertable_id);
 
-		BgwJob *job = linitial(jobs);
+		if ((NIL == jobs))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						errmsg("no jobs found")));
 
-		refresh_interval = PG_ARGISNULL(4) ? job->fd.schedule_interval : *PG_GETARG_INTERVAL_P(4);
+		BgwJob *job = (NIL == jobs) ? NULL : linitial(jobs);
+
+		refresh_interval = job->fd.schedule_interval;
 
 		policy_refresh_cagg_remove_internal(rel_oid, if_exists);
 
-		if (PG_ARGISNULL(2))
+		if (job && PG_ARGISNULL(2))
 		{
+			/* providing NULL value means there is no change to the parameter value */
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
 				int64 value =
 					ts_jsonb_get_int64_field(job->fd.config, CONFIG_KEY_START_OFFSET, &found);
+			/*
+				* If there is job then start_offset has to be there because policy is
+				* not created without it. However if found it to be NULL, then we
+				* want to keep it to NULL in this alter command also.
+				*/
 				start_offset.isnull = !found;
 				start_offset_type = cagg->partition_type;
 				switch (start_offset_type)
@@ -178,11 +240,11 @@ policies_alter(PG_FUNCTION_ARGS)
 		}
 		else
 		{
+			/* Check if user has provided -infinity to make this open ended */
 			start_offset.value = PG_GETARG_DATUM(2);
-			start_offset.isnull = false;
 			start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 		}
-		if (PG_ARGISNULL(3))
+		if (job && PG_ARGISNULL(3))
 		{
 			if (IS_INTEGER_TYPE(cagg->partition_type))
 			{
@@ -215,38 +277,42 @@ policies_alter(PG_FUNCTION_ARGS)
 		}
 		else
 		{
+
 			end_offset.value = PG_GETARG_DATUM(3);
-			end_offset.isnull = false;
 			end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 		}
 
 		refresh_job_id = policy_refresh_cagg_add_internal(rel_oid,
-														  start_offset_type,
-														  start_offset,
-														  end_offset_type,
-														  end_offset,
-														  refresh_interval,
-														  if_exists);
+															start_offset_type,
+															start_offset,
+															end_offset_type,
+															end_offset,
+															refresh_interval,
+															false, true);
 	}
-	if (!PG_ARGISNULL(5))
+
+	if (!PG_ARGISNULL(4))
 	{
-		Datum compress_after_datum = PG_GETARG_DATUM(5);
-		Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
+		Datum compress_after_datum = PG_GETARG_DATUM(4);
+		Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
 
 		policy_compression_remove_internal(rel_oid, if_exists);
 		compression_job_id = policy_compression_add_internal(rel_oid,
 															 compress_after_datum,
 															 compress_after_type,
+															 DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
+															 false,
 															 if_exists);
 	}
-	if (!PG_ARGISNULL(6))
+	if (!PG_ARGISNULL(5))
 	{
-		Datum drop_after_datum = PG_GETARG_DATUM(6);
-		Oid drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 6);
+		Datum drop_after_datum = PG_GETARG_DATUM(5);
+		Oid drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
 
 		policy_retention_remove_internal(rel_oid, if_exists);
 		retention_job_id =
-			policy_retention_add_internal(rel_oid, drop_after_type, drop_after_datum, if_exists);
+			policy_retention_add_internal(rel_oid, drop_after_type, drop_after_datum,
+										  (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL, false);
 	}
 
 	PG_RETURN_BOOL(refresh_job_id || compression_job_id || retention_job_id);
@@ -347,11 +413,17 @@ policies_show(PG_FUNCTION_ARGS)
 						 job,
 						 CONFIG_KEY_COMPRESS_AFTER,
 						 SHOW_POLICY_KEY_COMPRESS_AFTER);
+			ts_jsonb_add_interval(parse_state,
+								  SHOW_POLICY_KEY_COMPRESS_INTERVAL,
+								  &(job->fd.schedule_interval));
 		}
 		else if (!namestrcmp(&(job->fd.proc_name), POLICY_RETENTION_PROC_NAME))
 		{
 			ts_jsonb_add_str(parse_state, SHOW_POLICY_KEY_POLICY_NAME, POLICY_RETENTION_PROC_NAME);
 			push_to_json(type, parse_state, job, CONFIG_KEY_DROP_AFTER, SHOW_POLICY_KEY_DROP_AFTER);
+			ts_jsonb_add_interval(parse_state,
+								  SHOW_POLICY_KEY_RETENTION_INTERVAL,
+								  &(job->fd.schedule_interval));
 		}
 
 		JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
