@@ -15,3 +15,7 @@ CREATE FUNCTION @extschema@.detach_data_node(
     repartition            BOOLEAN = TRUE
 ) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
+DROP FUNCTION IF EXISTS @extschema@.add_policies;
+DROP FUNCTION IF EXISTS @extschema@.remove_policies;
+DROP FUNCTION IF EXISTS @extschema@.alter_policies;
+DROP FUNCTION IF EXISTS @extschema@.show_policies;
