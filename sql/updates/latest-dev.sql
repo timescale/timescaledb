@@ -72,3 +72,5 @@ GROUP BY
 END LOOP;
 END
 $$;
+
+DROP FUNCTION IF EXISTS @extschema@.remove_continuous_aggregate_policy(REGCLASS, BOOL);

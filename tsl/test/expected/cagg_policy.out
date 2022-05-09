@@ -126,6 +126,9 @@ SELECT show_policies('mat_m1');
 ---------------
 (0 rows)
 
+-- Alter non existent policies
+SELECT alter_policies('mat_m1', refresh_schedule_interval =>'2 h'::interval, compress_after=>11, drop_after => 15);
+ERROR:  continuous aggregate policy not found for "mat_m1"
 ALTER materialized view mat_m1 set (timescaledb.compress = false);
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);
 ERROR:  "int_tab" is not a continuous aggregate

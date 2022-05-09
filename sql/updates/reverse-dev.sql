@@ -7,3 +7,5 @@ DROP FUNCTION IF EXISTS @extschema@.add_policies;
 DROP FUNCTION IF EXISTS @extschema@.remove_policies;
 DROP FUNCTION IF EXISTS @extschema@.alter_policies;
 DROP FUNCTION IF EXISTS @extschema@.show_policies;
+DROP FUNCTION IF EXISTS @extschema@.remove_continuous_aggregate_policy(REGCLASS, BOOL, BOOL);
+

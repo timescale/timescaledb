@@ -68,6 +68,9 @@ SELECT show_policies('mat_m1');
 SELECT remove_policies('mat_m1', false, 'policy_refresh_continuous_aggregate', 'policy_retention');
 SELECT show_policies('mat_m1');
 
+-- Alter non existent policies
+SELECT alter_policies('mat_m1', refresh_schedule_interval =>'2 h'::interval, compress_after=>11, drop_after => 15);
+
 ALTER materialized view mat_m1 set (timescaledb.compress = false);
 
 SELECT add_continuous_aggregate_policy('int_tab', '1 day'::interval, 10 , '1 h'::interval);

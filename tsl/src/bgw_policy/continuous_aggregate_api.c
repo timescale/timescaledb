@@ -701,8 +701,11 @@ Datum
 policy_refresh_cagg_remove(PG_FUNCTION_ARGS)
 {
 	Oid cagg_oid = PG_GETARG_OID(0);
-	bool if_exists = PG_GETARG_BOOL(1);
+	bool if_not_exists = PG_GETARG_BOOL(1); /* Deprecating this argument */
+	bool if_exists;
 
+	/* For backward compatibility, we use IF_NOT_EXISTS when IF_EXISTS is not given */
+	if_exists = PG_ARGISNULL(2) ? if_not_exists : PG_GETARG_BOOL(2);
 	(void) policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
 	PG_RETURN_VOID();
 }
