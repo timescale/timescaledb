@@ -485,7 +485,7 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	 * hypertable is responsible for check if the `chunk_id` is valid
 	 * and then use it or not during the refresh.
 	 */
-	if (cagg->data.finalized)
+	if (ContinuousAggIsFinalized(cagg))
 		chunk_id = INVALID_CHUNK_ID;
 
 	if (do_merged_refresh)

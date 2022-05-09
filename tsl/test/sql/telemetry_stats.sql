@@ -53,6 +53,16 @@ FROM
   hyper
 GROUP BY hour, device;
 
+CREATE MATERIALIZED VIEW contagg_old
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
+FROM
+  hyper
+GROUP BY hour, device;
+
 -- Create another view (already have the "relations" view)
 CREATE VIEW devices AS
 SELECT DISTINCT ON (device) device
@@ -73,12 +83,14 @@ INSERT INTO part
 SELECT * FROM normal;
 
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
+CALL refresh_continuous_aggregate('contagg_old', NULL, NULL);
 
 -- ANALYZE to get updated reltuples stats
 ANALYZE normal, hyper, part;
 
 SELECT count(c) FROM show_chunks('hyper') c;
 SELECT count(c) FROM show_chunks('contagg') c;
+SELECT count(c) FROM show_chunks('contagg_old') c;
 
 -- Update and show the telemetry report
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -92,11 +104,11 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
 
 -- Add compression
 ALTER TABLE hyper SET (timescaledb.compress);
-SELECT compress_chunk(c) 
+SELECT compress_chunk(c)
 FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
 
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
-SELECT compress_chunk(c) 
+SELECT compress_chunk(c)
 FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
 
 -- Turn of real-time aggregation
@@ -171,7 +183,7 @@ $$);
 
 -- Add compression
 ALTER TABLE disthyper SET (timescaledb.compress);
-SELECT compress_chunk(c) 
+SELECT compress_chunk(c)
 FROM show_chunks('disthyper') c ORDER BY c LIMIT 4;
 
 ANALYZE disthyper;
@@ -202,6 +214,16 @@ FROM relations;
 -- Create a continuous aggregate on the distributed hypertable
 CREATE MATERIALIZED VIEW distcontagg
 WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
+FROM
+  disthyper
+GROUP BY hour, device;
+
+CREATE MATERIALIZED VIEW distcontagg_old
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT
   time_bucket('1 hour', time) AS hour,
   device,

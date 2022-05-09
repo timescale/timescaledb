@@ -92,6 +92,12 @@ typedef struct ContinuousAgg
 	Oid partition_type;
 } ContinuousAgg;
 
+static inline bool
+ContinuousAggIsFinalized(const ContinuousAgg *cagg)
+{
+	return (cagg->data.finalized == true);
+}
+
 typedef enum ContinuousAggHypertableStatus
 {
 	HypertableIsNotContinuousAgg = 0,
