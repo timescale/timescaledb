@@ -2363,7 +2363,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		final_query = destroy_union_query(final_query);
 	}
 
-	if (agg->data.finalized)
+	if (ContinuousAggIsFinalized(agg))
 	{ /* This continuous aggregate does not have partials, do not check for defects. */
 		relation_close(user_view_rel, NoLock);
 		elog(INFO,

@@ -75,6 +75,7 @@ typedef struct CaggStats
 	HyperStats hyp; /* "hyper" as field name leads to name conflict on Windows compiler */
 	int64 on_distributed_hypertable_count;
 	int64 uses_real_time_aggregation_count;
+	int64 finalized;
 } CaggStats;
 
 typedef struct TelemetryStats

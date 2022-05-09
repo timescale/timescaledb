@@ -266,6 +266,9 @@ process_continuous_agg(CaggStats *cs, Form_pg_class class, const ContinuousAgg *
 
 	if (!cagg->data.materialized_only)
 		cs->uses_real_time_aggregation_count++;
+
+	if (ContinuousAggIsFinalized(cagg))
+		cs->finalized++;
 }
 
 static void
