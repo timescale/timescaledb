@@ -136,19 +136,19 @@ if event_type != "pull_request":
   # chunk_utils is skipped because of a use after free bug in postgres 12.0 which one of our tests hit
   pg12_debug_earliest = {
     "pg": PG12_EARLIEST,
-    "installcheck_args": "SKIPS='chunk_utils' IGNORES='cluster-12 compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht cagg_policy deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select debug_notice dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
+    "installcheck_args": "SKIPS='chunk_utils' IGNORES='cluster-12 compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht cagg_policy deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select debug_notice dist_gapfill_pushdown-12 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
 
   # add debug test for first supported PG13 version
   pg13_debug_earliest = {
     "pg": PG13_EARLIEST,
-    "installcheck_args": "IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
+    "installcheck_args": "IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_gapfill_pushdown-13 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
   }
   m["include"].append(build_debug_config(pg13_debug_earliest))
 
   # add debug test for first supported PG14 version
-  m["include"].append(build_debug_config({"pg": PG14_EARLIEST, "installcheck_args": "IGNORES='memoize'"}))
+  m["include"].append(build_debug_config({"pg": PG14_EARLIEST, "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'"}))
 
   # add debug test for MacOS
   m["include"].append(build_debug_config(macos_config({})))
@@ -167,7 +167,7 @@ if event_type != "pull_request":
   # the stable branches of supported PG releases
   m["include"].append(build_debug_config({"pg":12,"snapshot":"snapshot"}))
   m["include"].append(build_debug_config({"pg":13,"snapshot":"snapshot"}))
-  m["include"].append(build_debug_config({"pg":14,"snapshot":"snapshot", "installcheck_args": "IGNORES='memoize'"}))
+  m["include"].append(build_debug_config({"pg":14,"snapshot":"snapshot", "installcheck_args": "IGNORES='dist_gapfill_pushdown-14 memoize'"}))
 
 # generate command to set github action variable
 print(str.format("::set-output name=matrix::{0}",json.dumps(m)))
