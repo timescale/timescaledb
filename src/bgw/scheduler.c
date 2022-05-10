@@ -574,6 +574,10 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 			sjob->next_start <= ts_timer_get_current_timestamp())
 			scheduled_ts_bgw_job_start(sjob, bgw_register);
 	}
+
+#if PG13_LT
+	list_free(ordered_scheduled_jobs);
+#endif
 }
 
 /* Returns the earliest time the scheduler should start a job that is waiting to be started */
