@@ -926,23 +926,6 @@ add_foreign_grouping_paths(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo 
 	fpinfo->startup_cost = startup_cost;
 	fpinfo->total_cost = total_cost;
 
-	if (ifpinfo->pushdown_gapfill)
-	{
-		/*
-		 * If pushdown of gapfill is possible then also check if it would
-		 * be beneficial to actually push it down. Since, it can create
-		 * more tuples and they need to be transferred to the data node.
-		 * However, still pushing of gapfill to the data nodes could make
-		 * sense because aggregating over it could be then done at the data
-		 * nodes itself, hence ignore pushing down gapfill to data nodes
-		 * when it produces a "really" larger amount of tuples.
-		 */
-		if (10 * ifpinfo->rows > fpinfo->rows)
-		{
-			fpinfo->pushdown_gapfill = false;
-			ifpinfo->pushdown_gapfill = false;
-		}
-	}
 	/* Create and add path to the grouping relation. */
 	grouppath = (Path *) create_path(root,
 									 grouped_rel,
