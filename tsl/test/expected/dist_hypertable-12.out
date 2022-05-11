@@ -5134,9 +5134,14 @@ SELECT count(*) FROM disttable;
 -- ignore this oid mismatch for non-builtin types.
 SET timescaledb.enable_connection_binary_data=true;
 \set ON_ERROR_STOP 0
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SELECT * FROM disttable ORDER BY 1;
+ERROR:  wrong element type
+SET timescaledb.remote_data_fetcher = 'cursor';
 SELECT * FROM disttable ORDER BY 1;
 ERROR:  wrong element type
 \set ON_ERROR_STOP 1
+RESET timescaledb.remote_data_fetcher;
 -- Show that DataNodeCopy is NOT used when source hypertable and target hypertable
 -- of the SELECT are both distributed. Try subselects with LIMIT, RETURNING and
 -- different distributed hypertable as source

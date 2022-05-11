@@ -137,6 +137,16 @@ lookup_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo)
 	if (OidIsValid(extensionOid) && list_member_oid(fpinfo->shippable_extensions, extensionOid))
 		return true;
 
+#ifndef NDEBUG
+	/* Special debug functions that we want to ship to data nodes. */
+	const char debug_func_prefix[] = "ts_debug_shippable_";
+	char *func_name = get_func_name(objectId);
+	if (func_name != NULL && strncmp(func_name, debug_func_prefix, strlen(debug_func_prefix)) == 0)
+	{
+		return true;
+	}
+#endif
+
 	return false;
 }
 

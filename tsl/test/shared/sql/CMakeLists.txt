@@ -18,13 +18,14 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES_SHARED timestamp_limits.sql with_clause_parser.sql)
+  list(APPEND TEST_FILES_SHARED dist_remote_error.sql timestamp_limits.sql
+       with_clause_parser.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in generated_columns.sql.in transparent_decompress_chunk.sql.in
+    dist_gapfill_pushdown.sql.in gapfill.sql.in generated_columns.sql.in
     ordered_append.sql.in ordered_append_join.sql.in
-    dist_gapfill_pushdown.sql.in)
+    transparent_decompress_chunk.sql.in)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are
 # put in the original source directory since all tests must be in the same

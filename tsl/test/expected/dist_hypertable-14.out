@@ -5140,6 +5140,29 @@ SELECT count(*) FROM disttable;
 -- ignore this oid mismatch for non-builtin types.
 SET timescaledb.enable_connection_binary_data=true;
 \set ON_ERROR_STOP 0
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SELECT * FROM disttable ORDER BY 1;
+ id |             time             | device |  temp_c  |  minmaxes   
+----+------------------------------+--------+----------+-------------
+  1 | Sun Jan 01 06:01:00 2017 PST |      1 |      1.2 | 
+  2 | Sun Jan 01 09:11:00 2017 PST |      3 |      4.3 | 
+  3 | Sun Jan 01 08:01:00 2017 PST |      1 |      7.3 | 
+  4 | Mon Jan 02 08:01:00 2017 PST |      2 |     0.23 | 
+  5 | Mon Jul 02 08:01:00 2018 PDT |     87 |        0 | 
+  6 | Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1 | 
+  7 | Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12 | 
+  8 | Sun Jul 01 08:01:00 2018 PDT |     29 |       64 | 
+  9 | Sun Jan 01 06:01:00 2017 PST |      1 |      1.2 | {"(1,2)"}
+ 10 | Sun Jan 01 09:11:00 2017 PST |      3 |      4.3 | {"(2,3)"}
+ 11 | Sun Jan 01 08:01:00 2017 PST |      1 |      7.3 | {"(4,5)"}
+ 12 | Mon Jan 02 08:01:00 2017 PST |      2 |     0.23 | {"(6,7)"}
+ 13 | Mon Jul 02 08:01:00 2018 PDT |     87 |        0 | {"(8,9)"}
+ 14 | Sun Jul 01 06:01:00 2018 PDT |     13 |      3.1 | {"(10,11)"}
+ 15 | Sun Jul 01 09:11:00 2018 PDT |     90 | 10303.12 | {"(12,13)"}
+ 16 | Sun Jul 01 08:01:00 2018 PDT |     29 |       64 | {"(14,15)"}
+(16 rows)
+
+SET timescaledb.remote_data_fetcher = 'cursor';
 SELECT * FROM disttable ORDER BY 1;
  id |             time             | device |  temp_c  |  minmaxes   
 ----+------------------------------+--------+----------+-------------
@@ -5162,6 +5185,7 @@ SELECT * FROM disttable ORDER BY 1;
 (16 rows)
 
 \set ON_ERROR_STOP 1
+RESET timescaledb.remote_data_fetcher;
 -- Show that DataNodeCopy is NOT used when source hypertable and target hypertable
 -- of the SELECT are both distributed. Try subselects with LIMIT, RETURNING and
 -- different distributed hypertable as source

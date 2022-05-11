@@ -78,11 +78,30 @@ FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht where c.hy
 ORDER BY c.table_name DESC;
 
 RESET ROLE;
+
 -- Add data nodes
 SELECT * FROM add_data_node('data_node_1', host => 'localhost', database => 'data_node_1');
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => 'data_node_2');
 SELECT * FROM add_data_node('data_node_3', host => 'localhost', database => 'data_node_3');
 GRANT USAGE ON FOREIGN SERVER data_node_1, data_node_2, data_node_3 TO PUBLIC;
+
+-- Import testsupport.sql file to data nodes
+\unset ECHO
+\o /dev/null
+\c data_node_1
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\c data_node_2
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\c data_node_3
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\c :TEST_DBNAME :ROLE_SUPERUSER;
+SET client_min_messages TO ERROR;
+\ir :TEST_SUPPORT_FILE
+\o
+\set ECHO all
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
@@ -298,3 +317,9 @@ SELECT * FROM create_hypertable('disttable_with_ct', 'time', replication_factor 
 INSERT INTO disttable_with_ct VALUES
     ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
     ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
+
+-- A relatively big table on one data node
+CREATE TABLE metrics_dist1(LIKE metrics_dist);
+SELECT create_distributed_hypertable('metrics_dist1', 'time', 'device_id',
+    data_nodes => '{"data_node_1"}');
+INSERT INTO metrics_dist1 SELECT * FROM metrics_dist ORDER BY random() LIMIT 20000;

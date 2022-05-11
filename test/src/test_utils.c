@@ -7,12 +7,15 @@
 #include <fmgr.h>
 #include <utils/builtins.h>
 #include <storage/procarray.h>
+#include <storage/proc.h>
 #include <commands/dbcommands.h>
 
 #include "test_utils.h"
 #include "debug_point.h"
 
 TS_FUNCTION_INFO_V1(ts_test_error_injection);
+TS_FUNCTION_INFO_V1(ts_debug_shippable_error_after_n_rows);
+TS_FUNCTION_INFO_V1(ts_debug_shippable_fatal_after_n_rows);
 
 /*
  * Test assertion macros.
@@ -73,6 +76,44 @@ ts_test_error_injection(PG_FUNCTION_ARGS)
 	text *name = PG_GETARG_TEXT_PP(0);
 	DEBUG_ERROR_INJECTION(text_to_cstring(name));
 	PG_RETURN_VOID();
+}
+
+static int
+throw_after_n_rows(int max_rows, int severity)
+{
+	static LocalTransactionId last_lxid = 0;
+	static int rows_seen = 0;
+
+	if (last_lxid != MyProc->lxid)
+	{
+		/* Reset it for each new transaction for predictable results. */
+		rows_seen = 0;
+		last_lxid = MyProc->lxid;
+	}
+
+	rows_seen++;
+
+	if (max_rows <= rows_seen)
+	{
+		ereport(severity,
+				errmsg("debug point: requested to error out every %d rows, %d rows seen",
+					   max_rows,
+					   rows_seen));
+	}
+
+	return rows_seen;
+}
+
+Datum
+ts_debug_shippable_error_after_n_rows(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(throw_after_n_rows(PG_GETARG_INT32(0), ERROR));
+}
+
+Datum
+ts_debug_shippable_fatal_after_n_rows(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT32(throw_after_n_rows(PG_GETARG_INT32(0), FATAL));
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_wait);
