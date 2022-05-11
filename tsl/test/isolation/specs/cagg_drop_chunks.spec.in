@@ -50,7 +50,7 @@ step "L_release_chunks_locked" { SELECT debug_waitpoint_release('drop_chunks_loc
 session "T1"
 step "T1_drop_chunks"        { SELECT count(*) FROM drop_chunks('conditions', older_than => '2018-12-03 00:00'::timestamptz); }
 step "T1_refresh"            { CALL refresh_continuous_aggregate('cond_summary', NULL, NULL); }
-step "T1_select"             { SELECT * FROM cond_summary; }
+step "T1_select"             { SELECT * FROM cond_summary ORDER BY bucket; }
 
 session "T2"
 # This insert outside the dropped chunks

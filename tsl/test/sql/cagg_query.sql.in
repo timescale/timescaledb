@@ -291,7 +291,7 @@ SELECT m1.location, m1.timec, sumt, sumh, firsth, lasth, maxtemp, mintemp
 FROM mat_m1 m1 RIGHT JOIN mat_m2 m2
 ON (m1.location = m2.location
 AND m1.timec = m2.timec)
-ORDER BY m1.location COLLATE "C", m1.timec DESC
+ORDER BY m1.location COLLATE "C" NULLS LAST, m1.timec DESC NULLS LAST, firsth NULLS LAST
 LIMIT 10;
 
 ROLLBACK;

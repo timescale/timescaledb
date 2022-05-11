@@ -476,13 +476,13 @@ ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET client_min_messages TO LOG;
 SELECT * FROM new_name;
- time_bucket |      agg_2_2       
--------------+--------------------
-           0 | \x0000000000000003
-           3 | \x0000000000000003
-           6 | \x0000000000000003
-           9 | \x0000000000000003
-          12 | \x0000000000000003
+ time_bucket | count 
+-------------+-------
+           0 |     3
+           3 |     3
+           6 |     3
+           9 |     3
+          12 |     3
 (5 rows)
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
@@ -502,7 +502,7 @@ CREATE MATERIALIZED VIEW new_name_view
     timescaledb.continuous,
     timescaledb.materialized_only=true
   )
-AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
+AS SELECT time_bucket('6', time_bucket), COUNT("count")
     FROM new_name
     GROUP BY 1 WITH NO DATA;
 psql:include/cagg_ddl_common.sql:326: ERROR:  hypertable is a continuous aggregate materialization table
@@ -1550,7 +1550,7 @@ SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
 ----------+--------------------------+---------
  location | text                     | f
  bucket   | timestamp with time zone | f
- agg_3_3  | bytea                    | f
+ avg      | double precision         | f
 (3 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
@@ -1558,7 +1558,7 @@ SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_
 ----------+--------------------------+---------
  location | text                     | f
  bucket   | timestamp with time zone | t
- agg_3_3  | bytea                    | f
+ avg      | double precision         | f
 (3 rows)
 
 ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN bucket to "time";
@@ -1585,7 +1585,7 @@ SELECT * FROM test.show_columns(' _timescaledb_internal._partial_view_35');
 ----------+--------------------------+---------
  location | text                     | f
  time     | timestamp with time zone | f
- agg_3_3  | bytea                    | f
+ avg      | double precision         | f
 (3 rows)
 
 SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_35');
@@ -1593,7 +1593,7 @@ SELECT * FROM test.show_columns('_timescaledb_internal._materialized_hypertable_
 ----------+--------------------------+---------
  location | text                     | f
  time     | timestamp with time zone | t
- agg_3_3  | bytea                    | f
+ avg      | double precision         | f
 (3 rows)
 
 -- This will rebuild the materialized view and should succeed.
@@ -1886,39 +1886,35 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount;
 
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
-                        View "_timescaledb_internal._partial_view_47"
- Column  |           Type           | Collation | Nullable | Default | Storage  | Description 
----------+--------------------------+-----------+----------+---------+----------+-------------
- bucket  | timestamp with time zone |           |          |         | plain    | 
- amount  | integer                  |           |          |         | plain    | 
- agg_3_3 | bytea                    |           |          |         | extended | 
- agg_3_4 | bytea                    |           |          |         | extended | 
- var_3_5 | integer                  |           |          |         | plain    | 
- agg_4_6 | bytea                    |           |          |         | extended | 
+                         View "_timescaledb_internal._partial_view_47"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ amount    | integer                  |           |          |         | plain   | 
+ cashflow  | bigint                   |           |          |         | plain   | 
+ cashflow2 | bigint                   |           |          |         | plain   | 
 View definition:
  SELECT time_bucket('@ 1 day'::interval, transactions."time") AS bucket,
     transactions.amount,
-    _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_3_3,
-    _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_3_4,
-    transactions.amount AS var_3_5,
-    _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_4_6
+        CASE
+            WHEN transactions.amount < 0 THEN 0 - sum(transactions.fiat_value)
+            ELSE sum(transactions.fiat_value)
+        END AS cashflow,
+    transactions.amount + sum(transactions.fiat_value) AS cashflow2
    FROM transactions
   GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount;
 
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
                           Table "_timescaledb_internal._materialized_hypertable_47"
- Column  |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
----------+--------------------------+-----------+----------+---------+----------+--------------+-------------
- bucket  | timestamp with time zone |           | not null |         | plain    |              | 
- amount  | integer                  |           |          |         | plain    |              | 
- agg_3_3 | bytea                    |           |          |         | extended |              | 
- agg_3_4 | bytea                    |           |          |         | extended |              | 
- var_3_5 | integer                  |           |          |         | plain    |              | 
- agg_4_6 | bytea                    |           |          |         | extended |              | 
+  Column   |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
+-----------+--------------------------+-----------+----------+---------+---------+--------------+-------------
+ bucket    | timestamp with time zone |           | not null |         | plain   |              | 
+ amount    | integer                  |           |          |         | plain   |              | 
+ cashflow  | bigint                   |           |          |         | plain   |              | 
+ cashflow2 | bigint                   |           |          |         | plain   |              | 
 Indexes:
     "_materialized_hypertable_47_amount_bucket_idx" btree (amount, bucket DESC)
     "_materialized_hypertable_47_bucket_idx" btree (bucket DESC)
-    "_materialized_hypertable_47_var_3_5_bucket_idx" btree (var_3_5, bucket DESC)
 Triggers:
     ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_47 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
 Child tables: _timescaledb_internal._hyper_47_52_chunk,
@@ -1935,13 +1931,9 @@ Child tables: _timescaledb_internal._hyper_47_52_chunk,
 View definition:
  SELECT _materialized_hypertable_47.bucket,
     _materialized_hypertable_47.amount,
-        CASE
-            WHEN _materialized_hypertable_47.var_3_5 < 0 THEN 0 - _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_47.agg_3_3, NULL::bigint)
-            ELSE _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_47.agg_3_4, NULL::bigint)
-        END AS cashflow,
-    _materialized_hypertable_47.var_3_5 + _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_47.agg_4_6, NULL::bigint) AS cashflow2
-   FROM _timescaledb_internal._materialized_hypertable_47
-  GROUP BY _materialized_hypertable_47.bucket, _materialized_hypertable_47.amount;
+    _materialized_hypertable_47.cashflow,
+    _materialized_hypertable_47.cashflow2
+   FROM _timescaledb_internal._materialized_hypertable_47;
 
 SELECT * FROM cashflows;
             bucket            | amount | cashflow | cashflow2 

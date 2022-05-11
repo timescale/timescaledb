@@ -81,28 +81,6 @@ CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 as
  select distinct on ( location ) count(*)  from conditions group by location, time_bucket('1week', timec)  WITH NO DATA;
 
---aggregate with DISTINCT
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select time_bucket('1week', timec),
- count(location) , sum(distinct temperature) from conditions
- group by time_bucket('1week', timec) , location WITH NO DATA;
-
---aggregate with FILTER
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select time_bucket('1week', timec),
- sum(temperature) filter ( where humidity > 20 ) from conditions
- group by time_bucket('1week', timec) , location WITH NO DATA;
-
--- aggregate with filter in having clause
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select time_bucket('1week', timec), max(temperature)
-from conditions
- group by time_bucket('1week', timec) , location
- having sum(temperature) filter ( where humidity > 20 ) > 50 WITH NO DATA;
-
 -- time_bucket on non partitioning column of hypertable
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -138,13 +116,6 @@ Select max(temperature)
 from conditions
  group by time_bucket( timeinterval, timec) , location WITH NO DATA;
 
--- ordered set aggr
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select mode() within group( order by humidity)
-from conditions
- group by time_bucket('1week', timec)  WITH NO DATA;
-
 --window function
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
@@ -152,30 +123,10 @@ Select avg(temperature) over( order by humidity)
 from conditions
  WITH NO DATA;
 
---aggregate without combine function
+--aggregate without combine function but stable function
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS
 Select json_agg(location)
-from conditions
- group by time_bucket('1week', timec) , location WITH NO DATA;
-;
-
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select sum(humidity), avg(temperature), array_agg(location)
-from conditions
- group by time_bucket('1week', timec) , location WITH NO DATA;
-;
-
--- userdefined aggregate without combine function
-CREATE AGGREGATE newavg (
-   sfunc = int4_avg_accum, basetype = int4, stype = _int8,
-   finalfunc = int8_avg,
-   initcond1 = '{0,0}'
-);
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select sum(humidity), newavg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location WITH NO DATA;
 ;
@@ -295,13 +246,6 @@ AS
 Select sum(humidity), max(timec + INTERVAL '1h')
 from conditions
 group by time_bucket('1week', timec) , location   WITH NO DATA;
-
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
-AS
-Select sum(humidity), min(location)
-from conditions
-group by time_bucket('1week', timec)
-having  max(timec + INTERVAL '1h') > '2010-01-01 09:00:00-08' WITH NO DATA;
 
 CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
 AS

@@ -1742,3 +1742,246 @@ SELECT
 --
 (0 rows)
 
+-- test that option create_group_indexes is taken into account
+CREATE TABLE test_group_idx (
+time timestamptz,
+symbol int,
+value numeric
+);
+select create_hypertable('test_group_idx', 'time');
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable       
+------------------------------
+ (48,public,test_group_idx,t)
+(1 row)
+
+insert into test_group_idx
+select t, round(random()*10), random()*5
+from generate_series('2020-01-01', '2020-02-25', INTERVAL '12 hours') t;
+create materialized view cagg_index_true
+with (timescaledb.continuous, timescaledb.create_group_indexes=true, timescaledb.finalized=false) as
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol
+from test_group_idx
+group by bucket, symbol;
+NOTICE:  refreshing continuous aggregate "cagg_index_true"
+create materialized view cagg_index_false
+with (timescaledb.continuous, timescaledb.create_group_indexes=false, timescaledb.finalized=false) as
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol
+from test_group_idx
+group by bucket, symbol;
+NOTICE:  refreshing continuous aggregate "cagg_index_false"
+create materialized view cagg_index_default
+with (timescaledb.continuous, timescaledb.finalized=false) as
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol
+from test_group_idx
+group by bucket, symbol;
+NOTICE:  refreshing continuous aggregate "cagg_index_default"
+-- see corresponding materialization_hypertables
+select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
+where view_name like 'cagg_index_%';
+     view_name      | materialization_hypertable_name 
+--------------------+---------------------------------
+ cagg_index_default | _materialized_hypertable_51
+ cagg_index_false   | _materialized_hypertable_50
+ cagg_index_true    | _materialized_hypertable_49
+(3 rows)
+
+-- now make sure a group index has been created when explicitly asked for
+\x on
+select i.*
+from pg_indexes i
+join pg_class c
+    on schemaname = relnamespace::regnamespace::text
+    and tablename = relname
+where tablename in (select materialization_hypertable_name from timescaledb_information.continuous_aggregates
+where view_name like 'cagg_index_%')
+order by tablename;
+-[ RECORD 1 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_49
+indexname  | _materialized_hypertable_49_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_49_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (bucket DESC)
+-[ RECORD 2 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_49
+indexname  | _materialized_hypertable_49_symbol_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_49_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (symbol, bucket DESC)
+-[ RECORD 3 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_50
+indexname  | _materialized_hypertable_50_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_50_bucket_idx ON _timescaledb_internal._materialized_hypertable_50 USING btree (bucket DESC)
+-[ RECORD 4 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_51
+indexname  | _materialized_hypertable_51_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_51_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (bucket DESC)
+-[ RECORD 5 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+schemaname | _timescaledb_internal
+tablename  | _materialized_hypertable_51
+indexname  | _materialized_hypertable_51_symbol_bucket_idx
+tablespace | 
+indexdef   | CREATE INDEX _materialized_hypertable_51_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (symbol, bucket DESC)
+
+\x off
+-- Test View Target Entries that contain both aggrefs and Vars in the same expression
+CREATE TABLE transactions
+(
+    "time" timestamp with time zone NOT NULL,
+    dummy1 integer,
+    dummy2 integer,
+    dummy3 integer,
+    dummy4 integer,
+    dummy5 integer,
+    amount integer,
+    fiat_value integer
+);
+SELECT create_hypertable('transactions', 'time');
+     create_hypertable      
+----------------------------
+ (52,public,transactions,t)
+(1 row)
+
+INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:30:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:20:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 10:40:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 11:50:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 12:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 13:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-11-02 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-02 10:30:00-08', 0, 0, 0, 0, 0, -1, 10);
+CREATE materialized view cashflows(
+    bucket,
+  	amount,
+    cashflow,
+    cashflow2
+) WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only = true,
+    timescaledb.finalized = false
+) AS
+SELECT time_bucket ('1 day', time) AS bucket,
+	amount,
+  CASE
+      WHEN amount < 0 THEN (0 - sum(fiat_value))
+      ELSE sum(fiat_value)
+  END AS cashflow,
+  amount + sum(fiat_value)
+FROM transactions
+GROUP BY bucket, amount;
+NOTICE:  refreshing continuous aggregate "cashflows"
+SELECT h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name AS "PART_VIEW_NAME",
+       direct_view_name AS "DIRECT_VIEW_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cashflows'
+\gset
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+\d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
+                         View "_timescaledb_internal._direct_view_53"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ amount    | integer                  |           |          |         | plain   | 
+ cashflow  | bigint                   |           |          |         | plain   | 
+ cashflow2 | bigint                   |           |          |         | plain   | 
+View definition:
+ SELECT time_bucket('@ 1 day'::interval, transactions."time") AS bucket,
+    transactions.amount,
+        CASE
+            WHEN transactions.amount < 0 THEN 0 - sum(transactions.fiat_value)
+            ELSE sum(transactions.fiat_value)
+        END AS cashflow,
+    transactions.amount + sum(transactions.fiat_value) AS cashflow2
+   FROM transactions
+  GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount;
+
+\d+ "_timescaledb_internal".:"PART_VIEW_NAME"
+                         View "_timescaledb_internal._partial_view_53"
+  Column  |           Type           | Collation | Nullable | Default | Storage  | Description 
+----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket   | timestamp with time zone |           |          |         | plain    | 
+ amount   | integer                  |           |          |         | plain    | 
+ agg_3_3  | bytea                    |           |          |         | extended | 
+ agg_3_4  | bytea                    |           |          |         | extended | 
+ var_3_5  | integer                  |           |          |         | plain    | 
+ agg_4_6  | bytea                    |           |          |         | extended | 
+ chunk_id | integer                  |           |          |         | plain    | 
+View definition:
+ SELECT time_bucket('@ 1 day'::interval, transactions."time") AS bucket,
+    transactions.amount,
+    _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_3_3,
+    _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_3_4,
+    transactions.amount AS var_3_5,
+    _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_4_6,
+    _timescaledb_internal.chunk_id_from_relid(transactions.tableoid) AS chunk_id
+   FROM transactions
+  GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount, (_timescaledb_internal.chunk_id_from_relid(transactions.tableoid));
+
+\d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
+                          Table "_timescaledb_internal._materialized_hypertable_53"
+  Column  |           Type           | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------+--------------------------+-----------+----------+---------+----------+--------------+-------------
+ bucket   | timestamp with time zone |           | not null |         | plain    |              | 
+ amount   | integer                  |           |          |         | plain    |              | 
+ agg_3_3  | bytea                    |           |          |         | extended |              | 
+ agg_3_4  | bytea                    |           |          |         | extended |              | 
+ var_3_5  | integer                  |           |          |         | plain    |              | 
+ agg_4_6  | bytea                    |           |          |         | extended |              | 
+ chunk_id | integer                  |           |          |         | plain    |              | 
+Indexes:
+    "_materialized_hypertable_53_amount_bucket_idx" btree (amount, bucket DESC)
+    "_materialized_hypertable_53_bucket_idx" btree (bucket DESC)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_53 FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.insert_blocker()
+Child tables: _timescaledb_internal._hyper_53_114_chunk,
+              _timescaledb_internal._hyper_53_115_chunk
+
+\d+ 'cashflows'
+                                    View "public.cashflows"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ amount    | integer                  |           |          |         | plain   | 
+ cashflow  | bigint                   |           |          |         | plain   | 
+ cashflow2 | bigint                   |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_53.bucket,
+    _materialized_hypertable_53.amount,
+        CASE
+            WHEN _materialized_hypertable_53.var_3_5 < 0 THEN 0 - _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_53.agg_3_3, NULL::bigint)
+            ELSE _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_53.agg_3_4, NULL::bigint)
+        END AS cashflow,
+    _materialized_hypertable_53.var_3_5 + _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_53.agg_4_6, NULL::bigint) AS cashflow2
+   FROM _timescaledb_internal._materialized_hypertable_53
+  GROUP BY _materialized_hypertable_53.bucket, _materialized_hypertable_53.amount;
+
+SELECT * FROM cashflows;
+            bucket            | amount | cashflow | cashflow2 
+------------------------------+--------+----------+-----------
+ Sun Dec 31 16:00:00 2017 PST |      1 |       10 |        11
+ Mon Jan 01 16:00:00 2018 PST |     -1 |      -30 |        29
+ Wed Oct 31 17:00:00 2018 PDT |     -1 |      -20 |        19
+ Wed Oct 31 17:00:00 2018 PDT |      1 |       30 |        31
+ Thu Nov 01 17:00:00 2018 PDT |     -1 |      -10 |         9
+ Thu Nov 01 17:00:00 2018 PDT |      1 |       10 |        11
+(6 rows)
+

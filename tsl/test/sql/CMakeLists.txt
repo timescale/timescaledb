@@ -11,6 +11,7 @@ set(TEST_FILES_postgresql
     bgw_custom.sql
     bgw_policy.sql
     cagg_errors.sql
+    cagg_errors_deprecated.sql
     cagg_invalidation.sql
     cagg_permissions.sql
     cagg_policy.sql
