@@ -1,7 +1,8 @@
+/continuous_aggs_compression-*.sql
+/dist_gapfill_pushdown-*.sql
+/dist_remote_error-*.sql
 /gapfill-*.sql
 /generated_columns-*.sql
 /ordered_append-*.sql
 /ordered_append_join-*.sql
 /transparent_decompress_chunk-*.sql
-/continuous_aggs_compression-*.sql
-/dist_gapfill_pushdown-*.sql

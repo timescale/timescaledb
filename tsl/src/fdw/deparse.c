@@ -327,6 +327,15 @@ contain_mutable_functions_checker(Oid func_id, void *context)
 	if (function_is_whitelisted(func_id))
 		return false;
 
+#ifndef NDEBUG
+	/* Special debug functions that we want to ship to data nodes. */
+	const char debug_func_prefix[] = "ts_debug_shippable_";
+	if (strncmp(get_func_name(func_id), debug_func_prefix, strlen(debug_func_prefix)) == 0)
+	{
+		return false;
+	}
+#endif
+
 	return true;
 }
 
