@@ -321,7 +321,7 @@ CREATE MATERIALIZED VIEW new_name_view
     timescaledb.continuous,
     timescaledb.materialized_only=true
   )
-AS SELECT time_bucket('6', time_bucket), COUNT(agg_2_2)
+AS SELECT time_bucket('6', time_bucket), COUNT("count")
     FROM new_name
     GROUP BY 1 WITH NO DATA;
 

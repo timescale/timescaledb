@@ -1230,3 +1230,126 @@ FROM issue3248 GROUP BY 1,2;
 SELECT
   FROM issue3248 AS m,
        LATERAL(SELECT m FROM issue3248_cagg WHERE avg IS NULL LIMIT 1) AS lat;
+
+-- test that option create_group_indexes is taken into account
+CREATE TABLE test_group_idx (
+time timestamptz,
+symbol int,
+value numeric
+);
+
+select create_hypertable('test_group_idx', 'time');
+
+insert into test_group_idx
+select t, round(random()*10), random()*5
+from generate_series('2020-01-01', '2020-02-25', INTERVAL '12 hours') t;
+
+create materialized view cagg_index_true
+with (timescaledb.continuous, timescaledb.create_group_indexes=true, timescaledb.finalized=false) as
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol
+from test_group_idx
+group by bucket, symbol;
+
+create materialized view cagg_index_false
+with (timescaledb.continuous, timescaledb.create_group_indexes=false, timescaledb.finalized=false) as
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol
+from test_group_idx
+group by bucket, symbol;
+
+create materialized view cagg_index_default
+with (timescaledb.continuous, timescaledb.finalized=false) as
+select
+	time_bucket('1 day', "time") as bucket,
+	sum(value),
+	symbol
+from test_group_idx
+group by bucket, symbol;
+
+-- see corresponding materialization_hypertables
+select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
+where view_name like 'cagg_index_%';
+
+-- now make sure a group index has been created when explicitly asked for
+\x on
+select i.*
+from pg_indexes i
+join pg_class c
+    on schemaname = relnamespace::regnamespace::text
+    and tablename = relname
+where tablename in (select materialization_hypertable_name from timescaledb_information.continuous_aggregates
+where view_name like 'cagg_index_%')
+order by tablename;
+\x off
+
+-- Test View Target Entries that contain both aggrefs and Vars in the same expression
+CREATE TABLE transactions
+(
+    "time" timestamp with time zone NOT NULL,
+    dummy1 integer,
+    dummy2 integer,
+    dummy3 integer,
+    dummy4 integer,
+    dummy5 integer,
+    amount integer,
+    fiat_value integer
+);
+
+SELECT create_hypertable('transactions', 'time');
+
+INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+
+INSERT INTO transactions VALUES ( '2018-01-02 09:30:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:20:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-01-02 09:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+
+INSERT INTO transactions VALUES ( '2018-11-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 10:40:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 11:50:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 12:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+INSERT INTO transactions VALUES ( '2018-11-01 13:10:00-08', 0, 0, 0, 0, 0, -1, 10);
+
+INSERT INTO transactions VALUES ( '2018-11-02 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
+INSERT INTO transactions VALUES ( '2018-11-02 10:30:00-08', 0, 0, 0, 0, 0, -1, 10);
+
+CREATE materialized view cashflows(
+    bucket,
+  	amount,
+    cashflow,
+    cashflow2
+) WITH (
+    timescaledb.continuous,
+    timescaledb.materialized_only = true,
+    timescaledb.finalized = false
+) AS
+SELECT time_bucket ('1 day', time) AS bucket,
+	amount,
+  CASE
+      WHEN amount < 0 THEN (0 - sum(fiat_value))
+      ELSE sum(fiat_value)
+  END AS cashflow,
+  amount + sum(fiat_value)
+FROM transactions
+GROUP BY bucket, amount;
+
+SELECT h.table_name AS "MAT_TABLE_NAME",
+       partial_view_name AS "PART_VIEW_NAME",
+       direct_view_name AS "DIRECT_VIEW_NAME"
+FROM _timescaledb_catalog.continuous_agg ca
+INNER JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
+WHERE user_view_name = 'cashflows'
+\gset
+
+-- Show both the columns and the view definitions to see that
+-- references are correct in the view as well.
+\d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
+\d+ "_timescaledb_internal".:"PART_VIEW_NAME"
+\d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
+\d+ 'cashflows'
+
+SELECT * FROM cashflows;
