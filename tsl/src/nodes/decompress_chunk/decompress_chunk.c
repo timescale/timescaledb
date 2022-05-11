@@ -491,12 +491,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	compressed_rel->reloptkind = RELOPT_DEADREL;
 }
 
+/*
+ * Add a var for a particular column to the reltarget. attrs_used is a bitmap
+ * of which columns we already have in reltarget. We do not add the columns that
+ * are already there, and update it after adding something.
+ */
 static void
 compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compressed_relid,
 										const char *column_name, Bitmapset **attrs_used)
 {
 	AttrNumber attnum = get_attnum(compressed_relid, column_name);
 	Assert(attnum > 0);
+
+	if (bms_is_member(attnum, *attrs_used))
+	{
+		/* This column is already in reltarget, we don't need duplicates. */
+		return;
+	}
+
 	*attrs_used = bms_add_member(*attrs_used, attnum);
 
 	Oid typid, collid;
@@ -518,8 +530,30 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 	Bitmapset *attrs_used = NULL;
 
 	Oid compressed_relid = info->compressed_rte->relid;
+
+	/*
+	 * We have to decompress three kinds of columns:
+	 * 1) output targetlist of the relation,
+	 * 2) columns required for the quals (WHERE),
+	 * 3) columns required for joins.
+	 */
+	List *exprs = list_copy(info->chunk_rel->reltarget->exprs);
 	ListCell *lc;
-	foreach (lc, info->chunk_rel->reltarget->exprs)
+	foreach (lc, info->chunk_rel->baserestrictinfo)
+	{
+		exprs = lappend(exprs, ((RestrictInfo *) lfirst(lc))->clause);
+	}
+	foreach (lc, info->chunk_rel->joininfo)
+	{
+		exprs = lappend(exprs, ((RestrictInfo *) lfirst(lc))->clause);
+	}
+
+	/*
+	 * Now go over the required expressions we prepared above, and add the
+	 * required columns to the compressed reltarget.
+	 */
+	info->compressed_rel->reltarget->exprs = NIL;
+	foreach (lc, exprs)
 	{
 		ListCell *lc2;
 		List *chunk_vars = pull_var_clause(lfirst(lc), PVC_RECURSE_PLACEHOLDERS);
@@ -531,9 +565,12 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 
 			/* skip vars that aren't from the uncompressed chunk */
 			if (chunk_var->varno != info->chunk_rel->relid)
+			{
 				continue;
+			}
 
-			/* if there's a system column or whole-row reference, add a whole-
+			/*
+			 * If there's a system column or whole-row reference, add a whole-
 			 * row reference, and we're done.
 			 */
 			if (chunk_var->varattno <= 0)

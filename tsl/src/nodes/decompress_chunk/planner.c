@@ -14,6 +14,7 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
+#include <optimizer/plancat.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
@@ -40,118 +41,10 @@ _decompress_chunk_init(void)
 	TryRegisterCustomScanMethods(&decompress_chunk_plan_methods);
 }
 
-static TargetEntry *
-make_compressed_scan_meta_targetentry(DecompressChunkPath *path, char *column_name, int id,
-									  int tle_index)
+static void
+check_for_system_columns(Bitmapset *attrs_used)
 {
-	Var *scan_var;
-	AttrNumber compressed_attno = get_attnum(path->info->compressed_rte->relid, column_name);
-	if (compressed_attno == InvalidAttrNumber)
-		elog(ERROR, "lookup failed for column \"%s\"", column_name);
-
-	/*
-	 * this is called for adding the count and sequence num column which are both int4
-	 * if we ever need columns with different datatype here we need to add
-	 * dynamic type lookup
-	 */
-	Assert(get_atttype(path->info->compressed_rte->relid, compressed_attno) == INT4OID);
-	scan_var = makeVar(path->info->compressed_rel->relid, compressed_attno, INT4OID, -1, 0, 0);
-	path->decompression_map = lappend_int(path->decompression_map, id);
-
-	return makeTargetEntry((Expr *) scan_var, tle_index, NULL, false);
-}
-
-/*
- * Find matching column attno for compressed chunk based on hypertable attno.
- *
- * Since we dont want aliasing to interfere we lookup directly in catalog
- * instead of using RangeTblEntry.
- */
-static AttrNumber
-get_compressed_attno(CompressionInfo *info, AttrNumber ht_attno)
-{
-	AttrNumber compressed_attno;
-	Assert(info->ht_rte);
-	char *chunk_col = get_attname(info->ht_rte->relid, ht_attno, false);
-	compressed_attno = get_attnum(info->compressed_rte->relid, chunk_col);
-
-	if (compressed_attno == InvalidAttrNumber)
-		elog(ERROR, "no matching column in compressed chunk found");
-
-	return compressed_attno;
-}
-
-static TargetEntry *
-make_compressed_scan_targetentry(DecompressChunkPath *path, AttrNumber ht_attno, int tle_index)
-{
-	Var *scan_var;
-	char *ht_attname = get_attname(path->info->ht_rte->relid, ht_attno, false);
-	FormData_hypertable_compression *ht_info =
-		get_column_compressioninfo(path->info->hypertable_compression_info, ht_attname);
-	AttrNumber scan_varattno = get_compressed_attno(path->info, ht_attno);
-	AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, ht_attname);
-
-	Assert(!get_rte_attribute_is_dropped(path->info->ht_rte, ht_attno));
-	Assert(!get_rte_attribute_is_dropped(path->info->chunk_rte, chunk_attno));
-	Assert(!get_rte_attribute_is_dropped(path->info->compressed_rte, scan_varattno));
-
-	if (ht_info->algo_id == _INVALID_COMPRESSION_ALGORITHM)
-	{
-		Oid typid, collid;
-		int32 typmod;
-		get_atttypetypmodcoll(path->info->ht_rte->relid, ht_attno, &typid, &typmod, &collid);
-		scan_var =
-			makeVar(path->info->compressed_rel->relid, scan_varattno, typid, typmod, collid, 0);
-	}
-	else
-		scan_var = makeVar(path->info->compressed_rel->relid,
-						   scan_varattno,
-						   ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid,
-						   -1,
-						   0,
-						   0);
-	path->decompression_map = lappend_int(path->decompression_map, chunk_attno);
-
-	return makeTargetEntry((Expr *) scan_var, tle_index, NULL, false);
-}
-
-/*
- * build targetlist for scan on compressed chunk
- *
- * Since we do not adjust selectedCols in RangeTblEntry for chunks
- * we use selectedCols from the hypertable RangeTblEntry to
- * build the target list for the compressed chunk and adjust
- * attno accordingly
- */
-static List *
-build_scan_tlist(DecompressChunkPath *path)
-{
-	List *scan_tlist = NIL;
-	Bitmapset *attrs_used = path->info->ht_rte->selectedCols;
-	TargetEntry *tle;
-	int bit;
-
-	path->decompression_map = NIL;
-
-	/* add count column */
-	tle = make_compressed_scan_meta_targetentry(path,
-												COMPRESSION_COLUMN_METADATA_COUNT_NAME,
-												DECOMPRESS_CHUNK_COUNT_ID,
-												list_length(scan_tlist) + 1);
-	scan_tlist = lappend(scan_tlist, tle);
-
-	/* add sequence num column */
-	if (path->needs_sequence_num)
-	{
-		tle = make_compressed_scan_meta_targetentry(path,
-													COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-													DECOMPRESS_CHUNK_SEQUENCE_NUM_ID,
-													list_length(scan_tlist) + 1);
-		scan_tlist = lappend(scan_tlist, tle);
-	}
-
-	/* check for system columns */
-	bit = bms_next_member(attrs_used, -1);
+	int bit = bms_next_member(attrs_used, -1);
 	if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
 	{
 		/* we support tableoid so skip that */
@@ -161,48 +54,208 @@ build_scan_tlist(DecompressChunkPath *path)
 		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
 			elog(ERROR, "transparent decompression only supports tableoid system column");
 	}
+}
 
-	/* check for reference to whole row */
-	if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, attrs_used))
+/*
+ * Given the scan targetlist and the bitmapset of the needed columns, determine
+ * which scan columns become which decompressed columns (fill decompression_map).
+ */
+static void
+build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *chunk_attrs_needed)
+{
+	/*
+	 * Track which normal and metadata columns we were able to find in the
+	 * targetlist.
+	 */
+	bool missing_count = true;
+	bool missing_sequence = path->needs_sequence_num;
+	Bitmapset *chunk_attrs_found = NULL;
+
+	/*
+	 * FIXME this way to determine which columns are used is actually wrong, see
+	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
+	 * Left as is for now, because changing it uncovers a whole new story with
+	 * ctid.
+	 */
+	check_for_system_columns(path->info->ht_rte->selectedCols);
+
+	/*
+	 * We allow tableoid system column, it won't be in the targetlist but will
+	 * be added at decompression time. Always mark it as found.
+	 */
+	if (bms_is_member(TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber,
+					  chunk_attrs_needed))
 	{
-		ListCell *lc;
-		AttrNumber ht_attno = 0;
+		chunk_attrs_found =
+			bms_add_member(chunk_attrs_found,
+						   TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber);
+	}
 
-		foreach (lc, path->info->ht_rte->eref->colnames)
+	/*
+	 * Fill the helper array of compressed attno -> compression info.
+	 */
+	FormData_hypertable_compression **compressed_attno_to_compression_info =
+		palloc0(sizeof(void *) * (path->info->compressed_rel->max_attr + 1));
+	ListCell *lc;
+	foreach (lc, path->info->hypertable_compression_info)
+	{
+		FormData_hypertable_compression *fd = lfirst(lc);
+		AttrNumber compressed_attno =
+			get_attnum(path->info->compressed_rte->relid, NameStr(fd->attname));
+
+		if (compressed_attno == InvalidAttrNumber)
 		{
-			const char *chunk_col = strVal(lfirst(lc));
-			ht_attno++;
+			elog(ERROR,
+				 "column '%s' not found in the compressed chunk '%s'",
+				 NameStr(fd->attname),
+				 get_rel_name(path->info->compressed_rte->relid));
+		}
+
+		compressed_attno_to_compression_info[compressed_attno] = fd;
+	}
+
+	/*
+	 * Go over the scan targetlist and determine to which output column each
+	 * scan column goes.
+	 */
+	path->decompression_map = NIL;
+	foreach (lc, scan_tlist)
+	{
+		TargetEntry *target = (TargetEntry *) lfirst(lc);
+		if (!IsA(target->expr, Var))
+		{
+			elog(ERROR, "compressed scan targetlist entries must be Vars");
+		}
+
+		Var *var = (Var *) target->expr;
+		Assert(var->varno == path->info->compressed_rel->relid);
+		AttrNumber compressed_attno = var->varattno;
+
+		if (compressed_attno == InvalidAttrNumber)
+		{
+			/*
+			 * We shouldn't have whole-row vars in the compressed scan tlist,
+			 * they are going to be built by final projection of DecompressChunk
+			 * custom scan.
+			 * See compressed_rel_setup_reltarget().
+			 */
+			elog(ERROR, "compressed scan targetlist must not have whole-row vars");
+		}
+
+		const char *column_name = get_attname(path->info->compressed_rte->relid,
+											  compressed_attno,
+											  /* missing_ok = */ false);
+
+		AttrNumber destination_attno_in_uncompressed_chunk = 0;
+		FormData_hypertable_compression *compression_info =
+			compressed_attno_to_compression_info[compressed_attno];
+		if (compression_info)
+		{
+			/*
+			 * Normal column, not a metadata column.
+			 */
+			AttrNumber hypertable_attno = get_attnum(path->info->ht_rte->relid, column_name);
+			AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, column_name);
+			Assert(hypertable_attno != InvalidAttrNumber);
+			Assert(chunk_attno != InvalidAttrNumber);
 
 			/*
-			 * dropped columns have empty string
+			 * The versions older than this commit didn't set up the proper
+			 * collation and typmod for segmentby columns in compressed chunks,
+			 * so we have to determine them from the main hypertable.
+			 * Additionally, we have to set the proper type for the compressed
+			 * columns. It would be cool to get rid of this code someday and
+			 * just use the types from the compressed chunk, but the problem is
+			 * that we have to support the chunks created by the older versions
+			 * of TimescaleDB.
 			 */
-			if (IsA(lfirst(lc), String) && strlen(chunk_col) > 0)
+			if (compression_info->algo_id == _INVALID_COMPRESSION_ALGORITHM)
 			{
-				tle = make_compressed_scan_targetentry(path, ht_attno, list_length(scan_tlist) + 1);
-				scan_tlist = lappend(scan_tlist, tle);
+				get_atttypetypmodcoll(path->info->ht_rte->relid,
+									  hypertable_attno,
+									  &var->vartype,
+									  &var->vartypmod,
+									  &var->varcollid);
+			}
+
+			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
+			{
+				/*
+				 * attno = 0 means whole-row var. Output all the columns.
+				 */
+				destination_attno_in_uncompressed_chunk = chunk_attno;
+				chunk_attrs_found =
+					bms_add_member(chunk_attrs_found,
+								   chunk_attno - FirstLowInvalidHeapAttributeNumber);
+			}
+			else if (bms_is_member(chunk_attno - FirstLowInvalidHeapAttributeNumber,
+								   chunk_attrs_needed))
+			{
+				destination_attno_in_uncompressed_chunk = chunk_attno;
+				chunk_attrs_found =
+					bms_add_member(chunk_attrs_found,
+								   chunk_attno - FirstLowInvalidHeapAttributeNumber);
 			}
 		}
-	}
-	else
-	{
-		/*
-		 * we only need to find unique varattno references here
-		 * multiple references to the same column will be handled by projection
-		 * we need to include junk columns because they might be needed for
-		 * filtering or sorting
-		 */
-		for (bit = bms_next_member(attrs_used, 0 - FirstLowInvalidHeapAttributeNumber); bit > 0;
-			 bit = bms_next_member(attrs_used, bit))
+		else
 		{
-			/* bits are offset by FirstLowInvalidHeapAttributeNumber */
-			AttrNumber ht_attno = bit + FirstLowInvalidHeapAttributeNumber;
+			/*
+			 * Metadata column.
+			 * We always need count column, and sometimes a sequence number
+			 * column. We don't output them, but use them for decompression,
+			 * hence the special negative destination attnos.
+			 * The min/max metadata columns are normally not required for output
+			 * or decompression, they are used only as filter for the compressed
+			 * scan, so we skip them here.
+			 */
+			Assert(strncmp(column_name,
+						   COMPRESSION_COLUMN_METADATA_PREFIX,
+						   strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0);
 
-			tle = make_compressed_scan_targetentry(path, ht_attno, list_length(scan_tlist) + 1);
-			scan_tlist = lappend(scan_tlist, tle);
+			if (strcmp(column_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
+			{
+				destination_attno_in_uncompressed_chunk = DECOMPRESS_CHUNK_COUNT_ID;
+				missing_count = false;
+			}
+			else if (path->needs_sequence_num &&
+					 strcmp(column_name, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) == 0)
+			{
+				destination_attno_in_uncompressed_chunk = DECOMPRESS_CHUNK_SEQUENCE_NUM_ID;
+				missing_sequence = false;
+			}
 		}
+
+		path->decompression_map =
+			lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
 	}
 
-	return scan_tlist;
+	/*
+	 * Check that we have found all the needed columns in the scan targetlist.
+	 * We can't conveniently check that we have all columns for all-row vars, so
+	 * skip attno 0 in this check.
+	 */
+	Bitmapset *attrs_not_found = bms_difference(chunk_attrs_needed, chunk_attrs_found);
+	int bit = bms_next_member(attrs_not_found, 0 - FirstLowInvalidHeapAttributeNumber);
+	if (bit >= 0)
+	{
+		elog(ERROR,
+			 "column '%s' (%d) not found in the scan targetlist for compressed chunk '%s'",
+			 get_attname(path->info->chunk_rte->relid,
+						 bit + FirstLowInvalidHeapAttributeNumber,
+						 /* missing_ok = */ true),
+			 bit + FirstLowInvalidHeapAttributeNumber,
+			 get_rel_name(path->info->compressed_rte->relid));
+	}
+
+	if (missing_count)
+	{
+		elog(ERROR, "the count column was not found in the compressed scan targetlist");
+	}
+
+	if (missing_sequence)
+	{
+		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
+	}
 }
 
 /* replace vars that reference the compressed table with ones that reference the
@@ -280,11 +333,11 @@ clause_has_compressed_attrs(Node *node, void *context)
 }
 
 Plan *
-decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *tlist,
-							 List *clauses, List *custom_plans)
+decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
+							 List *decompressed_tlist, List *clauses, List *custom_plans)
 {
 	DecompressChunkPath *dcpath = (DecompressChunkPath *) path;
-	CustomScan *cscan = makeNode(CustomScan);
+	CustomScan *decompress_plan = makeNode(CustomScan);
 	Scan *compressed_scan = linitial(custom_plans);
 	Path *compressed_path = linitial(path->custom_paths);
 	List *settings;
@@ -293,14 +346,14 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	Assert(list_length(custom_plans) == 1);
 	Assert(list_length(path->custom_paths) == 1);
 
-	cscan->flags = path->flags;
-	cscan->methods = &decompress_chunk_plan_methods;
-	cscan->scan.scanrelid = dcpath->info->chunk_rel->relid;
+	decompress_plan->flags = path->flags;
+	decompress_plan->methods = &decompress_chunk_plan_methods;
+	decompress_plan->scan.scanrelid = dcpath->info->chunk_rel->relid;
 
 	/* output target list */
-	cscan->scan.plan.targetlist = tlist;
+	decompress_plan->scan.plan.targetlist = decompressed_tlist;
 	/* input target list */
-	cscan->custom_scan_tlist = NIL;
+	decompress_plan->custom_scan_tlist = NIL;
 
 	if (IsA(compressed_path, IndexPath))
 	{
@@ -313,7 +366,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
 			if (is_redundant_derived_clause(rinfo, ipath->indexclauses))
 				continue; /* dup or derived from same EquivalenceClass */
-			cscan->scan.plan.qual = lappend(cscan->scan.plan.qual, rinfo->clause);
+			decompress_plan->scan.plan.qual =
+				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
 		/* joininfo clauses on the compressed chunk rel have to
 		 * contain clauses on both compressed and
@@ -322,7 +376,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		 * handle compressed attributes, so remove them from the
 		 * indexscans here. (these are included in the `clauses` passed in
 		 * to the function and so were added as filters
-		 * for cscan->scan.plan.qual in the loop above. )
+		 * for decompress_plan->scan.plan.qual in the loop above. )
 		 */
 		indexplan = linitial(custom_plans);
 		Assert(IsA(indexplan, IndexScan) || IsA(indexplan, IndexOnlyScan));
@@ -348,7 +402,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			cscan->scan.plan.qual = lappend(cscan->scan.plan.qual, rinfo->clause);
+			decompress_plan->scan.plan.qual =
+				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
 	}
 	else
@@ -356,25 +411,72 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		foreach (lc, clauses)
 		{
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
-			cscan->scan.plan.qual = lappend(cscan->scan.plan.qual, rinfo->clause);
+			decompress_plan->scan.plan.qual =
+				lappend(decompress_plan->scan.plan.qual, rinfo->clause);
 		}
 	}
 
-	cscan->scan.plan.qual =
-		(List *) replace_compressed_vars((Node *) cscan->scan.plan.qual, dcpath->info);
+	decompress_plan->scan.plan.qual =
+		(List *) replace_compressed_vars((Node *) decompress_plan->scan.plan.qual, dcpath->info);
 
-	compressed_scan->plan.targetlist = build_scan_tlist(dcpath);
+	/*
+	 * Try to use a physical tlist if possible. There's no reason to do the
+	 * extra work of projecting the result of compressed chunk scan, because
+	 * DecompressChunk can choose only the needed columns itself.
+	 * Note that Postgres uses the CP_EXACT_TLIST option when planning the child
+	 * paths of the Custom path, so we won't automatically get a phsyical tlist
+	 * here.
+	 */
+	if (compressed_path->pathtype == T_IndexOnlyScan)
+	{
+		compressed_scan->plan.targetlist = ((IndexPath *) compressed_path)->indexinfo->indextlist;
+	}
+	else
+	{
+		List *physical_tlist = build_physical_tlist(root, dcpath->info->compressed_rel);
+		/* Can be null if the relation has dropped columns. */
+		if (physical_tlist)
+		{
+			compressed_scan->plan.targetlist = physical_tlist;
+		}
+	}
+
+	/*
+	 * Determine which columns we have to decompress.
+	 * decompressed_tlist is sometimes empty, e.g. for a direct select from
+	 * chunk. We have a ProjectionPath above DecompressChunk in this case, and
+	 * the targetlist for this path is not built by the planner
+	 * (CP_IGNORE_TLIST). This is why we have to examine rel pathtarget.
+	 * Looking at the targetlist is not enough, we also have to decompress the
+	 * columns participating in quals and in pathkeys.
+	 */
+	Bitmapset *chunk_attrs_needed = NULL;
+	pull_varattnos((Node *) decompress_plan->scan.plan.qual,
+				   dcpath->info->chunk_rel->relid,
+				   &chunk_attrs_needed);
+	pull_varattnos((Node *) dcpath->cpath.path.pathtarget->exprs,
+				   dcpath->info->chunk_rel->relid,
+				   &chunk_attrs_needed);
+
+	/*
+	 * Determine which compressed colum goes to which output column.
+	 */
+	build_decompression_map(dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
+
+	/*
+	 * Add a sort if the compressed scan is not ordered appropriately.
+	 */
 	if (!pathkeys_contained_in(dcpath->compressed_pathkeys, compressed_path->pathkeys))
 	{
 		List *compressed_pks = dcpath->compressed_pathkeys;
 		Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
 												compressed_pks,
 												bms_make_singleton(compressed_scan->scanrelid));
-		cscan->custom_plans = list_make1(sort);
+		decompress_plan->custom_plans = list_make1(sort);
 	}
 	else
 	{
-		cscan->custom_plans = custom_plans;
+		decompress_plan->custom_plans = custom_plans;
 	}
 
 	Assert(list_length(custom_plans) == 1);
@@ -382,7 +484,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	settings = list_make3_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse);
-	cscan->custom_private = list_make2(settings, dcpath->decompression_map);
+	decompress_plan->custom_private = list_make2(settings, dcpath->decompression_map);
 
-	return &cscan->scan.plan;
+	return &decompress_plan->scan.plan;
 }

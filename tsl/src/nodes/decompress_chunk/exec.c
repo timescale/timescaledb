@@ -144,7 +144,11 @@ initialize_column_state(DecompressChunkState *state)
 		next_compressed_scan_attno++;
 
 		AttrNumber output_attno = lfirst_int(lc);
-		Assert(output_attno != 0);
+		if (output_attno == 0)
+		{
+			/* We are asked not to decompress this column, skip it. */
+			continue;
+		}
 
 		DecompressChunkColumnState *column = &state->columns[state->num_columns];
 		state->num_columns++;
