@@ -35,12 +35,12 @@ explain (costs off, verbose)
 SELECT
 FROM hyper
 WHERE time > 2::bigint and time < 4;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                          QUERY PLAN                                                                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
    Filter: ((_hyper_1_1_chunk."time" > '2'::bigint) AND (_hyper_1_1_chunk."time" < 4))
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-         Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk."time"
+         Output: compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.val, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
          Filter: ((compress_hyper_2_3_chunk._ts_meta_max_1 > '2'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_min_1 < 4))
 (5 rows)
 
@@ -48,12 +48,12 @@ explain (costs off, verbose)
 SELECT
 FROM hyper
 WHERE time = 3::bigint;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                          QUERY PLAN                                                                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
    Filter: (_hyper_1_1_chunk."time" = '3'::bigint)
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
-         Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk."time"
+         Output: compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.val, compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk._ts_meta_sequence_num, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1
          Filter: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= '3'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= '3'::bigint))
 (5 rows)
 
@@ -122,8 +122,8 @@ from metaseg_tab
 where fmid = 56
 and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
-                                                                                            QUERY PLAN                                                                                             
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                                                        QUERY PLAN                                                                                                                                                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
    Sort Key: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt
@@ -131,7 +131,7 @@ order by factorid, end_dt;
          Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
          Filter: ((_hyper_3_4_chunk.end_dt >= '12-10-2012'::date) AND (_hyper_3_4_chunk.end_dt <= '12-11-2012'::date) AND (_hyper_3_4_chunk.fmid = 56))
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_5_chunk
-               Output: compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.logret
+               Output: compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.start_dt, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.interval_number, compress_hyper_4_5_chunk.logret, compress_hyper_4_5_chunk.knowledge_date, compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk._ts_meta_sequence_num, compress_hyper_4_5_chunk._ts_meta_min_1, compress_hyper_4_5_chunk._ts_meta_max_1
                Filter: ((compress_hyper_4_5_chunk._ts_meta_max_1 >= '12-10-2012'::date) AND (compress_hyper_4_5_chunk._ts_meta_min_1 <= '12-11-2012'::date))
 (9 rows)
 
@@ -152,8 +152,8 @@ from metaseg_tab
 where fmid = 56
 and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
-                                                                                                 QUERY PLAN                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                                                        QUERY PLAN                                                                                                                                                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
    Sort Key: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt
@@ -161,7 +161,7 @@ order by factorid, end_dt;
          Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
          Filter: ((_hyper_3_4_chunk.fmid = 56) AND ((_hyper_3_4_chunk.end_dt)::date >= 'Mon Dec 10 00:00:00 2012'::timestamp without time zone) AND ((_hyper_3_4_chunk.end_dt)::date <= '12-11-2012'::date))
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_5_chunk
-               Output: compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.logret
+               Output: compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.start_dt, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.interval_number, compress_hyper_4_5_chunk.logret, compress_hyper_4_5_chunk.knowledge_date, compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk._ts_meta_sequence_num, compress_hyper_4_5_chunk._ts_meta_min_1, compress_hyper_4_5_chunk._ts_meta_max_1
 (8 rows)
 
 --should fail
