@@ -96,7 +96,6 @@ PG_MODULE_MAGIC;
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
 extern void TSDLLEXPORT _PG_init(void);
-extern void TSDLLEXPORT _PG_fini(void);
 
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
@@ -661,16 +660,6 @@ _PG_init(void)
 	/* register utility hook to handle a distributed database drop */
 	prev_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = loader_process_utility_hook;
-}
-
-void
-_PG_fini(void)
-{
-	post_parse_analyze_hook = prev_post_parse_analyze_hook;
-	shmem_startup_hook = prev_shmem_startup_hook;
-
-	ProcessUtility_hook = prev_ProcessUtility_hook;
-	/* No way to unregister relcache callback */
 }
 
 static void inline do_load()
