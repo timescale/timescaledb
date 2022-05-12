@@ -27,6 +27,7 @@
 
 #include <guc.h>
 #include "utils.h"
+#include "src/utils.h"
 #include "compat/compat.h"
 #include "remote/data_format.h"
 #include "tuplefactory.h"
@@ -90,9 +91,8 @@ conversion_error_callback(void *arg)
 	{
 		/* error occurred in a scan against a foreign join */
 		ScanState *ss = errpos->ss;
-		List *tlist;
+		List *tlist = NIL;
 		EState *estate = ss->ps.state;
-		TargetEntry *tle;
 
 		if (IsA(ss->ps.plan, ForeignScan))
 		{
@@ -105,10 +105,15 @@ conversion_error_callback(void *arg)
 
 			tlist = csplan->scan.plan.targetlist;
 		}
-		else
-			elog(ERROR, "unknown scan node type %u in error callback", nodeTag(ss->ps.plan));
 
-		tle = list_nth_node(TargetEntry, tlist, errpos->cur_attno - 1);
+		if (tlist == NIL)
+		{
+			elog(ERROR,
+				 "unknown scan node type %s in error callback",
+				 ts_get_node_name((Node *) ss->ps.plan));
+		}
+
+		TargetEntry *tle = list_nth_node(TargetEntry, tlist, errpos->cur_attno - 1);
 
 		/*
 		 * Target list can have Vars and expressions.  For Vars, we can get
@@ -247,11 +252,8 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 	ItemPointer ctid = NULL;
 	ListCell *lc;
 	int j;
-	StringInfo buf;
 
 	Assert(row < PQntuples(res));
-
-	buf = makeStringInfo();
 
 	/* Install error callback */
 	if (tf->errcallback.callback != NULL)
@@ -267,18 +269,15 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 	foreach (lc, tf->retrieved_attrs)
 	{
 		int i = lfirst_int(lc);
-		char *valstr;
+		char *valstr = NULL;
 
-		resetStringInfo(buf);
-
-		buf->len = PQgetlength(res, row, j);
+		const int len = PQgetlength(res, row, j);
 		/* we assume that value is NULL is length is 0 */
-		if (buf->len == 0)
+		if (len == 0)
 			valstr = NULL;
 		else
 		{
 			valstr = PQgetvalue(res, row, j);
-			buf->data = valstr;
 		}
 
 		/*
@@ -311,10 +310,13 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 			{
 				Assert(tf->attconv->binary);
 				if (valstr != NULL)
+				{
+					StringInfoData si = { .data = valstr, .len = len };
 					values[i - 1] = ReceiveFunctionCall(&tf->attconv->conv_funcs[i - 1],
-														buf,
+														&si,
 														tf->attconv->ioparams[i - 1],
 														tf->attconv->typmods[i - 1]);
+				}
 				else
 					values[i - 1] = PointerGetDatum(NULL);
 			}
@@ -328,7 +330,10 @@ tuplefactory_make_virtual_tuple(TupleFactory *tf, PGresult *res, int row, int fo
 				if (format == FORMAT_TEXT)
 					datum = DirectFunctionCall1(tidin, CStringGetDatum(valstr));
 				else
-					datum = DirectFunctionCall1(tidrecv, PointerGetDatum(buf));
+				{
+					StringInfoData si = { .data = valstr, .len = len };
+					datum = DirectFunctionCall1(tidrecv, PointerGetDatum(&si));
+				}
 				ctid = (ItemPointer) DatumGetPointer(datum);
 			}
 		}
@@ -392,7 +397,7 @@ tuplefactory_make_tuple(TupleFactory *tf, PGresult *res, int row, int format)
 
 	/* Clean up */
 	if (tf->per_tuple_mctx_reset)
-		MemoryContextReset(tf->temp_mctx);
+		tuplefactory_reset_mctx(tf);
 
 	return tuple;
 }
