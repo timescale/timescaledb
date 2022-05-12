@@ -694,29 +694,20 @@ launcher_handle_message(HTAB *db_htab)
 }
 
 /*
- * Wrapper around normal postgres `die()` function to give more context on
- * sigterms. The default, `bgworker_die()`, can't be used due to the fact
- * that it handles signals synchronously, rather than waiting for a
+ * The default, `bgworker_die()`, can't be used due to the fact that it
+ * handles signals synchronously, rather than waiting for a
  * CHECK_FOR_INTERRUPTS(). `die()` (which is arguably misnamed) sets flags
  * that will cause the backend to exit on the next call to
- * CHECK_FOR_INTERRUPTS(), which can happen either in our code or in
- * functions within the Postgres codebase that we call. This means that we
- * don't need to wait for the next time control is returned to our loop to
- * exit, which would be necessary if we set our own flag and checked it in
- * a loop condition. However, because it cannot exit 0, the launcher will be
- * restarted by the postmaster, even when it has received a SIGTERM, which
- * we decided was the proper behavior. If users want to disable the launcher,
+ * CHECK_FOR_INTERRUPTS(), which can happen either in our code or in functions
+ * within the Postgres codebase that we call. This means that we don't need to
+ * wait for the next time control is returned to our loop to exit, which would
+ * be necessary if we set our own flag and checked it in a loop
+ * condition. However, because it cannot exit 0, the launcher will be
+ * restarted by the postmaster, even when it has received a SIGTERM, which we
+ * decided was the proper behavior. If users want to disable the launcher,
  * they can set `timescaledb.max_background_workers = 0` and then we will
  * `proc_exit(0)` before doing anything else.
  */
-static void launcher_sigterm(SIGNAL_ARGS)
-{
-	/* Do not use anything that calls malloc() inside a signal handler since
-	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr(
-		"terminating TimescaleDB background worker launcher due to administrator command\n");
-	die(postgres_signal_arg);
-}
 
 extern Datum
 ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
@@ -726,7 +717,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	HTAB *db_htab;
 
 	pqsignal(SIGINT, StatementCancelHandler);
-	pqsignal(SIGTERM, launcher_sigterm);
+	pqsignal(SIGTERM, die);
 	pqsignal(SIGHUP, launcher_sighup);
 
 	/* Some SIGHUPS may already have been dropped, so we must load the file here */
@@ -801,15 +792,6 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_RETURN_VOID();
-}
-
-/* Wrapper around `die()`, see note on `launcher_sigterm()` above for more info*/
-static void entrypoint_sigterm(SIGNAL_ARGS)
-{
-	/* Do not use anything that calls malloc() inside a signal handler since
-	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB scheduler entrypoint due to administrator command\n");
-	die(postgres_signal_arg);
 }
 
 /*
@@ -892,7 +874,7 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	VirtualTransactionId vxid;
 
 	pqsignal(SIGINT, StatementCancelHandler);
-	pqsignal(SIGTERM, entrypoint_sigterm);
+	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 	BackgroundWorkerInitializeConnectionByOid(db_id, InvalidOid, 0);
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);

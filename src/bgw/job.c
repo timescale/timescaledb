@@ -805,15 +805,6 @@ ts_bgw_job_timeout_at(BgwJob *job, TimestampTz start_time)
 												   IntervalPGetDatum(&job->fd.max_runtime)));
 }
 
-static void handle_sigterm(SIGNAL_ARGS)
-{
-	/* Do not use anything that calls malloc() inside a signal handler since
-	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB background job \"%s\" due to administrator command\n",
-				 MyBgworkerEntry->bgw_name);
-	die(postgres_signal_arg);
-}
-
 TS_FUNCTION_INFO_V1(ts_bgw_job_entrypoint);
 
 static void
@@ -850,7 +841,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * do not use the default `bgworker_die` sigterm handler because it does
 	 * not respect critical sections
 	 */
-	pqsignal(SIGTERM, handle_sigterm);
+	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
 	elog(DEBUG1, "started background job %d", job_id);
