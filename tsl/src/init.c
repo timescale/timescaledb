@@ -66,7 +66,6 @@ PG_MODULE_MAGIC;
 #endif
 
 extern void PGDLLEXPORT _PG_init(void);
-extern void PGDLLEXPORT _PG_fini(void);
 
 static void
 cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
@@ -266,10 +265,4 @@ _PG_init(void)
 	ts_license_enable_module_loading();
 
 	_remote_connection_init();
-}
-
-PGDLLEXPORT void
-_PG_fini(void)
-{
-	ts_module_cleanup_on_pg_exit(0, 0);
 }
