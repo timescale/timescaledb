@@ -30,17 +30,9 @@ jobs:
     - name: Checkout timescaledb
       uses: actions/checkout@v2
 
-    - name: Checkout pgspot
-      uses: actions/checkout@v2
-      with:
-        repository: 'timescale/pgspot'
-        ref: '0.2.0'
-        submodules: true
-        path: 'pgspot'
-
-    - name: Install packages
+    - name: Install pgspot
       run: |
-        python -m pip install -r pgspot/requirements.txt
+        python -m pip install pgspot==0.3.0
 
     - name: Build timescaledb sqlfiles
       run: |
@@ -59,14 +51,14 @@ jobs:
         ls -la build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
 
         # The next pgspot execution tests the installation script by itself
-        python pgspot/pgspot ${{ env.PGSPOT_OPTS }} build/sql/timescaledb--${version}.sql
+        pgspot ${{ env.PGSPOT_OPTS }} build/sql/timescaledb--${version}.sql
         # The next pgspot execution tests the update script to the latest version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
-        python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
+        pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${downgrade_to}--${version}.sql
         # The next pgspot execution tests the downgrade script to the previous version
         # we prepend the installation script here so pgspot can correctly keep track of created objects
         # skip this check for 2.6.1 since the search_path in 2.6.1 is not considered safe by pgspot
         if [ "${downgrade_to}" != "2.6.1" ]; then
-          python pgspot/pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
+          pgspot ${{ env.PGSPOT_OPTS }} -a build/sql/timescaledb--${version}.sql build/sql/timescaledb--${version}--${downgrade_to}.sql
         fi
 
