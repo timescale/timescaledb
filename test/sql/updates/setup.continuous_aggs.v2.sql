@@ -44,66 +44,10 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 INSERT INTO conditions_before
 SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL, NULL, 8, true;
 
-DO LANGUAGE PLPGSQL $$
-DECLARE
-  ts_version TEXT;
-BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-  IF ts_version < '2.0.0' THEN
+\if :has_refresh_mat_view
     CREATE VIEW rename_cols
     WITH (timescaledb.continuous, timescaledb.materialized_only = false, timescaledb.refresh_lag='14 days') AS
-    SELECT time_bucket('1 week', timec) AS bucket, location, avg(humidity)
-    FROM conditions_before
-    GROUP BY bucket, location;
-
-    CREATE VIEW mat_before
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
-    AS
-      SELECT time_bucket('1week', timec) as bucket,
-	location,
-	min(allnull) as min_allnull,
-	max(temperature) as max_temp,
-	sum(temperature)+sum(humidity) as agg_sum_expr,
-	avg(humidity) AS avg_humidity,
-	stddev(humidity),
-	bit_and(bit_int),
-	bit_or(bit_int),
-	bool_and(good_life),
-	every(temperature > 0),
-	bool_or(good_life),
-	count(*) as count_rows,
-	count(temperature) as count_temp,
-	count(allnull) as count_zero,
-	corr(temperature, humidity),
-	covar_pop(temperature, humidity),
-	covar_samp(temperature, humidity),
-	regr_avgx(temperature, humidity),
-	regr_avgy(temperature, humidity),
-	regr_count(temperature, humidity),
-	regr_intercept(temperature, humidity),
-	regr_r2(temperature, humidity),
-	regr_slope(temperature, humidity),
-	regr_sxx(temperature, humidity),
-	regr_sxy(temperature, humidity),
-	round(regr_syy(temperature, humidity)) as regr_syy,
-	stddev(temperature) as stddev_temp,
-	round(stddev_pop(temperature)) as stddev_pop,
-	stddev_samp(temperature),
-	round(variance(temperature)) as variance,
-	round(var_pop(temperature)) as var_pop,
-	round(var_samp(temperature)) as var_samp,
-	last(temperature, timec) as last_temp,
-	last(highlow, timec) as last_hl,
-	first(highlow, timec) as first_hl,
-	histogram(temperature, 0, 100, 5)
-      FROM conditions_before
-      GROUP BY bucket, location
-      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
-
-    -- ALTER VIEW cannot rename columns before PG13, but ALTER TABLE
-    -- works for views.
-    ALTER TABLE rename_cols RENAME COLUMN bucket to "time";
-  ELSE
+\else
     -- rename_cols cagg view is also used for another test: if we can enable
     -- compression on a cagg after an upgrade
     -- This view has 3 cols which is fewer than the number of cols on the table
@@ -111,22 +55,32 @@ BEGIN
     -- enabled on such a view
     CREATE MATERIALIZED VIEW rename_cols
     WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-    SELECT time_bucket('1 week', timec) AS bucket, location, avg(humidity)
+\endif
+    SELECT time_bucket('1 week', timec) AS bucket, location, round(avg(humidity)) AS humidity
     FROM conditions_before
+\if :has_refresh_mat_view
+    GROUP BY bucket, location;
+\else
     GROUP BY bucket, location
     WITH NO DATA;
-    PERFORM add_continuous_aggregate_policy('rename_cols', NULL, '14 days'::interval, '336 h');
+    SELECT add_continuous_aggregate_policy('rename_cols', NULL, '14 days'::interval, '336 h');
+\endif
 
+\if :has_refresh_mat_view
+    CREATE VIEW mat_before
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
+\else
     CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
+\endif
     AS
       SELECT time_bucket('1week', timec) as bucket,
 	location,
-	min(allnull) as min_allnull,
-	max(temperature) as max_temp,
-	sum(temperature)+sum(humidity) as agg_sum_expr,
-	avg(humidity) AS avg_humidity,
-	stddev(humidity),
+	round(min(allnull)) as min_allnull,
+	round(max(temperature)) as max_temp,
+	round(sum(temperature)+sum(humidity)) as agg_sum_expr,
+	round(avg(humidity)) AS avg_humidity,
+	round(stddev(humidity)) as stddev,
 	bit_and(bit_int),
 	bit_or(bit_int),
 	bool_and(good_life),
@@ -135,21 +89,21 @@ BEGIN
 	count(*) as count_rows,
 	count(temperature) as count_temp,
 	count(allnull) as count_zero,
-	corr(temperature, humidity),
-	covar_pop(temperature, humidity),
-	covar_samp(temperature, humidity),
-	regr_avgx(temperature, humidity),
-	regr_avgy(temperature, humidity),
-	regr_count(temperature, humidity),
-	regr_intercept(temperature, humidity),
-	regr_r2(temperature, humidity),
-	regr_slope(temperature, humidity),
-	regr_sxx(temperature, humidity),
-	regr_sxy(temperature, humidity),
+	round(corr(temperature, humidity)) as corr,
+	round(covar_pop(temperature, humidity)) as covar_pop,
+	round(covar_samp(temperature, humidity)) as covar_samp,
+	round(regr_avgx(temperature, humidity)) as regr_avgx,
+	round(regr_avgy(temperature, humidity)) as regr_avgy,
+	round(regr_count(temperature, humidity)) as regr_count,
+	round(regr_intercept(temperature, humidity)) as regr_intercept,
+	round(regr_r2(temperature, humidity)) as regr_r2,
+	round(regr_slope(temperature, humidity)) as regr_slope,
+	round(regr_sxx(temperature, humidity)) as regr_sxx,
+	round(regr_sxy(temperature, humidity)) as regr_sxy,
 	round(regr_syy(temperature, humidity)) as regr_syy,
-	stddev(temperature) as stddev_temp,
+	round(stddev(temperature)) as stddev_temp,
 	round(stddev_pop(temperature)) as stddev_pop,
-	stddev_samp(temperature),
+	round(stddev_samp(temperature)) as stddev_samp,
 	round(variance(temperature)) as variance,
 	round(var_pop(temperature)) as var_pop,
 	round(var_samp(temperature)) as var_samp,
@@ -158,13 +112,19 @@ BEGIN
 	first(highlow, timec) as first_hl,
 	histogram(temperature, 0, 100, 5)
       FROM conditions_before
+\if :has_refresh_mat_view
+      GROUP BY bucket, location
+      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+    -- ALTER VIEW cannot rename columns before PG13, but ALTER TABLE
+    -- works for views.
+    ALTER TABLE rename_cols RENAME COLUMN bucket to "time";
+\else
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    PERFORM add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
+    SELECT add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
 
     ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket to "time";
-  END IF;
-END $$;
+\endif
 
 \if :WITH_SUPERUSER
 GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
@@ -182,67 +142,21 @@ CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
 -- but realtime agg view definition is not stable across versions
 CREATE SCHEMA cagg;
 
-DO LANGUAGE PLPGSQL $$
-DECLARE
-  ts_version TEXT;
-BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
-  IF ts_version < '2.0.0' THEN
+\if :has_refresh_mat_view
     CREATE VIEW cagg.realtime_mat
     WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
-    AS
-      SELECT time_bucket('1week', timec) as bucket,
-	location,
-	min(allnull) as min_allnull,
-	max(temperature) as max_temp,
-	sum(temperature)+sum(humidity) as agg_sum_expr,
-	avg(humidity) AS avg_humidity,
-	stddev(humidity),
-	bit_and(bit_int),
-	bit_or(bit_int),
-	bool_and(good_life),
-	every(temperature > 0),
-	bool_or(good_life),
-	count(*) as count_rows,
-	count(temperature) as count_temp,
-	count(allnull) as count_zero,
-	corr(temperature, humidity),
-	covar_pop(temperature, humidity),
-	covar_samp(temperature, humidity),
-	regr_avgx(temperature, humidity),
-	regr_avgy(temperature, humidity),
-	regr_count(temperature, humidity),
-	regr_intercept(temperature, humidity),
-	regr_r2(temperature, humidity),
-	regr_slope(temperature, humidity),
-	regr_sxx(temperature, humidity),
-	regr_sxy(temperature, humidity),
-	round(regr_syy(temperature, humidity)) as regr_syy,
-	stddev(temperature) as stddev_temp,
-	round(stddev_pop(temperature)) as stddev_pop,
-	stddev_samp(temperature),
-	round(variance(temperature)) as variance,
-	round(var_pop(temperature)) as var_pop,
-	round(var_samp(temperature)) as var_samp,
-	last(temperature, timec) as last_temp,
-	last(highlow, timec) as last_hl,
-	first(highlow, timec) as first_hl,
-	histogram(temperature, 0, 100, 5)
-      FROM conditions_before
-      GROUP BY bucket, location
-      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
-  ELSE
+\else
     CREATE MATERIALIZED VIEW IF NOT EXISTS cagg.realtime_mat
     WITH ( timescaledb.continuous, timescaledb.materialized_only=false)
+\endif
     AS
       SELECT time_bucket('1week', timec) as bucket,
 	location,
-	min(allnull) as min_allnull,
-	max(temperature) as max_temp,
-	sum(temperature)+sum(humidity) as agg_sum_expr,
-	avg(humidity) AS avg_humidity,
-	stddev(humidity),
+	round(min(allnull)) as min_allnull,
+	round(max(temperature)) as max_temp,
+	round(sum(temperature)+sum(humidity)) as agg_sum_expr,
+	round(avg(humidity)) AS avg_humidity,
+	round(stddev(humidity)) as stddev_humidity,
 	bit_and(bit_int),
 	bit_or(bit_int),
 	bool_and(good_life),
@@ -251,21 +165,21 @@ BEGIN
 	count(*) as count_rows,
 	count(temperature) as count_temp,
 	count(allnull) as count_zero,
-	corr(temperature, humidity),
-	covar_pop(temperature, humidity),
-	covar_samp(temperature, humidity),
-	regr_avgx(temperature, humidity),
-	regr_avgy(temperature, humidity),
-	regr_count(temperature, humidity),
-	regr_intercept(temperature, humidity),
-	regr_r2(temperature, humidity),
-	regr_slope(temperature, humidity),
-	regr_sxx(temperature, humidity),
-	regr_sxy(temperature, humidity),
+	round(corr(temperature, humidity)) as corr,
+	round(covar_pop(temperature, humidity)) as covar_pop,
+	round(covar_samp(temperature, humidity)) as covar_samp,
+	round(regr_avgx(temperature, humidity)) as regr_avgx,
+	round(regr_avgy(temperature, humidity)) as regr_avgy,
+	round(regr_count(temperature, humidity)) as regr_count,
+	round(regr_intercept(temperature, humidity)) as regr_intercept,
+	round(regr_r2(temperature, humidity)) as regr_r2,
+	round(regr_slope(temperature, humidity)) as regr_slope,
+	round(regr_sxx(temperature, humidity)) as regr_sxx,
+	round(regr_sxy(temperature, humidity)) as regr_sxy,
 	round(regr_syy(temperature, humidity)) as regr_syy,
-	stddev(temperature) as stddev_temp,
+	round(stddev(temperature)) as stddev_temp,
 	round(stddev_pop(temperature)) as stddev_pop,
-	stddev_samp(temperature),
+	round(stddev_samp(temperature)) as stddev_samp,
 	round(variance(temperature)) as variance,
 	round(var_pop(temperature)) as var_pop,
 	round(var_samp(temperature)) as var_samp,
@@ -274,12 +188,14 @@ BEGIN
 	first(highlow, timec) as first_hl,
 	histogram(temperature, 0, 100, 5)
       FROM conditions_before
+\if :has_refresh_mat_view
+      GROUP BY bucket, location
+      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+\else
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    PERFORM add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h');
-  END IF;
-END $$;
-
+    SELECT add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h');
+\endif
 \if :WITH_SUPERUSER
 GRANT SELECT ON cagg.realtime_mat TO cagg_user;
 \endif
@@ -291,35 +207,27 @@ CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
 \endif
 
 -- test ignore_invalidation_older_than migration --
-DO LANGUAGE PLPGSQL $$
-DECLARE
-  ts_version TEXT;
-BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
-  IF ts_version < '2.0.0' THEN
+\if :has_refresh_mat_view
     CREATE VIEW mat_ignoreinval
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.refresh_lag='-30 day',
            timescaledb.ignore_invalidation_older_than='30 days',
            timescaledb.max_interval_per_job = '100000 days')
-    AS
-      SELECT time_bucket('1 week', timec) as bucket,
-    max(temperature) as maxtemp
-      FROM conditions_before
-      GROUP BY bucket;
-  ELSE
+\else
     CREATE MATERIALIZED VIEW IF NOT EXISTS  mat_ignoreinval
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
+\endif
     AS
       SELECT time_bucket('1 week', timec) as bucket,
     max(temperature) as maxtemp
       FROM conditions_before
+\if :has_refresh_mat_view
+      GROUP BY bucket;
+\else
       GROUP BY bucket WITH NO DATA;
 
-    PERFORM add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h');
-  END IF;
-END $$;
+    SELECT add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h');
+\endif
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_ignoreinval;
@@ -336,36 +244,27 @@ SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timest
 INSERT INTO inval_test
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timestamp, '1 day'), 'NYC', generate_series(31.0, 50.0, 1.0);
 
-DO LANGUAGE PLPGSQL $$
-DECLARE
-  ts_version TEXT;
-BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
-  IF ts_version < '2.0.0' THEN
+\if :has_refresh_mat_view
     CREATE VIEW mat_inval
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.refresh_lag='-20 days',
            timescaledb.refresh_interval='12 hours',
            timescaledb.max_interval_per_job='100000 days' )
-    AS
-      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
-        max(temperature) as max_temp, avg(temperature) as avg_temp
-      FROM inval_test
-      GROUP BY bucket, location;
-
-  ELSE
+\else
     CREATE MATERIALIZED VIEW mat_inval
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+\endif
     AS
       SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
-        max(temperature) as max_temp, avg(temperature) as avg_temp
+        max(temperature) as max_temp, round(avg(temperature)) as avg_temp
       FROM inval_test
+\if :has_refresh_mat_view
+      GROUP BY bucket, location;
+\else
       GROUP BY bucket, location WITH NO DATA;
 
-    PERFORM add_continuous_aggregate_policy('mat_inval', NULL, '-20 days'::interval, '12 hours');
-  END IF;
-END $$;
+    SELECT add_continuous_aggregate_policy('mat_inval', NULL, '-20 days'::interval, '12 hours');
+\endif
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_inval;
@@ -389,52 +288,45 @@ INSERT INTO int_time_test VALUES
 (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
 (15, -4, 22), (16, -4, 23);
 
-DO LANGUAGE PLPGSQL $$
-DECLARE
-  ts_version TEXT;
-BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
-  IF ts_version < '2.0.0' THEN
+\if :has_refresh_mat_view
     CREATE VIEW mat_inttime
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.ignore_invalidation_older_than = 6,
            timescaledb.refresh_lag = 2,
            timescaledb.refresh_interval='12 hours')
+\else
+    CREATE MATERIALIZED VIEW mat_inttime
+    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+\endif
     AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
       FROM int_time_test
+\if :has_refresh_mat_view
       GROUP BY 1;
+\else
+      GROUP BY 1 WITH NO DATA;
+\endif
 
+\if :has_refresh_mat_view
     CREATE VIEW mat_inttime2
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.refresh_lag = 2,
            timescaledb.refresh_interval='12 hours')
-    AS
-      SELECT time_bucket( 2, timeval), COUNT(col1)
-      FROM int_time_test
-      GROUP BY 1;
-
-  ELSE
-    CREATE MATERIALIZED VIEW mat_inttime
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-    AS
-      SELECT time_bucket( 2, timeval), COUNT(col1)
-      FROM int_time_test
-      GROUP BY 1 WITH NO DATA;
-
+\else
     CREATE MATERIALIZED VIEW mat_inttime2
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+\endif
     AS
       SELECT time_bucket( 2, timeval), COUNT(col1)
       FROM int_time_test
+\if :has_refresh_mat_view
+      GROUP BY 1;
+\else
       GROUP BY 1 WITH NO DATA;
 
-    PERFORM add_continuous_aggregate_policy('mat_inttime', 6, 2, '12 hours');
-    PERFORM add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
-  END IF;
-END $$;
-
+    SELECT add_continuous_aggregate_policy('mat_inttime', 6, 2, '12 hours');
+    SELECT add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
+\endif
 
 \if :has_refresh_mat_view
 REFRESH MATERIALIZED VIEW mat_inttime;
@@ -448,40 +340,31 @@ CALL refresh_continuous_aggregate('mat_inttime2',NULL,NULL);
 CREATE TABLE conflict_test (time TIMESTAMPTZ NOT NULL, location TEXT, temperature DOUBLE PRECISION);
 SELECT create_hypertable('conflict_test', 'time', chunk_time_interval => INTERVAL '1 week');
 
-DO LANGUAGE PLPGSQL $$
-DECLARE
-  ts_version TEXT;
-  retention_jobid INTEGER;
-BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-
-  IF ts_version < '2.0.0' THEN
+\if :has_refresh_mat_view
     CREATE VIEW mat_conflict
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
            timescaledb.refresh_lag='1 day',
            timescaledb.ignore_invalidation_older_than = '28 days',
            timescaledb.refresh_interval='12 hours' )
-    AS
-      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
-        max(temperature) as max_temp, avg(temperature) as avg_temp
-      FROM conflict_test
-      GROUP BY bucket, location;
-
-    PERFORM add_drop_chunks_policy('conflict_test', '14 days'::interval);
-  ELSE
+\else
     CREATE MATERIALIZED VIEW mat_conflict
     WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+\endif
     AS
       SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
-        max(temperature) as max_temp, avg(temperature) as avg_temp
+        max(temperature) as max_temp, round(avg(temperature)) as avg_temp
       FROM conflict_test
+\if :has_refresh_mat_view
+      GROUP BY bucket, location;
+
+    SELECT add_drop_chunks_policy('conflict_test', '14 days'::interval);
+\else
       GROUP BY bucket, location WITH NO DATA;
 
-    PERFORM add_continuous_aggregate_policy('mat_conflict', '28 days', '1 day', '12 hours');
-    SELECT add_retention_policy('conflict_test', '14 days'::interval) INTO retention_jobid;
-    PERFORM alter_job(retention_jobid, scheduled=>false);
-  END IF;
-END $$;
+    SELECT add_continuous_aggregate_policy('mat_conflict', '28 days', '1 day', '12 hours');
+    SELECT add_retention_policy('conflict_test', '14 days'::interval) AS retention_jobid \gset
+    SELECT alter_job(:retention_jobid, scheduled=>false);
+\endif
 
 \if :WITH_SUPERUSER
 GRANT SELECT, TRIGGER, UPDATE
@@ -532,7 +415,7 @@ SELECT
     LOCATION,
     min(temperature) AS min_temp,
     max(temperature) AS max_temp,
-    avg(temperature) AS avg_temp
+    round(avg(temperature)) AS avg_temp
 FROM
     drop_test
 GROUP BY
