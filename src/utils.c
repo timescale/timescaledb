@@ -30,6 +30,7 @@
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/syscache.h>
+#include <unistd.h>
 
 #include "compat/compat.h"
 #include "chunk.h"
@@ -1112,4 +1113,30 @@ ts_get_relnatts(Oid relid)
 
 	ReleaseSysCache(tp);
 	return result;
+}
+
+ssize_t
+ts_write_stderr(const void *buf, size_t size)
+{
+#ifdef WIN32
+	HANDLE handle;
+	DWORD result;
+
+	handle = (HANDLE) GETStdHandle(STD_ERROR_HANDLE);
+	if (handle == INVALID_HANDLE_VALUE)
+	{
+		errno = EBADF;
+		return -1;
+	}
+
+	if (!WriteFile(handle, buf, size, &result, NULL))
+	{
+		_dosmaperr(GetLastError());
+		return -1;
+	}
+
+	return result;
+#else
+	return write(STDERR_FILENO, buf, size);
+#endif
 }

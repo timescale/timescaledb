@@ -49,6 +49,7 @@
 #include "bgw_counter.h"
 #include "bgw_message_queue.h"
 #include "bgw_launcher.h"
+#include "utils.h"
 
 #define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
 #define BGW_ENTRYPOINT_FUNCNAME "ts_bgw_db_scheduler_entrypoint"
@@ -713,8 +714,9 @@ static void launcher_sigterm(SIGNAL_ARGS)
 {
 	/* Do not use anything that calls malloc() inside a signal handler since
 	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr(
-		"terminating TimescaleDB background worker launcher due to administrator command\n");
+	const char *message =
+		"terminating TimescaleDB background worker launcher due to administrator command\n";
+	ts_write_stderr(message, strlen(message));
 	die(postgres_signal_arg);
 }
 
@@ -808,7 +810,9 @@ static void entrypoint_sigterm(SIGNAL_ARGS)
 {
 	/* Do not use anything that calls malloc() inside a signal handler since
 	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB scheduler entrypoint due to administrator command\n");
+	const char *message =
+		"terminating TimescaleDB scheduler entrypoint due to administrator command\n";
+	ts_write_stderr(message, strlen(message));
 	die(postgres_signal_arg);
 }
 

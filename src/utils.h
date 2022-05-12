@@ -13,6 +13,7 @@
 #include <nodes/pathnodes.h>
 #include <nodes/extensible.h>
 #include <utils/datetime.h>
+#include <unistd.h>
 
 #include "compat/compat.h"
 
@@ -196,5 +197,7 @@ extern TSDLLEXPORT RelationSize ts_relation_size_impl(Oid relid);
 
 extern TSDLLEXPORT const char *ts_get_node_name(Node *node);
 extern TSDLLEXPORT int ts_get_relnatts(Oid relid);
+
+extern TSDLLEXPORT ssize_t ts_write_stderr(const void *buf, size_t size);
 
 #endif /* TIMESCALEDB_UTILS_H */

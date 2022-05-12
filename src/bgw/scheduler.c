@@ -39,6 +39,7 @@
 #include "scheduler.h"
 #include "timer.h"
 #include "version.h"
+#include "utils.h"
 
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 #define START_RETRY_MS (1 * INT64CONST(1000)) /* 1 seconds */
@@ -840,7 +841,8 @@ static void handle_sigterm(SIGNAL_ARGS)
 {
 	/* Do not use anything that calls malloc() inside a signal handler since
 	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB job scheduler due to administrator command\n");
+	const char *message = "terminating TimescaleDB job scheduler due to administrator command\n";
+	ts_write_stderr(message, strlen(message));
 	die(postgres_signal_arg);
 }
 

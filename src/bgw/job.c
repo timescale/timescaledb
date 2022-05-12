@@ -38,6 +38,7 @@
 #include "bgw_policy/policy.h"
 #include "scan_iterator.h"
 #include "bgw/scheduler.h"
+#include "utils.h"
 
 #include <cross_module_fn.h>
 
@@ -809,8 +810,25 @@ static void handle_sigterm(SIGNAL_ARGS)
 {
 	/* Do not use anything that calls malloc() inside a signal handler since
 	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB background job \"%s\" due to administrator command\n",
-				 MyBgworkerEntry->bgw_name);
+
+#define MAX_MSG_LEN (128 + BGW_MAXLEN)
+	char message[MAX_MSG_LEN];
+	const char *tmp;
+	size_t len, offset = 0;
+
+	tmp = "terminating TimescaleDB background job \"";
+	len = strlen(tmp);
+	strcpy(message, tmp);
+	offset += len;
+
+	tmp = strncpy(message + offset, MyBgworkerEntry->bgw_name, BGW_MAXLEN - 1);
+	offset += len = strlen(MyBgworkerEntry->bgw_name);
+
+	tmp = "\" due to administrator command\n";
+	len = strlen(tmp);
+	strcpy(message, tmp);
+
+	ts_write_stderr(message, strlen(message));
 	die(postgres_signal_arg);
 }
 
