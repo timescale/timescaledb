@@ -12,6 +12,7 @@
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
+#include <utils/snapmgr.h>
 
 #include "compat/compat.h"
 #include "config.h"
@@ -655,6 +656,7 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	HttpRequest *req;
 	HttpResponseState *rsp;
 	bool started = false;
+	bool snapshot_set = false;
 	const char *volatile json = NULL;
 
 	if (!ts_telemetry_on())
@@ -671,7 +673,17 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	if (conn == NULL)
 		goto cleanup;
 
+	if (!ActiveSnapshotSet())
+	{
+		/* Need a valid snapshot to build telemetry information */
+		PushActiveSnapshot(GetTransactionSnapshot());
+		snapshot_set = true;
+	}
+
 	req = ts_build_version_request(host, path);
+
+	if (snapshot_set)
+		PopActiveSnapshot();
 
 	rsp = ts_http_response_state_create();
 
@@ -723,11 +735,13 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 
 	if (started)
 		CommitTransactionCommand();
+
 	return true;
 
 cleanup:
 	if (started)
 		AbortCurrentTransaction();
+
 	return false;
 }
 
