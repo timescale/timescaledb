@@ -25,9 +25,11 @@ If you use compression with a non-default collation on a segmentby-column you mi
 * #4269 Fix bad Continuous Aggregate view definition reported in #4233
 * #4300 Fix refresh window cap for cagg refresh policy
 * #4330 Add GUC "bgw_launcher_poll_time"
+* #4358 Fix crash and other issues in telemetry reporter
 
 **Thanks**
 * @jsoref for fixing various misspellings in code, comments and documentation
+* @abrownsword for reporting a bug in the telemetry reporter and testing the fix
 
 ## 2.6.1 (2022-04-11)
 This release is patch release. We recommend that you upgrade at the next available opportunity.

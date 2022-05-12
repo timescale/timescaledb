@@ -5,7 +5,7 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
 set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
     remote_create_chunk.spec.in dist_restore_point.spec.in
-    cagg_drop_chunks.spec.in)
+    cagg_drop_chunks.spec.in telemetry.spec.in)
 
 # These tests are using markers for the isolation tests (to avoid race
 # conditions causing differing output), which were added after 12.7, 13.3, and

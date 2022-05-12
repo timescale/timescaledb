@@ -13,6 +13,9 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_namespace.h>
 #include <utils/builtins.h>
+#include <utils/syscache.h>
+#include <utils/snapmgr.h>
+#include <storage/lmgr.h>
 #include <fmgr.h>
 
 #include "stats.h"
@@ -21,12 +24,13 @@
 #include "chunk.h"
 #include "extension.h"
 #include "hypertable_cache.h"
+#include "debug_point.h"
 #include "utils.h"
 
 typedef struct StatsContext
 {
 	TelemetryStats *stats;
-	ScanIterator compressed_chunk_stats_iterator;
+	Snapshot snapshot;
 } StatsContext;
 
 /*
@@ -341,27 +345,30 @@ get_chunk_compression_stats(StatsContext *statsctx, const Chunk *chunk,
 							Form_compression_chunk_size compr_stats)
 {
 	TupleInfo *ti;
+	ScanIterator it;
+	bool found = false;
 
 	if (!ts_chunk_is_compressed(chunk))
 		return false;
 
-	ts_scan_iterator_scan_key_reset(&statsctx->compressed_chunk_stats_iterator);
-	ts_scan_iterator_scan_key_init(&statsctx->compressed_chunk_stats_iterator,
+	it = ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessShareLock, CurrentMemoryContext);
+	ts_scan_iterator_set_index(&it, COMPRESSION_CHUNK_SIZE, COMPRESSION_CHUNK_SIZE_PKEY);
+	it.ctx.snapshot = statsctx->snapshot;
+
+	ts_scan_iterator_scan_key_reset(&it);
+	ts_scan_iterator_scan_key_init(&it,
 								   Anum_compression_chunk_size_pkey_chunk_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(chunk->fd.id));
-	ts_scan_iterator_start_or_restart_scan(&statsctx->compressed_chunk_stats_iterator);
-	ti = ts_scan_iterator_next(&statsctx->compressed_chunk_stats_iterator);
+	ts_scan_iterator_start_or_restart_scan(&it);
+	ti = ts_scan_iterator_next(&it);
 
 	if (ti)
 	{
 		Form_compression_chunk_size fd;
 		bool should_free;
-		HeapTuple tuple =
-			ts_scan_iterator_fetch_heap_tuple(&statsctx->compressed_chunk_stats_iterator,
-											  false,
-											  &should_free);
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&it, false, &should_free);
 
 		fd = (Form_compression_chunk_size) GETSTRUCT(tuple);
 		memcpy(compr_stats, fd, sizeof(*fd));
@@ -369,16 +376,12 @@ get_chunk_compression_stats(StatsContext *statsctx, const Chunk *chunk,
 		if (should_free)
 			heap_freetuple(tuple);
 
-		return true;
+		found = true;
 	}
 
-	/*
-	 * Should only get here if a compressed chunk is missing stats for some
-	 * reason. The iterator will automatically close if no tuple is found, so
-	 * it will be re-opened next time this function is called.
-	 */
+	ts_scan_iterator_close(&it);
 
-	return false;
+	return found;
 }
 
 /*
@@ -491,18 +494,12 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 	MemoryContext oldmcxt, relmcxt;
 	StatsContext statsctx = {
 		.stats = stats,
+		.snapshot = GetActiveSnapshot(),
 	};
 
 	MemSet(stats, 0, sizeof(*stats));
-	statsctx.compressed_chunk_stats_iterator =
-		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessShareLock, CurrentMemoryContext);
-	ts_scan_iterator_set_index(&statsctx.compressed_chunk_stats_iterator,
-							   COMPRESSION_CHUNK_SIZE,
-							   COMPRESSION_CHUNK_SIZE_PKEY);
-
 	rel = table_open(RelationRelationId, AccessShareLock);
 	scan = systable_beginscan(rel, ClassOidIndexId, false, NULL, 0, NULL);
-
 	relmcxt = AllocSetContextCreate(CurrentMemoryContext, "RelationStats", ALLOCSET_DEFAULT_SIZES);
 
 	while (true)
@@ -524,6 +521,19 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 		if (should_ignore_relation(catalog, class))
 			continue;
 
+		/* Lock the relation to ensure it does not disappear while we process
+		 * it */
+		LockRelationOid(class->oid, AccessShareLock);
+
+		/* Now that the lock is acquired, ensure the relation still
+		 * exists. Otherwise, ignore the relation and release the useless
+		 * lock. */
+		if (!SearchSysCacheExists1(RELOID, ObjectIdGetDatum(class->oid)))
+		{
+			UnlockRelationOid(class->oid, AccessShareLock);
+			continue;
+		}
+
 		/*
 		 * Use temporary per-relation memory context to not accumulate cruft
 		 * during processing of pg_class.
@@ -532,6 +542,8 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 		MemoryContextReset(relmcxt);
 
 		reltype = classify_relation(class, htcache, &ht, &chunk, &cagg);
+
+		DEBUG_WAITPOINT("telemetry_classify_relation");
 
 		switch (reltype)
 		{
@@ -587,12 +599,12 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 				break;
 		}
 
+		UnlockRelationOid(class->oid, AccessShareLock);
 		MemoryContextSwitchTo(oldmcxt);
 	}
 
 	systable_endscan(scan);
 	table_close(rel, AccessShareLock);
-	ts_scan_iterator_close(&statsctx.compressed_chunk_stats_iterator);
 	ts_cache_release(htcache);
 	MemoryContextDelete(relmcxt);
 }
