@@ -85,7 +85,7 @@ typedef struct TsFdwModifyState
 } TsFdwModifyState;
 
 #define TS_FDW_MODIFY_STATE_SIZE(num_data_nodes)                                                   \
-	(sizeof(TsFdwModifyState) + (sizeof(TsFdwDataNodeState) * num_data_nodes))
+	(sizeof(TsFdwModifyState) + (sizeof(TsFdwDataNodeState) * (num_data_nodes)))
 
 static void
 initialize_fdw_data_node_state(TsFdwDataNodeState *fdw_data_node, TSConnectionId id)

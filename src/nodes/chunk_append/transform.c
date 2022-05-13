@@ -15,7 +15,7 @@
 #include "utils.h"
 
 #define DATATYPE_PAIR(left, right, type1, type2)                                                   \
-	((left == type1 && right == type2) || (left == type2 && right == type1))
+	(((left) == (type1) && (right) == (type2)) || ((left) == (type2) && (right) == (type1)))
 
 /*
  * Cross datatype comparisons between DATE/TIMESTAMP/TIMESTAMPTZ
