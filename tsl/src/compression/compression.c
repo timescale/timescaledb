@@ -220,7 +220,8 @@ truncate_relation(Oid table_oid)
 	 *  be a lock upgrade. */
 	Relation rel = table_open(table_oid, AccessExclusiveLock);
 	Oid toast_relid;
-	int pages, visible;
+	int pages;
+	int visible;
 	float tuples;
 
 	/* Chunks should never have fks into them, but double check */
@@ -1484,8 +1485,13 @@ extern void
 update_compressed_chunk_relstats(Oid uncompressed_relid, Oid compressed_relid)
 {
 	double rowcnt;
-	int comp_pages, uncomp_pages, comp_visible, uncomp_visible;
-	float comp_tuples, uncomp_tuples, out_tuples;
+	int comp_pages;
+	int uncomp_pages;
+	int comp_visible;
+	int uncomp_visible;
+	float comp_tuples;
+	float uncomp_tuples;
+	float out_tuples;
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_relid, true);
 	Chunk *compressed_chunk = ts_chunk_get_by_relid(compressed_relid, true);
 
@@ -1534,7 +1540,8 @@ compress_row_init(int srcht_id, Relation in_rel, Relation out_rel)
 {
 	ListCell *lc;
 	List *htcols_list = NIL;
-	int i = 0, cclen;
+	int i = 0;
+	int cclen;
 	const ColumnCompressionInfo **ccinfo;
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
@@ -1587,7 +1594,8 @@ compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot)
 static TupleTableSlot *
 compress_singlerow(CompressSingleRowState *cr, TupleTableSlot *in_slot)
 {
-	Datum *invalues, *out_values;
+	Datum *invalues;
+	Datum *out_values;
 	bool *out_isnull;
 	TupleTableSlot *out_slot = cr->out_slot;
 	RowCompressor *row_compressor = &cr->row_compressor;

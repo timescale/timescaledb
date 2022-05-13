@@ -80,7 +80,8 @@ hypercube_to_jsonb_value(Hypercube *hc, Hyperspace *hs, JsonbParseState **ps)
 
 	for (i = 0; i < hc->num_slices; i++)
 	{
-		JsonbValue k, v;
+		JsonbValue k;
+		JsonbValue v;
 		char *dim_name = NameStr(hs->dimensions[i].fd.column_name);
 		Datum range_start =
 			DirectFunctionCall1(int8_numeric, Int64GetDatum(hc->slices[i]->fd.range_start));
@@ -502,7 +503,8 @@ chunk_api_create_on_data_nodes(const Chunk *chunk, const Hypertable *ht,
 		ChunkDataNode *cdn = async_response_result_get_user_data(res);
 		Datum values[Natts_create_chunk];
 		bool nulls[Natts_create_chunk];
-		const char *schema_name, *table_name;
+		const char *schema_name;
+		const char *table_name;
 		bool created;
 
 		Assert(Natts_create_chunk == tupdesc->natts);
@@ -933,7 +935,8 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 	bool replaces[Natts_pg_statistic];
 	HeapTuple stup;
 	HeapTuple oldtup;
-	int i, k;
+	int i;
+	int k;
 	int *slot_kinds;
 
 	rel = try_relation_open(chunk->table_id, ShareUpdateExclusiveLock);
@@ -1143,7 +1146,9 @@ chunk_process_remote_colstats_row(StatsProcessContext *ctx, TupleFactory *tf, Tu
 	Oid valtype_oids[STATISTIC_NUM_SLOTS];
 	ArrayType *value_arrays[STATISTIC_NUM_SLOTS];
 	int *slot_kinds;
-	int i, os_idx, vt_idx;
+	int i;
+	int os_idx;
+	int vt_idx;
 
 	tuple = tuplefactory_make_tuple(tf, res, row, PQbinaryTuples(res));
 	heap_deform_tuple(tuple, tupdesc, values, nulls);

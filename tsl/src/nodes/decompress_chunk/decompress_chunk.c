@@ -68,7 +68,9 @@ static PathKey *
 make_pathkey_from_compressed(PlannerInfo *root, Index compressed_relid, Expr *expr, Oid ordering_op,
 							 bool nulls_first)
 {
-	Oid opfamily, opcintype, collation;
+	Oid opfamily;
+	Oid opcintype;
+	Oid collation;
 	int16 strategy;
 
 	/* Find the operator in pg_amop --- failure shouldn't happen */
@@ -98,7 +100,9 @@ prepend_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_i
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 
-	Oid opfamily, opcintype, equality_op;
+	Oid opfamily;
+	Oid opcintype;
+	Oid equality_op;
 	int16 strategy;
 	List *opfamilies;
 	EquivalenceClass *newec = makeNode(EquivalenceClass);
@@ -511,7 +515,8 @@ compressed_reltarget_add_var_for_column(RelOptInfo *compressed_rel, Oid compress
 
 	*attrs_used = bms_add_member(*attrs_used, attnum);
 
-	Oid typid, collid;
+	Oid typid;
+	Oid collid;
 	int32 typmod;
 	get_atttypetypmodcoll(compressed_relid, attnum, &typid, &typmod, &collid);
 	compressed_rel->reltarget->exprs =

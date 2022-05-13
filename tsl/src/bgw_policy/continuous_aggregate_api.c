@@ -529,12 +529,15 @@ Datum
 policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name;
+	NameData proc_schema;
+	NameData owner;
 	ContinuousAgg *cagg;
 	CaggPolicyConfig policyconf;
 	int32 job_id;
 	Interval refresh_interval;
-	Oid cagg_oid, owner_id;
+	Oid cagg_oid;
+	Oid owner_id;
 	List *jobs;
 	JsonbParseState *parse_state = NULL;
 	bool if_not_exists;

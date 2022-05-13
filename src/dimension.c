@@ -244,7 +244,8 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 static DimensionSlice *
 calculate_open_range_default(const Dimension *dim, int64 value)
 {
-	int64 range_start, range_end;
+	int64 range_start;
+	int64 range_end;
 	Oid dimtype = ts_dimension_get_partition_type(dim);
 
 	if (value < 0)
@@ -306,7 +307,8 @@ calculate_closed_range_interval(const Dimension *dim)
 static DimensionSlice *
 calculate_closed_range_default(const Dimension *dim, int64 value)
 {
-	int64 range_start, range_end;
+	int64 range_start;
+	int64 range_end;
 
 	/* The interval that divides the dimension into N equal sized slices */
 	int64 interval = calculate_closed_range_interval(dim);

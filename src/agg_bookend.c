@@ -277,7 +277,8 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 inline static void
 cmpproc_init(FunctionCallInfo fcinfo, FmgrInfo *cmp_proc, Oid type_oid, char *opname)
 {
-	Oid cmp_op, cmp_regproc;
+	Oid cmp_op;
+	Oid cmp_regproc;
 
 	if (!OidIsValid(type_oid))
 		elog(ERROR, "could not determine the type of the comparison_element");

@@ -499,7 +499,8 @@ dist_ddl_process_grant_on_database(const GrantStmt *stmt)
 	const char *dbname;
 	bool dbmatch;
 	List *cmd_descriptors = NIL;
-	ListCell *i, *j;
+	ListCell *i;
+	ListCell *j;
 
 	if (dist_util_membership() != DIST_MEMBER_ACCESS_NODE)
 		return;

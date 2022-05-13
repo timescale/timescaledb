@@ -122,7 +122,9 @@ Datum
 policy_reorder_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name;
+	NameData proc_schema;
+	NameData owner;
 	int32 job_id;
 	const Dimension *dim;
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;

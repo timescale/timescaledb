@@ -56,7 +56,10 @@ ts_transform_cross_datatype_comparison(Expr *clause)
 			DATATYPE_PAIR(left_type, right_type, TIMESTAMPTZOID, DATEOID))
 		{
 			char *opname = get_opname(op->opno);
-			Oid source_type, target_type, opno, cast_oid;
+			Oid source_type;
+			Oid target_type;
+			Oid opno;
+			Oid cast_oid;
 
 			/*
 			 * if Var is on left side we put cast on right side otherwise

@@ -119,7 +119,8 @@ static bool
 is_timestamptz_op_interval(Expr *expr)
 {
 	OpExpr *op;
-	Const *c1, *c2;
+	Const *c1;
+	Const *c2;
 
 	if (!IsA(expr, OpExpr))
 		return false;
@@ -177,14 +178,18 @@ const_datum_get_int(Const *cnst)
 static OpExpr *
 constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 {
-	Expr *left, *right;
+	Expr *left;
+	Expr *right;
 	OpExpr *op;
 	bool var_on_left = false;
 	Interval *interval;
-	Const *c_ts, *c_int;
+	Const *c_ts;
+	Const *c_int;
 	Datum constified;
 	PGFunction opfunc;
-	Oid ts_pl_int, ts_mi_int, int_pl_ts;
+	Oid ts_pl_int;
+	Oid ts_mi_int;
+	Oid int_pl_ts;
 
 	/* checked in caller already so only asserting */
 	Assert(constraint->args->length == 2);
@@ -357,7 +362,8 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		/* column < value + width */
 		Expr *subst;
 		Datum datum;
-		int64 integralValue, integralWidth;
+		int64 integralValue;
+		int64 integralWidth;
 
 		if (castNode(Const, value)->constisnull || width->constisnull)
 			return op;
@@ -1493,7 +1499,8 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 	{
 		ListCell *lc_qual;
 		OpExpr *op = lfirst(lc);
-		Var *rel_var, *other_var;
+		Var *rel_var;
+		Var *other_var;
 
 		/*
 		 * join_conditions only has OpExpr with 2 Var as arguments

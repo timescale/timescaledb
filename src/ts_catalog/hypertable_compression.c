@@ -247,7 +247,8 @@ ts_hypertable_compression_rename_column(int32 htid, char *old_column_name, char 
 			bool isnulls[Natts_hypertable_compression];
 			bool repl[Natts_hypertable_compression] = { false };
 			bool should_free;
-			HeapTuple tuple, new_tuple;
+			HeapTuple tuple;
+			HeapTuple new_tuple;
 			TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
 			found = true;
 			tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);

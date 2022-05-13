@@ -57,7 +57,8 @@ prepare_constr_expr(Expr *node)
 static inline void
 create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 {
-	int ncheck, i;
+	int ncheck;
+	int i;
 	ConstrCheck *check;
 
 	Assert(rel->rd_att->constr != NULL && rri->ri_ConstraintExprs == NULL);
@@ -579,13 +580,16 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	int cagg_trig_nargs = 0;
 	int32 cagg_trig_args[2] = { 0, 0 };
 	ChunkInsertState *state;
-	Relation rel, parent_rel, compress_rel = NULL;
+	Relation rel;
+	Relation parent_rel;
+	Relation compress_rel = NULL;
 	MemoryContext old_mcxt;
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-	ResultRelInfo *resrelinfo, *relinfo;
+	ResultRelInfo *resrelinfo;
+	ResultRelInfo *relinfo;
 	bool has_compressed_chunk = (chunk->fd.compressed_chunk_id != 0);
 
 	/* permissions NOT checked here; were checked at hypertable level */

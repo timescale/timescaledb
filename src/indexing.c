@@ -237,7 +237,8 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 		/* Check for existence of "default" indexes */
 		if (create_default && NULL != time_dim)
 		{
-			Form_pg_attribute idxattr_time, idxattr_space;
+			Form_pg_attribute idxattr_time;
+			Form_pg_attribute idxattr_space;
 
 			switch (idxrel->rd_att->natts)
 			{

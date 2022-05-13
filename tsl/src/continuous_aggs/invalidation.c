@@ -771,7 +771,9 @@ move_invalidations_from_hyper_to_cagg_log(const CaggInvalidationState *state)
 	const CaggsInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->raw_hypertable_id;
 	int32 last_cagg_hyper_id;
-	ListCell *lc1, *lc2, *lc3;
+	ListCell *lc1;
+	ListCell *lc2;
+	ListCell *lc3;
 
 	last_cagg_hyper_id = llast_int(all_caggs->mat_hypertable_ids);
 
@@ -1032,7 +1034,9 @@ static void
 invalidation_state_init(CaggInvalidationState *state, int32 mat_hypertable_id,
 						int32 raw_hypertable_id, Oid dimtype, const CaggsInfo *all_caggs)
 {
-	ListCell *lc1, *lc2, *lc3;
+	ListCell *lc1;
+	ListCell *lc2;
+	ListCell *lc3;
 	bool PG_USED_FOR_ASSERTS_ONLY found = false;
 
 	state->mat_hypertable_id = mat_hypertable_id;
@@ -1430,7 +1434,8 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 	if (dist_res)
 	{
 		unsigned num_dist_res = ts_dist_cmd_response_count(dist_res);
-		int64 start_time, end_time;
+		int64 start_time;
+		int64 end_time;
 		InternalTimeRange merged_window = {
 			.type = refresh_window->type,
 			.start = TS_TIME_NOEND, /* initial state invalid */

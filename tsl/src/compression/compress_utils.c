@@ -217,8 +217,10 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	ListCell *lc;
 	List *htcols_list = NIL;
 	const ColumnCompressionInfo **colinfo_array;
-	int i = 0, htcols_listlen;
-	RelationSize before_size, after_size;
+	int i = 0;
+	int htcols_listlen;
+	RelationSize before_size;
+	RelationSize after_size;
 	CompressionStats cstat;
 
 	hcache = ts_hypertable_cache_pin();

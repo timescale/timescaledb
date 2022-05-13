@@ -203,8 +203,10 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	 * rows (which act like deletes) and once with the new rows.
 	 */
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	char *hypertable_id_str, *parent_hypertable_id_str;
-	int32 hypertable_id, parent_hypertable_id = 0;
+	char *hypertable_id_str;
+	char *parent_hypertable_id_str;
+	int32 hypertable_id;
+	int32 parent_hypertable_id = 0;
 	bool is_distributed_hypertable_trigger = false;
 	if (trigdata->tg_trigger->tgnargs < 0)
 		elog(ERROR, "must supply hypertable id");

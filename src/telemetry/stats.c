@@ -488,7 +488,8 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 	Relation rel;
 	SysScanDesc scan;
 	Cache *htcache = ts_hypertable_cache_pin();
-	MemoryContext oldmcxt, relmcxt;
+	MemoryContext oldmcxt;
+	MemoryContext relmcxt;
 	StatsContext statsctx = {
 		.stats = stats,
 	};

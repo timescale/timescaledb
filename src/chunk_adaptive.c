@@ -469,7 +469,8 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 		Chunk *chunk = lfirst(lc);
 		const DimensionSlice *slice =
 			ts_hypercube_get_slice_by_dimension_id(chunk->cube, dimension_id);
-		int64 chunk_size, slice_interval;
+		int64 chunk_size;
+		int64 slice_interval;
 		Datum minmax[2];
 		AttrNumber attno =
 			chunk_get_attno(ht->main_table_relid, chunk->table_id, dim->column_attno);
@@ -485,7 +486,8 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 		{
 			int64 min = ts_time_value_to_internal(minmax[0], dim->fd.column_type);
 			int64 max = ts_time_value_to_internal(minmax[1], dim->fd.column_type);
-			double interval_fillfactor, size_fillfactor;
+			double interval_fillfactor;
+			double size_fillfactor;
 			int64 extrapolated_chunk_size;
 
 			/*

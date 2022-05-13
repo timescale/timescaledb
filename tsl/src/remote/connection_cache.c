@@ -402,7 +402,9 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 	Datum values[Natts_show_conn];
 	bool nulls[Natts_show_conn] = { false };
 	PGconn *pgconn = remote_connection_get_pg_conn(entry->conn);
-	NameData conn_node_name, conn_user_name, conn_db;
+	NameData conn_node_name;
+	NameData conn_user_name;
+	NameData conn_db;
 	const char *username = GetUserNameFromId(entry->id.user_id, true);
 
 	namestrcpy(&conn_node_name, remote_connection_node_name(entry->conn));

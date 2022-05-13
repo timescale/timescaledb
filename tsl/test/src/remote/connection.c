@@ -107,7 +107,8 @@ test_simple_queries()
 static void
 test_connection_and_result_leaks()
 {
-	TSConnection *conn, *subconn;
+	TSConnection *conn;
+	TSConnection *subconn;
 	PGresult *res;
 	RemoteConnectionStats *stats;
 

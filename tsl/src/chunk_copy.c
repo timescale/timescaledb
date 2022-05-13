@@ -258,7 +258,8 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 {
 	Hypertable *ht;
 	Cache *hcache;
-	MemoryContext old, mcxt;
+	MemoryContext old;
+	MemoryContext mcxt;
 
 	if (!superuser())
 		ereport(ERROR,
@@ -853,7 +854,8 @@ chunk_copy_operation_get(const char *operation_id)
 	ScanKeyData scankeys[1];
 	ChunkCopy *cc = NULL;
 	int indexid;
-	MemoryContext old, mcxt;
+	MemoryContext old;
+	MemoryContext mcxt;
 
 	/* Objects need to be in long lived context */
 	mcxt =

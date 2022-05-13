@@ -207,7 +207,9 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 	List *data_node_list = NIL;
 	FuncCallContext *funcctx;
 	PGresult *result;
-	unsigned node_i, nodes_tuples, num_dist_res;
+	unsigned node_i;
+	unsigned nodes_tuples;
+	unsigned num_dist_res;
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -260,7 +262,9 @@ ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 
 		char **fields = palloc(sizeof(*fields) * PQnfields(result));
 		Datum *cstrings = palloc(sizeof(*cstrings) * PQnfields(result));
-		int i, cstrings_count, tup_num;
+		int i;
+		int cstrings_count;
+		int tup_num;
 		ArrayType *array = NULL;
 
 		tup_num = funcctx->call_cntr - nodes_tuples;

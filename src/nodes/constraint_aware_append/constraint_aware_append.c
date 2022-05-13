@@ -120,7 +120,8 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	Plan *subplan = copyObject(state->subplan);
 	List *chunk_ri_clauses = lsecond(cscan->custom_private);
 	List *chunk_relids = lthird(cscan->custom_private);
-	List **appendplans, *old_appendplans;
+	List **appendplans;
+	List *old_appendplans;
 	ListCell *lc_plan;
 	ListCell *lc_clauses;
 	ListCell *lc_relid;

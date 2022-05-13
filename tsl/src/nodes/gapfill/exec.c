@@ -380,7 +380,8 @@ static bool
 is_boundary_expr(Node *node, CollectBoundaryContext *context)
 {
 	OpExpr *op;
-	Node *left, *right;
+	Node *left;
+	Node *right;
 
 	if (!IsA(node, OpExpr))
 		return false;
@@ -468,7 +469,8 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 	Var *ts_var;
 	TypeCacheEntry *tce = lookup_type_cache(state->gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
 	int strategy;
-	Oid lefttype, righttype;
+	Oid lefttype;
+	Oid righttype;
 	List *quals;
 
 	int64 boundary_value = 0;
@@ -1255,7 +1257,8 @@ gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull)
 Expr *
 gapfill_adjust_varnos(GapFillState *state, Expr *expr)
 {
-	ListCell *lc_var, *lc_tle;
+	ListCell *lc_var;
+	ListCell *lc_tle;
 	List *vars = pull_var_clause((Node *) expr, 0);
 	List *tlist = castNode(CustomScan, state->csstate.ss.ps.plan)->custom_scan_tlist;
 

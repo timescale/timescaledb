@@ -89,7 +89,8 @@ DistCmdResult *
 ts_dist_multi_cmds_params_invoke_on_data_nodes(List *cmd_descriptors, List *data_nodes,
 											   bool transactional)
 {
-	ListCell *lc_data_node, *lc_cmd_descr;
+	ListCell *lc_data_node;
+	ListCell *lc_cmd_descr;
 	List *requests = NIL;
 	DistCmdResult *results;
 

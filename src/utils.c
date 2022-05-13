@@ -119,7 +119,8 @@ static int64 ts_integer_to_internal(Datum time_val, Oid type_oid);
 TSDLLEXPORT int64
 ts_time_value_to_internal(Datum time_val, Oid type_oid)
 {
-	Datum res, tz;
+	Datum res;
+	Datum tz;
 
 	/* Handle custom time types. We currently only support binary coercible
 	 * types */
@@ -425,7 +426,8 @@ ts_get_interval_period_approx(Interval *interval)
 int64
 ts_date_trunc_interval_period_approx(text *units)
 {
-	int decode_type, val;
+	int decode_type;
+	int val;
 	char *lowunits =
 		downcase_truncate_identifier(VARDATA_ANY(units), VARSIZE_ANY_EXHDR(units), false);
 

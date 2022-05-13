@@ -1913,7 +1913,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	Oid user_oid = GetUserId();
 	Oid tspc_oid = get_rel_tablespace(table_relid);
 	bool table_has_data;
-	NameData schema_name, table_name, default_associated_schema_name;
+	NameData schema_name;
+	NameData table_name;
+	NameData default_associated_schema_name;
 	Relation rel;
 	bool if_not_exists = (flags & HYPERTABLE_CREATE_IF_NOT_EXISTS) != 0;
 
@@ -2395,7 +2397,9 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 {
 	Oid user_oid = GetUserId();
 	Oid tspc_oid = get_rel_tablespace(table_relid);
-	NameData schema_name, table_name, associated_schema_name;
+	NameData schema_name;
+	NameData table_name;
+	NameData associated_schema_name;
 	ChunkSizingInfo *chunk_sizing_info;
 	Relation rel;
 
@@ -2506,7 +2510,8 @@ ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cub
 	List *chunk_data_nodes = NIL;
 	List *available_nodes = ts_hypertable_get_available_data_nodes(ht, true);
 	int num_assigned = MIN(ht->fd.replication_factor, list_length(available_nodes));
-	int n, i;
+	int n;
+	int i;
 
 	n = hypertable_get_chunk_round_robin_index(ht, cube);
 

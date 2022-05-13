@@ -505,7 +505,8 @@ ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval, Oid timety
 	Datum now = OidFunctionCall0(now_func);
 	int64 time_min = ts_time_get_min(timetype);
 	int64 time_max = ts_time_get_max(timetype);
-	int64 nowval, res;
+	int64 nowval;
+	int64 res;
 
 	Assert(IS_INTEGER_TYPE(timetype));
 	switch (timetype)

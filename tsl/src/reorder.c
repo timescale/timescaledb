@@ -614,7 +614,9 @@ static void
 copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 			   bool *pSwapToastByContent, TransactionId *pFreezeXid, MultiXactId *pCutoffMulti)
 {
-	Relation NewHeap, OldHeap, OldIndex;
+	Relation NewHeap;
+	Relation OldHeap;
+	Relation OldIndex;
 	Relation relRelation;
 	HeapTuple reltup;
 	Form_pg_class relform;
@@ -627,7 +629,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	TransactionId FreezeXid;
 	MultiXactId MultiXactCutoff;
 	bool use_sort;
-	double num_tuples = 0, tups_vacuumed = 0, tups_recently_dead = 0;
+	double num_tuples = 0;
+	double tups_vacuumed = 0;
+	double tups_recently_dead = 0;
 	BlockNumber num_pages;
 	int elevel = verbose ? INFO : DEBUG2;
 	PGRUsage ru0;
@@ -1018,9 +1022,12 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 					TransactionId frozenXid, MultiXactId cutoffMulti)
 {
 	Relation relRelation;
-	HeapTuple reltup1, reltup2;
-	Form_pg_class relform1, relform2;
-	Oid relfilenode1, relfilenode2;
+	HeapTuple reltup1;
+	HeapTuple reltup2;
+	Form_pg_class relform1;
+	Form_pg_class relform2;
+	Oid relfilenode1;
+	Oid relfilenode2;
 	Oid swaptemp;
 	char swptmpchr;
 
@@ -1146,7 +1153,8 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 			 * something more selective than deleteDependencyRecordsFor() to
 			 * get rid of just the link we want.
 			 */
-			ObjectAddress baseobject, toastobject;
+			ObjectAddress baseobject;
+			ObjectAddress toastobject;
 			long count;
 
 			/*
@@ -1201,7 +1209,8 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	if (swap_toast_by_content && relform1->relkind == RELKIND_TOASTVALUE &&
 		relform2->relkind == RELKIND_TOASTVALUE)
 	{
-		Oid toastIndex1, toastIndex2;
+		Oid toastIndex1;
+		Oid toastIndex2;
 
 		/* Get valid index for each relation */
 		toastIndex1 = toast_get_valid_index(r1, AccessExclusiveLock);

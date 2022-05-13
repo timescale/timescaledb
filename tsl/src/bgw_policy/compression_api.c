@@ -173,7 +173,9 @@ Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
 	NameData application_name;
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name;
+	NameData proc_schema;
+	NameData owner;
 	int32 job_id;
 	Oid user_rel_oid = PG_GETARG_OID(0);
 	Datum compress_after_datum = PG_GETARG_DATUM(1);

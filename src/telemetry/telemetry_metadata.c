@@ -21,7 +21,8 @@
 void
 ts_telemetry_metadata_add_values(JsonbParseState *state)
 {
-	Datum key, value;
+	Datum key;
+	Datum value;
 	bool key_isnull, value_isnull, include_entry;
 	ScanIterator iterator =
 		ts_scan_iterator_create(METADATA, AccessShareLock, CurrentMemoryContext);

@@ -189,7 +189,9 @@ static Expr *
 pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_args, Oid op_oid,
 									Oid op_collation)
 {
-	Expr *leftop, *rightop, *expr;
+	Expr *leftop;
+	Expr *rightop;
+	Expr *expr;
 	Var *var_with_segment_meta;
 	TypeCacheEntry *tce;
 	int strategy;

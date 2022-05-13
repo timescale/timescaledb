@@ -450,7 +450,8 @@ tsl_finalize_agg_sfunc(PG_FUNCTION_ARGS)
 	bytea *inner_agg_serialized_state = PG_ARGISNULL(5) ? NULL : PG_GETARG_BYTEA_P(5);
 	bool inner_agg_serialized_state_isnull = PG_ARGISNULL(5) ? true : false;
 	Datum inner_agg_deserialized_state;
-	MemoryContext fa_context, old_context;
+	MemoryContext fa_context;
+	MemoryContext old_context;
 
 	if (!AggCheckCallContext(fcinfo, &fa_context) || !IsA(fcinfo->context, AggState))
 	{
@@ -529,7 +530,8 @@ Datum
 tsl_finalize_agg_ffunc(PG_FUNCTION_ARGS)
 {
 	FATransitionState *tstate = PG_ARGISNULL(0) ? NULL : (FATransitionState *) PG_GETARG_POINTER(0);
-	MemoryContext fa_context, old_context;
+	MemoryContext fa_context;
+	MemoryContext old_context;
 	Datum result = tstate->per_group_state->trans_value;
 	bool result_isnull = tstate->per_group_state->trans_value_isnull;
 

@@ -137,7 +137,8 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-		int64 res, lag = int_getter(config);
+		int64 res;
+		int64 lag = int_getter(config);
 		Oid now_func = ts_get_integer_now_func(dim);
 
 		Assert(now_func);
@@ -348,7 +349,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	Hypertable *mat_ht;
 	const Dimension *open_dim;
 	Oid dim_type;
-	int64 refresh_start, refresh_end;
+	int64 refresh_start;
+	int64 refresh_end;
 
 	materialization_id = policy_continuous_aggregate_get_mat_hypertable_id(config);
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
@@ -476,7 +478,8 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	const Dimension *dim;
 	PolicyCompressionData policy_data;
 	bool distributed, used_portalcxt = false;
-	MemoryContext saved_cxt, multitxn_cxt;
+	MemoryContext saved_cxt;
+	MemoryContext multitxn_cxt;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
@@ -568,7 +571,8 @@ job_execute_procedure(FuncExpr *funcexpr)
 bool
 job_execute(BgwJob *job)
 {
-	Const *arg1, *arg2;
+	Const *arg1;
+	Const *arg2;
 	bool portal_created = false;
 	char prokind;
 	Oid proc;

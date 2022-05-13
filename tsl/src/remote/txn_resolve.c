@@ -70,8 +70,10 @@ remote_txn_heal_data_node(PG_FUNCTION_ARGS)
 	 */
 	PGresult *res;
 	int row;
-	List *in_progress_txn_gids = NIL, *healed_txn_gids = NIL;
-	int non_ts_txns = 0, ntuples;
+	List *in_progress_txn_gids = NIL;
+	List *healed_txn_gids = NIL;
+	int non_ts_txns = 0;
+	int ntuples;
 #ifdef TS_DEBUG
 	int n_gid_errors = 0; /* how many errors to induce? */
 #endif

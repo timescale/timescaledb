@@ -224,7 +224,8 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 	Interval *interval = PG_GETARG_INTERVAL_P(0);
 	DateADT date = PG_GETARG_DATEADT(1);
 	Timestamp origin = DEFAULT_ORIGIN;
-	Timestamp timestamp, result;
+	Timestamp timestamp;
+	Timestamp result;
 	int64 period = -1;
 
 	if (DATE_NOT_FINITE(date))
@@ -384,9 +385,14 @@ ts_time_bucket_ng_date(PG_FUNCTION_ARGS)
 	Interval *interval = PG_GETARG_INTERVAL_P(0);
 	DateADT date = PG_GETARG_DATEADT(1);
 	DateADT origin_date = 0;
-	int origin_year = 2000, origin_month = 1, origin_day = 1;
-	int year, month, day;
-	int delta, bucket_number;
+	int origin_year = 2000;
+	int origin_month = 1;
+	int origin_day = 1;
+	int year;
+	int month;
+	int day;
+	int delta;
+	int bucket_number;
 
 	if ((interval->time != 0) || ((interval->month != 0) && (interval->day != 0)))
 	{
@@ -495,7 +501,8 @@ TSDLLEXPORT Datum
 ts_time_bucket_ng_timezone_origin(PG_FUNCTION_ARGS)
 {
 	Timestamp result;
-	Datum timestamp, origin;
+	Datum timestamp;
+	Datum origin;
 	Datum interval = PG_GETARG_DATUM(0);
 	Datum timestamptz = PG_GETARG_DATUM(1);
 	Datum origintz = PG_GETARG_DATUM(2);

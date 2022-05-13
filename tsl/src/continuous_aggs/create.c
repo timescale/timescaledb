@@ -252,7 +252,12 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
 	TupleDesc desc;
-	NameData user_schnm, user_viewnm, partial_schnm, partial_viewnm, direct_schnm, direct_viewnm;
+	NameData user_schnm;
+	NameData user_viewnm;
+	NameData partial_schnm;
+	NameData partial_viewnm;
+	NameData direct_schnm;
+	NameData direct_viewnm;
 	Datum values[Natts_continuous_agg];
 	bool nulls[Natts_continuous_agg] = { false };
 	CatalogSecurityContext sec_ctx;
@@ -556,7 +561,8 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 												char *const table_access_method,
 												ObjectAddress *mataddress)
 {
-	Oid uid, saved_uid;
+	Oid uid;
+	Oid saved_uid;
 	int sec_ctx;
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
@@ -566,7 +572,8 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
-	Hypertable *mat_ht = NULL, *orig_ht = NULL;
+	Hypertable *mat_ht = NULL;
+	Hypertable *orig_ht = NULL;
 	Oid owner = GetUserId();
 
 	create = makeNode(CreateStmt);
@@ -639,7 +646,8 @@ mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Quer
 static ObjectAddress
 create_view_for_query(Query *selquery, RangeVar *viewrel)
 {
-	Oid uid, saved_uid;
+	Oid uid;
+	Oid saved_uid;
 	int sec_ctx;
 	ObjectAddress address;
 	CreateStmt *create;
@@ -1300,14 +1308,18 @@ get_finalize_aggref(Aggref *inp, Var *partial_state_var)
 	Aggref *aggref;
 	TargetEntry *te;
 	char *aggregate_signature;
-	Const *aggregate_signature_const, *collation_schema_const, *collation_name_const,
-		*input_types_const, *return_type_const;
+	Const *aggregate_signature_const;
+	Const *collation_schema_const;
+	Const *collation_name_const;
+	Const *input_types_const;
+	Const *return_type_const;
 	Oid name_array_type_oid = get_array_type(NAMEOID);
 	Var *partial_bytea_var;
 	List *tlist = NIL;
 	int tlist_attno = 1;
 	List *argtypes = NIL;
-	char *collation_name = NULL, *collation_schema_name = NULL;
+	char *collation_name = NULL;
+	char *collation_schema_name = NULL;
 	Datum collation_name_datum = (Datum) 0;
 	Datum collation_schema_datum = (Datum) 0;
 	Oid finalfnoid = get_finalizefnoid();
@@ -1415,7 +1427,8 @@ static FuncExpr *
 get_partialize_funcexpr(Aggref *agg)
 {
 	FuncExpr *partialize_fnexpr;
-	Oid partfnoid, partargtype;
+	Oid partfnoid;
+	Oid partargtype;
 	partargtype = ANYELEMENTOID;
 	partfnoid = LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(PARTIALFN)),
 							   1,
@@ -1475,7 +1488,8 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	TargetEntry *part_te = NULL;
 	ColumnDef *col;
 	Var *var;
-	Oid coltype, colcollation;
+	Oid coltype;
+	Oid colcollation;
 	int32 coltypmod;
 
 	if (contain_mutable_functions(input))
@@ -1595,7 +1609,8 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo, RangeTblEntry *us
 	Oid argtype[] = { OIDOID };
 	Oid rettype = INT4OID;
 	TargetEntry *chunk_te;
-	Oid sortop, eqop;
+	Oid sortop;
+	Oid eqop;
 	bool hashable;
 	ListCell *lc;
 	SortGroupClause *grpcl;
@@ -1689,7 +1704,8 @@ set_var_mapping(Var *orig_var, Var *mapped_var, AggPartCxt *cxt)
 static Var *
 var_already_mapped(Var *var, AggPartCxt *cxt)
 {
-	ListCell *lc_old, *lc_new;
+	ListCell *lc_old;
+	ListCell *lc_new;
 
 	forboth (lc_old, cxt->orig_vars, lc_new, cxt->mapped_vars)
 	{
@@ -1714,7 +1730,8 @@ add_var_mutator(Node *node, AggPartCxt *cxt)
 	}
 	if (IsA(node, Var))
 	{
-		Var *orig_var, *mapped_var;
+		Var *orig_var;
+		Var *mapped_var;
 
 		mapped_var = var_already_mapped((Var *) node, cxt);
 		/* Avoid duplicating columns in the materialization table */
@@ -1796,7 +1813,8 @@ create_replace_having_qual_mutator(Node *node, cagg_havingcxt *cxt)
 	 * expr. We do this by checking the existing targetlist
 	 * entries for the query.
 	 */
-	ListCell *lc, *lc2;
+	ListCell *lc;
+	ListCell *lc2;
 	List *origtlist = cxt->origq_tlist;
 	List *modtlist = cxt->finalizeq_tlist;
 	forboth (lc, origtlist, lc2, modtlist)
@@ -2100,7 +2118,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	Query *partial_selquery;	/* query to populate the mattable*/
 	Query *orig_userview_query; /* copy of the original user query for dummy view */
 	Oid nspid;
-	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
+	RangeVar *part_rel = NULL;
+	RangeVar *mat_rel = NULL;
+	RangeVar *dum_rel = NULL;
 	int32 materialize_hypertable_id;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
@@ -2347,9 +2367,11 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	bool test_failed = false;
 	char *relname = agg->data.user_view_name.data;
 	char *schema = agg->data.user_view_schema.data;
-	ListCell *lc1, *lc2;
+	ListCell *lc1;
+	ListCell *lc2;
 	int sec_ctx;
-	Oid uid, saved_uid;
+	Oid uid;
+	Oid saved_uid;
 	/* cagg view created by the user */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
@@ -2422,7 +2444,8 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	int i = 0;
 	forboth (lc1, view_query->targetList, lc2, user_query->targetList)
 	{
-		TargetEntry *view_tle, *user_tle;
+		TargetEntry *view_tle;
+		TargetEntry *user_tle;
 		FormData_pg_attribute *attr = TupleDescAttr(desc, i);
 		view_tle = lfirst_node(TargetEntry, lc1);
 		user_tle = lfirst_node(TargetEntry, lc2);
@@ -2502,7 +2525,8 @@ void
 cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 {
 	int sec_ctx;
-	Oid uid, saved_uid;
+	Oid uid;
+	Oid saved_uid;
 	Query *result_view_query;
 
 	/* user view query of the user defined CAGG */
@@ -2550,7 +2574,8 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 {
 	ListCell *lc;
 	int sec_ctx;
-	Oid uid, saved_uid;
+	Oid uid;
+	Oid saved_uid;
 
 	/* user view query of the user defined CAGG */
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
@@ -2791,7 +2816,8 @@ static Query *
 build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 				  int materialize_htid)
 {
-	ListCell *lc1, *lc2;
+	ListCell *lc1;
+	ListCell *lc2;
 	List *col_types = NIL;
 	List *col_typmods = NIL;
 	List *col_collations = NIL;

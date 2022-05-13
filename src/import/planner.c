@@ -601,7 +601,9 @@ PathKey *
 ts_make_pathkey_from_sortop(PlannerInfo *root, Expr *expr, Relids nullable_relids, Oid ordering_op,
 							bool nulls_first, Index sortref, bool create_it)
 {
-	Oid opfamily, opcintype, collation;
+	Oid opfamily;
+	Oid opcintype;
+	Oid collation;
 	int16 strategy;
 
 	/* Find the operator in pg_amop --- failure shouldn't happen */

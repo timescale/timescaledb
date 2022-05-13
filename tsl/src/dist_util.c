@@ -237,7 +237,8 @@ dist_util_remote_compressed_chunk_info(PG_FUNCTION_ARGS)
 {
 	char *node_name;
 	StringInfo query_str;
-	Name schema_name, table_name;
+	Name schema_name;
+	Name table_name;
 	/* Strict function */
 	if (PG_NARGS() != 3 || PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
 		PG_RETURN_NULL();
@@ -257,7 +258,8 @@ dist_util_remote_hypertable_index_info(PG_FUNCTION_ARGS)
 {
 	char *node_name;
 	StringInfo query_str;
-	Name schema_name, index_name;
+	Name schema_name;
+	Name index_name;
 	/* Strict function */
 	if (PG_NARGS() != 3 || PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
 		PG_RETURN_NULL();
@@ -334,8 +336,12 @@ bool
 dist_util_is_compatible_version(const char *data_node_version, const char *access_node_version,
 								bool *is_old_version)
 {
-	unsigned int data_node_major, data_node_minor, data_node_patch;
-	unsigned int access_node_major, access_node_minor, access_node_patch;
+	unsigned int data_node_major;
+	unsigned int data_node_minor;
+	unsigned int data_node_patch;
+	unsigned int access_node_major;
+	unsigned int access_node_minor;
+	unsigned int access_node_patch;
 
 	Assert(is_old_version);
 	Assert(data_node_version);

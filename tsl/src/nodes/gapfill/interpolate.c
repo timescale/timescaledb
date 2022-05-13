@@ -174,8 +174,11 @@ void
 gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillState *state,
 							  int64 time, Datum *value, bool *isnull)
 {
-	int64 x, x0, x1;
-	Datum y0, y1;
+	int64 x;
+	int64 x0;
+	int64 x1;
+	Datum y0;
+	Datum y1;
 
 	/* only evaluate expr for first tuple */
 	if (column->prev.isnull && column->lookup_before && time == state->gapfill_start)

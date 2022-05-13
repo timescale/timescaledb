@@ -32,8 +32,10 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 {
 	VariableStatData vardata;
 	Oid ltop;
-	Datum max_datum, min_datum;
-	volatile int64 max, min;
+	Datum max_datum;
+	Datum min_datum;
+	volatile int64 max;
+	volatile int64 min;
 	volatile bool valid;
 
 	examine_variable(root, (Node *) var, 0, &vardata);

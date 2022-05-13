@@ -847,7 +847,8 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *newname
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
 	bool repl[Natts_chunk_constraint] = { false };
-	HeapTuple tuple, new_tuple;
+	HeapTuple tuple;
+	HeapTuple new_tuple;
 	TupleDesc tupdesc = ts_scanner_get_tupledesc(ti);
 	NameData new_hypertable_constraint_name;
 	NameData new_chunk_constraint_name;

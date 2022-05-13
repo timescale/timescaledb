@@ -335,7 +335,8 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 static void
 initialize_runtime_exclusion(ChunkAppendState *state)
 {
-	ListCell *lc_clauses, *lc_constraints;
+	ListCell *lc_clauses;
+	ListCell *lc_constraints;
 	int i = 0;
 
 	PlannerGlobal glob = {
@@ -950,7 +951,9 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
 static void
 initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 {
-	ListCell *lc_clauses, *lc_plan, *lc_relid;
+	ListCell *lc_clauses;
+	ListCell *lc_plan;
+	ListCell *lc_relid;
 	List *constraints = NIL;
 	EState *estate = state->csstate.ss.ps.state;
 

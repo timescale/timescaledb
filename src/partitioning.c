@@ -174,7 +174,9 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 							DimensionType dimtype, Oid relid)
 {
 	PartitioningInfo *pinfo;
-	Oid columntype, varcollid, funccollid = InvalidOid;
+	Oid columntype;
+	Oid varcollid;
+	Oid funccollid = InvalidOid;
 	Var *var;
 	FuncExpr *expr;
 

@@ -89,7 +89,8 @@ static void
 append_var_expr(StringInfo buf, const Node *expr, const List *rtable)
 {
 	const Var *var = (const Var *) expr;
-	char *relname, *attname;
+	char *relname;
+	char *attname;
 
 	switch (var->varno)
 	{

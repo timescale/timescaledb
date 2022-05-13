@@ -876,7 +876,8 @@ ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
-	Size i, n = 0;
+	Size i;
+	Size n = 0;
 
 	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
 

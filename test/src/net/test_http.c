@@ -80,7 +80,9 @@ Datum
 ts_test_http_parsing(PG_FUNCTION_ARGS)
 {
 	int num_iterations = PG_GETARG_INT32(0);
-	int bytes, i, j;
+	int bytes;
+	int i;
+	int j;
 
 	srand(time(0));
 
@@ -125,7 +127,8 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 Datum
 ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 {
-	int bytes, i;
+	int bytes;
+	int i;
 
 	srand(time(0));
 

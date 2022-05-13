@@ -42,7 +42,8 @@ int
 ts_plain_connect(Connection *conn, const char *host, const char *servname, int port)
 {
 	char strport[6];
-	struct addrinfo *ainfo, hints = {
+	struct addrinfo *ainfo;
+	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_STREAM,
 	};

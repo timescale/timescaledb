@@ -1014,7 +1014,8 @@ process_truncate(ProcessUtilityArgs *args)
 
 					if (cagg)
 					{
-						Hypertable *mat_ht, *raw_ht;
+						Hypertable *mat_ht;
+						Hypertable *raw_ht;
 						MemoryContext oldctx;
 
 						if (!relation_should_recurse(rv))
@@ -2783,7 +2784,8 @@ process_cluster_start(ProcessUtilityArgs *args)
 		Relation index_rel;
 		List *chunk_indexes;
 		ListCell *lc;
-		MemoryContext old, mcxt;
+		MemoryContext old;
+		MemoryContext mcxt;
 		LockRelId cluster_index_lockid;
 		ChunkIndexMapping **mappings = NULL;
 		int i;
@@ -3302,7 +3304,8 @@ static void
 process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL;
+	List *cagg_options = NIL;
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
@@ -3811,7 +3814,8 @@ process_create_rule_start(ProcessUtilityArgs *args)
 static DDLResult
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
+	List *pg_options = NIL;
+	List *compress_options = NIL;
 	WithClauseResult *parse_results = NULL;
 	List *inpdef = NIL;
 	/* is this a compress table stmt */
@@ -3842,7 +3846,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 static DDLResult
 process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
+	List *pg_options = NIL;
+	List *compress_options = NIL;
 	List *inpdef = NIL;
 	/* is this a compress table stmt */
 	Assert(IsA(cmd->def, List));
@@ -3880,7 +3885,8 @@ process_create_table_as(ProcessUtilityArgs *args)
 	CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, args->parsetree);
 	WithClauseResult *parse_results = NULL;
 	bool is_cagg = false;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL;
+	List *cagg_options = NIL;
 
 	if (get_createtableas_objecttype(stmt) == OBJECT_MATVIEW)
 	{

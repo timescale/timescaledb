@@ -470,7 +470,9 @@ static const ContinuousAggsBucketFunction *
 bucket_function_deserialize(const char *str)
 {
 	int i;
-	char *begin, *end, *strings[4];
+	char *begin;
+	char *end;
+	char *strings[4];
 	ContinuousAggsBucketFunction *bf;
 
 	/* empty string stands for serialized NULL */
@@ -541,8 +543,12 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
 		   ARR_NDIM(bucket_functions) == ARR_NDIM(bucket_widths));
 
-	ArrayIterator it_htids, it_widths, it_bfs;
-	Datum array_datum1, array_datum2, array_datum3;
+	ArrayIterator it_htids;
+	ArrayIterator it_widths;
+	ArrayIterator it_bfs;
+	Datum array_datum1;
+	Datum array_datum2;
+	Datum array_datum3;
 	bool isnull1, isnull2, isnull3;
 
 	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
@@ -580,7 +586,9 @@ TSDLLEXPORT void
 ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
 								 ArrayType **bucket_widths, ArrayType **bucket_functions)
 {
-	ListCell *lc1, *lc2, *lc3;
+	ListCell *lc1;
+	ListCell *lc2;
+	ListCell *lc3;
 	unsigned i;
 
 	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
@@ -1629,7 +1637,10 @@ void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 													  const ContinuousAggsBucketFunction *bf)
 {
-	Datum start_old, end_old, start_new, end_new;
+	Datum start_old;
+	Datum end_old;
+	Datum start_new;
+	Datum end_new;
 	/*
 	 * It's OK to use TIMESTAMPOID here. Variable-sized buckets can be used
 	 * only for dates, timestamps and timestamptz's. For all these types our
@@ -1666,7 +1677,10 @@ void
 ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 														  const ContinuousAggsBucketFunction *bf)
 {
-	Datum start_old, end_old, start_new, end_new;
+	Datum start_old;
+	Datum end_old;
+	Datum start_new;
+	Datum end_new;
 
 	/*
 	 * It's OK to use TIMESTAMPOID here.

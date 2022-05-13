@@ -118,7 +118,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 	if (path->path.pathkeys == NIL)
 	{
-		ListCell *lc_plan, *lc_path;
+		ListCell *lc_plan;
+		ListCell *lc_path;
 		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 		{
 			Plan *child_plan = lfirst(lc_plan);
@@ -148,7 +149,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		 * return sorted output. Children not returning sorted output will be
 		 * wrapped in a sort node.
 		 */
-		ListCell *lc_plan, *lc_path;
+		ListCell *lc_plan;
+		ListCell *lc_path;
 		int numCols;
 		AttrNumber *sortColIdx;
 		Oid *sortOperators;
@@ -199,7 +201,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 			if (IsA(lfirst(lc_plan), MergeAppend))
 			{
-				ListCell *lc_childpath, *lc_childplan;
+				ListCell *lc_childpath;
+				ListCell *lc_childplan;
 				MergeAppend *merge_plan = castNode(MergeAppend, lfirst(lc_plan));
 				MergeAppendPath *merge_path = castNode(MergeAppendPath, lfirst(lc_path));
 

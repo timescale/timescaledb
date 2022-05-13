@@ -210,7 +210,9 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 {
 	Relation rel;
 	TupleDesc tupdesc;
-	int i, colno, attno;
+	int i;
+	int colno;
+	int attno;
 	int16 *segorder_colindex;
 	int seg_attnolen = 0;
 	ListCell *lc;
@@ -759,7 +761,8 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 		}
 		else
 		{
-			int j, numkeys;
+			int j;
+			int numkeys;
 			int16 *attnums;
 			bool is_null;
 			/* Extract the conkey array, ie, attnums of PK's columns */

@@ -252,7 +252,8 @@ static char *
 get_pgversion_string()
 {
 	StringInfo buf = makeStringInfo();
-	int major, patch;
+	int major;
+	int patch;
 
 	/*
 	 * We have to read the server version from GUC and not use any of

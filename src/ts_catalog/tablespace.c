@@ -371,7 +371,8 @@ ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid tspcoid)
 		.database_info = ts_catalog_database_info_get(),
 		.stopcount = (NULL != tspcname),
 	};
-	int num_deleted, nkeys = 0;
+	int num_deleted;
+	int nkeys = 0;
 
 	ScanKeyInit(&scankey[nkeys++],
 				Anum_tablespace_hypertable_id_tablespace_name_idx_hypertable_id,

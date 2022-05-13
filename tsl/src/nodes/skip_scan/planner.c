@@ -322,7 +322,8 @@ static ChunkAppendPath *
 copy_chunk_append_path(ChunkAppendPath *ca, List *subpaths)
 {
 	ListCell *lc;
-	double total_cost = 0, rows = 0;
+	double total_cost = 0;
+	double rows = 0;
 	ChunkAppendPath *new = palloc(sizeof(ChunkAppendPath));
 	memcpy(new, ca, sizeof(ChunkAppendPath));
 	new->cpath.custom_paths = subpaths;

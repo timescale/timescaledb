@@ -866,7 +866,8 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 {
 	PlannerInfo *root = context->root;
 	Query *query = root->parse;
-	ListCell *l, *dc_l;
+	ListCell *l;
+	ListCell *dc_l;
 	bool first = true, varno_assigned = false;
 	Index varno = 0; /* mostly to quell compiler warning, handled via varno_assigned */
 	RangeTblEntry *dc_rte;
@@ -922,7 +923,8 @@ deparseDistinctClause(StringInfo buf, deparse_expr_cxt *context, List *pathkeys)
 		 * corresponding relation. If the DISTINCT ON columns are not a prefix
 		 * of these pathkeys, we cannot push it down.
 		 */
-		ListCell *distinct_cell, *pathkey_cell;
+		ListCell *distinct_cell;
+		ListCell *pathkey_cell;
 		forboth (distinct_cell, query->distinctClause, pathkey_cell, pathkeys)
 		{
 			SortGroupClause *sgc = lfirst_node(SortGroupClause, distinct_cell);

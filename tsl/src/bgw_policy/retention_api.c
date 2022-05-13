@@ -256,7 +256,9 @@ policy_retention_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Retention Policy");
-	NameData proc_name, proc_schema, owner;
+	NameData proc_name;
+	NameData proc_schema;
+	NameData owner;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
 	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));

@@ -388,7 +388,8 @@ calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
 	Hyperspace *hs = ht->space;
 	Dimension *dim = NULL;
 	Datum datum;
-	int64 chunk_interval, coord;
+	int64 chunk_interval;
+	int64 coord;
 	int i;
 
 	if (!OidIsValid(ht->chunk_sizing_func) || ht->fd.chunk_target_size <= 0)
@@ -737,7 +738,8 @@ copy_hypertable_acl_to_relid(const Hypertable *ht, Oid owner_id, Oid relid)
 	acl_datum = SysCacheGetAttr(RELOID, ht_tuple, Anum_pg_class_relacl, &is_null);
 	if (!is_null)
 	{
-		HeapTuple chunk_tuple, newtuple;
+		HeapTuple chunk_tuple;
+		HeapTuple newtuple;
 		Datum new_val[Natts_pg_class] = { 0 };
 		bool new_null[Natts_pg_class] = { false };
 		bool new_repl[Natts_pg_class] = { false };
@@ -834,7 +836,8 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 								 get_am_name_for_rel(chunk->hypertable_relid) :
 								 NULL,
 	};
-	Oid uid, saved_uid;
+	Oid uid;
+	Oid saved_uid;
 
 	Assert(chunk->hypertable_relid == ht->main_table_relid);
 
@@ -2409,7 +2412,8 @@ Chunk *
 ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name,
 										 MemoryContext mctx, bool fail_if_not_found)
 {
-	NameData schema, table;
+	NameData schema;
+	NameData table;
 	ScanKeyData scankey[2];
 	static const DisplayKeyData displaykey[2] = {
 		[0] = { .name = "schema_name", .as_string = DatumGetNameString },
@@ -3703,7 +3707,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	uint64 num_chunks = 0;
 	Chunk *chunks;
 	List *dropped_chunk_names = NIL;
-	const char *schema_name, *table_name;
+	const char *schema_name;
+	const char *table_name;
 	const int32 hypertable_id = ht->fd.id;
 	bool has_continuous_aggs;
 	List *data_nodes = NIL;

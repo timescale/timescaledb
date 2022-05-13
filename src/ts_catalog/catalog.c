@@ -405,7 +405,8 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 		Oid schema_oid;
 		Oid id;
 		const char *sequence_name;
-		Size number_indexes, j;
+		Size number_indexes;
+		Size j;
 
 		schema_oid = get_namespace_oid(table_ary[i].schema_name, false);
 		id = get_relname_relid(table_ary[i].table_name, schema_oid);

@@ -281,7 +281,9 @@ static bool
 hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, List *expr_args,
 								  Oid op_oid, get_dimension_values func_get_dim_values, bool use_or)
 {
-	Expr *leftop, *rightop, *expr;
+	Expr *leftop;
+	Expr *rightop;
+	Expr *expr;
 	DimensionRestrictInfo *dri;
 	Var *v;
 	Const *c;
@@ -289,7 +291,8 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	Oid columntype;
 	TypeCacheEntry *tce;
 	int strategy;
-	Oid lefttype, righttype;
+	Oid lefttype;
+	Oid righttype;
 	DimensionValues *dimvalues;
 
 	if (list_length(expr_args) != 2)
