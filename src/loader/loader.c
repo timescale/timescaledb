@@ -350,7 +350,6 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 						dropped_db_oid)));
 		ts_bgw_message_send_and_wait(STOP, dropped_db_oid);
 	}
-	return;
 }
 
 static void
