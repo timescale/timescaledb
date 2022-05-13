@@ -29,8 +29,8 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "loader/lwlocks.h"
 
-#define INVALID_SUBPLAN_INDEX -1
-#define NO_MATCHING_SUBPLANS -2
+#define INVALID_SUBPLAN_INDEX (-1)
+#define NO_MATCHING_SUBPLANS (-2)
 
 typedef struct ParallelChunkAppendState
 {

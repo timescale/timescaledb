@@ -100,9 +100,9 @@ test_simple_queries()
 }
 
 #define ASSERT_NUM_OPEN_CONNECTIONS(stats, num)                                                    \
-	TestAssertTrue((((stats)->connections_created - (stats)->connections_closed) == num))
+	TestAssertTrue((((stats)->connections_created - (stats)->connections_closed) == (num)))
 #define ASSERT_NUM_OPEN_RESULTS(stats, num)                                                        \
-	TestAssertTrue((((stats)->results_created - (stats)->results_cleared) == num))
+	TestAssertTrue((((stats)->results_created - (stats)->results_cleared) == (num)))
 
 static void
 test_connection_and_result_leaks()

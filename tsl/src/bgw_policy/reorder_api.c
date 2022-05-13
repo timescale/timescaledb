@@ -41,7 +41,7 @@
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 /* Right now, there is an infinite number of retries for reorder jobs */
-#define DEFAULT_MAX_RETRIES -1
+#define DEFAULT_MAX_RETRIES (-1)
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))

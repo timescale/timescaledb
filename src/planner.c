@@ -86,7 +86,7 @@ typedef struct BaserelInfoEntry
 #define SH_ELEMENT_TYPE BaserelInfoEntry
 #define SH_KEY_TYPE Oid
 #define SH_KEY reloid
-#define SH_EQUAL(tb, a, b) (a == b)
+#define SH_EQUAL(tb, a, b) ((a) == (b))
 #define SH_HASH_KEY(tb, key) murmurhash32(key)
 #define SH_SCOPE static
 #define SH_DECLARE
