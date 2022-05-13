@@ -60,10 +60,9 @@ dist_util_membership(void)
 
 	if (isnull)
 		return DIST_MEMBER_NONE;
-	else if (uuid_matches(dist_id, local_get_uuid(&isnull)))
+	if (uuid_matches(dist_id, local_get_uuid(&isnull)))
 		return DIST_MEMBER_ACCESS_NODE;
-	else
-		return DIST_MEMBER_DATA_NODE;
+	return DIST_MEMBER_DATA_NODE;
 }
 
 const char *
@@ -119,10 +118,9 @@ dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid)
 	{
 		if (uuid_matches(dist_id, dist_util_get_id()))
 			return false;
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
-					 (errmsg("database is already a member of a distributed database"))));
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
+				 (errmsg("database is already a member of a distributed database"))));
 	}
 
 	Datum uuid = local_get_uuid(&isnull);

@@ -470,7 +470,7 @@ decompress_chunk_create_tuple(DecompressChunkState *state)
 							batch_done = true;
 							continue;
 						}
-						else if (batch_done)
+						if (batch_done)
 						{
 							/*
 							 * since the count column is the first column batch_done

@@ -709,7 +709,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 
 		return (Node *) compress_var;
 	}
-	else if (IsA(node, RestrictInfo))
+	if (IsA(node, RestrictInfo))
 	{
 		RestrictInfo *oldinfo = (RestrictInfo *) node;
 		RestrictInfo *newinfo = makeNode(RestrictInfo);

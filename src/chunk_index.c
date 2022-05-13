@@ -199,8 +199,7 @@ ts_chunk_index_get_tablespace(int32 hypertable_id, Relation template_indexrel, R
 	 */
 	if (OidIsValid(template_indexrel->rd_rel->reltablespace))
 		return template_indexrel->rd_rel->reltablespace;
-	else
-		return chunk_index_select_tablespace(hypertable_id, chunkrel);
+	return chunk_index_select_tablespace(hypertable_id, chunkrel);
 }
 
 /*

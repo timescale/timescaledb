@@ -236,7 +236,7 @@ ts_shm_mq_wait_for_attach(MessageQueue *queue, shm_mq_handle *ack_queue_handle)
 		reader_proc = shm_mq_get_sender(shm_mq_get_queue(ack_queue_handle));
 		if (reader_proc != NULL)
 			return SHM_MQ_SUCCESS;
-		else if (queue_get_reader(queue) == InvalidPid)
+		if (queue_get_reader(queue) == InvalidPid)
 			return SHM_MQ_DETACHED; /* Reader died after we enqueued our
 									 * message */
 		WaitLatch(MyLatch,

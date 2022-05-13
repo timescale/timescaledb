@@ -231,16 +231,14 @@ policy_compression_add(PG_FUNCTION_ARGS)
 							get_rel_name(user_rel_oid))));
 			PG_RETURN_INT32(-1);
 		}
-		else
-		{
-			ts_cache_release(hcache);
-			ereport(WARNING,
-					(errmsg("compression policy already exists for hypertable \"%s\"",
-							get_rel_name(user_rel_oid)),
-					 errdetail("A policy already exists with different arguments."),
-					 errhint("Remove the existing policy before adding a new one.")));
-			PG_RETURN_INT32(-1);
-		}
+
+		ts_cache_release(hcache);
+		ereport(WARNING,
+				(errmsg("compression policy already exists for hypertable \"%s\"",
+						get_rel_name(user_rel_oid)),
+				 errdetail("A policy already exists with different arguments."),
+				 errhint("Remove the existing policy before adding a new one.")));
+		PG_RETURN_INT32(-1);
 	}
 
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)))

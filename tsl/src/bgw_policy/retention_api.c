@@ -196,16 +196,14 @@ policy_retention_add(PG_FUNCTION_ARGS)
 							get_rel_name(ht_oid))));
 			PG_RETURN_INT32(-1);
 		}
-		else
-		{
-			ts_cache_release(hcache);
-			ereport(WARNING,
-					(errmsg("retention policy already exists for hypertable \"%s\"",
-							get_rel_name(ht_oid)),
-					 errdetail("A policy already exists with different arguments."),
-					 errhint("Remove the existing policy before adding a new one.")));
-			PG_RETURN_INT32(-1);
-		}
+
+		ts_cache_release(hcache);
+		ereport(WARNING,
+				(errmsg("retention policy already exists for hypertable \"%s\"",
+						get_rel_name(ht_oid)),
+				 errdetail("A policy already exists with different arguments."),
+				 errhint("Remove the existing policy before adding a new one.")));
+		PG_RETURN_INT32(-1);
 	}
 
 	if (IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(window_type))

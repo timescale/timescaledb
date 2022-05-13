@@ -2569,7 +2569,7 @@ process_index_start(ProcessUtilityArgs *args)
 		ts_cache_release(hcache);
 		return DDL_CONTINUE;
 	}
-	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 	{
 		/* unique indexes are not allowed on compressed hypertables*/
 		if (stmt->unique || stmt->primary || stmt->isconstraint)

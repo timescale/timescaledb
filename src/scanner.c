@@ -164,8 +164,7 @@ scanner_ctx_get_scanner(ScannerCtx *ctx)
 {
 	if (OidIsValid(ctx->index))
 		return &scanners[ScannerTypeIndex];
-	else
-		return &scanners[ScannerTypeTable];
+	return &scanners[ScannerTypeTable];
 }
 
 TSDLLEXPORT void

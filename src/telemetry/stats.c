@@ -45,30 +45,28 @@ classify_hypertable(const Hypertable *ht)
 		 */
 		return RELTYPE_COMPRESSION_HYPERTABLE;
 	}
-	else
+
+	/*
+	 * Not dealing with an internal compression hypertable, but
+	 * could be a materialized hypertable (cagg) unless it is
+	 * distributed.
+	 */
+	switch (ht->fd.replication_factor)
 	{
-		/*
-		 * Not dealing with an internal compression hypertable, but
-		 * could be a materialized hypertable (cagg) unless it is
-		 * distributed.
-		 */
-		switch (ht->fd.replication_factor)
+		case HYPERTABLE_DISTRIBUTED_MEMBER:
+			return RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER;
+		case HYPERTABLE_REGULAR:
 		{
-			case HYPERTABLE_DISTRIBUTED_MEMBER:
-				return RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER;
-			case HYPERTABLE_REGULAR:
-			{
-				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+			const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
 
-				if (cagg)
-					return RELTYPE_MATERIALIZED_HYPERTABLE;
+			if (cagg)
+				return RELTYPE_MATERIALIZED_HYPERTABLE;
 
-				return RELTYPE_HYPERTABLE;
-			}
-			default:
-				Assert(ht->fd.replication_factor >= 1);
-				return RELTYPE_DISTRIBUTED_HYPERTABLE;
+			return RELTYPE_HYPERTABLE;
 		}
+		default:
+			Assert(ht->fd.replication_factor >= 1);
+			return RELTYPE_DISTRIBUTED_HYPERTABLE;
 	}
 }
 

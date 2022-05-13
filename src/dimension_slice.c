@@ -812,7 +812,7 @@ ts_dimension_slice_cut(DimensionSlice *to_cut, const DimensionSlice *other, int6
 
 		return true;
 	}
-	else if (other->fd.range_start > coord && other->fd.range_start < to_cut->fd.range_end)
+	if (other->fd.range_start > coord && other->fd.range_start < to_cut->fd.range_end)
 	{
 		/* Cut "after" the coordinate */
 		to_cut->fd.range_end = other->fd.range_start;

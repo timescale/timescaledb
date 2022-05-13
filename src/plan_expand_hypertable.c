@@ -357,7 +357,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 		return op;
 	}
-	else if (strategy == BTLessStrategyNumber || strategy == BTLessEqualStrategyNumber)
+	if (strategy == BTLessStrategyNumber || strategy == BTLessEqualStrategyNumber)
 	{
 		/* column < value + width */
 		Expr *subst;

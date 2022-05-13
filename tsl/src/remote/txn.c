@@ -391,8 +391,8 @@ remote_txn_abort(RemoteTxn *entry)
 	/* Already in bad state */
 	if (remote_connection_xact_is_transitioning(entry->conn))
 		return false;
-	else if (in_error_recursion_trouble() ||
-			 PQstatus(remote_connection_get_pg_conn(entry->conn)) == CONNECTION_BAD)
+	if (in_error_recursion_trouble() ||
+		PQstatus(remote_connection_get_pg_conn(entry->conn)) == CONNECTION_BAD)
 	{
 		/*
 		 * Don't try to recover the connection if we're already in error

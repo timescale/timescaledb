@@ -298,19 +298,18 @@ skip_scan_exec(CustomScanState *node)
 					skip_scan_update_key(state, result);
 					return result;
 				}
+
+				/*
+				 * if there are no more values that satisfy
+				 * the skip constraint we are either done
+				 * for NULLS FIRST ordering or need to check
+				 * for NULLs if we have NULLS LAST ordering
+				 */
+				if (has_nulls_last(state))
+					skip_scan_switch_stage(state, SS_NULLS_LAST);
 				else
-				{
-					/*
-					 * if there are no more values that satisfy
-					 * the skip constraint we are either done
-					 * for NULLS FIRST ordering or need to check
-					 * for NULLs if we have NULLS LAST ordering
-					 */
-					if (has_nulls_last(state))
-						skip_scan_switch_stage(state, SS_NULLS_LAST);
-					else
-						skip_scan_switch_stage(state, SS_END);
-				}
+					skip_scan_switch_stage(state, SS_END);
+
 				break;
 
 			case SS_NULLS_LAST:

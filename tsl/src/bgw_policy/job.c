@@ -146,11 +146,9 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 		res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
 		return Int64GetDatum(res);
 	}
-	else
-	{
-		Interval *lag = interval_getter(config);
-		return subtract_interval_from_now(lag, partitioning_type);
-	}
+
+	Interval *lag = interval_getter(config);
+	return subtract_interval_from_now(lag, partitioning_type);
 }
 
 static List *

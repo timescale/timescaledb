@@ -749,8 +749,7 @@ gapfill_exec(CustomScanState *node)
 				 */
 				if (state->multigroup && !state->groups_initialized)
 					return NULL;
-				else
-					state->state = FETCHED_LAST;
+				state->state = FETCHED_LAST;
 			}
 		}
 
@@ -1112,7 +1111,7 @@ gapfill_state_initialize_columns(GapFillState *state)
 			state->groups_initialized = false;
 			continue;
 		}
-		else if (IsA(expr, FuncExpr))
+		if (IsA(expr, FuncExpr))
 		{
 			/* locf and interpolate will be toplevel function calls in the gapfill node */
 			if (strncmp(get_func_name(castNode(FuncExpr, expr)->funcid),

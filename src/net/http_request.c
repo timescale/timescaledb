@@ -237,8 +237,7 @@ ts_http_request_build(HttpRequest *req, size_t *buf_size)
 			{
 				return NULL;
 			}
-			else
-				verified_content_length = true;
+			verified_content_length = true;
 		}
 		http_header_serialize(cur_header, &buf);
 		http_request_serialize_char(CARRIAGE, &buf);

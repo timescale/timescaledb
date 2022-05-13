@@ -638,33 +638,31 @@ pushdown_gapfill(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 
 	if (dim == NULL)
 		return false;
-	else
+
+	if (parse->groupClause)
 	{
-		if (parse->groupClause)
+		foreach (lc, parse->groupClause)
 		{
-			foreach (lc, parse->groupClause)
+			/*
+			 * Check if the group by matches dimension and
+			 * group by clause has exact dimension and not
+			 * an expression of that attribute.
+			 */
+			SortGroupClause *sort = (SortGroupClause *) lfirst(lc);
+			tle = get_sortgroupref_tle(sort->tleSortGroupRef, parse->targetList);
+
+			if (tle->resno == dim->column_attno)
 			{
-				/*
-				 * Check if the group by matches dimension and
-				 * group by clause has exact dimension and not
-				 * an expression of that attribute.
-				 */
-				SortGroupClause *sort = (SortGroupClause *) lfirst(lc);
-				tle = get_sortgroupref_tle(sort->tleSortGroupRef, parse->targetList);
+				space_dim_in_group_by = true;
 
-				if (tle->resno == dim->column_attno)
-				{
-					space_dim_in_group_by = true;
-
-					if (IsA(tle->expr, Var))
-						break;
-					else
-						return false;
-				}
+				if (IsA(tle->expr, Var))
+					break;
+				return false;
 			}
 		}
-		if (!space_dim_in_group_by)
-			return false;
 	}
+	if (!space_dim_in_group_by)
+		return false;
+
 	return !data_node_chunk_assignments_are_overlapping(scas, dim->fd.id);
 }

@@ -515,18 +515,16 @@ data_node_bootstrap_extension(TSConnection *conn)
 								  quote_literal_cstr(ts_extension_get_version()));
 		return true;
 	}
-	else
-	{
-		ereport(NOTICE,
-				(errmsg("extension \"%s\" already exists on data node, skipping",
-						PQgetvalue(res, 0, 0)),
-				 errdetail("TimescaleDB extension version on %s:%s was %s.",
-						   PQhost(remote_connection_get_pg_conn(conn)),
-						   PQport(remote_connection_get_pg_conn(conn)),
-						   PQgetvalue(res, 0, 1))));
-		data_node_validate_extension(conn);
-		return false;
-	}
+
+	ereport(NOTICE,
+			(errmsg("extension \"%s\" already exists on data node, skipping",
+					PQgetvalue(res, 0, 0)),
+			 errdetail("TimescaleDB extension version on %s:%s was %s.",
+					   PQhost(remote_connection_get_pg_conn(conn)),
+					   PQport(remote_connection_get_pg_conn(conn)),
+					   PQgetvalue(res, 0, 1))));
+	data_node_validate_extension(conn);
+	return false;
 }
 
 /* Add dist_uuid on the remote node.
@@ -870,12 +868,11 @@ data_node_attach(PG_FUNCTION_ARGS)
 								get_rel_name(table_id))));
 				PG_RETURN_DATUM(create_hypertable_data_node_datum(fcinfo, node));
 			}
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_TS_DATA_NODE_ALREADY_ATTACHED),
-						 errmsg("data node \"%s\" is already attached to hypertable \"%s\"",
-								node_name,
-								get_rel_name(table_id))));
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_DATA_NODE_ALREADY_ATTACHED),
+					 errmsg("data node \"%s\" is already attached to hypertable \"%s\"",
+							node_name,
+							get_rel_name(table_id))));
 		}
 	}
 
@@ -1175,8 +1172,7 @@ data_node_hypertable_get_by_node_name(const Hypertable *ht, const char *node_nam
 		hdn = lfirst(lc);
 		if (namestrcmp(&hdn->fd.node_name, node_name) == 0)
 			break;
-		else
-			hdn = NULL;
+		hdn = NULL;
 	}
 
 	if (hdn == NULL)

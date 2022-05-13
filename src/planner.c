@@ -779,7 +779,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 
 				if (IsA(em_expr, Var) && castNode(Var, em_expr)->varattno == order_attno)
 					return true;
-				else if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
+				if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
 				{
 					FuncExpr *func = castNode(FuncExpr, em_expr);
 					FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);

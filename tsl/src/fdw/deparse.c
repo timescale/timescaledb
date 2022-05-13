@@ -276,10 +276,9 @@ oid_comparator(const void *a, const void *b)
 {
 	if (*(Oid *) a == *(Oid *) b)
 		return 0;
-	else if (*(Oid *) a < *(Oid *) b)
+	if (*(Oid *) a < *(Oid *) b)
 		return -1;
-	else
-		return 1;
+	return 1;
 }
 
 static bool
@@ -3127,23 +3126,21 @@ is_subquery_var(Var *node, RelOptInfo *foreignrel, int *relno, int *colno)
 		/* Otherwise, recurse into the outer relation. */
 		return is_subquery_var(node, outerrel, relno, colno);
 	}
-	else
+
+	Assert(bms_is_member(node->varno, innerrel->relids));
+
+	/*
+	 * If inner relation is deparsed as a subquery, the Var is an output
+	 * column of the subquery; get the IDs for the relation/column alias.
+	 */
+	if (fpinfo->make_innerrel_subquery)
 	{
-		Assert(bms_is_member(node->varno, innerrel->relids));
-
-		/*
-		 * If inner relation is deparsed as a subquery, the Var is an output
-		 * column of the subquery; get the IDs for the relation/column alias.
-		 */
-		if (fpinfo->make_innerrel_subquery)
-		{
-			get_relation_column_alias_ids(node, innerrel, relno, colno);
-			return true;
-		}
-
-		/* Otherwise, recurse into the inner relation. */
-		return is_subquery_var(node, innerrel, relno, colno);
+		get_relation_column_alias_ids(node, innerrel, relno, colno);
+		return true;
 	}
+
+	/* Otherwise, recurse into the inner relation. */
+	return is_subquery_var(node, innerrel, relno, colno);
 }
 
 /*

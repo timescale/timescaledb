@@ -203,14 +203,13 @@ ssl_errmsg(Connection *conn)
 				{
 					if (err == 0)
 						return "EOF in SSL operation";
-					else if (IS_SOCKET_ERROR(err))
+					if (IS_SOCKET_ERROR(err))
 					{
 						/* reset error for plan_errmsg() */
 						conn->err = err;
 						return ts_plain_errmsg(conn);
 					}
-					else
-						return "unknown SSL syscall error";
+					return "unknown SSL syscall error";
 				}
 				return "SSL error syscall";
 			default:

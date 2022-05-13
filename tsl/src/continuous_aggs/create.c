@@ -2280,14 +2280,12 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 							stmt->into->rel->relname)));
 			return DDL_DONE;
 		}
-		else
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_DUPLICATE_TABLE),
-					 errmsg("continuous aggregate \"%s\" already exists", stmt->into->rel->relname),
-					 errhint("Drop or rename the existing continuous aggregate"
-							 " first or use another name.")));
-		}
+
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_TABLE),
+				 errmsg("continuous aggregate \"%s\" already exists", stmt->into->rel->relname),
+				 errhint("Drop or rename the existing continuous aggregate"
+						 " first or use another name.")));
 	}
 	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
 	{
@@ -2451,7 +2449,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		user_tle = lfirst_node(TargetEntry, lc2);
 		if (view_tle->resjunk && user_tle->resjunk)
 			break;
-		else if (view_tle->resjunk || user_tle->resjunk)
+		if (view_tle->resjunk || user_tle->resjunk)
 		{
 			/* This should never happen but if it ever does it's safer to
 			 * error here instead of creating broken view definitions. */

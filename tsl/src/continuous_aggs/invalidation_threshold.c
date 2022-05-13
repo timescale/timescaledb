@@ -317,27 +317,22 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 				 */
 				return ts_time_get_nobegin(refresh_window->type);
 			}
-			else
-			{
-				/* For fixed-sized buckets return min (start of time) */
-				return ts_time_get_min(refresh_window->type);
-			}
+
+			/* For fixed-sized buckets return min (start of time) */
+			return ts_time_get_min(refresh_window->type);
 		}
-		else
+
+		int64 maxval = ts_time_value_to_internal(maxdat, refresh_window->type);
+
+		if (ts_continuous_agg_bucket_width_variable(cagg))
 		{
-			int64 maxval = ts_time_value_to_internal(maxdat, refresh_window->type);
-
-			if (ts_continuous_agg_bucket_width_variable(cagg))
-			{
-				return ts_compute_beginning_of_the_next_bucket_variable(maxval,
-																		cagg->bucket_function);
-			}
-
-			int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
-			int64 bucket_start = ts_time_bucket_by_type(bucket_width, maxval, refresh_window->type);
-			/* Add one bucket to get to the end of the last bucket */
-			return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);
+			return ts_compute_beginning_of_the_next_bucket_variable(maxval, cagg->bucket_function);
 		}
+
+		int64 bucket_width = ts_continuous_agg_bucket_width(cagg);
+		int64 bucket_start = ts_time_bucket_by_type(bucket_width, maxval, refresh_window->type);
+		/* Add one bucket to get to the end of the last bucket */
+		return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);
 	}
 
 	return refresh_window->end;

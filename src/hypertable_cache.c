@@ -163,8 +163,7 @@ ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const unsigne
 	{
 		if (flags & CACHE_FLAG_MISSING_OK)
 			return NULL;
-		else
-			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
 	}
 
 	return ts_hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL, flags);

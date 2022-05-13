@@ -181,18 +181,16 @@ internal_to_time_value_or_infinite(int64 internal, Oid time_type, bool *is_infin
 			*is_infinite_out = true;
 		return time_range_internal_to_min_time_value(time_type);
 	}
-	else if (internal == PG_INT64_MAX)
+	if (internal == PG_INT64_MAX)
 	{
 		if (is_infinite_out != NULL)
 			*is_infinite_out = true;
 		return time_range_internal_to_max_time_value(time_type);
 	}
-	else
-	{
-		if (is_infinite_out != NULL)
-			*is_infinite_out = false;
-		return ts_internal_to_time_value(internal, time_type);
-	}
+
+	if (is_infinite_out != NULL)
+		*is_infinite_out = false;
+	return ts_internal_to_time_value(internal, time_type);
 }
 
 static TimeRange

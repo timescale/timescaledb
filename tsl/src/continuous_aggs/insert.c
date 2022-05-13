@@ -234,8 +234,7 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 						 parent_hypertable_id);
 	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
 		return PointerGetDatum(trigdata->tg_trigtuple);
-	else
-		return PointerGetDatum(trigdata->tg_newtuple);
+	return PointerGetDatum(trigdata->tg_newtuple);
 }
 
 /*

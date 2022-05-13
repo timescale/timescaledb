@@ -80,8 +80,7 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 
 	if (reverse)
 		return definitions[algorithm].iterator_init_reverse;
-	else
-		return definitions[algorithm].iterator_init_forward;
+	return definitions[algorithm].iterator_init_forward;
 }
 
 typedef struct SegmentInfo

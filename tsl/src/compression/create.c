@@ -750,7 +750,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo)
 		 */
 		if (form->contype == CONSTRAINT_CHECK || form->contype == CONSTRAINT_TRIGGER)
 			continue;
-		else if (form->contype == CONSTRAINT_EXCLUSION)
+		if (form->contype == CONSTRAINT_EXCLUSION)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1046,11 +1046,9 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 		return true;
 	}
-	else
-	{
-		compress_htid = create_compression_table(ownerid, &compress_cols);
-		ts_hypertable_set_compressed(ht, compress_htid);
-	}
+
+	compress_htid = create_compression_table(ownerid, &compress_cols);
+	ts_hypertable_set_compressed(ht, compress_htid);
 
 	compresscolinfo_add_catalog_entries(&compress_cols, ht->fd.id);
 	/*add the constraints to the new compressed hypertable */

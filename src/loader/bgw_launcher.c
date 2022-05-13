@@ -241,8 +241,7 @@ terminate_background_worker(BackgroundWorkerHandle *handle)
 {
 	if (handle == NULL)
 		return;
-	else
-		TerminateBackgroundWorker(handle);
+	TerminateBackgroundWorker(handle);
 }
 
 extern void

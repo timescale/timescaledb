@@ -390,12 +390,11 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 	{
 		PG_RETURN_POINTER(state1);
 	}
-	else if (state1->cmp.is_null != state2->cmp.is_null)
+	if (state1->cmp.is_null != state2->cmp.is_null)
 	{
 		if (state1->cmp.is_null)
 			PG_RETURN_POINTER(state2);
-		else
-			PG_RETURN_POINTER(state1);
+		PG_RETURN_POINTER(state1);
 	}
 
 	cmpproc_init(fcinfo, &cache->cmp_proc, state1->cmp.type_oid, opname);

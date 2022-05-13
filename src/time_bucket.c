@@ -343,14 +343,11 @@ ts_time_bucket_ng_timestamp(PG_FUNCTION_ARGS)
 													 DateADTGetDatum(origin)));
 		return DirectFunctionCall1(date_timestamp, DateADTGetDatum(result));
 	}
-	else
-	{
-		DateADT result;
-		result = DatumGetDateADT(DirectFunctionCall2(ts_time_bucket_ng_date,
-													 PG_GETARG_DATUM(0),
-													 DateADTGetDatum(ts_date)));
-		return DirectFunctionCall1(date_timestamp, DateADTGetDatum(result));
-	}
+
+	DateADT result;
+	result = DatumGetDateADT(
+		DirectFunctionCall2(ts_time_bucket_ng_date, PG_GETARG_DATUM(0), DateADTGetDatum(ts_date)));
+	return DirectFunctionCall1(date_timestamp, DateADTGetDatum(result));
 }
 
 TS_FUNCTION_INFO_V1(ts_time_bucket_ng_timestamptz);

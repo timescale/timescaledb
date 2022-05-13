@@ -66,13 +66,12 @@ get_time_from_interval(const Dimension *dim, Datum interval, Oid type)
 
 		return ts_subtract_integer_from_now_saturating(now_func, value, partitioning_type);
 	}
-	else if (type == INTERVALOID)
+	if (type == INTERVALOID)
 	{
 		Datum res = subtract_interval_from_now(DatumGetIntervalP(interval), partitioning_type);
 		return ts_time_value_to_internal(res, partitioning_type);
 	}
-	else
-		elog(ERROR, "unsupported offset type for continuous aggregate policy");
+	elog(ERROR, "unsupported offset type for continuous aggregate policy");
 
 	pg_unreachable();
 
@@ -98,18 +97,16 @@ get_time_from_config(const Dimension *dim, const Jsonb *config, const char *json
 		}
 		return get_time_from_interval(dim, Int64GetDatum(interval_val), INT8OID);
 	}
-	else
+
+	Interval *interval_val = ts_jsonb_get_interval_field(config, json_label);
+
+	if (!interval_val)
 	{
-		Interval *interval_val = ts_jsonb_get_interval_field(config, json_label);
-
-		if (!interval_val)
-		{
-			*isnull = true;
-			return 0;
-		}
-
-		return get_time_from_interval(dim, IntervalPGetDatum(interval_val), INTERVALOID);
+		*isnull = true;
+		return 0;
 	}
+
+	return get_time_from_interval(dim, IntervalPGetDatum(interval_val), INTERVALOID);
 }
 
 int64
@@ -403,10 +400,9 @@ interval_to_int64(Datum interval, Oid type)
 
 			if (int128_compare(bigres, int64_to_int128(max)) >= 0)
 				return max;
-			else if (int128_compare(bigres, int64_to_int128(min)) <= 0)
+			if (int128_compare(bigres, int64_to_int128(min)) <= 0)
 				return min;
-			else
-				return int128_to_int64(bigres);
+			return int128_to_int64(bigres);
 		}
 		default:
 			break;
@@ -600,15 +596,13 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 							get_rel_name(cagg_oid))));
 			PG_RETURN_INT32(-1);
 		}
-		else
-		{
-			ereport(WARNING,
-					(errmsg("continuous aggregate policy already exists for \"%s\"",
-							get_rel_name(cagg_oid)),
-					 errdetail("A policy already exists with different arguments."),
-					 errhint("Remove the existing policy before adding a new one.")));
-			PG_RETURN_INT32(-1);
-		}
+
+		ereport(WARNING,
+				(errmsg("continuous aggregate policy already exists for \"%s\"",
+						get_rel_name(cagg_oid)),
+				 errdetail("A policy already exists with different arguments."),
+				 errhint("Remove the existing policy before adding a new one.")));
+		PG_RETURN_INT32(-1);
 	}
 
 	/* Next, insert a new job into jobs table */

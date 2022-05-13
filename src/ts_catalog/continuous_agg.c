@@ -1167,14 +1167,13 @@ ts_continuous_agg_view_type(FormData_continuous_agg *data, const char *schema, c
 	if (CHECK_NAME_MATCH(&data->user_view_schema, schema) &&
 		CHECK_NAME_MATCH(&data->user_view_name, name))
 		return ContinuousAggUserView;
-	else if (CHECK_NAME_MATCH(&data->partial_view_schema, schema) &&
-			 CHECK_NAME_MATCH(&data->partial_view_name, name))
+	if (CHECK_NAME_MATCH(&data->partial_view_schema, schema) &&
+		CHECK_NAME_MATCH(&data->partial_view_name, name))
 		return ContinuousAggPartialView;
-	else if (CHECK_NAME_MATCH(&data->direct_view_schema, schema) &&
-			 CHECK_NAME_MATCH(&data->direct_view_name, name))
+	if (CHECK_NAME_MATCH(&data->direct_view_schema, schema) &&
+		CHECK_NAME_MATCH(&data->direct_view_name, name))
 		return ContinuousAggDirectView;
-	else
-		return ContinuousAggAnyView;
+	return ContinuousAggAnyView;
 }
 
 static FormData_continuous_agg *
@@ -1554,15 +1553,13 @@ generic_time_bucket_ng(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 									   timestamp,
 									   CStringGetTextDatum(bf->timezone));
 		}
-		else
-		{
-			/* custom origin specified */
-			return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
-									   IntervalPGetDatum(bf->bucket_width),
-									   timestamp,
-									   TimestampTzGetDatum((TimestampTz) bf->origin),
-									   CStringGetTextDatum(bf->timezone));
-		}
+
+		/* custom origin specified */
+		return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
+								   IntervalPGetDatum(bf->bucket_width),
+								   timestamp,
+								   TimestampTzGetDatum((TimestampTz) bf->origin),
+								   CStringGetTextDatum(bf->timezone));
 	}
 
 	if (TIMESTAMP_NOT_FINITE(bf->origin))
@@ -1572,14 +1569,12 @@ generic_time_bucket_ng(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 								   IntervalPGetDatum(bf->bucket_width),
 								   timestamp);
 	}
-	else
-	{
-		/* custom origin specified */
-		return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
-								   IntervalPGetDatum(bf->bucket_width),
-								   timestamp,
-								   TimestampGetDatum(bf->origin));
-	}
+
+	/* custom origin specified */
+	return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
+							   IntervalPGetDatum(bf->bucket_width),
+							   timestamp,
+							   TimestampGetDatum(bf->origin));
 }
 
 /*

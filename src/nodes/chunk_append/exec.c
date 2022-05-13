@@ -476,15 +476,13 @@ get_next_subplan(ChunkAppendState *state, int last_plan)
 		 */
 		return bms_next_member(state->valid_subplans, last_plan);
 	}
-	else
-	{
-		int next_plan = last_plan + 1;
 
-		if (next_plan >= state->num_subplans)
-			return NO_MATCHING_SUBPLANS;
+	int next_plan = last_plan + 1;
 
-		return next_plan;
-	}
+	if (next_plan >= state->num_subplans)
+		return NO_MATCHING_SUBPLANS;
+
+	return next_plan;
 }
 
 static void

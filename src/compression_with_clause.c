@@ -259,8 +259,7 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypert
 		Datum textarg = parsed_options[CompressSegmentBy].parsed;
 		return parse_segment_collist(TextDatumGetCString(textarg), hypertable);
 	}
-	else
-		return NIL;
+	return NIL;
 }
 
 /* returns List of CompressedParsedCol
@@ -274,6 +273,5 @@ ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertab
 		Datum textarg = parsed_options[CompressOrderBy].parsed;
 		return parse_order_collist(TextDatumGetCString(textarg), hypertable);
 	}
-	else
-		return NIL;
+	return NIL;
 }
