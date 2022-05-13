@@ -56,14 +56,14 @@ typedef enum JobLockLifetime
 } JobLockLifetime;
 
 BackgroundWorkerHandle *
-ts_bgw_job_start(BgwJob *job, Oid user_uid)
+ts_bgw_job_start(BgwJob *job, Oid user_oid)
 {
 	int32 job_id = Int32GetDatum(job->fd.id);
 	StringInfo si = makeStringInfo();
 	BackgroundWorkerHandle *bgw_handle;
 
 	/* Changing this requires changes to ts_bgw_job_entrypoint */
-	appendStringInfo(si, "%u %d", user_uid, job_id);
+	appendStringInfo(si, "%u %d", user_oid, job_id);
 
 	bgw_handle = ts_bgw_start_worker(job_entrypoint_function_name,
 									 NameStr(job->fd.application_name),

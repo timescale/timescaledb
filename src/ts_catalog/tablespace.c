@@ -39,18 +39,19 @@ tablespaces_alloc(int capacity)
 }
 
 Tablespace *
-ts_tablespaces_add(Tablespaces *tspcs, const FormData_tablespace *form, Oid tspc_oid)
+ts_tablespaces_add(Tablespaces *tablespaces, const FormData_tablespace *form, Oid tspc_oid)
 {
 	Tablespace *tspc;
 
-	if (tspcs->num_tablespaces >= tspcs->capacity)
+	if (tablespaces->num_tablespaces >= tablespaces->capacity)
 	{
-		tspcs->capacity += TABLESPACE_DEFAULT_CAPACITY;
-		Assert(tspcs->tablespaces); /* repalloc() does not work with NULL argument */
-		tspcs->tablespaces = repalloc(tspcs->tablespaces, sizeof(Tablespace) * tspcs->capacity);
+		tablespaces->capacity += TABLESPACE_DEFAULT_CAPACITY;
+		Assert(tablespaces->tablespaces); /* repalloc() does not work with NULL argument */
+		tablespaces->tablespaces =
+			repalloc(tablespaces->tablespaces, sizeof(Tablespace) * tablespaces->capacity);
 	}
 
-	tspc = &tspcs->tablespaces[tspcs->num_tablespaces++];
+	tspc = &tablespaces->tablespaces[tablespaces->num_tablespaces++];
 	memcpy(&tspc->fd, form, sizeof(FormData_tablespace));
 	tspc->tablespace_oid = tspc_oid;
 

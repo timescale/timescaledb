@@ -115,7 +115,7 @@ static void choose_next_subplan_non_parallel(ChunkAppendState *state);
 static void choose_next_subplan_for_worker(ChunkAppendState *state);
 
 static List *constify_restrictinfos(PlannerInfo *root, List *restrictinfos);
-static bool can_exclude_chunk(List *constraints, List *restrictinfos);
+static bool can_exclude_chunk(List *constraints, List *baserestrictinfo);
 static void do_startup_exclusion(ChunkAppendState *state);
 static Node *constify_param_mutator(Node *node, void *context);
 static List *constify_restrictinfo_params(PlannerInfo *root, EState *state, List *restrictinfos);

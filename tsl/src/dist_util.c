@@ -111,12 +111,12 @@ dist_util_set_id(Datum dist_id)
 }
 
 static bool
-dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid)
+dist_util_set_id_with_uuid_check(Datum dist_uuid, bool check_uuid)
 {
 	bool isnull;
 	if (dist_util_membership() != DIST_MEMBER_NONE)
 	{
-		if (uuid_matches(dist_id, dist_util_get_id()))
+		if (uuid_matches(dist_uuid, dist_util_get_id()))
 			return false;
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_ASSIGNMENT_ALREADY_EXISTS),
@@ -124,7 +124,7 @@ dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid)
 	}
 
 	Datum uuid = local_get_uuid(&isnull);
-	if (check_uuid && !isnull && uuid_matches(dist_id, uuid))
+	if (check_uuid && !isnull && uuid_matches(dist_uuid, uuid))
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DATA_NODE_INVALID_CONFIG),
 				 (errmsg("cannot add the current database as a data node to itself"),
@@ -134,7 +134,7 @@ dist_util_set_id_with_uuid_check(Datum dist_id, bool check_uuid)
 						  "instance or that the 'database' parameter refers to a "
 						  "different database."))));
 
-	ts_metadata_insert(METADATA_DISTRIBUTED_UUID_KEY_NAME, dist_id, UUIDOID, true);
+	ts_metadata_insert(METADATA_DISTRIBUTED_UUID_KEY_NAME, dist_uuid, UUIDOID, true);
 	return true;
 }
 

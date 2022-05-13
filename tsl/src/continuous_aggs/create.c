@@ -220,7 +220,7 @@ static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
 	char *table_access_method, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
+static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
 														  Query *userview_query);
 
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
@@ -2255,10 +2255,10 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 }
 
 DDLResult
-tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *pstmt,
+tsl_process_continuous_agg_viewstmt(Node *stmt_node, const char *query_string, void *pstmt,
 									WithClauseResult *with_clause_options)
 {
-	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
+	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, stmt_node);
 	CAggTimebucketInfo timebucket_exprinfo;
 	Oid nspid;
 	ViewStmt viewstmt = {

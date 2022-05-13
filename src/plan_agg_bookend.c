@@ -77,8 +77,8 @@ typedef struct MutatorContext
 } MutatorContext;
 
 static bool find_first_last_aggs_walker(Node *node, List **context);
-static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *flinfo, Oid eqop, Oid sortop,
-								  bool nulls_first);
+static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop,
+								  Oid sortop, bool nulls_first);
 static void first_last_qp_callback(PlannerInfo *root, void *extra);
 static Node *mutate_aggref_node(Node *node, MutatorContext *context);
 static void replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path);

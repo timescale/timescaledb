@@ -153,7 +153,7 @@ static Tuplesortstate *compress_chunk_sort_relation(Relation in_rel, int n_keys,
 static void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
-								int16 *column_offsets, int16 num_compressed_columns,
+								int16 *column_offsets, int16 num_columns_in_compressed_table,
 								bool need_bistate);
 static void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);

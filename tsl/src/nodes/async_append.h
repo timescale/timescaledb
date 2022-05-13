@@ -32,6 +32,6 @@ typedef struct AsyncScanState
 	void (*fetch_data)(struct AsyncScanState *state);
 } AsyncScanState;
 
-extern void async_append_add_paths(PlannerInfo *root, RelOptInfo *hyper_rel);
+extern void async_append_add_paths(PlannerInfo *root, RelOptInfo *final_rel);
 
 #endif
