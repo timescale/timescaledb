@@ -396,8 +396,8 @@ _guc_init(void)
 #endif
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.license",
-							   /* short_dec= */ "TimescaleDB license type",
-							   /* long_dec= */ "Determines which features are enabled",
+							   /* short_desc= */ "TimescaleDB license type",
+							   /* long_desc= */ "Determines which features are enabled",
 							   /* valueAddr= */ &ts_guc_license,
 							   /* bootValue= */ TS_LICENSE_DEFAULT,
 							   /* context= */ PGC_SUSET,
@@ -407,8 +407,8 @@ _guc_init(void)
 							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.last_tuned",
-							   /* short_dec= */ "last tune run",
-							   /* long_dec= */ "records last time timescaledb-tune ran",
+							   /* short_desc= */ "last tune run",
+							   /* long_desc= */ "records last time timescaledb-tune ran",
 							   /* valueAddr= */ &ts_last_tune_time,
 							   /* bootValue= */ NULL,
 							   /* context= */ PGC_SIGHUP,
@@ -418,8 +418,8 @@ _guc_init(void)
 							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.last_tuned_version",
-							   /* short_dec= */ "version of timescaledb-tune",
-							   /* long_dec= */ "version of timescaledb-tune used to tune",
+							   /* short_desc= */ "version of timescaledb-tune",
+							   /* long_desc= */ "version of timescaledb-tune used to tune",
 							   /* valueAddr= */ &ts_last_tune_version,
 							   /* bootValue= */ NULL,
 							   /* context= */ PGC_SIGHUP,
@@ -430,8 +430,8 @@ _guc_init(void)
 
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
-							   /* short_dec= */ "cloud provider",
-							   /* long_dec= */ "cloud provider used for this instance",
+							   /* short_desc= */ "cloud provider",
+							   /* long_desc= */ "cloud provider used for this instance",
 							   /* valueAddr= */ &ts_telemetry_cloud,
 							   /* bootValue= */ NULL,
 							   /* context= */ PGC_SIGHUP,
@@ -443,8 +443,8 @@ _guc_init(void)
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler",
-							 /* short_dec= */ "immediately shutdown the bgw scheduler",
-							 /* long_dec= */ "this is for debugging purposes",
+							 /* short_desc= */ "immediately shutdown the bgw scheduler",
+							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ &ts_shutdown_bgw,
 							 /* bootValue= */ false,
 							 /* context= */ PGC_SIGHUP,
@@ -454,8 +454,8 @@ _guc_init(void)
 							 /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.current_timestamp_mock",
-							   /* short_dec= */ "set the current timestamp",
-							   /* long_dec= */ "this is for debugging purposes",
+							   /* short_desc= */ "set the current timestamp",
+							   /* long_desc= */ "this is for debugging purposes",
 							   /* valueAddr= */ &ts_current_timestamp_mock,
 							   /* bootValue= */ NULL,
 							   /* context= */ PGC_USERSET,
