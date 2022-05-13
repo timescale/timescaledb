@@ -2329,8 +2329,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	/* Step 5 create trigger on raw hypertable -specified in the user view query*/
 	cagg_add_trigger_hypertable(origquery_ht->htoid, origquery_ht->htid);
-
-	return;
 }
 
 DDLResult
