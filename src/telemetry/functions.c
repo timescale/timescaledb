@@ -247,8 +247,6 @@ ts_function_telemetry_reset_counts()
 	}
 
 	LWLockRelease(function_counts_lock);
-
-	return;
 }
 
 /****************************
