@@ -34,18 +34,18 @@
 #define IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype)                                        \
 	((proform)->prorettype == INT4OID && ((proform)->provolatile == PROVOLATILE_IMMUTABLE) &&      \
 	 (proform)->pronargs == 1 &&                                                                   \
-	 ((proform)->proargtypes.values[0] == argtype ||                                               \
+	 ((proform)->proargtypes.values[0] == (argtype) ||                                             \
 	  (proform)->proargtypes.values[0] == ANYELEMENTOID))
 
 #define IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype)                                          \
 	(IS_VALID_OPEN_DIM_TYPE((proform)->prorettype) &&                                              \
 	 ((proform)->provolatile == PROVOLATILE_IMMUTABLE) && (proform)->pronargs == 1 &&              \
-	 ((proform)->proargtypes.values[0] == argtype ||                                               \
+	 ((proform)->proargtypes.values[0] == (argtype) ||                                             \
 	  (proform)->proargtypes.values[0] == ANYELEMENTOID))
 
 #define IS_VALID_PARTITIONING_FUNC(proform, dimtype, argtype)                                      \
-	((dimtype == DIMENSION_TYPE_OPEN) ? IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype) :        \
-										IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype))
+	(((dimtype) == DIMENSION_TYPE_OPEN) ? IS_VALID_OPEN_PARTITIONING_FUNC(proform, argtype) :      \
+										  IS_VALID_CLOSED_PARTITIONING_FUNC(proform, argtype))
 
 static bool
 closed_dim_partitioning_func_filter(Form_pg_proc form, void *arg)
