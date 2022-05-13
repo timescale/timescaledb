@@ -153,7 +153,6 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	cxt->srcht = srcht;
 	cxt->compress_ht = compress_ht;
 	cxt->srcht_chunk = srcchunk;
-	return;
 }
 
 static void

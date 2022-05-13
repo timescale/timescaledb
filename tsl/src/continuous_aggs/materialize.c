@@ -116,7 +116,6 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
-	return;
 }
 
 static bool

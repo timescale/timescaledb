@@ -215,7 +215,6 @@ wait_for_background_worker_startup(BackgroundWorkerHandle *handle, pid_t *pidp)
 		bgw_on_postmaster_death();
 
 	Assert(status == BGWH_STOPPED || status == BGWH_STARTED);
-	return;
 }
 
 static void
@@ -233,7 +232,6 @@ wait_for_background_worker_shutdown(BackgroundWorkerHandle *handle)
 		bgw_on_postmaster_death();
 
 	Assert(status == BGWH_STOPPED);
-	return;
 }
 
 static void

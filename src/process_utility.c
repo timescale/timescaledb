@@ -1412,8 +1412,6 @@ process_relations_in_namespace(GrantStmt *stmt, Name schema_name, Oid namespaceI
 
 	table_endscan(scan);
 	table_close(rel, AccessShareLock);
-
-	return;
 }
 
 /*
