@@ -33,7 +33,6 @@ mock_connect(Connection *conn, const char *host, const char *servname, int port)
 static void
 mock_close(Connection *conn)
 {
-	return;
 }
 
 static ssize_t

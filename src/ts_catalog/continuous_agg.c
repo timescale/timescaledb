@@ -1219,7 +1219,6 @@ ts_continuous_agg_rename_schema_name(char *old_schema, char *new_schema)
 		if (should_free)
 			heap_freetuple(tuple);
 	}
-	return;
 }
 
 extern void
@@ -1288,7 +1287,6 @@ ts_continuous_agg_rename_view(const char *old_schema, const char *name, const ch
 		if (should_free)
 			heap_freetuple(tuple);
 	}
-	return;
 }
 
 TSDLLEXPORT int32
