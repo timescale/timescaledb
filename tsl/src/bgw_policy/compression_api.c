@@ -32,7 +32,7 @@
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 
 /* Right now, there is an infinite number of retries for compress_chunks jobs */
-#define DEFAULT_MAX_RETRIES -1
+#define DEFAULT_MAX_RETRIES (-1)
 /* Default retry period for reorder_jobs is currently 1 hour */
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))

@@ -20,9 +20,9 @@
 #define DEFAULT_MAX_RUNTIME 0
 
 /* Right now, there is an infinite number of retries for custom jobs */
-#define DEFAULT_MAX_RETRIES -1
+#define DEFAULT_MAX_RETRIES (-1)
 /* Default retry period for reorder_jobs is currently 5 minutes */
-#define DEFAULT_RETRY_PERIOD 5 * USECS_PER_MINUTE
+#define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
 #define ALTER_JOB_NUM_COLS 8
 

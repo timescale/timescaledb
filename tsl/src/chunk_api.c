@@ -49,7 +49,7 @@
 #define FLOAT4_TYPELEN sizeof(float4)
 #define FLOAT4_TYPEBYVAL true
 #define FLOAT4_TYPEALIGN 'i'
-#define CSTRING_TYPELEN -2
+#define CSTRING_TYPELEN (-2)
 #define CSTRING_TYPEBYVAL false
 #define CSTRING_TYPEALIGN 'c'
 #define INT4_TYPELEN sizeof(int32)
@@ -58,7 +58,7 @@
 #define OID_TYPELEN sizeof(Oid)
 #define OID_TYPEBYVAL true
 #define OID_TYPEALIGN 'i'
-#define CSTRING_ARY_TYPELEN -1
+#define CSTRING_ARY_TYPELEN (-1)
 
 /*
  * Convert a hypercube to a JSONB value.
@@ -633,8 +633,8 @@ enum OpArrayTypeIdx
 	ENCODED_OP_RARG_NAMESPACE,
 };
 
-#define LargSubarrayForOpArray(op_string_array) (&op_string_array[ENCODED_OP_LARG_NAME])
-#define RargSubarrayForOpArray(op_string_array) (&op_string_array[ENCODED_OP_RARG_NAME])
+#define LargSubarrayForOpArray(op_string_array) (&(op_string_array)[ENCODED_OP_LARG_NAME])
+#define RargSubarrayForOpArray(op_string_array) (&(op_string_array)[ENCODED_OP_RARG_NAME])
 
 static void
 convert_type_oid_to_strings(Oid type_id, Datum *result_strings)

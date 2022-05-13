@@ -18,35 +18,35 @@
 #define TIME_BUCKET(period, timestamp, offset, min, max, result)                                   \
 	do                                                                                             \
 	{                                                                                              \
-		if (period <= 0)                                                                           \
+		if ((period) <= 0)                                                                         \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
 					 errmsg("period must be greater than 0")));                                    \
-		if (offset != 0)                                                                           \
+		if ((offset) != 0)                                                                         \
 		{                                                                                          \
 			/* We need to ensure that the timestamp is in range _after_ the */                     \
 			/* offset is applied: when the offset is positive we need to make */                   \
 			/* sure the resultant time is at least min, and when negative that */                  \
 			/* it is less than the max. */                                                         \
-			offset = offset % period;                                                              \
-			if ((offset > 0 && timestamp < min + offset) ||                                        \
-				(offset < 0 && timestamp > max + offset))                                          \
+			(offset) = (offset) % (period);                                                        \
+			if (((offset) > 0 && (timestamp) < (min) + (offset)) ||                                \
+				((offset) < 0 && (timestamp) > (max) + (offset)))                                  \
 				ereport(ERROR,                                                                     \
 						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),                              \
 						 errmsg("timestamp out of range")));                                       \
-			timestamp -= offset;                                                                   \
+			(timestamp) -= (offset);                                                               \
 		}                                                                                          \
-		result = (timestamp / period) * period;                                                    \
-		if (timestamp < 0 && timestamp % period)                                                   \
+		(result) = ((timestamp) / (period)) * (period);                                            \
+		if ((timestamp) < 0 && (timestamp) % (period))                                             \
 		{                                                                                          \
-			if (result < min + period)                                                             \
+			if ((result) < (min) + (period))                                                       \
 				ereport(ERROR,                                                                     \
 						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),                              \
 						 errmsg("timestamp out of range")));                                       \
 			else                                                                                   \
-				result = result - period;                                                          \
+				(result) = (result) - (period);                                                    \
 		}                                                                                          \
-		result += offset;                                                                          \
+		(result) += (offset);                                                                      \
 	} while (0)
 
 TS_FUNCTION_INFO_V1(ts_int16_bucket);
@@ -102,23 +102,23 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 #define TIME_BUCKET_TS(period, timestamp, result, shift)                                           \
 	do                                                                                             \
 	{                                                                                              \
-		if (period <= 0)                                                                           \
+		if ((period) <= 0)                                                                         \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
 					 errmsg("period must be greater than 0")));                                    \
 		/* shift = shift % period, but use TMODULO */                                              \
 		TMODULO(shift, result, period);                                                            \
                                                                                                    \
-		if ((shift > 0 && timestamp < DT_NOBEGIN + shift) ||                                       \
-			(shift < 0 && timestamp > DT_NOEND + shift))                                           \
+		if (((shift) > 0 && (timestamp) < DT_NOBEGIN + (shift)) ||                                 \
+			((shift) < 0 && (timestamp) > DT_NOEND + (shift)))                                     \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),                                  \
 					 errmsg("timestamp out of range")));                                           \
-		timestamp -= shift;                                                                        \
+		(timestamp) -= (shift);                                                                    \
                                                                                                    \
 		/* result = (timestamp / period) * period */                                               \
 		TMODULO(timestamp, result, period);                                                        \
-		if (timestamp < 0)                                                                         \
+		if ((timestamp) < 0)                                                                       \
 		{                                                                                          \
 			/*                                                                                     \
 			 * need to subtract another period if remainder < 0 this only happens                  \
@@ -126,12 +126,12 @@ ts_int64_bucket(PG_FUNCTION_ARGS)
 			 * after division. Need to subtract another period since division                      \
 			 * truncates toward 0 in C99.                                                          \
 			 */                                                                                    \
-			result = (result * period) - period;                                                   \
+			(result) = ((result) * (period)) - (period);                                           \
 		}                                                                                          \
 		else                                                                                       \
-			result *= period;                                                                      \
+			(result) *= (period);                                                                  \
                                                                                                    \
-		result += shift;                                                                           \
+		(result) += (shift);                                                                       \
 	} while (0)
 
 /* Returns the period in the same representation as Postgres Timestamps.
