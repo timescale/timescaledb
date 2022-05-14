@@ -14,13 +14,6 @@ jobs:
     strategy:
       matrix:
         pg: ["12.10", "13.6", "14.2"]
-        include:
-          - pg: 12.10
-            pg_major: 12
-          - pg: 13.6
-            pg_major: 13
-          - pg: 14.2
-            pg_major: 14
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -31,7 +24,8 @@ jobs:
 
     - name: Update tests ${{ matrix.pg }}
       run: |
-        ./scripts/test_updates_pg${{ matrix.pg_major }}.sh
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+        ./scripts/test_updates_pg${PG_MAJOR}.sh
 
     - name: Update diff
       if: failure()
@@ -51,13 +45,6 @@ jobs:
     strategy:
       matrix:
         pg: ["12.10", "13.6", "14.2"]
-        include:
-          - pg: 12.10
-            pg_major: 12
-          - pg: 13.6
-            pg_major: 13
-          - pg: 14.2
-            pg_major: 14
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -71,17 +58,15 @@ jobs:
     - name: Fetch all tags
       run: git fetch --tags && git tag
 
-    - name: Read version
-      id: read_version
-      shell: perl -n {0} version.config
-      run: |
-        print "::set-output name=to_version::$1\n" if /downgrade_to_version\s*=\s*(\S+)/
-
     - name: Downgrade tests ${{ matrix.pg }}
       env:
-        UPDATE_FROM_TAG: ${{ steps.read_version.outputs.to_version }}-pg${{ matrix.pg_major }}
         TEST_VERSION: v7
-      run: bash scripts/test_downgrade_from_tag.sh
+      run: |
+        DOWNGRADE_TO=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+        UPDATE_FROM_TAG=${DOWNGRADE_TO}-pg${PG_MAJOR}
+        export UPDATE_FROM_TAG
+        scripts/test_downgrade_from_tag.sh
 
     - name: Downgrade diff
       if: failure()
