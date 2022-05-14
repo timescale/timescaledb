@@ -67,9 +67,20 @@ elif [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -n ${IGNORES} ]]; then
 
   echo > ${TEMP_SCHEDULE}
 
-  for t in ${IGNORES}; do
-      echo "ignore: ${t}" >> ${TEMP_SCHEDULE}
+  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
+
+  # to support wildcards in IGNORES we match the IGNORES
+  # list against the actual list of tests
+  for test_pattern in ${IGNORES}; do
+    for test_name in ${ALL_TESTS}; do
+      # shellcheck disable=SC2053
+      # We do want to match globs in $test_pattern here.
+      if [[ $test_name == $test_pattern ]]; then
+        echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
+      fi
+    done
   done
+
   cat ${TEST_SCHEDULE} >> ${TEMP_SCHEDULE}
 
   SCHEDULE=${TEMP_SCHEDULE}
@@ -111,8 +122,18 @@ else
 
   echo > ${TEMP_SCHEDULE}
 
-  for t in ${IGNORES}; do
-      echo "ignore: ${t}" >> ${TEMP_SCHEDULE}
+  # to support wildcards in IGNORES we match the IGNORES
+  # list against the actual list of tests
+  for test_pattern in ${IGNORES}; do
+    for test_name in ${ALL_TESTS}; do
+      if ! matches "${SKIPS}" "${test_name}"; then
+        # shellcheck disable=SC2053
+        # We do want to match globs in $test_pattern here.
+        if [[ $test_name == $test_pattern ]]; then
+          echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
+        fi
+      fi
+    done
   done
 
   for t in ${TESTS}; do
