@@ -56,11 +56,7 @@
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/hypertable_modify.h"
 #include "partitioning.h"
-#include "plan_add_hashagg.h"
-#include "plan_agg_bookend.h"
-#include "plan_expand_hypertable.h"
-#include "plan_partialize.h"
-#include "planner.h"
+#include "planner/planner.h"
 #include "utils.h"
 
 #include "compat/compat.h"

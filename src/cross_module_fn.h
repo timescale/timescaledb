@@ -20,8 +20,7 @@
 #include "process_utility.h"
 #include "with_clause_parser.h"
 #include "ts_catalog/continuous_agg.h"
-#include "plan_expand_hypertable.h"
-#include "planner.h"
+#include "planner/planner.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default

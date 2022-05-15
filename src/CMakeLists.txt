@@ -32,11 +32,6 @@ set(SOURCES
     jsonb_utils.c
     license_guc.c
     partitioning.c
-    planner.c
-    plan_expand_hypertable.c
-    plan_add_hashagg.c
-    plan_agg_bookend.c
-    plan_partialize.c
     process_utility.c
     scanner.c
     scan_iterator.c
@@ -104,3 +99,4 @@ add_subdirectory(compat)
 add_subdirectory(ts_catalog)
 add_subdirectory(import)
 add_subdirectory(nodes)
+add_subdirectory(planner)

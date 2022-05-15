@@ -16,7 +16,7 @@
 #include <parser/parse_func.h>
 #include <utils/lsyscache.h>
 
-#include "plan_partialize.h"
+#include "planner.h"
 #include "extension_constants.h"
 #include "utils.h"
 
