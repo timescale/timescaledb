@@ -10,7 +10,7 @@
 
 #include "fdw/data_node_scan_plan.h"
 #include <hypertable_cache.h>
-#include <planner.h>
+#include <planner/planner.h>
 #include <import/allpaths.h>
 #include <import/planner.h>
 #include <func_cache.h>

@@ -78,9 +78,9 @@
 #include "utils.h"
 #include "scan_plan.h"
 #include "extension_constants.h"
-#include "plan_expand_hypertable.h"
 #include "partialize_finalize.h"
 #include "nodes/gapfill/planner.h"
+#include "planner/planner.h"
 
 /*
  * Global context for foreign_expr_walker's search of an expression tree.

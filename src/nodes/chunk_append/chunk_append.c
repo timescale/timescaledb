@@ -12,7 +12,7 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
-#include "planner.h"
+#include "planner/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "func_cache.h"
 #include "guc.h"

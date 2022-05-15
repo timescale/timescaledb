@@ -12,7 +12,10 @@
 #include <nodes/pathnodes.h>
 
 #include "export.h"
+#include "hypertable.h"
 #include "guc.h"
+
+#define CHUNK_EXCL_FUNC_NAME "chunks_in"
 
 typedef struct Chunk Chunk;
 typedef struct TsFdwRelInfo TsFdwRelInfo;
@@ -76,5 +79,19 @@ typedef enum TsRelType
 							  * expansion. */
 	TS_REL_OTHER,			 /* Anything which is none of the above */
 } TsRelType;
+
+typedef enum PartializeAggFixAggref
+{
+	TS_DO_NOT_FIX_AGGREF = 0,
+	TS_FIX_AGGREF = 1
+} PartializeAggFixAggref;
+
+bool has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref);
+bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
+
+extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
+extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
+extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel);
+extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
 
 #endif /* TIMESCALEDB_PLANNER_H */

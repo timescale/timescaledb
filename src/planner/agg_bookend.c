@@ -5,13 +5,6 @@
  */
 
 /*
- * This file contains source code that was copied and/or modified from
- * the PostgreSQL database, which is licensed under the open-source
- * PostgreSQL License. Please see the NOTICE at the top level
- * directory for a copy of the PostgreSQL License.
- */
-
-/*
  *	  Optimization for FIRST/LAST aggregate functions.
  *
  * This module tries to replace FIRST/LAST aggregate functions by subqueries
@@ -32,6 +25,14 @@
  *
  *
  */
+
+/*
+ * This file contains source code that was copied and/or modified from
+ * the PostgreSQL database, which is licensed under the open-source
+ * PostgreSQL License. Please see the NOTICE at the top level
+ * directory for a copy of the PostgreSQL License.
+ */
+
 #include <postgres.h>
 
 #include <access/htup_details.h>
@@ -59,7 +60,6 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include "plan_agg_bookend.h"
 #include "planner.h"
 #include "utils.h"
 #include "extension.h"
