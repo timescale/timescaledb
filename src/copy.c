@@ -3,6 +3,23 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+
+/*
+ * This file contains source code that was copied and/or modified from
+ * the PostgreSQL database, which is licensed under the open-source
+ * PostgreSQL License. Please see the NOTICE at the top level
+ * directory for a copy of the PostgreSQL License.
+ *
+ * The code copies data to a hypertable or migrates existing data from
+ * a table to a hypertable when create_hypertable(..., migrate_data =>
+ * 'true', ...) is called.
+ *
+ * Unfortunately, there aren't any good hooks in the regular COPY code to
+ * insert our chunk dispatching. So, most of this code is a straight-up
+ * copy of the regular PostgreSQL source code for the COPY command
+ * (command/copy.c and command/copyfrom.c), albeit with minor modifications.
+ */
+
 #include <postgres.h>
 
 #include <ctype.h>
@@ -49,16 +66,6 @@
 #if PG14_GE
 #include <commands/copyfrom_internal.h>
 #endif
-
-/*
- * Copy from a file to a hypertable.
- *
- * Unfortunately, there aren't any good hooks in the regular COPY code to insert
- * our chunk dispatching. So, most of this code is a straight-up copy of the
- * regular PostgreSQL source code for the COPY command (command/copy.c
- * and command/copyfrom.c), albeit with minor modifications.
- *
- */
 
 /*
  * No more than this many tuples per TSCopyMultiInsertBuffer
