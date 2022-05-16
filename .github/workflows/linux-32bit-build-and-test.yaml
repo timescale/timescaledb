@@ -23,13 +23,13 @@ jobs:
         build_type: [ Debug ]
         include:
           - pg: "12.10"
-            ignores: append-12 debug_notice transparent_decompression-12 transparent_decompress_chunk-12 plan_skip_scan-12 pg_dump dist_gapfill_pushdown-12
+            ignores: append-12 debug_notice transparent_decompression-12 transparent_decompress_chunk-12 plan_skip_scan-12 pg_dump
             pg_major: 12
           - pg: "13.6"
-            ignores: append-13 debug_notice transparent_decompression-13 transparent_decompress_chunk-13 pg_dump dist_gapfill_pushdown-13
+            ignores: append-13 debug_notice transparent_decompression-13 transparent_decompress_chunk-13 pg_dump
             pg_major: 13
           - pg: "14.2"
-            ignores: append-14 debug_notice transparent_decompression-14 transparent_decompress_chunk-14 pg_dump dist_gapfill_pushdown-14
+            ignores: append-14 debug_notice transparent_decompression-14 transparent_decompress_chunk-14 pg_dump
             pg_major: 14
 
     steps:
