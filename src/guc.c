@@ -55,6 +55,7 @@ bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
+bool ts_guc_enable_now_constify = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_async_append = true;
@@ -220,6 +221,17 @@ _guc_init(void)
 							 "Enable group by reordering",
 							 "Enable group by clause reordering for continuous aggregates",
 							 &ts_guc_enable_cagg_reorder_groupby,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_now_constify",
+							 "Enable now() constify",
+							 "Enable constifying now() in query constraints",
+							 &ts_guc_enable_now_constify,
 							 true,
 							 PGC_USERSET,
 							 0,

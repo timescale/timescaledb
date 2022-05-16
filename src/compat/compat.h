@@ -535,3 +535,14 @@ get_reindex_options(ReindexStmt *stmt)
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */
+
+/*
+ * PostgreSQL < 14 does not have F_TIMESTAMPTZ_GT macro but instead has
+ * the oid of that function as F_TIMESTAMP_GT even though the signature
+ * is with timestamptz but the name of the underlying C function is
+ * timestamp_gt.
+ */
+#if PG14_LT
+#define F_TIMESTAMPTZ_GE F_TIMESTAMP_GE
+#define F_TIMESTAMPTZ_GT F_TIMESTAMP_GT
+#endif

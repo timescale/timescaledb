@@ -13,6 +13,10 @@ set(TEST_FILES_SHARED
     extension.sql
     subtract_integer_from_now.sql)
 
+set(TEST_TEMPLATES_SHARED
+    gapfill.sql.in generated_columns.sql.in ordered_append.sql.in
+    ordered_append_join.sql.in transparent_decompress_chunk.sql.in)
+
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED memoize.sql)
 endif()
@@ -20,11 +24,8 @@ endif()
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED dist_remote_error.sql timestamp_limits.sql
        with_clause_parser.sql)
+  list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in generated_columns.sql.in ordered_append.sql.in
-    ordered_append_join.sql.in transparent_decompress_chunk.sql.in)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are
 # put in the original source directory since all tests must be in the same
