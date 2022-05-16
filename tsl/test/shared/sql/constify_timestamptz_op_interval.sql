@@ -7,8 +7,8 @@
 -- otherwise those would remove the chunks from the plan during execution
 
 SET timescaledb.enable_chunk_append TO FALSE;
-
 SET timescaledb.enable_constraint_aware_append TO FALSE;
+SET timescaledb.enable_now_constify TO FALSE;
 
 -- plan query on complete hypertable to get a list of the chunks
 :PREFIX

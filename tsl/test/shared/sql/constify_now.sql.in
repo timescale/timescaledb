@@ -1,0 +1,106 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+SET timescaledb.enable_chunk_append TO false;
+SET timescaledb.enable_constraint_aware_append TO false;
+SET timescaledb.current_timestamp_mock TO '1990-01-01';
+
+\set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+
+-- test valid variants we are optimizing
+-- all of these should have a constified value as filter
+-- none of these initial tests will actually exclude chunks
+-- because we want to see the constified now expression in
+-- EXPLAIN output
+:PREFIX SELECT FROM metrics WHERE time > now();
+:PREFIX SELECT FROM metrics WHERE time >= now();
+:PREFIX SELECT FROM metrics WHERE time > now() - '24h'::interval;
+:PREFIX SELECT FROM metrics WHERE time > now() + '10m'::interval;
+:PREFIX SELECT FROM metrics WHERE time >= now() - '10m'::interval;
+:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval;
+
+-- test multiple constraints
+:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND device_id = 2;
+:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
+:PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
+
+-- variants we don't optimize
+-- we do not allow interval with day or month components
+:PREFIX SELECT FROM metrics WHERE time > now() - '1d'::interval;
+:PREFIX SELECT FROM metrics WHERE time > now() - '1week'::interval;
+:PREFIX SELECT FROM metrics WHERE time > now() - '1month'::interval;
+:PREFIX SELECT FROM metrics WHERE time > now()::date;
+:PREFIX SELECT FROM metrics WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
+
+-- we only modify top-level ANDed now() expressions
+:PREFIX SELECT FROM metrics WHERE time > now() - '1m'::interval OR time > now() + '1m'::interval;
+:PREFIX SELECT FROM metrics WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
+
+-- CTE
+:PREFIX WITH q1 AS (
+  SELECT * FROM metrics WHERE time > now()
+) SELECT FROM q1;
+
+:PREFIX WITH q1 AS (
+  SELECT * FROM metrics
+) SELECT FROM q1 WHERE time > now();
+
+-- JOIN
+:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now();
+:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m2.time > now();
+:PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now() AND m2.time > now();
+
+-- only top-level constraints in WHERE clause are constified
+:PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now());
+:PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now()) WHERE m2.time > now();
+
+-- test UPDATE
+:PREFIX UPDATE metrics SET v0 = 0.1, v1 = EXTRACT(EPOCH FROM now()) WHERE time > now();
+
+-- test DELETE
+:PREFIX DELETE FROM metrics WHERE time > now();
+
+-- test chunks actually get excluded
+-- should exclude all
+SET timescaledb.current_timestamp_mock TO '2010-01-01';
+:PREFIX SELECT FROM metrics WHERE time > now();
+
+-- should exclude all but 1 chunk
+SET timescaledb.current_timestamp_mock TO '2000-01-14';
+:PREFIX SELECT FROM metrics WHERE time > now();
+
+CREATE TABLE const_now(time timestamptz, time2 timestamptz, value float);
+
+-- does not apply to non-hypertables
+:PREFIX SELECT FROM const_now WHERE time > now();
+
+SELECT table_name FROM create_hypertable('const_now','time');
+INSERT INTO const_now SELECT '2000-01-01','2000-01-01',0.5;
+
+-- should have one time filter false
+:PREFIX SELECT FROM const_now WHERE time > now();
+
+-- no constification because it's not partitioning column
+:PREFIX SELECT FROM const_now WHERE time2 > now();
+
+DROP TABLE const_now;
+
+-- test prepared statements
+CREATE TABLE prep_const_now(time timestamptz, device int, value float);
+SELECT table_name FROM create_hypertable('prep_const_now', 'time');
+
+INSERT INTO prep_const_now SELECT '3000-01-02', 1, 0.2;
+INSERT INTO prep_const_now SELECT '3001-01-02', 2, 0.3;
+INSERT INTO prep_const_now SELECT '3002-01-02', 3, 0.4;
+
+SET timescaledb.current_timestamp_mock TO '3001-01-01';
+PREPARE p1 AS SELECT FROM prep_const_now WHERE time > now();
+:PREFIX EXECUTE p1;
+EXECUTE p1;
+SET timescaledb.current_timestamp_mock TO '3002-01-01';
+-- plan won't change cause the query didnt get replanned
+:PREFIX EXECUTE p1;
+EXECUTE p1;
+
+DROP TABLE prep_const_now;

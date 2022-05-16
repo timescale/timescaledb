@@ -27,7 +27,7 @@
 #include "estimate.h"
 
 /* This optimization adds a HashAggregate plan to many group by queries.
- * In plain postgres, many time-series queries will not use a the hash aggregate
+ * In plain postgres, many time-series queries will not use a hash aggregate
  * because the planner will incorrectly assume that the number of rows is much larger than
  * it actually is and will use the less efficient GroupAggregate instead of a HashAggregate
  * to prevent running out of memory.

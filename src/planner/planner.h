@@ -86,6 +86,7 @@ typedef enum PartializeAggFixAggref
 	TS_FIX_AGGREF = 1
 } PartializeAggFixAggref;
 
+Hypertable *ts_planner_get_hypertable(const Oid relid, const unsigned int flags);
 bool has_partialize_function(Query *parse, PartializeAggFixAggref fix_aggref);
 bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
 
@@ -93,5 +94,6 @@ extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOpt
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
+extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 
 #endif /* TIMESCALEDB_PLANNER_H */
