@@ -84,6 +84,7 @@ PG_MODULE_MAGIC;
 
 #define POST_LOAD_INIT_FN "ts_post_load_init"
 #define GUC_DISABLE_LOAD_NAME "timescaledb.disable_load"
+#define GUC_LAUNCHER_POLL_TIME_MS "timescaledb.bgw_launcher_poll_time"
 
 /*
  * The loader really shouldn't load if we're in a parallel worker as there is a
@@ -106,6 +107,8 @@ static char soversion[MAX_VERSION_LEN];
 
 /* GUC to disable the load */
 static bool guc_disable_load = false;
+
+int ts_guc_bgw_launcher_poll_time = BGW_LAUNCHER_POLL_TIME_MS;
 
 /* This is the hook that existed before the loader was installed */
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
@@ -643,6 +646,20 @@ _PG_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable(GUC_LAUNCHER_POLL_TIME_MS,
+							"Launcher timeout value in milliseconds",
+							"Configure the time the launcher waits "
+							"to look for new TimescaleDB instances",
+							&ts_guc_bgw_launcher_poll_time,
+							BGW_LAUNCHER_POLL_TIME_MS, /* 10 ms or 60 seconds */
+							10,						   /* min: 10ms */
+							PG_INT32_MAX,			   /* PG_INT16_MAX would be too small  */
+							PGC_POSTMASTER,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	/*
 	 * Cannot check for extension here since not inside a transaction yet. Nor
