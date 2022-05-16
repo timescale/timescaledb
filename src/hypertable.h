@@ -52,7 +52,6 @@ typedef struct Hypertable
 	Oid chunk_sizing_func;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
-	bool push_gapfill;
 	/*
 	 * Allows restricting the data nodes to use for the hypertable. Default is to
 	 * use all available data nodes.
