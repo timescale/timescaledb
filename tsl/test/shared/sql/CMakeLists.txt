@@ -23,9 +23,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(TEST_TEMPLATES_SHARED
-    dist_gapfill_pushdown.sql.in gapfill.sql.in generated_columns.sql.in
-    ordered_append.sql.in ordered_append_join.sql.in
-    transparent_decompress_chunk.sql.in)
+    gapfill.sql.in generated_columns.sql.in ordered_append.sql.in
+    ordered_append_join.sql.in transparent_decompress_chunk.sql.in)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are
 # put in the original source directory since all tests must be in the same

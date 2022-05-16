@@ -40,8 +40,6 @@
 #include "data_node_scan_exec.h"
 #include "fdw_utils.h"
 
-#include "nodes/gapfill/planner.h"
-
 /*
  * DataNodeScan is a custom scan implementation for scanning hypertables on
  * remote data nodes instead of scanning individual remote chunks.
@@ -375,7 +373,7 @@ force_group_by_push_down(PlannerInfo *root, RelOptInfo *hyper_rel)
  */
 static void
 push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
-					DataNodeChunkAssignments *scas, bool gapfill_safe)
+					DataNodeChunkAssignments *scas)
 {
 	const Dimension *dim;
 	bool overlaps;
@@ -416,9 +414,6 @@ push_down_group_bys(PlannerInfo *root, RelOptInfo *hyper_rel, Hyperspace *hs,
 		Assert(NULL != dim);
 		hyper_rel->partexprs[0] = ts_dimension_get_partexprs(dim, hyper_rel->relid);
 		hyper_rel->part_scheme->partnatts = 1;
-
-		if (gapfill_safe)
-			force_group_by_push_down(root, hyper_rel);
 	}
 }
 
@@ -445,7 +440,6 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	int ndata_node_rels;
 	DataNodeChunkAssignments scas;
 	int i;
-	bool gapfill_safe = false;
 
 	Assert(NULL != ht);
 
@@ -465,11 +459,8 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 	/* Assign chunks to data nodes */
 	data_node_chunk_assignment_assign_chunks(&scas, chunk_rels, nchunk_rels);
 
-	/* Check if we can push down gapfill to data nodes */
-	gapfill_safe = pushdown_gapfill(root, hyper_rel, ht->space, &scas);
-
 	/* Try to push down GROUP BY expressions and bucketing, if possible */
-	push_down_group_bys(root, hyper_rel, ht->space, &scas, gapfill_safe);
+	push_down_group_bys(root, hyper_rel, ht->space, &scas);
 
 	/*
 	 * Create estimates and paths for each data node rel based on data node chunk
@@ -496,17 +487,9 @@ data_node_scan_add_node_paths(PlannerInfo *root, RelOptInfo *hyper_rel)
 									data_node_rel,
 									data_node_rel->serverid,
 									hyper_rte->relid,
-									TS_FDW_RELINFO_HYPERTABLE_DATA_NODE,
-									gapfill_safe);
+									TS_FDW_RELINFO_HYPERTABLE_DATA_NODE);
 
 		fpinfo->sca = sca;
-
-		/*
-		 * Since we can not always call pushdown_gapfill where scas are not available,
-		 * remember if gapfill is safe to be pushed down for this relation for later
-		 * uses e.g. in add_foreign_grouping_paths.
-		 */
-		ht->push_gapfill = gapfill_safe;
 
 		if (!bms_is_empty(sca->chunk_relids))
 		{

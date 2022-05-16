@@ -37,7 +37,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000
    Data node: data_node_1
    Fetcher Type: Row by row
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[34, 35, 36]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
 explain (analyze, verbose, costs off, timing off, summary off)
@@ -55,7 +55,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000
    Data node: data_node_1
    Fetcher Type: Row by row
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[34, 35, 36]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
 set timescaledb.remote_data_fetcher = 'cursor';
@@ -74,7 +74,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000
    Data node: data_node_1
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[34, 35, 36]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
 explain (analyze, verbose, costs off, timing off, summary off)
@@ -92,6 +92,6 @@ select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000
    Data node: data_node_1
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[34, 35, 36]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 

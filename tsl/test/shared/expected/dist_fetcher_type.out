@@ -132,9 +132,9 @@ select * from disttable_with_ct;
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) on public.disttable_with_ct (actual rows=2 loops=1)
    Output: disttable_with_ct."time", disttable_with_ct.txn_id, disttable_with_ct.val, disttable_with_ct.info
-   Data node: data_node_1
+   Data node: data_node_2
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk
-   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[33])
+   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[20])
 (6 rows)
 
