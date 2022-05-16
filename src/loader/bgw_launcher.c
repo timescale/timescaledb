@@ -82,13 +82,6 @@ typedef enum SchedulerState
 #define BGW_LAUNCHER_RESTART_TIME_S 60
 #endif
 
-/* WaitLatch expects a long */
-#ifdef TS_DEBUG
-#define BGW_LAUNCHER_POLL_TIME_MS 10L
-#else
-#define BGW_LAUNCHER_POLL_TIME_MS 60000L
-#endif
-
 static volatile sig_atomic_t got_SIGHUP = false;
 
 static void launcher_sighup(SIGNAL_ARGS)
@@ -779,7 +772,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 
 		wl_rc = WaitLatch(MyLatch,
 						  WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT,
-						  BGW_LAUNCHER_POLL_TIME_MS,
+						  (long) ts_guc_bgw_launcher_poll_time,
 						  PG_WAIT_EXTENSION);
 		ResetLatch(MyLatch);
 		if (wl_rc & WL_POSTMASTER_DEATH)
