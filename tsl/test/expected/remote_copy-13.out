@@ -110,14 +110,14 @@ SELECT * FROM _timescaledb_catalog.chunk ORDER BY 1;
   6 |             1 | _timescaledb_internal | _dist_hyper_1_6_chunk  |                     | f       |      0
   7 |             1 | _timescaledb_internal | _dist_hyper_1_7_chunk  |                     | f       |      0
   8 |             1 | _timescaledb_internal | _dist_hyper_1_8_chunk  |                     | f       |      0
+  9 |             1 | _timescaledb_internal | _dist_hyper_1_9_chunk  |                     | f       |      0
+ 10 |             1 | _timescaledb_internal | _dist_hyper_1_10_chunk |                     | f       |      0
+ 11 |             1 | _timescaledb_internal | _dist_hyper_1_11_chunk |                     | f       |      0
  12 |             1 | _timescaledb_internal | _dist_hyper_1_12_chunk |                     | f       |      0
  13 |             1 | _timescaledb_internal | _dist_hyper_1_13_chunk |                     | f       |      0
  14 |             1 | _timescaledb_internal | _dist_hyper_1_14_chunk |                     | f       |      0
  15 |             1 | _timescaledb_internal | _dist_hyper_1_15_chunk |                     | f       |      0
  16 |             1 | _timescaledb_internal | _dist_hyper_1_16_chunk |                     | f       |      0
- 17 |             1 | _timescaledb_internal | _dist_hyper_1_17_chunk |                     | f       |      0
- 18 |             1 | _timescaledb_internal | _dist_hyper_1_18_chunk |                     | f       |      0
- 19 |             1 | _timescaledb_internal | _dist_hyper_1_19_chunk |                     | f       |      0
 (16 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1, 3;
@@ -139,22 +139,22 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1, 3;
         7 |             5 | data_node_2
         8 |             8 | data_node_1
         8 |             6 | data_node_2
-       12 |            11 | data_node_1
-       12 |             8 | data_node_2
-       13 |            12 | data_node_1
-       13 |             9 | data_node_2
-       14 |            13 | data_node_1
-       14 |            10 | data_node_2
-       15 |            14 | data_node_1
-       15 |            11 | data_node_2
-       16 |            15 | data_node_1
-       16 |            12 | data_node_2
-       17 |            16 | data_node_1
-       17 |            13 | data_node_2
-       18 |            17 | data_node_1
-       18 |            14 | data_node_2
-       19 |            18 | data_node_1
-       19 |             6 | data_node_3
+        9 |             9 | data_node_1
+        9 |             7 | data_node_2
+       10 |            10 | data_node_1
+       10 |             8 | data_node_2
+       11 |            11 | data_node_1
+       11 |             9 | data_node_2
+       12 |            12 | data_node_1
+       12 |            10 | data_node_2
+       13 |            13 | data_node_1
+       13 |            11 | data_node_2
+       14 |            14 | data_node_1
+       14 |             3 | data_node_3
+       15 |            15 | data_node_1
+       15 |            12 | data_node_2
+       16 |            16 | data_node_1
+       16 |            13 | data_node_2
 (32 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable_data_node ORDER BY 3;
@@ -176,14 +176,14 @@ select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
  _timescaledb_internal._dist_hyper_1_6_chunk
  _timescaledb_internal._dist_hyper_1_7_chunk
  _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_9_chunk
+ _timescaledb_internal._dist_hyper_1_10_chunk
+ _timescaledb_internal._dist_hyper_1_11_chunk
  _timescaledb_internal._dist_hyper_1_12_chunk
  _timescaledb_internal._dist_hyper_1_13_chunk
  _timescaledb_internal._dist_hyper_1_14_chunk
  _timescaledb_internal._dist_hyper_1_15_chunk
  _timescaledb_internal._dist_hyper_1_16_chunk
- _timescaledb_internal._dist_hyper_1_17_chunk
- _timescaledb_internal._dist_hyper_1_18_chunk
- _timescaledb_internal._dist_hyper_1_19_chunk
 (16 rows)
 
 \c :DN_DBNAME_1
@@ -221,14 +221,14 @@ select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
  _timescaledb_internal._dist_hyper_1_6_chunk
  _timescaledb_internal._dist_hyper_1_7_chunk
  _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_9_chunk
+ _timescaledb_internal._dist_hyper_1_10_chunk
+ _timescaledb_internal._dist_hyper_1_11_chunk
  _timescaledb_internal._dist_hyper_1_12_chunk
  _timescaledb_internal._dist_hyper_1_13_chunk
  _timescaledb_internal._dist_hyper_1_14_chunk
  _timescaledb_internal._dist_hyper_1_15_chunk
  _timescaledb_internal._dist_hyper_1_16_chunk
- _timescaledb_internal._dist_hyper_1_17_chunk
- _timescaledb_internal._dist_hyper_1_18_chunk
- _timescaledb_internal._dist_hyper_1_19_chunk
 (16 rows)
 
 \c :DN_DBNAME_2
@@ -261,13 +261,13 @@ select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
  _timescaledb_internal._dist_hyper_1_6_chunk
  _timescaledb_internal._dist_hyper_1_7_chunk
  _timescaledb_internal._dist_hyper_1_8_chunk
+ _timescaledb_internal._dist_hyper_1_9_chunk
+ _timescaledb_internal._dist_hyper_1_10_chunk
+ _timescaledb_internal._dist_hyper_1_11_chunk
  _timescaledb_internal._dist_hyper_1_12_chunk
  _timescaledb_internal._dist_hyper_1_13_chunk
- _timescaledb_internal._dist_hyper_1_14_chunk
  _timescaledb_internal._dist_hyper_1_15_chunk
  _timescaledb_internal._dist_hyper_1_16_chunk
- _timescaledb_internal._dist_hyper_1_17_chunk
- _timescaledb_internal._dist_hyper_1_18_chunk
 (13 rows)
 
 \c :DN_DBNAME_3
@@ -284,7 +284,7 @@ select * from show_chunks('"+ri(k33_'')"') ORDER BY 1;
 ----------------------------------------------
  _timescaledb_internal._dist_hyper_1_1_chunk
  _timescaledb_internal._dist_hyper_1_2_chunk
- _timescaledb_internal._dist_hyper_1_19_chunk
+ _timescaledb_internal._dist_hyper_1_14_chunk
 (3 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
