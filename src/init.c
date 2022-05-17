@@ -61,7 +61,6 @@ extern void _conn_mock_fini();
 extern void _chunk_append_init();
 
 extern void TSDLLEXPORT _PG_init(void);
-extern void TSDLLEXPORT _PG_fini(void);
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
@@ -120,12 +119,6 @@ _PG_init(void)
 
 	/* Register a cleanup function to be called when the backend exits */
 	on_proc_exit(cleanup_on_pg_proc_exit, 0);
-}
-
-void
-_PG_fini(void)
-{
-	cleanup_on_pg_proc_exit(0, 0);
 }
 
 TSDLLEXPORT Datum

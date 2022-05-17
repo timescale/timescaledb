@@ -58,70 +58,70 @@ DROP TABLE records;
 DROP TABLE clients;
 \set VERBOSITY default
 
--- Test that a continuous aggregate is refreshed correctly inside given chunk,
--- so it can be used together with user retention.
--- Shows that it is not affected by issue #2592.
+CREATE PROCEDURE refresh_cagg_by_chunk_range(_cagg REGCLASS, _hypertable REGCLASS, _older_than INTEGER)
+AS
+$$
+DECLARE
+    _r RECORD;
+BEGIN
+    WITH _chunks AS (
+        SELECT relname, nspname
+        FROM show_chunks(_hypertable, _older_than) AS relid
+        JOIN pg_catalog.pg_class ON pg_class.oid = relid AND pg_class.relkind = 'r'
+        JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+    )
+    SELECT MIN(range_start) AS range_start, MAX(range_end) AS range_end
+    INTO _r
+    FROM
+        _chunks
+        JOIN _timescaledb_catalog.chunk ON chunk.schema_name = _chunks.nspname AND chunk.table_name = _chunks.relname
+        JOIN _timescaledb_catalog.chunk_constraint ON chunk_id = chunk.id
+        JOIN _timescaledb_catalog.dimension_slice ON dimension_slice.id = dimension_slice_id;
 
-CREATE OR REPLACE FUNCTION test_int_now() returns INT LANGUAGE SQL STABLE as 
+    RAISE INFO 'range_start=% range_end=%', _r.range_start::int, _r.range_end::int;
+    CALL refresh_continuous_aggregate(_cagg, _r.range_start::int, _r.range_end::int + 1);
+END;
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION test_int_now() returns INT LANGUAGE SQL STABLE as
     $$ SELECT 125 $$;
 
-CREATE TABLE conditions(time_int INT NOT NULL, device INT, value FLOAT);
-SELECT create_hypertable('conditions', 'time_int', chunk_time_interval => 10);
+CREATE TABLE conditions(time_int INT NOT NULL, value FLOAT);
+SELECT create_hypertable('conditions', 'time_int', chunk_time_interval => 4);
 
 INSERT INTO conditions
-SELECT time_val, time_val % 4, 3.14 FROM generate_series(0,100,1) AS time_val;
+SELECT time_val, 1 FROM generate_series(0, 19, 1) AS time_val;
 
 SELECT set_integer_now_func('conditions', 'test_int_now');
-CREATE MATERIALIZED VIEW conditions_7
+
+CREATE MATERIALIZED VIEW conditions_2
     WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
     AS
-        SELECT time_bucket(7, time_int) as bucket,
+        SELECT time_bucket(2, time_int) as bucket,
             SUM(value), COUNT(value)
         FROM conditions GROUP BY bucket WITH DATA;
 
-CREATE VIEW see_cagg AS SELECT * FROM conditions_7 WHERE bucket <= 70 ORDER BY bucket;
+SELECT * FROM conditions_2 ORDER BY bucket;
 
-SELECT * FROM see_cagg;
+UPDATE conditions SET value = 4.00 WHERE time_int = 0;
+UPDATE conditions SET value = 4.00 WHERE time_int = 6;
 
--- This is the simplest case, when the updated bucket is inside a chunk, so it is expected
--- that the update is refreshed.
-UPDATE conditions SET value = 4.00 WHERE time_int = 2;
+CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 4);
+SELECT drop_chunks('conditions', 4);
 
--- This case updates values in the bucket, which affects two different partials in
--- two different chunks.
-UPDATE conditions SET value = 4.00 WHERE time_int = 9;
-UPDATE conditions SET value = 4.00 WHERE time_int = 11;
+SELECT * FROM conditions_2 ORDER BY bucket;
 
-SELECT timescaledb_experimental.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 20));
-SELECT drop_chunks('conditions', 20);
-SELECT * FROM see_cagg;
+CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 8);
+SELECT * FROM conditions_2 ORDER BY bucket;
 
--- This case is an update at the beginning of a bucket, which crosses two chunks. The update 
--- is in the first chunk, which is going to be refreshed, and the update will be present.
-UPDATE conditions SET value = 4.00 WHERE time_int = 39;
+UPDATE conditions SET value = 4.00 WHERE time_int = 19;
 
--- This update is in the bucket, which crosses two chunks. The first chunk is going to be 
--- refreshed now and the update is outside it, and thus should not be reflected. The second 
--- chunk contains the update and will be refreshed on the next call, thus it should be reflected 
--- in the continuous aggregate only after another refresh.
-UPDATE conditions SET value = 4.00 WHERE time_int = 41;
+SELECT drop_chunks('conditions', 8);
+CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 12);
+SELECT * FROM conditions_2 ORDER BY bucket;
 
--- After the call to drop_chunks the update in 39 will be refreshed and present in the cagg, 
--- but not the update in 41.
-BEGIN;
-    SELECT timescaledb_experimental.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 40));
-    SELECT drop_chunks('conditions', 40);
-END;
-SELECT * FROM see_cagg;
+CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', NULL);
+SELECT * FROM conditions_2 ORDER BY bucket;
 
--- Now refresh includes the update in 41.
-SELECT timescaledb_experimental.refresh_continuous_aggregate('conditions_7', show_chunks('conditions', 60));
-SELECT drop_chunks('conditions', 60);
-SELECT * FROM see_cagg;
-
--- Update chunks before drop but don't refresh, so the update will not be reflected in the cagg.
-UPDATE conditions SET value = 4.00 WHERE time_int = 62;
-UPDATE conditions SET value = 4.00 WHERE time_int = 69;
-
-SELECT drop_chunks('conditions', 80);
-SELECT * FROM see_cagg;
+DROP PROCEDURE refresh_cagg_by_chunk_range(REGCLASS, REGCLASS, INTEGER);

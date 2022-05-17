@@ -9,9 +9,8 @@
 #include <postgres.h>
 #include <optimizer/planner.h>
 
-#include <planner.h>
+#include <planner/planner.h>
 #include "hypertable.h"
-#include "plan_expand_hypertable.h"
 
 void tsl_create_upper_paths_hook(PlannerInfo *, UpperRelationKind, RelOptInfo *, RelOptInfo *,
 								 TsRelType, Hypertable *, void *);

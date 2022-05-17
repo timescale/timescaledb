@@ -68,6 +68,16 @@ FROM
   hyper
 GROUP BY hour, device;
 NOTICE:  continuous aggregate "contagg" is already up-to-date
+CREATE MATERIALIZED VIEW contagg_old
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
+FROM
+  hyper
+GROUP BY hour, device;
+NOTICE:  continuous aggregate "contagg_old" is already up-to-date
 -- Create another view (already have the "relations" view)
 CREATE VIEW devices AS
 SELECT DISTINCT ON (device) device
@@ -139,10 +149,11 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          },                                         +
          "indexes_size": 0,                         +
          "num_children": 0,                         +
-         "num_relations": 1,                        +
+         "num_relations": 2,                        +
          "num_reltuples": 0,                        +
+         "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
-         "num_caggs_using_real_time_aggregation": 1 +
+         "num_caggs_using_real_time_aggregation": 2 +
      },                                             +
      "distributed_hypertables_data_node": {         +
          "heap_size": 0,                            +
@@ -198,6 +209,7 @@ SELECT * FROM normal;
 INSERT INTO part
 SELECT * FROM normal;
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
+CALL refresh_continuous_aggregate('contagg_old', NULL, NULL);
 -- ANALYZE to get updated reltuples stats
 ANALYZE normal, hyper, part;
 SELECT count(c) FROM show_chunks('hyper') c;
@@ -207,6 +219,12 @@ SELECT count(c) FROM show_chunks('hyper') c;
 (1 row)
 
 SELECT count(c) FROM show_chunks('contagg') c;
+ count 
+-------
+     2
+(1 row)
+
+SELECT count(c) FROM show_chunks('contagg_old') c;
  count 
 -------
      2
@@ -263,8 +281,8 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                       +
      },                                             +
      "continuous_aggregates": {                     +
-         "heap_size": 98304,                        +
-         "toast_size": 16384,                       +
+         "heap_size": 188416,                       +
+         "toast_size": 32768,                       +
          "compression": {                           +
              "compressed_heap_size": 0,             +
              "compressed_row_count": 0,             +
@@ -277,12 +295,13 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "uncompressed_toast_size": 0,          +
              "uncompressed_indexes_size": 0         +
          },                                         +
-         "indexes_size": 114688,                    +
-         "num_children": 2,                         +
-         "num_relations": 1,                        +
+         "indexes_size": 229376,                    +
+         "num_children": 4,                         +
+         "num_relations": 2,                        +
          "num_reltuples": 0,                        +
+         "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
-         "num_caggs_using_real_time_aggregation": 1 +
+         "num_caggs_using_real_time_aggregation": 2 +
      },                                             +
      "distributed_hypertables_data_node": {         +
          "heap_size": 0,                            +
@@ -341,7 +360,7 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
 
 -- Add compression
 ALTER TABLE hyper SET (timescaledb.compress);
-SELECT compress_chunk(c) 
+SELECT compress_chunk(c)
 FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
              compress_chunk             
 ----------------------------------------
@@ -352,7 +371,7 @@ FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
 (4 rows)
 
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
-SELECT compress_chunk(c) 
+SELECT compress_chunk(c)
 FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
              compress_chunk              
 -----------------------------------------
@@ -412,26 +431,27 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                       +
      },                                             +
      "continuous_aggregates": {                     +
-         "heap_size": 81920,                        +
-         "toast_size": 24576,                       +
+         "heap_size": 180224,                       +
+         "toast_size": 40960,                       +
          "compression": {                           +
              "compressed_heap_size": 40960,         +
              "compressed_row_count": 10,            +
              "num_compressed_caggs": 1,             +
              "compressed_toast_size": 8192,         +
              "num_compressed_chunks": 1,            +
-             "uncompressed_heap_size": 57344,       +
+             "uncompressed_heap_size": 49152,       +
              "uncompressed_row_count": 452,         +
              "compressed_indexes_size": 16384,      +
              "uncompressed_toast_size": 8192,       +
              "uncompressed_indexes_size": 81920     +
          },                                         +
-         "indexes_size": 65536,                     +
-         "num_children": 2,                         +
-         "num_relations": 1,                        +
+         "indexes_size": 180224,                    +
+         "num_children": 4,                         +
+         "num_relations": 2,                        +
          "num_reltuples": 452,                      +
+         "num_caggs_finalized": 1,                  +
          "num_caggs_on_distributed_hypertables": 0, +
-         "num_caggs_using_real_time_aggregation": 0 +
+         "num_caggs_using_real_time_aggregation": 1 +
      },                                             +
      "distributed_hypertables_data_node": {         +
          "heap_size": 0,                            +
@@ -554,7 +574,7 @@ CREATE TABLE disthyper (LIKE normal);
 SELECT create_distributed_hypertable('disthyper', 'time', 'device');
  create_distributed_hypertable 
 -------------------------------
- (5,public,disthyper,t)
+ (6,public,disthyper,t)
 (1 row)
 
 -- Show distributed hypertables stats with no data
@@ -727,14 +747,14 @@ distributed_hypertables_dn
 
 -- Add compression
 ALTER TABLE disthyper SET (timescaledb.compress);
-SELECT compress_chunk(c) 
+SELECT compress_chunk(c)
 FROM show_chunks('disthyper') c ORDER BY c LIMIT 4;
                 compress_chunk                
 ----------------------------------------------
- _timescaledb_internal._dist_hyper_5_17_chunk
- _timescaledb_internal._dist_hyper_5_18_chunk
- _timescaledb_internal._dist_hyper_5_19_chunk
- _timescaledb_internal._dist_hyper_5_20_chunk
+ _timescaledb_internal._dist_hyper_6_19_chunk
+ _timescaledb_internal._dist_hyper_6_20_chunk
+ _timescaledb_internal._dist_hyper_6_21_chunk
+ _timescaledb_internal._dist_hyper_6_22_chunk
 (4 rows)
 
 ANALYZE disthyper;
@@ -845,7 +865,7 @@ CREATE TABLE disthyper_repl (LIKE normal);
 SELECT create_distributed_hypertable('disthyper_repl', 'time', 'device', replication_factor => 2);
  create_distributed_hypertable 
 -------------------------------
- (6,public,disthyper_repl,t)
+ (7,public,disthyper_repl,t)
 (1 row)
 
 INSERT INTO disthyper_repl
@@ -891,6 +911,16 @@ FROM
   disthyper
 GROUP BY hour, device;
 NOTICE:  refreshing continuous aggregate "distcontagg"
+CREATE MATERIALIZED VIEW distcontagg_old
+WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+SELECT
+  time_bucket('1 hour', time) AS hour,
+  device,
+  min(time)
+FROM
+  disthyper
+GROUP BY hour, device;
+NOTICE:  refreshing continuous aggregate "distcontagg_old"
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT
 	jsonb_pretty(rels -> 'continuous_aggregates') AS continuous_aggregates
@@ -898,26 +928,27 @@ FROM relations;
              continuous_aggregates              
 ------------------------------------------------
  {                                             +
-     "heap_size": 180224,                      +
-     "toast_size": 40960,                      +
+     "heap_size": 368640,                      +
+     "toast_size": 73728,                      +
      "compression": {                          +
          "compressed_heap_size": 40960,        +
          "compressed_row_count": 10,           +
          "num_compressed_caggs": 1,            +
          "compressed_toast_size": 8192,        +
          "num_compressed_chunks": 1,           +
-         "uncompressed_heap_size": 57344,      +
+         "uncompressed_heap_size": 49152,      +
          "uncompressed_row_count": 452,        +
          "compressed_indexes_size": 16384,     +
          "uncompressed_toast_size": 8192,      +
          "uncompressed_indexes_size": 81920    +
      },                                        +
-     "indexes_size": 180224,                   +
-     "num_children": 4,                        +
-     "num_relations": 2,                       +
+     "indexes_size": 409600,                   +
+     "num_children": 8,                        +
+     "num_relations": 4,                       +
      "num_reltuples": 452,                     +
-     "num_caggs_on_distributed_hypertables": 1,+
-     "num_caggs_using_real_time_aggregation": 1+
+     "num_caggs_finalized": 2,                 +
+     "num_caggs_on_distributed_hypertables": 2,+
+     "num_caggs_using_real_time_aggregation": 3+
  }
 (1 row)
 

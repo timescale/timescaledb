@@ -56,11 +56,7 @@
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/hypertable_modify.h"
 #include "partitioning.h"
-#include "plan_add_hashagg.h"
-#include "plan_agg_bookend.h"
-#include "plan_expand_hypertable.h"
-#include "plan_partialize.h"
-#include "planner.h"
+#include "planner/planner.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -77,6 +73,7 @@ typedef struct BaserelInfoEntry
 	/* Either a chunk or plain baserel (TS_REL_OTHER). */
 	TsRelType type;
 	Hypertable *ht;
+	uint32 chunk_status; /* status of chunk, if this is a chunk */
 
 	uint32 status; /* hash status */
 } BaserelInfoEntry;
@@ -559,6 +556,55 @@ get_parent_rte(const PlannerInfo *root, Index rti)
 	return NULL;
 }
 
+/* Fetch cached baserel entry. If it does not exists, create an entry for this
+ *relid.
+ * If this relid corresponds to a chunk, cache additional chunk
+ * related metadata: like chunk_status and pointer to hypertable entry.
+ * It is okay to cache a pointer to the hypertable, since this cache is
+ * confined to the lifetime of the query and not used across queries.
+ */
+static BaserelInfoEntry *
+get_or_add_baserel_from_cache(Oid chunk_relid, TsRelType chunk_reltype)
+{
+	Hypertable *ht = NULL;
+	TsRelType reltype = TS_REL_OTHER;
+	/* First, check if this reloid is in cache. */
+	bool found = false;
+	BaserelInfoEntry *entry = BaserelInfo_insert(ts_baserel_info, chunk_relid, &found);
+	if (found)
+	{
+		return entry;
+	}
+
+	/*
+	 * This reloid is not in the chunk cache, so do the full metadata
+	 * lookup.
+	 */
+	int32 hypertable_id = 0;
+	int32 chunk_status = 0;
+	if (ts_chunk_get_hypertable_id_and_status_by_relid(chunk_relid, &hypertable_id, &chunk_status))
+	{
+		/*
+		 * This is a chunk. Look up the hypertable for it.
+		 */
+		reltype = chunk_reltype; // TS_REL_CHUNK or TS_REL_CHUNK_CHILD
+		Assert(chunk_reltype == TS_REL_CHUNK || chunk_reltype == TS_REL_CHUNK_CHILD);
+		Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id);
+		ht = get_hypertable(hypertable_relid, CACHE_FLAG_NONE);
+		Assert(ht != NULL);
+	}
+	else
+	{
+		Assert(reltype == TS_REL_OTHER);
+	}
+
+	/* Cache the result. */
+	entry->type = reltype;
+	entry->ht = ht;
+	entry->chunk_status = chunk_status;
+	return entry;
+}
+
 /*
  * Classify a planned relation.
  *
@@ -582,6 +628,8 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 			 * with CACHE_FLAG_CHECK which includes CACHE_FLAG_NOCREATE flag because
 			 * the rel might not be in cache yet.
 			 */
+			if (!OidIsValid(rte->relid))
+				break;
 			ht = get_hypertable(rte->relid, CACHE_FLAG_MISSING_OK);
 
 			if (ht != NULL)
@@ -594,41 +642,10 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 				 * baserel, so we cache the result of this lookup to avoid doing
 				 * it repeatedly.
 				 *
-				 * First, check if this reloid is in cache.
 				 */
-				bool found = false;
-				BaserelInfoEntry *entry = BaserelInfo_insert(ts_baserel_info, rte->relid, &found);
-				if (found)
-				{
-					ht = entry->ht;
-					reltype = entry->type;
-					break;
-				}
-
-				/*
-				 * This reloid is not in the chunk cache, so do the full metadata
-				 * lookup.
-				 */
-				Oid hypertable_id = ts_chunk_get_hypertable_id_by_relid(rte->relid);
-				if (hypertable_id != InvalidOid)
-				{
-					/*
-					 * This is a chunk. Look up the hypertable for it.
-					 */
-					reltype = TS_REL_CHUNK;
-
-					Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id);
-					ht = get_hypertable(hypertable_relid, CACHE_FLAG_NONE);
-					Assert(ht != NULL);
-				}
-				else
-				{
-					Assert(reltype == TS_REL_OTHER);
-				}
-
-				/* Cache the result. */
-				entry->type = reltype;
-				entry->ht = ht;
+				BaserelInfoEntry *entry = get_or_add_baserel_from_cache(rte->relid, TS_REL_CHUNK);
+				ht = entry->ht;
+				reltype = entry->type;
 			}
 			break;
 		case RELOPT_OTHER_MEMBER_REL:
@@ -651,6 +668,8 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 			}
 			else
 			{
+				if (!OidIsValid(rte->relid))
+					break;
 				ht = get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
 
 				if (ht != NULL)
@@ -658,7 +677,20 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 					if (parent_rte->relid == rte->relid)
 						reltype = TS_REL_HYPERTABLE_CHILD;
 					else
+					{
+						/* add cache entry for chunk child */
+						BaserelInfoEntry *entry =
+							get_or_add_baserel_from_cache(rte->relid, TS_REL_CHUNK_CHILD);
+						if (entry->type != TS_REL_CHUNK_CHILD)
+						{
+							ereport(ERROR,
+									(errcode(ERRCODE_INTERNAL_ERROR),
+									 errmsg("unexpected chunk type %d for chunk %s",
+											entry->type,
+											get_rel_name(entry->reloid))));
+						}
 						reltype = TS_REL_CHUNK_CHILD;
+					}
 				}
 			}
 			break;
@@ -1045,7 +1077,21 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			break;
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
-			/* Check for UPDATE/DELETE (DLM) on compressed chunks */
+			if (IS_UPDL_CMD(root->parse))
+			{
+				BaserelInfoEntry *chunk_cache_entry =
+					BaserelInfo_lookup(ts_baserel_info, rte->relid);
+				Assert(chunk_cache_entry != NULL);
+				int32 chunk_status = chunk_cache_entry->chunk_status;
+				/* throw error if chunk has invalid status for operation */
+				ts_chunk_validate_chunk_status_for_operation(rte->relid,
+															 chunk_status,
+															 root->parse->commandType ==
+																	 CMD_UPDATE ?
+																 CHUNK_UPDATE :
+																 CHUNK_DELETE);
+			}
+			/* Check for UPDATE/DELETE (DML) on compressed chunks */
 			if (IS_UPDL_CMD(root->parse) && dml_involves_hypertable(root, ht, rti))
 			{
 				if (ts_cm_functions->set_rel_pathlist_dml != NULL)

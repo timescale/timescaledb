@@ -78,9 +78,9 @@
 #include "utils.h"
 #include "scan_plan.h"
 #include "extension_constants.h"
-#include "plan_expand_hypertable.h"
 #include "partialize_finalize.h"
 #include "nodes/gapfill/planner.h"
+#include "planner/planner.h"
 
 /*
  * Global context for foreign_expr_walker's search of an expression tree.
@@ -326,6 +326,15 @@ contain_mutable_functions_checker(Oid func_id, void *context)
 	/* Certain functions are mutable but are known to safe to push down to the data node. */
 	if (function_is_whitelisted(func_id))
 		return false;
+
+#ifndef NDEBUG
+	/* Special debug functions that we want to ship to data nodes. */
+	const char debug_func_prefix[] = "ts_debug_shippable_";
+	if (strncmp(get_func_name(func_id), debug_func_prefix, strlen(debug_func_prefix)) == 0)
+	{
+		return false;
+	}
+#endif
 
 	return true;
 }

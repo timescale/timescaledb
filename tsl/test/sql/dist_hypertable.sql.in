@@ -1664,6 +1664,21 @@ SET timescaledb.enable_connection_binary_data=false;
 SELECT * FROM disttable ORDER BY 1;
 SELECT count(*) FROM disttable;
 
+-- Binary format should lead to data incompatibility in PG 13 and earlier,
+-- because the highlow data type has different oids on data and access nodes.
+-- Use this to test the deserialization error reporting. Newer PG version
+-- ignore this oid mismatch for non-builtin types.
+SET timescaledb.enable_connection_binary_data=true;
+\set ON_ERROR_STOP 0
+SET timescaledb.remote_data_fetcher = 'rowbyrow';
+SELECT * FROM disttable ORDER BY 1;
+
+SET timescaledb.remote_data_fetcher = 'cursor';
+SELECT * FROM disttable ORDER BY 1;
+\set ON_ERROR_STOP 1
+
+RESET timescaledb.remote_data_fetcher;
+
 -- Show that DataNodeCopy is NOT used when source hypertable and target hypertable
 -- of the SELECT are both distributed. Try subselects with LIMIT, RETURNING and
 -- different distributed hypertable as source
@@ -1985,6 +2000,25 @@ SELECT table_name FROM create_distributed_hypertable('pruned_chunks_2', 'time', 
 
 insert into pruned_chunks_2 select * from pruned_chunks_1;
 insert into pruned_chunks_2 select * from pruned_chunks_1 WHERE time > '2022-01-01';
+
+-- TEST freeze_chunk api. does not work for distributed chunks
+SELECT chunk_schema || '.' ||  chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'pruned_chunks_1' 
+ORDER BY chunk_name LIMIT 1
+\gset
+
+\set ON_ERROR_STOP 0
+SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+\set ON_ERROR_STOP 1
+
+--TEST freeze_chunk api for regular hypertables. Works only for >= PG14
+CREATE TABLE freeze_1(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT);
+SELECT table_name FROM create_hypertable('freeze_1', 'time');
+INSERT INTO freeze_1 VALUES  ('2020-12-09',1,32.2);
+\set ON_ERROR_STOP 0
+SELECT  _timescaledb_internal.freeze_chunk( ch) FROM ( select show_chunks('freeze_1') ch ) q;
+\set ON_ERROR_STOP 1
 
 DROP TABLE pruned_chunks_1;
 DROP TABLE pruned_chunks_2;

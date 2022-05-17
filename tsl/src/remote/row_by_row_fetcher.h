@@ -10,11 +10,7 @@
 
 #include "data_fetcher.h"
 
-extern DataFetcher *row_by_row_fetcher_create_for_rel(TSConnection *conn, Relation rel,
-													  List *retrieved_attrs, const char *stmt,
-													  StmtParams *params);
-extern DataFetcher *row_by_row_fetcher_create_for_scan(TSConnection *conn, ScanState *ss,
-													   List *retrieved_attrs, const char *stmt,
-													   StmtParams *params);
+extern DataFetcher *row_by_row_fetcher_create_for_scan(TSConnection *conn, const char *stmt,
+													   StmtParams *params, TupleFactory *tf);
 
 #endif /* TIMESCALEDB_TSL_ROW_BY_ROW_FETCHER_H */

@@ -599,3 +599,24 @@ SELECT show_chunks('test3.hyperx');
 CREATE TABLE PUBLIC.drop_chunk_test4(time bigint, temp float8, device_id text);
 CREATE TABLE drop_chunks_table_id AS SELECT hypertable_id
       FROM create_hypertable('public.drop_chunk_test4', 'time', chunk_time_interval => 1);
+
+-- TEST for internal api that drops a single chunk
+-- this drops the table and removes entry from the catalog.
+-- does not affect any materialized cagg data
+INSERT INTO test1.hyper1 VALUES (20, 0.5);
+SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
+ORDER BY chunk_name ;
+--drop one of the chunks
+SELECT chunk_schema || '.' || chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
+ORDER BY chunk_name LIMIT 1
+\gset
+
+SELECT  _timescaledb_internal.drop_chunk(:'CHNAME');
+SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
+ORDER BY chunk_name ;

@@ -22,7 +22,6 @@ typedef enum CaggRefreshCallContext
 } CaggRefreshCallContext;
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
-extern Datum continuous_agg_refresh_chunk(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
 	const InternalTimeRange *refresh_window, const InvalidationStore *invalidations,
 	const int64 bucket_width, const ContinuousAggsBucketFunction *bucket_function,

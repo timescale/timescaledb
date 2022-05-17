@@ -63,8 +63,7 @@ typedef struct DataFetcher
 void data_fetcher_free(DataFetcher *df);
 
 extern void data_fetcher_init(DataFetcher *df, TSConnection *conn, const char *stmt,
-							  StmtParams *params, Relation rel, ScanState *ss,
-							  List *retrieved_attrs);
+							  StmtParams *params, TupleFactory *tf);
 
 extern void data_fetcher_store_tuple(DataFetcher *df, int row, TupleTableSlot *slot);
 extern void data_fetcher_store_next_tuple(DataFetcher *df, TupleTableSlot *slot);

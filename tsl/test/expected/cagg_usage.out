@@ -86,6 +86,7 @@ view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, de
                                   |     (max(device_readings.metric) - min(device_readings.metric)) AS metric_spread                            +
                                   |    FROM device_readings                                                                                     +
                                   |   GROUP BY (time_bucket('@ 1 hour'::interval, device_readings.observation_time)), device_readings.device_id;
+finalized                         | t
 
 \x
 -- Refresh interval

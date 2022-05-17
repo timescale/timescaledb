@@ -31,6 +31,8 @@ typedef struct CompressChunkInsertState
 	int cagg_trig_nargs;
 } CompressChunkInsertState;
 
+typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
+
 typedef struct ChunkInsertState
 {
 	Relation rel;
@@ -73,6 +75,9 @@ typedef struct ChunkInsertState
 
 	/* for tracking compressed chunks */
 	CompressChunkInsertState *compress_info;
+
+	/* for use by copy.c when performing multi-inserts */
+	struct TSCopyMultiInsertBuffer *copy_multi_insert_buffer;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

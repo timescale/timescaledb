@@ -20,8 +20,7 @@
 #include "process_utility.h"
 #include "with_clause_parser.h"
 #include "ts_catalog/continuous_agg.h"
-#include "plan_expand_hypertable.h"
-#include "planner.h"
+#include "planner/planner.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -100,7 +99,6 @@ typedef struct CrossModuleFunctions
 													 bool is_distributed_hypertable_trigger,
 													 int32 parent_hypertable_id);
 	PGFunction continuous_agg_refresh;
-	PGFunction continuous_agg_refresh_chunk;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);

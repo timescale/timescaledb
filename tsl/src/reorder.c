@@ -215,6 +215,7 @@ tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
 	Oid chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	const char *src_node_name = PG_ARGISNULL(1) ? NULL : NameStr(*PG_GETARG_NAME(1));
 	const char *dst_node_name = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
+	const char *op_id = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
 	int rc;
 	bool nonatomic = fcinfo->context && IsA(fcinfo->context, CallContext) &&
 					 !castNode(CallContext, fcinfo->context)->atomic;
@@ -236,7 +237,7 @@ tsl_copy_or_move_chunk_proc(FunctionCallInfo fcinfo, bool delete_on_src_node)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* perform the actual distributed chunk move after a few sanity checks */
-	chunk_copy(chunk_id, src_node_name, dst_node_name, delete_on_src_node);
+	chunk_copy(chunk_id, src_node_name, dst_node_name, op_id, delete_on_src_node);
 
 	if ((rc = SPI_finish()) != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));

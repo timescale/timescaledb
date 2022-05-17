@@ -129,71 +129,24 @@ cursor_fetcher_wait_until_open(DataFetcher *df)
 	cursor->create_req = NULL;
 }
 
-static CursorFetcher *
-remote_cursor_init_with_params(TSConnection *conn, Relation rel, TupleDesc tupdesc, ScanState *ss,
-							   List *retrieved_attrs, const char *stmt, StmtParams *params)
+DataFetcher *
+cursor_fetcher_create_for_scan(TSConnection *conn, const char *stmt, StmtParams *params,
+							   TupleFactory *tf)
 {
-	CursorFetcher *cursor = palloc0(sizeof(CursorFetcher));
+	CursorFetcher *fetcher = palloc0(sizeof(CursorFetcher));
 
-	data_fetcher_init(&cursor->state, conn, stmt, params, rel, ss, retrieved_attrs);
-	cursor->state.type = CursorFetcherType;
+	data_fetcher_init(&fetcher->state, conn, stmt, params, tf);
+
+	fetcher->state.type = CursorFetcherType;
 	/* Assign a unique ID for my cursor */
-	cursor->id = remote_connection_get_cursor_number();
-	cursor->create_req = NULL;
+	fetcher->id = remote_connection_get_cursor_number();
+	fetcher->create_req = NULL;
 	/* send a request to DECLARE cursor  */
-	cursor_create_req(cursor);
-	cursor->state.funcs = &funcs;
-	cursor_fetcher_wait_until_open(&cursor->state);
+	cursor_create_req(fetcher);
+	fetcher->state.funcs = &funcs;
+	cursor_fetcher_wait_until_open(&fetcher->state);
 
-	return cursor;
-}
-
-DataFetcher *
-cursor_fetcher_create_for_rel(TSConnection *conn, Relation rel, List *retrieved_attrs,
-							  const char *stmt, StmtParams *params)
-{
-	CursorFetcher *cursor;
-
-	Assert(NULL != rel);
-
-	cursor = remote_cursor_init_with_params(conn,
-											rel,
-											RelationGetDescr(rel),
-											NULL,
-											retrieved_attrs,
-											stmt,
-											params);
-	return &cursor->state;
-}
-
-DataFetcher *
-cursor_fetcher_create_for_scan(TSConnection *conn, ScanState *ss, List *retrieved_attrs,
-							   const char *stmt, StmtParams *params)
-{
-	Scan *scan = (Scan *) ss->ps.plan;
-	TupleDesc tupdesc;
-	Relation rel;
-	CursorFetcher *cursor;
-
-	Assert(NULL != ss);
-
-	/*
-	 * Get info we'll need for converting data fetched from the data node
-	 * into local representation and error reporting during that process.
-	 */
-	if (scan->scanrelid > 0)
-	{
-		rel = ss->ss_currentRelation;
-		tupdesc = RelationGetDescr(rel);
-	}
-	else
-	{
-		rel = NULL;
-		tupdesc = ss->ss_ScanTupleSlot->tts_tupleDescriptor;
-	}
-
-	cursor = remote_cursor_init_with_params(conn, rel, tupdesc, ss, retrieved_attrs, stmt, params);
-	return &cursor->state;
+	return &fetcher->state;
 }
 
 static void

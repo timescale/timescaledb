@@ -66,7 +66,6 @@ PG_MODULE_MAGIC;
 #endif
 
 extern void PGDLLEXPORT _PG_init(void);
-extern void PGDLLEXPORT _PG_fini(void);
 
 static void
 cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
@@ -137,7 +136,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
-	.continuous_agg_refresh_chunk = continuous_agg_refresh_chunk,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
@@ -267,10 +265,4 @@ _PG_init(void)
 	ts_license_enable_module_loading();
 
 	_remote_connection_init();
-}
-
-PGDLLEXPORT void
-_PG_fini(void)
-{
-	ts_module_cleanup_on_pg_exit(0, 0);
 }

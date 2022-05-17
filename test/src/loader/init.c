@@ -27,7 +27,6 @@ PG_MODULE_MAGIC;
 #endif
 
 extern void PGDLLEXPORT _PG_init(void);
-extern void PGDLLEXPORT _PG_fini(void);
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 
@@ -86,13 +85,6 @@ _PG_init(void)
 #endif
 	post_parse_analyze_hook = post_analyze_hook;
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
-}
-
-void
-_PG_fini(void)
-{
-	post_parse_analyze_hook = prev_post_parse_analyze_hook;
-	/* No way to unregister relcache callback */
 }
 
 /* mock for extension.c */

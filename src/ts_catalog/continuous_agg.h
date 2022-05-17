@@ -23,6 +23,7 @@ typedef enum ContinuousAggViewOption
 	ContinuousViewOptionCreateGroupIndex,
 	ContinuousViewOptionMaterializedOnly,
 	ContinuousViewOptionCompress,
+	ContinuousViewOptionFinalized,
 } ContinuousAggViewOption;
 
 typedef enum ContinuousAggViewType
@@ -90,6 +91,12 @@ typedef struct ContinuousAgg
 	/* Type of the primary partitioning dimension */
 	Oid partition_type;
 } ContinuousAgg;
+
+static inline bool
+ContinuousAggIsFinalized(const ContinuousAgg *cagg)
+{
+	return (cagg->data.finalized == true);
+}
 
 typedef enum ContinuousAggHypertableStatus
 {

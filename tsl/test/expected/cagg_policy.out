@@ -638,3 +638,69 @@ WHERE hypertable_name = :'MAT_TABLE_NAME';
      0
 (1 row)
 
+-- add test case for issue 4252
+CREATE TABLE IF NOT EXISTS sensor_data(
+time TIMESTAMPTZ NOT NULL,
+sensor_id INTEGER,
+temperature DOUBLE PRECISION,
+cpu DOUBLE PRECISION);
+SELECT create_hypertable('sensor_data','time');
+     create_hypertable     
+---------------------------
+ (17,public,sensor_data,t)
+(1 row)
+
+INSERT INTO sensor_data(time, sensor_id, cpu, temperature)
+SELECT 
+time,
+sensor_id,
+extract(dow from time) AS cpu,
+extract(doy from time) AS temperature
+FROM 
+generate_series('2022-05-05'::timestamp at time zone 'UTC' - interval '6 weeks', '2022-05-05'::timestamp at time zone 'UTC', interval '5 hours') as g1(time),
+generate_series(1,1000,1) as g2(sensor_id);
+CREATE materialized view deals_best_weekly
+WITH (timescaledb.continuous) AS
+SELECT 
+time_bucket('7 days', "time") AS bucket, 
+avg(temperature) AS avg_temp, 
+max(cpu) AS max_rating 
+FROM sensor_data 
+GROUP BY bucket
+WITH NO DATA;
+CREATE materialized view deals_best_daily
+WITH (timescaledb.continuous) AS
+SELECT 
+time_bucket('1 day', "time") AS bucket, 
+avg(temperature) AS avg_temp, 
+max(cpu) AS max_rating 
+FROM sensor_data 
+GROUP BY bucket
+WITH NO DATA;
+ALTER materialized view deals_best_weekly set (timescaledb.materialized_only=true);
+ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true);
+-- we have data from 6 weeks before to May 5 2022 (Thu)
+CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
+SELECT * FROM deals_best_weekly;
+            bucket            |     avg_temp     | max_rating 
+------------------------------+------------------+------------
+ Sun Apr 24 17:00:00 2022 PDT | 117.764705882353 |          6
+(1 row)
+
+CALL refresh_continuous_aggregate('deals_best_daily', '2022-04-20', '2022-05-04');
+SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
+            bucket            | avg_temp | max_rating 
+------------------------------+----------+------------
+ Wed Apr 20 17:00:00 2022 PDT |    110.8 |          4
+ Thu Apr 21 17:00:00 2022 PDT |   111.75 |          5
+(2 rows)
+
+-- expect to get an up-to-date notice
+CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
+NOTICE:  continuous aggregate "deals_best_weekly" is already up-to-date
+SELECT * FROM deals_best_weekly;
+            bucket            |     avg_temp     | max_rating 
+------------------------------+------------------+------------
+ Sun Apr 24 17:00:00 2022 PDT | 117.764705882353 |          6
+(1 row)
+

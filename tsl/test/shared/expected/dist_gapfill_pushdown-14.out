@@ -20,7 +20,6 @@ GROUP BY 1,2;
                Output: (time_bucket_gapfill('@ 3 hours'::interval, test_gapfill."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone)), test_gapfill.name, (first(test_gapfill.value, test_gapfill."time")), (avg(test_gapfill.value))
                Relations: Aggregate on (public.test_gapfill)
                Data node: data_node_1
-               Fetcher Type: Row by row
                Chunks: _dist_hyper_X_X_chunk
                Remote SQL: SELECT public.time_bucket_gapfill('@ 3 hours'::interval, "time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone), name, public.first(value, "time"), avg(value) FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[28]) GROUP BY 1, 2
                Remote EXPLAIN: 
@@ -41,7 +40,6 @@ GROUP BY 1,2;
                Output: (time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_1."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone)), test_gapfill_1.name, (first(test_gapfill_1.value, test_gapfill_1."time")), (avg(test_gapfill_1.value))
                Relations: Aggregate on (public.test_gapfill)
                Data node: data_node_3
-               Fetcher Type: Row by row
                Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                Remote SQL: SELECT public.time_bucket_gapfill('@ 3 hours'::interval, "time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone), name, public.first(value, "time"), avg(value) FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[23, 24, 25]) GROUP BY 1, 2
                Remote EXPLAIN: 
@@ -63,7 +61,7 @@ GROUP BY 1,2;
                                            ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
                                                  Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.name, _dist_hyper_X_X_chunk.value
  
-(50 rows)
+(48 rows)
 
 EXPLAIN (VERBOSE, COSTS OFF) SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
        name,
@@ -80,7 +78,6 @@ GROUP BY 2,1;
                Output: (time_bucket_gapfill('@ 3 hours'::interval, test_gapfill."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone)), test_gapfill.name, (first(test_gapfill.value, test_gapfill."time")), (avg(test_gapfill.value))
                Relations: Aggregate on (public.test_gapfill)
                Data node: data_node_1
-               Fetcher Type: Row by row
                Chunks: _dist_hyper_X_X_chunk
                Remote SQL: SELECT public.time_bucket_gapfill('@ 3 hours'::interval, "time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone), name, public.first(value, "time"), avg(value) FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[28]) GROUP BY 2, 1
                Remote EXPLAIN: 
@@ -101,7 +98,6 @@ GROUP BY 2,1;
                Output: (time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_1."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone)), test_gapfill_1.name, (first(test_gapfill_1.value, test_gapfill_1."time")), (avg(test_gapfill_1.value))
                Relations: Aggregate on (public.test_gapfill)
                Data node: data_node_3
-               Fetcher Type: Row by row
                Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                Remote SQL: SELECT public.time_bucket_gapfill('@ 3 hours'::interval, "time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone), name, public.first(value, "time"), avg(value) FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[23, 24, 25]) GROUP BY 2, 1
                Remote EXPLAIN: 
@@ -123,7 +119,7 @@ GROUP BY 2,1;
                                            ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
                                                  Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.name, _dist_hyper_X_X_chunk.value
  
-(50 rows)
+(48 rows)
 
 -- Check for multiple gapfill calls
 SELECT time_bucket_gapfill('3 hours', time, '2017-01-01 06:00', '2017-01-01 18:00'),
@@ -158,7 +154,6 @@ GROUP BY 1;
                            ->  Custom Scan (DataNodeScan) on public.test_gapfill
                                  Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Mon Jan 02 18:00:00 2017'::timestamp without time zone), test_gapfill.value, test_gapfill."time"
                                  Data node: data_node_1
-                                 Fetcher Type: Row by row
                                  Chunks: _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT "time", value FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[28])
                                  Remote EXPLAIN: 
@@ -171,7 +166,6 @@ GROUP BY 1;
                            ->  Custom Scan (DataNodeScan) on public.test_gapfill test_gapfill_1
                                  Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_1."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Mon Jan 02 18:00:00 2017'::timestamp without time zone), test_gapfill_1.value, test_gapfill_1."time"
                                  Data node: data_node_3
-                                 Fetcher Type: Row by row
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                  Remote SQL: SELECT "time", value FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[23, 24, 25])
                                  Remote EXPLAIN: 
@@ -183,7 +177,7 @@ GROUP BY 1;
                                      ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
                                            Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.value
  
-(40 rows)
+(38 rows)
 
 -- Window functions
 EXPLAIN (VERBOSE, COSTS OFF) SELECT
@@ -210,7 +204,6 @@ GROUP BY 1;
                                  ->  Custom Scan (DataNodeScan) on public.test_gapfill
                                        Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone), test_gapfill."time"
                                        Data node: data_node_1
-                                       Fetcher Type: Row by row
                                        Chunks: _dist_hyper_X_X_chunk
                                        Remote SQL: SELECT "time" FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[28])
                                        Remote EXPLAIN: 
@@ -223,7 +216,6 @@ GROUP BY 1;
                                  ->  Custom Scan (DataNodeScan) on public.test_gapfill test_gapfill_1
                                        Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_1."time", 'Sun Jan 01 06:00:00 2017'::timestamp without time zone, 'Sun Jan 01 18:00:00 2017'::timestamp without time zone), test_gapfill_1."time"
                                        Data node: data_node_3
-                                       Fetcher Type: Row by row
                                        Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                                        Remote SQL: SELECT "time" FROM public.test_gapfill WHERE _timescaledb_internal.chunks_in(public.test_gapfill.*, ARRAY[23, 24, 25])
                                        Remote EXPLAIN: 
@@ -235,7 +227,7 @@ GROUP BY 1;
                                            ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
                                                  Output: _dist_hyper_X_X_chunk."time"
  
-(42 rows)
+(40 rows)
 
 -- Data nodes are overlapping
 EXPLAIN (VERBOSE, COSTS OFF) SELECT time_bucket_gapfill('3 hours', time, '2018-01-01 06:00', '2018-01-01 18:00'),
@@ -258,7 +250,6 @@ GROUP BY 1,2;
                      ->  Custom Scan (DataNodeScan) on public.test_gapfill_overlap test_gapfill_overlap_1
                            Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_overlap_1."time", 'Mon Jan 01 06:00:00 2018'::timestamp without time zone, 'Mon Jan 01 18:00:00 2018'::timestamp without time zone), test_gapfill_overlap_1.name, test_gapfill_overlap_1.value, test_gapfill_overlap_1."time"
                            Data node: data_node_1
-                           Fetcher Type: Row by row
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT "time", name, value FROM public.test_gapfill_overlap WHERE _timescaledb_internal.chunks_in(public.test_gapfill_overlap.*, ARRAY[29, 30, 31, 32])
                            Remote EXPLAIN: 
@@ -275,7 +266,6 @@ GROUP BY 1,2;
                      ->  Custom Scan (DataNodeScan) on public.test_gapfill_overlap test_gapfill_overlap_2
                            Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_overlap_2."time", 'Mon Jan 01 06:00:00 2018'::timestamp without time zone, 'Mon Jan 01 18:00:00 2018'::timestamp without time zone), test_gapfill_overlap_2.name, test_gapfill_overlap_2.value, test_gapfill_overlap_2."time"
                            Data node: data_node_2
-                           Fetcher Type: Row by row
                            Chunks: _dist_hyper_X_X_chunk
                            Remote SQL: SELECT "time", name, value FROM public.test_gapfill_overlap WHERE _timescaledb_internal.chunks_in(public.test_gapfill_overlap.*, ARRAY[20])
                            Remote EXPLAIN: 
@@ -285,7 +275,6 @@ GROUP BY 1,2;
                      ->  Custom Scan (DataNodeScan) on public.test_gapfill_overlap test_gapfill_overlap_3
                            Output: time_bucket_gapfill('@ 3 hours'::interval, test_gapfill_overlap_3."time", 'Mon Jan 01 06:00:00 2018'::timestamp without time zone, 'Mon Jan 01 18:00:00 2018'::timestamp without time zone), test_gapfill_overlap_3.name, test_gapfill_overlap_3.value, test_gapfill_overlap_3."time"
                            Data node: data_node_3
-                           Fetcher Type: Row by row
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
                            Remote SQL: SELECT "time", name, value FROM public.test_gapfill_overlap WHERE _timescaledb_internal.chunks_in(public.test_gapfill_overlap.*, ARRAY[26, 27, 28, 29, 30])
                            Remote EXPLAIN: 
@@ -301,7 +290,7 @@ GROUP BY 1,2;
                                ->  Seq Scan on _timescaledb_internal._dist_hyper_X_X_chunk
                                      Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.name, _dist_hyper_X_X_chunk.value
  
-(55 rows)
+(52 rows)
 
 SET timescaledb.enable_remote_explain = false;
 DROP TABLE test_gapfill;

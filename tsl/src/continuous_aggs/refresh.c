@@ -462,7 +462,7 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, const int64 bucket_width,
-								   const int32 chunk_id, const bool is_raw_ht_distributed,
+								   int32 chunk_id, const bool is_raw_ht_distributed,
 								   const bool do_merged_refresh,
 								   const InternalTimeRange merged_refresh_window)
 {
@@ -474,6 +474,19 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	/* Disable per-data-node optimization so that 'tableoid' system column is evaluated in the
 	 * Access Node to generate Access Node chunk-IDs for the materialization table. */
 	ts_guc_enable_per_data_node_queries = false;
+
+	/*
+	 * If we're refreshing a finalized CAgg then we should force
+	 * the `chunk_id` to be `INVALID_CHUNK_ID` because this column
+	 * does not exist anymore in the materialization hypertable.
+	 *
+	 * The underlying function `spi_update_materialization` that
+	 * actually will DELETE and INSERT data into the materialization
+	 * hypertable is responsible for check if the `chunk_id` is valid
+	 * and then use it or not during the refresh.
+	 */
+	if (ContinuousAggIsFinalized(cagg))
+		chunk_id = INVALID_CHUNK_ID;
 
 	if (do_merged_refresh)
 	{
@@ -665,6 +678,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 		int64 bucket_width = ts_continuous_agg_bucket_width_variable(cagg) ?
 								 BUCKET_WIDTH_VARIABLE :
 								 ts_continuous_agg_bucket_width(cagg);
+
 		continuous_agg_refresh_with_window(cagg,
 										   refresh_window,
 										   invalidations,
@@ -780,7 +794,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * won't be refreshed when the threshold is moved forward in the
 	 * future. The invalidation threshold should already be aligned on bucket
 	 * boundary. */
-	if (refresh_window_arg->end > invalidation_threshold)
+	if (refresh_window.end > invalidation_threshold)
 		refresh_window.end = invalidation_threshold;
 
 	/* Capping the end might have made the window 0, or negative, so
@@ -823,75 +837,4 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	if ((rc = SPI_finish()) != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
-}
-
-/*
- * Refresh a continuous aggregate on the given hypertable chunk according to invalidations.
- *
- * The refreshing happens in a single transaction. For this to work correctly,
- * there must be no new invalidations written in the refreshed region during
- * the refresh. Therefore, it locks exclusively the chunk to
- * ensure there are no invalidations (INSERTs, DELETEs, etc.).
- */
-Datum
-continuous_agg_refresh_chunk(PG_FUNCTION_ARGS)
-{
-	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Oid chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
-	ContinuousAgg *cagg = get_cagg_by_relid(cagg_relid);
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Catalog *catalog = ts_catalog_get();
-	const InternalTimeRange refresh_window = {
-		.type = cagg->partition_type,
-		.start = ts_chunk_primary_dimension_start(chunk),
-		.end = ts_chunk_primary_dimension_end(chunk),
-	};
-
-	/* Like regular materialized views, require owner to refresh. */
-	if (!pg_class_ownercheck(cagg->relid, GetUserId()))
-		aclcheck_error(ACLCHECK_NOT_OWNER,
-					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
-					   get_rel_name(cagg->relid));
-
-	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	if (chunk->fd.hypertable_id != cagg->data.raw_hypertable_id)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot refresh continuous aggregate on chunk from different hypertable"),
-				 errdetail("The the continuous aggregate is defined on hypertable \"%s\", while "
-						   "chunk is from hypertable \"%s\". The continuous aggregate can be "
-						   "refreshed only on a chunk from the same hypertable.",
-						   get_rel_name(ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id)),
-						   get_rel_name(chunk->hypertable_relid))));
-
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
-
-	LockRelationOid(chunk->table_id, ExclusiveLock);
-	LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-					AccessExclusiveLock);
-	invalidation_threshold_set_or_get(chunk->fd.hypertable_id, refresh_window.end);
-
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	if (is_raw_ht_distributed)
-	{
-		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-												   cagg->data.raw_hypertable_id,
-												   refresh_window.type,
-												   &all_caggs_info);
-	}
-	else
-	{
-		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-											cagg->data.raw_hypertable_id,
-											refresh_window.type,
-											&all_caggs_info);
-	}
-	/* Must make invalidation processing visible */
-	CommandCounterIncrement();
-	process_cagg_invalidations_and_refresh(cagg, &refresh_window, CAGG_REFRESH_CHUNK, chunk->fd.id);
-
-	PG_RETURN_VOID();
 }

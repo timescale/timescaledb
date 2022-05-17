@@ -574,6 +574,10 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 			sjob->next_start <= ts_timer_get_current_timestamp())
 			scheduled_ts_bgw_job_start(sjob, bgw_register);
 	}
+
+#if PG13_LT
+	list_free(ordered_scheduled_jobs);
+#endif
 }
 
 /* Returns the earliest time the scheduler should start a job that is waiting to be started */
@@ -832,14 +836,6 @@ ts_bgw_scheduler_setup_mctx()
 	MemoryContextSwitchTo(scratch_mctx);
 }
 
-static void handle_sigterm(SIGNAL_ARGS)
-{
-	/* Do not use anything that calls malloc() inside a signal handler since
-	 * malloc() is not signal-safe. This includes ereport() */
-	write_stderr("terminating TimescaleDB job scheduler due to administrator command\n");
-	die(postgres_signal_arg);
-}
-
 static void handle_sighup(SIGNAL_ARGS)
 {
 	/* based on av_sighup_handler */
@@ -863,7 +859,7 @@ ts_bgw_scheduler_register_signal_handlers(void)
 	 * do not use the default `bgworker_die` sigterm handler because it does
 	 * not respect critical sections
 	 */
-	pqsignal(SIGTERM, handle_sigterm);
+	pqsignal(SIGTERM, die);
 	pqsignal(SIGHUP, handle_sighup);
 
 	/* Some SIGHUPS may already have been dropped, so we must load the file here */
