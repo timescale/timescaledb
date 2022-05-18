@@ -10,8 +10,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 1;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
@@ -28,8 +27,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 2;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Sort Key: (avg("*VALUES*".column2))
    ->  Custom Scan (GapFill)
@@ -48,8 +46,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 1 DESC;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now())) DESC
    ->  Custom Scan (GapFill)
@@ -68,8 +65,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 2,1;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Sort Key: (avg("*VALUES*".column2)), (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
    ->  Custom Scan (GapFill)
@@ -87,8 +83,7 @@ SELECT
   avg(c2)
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
@@ -105,8 +100,7 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                          QUERY PLAN                                                                                                          
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
@@ -132,8 +126,7 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                          QUERY PLAN                                                                                                          
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
@@ -159,8 +152,7 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                          QUERY PLAN                                                                                                          
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
@@ -188,8 +180,7 @@ FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 2
 LIMIT 1;
-                                                                                                                QUERY PLAN                                                                                                                
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    ->  Sort
          Sort Key: (interpolate(avg(gapfill_plan_test.value), NULL::record, NULL::record))
@@ -229,8 +220,7 @@ LIMIT 1;
 :EXPLAIN SELECT time_bucket_gapfill('5m',time),value
 FROM gapfill_plan_test
 ORDER BY 1;
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
    ->  Result
@@ -247,8 +237,7 @@ SET max_parallel_workers_per_gather TO 0;
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  Sort
          Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
@@ -267,8 +256,7 @@ ORDER BY 1;
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  Sort
          Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
@@ -289,8 +277,7 @@ CREATE INDEX gapfill_plan_test_indx ON gapfill_plan_test(value, time);
 :EXPLAIN  SELECT time_bucket_gapfill('5m',time),value
 FROM gapfill_plan_test
 ORDER BY 1,2;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone)), _hyper_X_X_chunk.value
    ->  Result
@@ -306,8 +293,7 @@ ORDER BY 1,2;
 :EXPLAIN SELECT time_bucket_gapfill('5m',time),value
 FROM gapfill_plan_test
 ORDER BY 2,1;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Sort Key: _hyper_X_X_chunk.value, (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
    ->  Result
@@ -372,7 +358,6 @@ ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE c
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- test locf lookup query does not trigger when not needed
---
 -- 1/(SELECT 0) will throw an error in the lookup query but in order to not
 -- always trigger evaluation it needs to be correlated otherwise postgres will
 -- always run it once even if the value is never used
@@ -561,7 +546,6 @@ FROM :METRICS m1
 WHERE m1.time >=0 AND m1.time < 2 AND device_id IN (SELECT device_id FROM :METRICS)
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
 (2 rows)
@@ -572,7 +556,6 @@ SELECT
 FROM :METRICS m1 INNER JOIN :METRICS m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
 (2 rows)
@@ -584,7 +567,6 @@ FROM :METRICS
 WHERE time >=0 AND time < 2
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
 (2 rows)
@@ -596,7 +578,6 @@ FROM :METRICS m
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
 (2 rows)
@@ -608,7 +589,6 @@ FROM :METRICS m, :METRICS m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
 (2 rows)
@@ -926,26 +906,22 @@ DEALLOCATE prep_gapfill;
 -- test locf and interpolate call without gapfill
 SELECT locf(1);
  locf 
-------
     1
 (1 row)
 
 SELECT interpolate(1);
  interpolate 
--------------
            1
 (1 row)
 
 -- test locf and interpolate call with NULL input
 SELECT locf(NULL::int);
  locf 
-------
      
 (1 row)
 
 SELECT interpolate(NULL);
  interpolate 
--------------
             
 (1 row)
 
@@ -1180,7 +1156,6 @@ SELECT
   time_bucket_gapfill(1,time,1,11)
 FROM (VALUES (1),(2)) v(time);
  time_bucket_gapfill 
----------------------
                    1
                    2
 (2 rows)
@@ -1201,7 +1176,6 @@ SELECT
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
                    2
@@ -1215,7 +1189,6 @@ SELECT
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
                    2
@@ -1229,7 +1202,6 @@ SELECT
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
                    2
@@ -1244,7 +1216,6 @@ SELECT
 FROM (VALUES (11),(22)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                   10
                   20
@@ -1555,7 +1526,6 @@ GROUP BY 1,color ORDER BY 2,1;
 -- test insert into SELECT
 SELECT * FROM insert_test;
  id 
-----
   1
   2
   3
@@ -2522,7 +2492,6 @@ WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                   -1
                    0
                    1
@@ -2537,7 +2506,6 @@ WHERE
   t >= -1 AND t <= 3
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                   -1
                    0
                    1
@@ -2553,7 +2521,6 @@ WHERE
   -1 < t AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
                    2
@@ -2567,7 +2534,6 @@ WHERE
   t >= 0 AND 3 >= t
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    0
                    1
                    2
@@ -2582,7 +2548,6 @@ WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                   -1
                    0
                    1
@@ -2597,7 +2562,6 @@ WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                   -1
                    0
                    1
@@ -2612,7 +2576,6 @@ WHERE
   t >= '1999-12-29' AND t < '2000-01-03'
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
  12-29-1999
  12-30-1999
  12-31-1999
@@ -2628,7 +2591,6 @@ WHERE
   t >= '1999-12-29' AND t < '2000-01-03'
 GROUP BY 1;
    time_bucket_gapfill    
---------------------------
  Wed Dec 29 00:00:00 1999
  Wed Dec 29 12:00:00 1999
  Thu Dec 30 00:00:00 1999
@@ -2649,7 +2611,6 @@ WHERE
   t >= '1999-12-29' AND t < '2000-01-03'
 GROUP BY 1;
      time_bucket_gapfill      
-------------------------------
  Tue Dec 28 16:00:00 1999 PST
  Wed Dec 29 04:00:00 1999 PST
  Wed Dec 29 16:00:00 1999 PST
@@ -2671,7 +2632,6 @@ WHERE
   t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'
 GROUP BY 1;
      time_bucket_gapfill      
-------------------------------
  Wed Dec 29 16:00:00 1999 PST
  Thu Dec 30 04:00:00 1999 PST
  Thu Dec 30 16:00:00 1999 PST
@@ -2691,7 +2651,6 @@ WHERE
   t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'::date
 GROUP BY 1;
      time_bucket_gapfill      
-------------------------------
  Wed Dec 29 16:00:00 1999 PST
  Thu Dec 30 04:00:00 1999 PST
  Thu Dec 30 16:00:00 1999 PST
@@ -2711,7 +2670,6 @@ WHERE
  t >= now() AND t < now() - '1h'::interval
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
 (0 rows)
 
 -- time_bucket_gapfill with multiple constraints
@@ -2722,7 +2680,6 @@ WHERE
  t >= -1 AND t < 3 and t>1 AND t <=4 AND length(version()) > 0
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                    2
 (1 row)
 
@@ -2734,7 +2691,6 @@ WHERE
   t > -2 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
----------------------
                   -1
                    0
                    1
@@ -3129,8 +3085,7 @@ EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, '2000-01-01', '2000-
        sum(v1) AS v1_sum
 FROM metrics
 GROUP BY 1;
-                                                                                                    QUERY PLAN                                                                                                     
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (GapFill)
    ->  Sort
          Sort Key: (time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
@@ -3148,7 +3103,6 @@ GROUP BY 1;
 CREATE TABLE i3834(time timestamptz NOT NULL, ship_id int, value float);
 SELECT table_name FROM create_hypertable('i3834','time');
  table_name 
-------------
  i3834
 (1 row)
 

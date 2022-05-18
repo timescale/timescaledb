@@ -8,7 +8,6 @@ CREATE TABLE gencol_tab (
 );
 SELECT table_name FROM create_hypertable('gencol_tab', 'a', chunk_time_interval=>10);
  table_name 
-------------
  gencol_tab
 (1 row)
 
@@ -40,7 +39,6 @@ ERROR:  invalid partitioning column
 -- check if default generated expression can be dropped (works on >= PG13)
 SELECT table_name FROM create_hypertable('gencol_test', 'a',  chunk_time_interval=>10);
  table_name  
--------------
  gencol_test
 (1 row)
 

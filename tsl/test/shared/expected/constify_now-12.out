@@ -11,8 +11,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 -- because we want to see the constified now expression in
 -- EXPLAIN output
 :PREFIX SELECT FROM metrics WHERE time > now();
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
@@ -23,8 +22,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now();
-                                                    QUERY PLAN                                                    
-------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" >= now()) AND ("time" >= 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
@@ -35,8 +33,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now() - '24h'::interval;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > (now() - '@ 24 hours'::interval)) AND ("time" > 'Sun Dec 31 00:00:00 1989 PST'::timestamp with time zone))
@@ -47,8 +44,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now() + '10m'::interval;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > (now() + '@ 10 mins'::interval)) AND ("time" > 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
@@ -59,8 +55,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() - '10m'::interval;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
@@ -71,8 +66,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
@@ -84,8 +78,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 -- test multiple constraints
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND device_id = 2;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
          Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
@@ -96,8 +89,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
@@ -111,8 +103,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (10 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
-                                                                                                                             QUERY PLAN                                                                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
@@ -125,8 +116,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 -- variants we don't optimize
 -- we do not allow interval with day or month components
 :PREFIX SELECT FROM metrics WHERE time > now() - '1d'::interval;
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 1 day'::interval))
@@ -137,8 +127,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now() - '1week'::interval;
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 7 days'::interval))
@@ -149,8 +138,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now() - '1month'::interval;
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 1 mon'::interval))
@@ -161,8 +149,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now()::date;
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now())::date)
@@ -173,8 +160,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE round(EXTRACT(EPOCH FROM now())) > 0.5;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Result
          One-Time Filter: (round(date_part('epoch'::text, now())) > '0.5'::double precision)
@@ -189,8 +175,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 -- we only modify top-level ANDed now() expressions
 :PREFIX SELECT FROM metrics WHERE time > now() - '1m'::interval OR time > now() + '1m'::interval;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Bitmap Heap Scan on _hyper_X_X_chunk
          Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
@@ -216,8 +201,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (22 rows)
 
 :PREFIX SELECT FROM metrics WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Bitmap Heap Scan on _hyper_X_X_chunk
          Recheck Cond: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
@@ -246,8 +230,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 :PREFIX WITH q1 AS (
   SELECT * FROM metrics WHERE time > now()
 ) SELECT FROM q1;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
@@ -260,8 +243,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 :PREFIX WITH q1 AS (
   SELECT * FROM metrics
 ) SELECT FROM q1 WHERE time > now();
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > now())
@@ -273,8 +255,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 -- JOIN
 :PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now();
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop
    ->  Append
          ->  Seq Scan on _hyper_X_X_chunk m2
@@ -291,8 +272,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (13 rows)
 
 :PREFIX SELECT FROM metrics m1, metrics m2 WHERE m2.time > now();
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop
    ->  Append
          ->  Seq Scan on _hyper_X_X_chunk m1
@@ -309,8 +289,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (13 rows)
 
 :PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now() AND m2.time > now();
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop
    ->  Append
          ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1
@@ -331,8 +310,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 -- only top-level constraints in WHERE clause are constified
 :PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now());
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop
    ->  Append
          ->  Seq Scan on _hyper_X_X_chunk m2
@@ -349,8 +327,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 (13 rows)
 
 :PREFIX SELECT FROM metrics m1 INNER JOIN metrics m2 ON (m1.time > now()) WHERE m2.time > now();
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop
    ->  Append
          ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1
@@ -371,8 +348,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 -- test UPDATE
 :PREFIX UPDATE metrics SET v0 = 0.1, v1 = EXTRACT(EPOCH FROM now()) WHERE time > now();
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Update on metrics
    Update on metrics
    Update on _hyper_X_X_chunk
@@ -390,8 +366,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
 -- test DELETE
 :PREFIX DELETE FROM metrics WHERE time > now();
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Delete on metrics
    Delete on metrics
    Delete on _hyper_X_X_chunk
@@ -411,8 +386,7 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 -- should exclude all
 SET timescaledb.current_timestamp_mock TO '2010-01-01';
 :PREFIX SELECT FROM metrics WHERE time > now();
-        QUERY PLAN        
---------------------------
+QUERY PLAN
  Result
    One-Time Filter: false
 (2 rows)
@@ -420,8 +394,7 @@ SET timescaledb.current_timestamp_mock TO '2010-01-01';
 -- should exclude all but 1 chunk
 SET timescaledb.current_timestamp_mock TO '2000-01-14';
 :PREFIX SELECT FROM metrics WHERE time > now();
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: (("time" > now()) AND ("time" > 'Fri Jan 14 00:00:00 2000 PST'::timestamp with time zone))
 (2 rows)
@@ -429,8 +402,7 @@ SET timescaledb.current_timestamp_mock TO '2000-01-14';
 CREATE TABLE const_now(time timestamptz, time2 timestamptz, value float);
 -- does not apply to non-hypertables
 :PREFIX SELECT FROM const_now WHERE time > now();
-         QUERY PLAN         
-----------------------------
+QUERY PLAN
  Seq Scan on const_now
    Filter: ("time" > now())
 (2 rows)
@@ -438,23 +410,20 @@ CREATE TABLE const_now(time timestamptz, time2 timestamptz, value float);
 SELECT table_name FROM create_hypertable('const_now','time');
 NOTICE:  adding not-null constraint to column "time"
  table_name 
-------------
  const_now
 (1 row)
 
 INSERT INTO const_now SELECT '2000-01-01','2000-01-01',0.5;
 -- should have one time filter false
 :PREFIX SELECT FROM const_now WHERE time > now();
-        QUERY PLAN        
---------------------------
+QUERY PLAN
  Result
    One-Time Filter: false
 (2 rows)
 
 -- no constification because it's not partitioning column
 :PREFIX SELECT FROM const_now WHERE time2 > now();
-           QUERY PLAN           
---------------------------------
+QUERY PLAN
  Seq Scan on _hyper_X_X_chunk
    Filter: (time2 > now())
 (2 rows)
@@ -465,7 +434,6 @@ CREATE TABLE prep_const_now(time timestamptz, device int, value float);
 SELECT table_name FROM create_hypertable('prep_const_now', 'time');
 NOTICE:  adding not-null constraint to column "time"
    table_name   
-----------------
  prep_const_now
 (1 row)
 
@@ -475,8 +443,7 @@ INSERT INTO prep_const_now SELECT '3002-01-02', 3, 0.4;
 SET timescaledb.current_timestamp_mock TO '3001-01-01';
 PREPARE p1 AS SELECT FROM prep_const_now WHERE time > now();
 :PREFIX EXECUTE p1;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > now()) AND ("time" > 'Thu Jan 01 00:00:00 3001 PST'::timestamp with time zone))
@@ -485,14 +452,12 @@ PREPARE p1 AS SELECT FROM prep_const_now WHERE time > now();
 (5 rows)
 
 EXECUTE p1;
---
 (2 rows)
 
 SET timescaledb.current_timestamp_mock TO '3002-01-01';
 -- plan won't change cause the query didnt get replanned
 :PREFIX EXECUTE p1;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
          Index Cond: (("time" > now()) AND ("time" > 'Thu Jan 01 00:00:00 3001 PST'::timestamp with time zone))
@@ -501,7 +466,6 @@ SET timescaledb.current_timestamp_mock TO '3002-01-01';
 (5 rows)
 
 EXECUTE p1;
---
 (2 rows)
 
 DROP TABLE prep_const_now;

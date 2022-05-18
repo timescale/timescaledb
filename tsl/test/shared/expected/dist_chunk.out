@@ -29,7 +29,6 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions'
 ORDER BY 1;
      chunk_name     
---------------------
  _hyper_X_X_chunk
  _hyper_X_X_chunk
 (2 rows)
@@ -61,7 +60,6 @@ COMMIT;
 \set ON_ERROR_STOP 1
 SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_X_X_chunk', 'data_node_1');
  create_chunk_replica_table 
-----------------------------
  
 (1 row)
 
@@ -73,7 +71,6 @@ ERROR:  chunk "_dist_hyper_X_X_chunk" already exists on data node "data_node_3"
 -- Creating chunk replica table ignores compression now:
 SELECT _timescaledb_internal.create_chunk_replica_table('_timescaledb_internal._dist_hyper_X_X_chunk', 'data_node_2');
  create_chunk_replica_table 
-----------------------------
  
 (1 row)
 
@@ -131,7 +128,6 @@ data_node_1
 -- Drop the chunk replica on the primary chunk node. Should succeed
 SELECT _timescaledb_internal.chunk_drop_replica(:'CHUNK_NAME', :'PRIMARY_CHUNK_NODE');
  chunk_drop_replica 
---------------------
  
 (1 row)
 
@@ -141,14 +137,12 @@ SELECT foreign_server_name
     foreign_table_name = split_part(:'CHUNK_NAME', '.', 2)
     ORDER BY 1;
  foreign_server_name 
----------------------
  data_node_2
 (1 row)
 
 -- Number of replicas should have been reduced by 1
 SELECT count(*) FROM _timescaledb_catalog.chunk_data_node WHERE chunk_id = :'CHUNK_ID';
  count 
--------
      2
 (1 row)
 
@@ -159,7 +153,6 @@ INSERT INTO mvcp_hyper VALUES (1001, 1001);
 -- Ensure that SELECTs are able to query data from the above chunk
 SELECT count(*) FROM mvcp_hyper WHERE time >= 1000;
  count 
--------
      2
 (1 row)
 
@@ -167,28 +160,24 @@ ROLLBACK;
 -- Check that chunk_drop_replica works with compressed chunk
 SELECT substr(compress_chunk(:'CHUNK_NAME')::TEXT, 1, 29);
             substr             
--------------------------------
  _timescaledb_internal._dist_h
 (1 row)
 
 -- Drop one replica of a valid chunk. Should succeed on another datanode
 SELECT _timescaledb_internal.chunk_drop_replica(:'CHUNK_NAME', 'data_node_2');
  chunk_drop_replica 
---------------------
  
 (1 row)
 
 -- Number of replicas should have been reduced by 1
 SELECT count(*) FROM _timescaledb_catalog.chunk_data_node WHERE chunk_id = :'CHUNK_ID';
  count 
--------
      1
 (1 row)
 
 -- Decompress before checking INSERTs
 SELECT substr(decompress_chunk(:'CHUNK_NAME')::TEXT, 1, 29);
             substr             
--------------------------------
  _timescaledb_internal._dist_h
 (1 row)
 
@@ -199,7 +188,6 @@ INSERT INTO mvcp_hyper VALUES (1002, 1002);
 -- Ensure that SELECTs are able to query data from the above chunk
 SELECT count(*) FROM mvcp_hyper WHERE time >= 1000;
  count 
--------
      2
 (1 row)
 
