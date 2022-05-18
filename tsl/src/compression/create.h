@@ -20,8 +20,8 @@ bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
-Chunk *create_compress_chunk_table(Hypertable *compress_ht, Chunk *src_chunk);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);
+Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_oid);
 
 char *compression_column_segment_min_name(const FormData_hypertable_compression *fd);
 char *compression_column_segment_max_name(const FormData_hypertable_compression *fd);
