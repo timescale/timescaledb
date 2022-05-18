@@ -16,6 +16,8 @@
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
 #include <catalog/pg_type.h>
+#include <commands/event_trigger.h>
+#include <commands/tablecmds.h>
 #include <fmgr.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
@@ -1112,4 +1114,28 @@ ts_get_relnatts(Oid relid)
 
 	ReleaseSysCache(tp);
 	return result;
+}
+
+/*
+ * Wrap AlterTableInternal() for event trigger handling.
+ *
+ * AlterTableInternal can be called as a utility command, which is common in a
+ * SQL function that alters a table in some form when called in the form
+ * SELECT <cmd> INTO <table>. This is transformed into a process utility
+ * command (CREATE TABLE AS), which expects an event trigger context to be
+ * set up.
+ *
+ * The "cmd" parameter can be set to a higher-level command that caused the
+ * alter table to occur. If "cmd" is set to NULL, the "cmds" list will be used
+ * instead.
+ */
+void
+ts_alter_table_with_event_trigger(Oid relid, Node *cmd, List *cmds, bool recurse)
+{
+	if (cmd == NULL)
+		cmd = (Node *) cmds;
+
+	EventTriggerAlterTableStart(cmd);
+	AlterTableInternal(relid, cmds, recurse);
+	EventTriggerAlterTableEnd();
 }

@@ -13,6 +13,7 @@
 
 /* see postgres commit ab5e9caa4a3ec4765348a0482e88edcf3f6aab4a */
 
+#include "utils.h"
 #include <postgres.h>
 #include <access/amapi.h>
 #include <access/multixact.h>
@@ -185,8 +186,11 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 					 errmsg("ignoring index parameter"),
 					 errdetail("Chunk will not be reordered as it has compressed data.")));
 
-		AlterTableInternal(chunk_id, list_make1(&cmd), false);
-		AlterTableInternal(compressed_chunk->table_id, list_make1(&cmd), false);
+		ts_alter_table_with_event_trigger(chunk_id, fcinfo->context, list_make1(&cmd), false);
+		ts_alter_table_with_event_trigger(compressed_chunk->table_id,
+										  fcinfo->context,
+										  list_make1(&cmd),
+										  false);
 		/* move indexes on original and compressed chunk */
 		ts_chunk_index_move_all(chunk_id, index_destination_tablespace);
 		ts_chunk_index_move_all(compressed_chunk->table_id, index_destination_tablespace);

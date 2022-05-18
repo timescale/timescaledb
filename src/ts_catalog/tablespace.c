@@ -22,6 +22,7 @@
 #include "scanner.h"
 #include "ts_catalog/tablespace.h"
 #include "compat/compat.h"
+#include "utils.h"
 
 #define TABLESPACE_DEFAULT_CAPACITY 4
 
@@ -502,8 +503,7 @@ ts_tablespace_attach(PG_FUNCTION_ARGS)
 
 		cmd->subtype = AT_SetTableSpace;
 		cmd->name = NameStr(*tspcname);
-
-		AlterTableInternal(hypertable_oid, list_make1(cmd), false);
+		ts_alter_table_with_event_trigger(hypertable_oid, fcinfo->context, list_make1(cmd), false);
 	}
 	relation_close(rel, AccessShareLock);
 	PG_RETURN_VOID();
@@ -644,7 +644,7 @@ tablespace_detach_all(Oid hypertable_oid)
 }
 
 static void
-detach_tablespace_from_hypertable_if_set(Oid hypertable_oid, Oid tspcoid)
+detach_tablespace_from_hypertable_if_set(Node *detach_cmd, Oid hypertable_oid, Oid tspcoid)
 {
 	Relation rel;
 
@@ -657,8 +657,7 @@ detach_tablespace_from_hypertable_if_set(Oid hypertable_oid, Oid tspcoid)
 
 		cmd->subtype = AT_SetTableSpace;
 		cmd->name = "pg_default";
-
-		AlterTableInternal(hypertable_oid, list_make1(cmd), false);
+		ts_alter_table_with_event_trigger(hypertable_oid, detach_cmd, list_make1(cmd), false);
 	}
 	relation_close(rel, AccessShareLock);
 }
@@ -696,7 +695,7 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 	if (OidIsValid(hypertable_oid))
 	{
 		ret = tablespace_detach_one(hypertable_oid, NameStr(*tspcname), tspcoid, if_attached);
-		detach_tablespace_from_hypertable_if_set(hypertable_oid, tspcoid);
+		detach_tablespace_from_hypertable_if_set(fcinfo->context, hypertable_oid, tspcoid);
 	}
 	else
 	{
@@ -707,7 +706,8 @@ ts_tablespace_detach(PG_FUNCTION_ARGS)
 		foreach (cell, hypertables)
 		{
 			const int32 hypertable_id = lfirst_int(cell);
-			detach_tablespace_from_hypertable_if_set(ts_hypertable_id_to_relid(hypertable_id),
+			detach_tablespace_from_hypertable_if_set(fcinfo->context,
+													 ts_hypertable_id_to_relid(hypertable_id),
 													 tspcoid);
 		}
 	}
@@ -736,7 +736,7 @@ ts_tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 		elog(ERROR, "invalid argument");
 
 	result = tablespace_detach_all(hypertable_relid);
-	AlterTableInternal(hypertable_relid, list_make1(cmd), false);
+	ts_alter_table_with_event_trigger(hypertable_relid, fcinfo->context, list_make1(cmd), false);
 
 	PG_RETURN_INT32(result);
 }

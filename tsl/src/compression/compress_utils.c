@@ -180,7 +180,7 @@ preserve_uncompressed_chunk_stats(Oid chunk_relid)
 	};
 
 	ExecVacuum(NULL, &vs, true);
-	AlterTableInternal(chunk_relid, list_make1(&at_cmd), false);
+	ts_alter_table_with_event_trigger(chunk_relid, NULL, list_make1(&at_cmd), false);
 }
 
 /* This function is intended to undo the disabling of autovacuum done when we compressed a chunk.
@@ -205,7 +205,10 @@ restore_autovacuum_on_decompress(Oid uncompressed_hypertable_relid, Oid uncompre
 				makeDefElem("autovacuum_enabled", (Node *) makeString("true"), -1)),
 		};
 
-		AlterTableInternal(uncompressed_chunk_relid, list_make1(&at_cmd), false);
+		ts_alter_table_with_event_trigger(uncompressed_chunk_relid,
+										  NULL,
+										  list_make1(&at_cmd),
+										  false);
 	}
 }
 
