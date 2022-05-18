@@ -6,6 +6,10 @@ SET client_min_messages TO ERROR;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
+-- this is a noop in our regression tests but allows us to use this
+-- dataset more easily in other tests like the sqlsmith test
+SELECT current_database() AS "TEST_DBNAME" \gset
+
 CREATE SCHEMA test;
 
 -- create normal hypertable with dropped columns, each chunk will have different attribute numbers
@@ -97,7 +101,7 @@ SET client_min_messages TO ERROR;
 \c data_node_3
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
-\c :TEST_DBNAME :ROLE_SUPERUSER;
+\c :TEST_DBNAME
 SET client_min_messages TO ERROR;
 \ir :TEST_SUPPORT_FILE
 \o
