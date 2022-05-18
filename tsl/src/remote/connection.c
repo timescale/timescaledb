@@ -2288,11 +2288,16 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 	conn->status = CONN_PROCESSING;
 
 	while ((res = PQgetResult(conn->pg_conn)))
-		if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		ExecStatusType status = PQresultStatus(res);
+		if (status != PGRES_COMMAND_OK)
+		{
 			success = fill_result_error(err,
 										ERRCODE_CONNECTION_EXCEPTION,
-										"invalid result when ending remote COPY",
+										psprintf("invalid result status '%s' when ending remote COPY", PQresStatus(status)),
 										res);
+		}
+	}
 
 	Assert(res == NULL);
 	conn->status = CONN_IDLE;
