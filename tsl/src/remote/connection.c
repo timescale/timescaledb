@@ -2218,20 +2218,43 @@ remote_connection_end_copy(TSConnection *conn, TSConnectionError *err)
 
 	for (;;)
 	{
-		int res = PQflush(conn->pg_conn);
+		CHECK_FOR_INTERRUPTS();
 
-		if (res == 1)
+		int flush_result = PQflush(conn->pg_conn);
+
+		if (flush_result == 1)
 		{
 			/* FIXME */
 			fprintf(stderr, "wait for flush\n");
 
-			(void) WaitLatch(MyLatch,
-							 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
-							 10,
-							 WAIT_EVENT_PG_SLEEP);
+			const int wait_result =
+					WaitLatchOrSocket(MyLatch,
+									  PQsocket(conn->pg_conn),
+									  WL_TIMEOUT | WL_SOCKET_WRITEABLE,
+									  /* timeout = */ 1000,
+									  /* wait_even_info = */ 0);
+
+			fprintf(stderr, "wait result %d\n", wait_result);
+
+			if (wait_result == 1)
+			{
+				/* Socket writeable. */
+				continue;
+			}
+			else if (wait_result == 0)
+			{
+				/* The write to socket is taking some time. Let's just retry. */
+				continue;
+			}
+			else
+			{
+				/* We shouldn't really have two or more events occur here. */
+				elog(ERROR, "WaitLatchOrSocket returns unexpected result %d while waiting to flush COPY data", wait_result);
+			}
 		}
-		else if (res == 0)
+		else if (flush_result == 0)
 		{
+			/* Flushed all. */
 			break;
 		}
 		else

@@ -336,7 +336,9 @@ finish_outstanding_copies(const CopyConnectionState *state)
 {
 	ListCell *lc;
 	TSConnectionError err;
-	bool failure = false;
+
+	List *to_flush = list_copy(state->connections_in_use);
+	List *to_flush_next = NIL;
 
 	/*
 	 * Flush all connections simultaneously instead of doing this one-by-one in
@@ -344,13 +346,21 @@ finish_outstanding_copies(const CopyConnectionState *state)
 	 */
 	for (;;)
 	{
-		bool flushed_all = true;
-		foreach (lc, state->connections_in_use)
+		foreach (lc, to_flush)
 		{
 			TSConnection *conn = lfirst(lc);
-			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
-			int res = PQflush(pg_conn);
 
+			TSConnectionStatus status = remote_connection_get_status(conn);
+			if (status == CONN_IDLE)
+			{
+				continue;
+			}
+			Assert(status == CONN_COPY_IN);
+
+			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+			Assert(PQisnonblocking(pg_conn));
+
+			int res = PQflush(pg_conn);
 			if (res == -1)
 			{
 				ereport(ERROR,
@@ -363,12 +373,13 @@ finish_outstanding_copies(const CopyConnectionState *state)
 			}
 			else
 			{
+				/* Busy. */
 				Assert(res == 1);
-				flushed_all = false;
+				to_flush_next = lappend(to_flush_next, conn);
 			}
 		}
 
-		if (flushed_all)
+		if (list_length(to_flush_next) == 0)
 		{
 			break;
 		}
@@ -380,8 +391,19 @@ finish_outstanding_copies(const CopyConnectionState *state)
 						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 						 10,
 						 WAIT_EVENT_PG_SLEEP);
+
+		List * tmp = to_flush_next;
+		to_flush_next=  to_flush;
+		to_flush = tmp;
+
+		to_flush_next = list_truncate(to_flush_next, 0);
 	}
 
+	list_free(to_flush);
+	list_free(to_flush_next);
+
+	/* Exit the copy subprotocol. */
+	bool failure = false;
 	foreach (lc, state->connections_in_use)
 	{
 		TSConnection *conn = lfirst(lc);
@@ -1036,6 +1058,8 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 //			remote_connection_get_pg_conn(info->connection));
 //	}
 
+	finish_outstanding_copies(&context->connection_state);
+
 	List *data_nodes = NIL;
 
 	for (int k = 0; k < n; k++)
@@ -1122,15 +1146,9 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 				= lappend(context->connection_state.data_node_connections, entry);
 		}
 
-		if (remote_connection_get_status(data_node->connection) == CONN_PROCESSING)
-		{
-			elog(ERROR,
-				 "wrong status CONN_PROCESSING for connection to data node %d when performing "
-				 "distributed COPY\n",
-				 data_node->server_oid);
-		}
 
-		if (remote_connection_get_status(data_node->connection) == CONN_IDLE)
+		TSConnectionStatus status = remote_connection_get_status(data_node->connection);
+		if (status == CONN_IDLE)
 		{
 			TSConnectionError err;
 			if (!remote_connection_begin_copy(data_node->connection,
@@ -1155,6 +1173,18 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 					= lappend(context->connection_state.connections_in_use,
 					 data_node->connection);
 			}
+		}
+		else if (status == CONN_COPY_IN)
+		{
+			/* Ready to use. */
+		}
+		else
+		{
+			elog(ERROR,
+				 "wrong status %d for connection to data node %d when performing "
+				 "distributed COPY\n",
+				 status,
+				 data_node->server_oid);
 		}
 	}
 	MemoryContextSwitchTo(old);
