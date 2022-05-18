@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <fmgr.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <storage/procarray.h>
 #include <storage/proc.h>
 #include <commands/dbcommands.h>
@@ -96,9 +97,9 @@ throw_after_n_rows(int max_rows, int severity)
 	if (max_rows <= rows_seen)
 	{
 		ereport(severity,
-				errmsg("debug point: requested to error out every %d rows, %d rows seen",
-					   max_rows,
-					   rows_seen));
+				(errmsg("debug point: requested to error out every %d rows, %d rows seen",
+						max_rows,
+						rows_seen)));
 	}
 
 	return rows_seen;
