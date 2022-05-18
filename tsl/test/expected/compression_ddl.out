@@ -1161,6 +1161,10 @@ WHERE reltablespace in
  test2
 (3 rows)
 
+-- test compress_chunk() with utility statement (SELECT ... INTO)
+SELECT compress_chunk(ch) INTO compressed_chunks FROM show_chunks('test2') ch;
+SELECT decompress_chunk(ch) INTO decompressed_chunks FROM show_chunks('test2') ch;
+-- compress again
 SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
               compress_chunk               
 -------------------------------------------
@@ -1180,7 +1184,7 @@ WHERE reltablespace in
 (1 row)
 
 DROP TABLE test2 CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_17_104_chunk
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_17_105_chunk
 DROP TABLESPACE tablespace2;
 -- Create a table with a compressed table and then delete the
 -- compressed table and see that the drop of the hypertable does not

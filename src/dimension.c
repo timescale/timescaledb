@@ -1078,9 +1078,7 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 			(errmsg("adding not-null constraint to column \"%s\"", colname),
 			 errdetail("Time dimensions cannot have NULL values.")));
 
-	EventTriggerAlterTableStart((Node *) &cmd);
-	AlterTableInternal(table_relid, list_make1(&cmd), false);
-	EventTriggerAlterTableEnd();
+	ts_alter_table_with_event_trigger(table_relid, (Node *) &cmd, list_make1(&cmd), false);
 }
 
 void

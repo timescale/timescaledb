@@ -64,7 +64,7 @@ GRANT CREATE ON TABLESPACE tablespace2 TO :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- move with chunk index for reorder
-SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
+SELECT true INTO move_chunk_result FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
 SELECT * FROM test.show_subtables('cluster_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 BEGIN;
@@ -102,7 +102,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 --compress chunk and then  move chunk and index to different tablespaces
 ALTER TABLE cluster_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'location');
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk') as ch;
-SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', verbose=>TRUE);
+SELECT true INTO move_chunk_compressed FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', verbose=>TRUE);
 SELECT * FROM test.show_subtables('cluster_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 SELECT * FROM test.show_indexesp('_timescaledb_internal.compress_hyper%_chunk');
