@@ -335,7 +335,8 @@ static void
 flush_data_nodes(const CopyConnectionState *state)
 {
 	ListCell *lc;
-	WaitEventSet *set = NULL;
+	List *to_flush = list_copy(state->connections_in_use);
+	List *to_flush_next = NIL;
 
 	/*
 	 * Flush all connections simultaneously instead of doing this one-by-one in
@@ -343,8 +344,7 @@ flush_data_nodes(const CopyConnectionState *state)
 	 */
 	for (;;)
 	{
-		bool flushed_all = true;
-		foreach (lc, state->connections_in_use)
+		foreach (lc, to_flush)
 		{
 			TSConnection *conn = lfirst(lc);
 
@@ -368,43 +368,40 @@ flush_data_nodes(const CopyConnectionState *state)
 			else if (res == 0)
 			{
 				/* Flushed. */
-				if (set != NULL)
-				{
-					ModifyWaitEvent(set, foreach_current_index(lc),
-						/* events = */ 0, /* latch = */ NULL);
-				}
-				continue;
 			}
-
-			/* Busy. */
-			Assert(res == 1);
-			flushed_all = false;
-
-			if (set == NULL)
+			else
 			{
-				set = CreateWaitEventSet(CurrentMemoryContext,
-					list_length(state->connections_in_use));
-				ListCell *set_cell;
-				foreach (set_cell, state->connections_in_use)
-				{
-					TSConnection *conn = lfirst(set_cell);
-					PGconn *pg_conn = remote_connection_get_pg_conn(conn);
-					const int required_events
-							= foreach_current_index(set_cell) > foreach_current_index(lc)
-							? WL_SOCKET_WRITEABLE : 0;
-
-					const int __attribute__((unused)) resulting_pos = AddWaitEventToSet(set,
-						/* events = */ required_events,
-						PQsocket(pg_conn), /* latch = */ NULL, /* user_data = */ NULL);
-
-					Assert(resulting_pos == foreach_current_index(set_cell));
-				}
+				/* Busy. */
+				Assert(res == 1);
+				to_flush_next = lappend(to_flush_next, conn);
 			}
 		}
 
-		if (flushed_all)
+		if (list_length(to_flush_next) == 0)
 		{
 			break;
+		}
+
+		List * tmp = to_flush_next;
+		to_flush_next=  to_flush;
+		to_flush = tmp;
+
+		to_flush_next = list_truncate(to_flush_next, 0);
+
+		/*
+		 * Postgres API doesn't allow to remove a socket from the wait event,
+		 * and it's level-triggered, so we have to recreate the set each time.
+		 */
+		WaitEventSet *set = CreateWaitEventSet(CurrentMemoryContext,
+											 list_length(to_flush));
+		ListCell *set_cell;
+		foreach (set_cell, to_flush)
+		{
+			TSConnection *conn = lfirst(set_cell);
+			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+			(void) AddWaitEventToSet(set,
+						 /* events = */ WL_SOCKET_WRITEABLE,
+							 PQsocket(pg_conn), /* latch = */ NULL, /* user_data = */ NULL);
 		}
 
 		CHECK_FOR_INTERRUPTS();
@@ -423,12 +420,12 @@ flush_data_nodes(const CopyConnectionState *state)
 		Assert(wait_result == 0 || wait_result == 1);
 
 		fprintf(stderr, "result %d pos %d\n", wait_result, occurred->pos);
-	}
 
-	if (set)
-	{
 		FreeWaitEventSet(set);
 	}
+
+	list_free(to_flush);
+	list_free(to_flush_next);
 }
 
 static void
