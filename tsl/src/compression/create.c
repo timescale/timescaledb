@@ -45,6 +45,7 @@
 #include "trigger.h"
 #include "utils.h"
 
+/* just a comment */
 /* entrypoint
  * tsl_process_compress_table : is the entry point.
  */
