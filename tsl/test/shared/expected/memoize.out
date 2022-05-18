@@ -19,7 +19,6 @@ SET enable_memoize TO on;
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
-----------------
  on
 (1 row)
 
@@ -28,8 +27,7 @@ SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=68370 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=68370 loops=1)
          Order: m1."time"
@@ -64,7 +62,6 @@ ORDER BY m1.time;
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
-----------------
  on
 (1 row)
 
@@ -73,8 +70,7 @@ SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=68370 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=68370 loops=1)
          Order: m1."time"
@@ -145,7 +141,6 @@ ORDER BY m1.time;
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
-----------------
  on
 (1 row)
 
@@ -154,8 +149,7 @@ SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort (actual rows=68370 loops=1)
    Sort Key: m1_1."time"
    Sort Method: quicksort 
@@ -201,7 +195,6 @@ ORDER BY m1.time;
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
-----------------
  on
 (1 row)
 
@@ -210,8 +203,7 @@ SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort (actual rows=68370 loops=1)
    Sort Key: m1_1."time"
    Sort Method: quicksort 

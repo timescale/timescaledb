@@ -13,7 +13,6 @@ SELECT
 FROM
   create_distributed_hypertable('dist_insert', 'inserted', 'partkey');
  table_name  
--------------
  dist_insert
 (1 row)
 

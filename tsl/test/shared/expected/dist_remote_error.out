@@ -30,8 +30,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000, d
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                     QUERY PLAN                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
@@ -48,8 +47,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000, d
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                     QUERY PLAN                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
@@ -67,8 +65,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000, d
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                     QUERY PLAN                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
@@ -85,8 +82,7 @@ select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000, d
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                     QUERY PLAN                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1

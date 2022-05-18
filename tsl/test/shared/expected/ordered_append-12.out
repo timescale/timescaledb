@@ -24,8 +24,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -43,8 +42,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -63,8 +61,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -83,8 +80,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -106,8 +102,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -125,8 +120,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -144,8 +138,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id
@@ -166,8 +159,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
@@ -195,8 +187,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -218,8 +209,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics (actual rows=27348 loops=1)
    Order: metrics."time"
    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=7196 loops=1)
@@ -238,8 +228,7 @@ ORDER BY time ASC;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Result (actual rows=1 loops=1)
          ->  Append (actual rows=1 loops=1)
@@ -255,8 +244,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -274,8 +262,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -294,8 +281,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -314,8 +300,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -336,8 +321,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -354,8 +338,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -369,8 +352,7 @@ LIMIT 1;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -390,8 +372,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -412,8 +393,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -433,8 +413,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -457,8 +436,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time"
@@ -476,8 +454,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: time_bucket('@ 1 day'::interval, metrics."time")
@@ -500,8 +477,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -522,8 +498,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: date_trunc('day'::text, metrics."time")
@@ -541,8 +516,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: date_trunc('day'::text, metrics."time")
@@ -565,8 +539,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -588,8 +561,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -615,8 +587,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100 loops=1)
          Order: metrics."time" DESC
@@ -643,8 +614,7 @@ FROM i;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics (actual rows=13674 loops=1)
    Order: metrics."time"
    ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -667,8 +637,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics (actual rows=5 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2 (returns $1)
@@ -704,8 +673,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=4 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1 loops=1)
@@ -726,8 +694,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -745,8 +712,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=3 loops=1)
          Order: metrics."time"
@@ -765,8 +731,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -784,8 +749,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=3 loops=1)
          Order: metrics."time"
@@ -808,8 +772,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -845,8 +808,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -883,8 +845,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -915,8 +876,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -938,8 +898,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -957,8 +916,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -994,8 +952,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id
@@ -1028,8 +985,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
@@ -1064,8 +1020,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -1084,8 +1039,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space (actual rows=27348 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7196 loops=1)
@@ -1116,8 +1070,7 @@ ORDER BY time ASC;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Result (actual rows=1 loops=1)
          ->  Append (actual rows=1 loops=1)
@@ -1139,8 +1092,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -1174,8 +1126,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -1210,8 +1161,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -1256,8 +1206,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -1304,8 +1253,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -1340,8 +1288,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -1373,8 +1320,7 @@ LIMIT 1;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -1418,8 +1364,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -1464,8 +1409,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -1509,8 +1453,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Result (actual rows=1 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
@@ -1557,8 +1500,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time"
@@ -1594,8 +1536,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: time_bucket('@ 1 day'::interval, metrics_space."time")
@@ -1636,8 +1577,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -1664,8 +1604,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: date_trunc('day'::text, metrics_space."time")
@@ -1701,8 +1640,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: date_trunc('day'::text, metrics_space."time")
@@ -1743,8 +1681,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -1772,8 +1709,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -1822,8 +1758,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
          Order: metrics_space."time" DESC
@@ -1873,8 +1808,7 @@ FROM i;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space (actual rows=13674 loops=1)
    Order: metrics_space."time"
    ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -1897,8 +1831,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space (actual rows=5 loops=1)
    InitPlan 2 (returns $1)
      ->  Result (actual rows=1 loops=1)
@@ -1978,8 +1911,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=4 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1 loops=1)
@@ -2018,8 +1950,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2049,8 +1980,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=3 loops=1)
          Order: metrics_space."time"
@@ -2087,8 +2017,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2118,8 +2047,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=3 loops=1)
          Order: metrics_space."time"
@@ -2160,8 +2088,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2181,8 +2108,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -2203,8 +2129,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2229,8 +2154,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2255,8 +2179,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2277,8 +2200,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -2299,8 +2221,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id
@@ -2330,8 +2251,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
@@ -2369,8 +2289,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2392,8 +2311,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort (actual rows=27348 loops=1)
    Sort Key: _hyper_X_X_chunk."time"
    Sort Method: quicksort 
@@ -2417,8 +2335,7 @@ ORDER BY time ASC;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Result (actual rows=1 loops=1)
          ->  Append (actual rows=1 loops=1)
@@ -2437,8 +2354,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2462,8 +2378,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -2488,8 +2403,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_compressed."time"
@@ -2511,8 +2425,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_compressed."time"
@@ -2536,8 +2449,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_compressed."time"
@@ -2559,8 +2471,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_compressed."time"
@@ -2579,8 +2490,7 @@ LIMIT 1;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
@@ -2594,8 +2504,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
@@ -2610,8 +2519,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
@@ -2625,8 +2533,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
@@ -2643,8 +2550,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2665,8 +2571,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"))
@@ -2692,8 +2597,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -2720,8 +2624,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time"))
@@ -2742,8 +2645,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time"))
@@ -2769,8 +2671,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -2798,8 +2699,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_compressed."time" DESC
@@ -2827,8 +2727,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics_compressed."time" DESC
@@ -2857,8 +2756,7 @@ FROM i;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=13674 loops=1)
    Order: metrics_compressed."time"
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -2887,8 +2785,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
    Chunks excluded during runtime: 1
    InitPlan 1 (returns $0)
@@ -2924,8 +2821,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=4 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1 loops=1)
@@ -2948,8 +2844,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2969,8 +2864,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -2991,8 +2885,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3012,8 +2905,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3038,8 +2930,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3071,8 +2962,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -3105,8 +2995,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3143,8 +3032,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -3176,8 +3064,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -3205,8 +3092,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -3239,8 +3125,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id
@@ -3300,8 +3185,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
@@ -3357,8 +3241,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3380,8 +3263,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort (actual rows=27348 loops=1)
    Sort Key: _hyper_X_X_chunk."time"
    Sort Method: quicksort 
@@ -3414,8 +3296,7 @@ ORDER BY time ASC;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Result (actual rows=1 loops=1)
          ->  Append (actual rows=1 loops=1)
@@ -3446,8 +3327,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3491,8 +3371,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -3537,8 +3416,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3588,8 +3466,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3641,8 +3518,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3692,8 +3568,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3740,8 +3615,7 @@ LIMIT 1;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -3767,8 +3641,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -3795,8 +3668,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -3822,8 +3694,7 @@ FROM :TEST_TABLE;
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+QUERY PLAN
  Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=68370 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -3852,8 +3723,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -3886,8 +3756,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"))
@@ -3925,8 +3794,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -3962,8 +3830,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time"))
@@ -3996,8 +3863,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time"))
@@ -4035,8 +3901,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (date_trunc('day'::text, _hyper_X_X_chunk."time")), _hyper_X_X_chunk.device_id
@@ -4073,8 +3938,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: metrics_space_compressed."time" DESC
@@ -4122,8 +3986,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Sort (actual rows=100 loops=1)
          Sort Key: metrics_space_compressed."time" DESC
@@ -4172,8 +4035,7 @@ FROM i;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=13674 loops=1)
    Order: metrics_space_compressed."time"
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
@@ -4202,8 +4064,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5 loops=1)
    InitPlan 1 (returns $0)
      ->  Aggregate (actual rows=1 loops=1)
@@ -4286,8 +4147,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=4 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1 loops=1)
@@ -4322,8 +4182,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -4355,8 +4214,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -4389,8 +4247,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
@@ -4422,8 +4279,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=3 loops=1)
    ->  Sort (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"

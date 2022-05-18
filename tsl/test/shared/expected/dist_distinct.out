@@ -26,8 +26,7 @@ SELECT DISTINCT device_id
 FROM metrics_dist
 ORDER BY 1
 LIMIT 10;
-                                                                                               QUERY PLAN                                                                                                
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.device_id
    ->  Unique
@@ -61,8 +60,7 @@ SELECT DISTINCT device_id*v1
 FROM metrics_dist
 ORDER BY 1
 LIMIT 10;
-                                                                                                QUERY PLAN                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: ((metrics_dist.device_id * metrics_dist.v1))
    ->  Unique
@@ -95,8 +93,7 @@ SELECT DISTINCT device_id
 FROM metrics_dist
 ORDER BY 1
 LIMIT 10;
-                                                                                               QUERY PLAN                                                                                                
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.device_id
    ->  Unique
@@ -191,8 +188,7 @@ SELECT DISTINCT device_id, NULL, 'const1'
 FROM metrics_dist
 ORDER BY 1
 LIMIT 10;
-                                                                                               QUERY PLAN                                                                                                
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.device_id, NULL::text, 'const1'::text
    ->  Unique
@@ -287,8 +283,7 @@ SELECT DISTINCT device_id, time, NULL, 'const1'
 FROM metrics_dist
 ORDER BY 1,2
 LIMIT 10;
-                                                                                                               QUERY PLAN                                                                                                               
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.device_id, metrics_dist."time", NULL::text, 'const1'::text
    ->  Unique
@@ -363,8 +358,7 @@ SELECT DISTINCT device_id, time
 FROM metrics_dist
 ORDER BY 1,2
 LIMIT 10;
-                                                                                                               QUERY PLAN                                                                                                               
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.device_id, metrics_dist."time"
    ->  Unique
@@ -439,8 +433,7 @@ SELECT DISTINCT ON (device_id, time) device_id, time
 FROM metrics_dist
 ORDER BY 1,2
 LIMIT 10;
-                                                                                                                          QUERY PLAN                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.device_id, metrics_dist."time"
    ->  Unique
@@ -514,8 +507,7 @@ SELECT device_id, time, 'const1' FROM (SELECT DISTINCT ON (device_id) device_id,
 FROM metrics_dist
 ORDER BY 1,2
 LIMIT 10) a;
-                                                                                                                         QUERY PLAN                                                                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Subquery Scan on a
    Output: a.device_id, a."time", 'const1'::text
    ->  Limit
@@ -592,8 +584,7 @@ SELECT DISTINCT device_id
 FROM metrics_dist
 ORDER BY 1
 LIMIT 10;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: _dist_hyper_X_X_chunk.device_id
    ->  Unique
@@ -726,8 +717,7 @@ EXPLAIN (verbose, costs off)
 SELECT DISTINCT device_id, device_id
 FROM metrics_dist
 ORDER BY 1;
-                                                                                               QUERY PLAN                                                                                                
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort
    Output: metrics_dist.device_id, metrics_dist.device_id
    Sort Key: metrics_dist.device_id
@@ -760,8 +750,7 @@ SELECT DISTINCT *
 FROM metrics_dist
 ORDER BY 1,2
 LIMIT 10;
-                                                                                                                                                             QUERY PLAN                                                                                                                                                             
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist."time", metrics_dist.device_id, metrics_dist.v0, metrics_dist.v1, metrics_dist.v2, metrics_dist.v3
    ->  Unique
@@ -793,8 +782,7 @@ SELECT DISTINCT ON (device_id) *
 FROM metrics_dist
 ORDER BY device_id, time
 LIMIT 10;
-                                                                                                                              QUERY PLAN                                                                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist."time", metrics_dist.device_id, metrics_dist.v0, metrics_dist.v1, metrics_dist.v2, metrics_dist.v3
    ->  Unique
@@ -827,8 +815,7 @@ SELECT DISTINCT metrics_dist r
 FROM metrics_dist
 ORDER BY r
 LIMIT 10;
-                                                                                             QUERY PLAN                                                                                              
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: metrics_dist.*
    ->  Unique
@@ -863,8 +850,7 @@ SELECT DISTINCT time_bucket('1h',time) col1
 FROM metrics_dist
 ORDER BY col1
 LIMIT 10;
-                                                                                                             QUERY PLAN                                                                                                             
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: (time_bucket('@ 1 hour'::interval, metrics_dist."time"))
    ->  Unique
@@ -894,8 +880,7 @@ SELECT DISTINCT without any var references is handled correctly
 EXPLAIN (verbose, costs off)
 SELECT DISTINCT 1, 'constx'
 FROM metrics_dist;
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: 1, 'constx'::text
    ->  Custom Scan (AsyncAppend)
