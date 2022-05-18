@@ -332,13 +332,10 @@ create_connection_list_for_chunk(CopyConnectionState *state, int32 chunk_id,
 }
 
 static void
-finish_outstanding_copies(const CopyConnectionState *state)
+flush_data_nodes(const CopyConnectionState *state)
 {
 	ListCell *lc;
-	TSConnectionError err;
-
-	List *to_flush = list_copy(state->connections_in_use);
-	List *to_flush_next = NIL;
+	WaitEventSet *set = NULL;
 
 	/*
 	 * Flush all connections simultaneously instead of doing this one-by-one in
@@ -346,7 +343,8 @@ finish_outstanding_copies(const CopyConnectionState *state)
 	 */
 	for (;;)
 	{
-		foreach (lc, to_flush)
+		bool flushed_all = true;
+		foreach (lc, state->connections_in_use)
 		{
 			TSConnection *conn = lfirst(lc);
 
@@ -370,40 +368,78 @@ finish_outstanding_copies(const CopyConnectionState *state)
 			else if (res == 0)
 			{
 				/* Flushed. */
+				if (set != NULL)
+				{
+					ModifyWaitEvent(set, foreach_current_index(lc),
+						/* events = */ 0, /* latch = */ NULL);
+				}
+				continue;
 			}
-			else
+
+			/* Busy. */
+			Assert(res == 1);
+			flushed_all = false;
+
+			if (set == NULL)
 			{
-				/* Busy. */
-				Assert(res == 1);
-				to_flush_next = lappend(to_flush_next, conn);
+				set = CreateWaitEventSet(CurrentMemoryContext,
+					list_length(state->connections_in_use));
+				ListCell *set_cell;
+				foreach (set_cell, state->connections_in_use)
+				{
+					TSConnection *conn = lfirst(set_cell);
+					PGconn *pg_conn = remote_connection_get_pg_conn(conn);
+					const int required_events
+							= foreach_current_index(set_cell) > foreach_current_index(lc)
+							? WL_SOCKET_WRITEABLE : 0;
+
+					const int __attribute__((unused)) resulting_pos = AddWaitEventToSet(set,
+						/* events = */ required_events,
+						PQsocket(pg_conn), /* latch = */ NULL, /* user_data = */ NULL);
+
+					Assert(resulting_pos == foreach_current_index(set_cell));
+				}
 			}
 		}
 
-		if (list_length(to_flush_next) == 0)
+		if (flushed_all)
 		{
 			break;
 		}
 
 		CHECK_FOR_INTERRUPTS();
 
-		fprintf(stderr, "sleep (4)!\n");
-		(void) WaitLatch(MyLatch,
-						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
-						 10,
-						 WAIT_EVENT_PG_SLEEP);
+		WaitEvent occurred[1];
+		int wait_result = WaitEventSetWait(set,
+			/* timeout = */ 1000, occurred, /* nevents = */ 1,
+			WAIT_EVENT_COPY_FILE_WRITE);
 
-		List * tmp = to_flush_next;
-		to_flush_next=  to_flush;
-		to_flush = tmp;
+		/*
+		 * The possible results are:
+		 * 1) Timeout. Just retry the flush, it will cause errors.
+		 * 2) We have successfully waited for something, we don't care,
+		 * just continue to flush the entire list.
+		 */
+		Assert(wait_result == 0 || wait_result == 1);
 
-		to_flush_next = list_truncate(to_flush_next, 0);
+		fprintf(stderr, "result %d pos %d\n", wait_result, occurred->pos);
 	}
 
-	list_free(to_flush);
-	list_free(to_flush_next);
+	if (set)
+	{
+		FreeWaitEventSet(set);
+	}
+}
+
+static void
+end_copy_on_data_nodes(const CopyConnectionState *state)
+{
+	flush_data_nodes(state);
 
 	/* Exit the copy subprotocol. */
+	TSConnectionError err;
 	bool failure = false;
+	ListCell *lc;
 	foreach (lc, state->connections_in_use)
 	{
 		TSConnection *conn = lfirst(lc);
@@ -1058,7 +1094,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 //			remote_connection_get_pg_conn(info->connection));
 //	}
 
-	finish_outstanding_copies(&context->connection_state);
+	flush_data_nodes(&context->connection_state);
 
 	List *data_nodes = NIL;
 
@@ -1248,7 +1284,8 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 void
 remote_copy_end(RemoteCopyContext *context)
 {
-	finish_outstanding_copies(&context->connection_state);
+	flush_data_nodes(&context->connection_state);
+	end_copy_on_data_nodes(&context->connection_state);
 	MemoryContextDelete(context->mctx);
 }
 

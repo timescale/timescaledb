@@ -812,7 +812,12 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_instead_row);
 
 	/* Depending on the configured trigger, enable or disable the multi-insert buffers */
-	if (has_before_insert_row_trig || has_instead_insert_row_trig)
+	if (true)
+	{
+		/* FIXME Disabled multi-inserts until the fix. */
+		insertMethod = CIM_SINGLE;
+	}
+	else if (has_before_insert_row_trig || has_instead_insert_row_trig)
 	{
 		insertMethod = CIM_SINGLE;
 		ereport(DEBUG1,
