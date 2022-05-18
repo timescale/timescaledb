@@ -13,6 +13,8 @@ If you use compression with a non-default collation on a segmentby-column you mi
 * #4169 Add support for chunk exclusion on DELETE to PG14
 * #4209 Add support for chunk exclusion on UPDATE to PG14
 * #4301 Add support for bulk inserts in COPY operator
+* #4330 Add GUC "bgw_launcher_poll_time"
+* #4340 Enable now() usage in plan-time chunk exclusion
 
 **Bugfixes**
 * #3899 Fix segfault in Continuous Aggregates
@@ -21,6 +23,7 @@ If you use compression with a non-default collation on a segmentby-column you mi
 * #4236 Fix potential wrong order of results for compressed hypertable with a non-default collation
 * #4255 Fix option "timescaledb.create_group_indexes"
 * #4300 Fix refresh window cap for cagg refresh policy
+* #4330 Add GUC "bgw_launcher_poll_time"
 
 **Thanks**
 * @jsoref for fixing various misspellings in code, comments and documentation

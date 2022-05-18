@@ -11,7 +11,7 @@ TEST_VERSION=${TEST_VERSION:-}
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_TO_IMAGE=${UPDATE_TO_IMAGE:-update_test}
 UPDATE_TO_TAG=${UPDATE_TO_TAG:-${GIT_ID}}
-PG_VERSION=${PG_VERSION:-14.2}
+PG_VERSION=${PG_VERSION:-14.3}
 
 # This will propagate to the test_update_from_tags.sh script
 export TEST_REPAIR

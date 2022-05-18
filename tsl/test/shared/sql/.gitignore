@@ -1,5 +1,5 @@
 /continuous_aggs_compression-*.sql
-/dist_gapfill_pushdown-*.sql
+/constify_now-*.sql
 /dist_remote_error-*.sql
 /gapfill-*.sql
 /generated_columns-*.sql

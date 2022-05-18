@@ -22,6 +22,7 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 #include <utils/elog.h>
+#include <utils/fmgroids.h>
 #include <utils/guc.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
@@ -229,8 +230,8 @@ planner_hcache_get(void)
  * allows fast lookups during planning to also determine if something is _not_ a
  * hypertable.
  */
-static Hypertable *
-get_hypertable(const Oid relid, const unsigned int flags)
+Hypertable *
+ts_planner_get_hypertable(const Oid relid, const unsigned int flags)
 {
 	Cache *cache = planner_hcache_get();
 
@@ -243,7 +244,7 @@ get_hypertable(const Oid relid, const unsigned int flags)
 bool
 ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed)
 {
-	Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+	Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
 	if (isdistributed && ht != NULL)
 		*isdistributed = hypertable_is_distributed(ht);
@@ -257,6 +258,8 @@ ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed)
 typedef struct
 {
 	Query *rootquery;
+	Query *current_query;
+	PlannerInfo *root;
 	/*
 	 * The number of distributed hypertables in the query and its subqueries.
 	 * Specifically, we count range table entries here, so using the same
@@ -281,6 +284,8 @@ typedef struct
  * 2. Turning off inheritance for hypertable RTEs that we expand ourselves.
  *
  * 3. Reordering of GROUP BY clauses for continuous aggregates.
+ *
+ * 4. Constifying now() expressions for primary time dimension.
  */
 static bool
 preprocess_query(Node *node, PreprocessQueryContext *context)
@@ -288,12 +293,24 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, Query))
+	if (ts_guc_enable_now_constify && IsA(node, FromExpr))
+	{
+		FromExpr *from = castNode(FromExpr, node);
+		if (from->quals)
+		{
+			from->quals =
+				ts_constify_now(context->root, context->current_query->rtable, from->quals);
+		}
+	}
+
+	else if (IsA(node, Query))
 	{
 		Query *query = castNode(Query, node);
+		Query *prev_query;
 		Cache *hcache = planner_hcache_get();
 		ListCell *lc;
 		Index rti = 1;
+		bool ret;
 
 		foreach (lc, query->rtable)
 		{
@@ -361,7 +378,11 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			}
 			rti++;
 		}
-		return query_tree_walker(query, preprocess_query, context, 0);
+		prev_query = context->current_query;
+		context->current_query = query;
+		ret = query_tree_walker(query, preprocess_query, context, 0);
+		context->current_query = prev_query;
+		return ret;
 	}
 
 	return expression_tree_walker(node, preprocess_query, context);
@@ -396,7 +417,16 @@ timescaledb_planner(Query *parse, int cursor_opts, ParamListInfo bound_params)
 	PG_TRY();
 	{
 		PreprocessQueryContext context = { 0 };
+		PlannerGlobal glob = {
+			.boundParams = bound_params,
+		};
+		PlannerInfo root = {
+			.glob = &glob,
+		};
+
+		context.root = &root;
 		context.rootquery = parse;
+		context.current_query = parse;
 
 		if (ts_extension_is_loaded())
 		{
@@ -590,7 +620,7 @@ get_or_add_baserel_from_cache(Oid chunk_relid, TsRelType chunk_reltype)
 		reltype = chunk_reltype; // TS_REL_CHUNK or TS_REL_CHUNK_CHILD
 		Assert(chunk_reltype == TS_REL_CHUNK || chunk_reltype == TS_REL_CHUNK_CHILD);
 		Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id);
-		ht = get_hypertable(hypertable_relid, CACHE_FLAG_NONE);
+		ht = ts_planner_get_hypertable(hypertable_relid, CACHE_FLAG_NONE);
 		Assert(ht != NULL);
 	}
 	else
@@ -624,13 +654,13 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 		case RELOPT_BASEREL:
 			rte = planner_rt_fetch(rel->relid, root);
 			/*
-			 * To correctly classify relations in subqueries we cannot call get_hypertable
-			 * with CACHE_FLAG_CHECK which includes CACHE_FLAG_NOCREATE flag because
-			 * the rel might not be in cache yet.
+			 * To correctly classify relations in subqueries we cannot call
+			 * ts_planner_get_hypertable with CACHE_FLAG_CHECK which includes
+			 * CACHE_FLAG_NOCREATE flag because the rel might not be in cache yet.
 			 */
 			if (!OidIsValid(rte->relid))
 				break;
-			ht = get_hypertable(rte->relid, CACHE_FLAG_MISSING_OK);
+			ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_MISSING_OK);
 
 			if (ht != NULL)
 				reltype = TS_REL_HYPERTABLE;
@@ -660,8 +690,8 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 			 */
 			if (parent_rte->rtekind == RTE_SUBQUERY)
 			{
-				ht =
-					get_hypertable(rte->relid, rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
+				ht = ts_planner_get_hypertable(rte->relid,
+											   rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
 
 				if (ht != NULL)
 					reltype = TS_REL_HYPERTABLE;
@@ -670,7 +700,7 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **p
 			{
 				if (!OidIsValid(rte->relid))
 					break;
-				ht = get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
+				ht = ts_planner_get_hypertable(parent_rte->relid, CACHE_FLAG_CHECK);
 
 				if (ht != NULL)
 				{
@@ -836,7 +866,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		if (rte_should_expand(in_rte))
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
-			Hypertable *ht = get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
+			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);
 
 			Assert(ht != NULL && in_rel != NULL);
 			ts_plan_expand_hypertable_chunks(ht, root, in_rel);
@@ -898,7 +928,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 	{
 		bool do_distributed;
 
-		Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
+		Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
 		Assert(ht != NULL);
 
 		/* the hypertable will have been planned as if it was a regular table
@@ -1320,7 +1350,7 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 #endif
 			{
 				RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
-				Hypertable *ht = get_hypertable(rte->relid, CACHE_FLAG_CHECK);
+				Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 
 				if (ht && (mt->operation == CMD_INSERT || !hypertable_is_distributed(ht)))
 				{

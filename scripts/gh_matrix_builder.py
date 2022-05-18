@@ -22,11 +22,11 @@ import sys
 event_type = sys.argv[1]
 
 PG12_EARLIEST = "12.0"
-PG12_LATEST = "12.10"
+PG12_LATEST = "12.11"
 PG13_EARLIEST = "13.2"
-PG13_LATEST = "13.6"
+PG13_LATEST = "13.7"
 PG14_EARLIEST = "14.0"
-PG14_LATEST = "14.2"
+PG14_LATEST = "14.3"
 
 m = {"include": [],}
 
@@ -48,7 +48,7 @@ def build_debug_config(overrides):
     "build_type": "Debug",
     "pg_build_args": "--enable-debug --enable-cassert",
     "tsdb_build_args": "-DCODECOVERAGE=ON -DWARNINGS_AS_ERRORS=ON",
-    "installcheck_args": "IGNORES='bgw_db_scheduler dist_gapfill_pushdown-12 dist_gapfill_pushdown-13 dist_gapfill_pushdown-14'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler'",
     "coverage": True,
     "extra_packages": "clang-9 llvm-9 llvm-9-dev llvm-9-tools",
     "llvm_config": "llvm-config-9",
@@ -111,7 +111,7 @@ def macos_config(overrides):
     "tsdb_build_args": "-DASSERTIONS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
     "llvm_config": "/usr/local/opt/llvm/bin/llvm-config",
     "coverage": False,
-    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher pg_dump remote_connection compressed_collation dist_gapfill_pushdown-12 dist_gapfill_pushdown-13 dist_gapfill_pushdown-14'",
+    "installcheck_args": "IGNORES='bgw_db_scheduler bgw_launcher pg_dump remote_connection compressed_collation'",
     "extra_packages": "",
   })
   base_config.update(overrides)
