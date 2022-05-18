@@ -43,6 +43,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.create_chunk(regclass,jsonb,name,name,regclass)
  _timescaledb_internal.create_chunk_replica_table(regclass,name)
  _timescaledb_internal.create_chunk_table(regclass,jsonb,name,name)
+ _timescaledb_internal.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint)
  _timescaledb_internal.data_node_chunk_info(name,name,name)
  _timescaledb_internal.data_node_compressed_chunk_stats(name,name,name)
  _timescaledb_internal.data_node_hypertable_info(name,name,name)

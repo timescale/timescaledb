@@ -19,6 +19,19 @@ CREATE OR REPLACE FUNCTION @extschema@.move_chunk(
     verbose BOOLEAN=FALSE
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_move_chunk' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.create_compressed_chunk(
+    chunk REGCLASS,
+    chunk_table REGCLASS,
+    uncompressed_heap_size BIGINT,
+    uncompressed_toast_size BIGINT,
+    uncompressed_index_size BIGINT,
+    compressed_heap_size BIGINT,
+    compressed_toast_size BIGINT,
+    compressed_index_size BIGINT,
+    numrows_pre_compression BIGINT,
+    numrows_post_compression BIGINT
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_create_compressed_chunk' LANGUAGE C STRICT VOLATILE;
+
 CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = false

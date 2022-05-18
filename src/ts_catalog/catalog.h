@@ -1238,6 +1238,7 @@ enum Anum_chunk_copy_operation
 	Anum_chunk_copy_operation_completed_stage,
 	Anum_chunk_copy_operation_time_start,
 	Anum_chunk_copy_operation_chunk_id,
+	Anum_chunk_copy_operation_compressed_chunk_name,
 	Anum_chunk_copy_operation_source_node_name,
 	Anum_chunk_copy_operation_dest_node_name,
 	Anum_chunk_copy_operation_delete_on_src_node,
@@ -1253,6 +1254,7 @@ typedef struct FormData_chunk_copy_operation
 	NameData completed_stage;
 	TimestampTz time_start;
 	int32 chunk_id;
+	NameData compressed_chunk_name;
 	NameData source_node_name;
 	NameData dest_node_name;
 	bool delete_on_src_node;

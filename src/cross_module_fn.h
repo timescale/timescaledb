@@ -123,6 +123,7 @@ typedef struct CrossModuleFunctions
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
+	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	/* The compression functions below are not installed in SQL as part of create extension;

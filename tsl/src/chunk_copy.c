@@ -27,6 +27,7 @@
 #include <miscadmin.h>
 #include <fmgr.h>
 #include <executor/spi.h>
+#include <replication/slot.h>
 
 #ifdef USE_ASSERT_CHECKING
 #include <funcapi.h>
@@ -49,6 +50,7 @@
 
 #define CCS_INIT "init"
 #define CCS_CREATE_EMPTY_CHUNK "create_empty_chunk"
+#define CCS_CREATE_EMPTY_COMPRESSED_CHUNK "create_empty_compressed_chunk"
 #define CCS_CREATE_PUBLICATION "create_publication"
 #define CCS_CREATE_REPLICATION_SLOT "create_replication_slot"
 #define CCS_CREATE_SUBSCRIPTION "create_subscription"
@@ -57,6 +59,7 @@
 #define CCS_DROP_PUBLICATION "drop_publication"
 #define CCS_DROP_SUBSCRIPTION "drop_subscription"
 #define CCS_ATTACH_CHUNK "attach_chunk"
+#define CCS_ATTACH_COMPRESSED_CHUNK "attach_compressed_chunk"
 #define CCS_DELETE_CHUNK "delete_chunk"
 
 typedef struct ChunkCopyStage ChunkCopyStage;
@@ -76,6 +79,7 @@ struct ChunkCopy
 {
 	/* catalog data */
 	FormData_chunk_copy_operation fd;
+	FormData_compression_chunk_size fd_ccs;
 	/* current stage being executed */
 	const ChunkCopyStage *stage;
 	/* chunk to copy */
@@ -90,7 +94,7 @@ struct ChunkCopy
 static HeapTuple
 chunk_copy_operation_make_tuple(const FormData_chunk_copy_operation *fd, TupleDesc desc)
 {
-	Datum values[Natts_chunk_copy_operation];
+	Datum values[Natts_chunk_copy_operation] = { 0 };
 	bool nulls[Natts_chunk_copy_operation] = { false };
 	memset(values, 0, sizeof(values));
 	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_operation_id)] =
@@ -103,6 +107,8 @@ chunk_copy_operation_make_tuple(const FormData_chunk_copy_operation *fd, TupleDe
 		TimestampTzGetDatum(fd->time_start);
 	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_chunk_id)] =
 		Int32GetDatum(fd->chunk_id);
+	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_compressed_chunk_name)] =
+		NameGetDatum(&fd->compressed_chunk_name);
 	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_source_node_name)] =
 		NameGetDatum(&fd->source_node_name);
 	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_dest_node_name)] =
@@ -152,11 +158,12 @@ chunk_copy_operation_tuple_update(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
-	/* We only update the "completed_stage" field */
+	/* We only update the "completed_stage" and "compressed_chunk_name" fields */
 	Assert(NULL != cc->stage);
 	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_completed_stage)] =
 		DirectFunctionCall1(namein, CStringGetDatum((cc->stage->name)));
-
+	values[AttrNumberGetAttrOffset(Anum_chunk_copy_operation_compressed_chunk_name)] =
+		NameGetDatum(&cc->fd.compressed_chunk_name);
 	new_tuple = heap_form_tuple(ts_scanner_get_tupledesc(ti), values, nulls);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
@@ -288,14 +295,6 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a valid remote chunk", get_rel_name(chunk_relid))));
 
-	/* It has to be an uncompressed chunk, we query the status field on the AN for this */
-	if (ts_chunk_is_compressed(cc->chunk))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("\"%s\" is a compressed remote chunk. Chunk copy/move not supported"
-						" currently on compressed chunks",
-						get_rel_name(chunk_relid))));
-
 	ht = ts_hypertable_cache_get_cache_and_entry(cc->chunk->hypertable_relid,
 												 CACHE_FLAG_NONE,
 												 &hcache);
@@ -341,12 +340,14 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 	 *
 	 * The operation_id will be populated in the chunk_copy_stage_init function.
 	 */
+	memset(&cc->fd_ccs, 0, sizeof(cc->fd_ccs));
 	cc->fd.backend_pid = MyProcPid;
 	namestrcpy(&cc->fd.completed_stage, CCS_INIT);
 	cc->fd.time_start = GetCurrentTimestamp();
 	cc->fd.chunk_id = cc->chunk->fd.id;
 	namestrcpy(&cc->fd.source_node_name, src_node);
 	namestrcpy(&cc->fd.dest_node_name, dst_node);
+	memset(cc->fd.compressed_chunk_name.data, 0, NAMEDATALEN);
 	cc->fd.delete_on_src_node = delete_on_src_node;
 
 	ts_cache_release(hcache);
@@ -427,15 +428,171 @@ chunk_copy_stage_create_empty_chunk_cleanup(ChunkCopy *cc)
 }
 
 static void
-chunk_copy_stage_create_publication(ChunkCopy *cc)
+chunk_copy_get_source_compressed_chunk_name(ChunkCopy *cc)
+{
+	char *cmd;
+	DistCmdResult *dist_res;
+	PGresult *res;
+
+	/* Get compressed chunk name on the source data node */
+	cmd = psprintf("SELECT c2.table_name "
+				   "FROM _timescaledb_catalog.chunk c1 "
+				   "JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id) "
+				   "WHERE c1.schema_name = %s and c1.table_name = %s",
+				   quote_literal_cstr(NameStr(cc->chunk->fd.schema_name)),
+				   quote_literal_cstr(NameStr(cc->chunk->fd.table_name)));
+	dist_res =
+		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
+	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.source_node_name));
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+
+	/* Set compressed chunk name of the source data node */
+	if (PQntuples(res) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("failed to get corresponding compressed chunk name from the source data "
+						"node")));
+
+	snprintf(cc->fd.compressed_chunk_name.data,
+			 sizeof(cc->fd.compressed_chunk_name.data),
+			 "%s",
+			 PQgetvalue(res, 0, 0));
+
+	ts_dist_cmd_close_response(dist_res);
+}
+
+static void
+chunk_copy_get_source_compressed_chunk_stats(ChunkCopy *cc)
+{
+	char *cmd;
+	DistCmdResult *dist_res;
+	PGresult *res;
+
+	/* Get compressed chunk statistics from the source data node */
+	cmd = psprintf("SELECT cs.uncompressed_heap_size, cs.uncompressed_toast_size, "
+				   "cs.uncompressed_index_size, cs.compressed_heap_size, "
+				   "cs.compressed_toast_size, cs.compressed_index_size, "
+				   "cs.numrows_pre_compression, cs.numrows_post_compression "
+				   "FROM _timescaledb_catalog.compression_chunk_size cs "
+				   "JOIN _timescaledb_catalog.chunk c ON (cs.chunk_id = c.id) "
+				   "WHERE c.schema_name = %s and c.table_name = %s",
+				   quote_literal_cstr(NameStr(cc->chunk->fd.schema_name)),
+				   quote_literal_cstr(NameStr(cc->chunk->fd.table_name)));
+	dist_res =
+		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
+	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.source_node_name));
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+
+	if (PQntuples(res) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("failed to get corresponding compressed chunk stats from the source data "
+						"node")));
+
+	cc->fd_ccs.uncompressed_heap_size = atoll(PQgetvalue(res, 0, 0));
+	cc->fd_ccs.uncompressed_toast_size = atoll(PQgetvalue(res, 0, 1));
+	cc->fd_ccs.uncompressed_index_size = atoll(PQgetvalue(res, 0, 2));
+	cc->fd_ccs.compressed_heap_size = atoll(PQgetvalue(res, 0, 3));
+	cc->fd_ccs.compressed_toast_size = atoll(PQgetvalue(res, 0, 4));
+	cc->fd_ccs.compressed_index_size = atoll(PQgetvalue(res, 0, 5));
+	cc->fd_ccs.numrows_pre_compression = atoll(PQgetvalue(res, 0, 6));
+	cc->fd_ccs.numrows_post_compression = atoll(PQgetvalue(res, 0, 7));
+
+	ts_dist_cmd_close_response(dist_res);
+}
+
+static void
+chunk_copy_create_dest_empty_compressed_chunk(ChunkCopy *cc)
+{
+	char *cmd;
+	DistCmdResult *dist_res;
+	PGresult *res;
+	Cache *hcache;
+	Hypertable *ht;
+
+	/* Create empty compressed chunk table in the compressed hypertable of the
+	 * source chunk on the destination data node */
+	ht = ts_hypertable_cache_get_cache_and_entry(cc->chunk->hypertable_relid,
+												 CACHE_FLAG_NONE,
+												 &hcache);
+	cmd =
+		psprintf("SELECT %s.create_chunk_table(h2.schema_name || '.' || h2.table_name, "
+				 "'{}'::jsonb, %s, %s) "
+				 "FROM _timescaledb_catalog.hypertable h1 "
+				 "JOIN _timescaledb_catalog.hypertable h2 ON (h1.compressed_hypertable_id = h2.id) "
+				 "WHERE h1.table_name = %s",
+				 INTERNAL_SCHEMA_NAME,
+				 quote_literal_cstr(INTERNAL_SCHEMA_NAME),
+				 quote_literal_cstr(NameStr(cc->fd.compressed_chunk_name)),
+				 quote_literal_cstr(NameStr(ht->fd.table_name)));
+	ts_cache_release(hcache);
+
+	dist_res =
+		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.dest_node_name));
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+	ts_dist_cmd_close_response(dist_res);
+}
+
+static void
+chunk_copy_stage_create_empty_compressed_chunk(ChunkCopy *cc)
+{
+	if (!ts_chunk_is_compressed(cc->chunk))
+		return;
+
+	/* Get compressed chunk name from the source data node */
+	chunk_copy_get_source_compressed_chunk_name(cc);
+
+	/* Get compressed chunk stats from the source data node */
+	chunk_copy_get_source_compressed_chunk_stats(cc);
+
+	/* Create empty compressed chunk table in the compressed hypertable of the
+	 * source chunk on the destination data node */
+	chunk_copy_create_dest_empty_compressed_chunk(cc);
+}
+
+static void
+chunk_copy_stage_create_empty_compressed_chunk_cleanup(ChunkCopy *cc)
 {
 	const char *cmd;
 
-	/* Create publication on the source data node */
+	if (!*NameStr(cc->fd.compressed_chunk_name))
+		return;
+
+	cmd = psprintf("DROP TABLE IF EXISTS %s.%s",
+				   INTERNAL_SCHEMA_NAME,
+				   NameStr(cc->fd.compressed_chunk_name));
+	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	cc->fd.compressed_chunk_name.data[0] = 0;
+}
+
+static void
+chunk_copy_stage_create_publication(ChunkCopy *cc)
+{
+	const char *table_list;
+	const char *cmd;
+
+	/* Create publication on the source data node, include compressed
+	 * chunk if necessary */
+	if (ts_chunk_is_compressed(cc->chunk))
+		table_list = psprintf("%s, %s ",
+							  quote_qualified_identifier(NameStr(cc->chunk->fd.schema_name),
+														 NameStr(cc->chunk->fd.table_name)),
+							  quote_qualified_identifier(INTERNAL_SCHEMA_NAME,
+														 NameStr(cc->fd.compressed_chunk_name)));
+	else
+		table_list = psprintf("%s ",
+							  quote_qualified_identifier(NameStr(cc->chunk->fd.schema_name),
+														 NameStr(cc->chunk->fd.table_name)));
 	cmd = psprintf("CREATE PUBLICATION %s FOR TABLE %s",
 				   quote_identifier(NameStr(cc->fd.operation_id)),
-				   quote_qualified_identifier(NameStr(cc->chunk->fd.schema_name),
-											  NameStr(cc->chunk->fd.table_name)));
+				   table_list);
 
 	/* Create the publication */
 	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.source_node_name)), true);
@@ -658,6 +815,17 @@ chunk_copy_stage_sync(ChunkCopy *cc)
 
 	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
 	pfree(cmd);
+
+	/* Wait until compressed chunk being copied */
+	if (ts_chunk_is_compressed(cc->chunk))
+	{
+		cmd = psprintf("CALL _timescaledb_internal.wait_subscription_sync(%s, %s)",
+					   quote_literal_cstr(INTERNAL_SCHEMA_NAME),
+					   quote_literal_cstr(NameStr(cc->fd.compressed_chunk_name)));
+
+		ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+		pfree(cmd);
+	}
 }
 
 static void
@@ -733,6 +901,50 @@ chunk_copy_stage_attach_chunk(ChunkCopy *cc)
 }
 
 static void
+chunk_copy_stage_attach_compressed_chunk(ChunkCopy *cc)
+{
+	char *cmd;
+	const char *chunk_name;
+	const char *compressed_chunk_name;
+	PGresult *res;
+	DistCmdResult *dist_res;
+
+	if (!ts_chunk_is_compressed(cc->chunk))
+		return;
+
+	chunk_name = psprintf("%s.%s",
+						  quote_identifier(cc->chunk->fd.schema_name.data),
+						  quote_identifier(cc->chunk->fd.table_name.data));
+
+	compressed_chunk_name = psprintf("%s.%s",
+									 quote_identifier(INTERNAL_SCHEMA_NAME),
+									 quote_identifier(NameStr(cc->fd.compressed_chunk_name)));
+
+	cmd = psprintf("SELECT %s.create_compressed_chunk(%s, %s, " INT64_FORMAT ", " INT64_FORMAT
+				   ", " INT64_FORMAT ", " INT64_FORMAT ", " INT64_FORMAT ", " INT64_FORMAT
+				   ", " INT64_FORMAT ", " INT64_FORMAT ")",
+				   INTERNAL_SCHEMA_NAME,
+				   quote_literal_cstr(chunk_name),
+				   quote_literal_cstr(compressed_chunk_name),
+				   cc->fd_ccs.uncompressed_heap_size,
+				   cc->fd_ccs.uncompressed_toast_size,
+				   cc->fd_ccs.uncompressed_index_size,
+				   cc->fd_ccs.compressed_heap_size,
+				   cc->fd_ccs.compressed_toast_size,
+				   cc->fd_ccs.compressed_index_size,
+				   cc->fd_ccs.numrows_pre_compression,
+				   cc->fd_ccs.numrows_post_compression);
+	dist_res =
+		ts_dist_cmd_invoke_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
+	res = ts_dist_cmd_get_result_by_node_name(dist_res, NameStr(cc->fd.dest_node_name));
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("%s", PQresultErrorMessage(res))));
+
+	ts_dist_cmd_close_response(dist_res);
+}
+
+static void
 chunk_copy_stage_delete_chunk(ChunkCopy *cc)
 {
 	if (!cc->fd.delete_on_src_node)
@@ -754,6 +966,15 @@ static const ChunkCopyStage chunk_copy_stages[] = {
 	{ CCS_CREATE_EMPTY_CHUNK,
 	  chunk_copy_stage_create_empty_chunk,
 	  chunk_copy_stage_create_empty_chunk_cleanup },
+
+	/*
+	 * Create compressed empty chunk table on the dst node.
+	 * The corresponding cleanup function should just delete this empty chunk, if
+	 * the compressed_chunk_name column was set in the operation metadata.
+	 */
+	{ CCS_CREATE_EMPTY_COMPRESSED_CHUNK,
+	  chunk_copy_stage_create_empty_compressed_chunk,
+	  chunk_copy_stage_create_empty_compressed_chunk_cleanup },
 
 	/*
 	 * Setup logical replication between nodes.
@@ -791,6 +1012,11 @@ static const ChunkCopyStage chunk_copy_stages[] = {
 	 * No cleanup required here.
 	 */
 	{ CCS_ATTACH_CHUNK, chunk_copy_stage_attach_chunk, NULL },
+
+	/*
+	 * Attach compressed chunk to the hypertable on the dst_node.
+	 */
+	{ CCS_ATTACH_COMPRESSED_CHUNK, chunk_copy_stage_attach_compressed_chunk, NULL },
 
 	/*
 	 * Maybe delete chunk from the src_node (move operation).
@@ -838,9 +1064,21 @@ chunk_copy(Oid chunk_relid, const char *src_node, const char *dst_node, const ch
 
 	/* Populate copy structure. First set up the operation id if it's provided */
 	if (op_id)
+	{
+		/* Validate operation id as beign compatible to be used as a replication slot name */
+		if (!ReplicationSlotValidateName(op_id, DEBUG2))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_NAME),
+					 errmsg("operation_id name \"%s\" is not valid", op_id),
+					 errhint("operation_id names may only contain lower case letters, numbers, and "
+							 "the underscore character.")));
+
 		snprintf(cc.fd.operation_id.data, sizeof(cc.fd.operation_id.data), "%s", op_id);
+	}
 	else
+	{
 		cc.fd.operation_id.data[0] = '\0';
+	}
 
 	chunk_copy_setup(&cc, chunk_relid, src_node, dst_node, delete_on_src_node);
 

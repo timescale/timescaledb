@@ -410,6 +410,7 @@ CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
   completed_stage name NOT NULL, -- the completed stage/step
   time_start timestamptz NOT NULL DEFAULT NOW(), -- start time of the activity
   chunk_id integer NOT NULL REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  compress_chunk_name name NOT NULL,
   source_node_name name NOT NULL,
   dest_node_name name NOT NULL,
   delete_on_source_node bool NOT NULL -- is a move or copy activity
