@@ -63,9 +63,15 @@ ORDER BY c.id, c.hypertable_id;
 SELECT * FROM _timescaledb_catalog.chunk_constraint ORDER BY chunk_id, dimension_slice_id, constraint_name;
 SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
--- Indices can have different column names between an upgrade and a
--- restore of a dump, so we only list the tables. This will include
--- the indexes defined on the tables, but not the exact definition of
--- the indexes and in particular not the column name in the index
--- which will be different in a restored database and an updated
--- database for columns that were renamed before the update.
+-- Show attnum of all regclass objects belonging to our extension
+-- if those are not the same between fresh install/update our update scripts are broken
+SELECT
+  att.attrelid::regclass,
+  att.attnum,
+  att.attname
+FROM pg_depend dep
+  INNER JOIN pg_extension ext ON (dep.refobjid=ext.oid AND ext.extname = 'timescaledb')
+  INNER JOIN pg_attribute att ON (att.attrelid=dep.objid AND att.attnum > 0)
+WHERE classid='pg_class'::regclass
+ORDER BY attrelid::regclass::text,att.attnum;
+
