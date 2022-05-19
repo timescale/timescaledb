@@ -1245,27 +1245,30 @@ with (timescaledb.continuous, timescaledb.create_group_indexes=true) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
-	symbol
+	symbol,
+	symbol + symbol AS symbol2
 from test_group_idx
-group by bucket, symbol;
+group by bucket, symbol, symbol2;
 
 create materialized view cagg_index_false
 with (timescaledb.continuous, timescaledb.create_group_indexes=false) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
-	symbol
+	symbol,
+	symbol + symbol AS symbol2
 from test_group_idx
-group by bucket, symbol;
+group by bucket, symbol, symbol2;
 
 create materialized view cagg_index_default
 with (timescaledb.continuous) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
-	symbol
+	symbol,
+	symbol + symbol AS symbol2
 from test_group_idx
-group by bucket, symbol;
+group by bucket, symbol, symbol2;
 
 -- see corresponding materialization_hypertables
 select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca

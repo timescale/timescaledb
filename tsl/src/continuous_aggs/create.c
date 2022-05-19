@@ -485,16 +485,22 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 }
 
 /*
- * Add additional indexes to materialization table for the columns derived from
- * the group-by column list of the partial select query.
+ * Add additional indexes to materialization hypertable for the columns derived from
+ * the group-by column list of the cagg's select query.
+ *
  * If partial select query has:
- * GROUP BY timebucket_expr, <grpcol1, grpcol2, grpcol3 ...>
- * index on mattable is <grpcol1, timebucketcol>, <grpcol2, timebucketcol> ... and so on.
- * i.e. #indexes =(  #grp-cols - 1)
+ *   GROUP BY timebucket_expr, <grpcol1, grpcol2, grpcol3 ...>
+ *
+ * Index on mattable will be:
+ *   <grpcol1, grpcol2, grpcol3, timebucket_expr DESC>.
  */
 static void
 mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht)
 {
+	NameData indxname;
+	ObjectAddress indxaddr;
+	HeapTuple indxtuple;
+	List *indxelements = NIL;
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
 		.accessMethod = DEFAULT_INDEX_TYPE,
@@ -506,38 +512,54 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
 						   .name = matcolinfo->matpartcolname,
 						   .ordering = SORTBY_DESC };
 	ListCell *le = NULL;
+	StringInfo buf = makeStringInfo();
+	char *sep = "";
+
+	if (list_length(matcolinfo->mat_groupcolname_list) == 0)
+		return;
+
 	foreach (le, matcolinfo->mat_groupcolname_list)
 	{
-		NameData indxname;
-		ObjectAddress indxaddr;
-		HeapTuple indxtuple;
 		char *grpcolname = (char *) lfirst(le);
-		IndexElem grpelem = { .type = T_IndexElem, .name = grpcolname };
-		stmt.indexParams = list_make2(&grpelem, &timeelem);
-		indxaddr = DefineIndex(ht->main_table_relid,
-							   &stmt,
-							   InvalidOid, /* indexRelationId */
-							   InvalidOid, /* parentIndexId */
-							   InvalidOid, /* parentConstraintId */
-							   false,	   /* is_alter_table */
-							   false,	   /* check_rights */
-							   false,	   /* check_not_in_use */
-							   false,	   /* skip_build */
-							   false);	   /* quiet */
-		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
+		IndexElem *grpelem = makeNode(IndexElem);
+		grpelem->name = pstrdup(grpcolname);
 
-		if (!HeapTupleIsValid(indxtuple))
-			elog(ERROR, "cache lookup failed for index relid %u", indxaddr.objectId);
-		indxname = ((Form_pg_class) GETSTRUCT(indxtuple))->relname;
-		elog(DEBUG1,
-			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
-			 NameStr(indxname),
-			 NameStr(ht->fd.schema_name),
-			 NameStr(ht->fd.table_name),
-			 grpcolname,
-			 matcolinfo->matpartcolname);
-		ReleaseSysCache(indxtuple);
+		indxelements = lappend(indxelements, grpelem);
+
+		appendStringInfoString(buf, grpelem->name);
+		appendStringInfoString(buf, sep);
+		sep = ", ";
 	}
+
+	indxelements = lappend(indxelements, &timeelem);
+	stmt.indexParams = indxelements;
+
+	indxaddr = DefineIndex(ht->main_table_relid,
+						   &stmt,
+						   InvalidOid, /* indexRelationId */
+						   InvalidOid, /* parentIndexId */
+						   InvalidOid, /* parentConstraintId */
+						   false,	  /* is_alter_table */
+						   false,	  /* check_rights */
+						   false,	  /* check_not_in_use */
+						   false,	  /* skip_build */
+						   false);	 /* quiet */
+
+	indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
+
+	if (!HeapTupleIsValid(indxtuple))
+		elog(ERROR, "cache lookup failed for index relid %u", indxaddr.objectId);
+
+	indxname = ((Form_pg_class) GETSTRUCT(indxtuple))->relname;
+
+	elog(DEBUG1,
+		 "adding index %s ON %s.%s USING BTREE(%s)",
+		 NameStr(indxname),
+		 NameStr(ht->fd.schema_name),
+		 NameStr(ht->fd.table_name),
+		 buf->data);
+
+	ReleaseSysCache(indxtuple);
 }
 
 /*

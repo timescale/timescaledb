@@ -1732,27 +1732,30 @@ with (timescaledb.continuous, timescaledb.create_group_indexes=true) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
-	symbol
+	symbol,
+	symbol + symbol AS symbol2
 from test_group_idx
-group by bucket, symbol;
+group by bucket, symbol, symbol2;
 NOTICE:  refreshing continuous aggregate "cagg_index_true"
 create materialized view cagg_index_false
 with (timescaledb.continuous, timescaledb.create_group_indexes=false) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
-	symbol
+	symbol,
+	symbol + symbol AS symbol2
 from test_group_idx
-group by bucket, symbol;
+group by bucket, symbol, symbol2;
 NOTICE:  refreshing continuous aggregate "cagg_index_false"
 create materialized view cagg_index_default
 with (timescaledb.continuous) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
-	symbol
+	symbol,
+	symbol + symbol AS symbol2
 from test_group_idx
-group by bucket, symbol;
+group by bucket, symbol, symbol2;
 NOTICE:  refreshing continuous aggregate "cagg_index_default"
 -- see corresponding materialization_hypertables
 select view_name, materialization_hypertable_name from timescaledb_information.continuous_aggregates ca
@@ -1774,36 +1777,36 @@ join pg_class c
 where tablename in (select materialization_hypertable_name from timescaledb_information.continuous_aggregates
 where view_name like 'cagg_index_%')
 order by tablename;
--[ RECORD 1 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+-[ RECORD 1 ]------------------------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_49
 indexname  | _materialized_hypertable_49_bucket_idx
 tablespace | 
 indexdef   | CREATE INDEX _materialized_hypertable_49_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (bucket DESC)
--[ RECORD 2 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+-[ RECORD 2 ]------------------------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_49
-indexname  | _materialized_hypertable_49_symbol_bucket_idx
+indexname  | _materialized_hypertable_49_symbol_symbol2_bucket_idx
 tablespace | 
-indexdef   | CREATE INDEX _materialized_hypertable_49_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (symbol, bucket DESC)
--[ RECORD 3 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+indexdef   | CREATE INDEX _materialized_hypertable_49_symbol_symbol2_bucket_idx ON _timescaledb_internal._materialized_hypertable_49 USING btree (symbol, symbol2, bucket DESC)
+-[ RECORD 3 ]------------------------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_50
 indexname  | _materialized_hypertable_50_bucket_idx
 tablespace | 
 indexdef   | CREATE INDEX _materialized_hypertable_50_bucket_idx ON _timescaledb_internal._materialized_hypertable_50 USING btree (bucket DESC)
--[ RECORD 4 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+-[ RECORD 4 ]------------------------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_51
 indexname  | _materialized_hypertable_51_bucket_idx
 tablespace | 
 indexdef   | CREATE INDEX _materialized_hypertable_51_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (bucket DESC)
--[ RECORD 5 ]-------------------------------------------------------------------------------------------------------------------------------------------------
+-[ RECORD 5 ]------------------------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_51
-indexname  | _materialized_hypertable_51_symbol_bucket_idx
+indexname  | _materialized_hypertable_51_symbol_symbol2_bucket_idx
 tablespace | 
-indexdef   | CREATE INDEX _materialized_hypertable_51_symbol_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (symbol, bucket DESC)
+indexdef   | CREATE INDEX _materialized_hypertable_51_symbol_symbol2_bucket_idx ON _timescaledb_internal._materialized_hypertable_51 USING btree (symbol, symbol2, bucket DESC)
 
 \x off
 --

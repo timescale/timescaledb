@@ -898,13 +898,11 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_with_test')
 order by indexname;
-                   indexname                   |                                                                     indexdef                                                                      
------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------
- _materialized_hypertable_20_grp_5_5_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_5_5_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_5_5, timec DESC)
- _materialized_hypertable_20_grp_6_6_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_6_6_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_6_6, timec DESC)
- _materialized_hypertable_20_grp_7_7_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_7_7, timec DESC)
- _materialized_hypertable_20_timec_idx         | CREATE INDEX _materialized_hypertable_20_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (timec DESC)
-(4 rows)
+                           indexname                           |                                                                                      indexdef                                                                                       
+---------------------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _materialized_hypertable_20_grp_5_5_grp_6_6_grp_7_7_timec_idx | CREATE INDEX _materialized_hypertable_20_grp_5_5_grp_6_6_grp_7_7_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (grp_5_5, grp_6_6, grp_7_7, timec DESC)
+ _materialized_hypertable_20_timec_idx                         | CREATE INDEX _materialized_hypertable_20_timec_idx ON _timescaledb_internal._materialized_hypertable_20 USING btree (timec DESC)
+(2 rows)
 
 DROP MATERIALIZED VIEW mat_with_test;
 --no additional indexes
