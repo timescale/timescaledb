@@ -287,8 +287,3 @@ INSERT INTO disttable_with_ct VALUES
     ('2019-01-01 01:01', 'ts-1-10-20-30', 1.1, 'a'),
     ('2019-01-01 01:02', 'ts-1-11-20-30', 2.0, repeat('abc', 1000000)); -- TOAST
 
--- A relatively big table on one data node
-CREATE TABLE metrics_dist1(LIKE metrics_dist);
-SELECT create_distributed_hypertable('metrics_dist1', 'time', 'device_id',
-    data_nodes => '{"data_node_1"}');
-INSERT INTO metrics_dist1 SELECT * FROM metrics_dist ORDER BY random() LIMIT 20000;

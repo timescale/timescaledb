@@ -2,6 +2,16 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER;
+-- A relatively big table on one data node
+CREATE TABLE metrics_dist_remote_error(LIKE metrics_dist);
+SELECT table_name FROM create_distributed_hypertable('metrics_dist_remote_error', 'time', 'device_id',
+    data_nodes => '{"data_node_1"}');
+WARNING:  only one data node was assigned to the hypertable
+        table_name         
+ metrics_dist_remote_error
+(1 row)
+
+INSERT INTO metrics_dist_remote_error SELECT * FROM metrics_dist ORDER BY random() LIMIT 20000;
 -- Create a function that raises an error every nth row.
 -- It's stable, takes a second argument and returns current number of rows,
 -- so that it is shipped to data nodes and not optimized out.
@@ -23,71 +33,72 @@ set client_min_messages to ERROR;
 \set ON_ERROR_STOP off
 set timescaledb.remote_data_fetcher = 'rowbyrow';
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 1 rows, 1 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
 QUERY PLAN
- Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
+ Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
    Fetcher Type: Row by row
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[33, 34, 35]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 1 rows, 1 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
 QUERY PLAN
- Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
+ Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
    Fetcher Type: Row by row
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[33, 34, 35]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
 set timescaledb.remote_data_fetcher = 'cursor';
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 1 rows, 1 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
 QUERY PLAN
- Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
+ Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[33, 34, 35]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 1 rows, 1 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
 ERROR:  [data_node_1]: debug point: requested to error out every 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
 QUERY PLAN
- Custom Scan (DataNodeScan) on public.metrics_dist1 (actual rows=20000 loops=1)
+ Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=20000 loops=1)
    Output: 1
    Data node: data_node_1
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT NULL FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[28, 29, 30]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
+   Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[33, 34, 35]) AND ((public.ts_debug_shippable_fatal_after_n_rows(10000000, device_id) <> 0))
 (6 rows)
 
+DROP TABLE metrics_dist_remote_error;
