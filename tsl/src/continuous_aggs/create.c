@@ -165,9 +165,10 @@ typedef struct MatTableColumnInfo
 
 typedef struct FinalizeQueryInfo
 {
-	List *final_seltlist;   /*select target list for finalize query */
-	Node *final_havingqual; /*having qual for finalize query */
+	List *final_seltlist;   /* select target list for finalize query */
+	Node *final_havingqual; /* having qual for finalize query */
 	Query *final_userquery; /* user query used to compute the finalize_query */
+	bool finalized;			/* finalized form? */
 } FinalizeQueryInfo;
 
 typedef struct CAggTimebucketInfo
@@ -210,10 +211,10 @@ typedef struct AggPartCxt
 } AggPartCxt;
 
 /* STATIC functions defined on the structs above */
-static void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tlist,
-									List *grouplist);
+static void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
 static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
-										int original_query_resno);
+										int original_query_resno, bool finalized,
+										bool *skip_adding);
 static void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo,
 										   RangeTblEntry *usertbl_rte, int32 usertbl_htid);
 static int32 mattablecolumninfo_create_materialization_table(
@@ -221,7 +222,7 @@ static int32 mattablecolumninfo_create_materialization_table(
 	CAggTimebucketInfo *origquery_tblinfo, bool create_addl_index, char *tablespacename,
 	char *table_access_method, ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *matcolinfo,
-														  Query *userview_query);
+														  Query *userview_query, bool finalized);
 
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
@@ -620,16 +621,29 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
  * the materialization columns and remove HAVING clause and ORDER BY
  */
 static Query *
-mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query)
+mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query,
+											bool finalized)
 {
 	Query *partial_selquery;
+
 	CAGG_MAKEQUERY(partial_selquery, userview_query);
 	partial_selquery->rtable = copyObject(userview_query->rtable);
 	partial_selquery->jointree = copyObject(userview_query->jointree);
+
 	partial_selquery->targetList = mattblinfo->partial_seltlist;
 	partial_selquery->groupClause = mattblinfo->partial_grouplist;
-	partial_selquery->havingQual = NULL;
-	partial_selquery->sortClause = NULL;
+
+	if (finalized)
+	{
+		partial_selquery->havingQual = copyObject(userview_query->havingQual);
+		partial_selquery->sortClause = copyObject(userview_query->sortClause);
+	}
+	else
+	{
+		partial_selquery->havingQual = NULL;
+		partial_selquery->sortClause = NULL;
+	}
+
 	return partial_selquery;
 }
 
@@ -1088,7 +1102,7 @@ cagg_query_supported(Query *query, StringInfo hint, StringInfo detail)
 }
 
 static CAggTimebucketInfo
-cagg_validate_query(Query *query)
+cagg_validate_query(Query *query, bool finalized)
 {
 	CAggTimebucketInfo ret;
 	Cache *hcache;
@@ -1108,9 +1122,13 @@ cagg_validate_query(Query *query)
 				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
 
-	/*validate aggregates allowed */
-	cagg_agg_validate((Node *) query->targetList, NULL);
-	cagg_agg_validate((Node *) query->havingQual, NULL);
+	/* finalized cagg doesn't have those restrictions anymore */
+	if (!finalized)
+	{
+		/* validate aggregates allowed */
+		cagg_agg_validate((Node *) query->targetList, NULL);
+		cagg_agg_validate((Node *) query->havingQual, NULL);
+	}
 
 	fromList = query->jointree->fromlist;
 	if (list_length(fromList) != 1 || !IsA(linitial(fromList), RangeTblRef))
@@ -1444,12 +1462,14 @@ function_allowed_in_cagg_definition(Oid funcid)
 	return finfo->allowed_in_cagg_definition;
 }
 
-/*initialize MatTableColumnInfo */
+/*
+ * Initialize MatTableColumnInfo
+ */
 static void
-mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tlist, List *grouplist)
+mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
 {
-	matcolinfo->matcollist = collist;
-	matcolinfo->partial_seltlist = tlist;
+	matcolinfo->matcollist = NIL;
+	matcolinfo->partial_seltlist = NIL;
 	matcolinfo->partial_grouplist = grouplist;
 	matcolinfo->mat_groupcolname_list = NIL;
 	matcolinfo->matpartcolno = -1;
@@ -1457,17 +1477,25 @@ mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *collist, List *tli
 }
 
 /*
- * Add Information required to create and populate the materialization table
- * columns
+ * Add Information required to create and populate the materialization table columns
  * a) create a columndef for the materialization table
  * b) create the corresponding expr to populate the column of the materialization table (e..g for a
- * column that is an aggref, we create a partialize_agg expr to populate the column Returns: the Var
- * corresponding to the newly created column of the materialization table
+ *    column that is an aggref, we create a partialize_agg expr to populate the column Returns: the
+ *    Var corresponding to the newly created column of the materialization table
+ *
  * Notes: make sure the materialization table columns do not save
- * values computed by mutable function.
+ *        values computed by mutable function.
+ *
+ * Notes on TargetEntry fields:
+ * - (resname != NULL) means it's projected in our case
+ * - (ressortgroupref > 0) means part of GROUP BY, which can be projected or not, depending of the
+ *                         value of the resjunk
+ * - (resjunk == true) applies for GROUP BY columns that are not projected
+ *
  */
 static Var *
-mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_query_resno)
+mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_query_resno,
+							bool finalized, bool *skip_adding)
 {
 	int matcolno = list_length(out->matcollist) + 1;
 	char colbuf[NAMEDATALEN];
@@ -1478,14 +1506,19 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 	Oid coltype, colcollation;
 	int32 coltypmod;
 
+	*skip_adding = false;
+
 	if (contain_mutable_functions(input))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only immutable functions supported in continuous aggregate view"),
-				 errhint("Make sure the function includes only immutable expressions,"
-						 " e.g., time_bucket('1 hour', time AT TIME ZONE 'GMT').")));
+				 errhint("Make sure all functions in the continuous aggregate definition"
+						 " have IMMUTABLE volatility. Note that functions or expressions"
+						 " may be IMMUTABLE for one data type, but STABLE or VOLATILE for"
+						 " another.")));
 	}
+
 	switch (nodeTag(input))
 	{
 		case T_Aggref:
@@ -1500,6 +1533,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			part_te = makeTargetEntry((Expr *) fexpr, matcolno, pstrdup(colname), false);
 		}
 		break;
+
 		case T_TargetEntry:
 		{
 			TargetEntry *tle = (TargetEntry *) input;
@@ -1518,6 +1552,9 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 				{
 					PRINT_MATCOLNAME(colbuf, "grp", original_query_resno, matcolno);
 					colname = colbuf;
+
+					/* for finalized form we skip adding extra group by columns */
+					*skip_adding = finalized;
 				}
 			}
 
@@ -1529,33 +1566,50 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			}
 			else
 			{
-				out->mat_groupcolname_list = lappend(out->mat_groupcolname_list, pstrdup(colname));
+				/*
+				 * Add indexes only for columns that are part of the GROUP BY clause
+				 * and for finals form we skip adding it because we'll not add the
+				 * extra group by columns to the materialization hypertable anymore
+				 */
+				if (!*skip_adding && tle->ressortgroupref > 0)
+					out->mat_groupcolname_list =
+						lappend(out->mat_groupcolname_list, pstrdup(colname));
 			}
+
 			coltype = exprType((Node *) tle->expr);
 			coltypmod = exprTypmod((Node *) tle->expr);
 			colcollation = exprCollation((Node *) tle->expr);
 			col = makeColumnDef(colname, coltype, coltypmod, colcollation);
 			part_te = (TargetEntry *) copyObject(input);
-			/* need to project all the partial entries so that materialization table is filled */
-			part_te->resjunk = false;
+
+			/* keep original resjunk if finalized or not time bucket */
+			if (!finalized || timebkt_chk)
+			{
+				/*
+				 * Need to project all the partial entries so that
+				 * materialization table is filled
+				 */
+				part_te->resjunk = false;
+			}
+
 			part_te->resno = matcolno;
 
 			if (timebkt_chk)
 			{
 				col->is_not_null = true;
 			}
+
 			if (part_te->resname == NULL)
 			{
 				part_te->resname = pstrdup(colname);
 			}
 		}
 		break;
+
 		case T_Var:
 		{
 			PRINT_MATCOLNAME(colbuf, "var", original_query_resno, matcolno);
 			colname = colbuf;
-
-			out->mat_groupcolname_list = lappend(out->mat_groupcolname_list, pstrdup(colname));
 
 			coltype = exprType(input);
 			coltypmod = exprTypmod(input);
@@ -1568,15 +1622,23 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			part_te->resno = matcolno;
 		}
 		break;
+
 		default:
 			elog(ERROR, "invalid node type %d", nodeTag(input));
 			break;
 	}
-	Assert(list_length(out->matcollist) == list_length(out->partial_seltlist));
+	Assert((!finalized && list_length(out->matcollist) == list_length(out->partial_seltlist)) ||
+		   (finalized && list_length(out->matcollist) <= list_length(out->partial_seltlist)));
 	Assert(col != NULL);
 	Assert(part_te != NULL);
-	out->matcollist = lappend(out->matcollist, col);
+
+	if (!*skip_adding)
+	{
+		out->matcollist = lappend(out->matcollist, col);
+	}
+
 	out->partial_seltlist = lappend(out->partial_seltlist, part_te);
+
 	var = makeVar(1, matcolno, coltype, coltypmod, colcollation, 0);
 	return var;
 }
@@ -1663,11 +1725,15 @@ add_partialize_column(Aggref *agg_to_partialize, AggPartCxt *cxt)
 {
 	Aggref *newagg;
 	Var *var;
+	bool skip_adding;
+
 	/* step 1: create partialize( aggref) column
 	 * for materialization table */
 	var = mattablecolumninfo_addentry(cxt->mattblinfo,
 									  (Node *) agg_to_partialize,
-									  cxt->original_query_resno);
+									  cxt->original_query_resno,
+									  false,
+									  &skip_adding);
 	cxt->added_aggref_col = true;
 	/* step 2: create finalize_agg expr using var
 	 * for the column added to the materialization table
@@ -1715,6 +1781,7 @@ add_var_mutator(Node *node, AggPartCxt *cxt)
 	if (IsA(node, Var))
 	{
 		Var *orig_var, *mapped_var;
+		bool skip_adding = false;
 
 		mapped_var = var_already_mapped((Var *) node, cxt);
 		/* Avoid duplicating columns in the materialization table */
@@ -1724,7 +1791,11 @@ add_var_mutator(Node *node, AggPartCxt *cxt)
 			return (Node *) copyObject(mapped_var);
 
 		orig_var = (Var *) node;
-		mapped_var = mattablecolumninfo_addentry(cxt->mattblinfo, node, cxt->original_query_resno);
+		mapped_var = mattablecolumninfo_addentry(cxt->mattblinfo,
+												 node,
+												 cxt->original_query_resno,
+												 false,
+												 &skip_adding);
 		set_var_mapping(orig_var, mapped_var, cxt);
 		return (Node *) mapped_var;
 	}
@@ -1886,26 +1957,44 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		cxt.added_aggref_col = false;
 		cxt.var_outside_of_aggref = false;
 		cxt.original_query_resno = resno;
-		/* if tle has aggrefs , get the corresponding
-		 * finalize_agg expression and save it in modte
-		 * also add correspong materialization table column info
-		 * for the aggrefs in tle. */
-		modte = (TargetEntry *) expression_tree_mutator((Node *) modte,
-														add_aggregate_partialize_mutator,
-														&cxt);
+
+		if (!inp->finalized)
+		{
+			/*
+			 * If tle has aggrefs, get the corresponding
+			 * finalize_agg expression and save it in modte
+			 * also add correspong materialization table column info
+			 * for the aggrefs in tle.
+			 */
+			modte = (TargetEntry *) expression_tree_mutator((Node *) modte,
+															add_aggregate_partialize_mutator,
+															&cxt);
+		}
+
 		/* We need columns for non-aggregate targets
 		 * if it is not a resjunk OR appears in the grouping clause
 		 */
 		if (cxt.added_aggref_col == false && (tle->resjunk == false || tle->ressortgroupref > 0))
 		{
 			Var *var;
-			var =
-				mattablecolumninfo_addentry(cxt.mattblinfo, (Node *) tle, cxt.original_query_resno);
+			bool skip_adding = false;
+			var = mattablecolumninfo_addentry(cxt.mattblinfo,
+											  (Node *) tle,
+											  cxt.original_query_resno,
+											  inp->finalized,
+											  &skip_adding);
+
+			/* skipp adding this column for finalized form */
+			if (skip_adding)
+			{
+				continue;
+			}
+
 			/* fix the expression for the target entry */
 			modte->expr = (Expr *) var;
 		}
 		/* Check for left over variables (Var) of targets that contain Aggref */
-		if (cxt.added_aggref_col && cxt.var_outside_of_aggref)
+		if (cxt.added_aggref_col && cxt.var_outside_of_aggref && !inp->finalized)
 		{
 			modte = (TargetEntry *) expression_tree_mutator((Node *) modte, add_var_mutator, &cxt);
 		}
@@ -1923,7 +2012,8 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		 * origquery . so tleSortGroupReffor the targetentry can be reused, only table info needs to
 		 * be modified
 		 */
-		Assert(modte->resno == resno);
+		Assert((!inp->finalized && modte->resno == resno) ||
+			   (inp->finalized && modte->resno >= resno));
 		resno++;
 		if (IsA(modte->expr, Var))
 		{
@@ -1933,7 +2023,8 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 	}
 	/* all grouping clause elements are in targetlist already.
 	   so let's check the having clause */
-	inp->final_havingqual = finalizequery_create_havingqual(inp, mattblinfo);
+	if (!inp->finalized)
+		inp->final_havingqual = finalizequery_create_havingqual(inp, mattblinfo);
 }
 
 /* Create select query with the finalize aggregates
@@ -1985,7 +2076,8 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	}
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
-	final_selquery->rtable = inp->final_userquery->rtable; /*fixed up above */
+	final_selquery->hasAggs = !inp->finalized;
+	final_selquery->rtable = inp->final_userquery->rtable; /* fixed up above */
 	/* fixup from list. No quals on original table should be
 	 * present here - they should be on the query that populates the mattable (partial_selquery)
 	 */
@@ -1994,10 +2086,14 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	fromexpr->quals = NULL;
 	final_selquery->jointree = fromexpr;
 	final_selquery->targetList = inp->final_seltlist;
-	final_selquery->groupClause = inp->final_userquery->groupClause;
 	final_selquery->sortClause = inp->final_userquery->sortClause;
-	/* copy the having clause too */
-	final_selquery->havingQual = inp->final_havingqual;
+
+	if (!inp->finalized)
+	{
+		final_selquery->groupClause = inp->final_userquery->groupClause;
+		/* copy the having clause too */
+		final_selquery->havingQual = inp->final_havingqual;
+	}
 
 	return final_selquery;
 }
@@ -2106,12 +2202,14 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[ContinuousViewOptionFinalized].parsed);
 
+	finalqinfo.finalized = finalized;
+
 	/*
 	 * Assign the column_name aliases in CREATE VIEW to the query. No other modifications to
 	 * panquery
 	 */
 	fixup_userview_query_tlist(panquery, stmt->aliases);
-	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(panquery->groupClause));
+	mattablecolumninfo_init(&mattblinfo, copyObject(panquery->groupClause));
 	finalizequery_init(&finalqinfo, panquery, &mattblinfo);
 
 	/*
@@ -2163,7 +2261,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	/* Step 3: create the internal view with select partialize(..)
 	 */
-	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
+	partial_selquery =
+		mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery, finalqinfo.finalized);
 
 	PRINT_MATINTERNAL_NAME(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
@@ -2241,6 +2340,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
 	CAggTimebucketInfo timebucket_exprinfo;
 	Oid nspid;
+	bool finalized = with_clause_options[ContinuousViewOptionFinalized].parsed;
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
@@ -2277,7 +2377,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 				 errhint("Use ALTER MATERIALIZED VIEW to enable compression.")));
 	}
 
-	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery);
+	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery, finalized);
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
 	if (!stmt->into->skipData)
@@ -2354,6 +2454,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	Oid user_view_oid = relation_oid(agg->data.user_view_schema, agg->data.user_view_name);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
+	bool finalized = ContinuousAggIsFinalized(agg);
 
 	/* Extract final query from user view query. */
 	Query *final_query = copyObject(user_query);
@@ -2363,7 +2464,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		final_query = destroy_union_query(final_query);
 	}
 
-	if (ContinuousAggIsFinalized(agg))
+	if (finalized)
 	{ /* This continuous aggregate does not have partials, do not check for defects. */
 		relation_close(user_view_rel, NoLock);
 		elog(INFO,
@@ -2385,9 +2486,10 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 	remove_old_and_new_rte_from_query(direct_query);
-	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
+	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query, finalized);
 
-	mattablecolumninfo_init(&mattblinfo, NIL, NIL, copyObject(direct_query->groupClause));
+	mattablecolumninfo_init(&mattblinfo, (finalized ? NIL : copyObject(direct_query->groupClause)));
+	fqi.finalized = finalized;
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
 	RangeTblEntry *usertbl_rte = list_nth(direct_query->rtable, 0);
@@ -2521,7 +2623,7 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	relation_close(direct_view_rel, NoLock);
 	remove_old_and_new_rte_from_query(direct_query);
 
-	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query);
+	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query, agg->data.finalized);
 
 	/* flip */
 	agg->data.materialized_only = !agg->data.materialized_only;
@@ -2799,7 +2901,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	int varno;
 	Node *q2_quals = NULL;
 
-	Assert(list_length(q1->targetList) == list_length(q2->targetList));
+	Assert(list_length(q1->targetList) <= list_length(q2->targetList));
 
 	q1 = copyObject(q1);
 	q2 = copyObject(q2);

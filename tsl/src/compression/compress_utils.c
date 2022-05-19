@@ -29,6 +29,7 @@
 #include "cache.h"
 #include "chunk.h"
 #include "errors.h"
+#include "error_utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "ts_catalog/continuous_agg.h"
@@ -240,8 +241,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	/* get compression properties for hypertable */
 	htcols_list = ts_hypertable_compression_get(cxt.srcht->fd.id);
 	htcols_listlen = list_length(htcols_list);
-	/* create compressed chunk DDL and compress the data */
-	compress_ht_chunk = create_compress_chunk_table(cxt.compress_ht, cxt.srcht_chunk);
+	/* create compressed chunk and a new table */
+	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
 	/* convert list to array of pointers for compress_chunk */
 	colinfo_array = palloc(sizeof(ColumnCompressionInfo *) * htcols_listlen);
 	foreach (lc, htcols_list)
@@ -434,6 +435,80 @@ decompress_remote_chunk(FunctionCallInfo fcinfo, const Chunk *chunk, bool if_com
 				 errmsg("chunk \"%s\" is not compressed", get_rel_name(chunk->table_id))));
 
 	return success;
+}
+
+/*
+ * Create a new compressed chunk using existing table with compressed data.
+ *
+ * chunk_relid - non-compressed chunk relid
+ * chunk_table - table containing compressed data
+ */
+Datum
+tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_GETARG_OID(0);
+	Oid chunk_table = PG_GETARG_OID(1);
+	RelationSize uncompressed_size = { .heap_size = PG_GETARG_INT64(2),
+									   .toast_size = PG_GETARG_INT64(3),
+									   .index_size = PG_GETARG_INT64(4) };
+	RelationSize compressed_size = { .heap_size = PG_GETARG_INT64(5),
+									 .toast_size = PG_GETARG_INT64(6),
+									 .index_size = PG_GETARG_INT64(7) };
+	int64 numrows_pre_compression = PG_GETARG_INT64(8);
+	int64 numrows_post_compression = PG_GETARG_INT64(9);
+	Chunk *chunk;
+	Chunk *compress_ht_chunk;
+	Cache *hcache;
+	CompressChunkCxt cxt;
+
+	Assert(!PG_ARGISNULL(0));
+	Assert(!PG_ARGISNULL(1));
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	hcache = ts_hypertable_cache_pin();
+	compresschunkcxt_init(&cxt, hcache, chunk->hypertable_relid, chunk_relid);
+
+	/* Acquire locks on src and compress hypertable and src chunk */
+	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
+	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
+	LockRelationOid(cxt.srcht_chunk->table_id, ShareLock);
+
+	/* Aquire locks on catalog tables to keep till end of txn */
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE_COMPRESSION),
+					AccessShareLock);
+	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+
+	/* Create compressed chunk using existing table */
+	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
+
+	/* Copy chunk constraints (including fkey) to compressed chunk */
+	ts_chunk_constraints_create(compress_ht_chunk->constraints,
+								compress_ht_chunk->table_id,
+								compress_ht_chunk->fd.id,
+								compress_ht_chunk->hypertable_relid,
+								compress_ht_chunk->fd.hypertable_id);
+	ts_trigger_create_all_on_chunk(compress_ht_chunk);
+
+	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
+	 * cascading deleted data in FK-referenced tables, while blocking deleting data
+	 * directly on the hypertable or chunks.
+	 */
+	ts_chunk_drop_fks(cxt.srcht_chunk);
+
+	/* Insert empty stats to compression_chunk_size */
+	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
+										  &uncompressed_size,
+										  compress_ht_chunk->fd.id,
+										  &compressed_size,
+										  numrows_pre_compression,
+										  numrows_post_compression);
+
+	ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
+	ts_cache_release(hcache);
+
+	PG_RETURN_OID(chunk_relid);
 }
 
 Datum

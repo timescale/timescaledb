@@ -26,7 +26,6 @@ ERROR:  hypertable has no open partitioning dimension
 CREATE TABLE subtract_int_no_func(time int NOT NULL);
 SELECT table_name FROM create_hypertable('subtract_int_no_func','time',chunk_time_interval:=10);
       table_name      
-----------------------
  subtract_int_no_func
 (1 row)
 
@@ -42,43 +41,36 @@ CREATE TABLE subtract_int4(time int4 NOT NULL);
 CREATE TABLE subtract_int8(time int8 NOT NULL);
 SELECT table_name FROM create_hypertable('subtract_int2', 'time', chunk_time_interval:=10);
   table_name   
----------------
  subtract_int2
 (1 row)
 
 SELECT table_name FROM create_hypertable('subtract_int4', 'time', chunk_time_interval:=10);
   table_name   
----------------
  subtract_int4
 (1 row)
 
 SELECT table_name FROM create_hypertable('subtract_int8', 'time', chunk_time_interval:=10);
   table_name   
----------------
  subtract_int8
 (1 row)
 
 SELECT set_integer_now_func('subtract_int2', 'sub_int2_now');
  set_integer_now_func 
-----------------------
  
 (1 row)
 
 SELECT set_integer_now_func('subtract_int4', 'sub_int4_now');
  set_integer_now_func 
-----------------------
  
 (1 row)
 
 SELECT set_integer_now_func('subtract_int8', 'sub_int8_now');
  set_integer_now_func 
-----------------------
  
 (1 row)
 
 SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int2', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
  sub 
------
   12
    2
    0
@@ -88,7 +80,6 @@ SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int2', lag) AS 
 
 SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int4', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
  sub 
------
   14
    4
    2
@@ -98,7 +89,6 @@ SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int4', lag) AS 
 
 SELECT _timescaledb_internal.subtract_integer_from_now('subtract_int8', lag) AS sub FROM (VALUES (-10),(0),(2),(4),(8)) v(lag);
  sub 
------
   18
    8
    6

@@ -36,8 +36,7 @@ select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc
 
 explain (costs off, verbose)
 select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
-                                                                                                        QUERY PLAN                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
@@ -57,8 +56,7 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1
 
 explain (costs off, verbose)
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
-                                                                                                                           QUERY PLAN                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
@@ -78,8 +76,7 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0') or
 
 explain (costs off, verbose)
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
-                                                                                  QUERY PLAN                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Sort
@@ -103,8 +100,7 @@ select ts, id from distinct_on_distributed order by id, ts desc limit 1;
 
 explain (costs off, verbose)
 select ts, id from distinct_on_distributed order by id, ts desc limit 1;
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
@@ -125,8 +121,7 @@ select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc
 
 explain (costs off, verbose)
 select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
-                                                                                                        QUERY PLAN                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
@@ -145,8 +140,7 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1
 
 explain (costs off, verbose)
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
-                                                                                                                           QUERY PLAN                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed
@@ -164,8 +158,7 @@ select distinct on (id) ts, id from distinct_on_distributed where id in ('0') or
 
 explain (costs off, verbose)
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
-                                                                                              QUERY PLAN                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Unique
    Output: distinct_on_distributed.ts, distinct_on_distributed.id
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed

@@ -88,5 +88,84 @@ ALTER TABLE _timescaledb_catalog.continuous_agg
   ALTER COLUMN finalized SET DEFAULT TRUE;
 
 DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk(REGCLASS, NAME, NAME);
-
 DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk(REGCLASS, NAME, NAME);
+
+CREATE OR REPLACE FUNCTION timescaledb_experimental.subscription_exec(
+    subscription_command TEXT
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_subscription_exec' LANGUAGE C VOLATILE;
+
+-- Recreate chunk_copy_operation table with newly added `compress_chunk_name` column
+--
+
+CREATE TABLE _timescaledb_catalog._tmp_chunk_copy_operation (
+  operation_id name NOT NULL,
+  backend_pid integer NOT NULL,
+  completed_stage name NOT NULL,
+  time_start timestamptz NOT NULL DEFAULT NOW(),
+  chunk_id integer NOT NULL,
+  compress_chunk_name name NOT NULL, -- new column
+  source_node_name name NOT NULL,
+  dest_node_name name NOT NULL,
+  delete_on_source_node bool NOT NULL
+);
+
+INSERT INTO _timescaledb_catalog._tmp_chunk_copy_operation
+    SELECT
+        operation_id,
+        backend_pid,
+        completed_stage,
+        time_start,
+        chunk_id,
+        '', -- compress_chunk_name
+        source_node_name,
+        dest_node_name,
+        delete_on_source_node
+    FROM
+        _timescaledb_catalog.chunk_copy_operation
+    ORDER BY
+        operation_id;
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+
+DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+
+-- Create a new table to void doing rename operation on the tmp table
+--
+CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
+  operation_id name NOT NULL,
+  backend_pid integer NOT NULL,
+  completed_stage name NOT NULL,
+  time_start timestamptz NOT NULL DEFAULT NOW(),
+  chunk_id integer NOT NULL,
+  compress_chunk_name name NOT NULL,
+  source_node_name name NOT NULL,
+  dest_node_name name NOT NULL,
+  delete_on_source_node bool NOT NULL
+);
+
+INSERT INTO _timescaledb_catalog.chunk_copy_operation
+    SELECT
+        operation_id,
+        backend_pid,
+        completed_stage,
+        time_start,
+        chunk_id,
+        compress_chunk_name,
+        source_node_name,
+        dest_node_name,
+        delete_on_source_node
+    FROM
+        _timescaledb_catalog._tmp_chunk_copy_operation
+    ORDER BY
+        operation_id;
+
+DROP TABLE _timescaledb_catalog._tmp_chunk_copy_operation;
+
+ALTER TABLE _timescaledb_catalog.chunk_copy_operation
+    ADD CONSTRAINT chunk_copy_operation_pkey PRIMARY KEY (operation_id),
+    ADD CONSTRAINT chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
+
+GRANT SELECT ON TABLE _timescaledb_catalog.chunk_copy_operation TO PUBLIC;
+
+ANALYZE _timescaledb_catalog.chunk_copy_operation;

@@ -83,14 +83,6 @@ CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._hyper_2_
 CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._hyper_2_5_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
 \set ON_ERROR_STOP 1
 
--- ensure that distributed chunk is not compressed
-ALTER TABLE dist_test SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
-SELECT compress_chunk('_timescaledb_internal._dist_hyper_1_4_chunk');
-\set ON_ERROR_STOP 0
-CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_4_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
-CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_4_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
-\set ON_ERROR_STOP 1
-
 -- ensure that chunk exists on a source data node
 \set ON_ERROR_STOP 0
 CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_2_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
@@ -141,6 +133,126 @@ FROM timescaledb_experimental.chunk_replication_status;
 
 DROP PROCEDURE copy_wrapper;
 DROP PROCEDURE move_wrapper;
+
+DROP TABLE dist_test;
+
+-- Test copy/move compressed chunk
+--
+
+-- Create a compressed hypertable
+CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
+SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+INSERT INTO dist_test SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
+ALTER TABLE dist_test SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+
+-- Integrity check (see below)
+SELECT sum(device) FROM dist_test;
+
+-- Get a list of chunks
+SELECT * from show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'dist_test';
+
+-- Compress a chunk
+SELECT compress_chunk('_timescaledb_internal._dist_hyper_3_12_chunk');
+SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
+
+-- Get compressed chunk name on the source data node and show its content
+\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+
+SELECT c2.table_name
+FROM _timescaledb_catalog.chunk c1
+JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
+WHERE c1.table_name = '_dist_hyper_3_12_chunk';
+
+SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
+SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
+
+-- Get compressed chunk stat
+SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE  chunk_name = '_dist_hyper_3_12_chunk';
+
+-- Move compressed chunk from data node 1 to data node 2
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_1', destination_node => 'data_node_2');
+SELECT count(*) FROM  _timescaledb_catalog.chunk_copy_operation;
+
+-- Make sure same compressed chunk hash been created on the destination data node
+\c :DN_DBNAME_2 :ROLE_CLUSTER_SUPERUSER;
+
+-- Chunk created on data node has different id but the same name, make sure
+-- compressed_chunk_id is correctly set
+SELECT c2.table_name
+FROM _timescaledb_catalog.chunk c1
+JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
+WHERE c1.table_name = '_dist_hyper_3_12_chunk';
+
+-- Try to query hypertable member with compressed chunk
+SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
+SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
+
+-- Ensure that compressed chunk stats match stats from the source data node
+SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE chunk_name = '_dist_hyper_3_12_chunk';
+
+-- Ensure moved chunks are no longer present on the source data node
+\c :DN_DBNAME_1 :ROLE_CLUSTER_SUPERUSER;
+
+SELECT c2.table_name
+FROM _timescaledb_catalog.chunk c1
+JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
+WHERE c1.table_name = '_dist_hyper_3_12_chunk';
+
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
+SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
+\set ON_ERROR_STOP 1
+
+-- Make sure chunk has been properly moved from AN
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+SELECT * FROM show_chunks('dist_test');
+SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'dist_test';
+
+-- Query distributed hypertable again to query newly moved chunk, make
+-- sure result has not changed
+SELECT sum(device) FROM dist_test;
+
+-- Test operation_id name validation
+
+\set ON_ERROR_STOP 0
+CALL timescaledb_experimental.move_chunk(operation_id => ' move chunk id ', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+CALL timescaledb_experimental.move_chunk(operation_id => 'ChUnK_MoVe_Op', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+CALL timescaledb_experimental.move_chunk(operation_id => '_ID123', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+\set ON_ERROR_STOP 1
+
+-- Now copy chunk from data node 2 to data node 3
+CALL timescaledb_experimental.move_chunk(operation_id => 'id123', chunk=>'_timescaledb_internal._dist_hyper_3_12_chunk', source_node=> 'data_node_2', destination_node => 'data_node_3');
+
+\c :DN_DBNAME_3 :ROLE_CLUSTER_SUPERUSER;
+
+-- Validate chunk on data node 3
+SELECT c2.table_name
+FROM _timescaledb_catalog.chunk c1
+JOIN _timescaledb_catalog.chunk c2 ON (c1.compressed_chunk_id = c2.id)
+WHERE c1.table_name = '_dist_hyper_3_12_chunk';
+
+SELECT * FROM _timescaledb_internal.compress_hyper_3_6_chunk;
+SELECT * FROM _timescaledb_internal._dist_hyper_3_12_chunk ORDER BY time;
+SELECT * FROM _timescaledb_internal.compressed_chunk_stats WHERE chunk_name = '_dist_hyper_3_12_chunk';
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+
+-- _dist_hyper_3_12_chunk should be moved in data node 3 now
+SELECT chunk_schema || '.' ||  chunk_name, data_nodes
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'dist_test';
 
 RESET ROLE;
 DROP DATABASE :DN_DBNAME_1;

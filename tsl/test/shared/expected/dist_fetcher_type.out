@@ -8,7 +8,6 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
  x 
----
  1
 (1 row)
 
@@ -16,15 +15,13 @@ limit 1;
 select 1 x from distinct_on_distributed t1
 limit 1;
  x 
----
  1
 (1 row)
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 x from distinct_on_distributed t1
 limit 1;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    Output: 1
    ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t1 (actual rows=1 loops=1)
@@ -40,7 +37,6 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
  x 
----
  1
 (1 row)
 
@@ -48,8 +44,7 @@ explain (analyze, verbose, costs off, timing off, summary off)
 select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    Output: 1
    ->  Nested Loop (actual rows=1 loops=1)
@@ -84,7 +79,6 @@ select 1 x from distinct_on_distributed t1, distinct_on_distributed t2
 where t1.id = t2.id + 1
 limit 1;
  x 
----
  1
 (1 row)
 
@@ -128,8 +122,7 @@ ERROR:  cannot use row-by-row fetcher because some of the column types do not ha
 set timescaledb.remote_data_fetcher = 'auto';
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from disttable_with_ct;
-                                                                        QUERY PLAN                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DataNodeScan) on public.disttable_with_ct (actual rows=2 loops=1)
    Output: disttable_with_ct."time", disttable_with_ct.txn_id, disttable_with_ct.val, disttable_with_ct.info
    Data node: data_node_2

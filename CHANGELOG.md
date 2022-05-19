@@ -22,6 +22,7 @@ If you use compression with a non-default collation on a segmentby-column you mi
 * #4259 Fix logic bug in extension update script
 * #4236 Fix potential wrong order of results for compressed hypertable with a non-default collation
 * #4255 Fix option "timescaledb.create_group_indexes"
+* #4269 Fix bad Continuous Aggregate view definition reported in #4233
 * #4300 Fix refresh window cap for cagg refresh policy
 * #4330 Add GUC "bgw_launcher_poll_time"
 

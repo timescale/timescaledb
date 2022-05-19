@@ -81,6 +81,7 @@ typedef struct CrossModuleFunctions
 	PGFunction move_chunk;
 	PGFunction move_chunk_proc;
 	PGFunction copy_chunk_proc;
+	PGFunction subscription_exec;
 	PGFunction copy_chunk_cleanup_proc;
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *command);
@@ -122,6 +123,7 @@ typedef struct CrossModuleFunctions
 								   WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
+	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	/* The compression functions below are not installed in SQL as part of create extension;

@@ -11,6 +11,7 @@
 #include "export.h"
 #include "cross_module_fn.h"
 #include "guc.h"
+#include "license_guc.h"
 #include "bgw/job.h"
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
@@ -47,6 +48,7 @@ CROSSMODULE_WRAPPER(move_chunk);
 CROSSMODULE_WRAPPER(move_chunk_proc);
 CROSSMODULE_WRAPPER(copy_chunk_proc);
 CROSSMODULE_WRAPPER(copy_chunk_cleanup_proc);
+CROSSMODULE_WRAPPER(subscription_exec);
 
 /* partialize/finalize aggregate */
 CROSSMODULE_WRAPPER(partialize_agg);
@@ -68,6 +70,7 @@ CROSSMODULE_WRAPPER(dictionary_compressor_append);
 CROSSMODULE_WRAPPER(dictionary_compressor_finish);
 CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
+CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 
@@ -193,6 +196,28 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 					get_func_name(fcinfo->flinfo->fn_oid),
 					ts_guc_license),
 			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
+
+	pg_unreachable();
+}
+
+static Datum
+process_compressed_data_in(PG_FUNCTION_ARGS)
+{
+	/*
+	 * TSL library is not loaded by the replication worker for some reason,
+	 * so a call to `compressed_data_in` function would produce a misleading
+	 * error saying that your license is "timescale" and you should upgrade to
+	 * "timescale" license, even if you have already upgraded.
+	 *
+	 * As a workaround, we try to load the TSL module it in this function. It will still
+	 * error out in the "apache" version
+	 */
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->compressed_data_in != process_compressed_data_in)
+		return ts_cm_functions->compressed_data_in(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
 }
 
@@ -374,6 +399,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.move_chunk_proc = error_no_default_fn_pg_community,
 	.copy_chunk_proc = error_no_default_fn_pg_community,
 	.copy_chunk_cleanup_proc = error_no_default_fn_pg_community,
+	.subscription_exec = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
 
 	.partialize_agg = error_no_default_fn_pg_community,
@@ -398,9 +424,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
 	.compressed_data_recv = error_no_default_fn_pg_community,
-	.compressed_data_in = error_no_default_fn_pg_community,
+	.compressed_data_in = process_compressed_data_in,
 	.compressed_data_out = error_no_default_fn_pg_community,
 	.process_compress_table = process_compress_table_default,
+	.create_compressed_chunk = error_no_default_fn_pg_community,
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,

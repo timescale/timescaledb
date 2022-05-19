@@ -127,6 +127,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.move_chunk_proc = tsl_move_chunk_proc,
 	.copy_chunk_proc = tsl_copy_chunk_proc,
 	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
+	.subscription_exec = tsl_subscription_exec,
 
 	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,
@@ -180,6 +181,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.data_node_block_new_chunks = data_node_block_new_chunks,
 	.chunk_set_default_data_node = chunk_set_default_data_node,
 	.show_chunk = chunk_show,
+	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,
 	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
 	.chunk_drop_replica = chunk_drop_replica,

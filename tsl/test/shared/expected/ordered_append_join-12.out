@@ -31,8 +31,7 @@ FROM :TEST_TABLE,
         (2)) v) l
 ORDER BY time DESC
 LIMIT 2;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=2 loops=1)
    ->  Nested Loop (actual rows=2 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
@@ -59,8 +58,7 @@ FROM (
     FROM :TEST_TABLE
     ORDER BY time DESC
     LIMIT 2) l;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop (actual rows=4 loops=1)
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Materialize (actual rows=2 loops=2)
@@ -85,8 +83,7 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time DESC
 LIMIT 1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -108,8 +105,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
          Order: metrics."time" DESC
@@ -134,8 +130,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -167,8 +162,7 @@ FROM generate_series('2000-01-10'::timestamptz, '2000-01-11', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time
   LIMIT 1) l ON TRUE;
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=2 loops=1)
    ->  Function Scan on generate_series g (actual rows=2 loops=1)
    ->  Limit (actual rows=1 loops=2)
@@ -200,8 +194,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -234,8 +227,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time > now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=0 loops=3)
@@ -255,8 +247,7 @@ WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Merge Join (actual rows=13674 loops=1)
    Merge Cond: (o1."time" = o2."time")
    ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=13674 loops=1)
@@ -297,8 +288,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-01-08'
 ORDER BY o1.time
 LIMIT 10;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Join (actual rows=10 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -333,8 +323,7 @@ FROM :TEST_TABLE o1
     FROM :TEST_TABLE) o2 ON o1.time = o2.max_time
 WHERE o1.device_id = 1
 ORDER BY time;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort (actual rows=1 loops=1)
    Sort Key: o1."time"
    Sort Method: quicksort 
@@ -377,8 +366,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -417,8 +405,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -457,8 +444,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                  QUERY PLAN                  
-----------------------------------------------
+QUERY PLAN
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: o1."time"
@@ -477,8 +463,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -517,8 +502,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -557,8 +541,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -598,8 +581,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -638,8 +620,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -677,8 +658,7 @@ FROM :TEST_TABLE o1
     AND o1.time = o2.time
   ORDER BY o1.time
   LIMIT 100;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -706,8 +686,7 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=1 loops=1)
@@ -745,8 +724,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -787,8 +765,7 @@ WHERE o1.device_id = 1
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
-                                                                            QUERY PLAN                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o3."time" = o1."time")
@@ -849,8 +826,7 @@ FROM :TEST_TABLE,
         (2)) v) l
 ORDER BY time DESC
 LIMIT 2;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=2 loops=1)
    ->  Nested Loop (actual rows=2 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
@@ -895,8 +871,7 @@ FROM (
     FROM :TEST_TABLE
     ORDER BY time DESC
     LIMIT 2) l;
-                                                                        QUERY PLAN                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop (actual rows=4 loops=1)
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Materialize (actual rows=2 loops=2)
@@ -939,8 +914,7 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time DESC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -959,8 +933,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
@@ -1003,8 +976,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -1058,8 +1030,7 @@ FROM generate_series('2000-01-10'::timestamptz, '2000-01-11', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time
   LIMIT 1) l ON TRUE;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=2 loops=1)
    ->  Function Scan on generate_series g (actual rows=2 loops=1)
    ->  Limit (actual rows=1 loops=2)
@@ -1113,8 +1084,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -1169,8 +1139,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time > now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=0 loops=3)
@@ -1222,8 +1191,7 @@ WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time;
-                                                                   QUERY PLAN                                                                    
--------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Merge Join (actual rows=13674 loops=1)
    Merge Cond: (o1."time" = o2."time")
    ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=13674 loops=1)
@@ -1264,8 +1232,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-01-08'
 ORDER BY o1.time
 LIMIT 10;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Join (actual rows=10 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1334,8 +1301,7 @@ FROM :TEST_TABLE o1
     FROM :TEST_TABLE) o2 ON o1.time = o2.max_time
 WHERE o1.device_id = 1
 ORDER BY time;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Sort (actual rows=1 loops=1)
    Sort Key: o1."time"
    Sort Method: quicksort 
@@ -1402,8 +1368,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1439,8 +1404,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1476,8 +1440,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                  QUERY PLAN                  
-----------------------------------------------
+QUERY PLAN
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: o1."time"
@@ -1496,8 +1459,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1533,8 +1495,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1570,8 +1531,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1608,8 +1568,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1645,8 +1604,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1681,8 +1639,7 @@ FROM :TEST_TABLE o1
     AND o1.time = o2.time
   ORDER BY o1.time
   LIMIT 100;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1734,8 +1691,7 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=1 loops=1)
@@ -1770,8 +1726,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -1809,8 +1764,7 @@ WHERE o1.device_id = 1
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o3."time" = o1."time")
@@ -1865,8 +1819,7 @@ FROM :TEST_TABLE,
         (2)) v) l
 ORDER BY time DESC
 LIMIT 2;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=2 loops=1)
    ->  Sort (actual rows=2 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -1895,8 +1848,7 @@ FROM (
     FROM :TEST_TABLE
     ORDER BY time DESC
     LIMIT 2) l;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop (actual rows=4 loops=1)
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Materialize (actual rows=2 loops=2)
@@ -1924,8 +1876,7 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time DESC
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
          Order: metrics_compressed."time" DESC
@@ -1947,8 +1898,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -1975,8 +1925,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -2015,8 +1964,7 @@ FROM generate_series('2000-01-10'::timestamptz, '2000-01-11', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time
   LIMIT 1) l ON TRUE;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=2 loops=1)
    ->  Function Scan on generate_series g (actual rows=2 loops=1)
    ->  Limit (actual rows=1 loops=2)
@@ -2055,8 +2003,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -2096,8 +2043,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time > now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=0 loops=3)
@@ -2119,8 +2065,7 @@ WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time;
-                                                                                             QUERY PLAN                                                                                             
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Merge Join (actual rows=13674 loops=1)
    Merge Cond: (o1."time" = o2."time")
    ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=13674 loops=1)
@@ -2173,8 +2118,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-01-08'
 ORDER BY o1.time
 LIMIT 10;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Join (actual rows=10 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2218,8 +2162,7 @@ FROM :TEST_TABLE o1
     FROM :TEST_TABLE) o2 ON o1.time = o2.max_time
 WHERE o1.device_id = 1
 ORDER BY time;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Merge Join (actual rows=1 loops=1)
    Merge Cond: (o1."time" = (max(_hyper_X_X_chunk."time")))
    ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=13674 loops=1)
@@ -2258,8 +2201,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2298,8 +2240,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2338,8 +2279,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                  QUERY PLAN                  
-----------------------------------------------
+QUERY PLAN
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: o1."time"
@@ -2358,8 +2298,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2398,8 +2337,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2438,8 +2376,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2479,8 +2416,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2519,8 +2455,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2558,8 +2493,7 @@ FROM :TEST_TABLE o1
     AND o1.time = o2.time
   ORDER BY o1.time
   LIMIT 100;
-                                                                                               QUERY PLAN                                                                                               
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Sort (actual rows=100 loops=1)
          Sort Key: o1."time"
@@ -2593,8 +2527,7 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                                                           QUERY PLAN                                                                                            
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=1 loops=1)
@@ -2632,8 +2565,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -2674,8 +2606,7 @@ WHERE o1.device_id = 1
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
-                                                                                                      QUERY PLAN                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o3."time" = o1."time")
@@ -2736,8 +2667,7 @@ FROM :TEST_TABLE,
         (2)) v) l
 ORDER BY time DESC
 LIMIT 2;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=2 loops=1)
    ->  Sort (actual rows=2 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -2778,8 +2708,7 @@ FROM (
     FROM :TEST_TABLE
     ORDER BY time DESC
     LIMIT 2) l;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop (actual rows=4 loops=1)
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Materialize (actual rows=2 loops=2)
@@ -2819,8 +2748,7 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time DESC
 LIMIT 1;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -2849,8 +2777,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk."time" DESC
@@ -2889,8 +2816,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -2964,8 +2890,7 @@ FROM generate_series('2000-01-10'::timestamptz, '2000-01-11', '1d') AS g (time)
     AND o.time < g.time + '1d'::interval
   ORDER BY time
   LIMIT 1) l ON TRUE;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=2 loops=1)
    ->  Function Scan on generate_series g (actual rows=2 loops=1)
    ->  Limit (actual rows=1 loops=2)
@@ -3039,8 +2964,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time < now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=1 loops=3)
@@ -3115,8 +3039,7 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
     AND o.time > now()
   ORDER BY time DESC
   LIMIT 1) l ON TRUE;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Nested Loop Left Join (actual rows=3 loops=1)
    ->  Function Scan on generate_series g (actual rows=3 loops=1)
    ->  Limit (actual rows=0 loops=3)
@@ -3188,8 +3111,7 @@ WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time;
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Merge Join (actual rows=13674 loops=1)
    Merge Cond: (o1."time" = o2."time")
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=13674 loops=1)
@@ -3242,8 +3164,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-01-08'
 ORDER BY o1.time
 LIMIT 10;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=10 loops=1)
    ->  Merge Join (actual rows=10 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3319,8 +3240,7 @@ FROM :TEST_TABLE o1
     FROM :TEST_TABLE) o2 ON o1.time = o2.max_time
 WHERE o1.device_id = 1
 ORDER BY time;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Merge Join (actual rows=1 loops=1)
    Merge Cond: (o1."time" = (max(_hyper_X_X_chunk."time")))
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=13674 loops=1)
@@ -3371,8 +3291,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3411,8 +3330,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3451,8 +3369,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                  QUERY PLAN                  
-----------------------------------------------
+QUERY PLAN
  Limit (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
          Sort Key: o1."time"
@@ -3471,8 +3388,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3511,8 +3427,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3551,8 +3466,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3592,8 +3506,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3632,8 +3545,7 @@ WHERE o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o2.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3671,8 +3583,7 @@ FROM :TEST_TABLE o1
     AND o1.time = o2.time
   ORDER BY o1.time
   LIMIT 100;
-                                                                                               QUERY PLAN                                                                                               
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Sort (actual rows=100 loops=1)
          Sort Key: o1."time"
@@ -3730,8 +3641,7 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY o1.time
 LIMIT 100;
-                                                                                           QUERY PLAN                                                                                            
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Nested Loop (actual rows=100 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=1 loops=1)
@@ -3769,8 +3679,7 @@ WHERE o1.time = o2.time
   AND o2.device_id = 2
 ORDER BY o1.time
 LIMIT 100;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o1."time" = o2."time")
@@ -3811,8 +3720,7 @@ WHERE o1.device_id = 1
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
-                                                                                        QUERY PLAN                                                                                        
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
          Merge Cond: (o3."time" = o1."time")

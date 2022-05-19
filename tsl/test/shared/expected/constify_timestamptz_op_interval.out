@@ -11,8 +11,7 @@ SET timescaledb.enable_now_constify TO FALSE;
 :PREFIX
 SELECT time
 FROM metrics;
-             QUERY PLAN             
-------------------------------------
+QUERY PLAN
  Append
    ->  Seq Scan on _hyper_X_X_chunk
    ->  Seq Scan on _hyper_X_X_chunk
@@ -24,8 +23,7 @@ FROM metrics;
 SELECT time
 FROM metrics
 WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
 (2 rows)
@@ -34,8 +32,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
 SELECT time
 FROM metrics
 WHERE time < '2000-01-01'::timestamptz + '6h'::interval;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone + '@ 6 hours'::interval))
 (2 rows)
@@ -44,8 +41,7 @@ WHERE time < '2000-01-01'::timestamptz + '6h'::interval;
 SELECT time
 FROM metrics
 WHERE time < '6h'::interval + '2000-01-01'::timestamptz;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone + '@ 6 hours'::interval))
 (2 rows)
@@ -54,8 +50,7 @@ WHERE time < '6h'::interval + '2000-01-01'::timestamptz;
 SELECT time
 FROM metrics
 WHERE time < '2000-01-07'::timestamptz - '7 day 8 seconds'::interval;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone - '@ 7 days 8 secs'::interval))
 (2 rows)
@@ -64,8 +59,7 @@ WHERE time < '2000-01-07'::timestamptz - '7 day 8 seconds'::interval;
 SELECT time
 FROM metrics
 WHERE time < '2000-03-01'::timestamptz - '60 day'::interval;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Wed Mar 01 00:00:00 2000 PST'::timestamp with time zone - '@ 60 days'::interval))
 (2 rows)
@@ -75,8 +69,7 @@ WHERE time < '2000-03-01'::timestamptz - '60 day'::interval;
 SELECT time
 FROM metrics
 WHERE '2000-01-01'::timestamptz - '6h'::interval > time;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
 (2 rows)
@@ -85,8 +78,7 @@ WHERE '2000-01-01'::timestamptz - '6h'::interval > time;
 SELECT time
 FROM metrics
 WHERE '2000-01-07'::timestamptz - '7 day'::interval > time;
-                                                 QUERY PLAN                                                 
-------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone - '@ 7 days'::interval))
 (2 rows)
@@ -95,8 +87,7 @@ WHERE '2000-01-07'::timestamptz - '7 day'::interval > time;
 SELECT time
 FROM metrics
 WHERE '2000-03-01'::timestamptz - '60 day'::interval > time;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Wed Mar 01 00:00:00 2000 PST'::timestamp with time zone - '@ 60 days'::interval))
 (2 rows)
@@ -107,8 +98,7 @@ SELECT time
 FROM metrics
 WHERE time > '2000-01-10'::timestamptz - '6h'::interval
     AND time < '2000-01-10'::timestamptz + '6h'::interval;
-                                                                                                   QUERY PLAN                                                                                                    
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
    Index Cond: (("time" > ('Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval)) AND ("time" < ('Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone + '@ 6 hours'::interval)))
 (2 rows)
@@ -119,8 +109,7 @@ SELECT time
 FROM metrics_space
 WHERE time < '2000-01-01'::timestamptz - '6h'::interval
     AND device_id = 1;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk
    Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
    Filter: (device_id = 1)
@@ -131,8 +120,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval
 SELECT time
 FROM metrics_compressed
 WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
    Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
    ->  Seq Scan on compress_hyper_X_X_chunk
@@ -145,8 +133,7 @@ SELECT time
 FROM metrics_space_compressed
 WHERE time < '2000-01-01'::timestamptz - '6h'::interval
     AND device_id = 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
    Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
    ->  Seq Scan on compress_hyper_X_X_chunk
@@ -158,8 +145,7 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval
 SELECT time
 FROM metrics
 WHERE time < '2000-02-01'::timestamptz - '1 month'::interval;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon'::interval))
@@ -173,8 +159,7 @@ WHERE time < '2000-02-01'::timestamptz - '1 month'::interval;
 SELECT time
 FROM metrics
 WHERE time < '2000-02-01'::timestamptz - '1 month - 1 day'::interval;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon -1 days'::interval))
@@ -188,8 +173,7 @@ WHERE time < '2000-02-01'::timestamptz - '1 month - 1 day'::interval;
 SELECT time
 FROM metrics
 WHERE time < '2000-02-01'::timestamptz - '1 month + 1 day'::interval;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 mon 1 day'::interval))
@@ -203,8 +187,7 @@ WHERE time < '2000-02-01'::timestamptz - '1 month + 1 day'::interval;
 SELECT time
 FROM metrics
 WHERE '2000-02-01'::timestamptz - '1 year'::interval > time;
-                                                    QUERY PLAN                                                    
-------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < ('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone - '@ 1 year'::interval))
@@ -219,8 +202,7 @@ WHERE '2000-02-01'::timestamptz - '1 year'::interval > time;
 SELECT time
 FROM metrics
 WHERE time < '1 day' + '2000-02-01'::timestamptz - '1 month'::interval;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" < (('Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone + '@ 1 day'::interval) - '@ 1 mon'::interval))
@@ -235,8 +217,7 @@ WHERE time < '1 day' + '2000-02-01'::timestamptz - '1 month'::interval;
 SELECT time
 FROM metrics
 WHERE time > now() - '6h'::interval;
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
          Index Cond: ("time" > (now() - '@ 6 hours'::interval))
@@ -251,8 +232,7 @@ WHERE time > now() - '6h'::interval;
 SELECT time
 FROM metrics
 WHERE time < '2000-02-01'::timestamptz - NULL::interval;
-        QUERY PLAN        
---------------------------
+QUERY PLAN
  Result
    One-Time Filter: false
 (2 rows)
@@ -261,8 +241,7 @@ WHERE time < '2000-02-01'::timestamptz - NULL::interval;
 SELECT time
 FROM metrics
 WHERE time < NULL::timestamptz - NULL::interval;
-        QUERY PLAN        
---------------------------
+QUERY PLAN
  Result
    One-Time Filter: false
 (2 rows)

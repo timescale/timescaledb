@@ -19,59 +19,59 @@ select table_name from create_hypertable( 'conditions', 'timec');
  conditions
 (1 row)
 
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous, timescaledb.myfill = 1)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false, timescaledb.myfill = 1)
 as
 select location , min(temperature)
 from conditions
 group by time_bucket('1d', timec), location WITH NO DATA;
 ERROR:  unrecognized parameter "timescaledb.myfill"
 --valid PG option
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous, check_option = LOCAL )
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false, check_option = LOCAL )
 as
 select * from conditions , mat_t1 WITH NO DATA;
 ERROR:  unsupported combination of storage parameters
 DETAIL:  A continuous aggregate does not support standard storage parameters.
 HINT:  Use only parameters with the "timescaledb." prefix when creating a continuous aggregate.
 -- join multiple tables
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select location, count(*) from conditions , mat_t1
 where conditions.location = mat_t1.c
 group by location WITH NO DATA;
 ERROR:  only one hypertable allowed in continuous aggregate view
 -- join multiple tables WITH explicit JOIN
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select location, count(*) from conditions JOIN mat_t1 ON true
 where conditions.location = mat_t1.c
 group by location WITH NO DATA;
 ERROR:  only one hypertable allowed in continuous aggregate view
 -- LATERAL multiple tables
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select location, count(*) from conditions,
 LATERAL (Select * from mat_t1 where c = conditions.location) q
 group by location WITH NO DATA;
 ERROR:  only one hypertable allowed in continuous aggregate view
 --non-hypertable
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select a, count(*) from mat_t1
 group by a WITH NO DATA;
 ERROR:  table "mat_t1" is not a hypertable
 -- no group by
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select count(*) from conditions  WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 HINT:  Include at least one aggregate function and a GROUP BY clause with time bucket.
 -- no time_bucket in group by
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
 select count(*) from conditions group by location WITH NO DATA;
 ERROR:  continuous aggregate view must include a valid time bucket function
 -- with valid query in a CTE
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 with m1 as (
 Select location, count(*) from conditions
@@ -80,66 +80,114 @@ select * from m1 WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
 --with DISTINCT ON
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 as
  select distinct on ( location ) count(*)  from conditions group by location, time_bucket('1week', timec)  WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 DETAIL:  DISTINCT / DISTINCT ON queries are not supported by continuous aggregates.
+--aggregate with DISTINCT
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select time_bucket('1week', timec),
+ count(location) , sum(distinct temperature) from conditions
+ group by time_bucket('1week', timec) , location WITH NO DATA;
+ERROR:  aggregates with FILTER / DISTINCT / ORDER BY are not supported
+--aggregate with FILTER
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select time_bucket('1week', timec),
+ sum(temperature) filter ( where humidity > 20 ) from conditions
+ group by time_bucket('1week', timec) , location WITH NO DATA;
+ERROR:  aggregates with FILTER / DISTINCT / ORDER BY are not supported
+-- aggregate with filter in having clause
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select time_bucket('1week', timec), max(temperature)
+from conditions
+ group by time_bucket('1week', timec) , location
+ having sum(temperature) filter ( where humidity > 20 ) > 50 WITH NO DATA;
+ERROR:  aggregates with FILTER / DISTINCT / ORDER BY are not supported
 -- time_bucket on non partitioning column of hypertable
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select max(temperature)
 from conditions
  group by time_bucket('1week', timemeasure) , location WITH NO DATA;
 ERROR:  time bucket function must reference a hypertable dimension column
 --time_bucket on expression
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select max(temperature)
 from conditions
  group by time_bucket('1week', timec+ '10 minutes'::interval) , location WITH NO DATA;
 ERROR:  time bucket function must reference a hypertable dimension column
 --multiple time_bucket functions
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select max(temperature)
 from conditions
  group by time_bucket('1week', timec) , time_bucket('1month', timec), location WITH NO DATA;
 ERROR:  continuous aggregate view cannot contain multiple time bucket functions
 --time_bucket using additional args
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select max(temperature)
 from conditions
  group by time_bucket( INTERVAL '5 minutes', timec, INTERVAL '-2.5 minutes') , location WITH NO DATA;
 ERROR:  continuous aggregate view must include a valid time bucket function
 --time_bucket using non-const for first argument
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select max(temperature)
 from conditions
  group by time_bucket( timeinterval, timec) , location WITH NO DATA;
 ERROR:  only immutable expressions allowed in time bucket function
 HINT:  Use an immutable expression as first argument to the time bucket function.
+-- ordered set aggr
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select mode() within group( order by humidity)
+from conditions
+ group by time_bucket('1week', timec)  WITH NO DATA;
+ERROR:  aggregates with FILTER / DISTINCT / ORDER BY are not supported
 --window function
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select avg(temperature) over( order by humidity)
 from conditions
  WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 DETAIL:  Window functions are not supported by continuous aggregates.
---aggregate without combine function but stable function
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+--aggregate without combine function
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select json_agg(location)
 from conditions
  group by time_bucket('1week', timec) , location WITH NO DATA;
-ERROR:  only immutable functions supported in continuous aggregate view
-HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
+ERROR:  aggregates which are not parallelizable are not supported
+;
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select sum(humidity), avg(temperature), array_agg(location)
+from conditions
+ group by time_bucket('1week', timec) , location WITH NO DATA;
+ERROR:  aggregates which are not parallelizable are not supported
+;
+-- userdefined aggregate without combine function
+CREATE AGGREGATE newavg (
+   sfunc = int4_avg_accum, basetype = int4, stype = _int8,
+   finalfunc = int8_avg,
+   initcond1 = '{0,0}'
+);
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select sum(humidity), newavg(temperature::int4)
+from conditions
+ group by time_bucket('1week', timec) , location WITH NO DATA;
+ERROR:  aggregates which are not parallelizable are not supported
 ;
 -- using subqueries
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from
@@ -147,7 +195,7 @@ from
 from conditions ) q
  group by time_bucket('1week', timec) , location  WITH NO DATA;
 ERROR:  invalid continuous aggregate view
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 select * from
 ( Select sum(humidity), avg(temperature::int4)
@@ -156,7 +204,7 @@ from conditions
 ERROR:  invalid continuous aggregate query
 HINT:  Include at least one aggregate function and a GROUP BY clause with time bucket.
 --using limit /limit offset
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -165,7 +213,7 @@ limit 10  WITH NO DATA;
 ERROR:  invalid continuous aggregate query
 DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates.
 HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -175,7 +223,7 @@ ERROR:  invalid continuous aggregate query
 DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous aggregates.
 HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
 --using ORDER BY in view defintion
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -185,7 +233,7 @@ ERROR:  invalid continuous aggregate query
 DETAIL:  ORDER BY is not supported in queries defining continuous aggregates.
 HINT:  Use ORDER BY clauses in SELECTS from the continuous aggregate view instead.
 --using FETCH
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -196,28 +244,28 @@ DETAIL:  LIMIT and LIMIT OFFSET are not supported in queries defining continuous
 HINT:  Use LIMIT and LIMIT OFFSET in SELECTS from the continuous aggregate view instead.
 --using locking clauses FOR clause
 --all should be disabled. we cannot guarntee locks on the hypertable
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 FOR KEY SHARE WITH NO DATA;
 ERROR:  FOR KEY SHARE is not allowed with GROUP BY clause
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 FOR SHARE WITH NO DATA;
 ERROR:  FOR SHARE is not allowed with GROUP BY clause
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
  group by time_bucket('1week', timec) , location
 FOR UPDATE WITH NO DATA;
 ERROR:  FOR UPDATE is not allowed with GROUP BY clause
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -225,7 +273,7 @@ from conditions
 FOR NO KEY UPDATE WITH NO DATA;
 ERROR:  FOR NO KEY UPDATE is not allowed with GROUP BY clause
 --tablesample clause
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions tablesample bernoulli(0.2)
@@ -233,14 +281,14 @@ from conditions tablesample bernoulli(0.2)
  WITH NO DATA;
 ERROR:  invalid continuous aggregate view
 -- ONLY in from clause
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from ONLY conditions
  group by time_bucket('1week', timec) , location  WITH NO DATA;
 ERROR:  invalid continuous aggregate view
 --grouping sets and variants
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -248,7 +296,7 @@ from conditions
 ERROR:  invalid continuous aggregate query
 DETAIL:  GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by continuous aggregates
 HINT:  Define multiple continuous aggregates with different grouping levels.
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), avg(temperature::int4)
 from conditions
@@ -259,21 +307,29 @@ HINT:  Define multiple continuous aggregates with different grouping levels.
 --NO immutable functions -- check all clauses
 CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql'
        STABLE AS 'SELECT $1 + 10';
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum(humidity), max(timec + INTERVAL '1h')
 from conditions
 group by time_bucket('1week', timec) , location   WITH NO DATA;
 ERROR:  only immutable functions supported in continuous aggregate view
 HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+AS
+Select sum(humidity), min(location)
+from conditions
+group by time_bucket('1week', timec)
+having  max(timec + INTERVAL '1h') > '2010-01-01 09:00:00-08' WITH NO DATA;
+ERROR:  only immutable functions supported in continuous aggregate view
+HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum( test_stablefunc(humidity::int) ), min(location)
 from conditions
 group by time_bucket('1week', timec) WITH NO DATA;
 ERROR:  only immutable functions supported in continuous aggregate view
 HINT:  Make sure all functions in the continuous aggregate definition have IMMUTABLE volatility. Note that functions or expressions may be IMMUTABLE for one data type, but STABLE or VOLATILE for another.
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum( temperature ), min(location)
 from conditions
@@ -306,7 +362,7 @@ SELECT set_integer_now_func('rowsec_tab', 'integer_now_test');
 
 alter table rowsec_tab ENABLE ROW LEVEL SECURITY;
 create policy rowsec_tab_allview ON rowsec_tab FOR SELECT USING(true);
-CREATE MATERIALIZED VIEW mat_m1 WITH ( timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
 AS
 Select sum( b), min(c)
 from rowsec_tab
@@ -638,7 +694,3 @@ FROM
       AND uncompress.table_name = 'comp_ht_test') \gset
 CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
 ERROR:  hypertable is an internal compressed hypertable
---TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
---Check error handling for this case
-SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;
-ERROR:  compression not enabled on "i2980"

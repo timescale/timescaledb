@@ -17,7 +17,6 @@ CREATE TABLE decompress_phv_ping (
 );
 SELECT table_name FROM create_hypertable('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
      table_name      
----------------------
  decompress_phv_ping
 (1 row)
 
@@ -29,7 +28,6 @@ ALTER TABLE decompress_phv_ping SET (timescaledb.compress, timescaledb.compress_
 SELECT count(*) AS compressed
 FROM ( select compress_chunk(i) FROM show_chunks('decompress_phv_ping') i ) q;
  compressed 
-------------
           2
 (1 row)
 
@@ -91,7 +89,6 @@ FROM
   create_hypertable('tickers', 'time');
 NOTICE:  adding not-null constraint to column "time"
  table_name 
-------------
  tickers
 (1 row)
 
@@ -113,7 +110,6 @@ FROM
 GROUP BY
   tableoid;
             substr             
--------------------------------
  _timescaledb_internal._hyper_
 (1 row)
 

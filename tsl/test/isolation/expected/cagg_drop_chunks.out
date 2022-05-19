@@ -21,7 +21,7 @@ created
 t      
 (1 row)
 
-step T1_select: SELECT * FROM cond_summary;
+step T1_select: SELECT * FROM cond_summary ORDER BY bucket;
 bucket                      |avg_temp
 ----------------------------+--------
 Fri Nov 30 16:00:00 2018 PST|       0
@@ -58,13 +58,13 @@ count
 
 step T2_insert_2: <... completed>
 step T1_refresh: CALL refresh_continuous_aggregate('cond_summary', NULL, NULL);
-step T1_select: SELECT * FROM cond_summary;
+step T1_select: SELECT * FROM cond_summary ORDER BY bucket;
 bucket                      |avg_temp
 ----------------------------+--------
 Fri Nov 30 16:00:00 2018 PST|     100
 Sat Dec 01 16:00:00 2018 PST|     100
-Tue Dec 04 16:00:00 2018 PST|      10
 Sun Dec 02 16:00:00 2018 PST|      50
 Mon Dec 03 16:00:00 2018 PST|      10
+Tue Dec 04 16:00:00 2018 PST|      10
 (5 rows)
 

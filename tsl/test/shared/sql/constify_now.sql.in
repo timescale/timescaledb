@@ -104,3 +104,12 @@ SET timescaledb.current_timestamp_mock TO '3002-01-01';
 EXECUTE p1;
 
 DROP TABLE prep_const_now;
+
+-- test outer var references dont trip up constify_now
+-- no optimization is done in this case
+:PREFIX SELECT * FROM
+  metrics_tstz m1
+  INNER JOIN metrics_tstz as m2 on (true)
+WHERE
+  EXISTS (SELECT * FROM metrics_tstz AS m3 WHERE m2.time > now());
+

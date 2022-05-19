@@ -105,3 +105,83 @@ ANALYZE _timescaledb_catalog.continuous_agg;
 
 DROP PROCEDURE timescaledb_experimental.move_chunk(REGCLASS, NAME, NAME, NAME);
 DROP PROCEDURE timescaledb_experimental.copy_chunk(REGCLASS, NAME, NAME, NAME);
+
+DROP FUNCTION IF EXISTS timescaledb_experimental.subscription_exec(TEXT);
+
+DROP FUNCTION _timescaledb_internal.create_compressed_chunk(REGCLASS, REGCLASS,
+	BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
+--
+-- Rebuild the catalog table `_timescaledb_catalog.chunk_copy_operation`
+--
+-- We need to recreate the catalog from scratch because when we drop a column
+-- Postgres mark the `pg_attribute.attisdropped=TRUE` instead of removing it from
+-- the `pg_catalog.pg_attribute` table.
+--
+-- If we downgrade and upgrade the extension without rebuild the catalog table it
+-- will mess with `pg_attribute.attnum` and we will end up with issues when trying
+-- to update data in those catalog tables.
+
+ALTER TABLE _timescaledb_catalog.chunk_copy_operation
+	DROP COLUMN compress_chunk_name;
+
+CREATE TABLE _timescaledb_catalog._tmp_chunk_copy_operation (
+    LIKE _timescaledb_catalog.chunk_copy_operation
+    INCLUDING ALL
+    EXCLUDING INDEXES
+    EXCLUDING CONSTRAINTS
+);
+
+INSERT INTO _timescaledb_catalog._tmp_chunk_copy_operation
+    SELECT
+        operation_id,
+        backend_pid,
+        completed_stage,
+        time_start,
+        chunk_id,
+        source_node_name,
+        dest_node_name,
+        delete_on_source_node
+    FROM
+        _timescaledb_catalog.chunk_copy_operation
+    ORDER BY
+        operation_id;
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+
+DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+
+CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
+    LIKE _timescaledb_catalog._tmp_chunk_copy_operation
+    INCLUDING ALL
+    EXCLUDING INDEXES
+    EXCLUDING CONSTRAINTS
+);
+
+-- Create a new table to void doing rename operation on the tmp table
+--
+INSERT INTO _timescaledb_catalog.chunk_copy_operation
+    SELECT
+        operation_id,
+        backend_pid,
+        completed_stage,
+        time_start,
+        chunk_id,
+        source_node_name,
+        dest_node_name,
+        delete_on_source_node
+    FROM
+        _timescaledb_catalog._tmp_chunk_copy_operation
+    ORDER BY
+        operation_id;
+
+DROP TABLE _timescaledb_catalog._tmp_chunk_copy_operation;
+
+ALTER TABLE _timescaledb_catalog.chunk_copy_operation
+    ADD CONSTRAINT chunk_copy_operation_pkey PRIMARY KEY (operation_id),
+    ADD CONSTRAINT chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
+
+GRANT SELECT ON TABLE _timescaledb_catalog.chunk_copy_operation TO PUBLIC;
+
+ANALYZE _timescaledb_catalog.chunk_copy_operation;

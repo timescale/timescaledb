@@ -174,7 +174,7 @@ CREATE TABLE "hyper_copy" (
     "time" bigint NOT NULL,
     "value" double precision NOT NULL
 );
-SELECT create_hypertable('hyper_copy', 'time', chunk_time_interval => 10);
+SELECT create_hypertable('hyper_copy', 'time', chunk_time_interval => 2);
     create_hypertable    
 -------------------------
  (6,public,hyper_copy,t)
@@ -240,6 +240,15 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
    125
+(1 row)
+
+-- Insert data into the chunks in random order
+COPY hyper_copy FROM STDIN DELIMITER ',' NULL AS 'null';
+DEBUG:  Using optimized multi-buffer copy operation (CIM_MULTI_CONDITIONAL).
+SELECT count(*) FROM hyper_copy;
+ count 
+-------
+   154
 (1 row)
 
 RESET client_min_messages;
