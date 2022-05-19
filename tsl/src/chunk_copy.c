@@ -61,6 +61,7 @@
 #define CCS_ATTACH_CHUNK "attach_chunk"
 #define CCS_ATTACH_COMPRESSED_CHUNK "attach_compressed_chunk"
 #define CCS_DELETE_CHUNK "delete_chunk"
+#define CCS_COMPLETE "complete"
 
 typedef struct ChunkCopyStage ChunkCopyStage;
 typedef struct ChunkCopy ChunkCopy;
@@ -1025,6 +1026,9 @@ static const ChunkCopyStage chunk_copy_stages[] = {
 	 */
 	{ CCS_DELETE_CHUNK, chunk_copy_stage_delete_chunk, NULL },
 
+	/* Operation complete */
+	{ CCS_COMPLETE, NULL, NULL },
+
 	/* Done Marker */
 	{ NULL, NULL, NULL }
 };
@@ -1044,7 +1048,9 @@ chunk_copy_execute(ChunkCopy *cc)
 		SPI_start_transaction();
 
 		cc->stage = stage;
-		cc->stage->function(cc);
+
+		if (cc->stage->function)
+			cc->stage->function(cc);
 
 		/* Mark current stage as completed and update the catalog */
 		chunk_copy_operation_update(cc);
@@ -1230,6 +1236,13 @@ chunk_copy_cleanup(const char *operation_id)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid chunk copy operation identifier. Entry not found")));
+
+	/* If it's a completed operation, return immediately after deleting catalog entry */
+	if (namestrcmp(&cc->fd.completed_stage, CCS_COMPLETE) == 0)
+	{
+		chunk_copy_operation_delete_by_id(NameStr(cc->fd.operation_id));
+		return;
+	}
 
 	/* Identify the last completed stage for this activity. */
 	stage_idx = 0;
