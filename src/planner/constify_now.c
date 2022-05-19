@@ -60,6 +60,8 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	 * because that will be the time column.
 	 */
 	Var *var = linitial_node(Var, op->args);
+	if (var->varlevelsup != 0)
+		return false;
 	Assert(var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 
