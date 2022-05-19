@@ -8,7 +8,7 @@ use warnings;
 use AccessNode;
 use DataNode;
 use TestLib;
-use Test::More tests => 274;
+use Test::More tests => 283;
 
 #Initialize all the multi-node instances
 my $an  = AccessNode->create('an');
@@ -83,6 +83,11 @@ while ($curr_index < $arrSize)
 	$curr_index++;
 }
 
+#_timescaledb_catalog.chunk_copy_operation catalog should be empty due to the cleanup above
+$an->psql_is(
+	'postgres', "SELECT * from _timescaledb_catalog.chunk_copy_operation",
+	"",         "AN catalog is empty as expected");
+
 for my $node ($an, $dn1, $dn2)
 {
 	$node->safe_psql('postgres', "CREATE ROLE testrole LOGIN");
@@ -123,6 +128,22 @@ $an->safe_psql('postgres',
 $an->safe_psql('postgres',
 	"SET ROLE testrole; CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> 'dn1', destination_node => 'dn2')"
 );
+
+#An entry for the above move should exist with "complete" stage in the catalog now
+$an->psql_is(
+	'postgres',
+	"SELECT operation_id, completed_stage, source_node_name, dest_node_name, delete_on_source_node from _timescaledb_catalog.chunk_copy_operation",
+	"ts_copy_1_1|complete|dn1|dn2|t",
+	"AN catalog is as expected");
+
+#Run cleanup on this operstion. It should just delete the catalog entry since the
+#activity has completed successfully. Rest of the checks below should succeed
+$an->safe_psql('postgres',
+	"CALL timescaledb_experimental.cleanup_copy_chunk_operation(operation_id=>'ts_copy_1_1');"
+);
+$an->psql_is(
+	'postgres', "SELECT * from _timescaledb_catalog.chunk_copy_operation",
+	"",         "AN catalog is empty as expected");
 
 #Query datanode1 after the above move
 $dn1->psql_is(
