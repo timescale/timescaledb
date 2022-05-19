@@ -293,7 +293,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 	if (node == NULL)
 		return false;
 
-	if (ts_guc_enable_now_constify && IsA(node, FromExpr))
+	if (IsA(node, FromExpr) && ts_guc_enable_optimizations && ts_guc_enable_now_constify)
 	{
 		FromExpr *from = castNode(FromExpr, node);
 		if (from->quals)
