@@ -96,3 +96,30 @@ UPDATE pg_class cl SET relacl = tmpacl
   FROM to_update WHERE cl.oid = to_update.oid;
 
 DROP TABLE _timescaledb_internal.saved_privs;
+
+-- warn about partial storage format change for numeric
+DO $$
+DECLARE
+  cagg_name text;
+  cagg_column text;
+  cnt int := 0;
+BEGIN
+  IF current_setting('server_version_num')::int <  140000 THEN
+    FOR cagg_name, cagg_column IN
+      SELECT
+        attrelid::regclass::text,
+        att.attname
+      FROM _timescaledb_catalog.continuous_agg cagg
+      INNER JOIN pg_attribute att ON (
+        att.attrelid = format('%I.%I',cagg.user_view_schema,cagg.user_view_name)::regclass AND
+        atttypid = 'numeric'::regtype)
+      WHERE cagg.finalized = false
+    LOOP
+      RAISE WARNING 'Continuous Aggregate: % column: %', cagg_name, cagg_column;
+      cnt := cnt + 1;
+    END LOOP;
+    IF cnt > 0 THEN
+      RAISE WARNING 'The aggregation state format for numeric changed between PG13 and PG14. You should upgrade the above mentioned caggs to the new format before upgrading to PG14';
+    END IF;
+  END IF;
+END $$;
