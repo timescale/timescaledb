@@ -72,6 +72,7 @@
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "reorder.h"
+#include "debug_assert.h"
 
 static void reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 						Oid destination_tablespace, Oid index_tablespace);
@@ -334,8 +335,8 @@ tsl_subscription_exec(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("error in subscription cmd \"%s\"", subscription_cmd))));
 
-	res = SPI_finish();
-	Assert(res == SPI_OK_FINISH);
+	if ((res = SPI_finish()) != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 
 	/* Restore the earlier user */
 	SetUserIdAndSecContext(save_userid, save_sec_context);

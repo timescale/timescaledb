@@ -62,6 +62,7 @@
 #include "license_guc.h"
 #include "cross_module_fn.h"
 #include "scan_iterator.h"
+#include "debug_assert.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -2889,14 +2890,17 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
-	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == ts_dimension_get_partition_type(dim));
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == ts_dimension_get_partition_type(dim),
+		   "partition types for result (%d) and dimension (%d) do not match",
+		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
+		   ts_dimension_get_partition_type(dim));
 	maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
 
 	if (isnull)
 		*isnull = max_isnull;
 
-	res = SPI_finish();
-	Assert(res == SPI_OK_FINISH);
+	if ((res = SPI_finish()) != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 
 	return maxdat;
 }

@@ -11,6 +11,7 @@
 #include <fmgr.h>
 
 #include "debug_guc.h"
+#include "debug_assert.h"
 
 TSDLLEXPORT DebugOptimizerFlags ts_debug_optimizer_flags;
 
@@ -112,7 +113,7 @@ set_debug_flag(const char *flag_string, size_t length, DebugOptimizerFlags *flag
 
 	if ((end = strchr(flag_string, '=')) != NULL)
 	{
-		Assert(end - flag_string >= 0);
+		Ensure(end - flag_string >= 0, "bad flag string format \"%s\"", flag_string);
 		flag_length = end - flag_string;
 	}
 	else
@@ -204,7 +205,7 @@ debug_optimizer_flags_assign(const char *newval, void *extra)
 
 	if (!parse_optimizer_flags(newval, &ts_debug_optimizer_flags))
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot parse \"%s\" as debug optimizer flags", newval)));
 }
 
