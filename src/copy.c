@@ -220,6 +220,17 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 	if (miinfo->bufferedTuples >= MAX_BUFFERED_TUPLES ||
 		miinfo->bufferedBytes >= MAX_BUFFERED_BYTES)
 		return true;
+
+	if (list_length(miinfo->multiInsertBuffers) >= ts_guc_max_open_chunks_per_insert)
+	{
+		/*
+		 * Flushing each multi-insert buffer will require looking up the
+		 * corresponding chunk insert state in the cache, so don't accumulate
+		 * more inserts than the cache can fit, to avoid thrashing.
+		 */
+		return true;
+	}
+
 	return false;
 }
 
@@ -797,12 +808,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_instead_row);
 
 	/* Depending on the configured trigger, enable or disable the multi-insert buffers */
-	if (true)
-	{
-		/* FIXME Disabled multi-inserts until the fix. */
-		insertMethod = CIM_SINGLE;
-	}
-	else if (has_before_insert_row_trig || has_instead_insert_row_trig)
+	if (has_before_insert_row_trig || has_instead_insert_row_trig)
 	{
 		insertMethod = CIM_SINGLE;
 		ereport(DEBUG1,

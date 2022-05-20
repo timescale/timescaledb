@@ -459,13 +459,10 @@ ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice, Ch
 											MemoryContext mctx)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
-	int count = 0;
-
 	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, slice->fd.id);
 
 	ts_scanner_foreach(&iterator)
 	{
-		ChunkStub *stub;
 		ChunkScanEntry *entry;
 		bool found;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
@@ -476,59 +473,33 @@ ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice, Ch
 						   Anum_chunk_constraint_dimension_slice_id))
 			continue;
 
-		count++;
-
 		Assert(!slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id));
 
 		entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
 
 		if (!found)
 		{
-			stub = ts_chunk_stub_create(chunk_id, 0);
-			stub->constraints = (ChunkConstraints *) palloc0(sizeof(ChunkConstraints));
-			entry->stub = stub;
+			entry->stub = NULL;
 			entry->num_dimension_constraints = 0;
-		}
-		else
-		{
-			stub = entry->stub;
 		}
 
 		/*
-		 * We have only te dimension constraints here, because we're searching
+		 * We have only the dimension constraints here, because we're searching
 		 * by dimension slice id. See the assert above.
 		 */
 		entry->num_dimension_constraints++;
-
-		bool should_free;
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-
-//		bool nulls[Natts_chunk_constraint];
-//		Datum values[Natts_chunk_constraint];
-//
-//		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-//
-//		ts_chunk_constraints_add_from_values(stub->constraints, values, nulls);
-
-		if (should_free)
-			heap_freetuple(tuple);
 
 		/* A stub is complete when we've added slices for all its dimensions,
 		 * i.e., a complete hypercube */
 		if(entry->num_dimension_constraints == ctx->space->num_dimensions)
 		{
-			ctx->num_complete_chunks++;
-
-			entry->stub->constraints->num_dimension_constraints = entry->num_dimension_constraints;
-
-			if (ctx->early_abort)
-			{
-				ts_scan_iterator_close(&iterator);
-				break;
-			}
+			Assert(ctx->early_abort);
+			ts_scan_iterator_close(&iterator);
+			return entry->chunk_id;
 		}
 	}
-	return count;
+
+	return 0;
 }
 /*
  * Scan for all chunk constraints that match the given slice ID. The chunk

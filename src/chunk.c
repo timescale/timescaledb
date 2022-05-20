@@ -1709,19 +1709,24 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, const Dimension
 	}
 }
 
-static inline void
+static inline int
 dimension_slice_and_chunk_constraint_join_lite(ChunkScanCtx *scanctx, const DimensionVec *vec)
 {
-	int i;
-
-	for (i = 0; i < vec->num_slices; i++)
+	for (int i = 0; i < vec->num_slices; i++)
 	{
 		/*
 		 * For each dimension slice, find matching constraints. These will be
 		 * saved in the scan context
 		 */
-		ts_chunk_constraint_scan_by_dimension_slice_lite(vec->slices[i], scanctx, CurrentMemoryContext);
+		int found_chunk_id = ts_chunk_constraint_scan_by_dimension_slice_lite(vec->slices[i], scanctx, CurrentMemoryContext);
+
+		if (found_chunk_id != 0)
+		{
+			return found_chunk_id;
+		}
 	}
+
+	return 0;
 }
 
 /*
@@ -2035,11 +2040,29 @@ chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slice
 	return chunk;
 }
 
+static int
+compare_slices(const void *left, const void *right)
+{
+	const DimensionSlice *left_slice = *((DimensionSlice **) left);
+	const DimensionSlice *right_slice = *((DimensionSlice **) right);
+
+	int res = VALUE_CMP(left_slice->fd.id, right_slice->fd.id);
+
+	if (res == 0)
+		res = DIMENSION_SLICE_RANGE_START_CMP(left_slice, right_slice);
+
+	if (res == 0)
+		res = DIMENSION_SLICE_RANGE_END_CMP(left_slice, right_slice);
+
+	return res;
+}
+
 static Chunk *
 chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 {
-	ChunkStub *stub;
-	Chunk *chunk = NULL;
+	Assert(lock_slices);
+
+	int chunk_id = 0;
 	ChunkScanCtx ctx;
 
 	/* The scan context will keep the state accumulated during the scan */
@@ -2049,40 +2072,52 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 	ctx.early_abort = true;
 
 	/* Scan all dimensions for slices enclosing the point */
-	for (int i = 0; i < ctx.space->num_dimensions; i++)
+	DimensionVec *all_slices = ts_dimension_vec_create(ctx.space->num_dimensions);
+	for (int dimension_index = 0; dimension_index < ctx.space->num_dimensions; dimension_index++)
 	{
-		ScanTupLock tuplock = {
-			.lockmode = LockTupleKeyShare,
-			.waitpolicy = LockWaitBlock,
-		};
-
-		DimensionVec *vec  = ts_dimension_slice_scan_limit(ctx.space->dimensions[i].fd.id,
-														   p->coordinates[i],
-														   /* limit = */ 0,
-														   lock_slices ? &tuplock : NULL);
-
-		dimension_slice_and_chunk_constraint_join_lite(&ctx, vec);
+		ts_dimension_slice_scan_lite(ctx.space->dimensions[dimension_index].fd.id,
+		   p->coordinates[dimension_index],
+		   all_slices);
 	}
 
-	/* Find the stub that has N matching dimension constraints */
-	stub = chunk_scan_ctx_get_chunk_stub(&ctx);
+	/* Sort the dimensions before locking constraints to avoid deadlocks.
+	 * -- probably not needed. */
+	pg_qsort(all_slices->slices, all_slices->num_slices,
+		sizeof(all_slices->slices[0]), compare_slices);
+
+	/* Find constraints matching dimension slices. */
+	for (int slice_index = 0; slice_index < all_slices->num_slices; slice_index++)
+	{
+		chunk_id = ts_chunk_constraint_scan_by_dimension_slice_lite(
+			all_slices->slices[slice_index],
+			&ctx, CurrentMemoryContext);
+
+		if (chunk_id != 0)
+		{
+			break;
+		}
+	}
 
 	chunk_scan_ctx_destroy(&ctx);
 
-	if (NULL != stub)
+	if (chunk_id == 0)
 	{
-		chunk = ts_chunk_get_by_id(stub->id, /* fail_if_not_found = */ true);
+		return NULL;
 	}
 
-	ASSERT_IS_NULL_OR_VALID_CHUNK(chunk);
-
-	return chunk;
+	return ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ true);
 }
 
 Chunk *
 ts_chunk_find(const Hypertable *ht, const Point *p, bool lock_slices)
 {
-	return chunk_find_lite(ht, p, lock_slices);
+	Assert(lock_slices);
+
+	Chunk *res1 =  chunk_find(ht, p, false, lock_slices);
+
+	//Chunk *res2 = chunk_find_lite(ht, p, lock_slices);
+
+	return res1;
 }
 
 /*
