@@ -109,7 +109,7 @@
 		{                                                                                          \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
-					 errmsg(" bad materialization internal name")));                               \
+					 errmsg("bad materialization internal name")));                                \
 		}                                                                                          \
 	} while (0);
 

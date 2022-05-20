@@ -6,6 +6,7 @@
 #include <postgres.h>
 
 #include "conn_internal.h"
+#include "debug_assert.h"
 
 static ConnOps *conn_ops[_CONNECTION_MAX] = { NULL };
 
@@ -46,7 +47,7 @@ ts_connection_create(ConnectionType type)
 
 	conn = connection_internal_create(type, conn_ops[type]);
 
-	Assert(NULL != conn);
+	Ensure(conn, "unable to create connection");
 
 	if (NULL != conn->ops->init)
 		if (conn->ops->init(conn) < 0)

@@ -23,6 +23,7 @@
 #include "telemetry/telemetry_metadata.h"
 #endif
 #include "utils/uuid.h"
+#include "debug_assert.h"
 
 static Datum dist_util_remote_srf_query(FunctionCallInfo fcinfo, const char *node_name,
 										const char *sql_query);
@@ -206,7 +207,8 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 	/* Strict function */
 	Name schema_name = PG_GETARG_NAME(1);
 	Name table_name = PG_GETARG_NAME(2);
-	Assert(!PG_ARGISNULL(0) && !PG_ARGISNULL(1) && !PG_ARGISNULL(2));
+	Ensure(!PG_ARGISNULL(0) && !PG_ARGISNULL(1) && !PG_ARGISNULL(2),
+		   "three non-null arguments required");
 	appendStringInfo(query_str,
 					 "SELECT * from _timescaledb_internal.hypertable_local_size( %s, %s );",
 					 quote_literal_cstr(NameStr(*schema_name)),
@@ -333,7 +335,7 @@ dist_util_is_compatible_version(const char *data_node_version, const char *acces
 	unsigned int data_node_major, data_node_minor, data_node_patch;
 	unsigned int access_node_major, access_node_minor, access_node_patch;
 
-	Assert(data_node_version);
+	Ensure(data_node_version, "missing data node version when checking compatibility");
 
 	if (sscanf(data_node_version,
 			   "%u.%u.%u",

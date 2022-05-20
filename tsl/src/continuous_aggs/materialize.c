@@ -114,8 +114,8 @@ continuous_agg_update_materialization(SchemaAndName partial_view,
 									chunk_id);
 	}
 
-	res = SPI_finish();
-	Assert(res == SPI_OK_FINISH);
+	if ((res = SPI_finish()) != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 }
 
 static bool

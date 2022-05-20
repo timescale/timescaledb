@@ -3472,7 +3472,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 			case AT_SetRelOptions:
 				if (!IsA(cmd->def, List))
 					ereport(ERROR,
-							(errcode(ERRCODE_INTERNAL_ERROR),
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("expected set options to contain a list")));
 				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				break;
