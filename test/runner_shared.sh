@@ -82,6 +82,7 @@ ${PSQL} -U ${TEST_PGUSER} \
                -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
                -e 's!^ \{1,\}QUERY PLAN \{1,\}$!QUERY PLAN!' \
                -e '/^-\{1,\}$/d' \
+               -e 's!\(_timescaledb_internal.chunks_in([^,]\{1,\}, ARRAY\[\)[^]]\{1,\}\]!\1..]!' \
                -e 's! Memory: [0-9]\{1,\}kB!!' \
                -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
                -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \

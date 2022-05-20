@@ -100,8 +100,9 @@ SELECT attach_tablespace('tablespace1', 'tspace_1dim');
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
---should work fine now
-SELECT attach_tablespace('tablespace1', 'tspace_1dim');
+--should work fine now. Test SELECT INTO utility statements to ensure
+--internal alter table function call works with event triggers.
+SELECT true INTO attached FROM attach_tablespace('tablespace1', 'tspace_1dim');
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
 -- Tablespace for tspace_1dim should be set and attached
 SELECT * FROM hypertable_tablespaces WHERE hypertable = 'tspace_1dim';
@@ -133,7 +134,8 @@ SELECT detach_tablespace('tablespace1', 'tspace_2dim');
 --detach tablespace1 from all tables. Should only detach from
 --'tspace_1dim' (1 tablespace) due to lack of permissions
 SELECT * FROM hypertable_tablespaces;
-SELECT detach_tablespace('tablespace1');
+SELECT * INTO detached FROM detach_tablespace('tablespace1');
+SELECT * FROM detached;
 SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');
@@ -164,7 +166,8 @@ SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 
 --set other user should make detach work
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT detach_tablespaces('tspace_2dim');
+SELECT * INTO detached_all FROM detach_tablespaces('tspace_2dim');
+SELECT * FROM detached_all;
 SELECT * FROM _timescaledb_catalog.tablespace;
 SELECT * FROM show_tablespaces('tspace_1dim');
 SELECT * FROM show_tablespaces('tspace_2dim');

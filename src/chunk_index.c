@@ -1060,7 +1060,7 @@ chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
 	cmd->name = tablespace;
 	cmds = lappend(cmds, cmd);
 
-	AlterTableInternal(indexrelid, cmds, false);
+	ts_alter_table_with_event_trigger(indexrelid, NULL, cmds, false);
 
 	if (should_free)
 		heap_freetuple(tuple);
@@ -1294,7 +1294,7 @@ ts_chunk_index_move_all(Oid chunk_relid, Oid index_tblspc)
 	foreach (lc, indexlist)
 	{
 		Oid chunk_idxoid = lfirst_oid(lc);
-		AlterTableInternal(chunk_idxoid, list_make1(&cmd), false);
+		ts_alter_table_with_event_trigger(chunk_idxoid, NULL, list_make1(&cmd), false);
 	}
 	table_close(chunkrel, AccessShareLock);
 }

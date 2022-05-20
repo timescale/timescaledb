@@ -29,7 +29,7 @@ QUERY PLAN
          Data node: data_node_1
          Fetcher Type: Row by row
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT NULL FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27]) LIMIT 1
+         Remote SQL: SELECT NULL FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) LIMIT 1
 (8 rows)
 
 set timescaledb.remote_data_fetcher = 'cursor';
@@ -56,7 +56,7 @@ QUERY PLAN
                Data node: data_node_1
                Fetcher Type: Cursor
                Chunks: _dist_hyper_X_X_chunk
-               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
          ->  Materialize (actual rows=5 loops=1)
                Output: t2.id
                ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2 (actual rows=5 loops=1)
@@ -64,7 +64,7 @@ QUERY PLAN
                      Data node: data_node_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[27])
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
 (20 rows)
 
 -- This query can't work with rowbyrow fetcher.
@@ -128,6 +128,6 @@ QUERY PLAN
    Data node: data_node_2
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk
-   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[20])
+   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[..])
 (6 rows)
 

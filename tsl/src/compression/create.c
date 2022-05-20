@@ -370,7 +370,7 @@ modify_compressed_toast_table_storage(CompressColInfo *cc, Oid compress_relid)
 	}
 	if (cmds != NIL)
 	{
-		AlterTableInternal(compress_relid, cmds, false);
+		ts_alter_table_with_event_trigger(compress_relid, NULL, cmds, false);
 	}
 }
 
@@ -527,7 +527,7 @@ set_toast_tuple_target_on_compressed(Oid compressed_table_id)
 		.subtype = AT_SetRelOptions,
 		.def = (Node *) list_make1(&def_elem),
 	};
-	AlterTableInternal(compressed_table_id, list_make1(&cmd), true);
+	ts_alter_table_with_event_trigger(compressed_table_id, NULL, list_make1(&cmd), true);
 }
 
 static int32
@@ -963,7 +963,7 @@ add_column_to_compression_table(Hypertable *compress_ht, CompressColInfo *compre
 	addcol_cmd->missing_ok = false;
 
 	/* alter the table and add column */
-	AlterTableInternal(compress_relid, list_make1(addcol_cmd), true);
+	ts_alter_table_with_event_trigger(compress_relid, NULL, list_make1(addcol_cmd), true);
 	modify_compressed_toast_table_storage(compress_cols, compress_relid);
 }
 
@@ -982,7 +982,7 @@ drop_column_from_compression_table(Hypertable *compress_ht, char *name)
 	cmd->missing_ok = true;
 
 	/* alter the table and drop column */
-	AlterTableInternal(compress_relid, list_make1(cmd), true);
+	ts_alter_table_with_event_trigger(compress_relid, NULL, list_make1(cmd), true);
 }
 
 /*

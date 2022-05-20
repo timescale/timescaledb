@@ -4,6 +4,12 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER;
 
+-- A relatively big table on one data node
+CREATE TABLE metrics_dist_remote_error(LIKE metrics_dist);
+SELECT table_name FROM create_distributed_hypertable('metrics_dist_remote_error', 'time', 'device_id',
+    data_nodes => '{"data_node_1"}');
+INSERT INTO metrics_dist_remote_error SELECT * FROM metrics_dist ORDER BY random() LIMIT 20000;
+
 -- Create a function that raises an error every nth row.
 -- It's stable, takes a second argument and returns current number of rows,
 -- so that it is shipped to data nodes and not optimized out.
@@ -30,39 +36,42 @@ set client_min_messages to ERROR;
 set timescaledb.remote_data_fetcher = 'rowbyrow';
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
 
 set timescaledb.remote_data_fetcher = 'cursor';
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(1, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(1, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000, device_id)::int != 0;
 
 explain (analyze, verbose, costs off, timing off, summary off)
-select 1 from metrics_dist1 where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
+select 1 from metrics_dist_remote_error where ts_debug_shippable_fatal_after_n_rows(10000000, device_id)::int != 0;
+
+DROP TABLE metrics_dist_remote_error;
+

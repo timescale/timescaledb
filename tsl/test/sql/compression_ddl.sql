@@ -478,6 +478,11 @@ SELECT relname FROM pg_class
 WHERE reltablespace in 
   ( SELECT oid from pg_tablespace WHERE spcname = 'tablespace2') ORDER BY 1;
 
+-- test compress_chunk() with utility statement (SELECT ... INTO)
+SELECT compress_chunk(ch) INTO compressed_chunks FROM show_chunks('test2') ch;
+SELECT decompress_chunk(ch) INTO decompressed_chunks FROM show_chunks('test2') ch;
+
+-- compress again
 SELECT compress_chunk(ch) FROM show_chunks('test2') ch;
 
 -- the chunk, compressed chunk + index + toast tables are in tablespace2 now .

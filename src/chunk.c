@@ -624,6 +624,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 	TupleDesc tupleDesc = RelationGetDescr(ht_rel);
 	int natts = tupleDesc->natts;
 	int attno;
+	List *alter_cmds = NIL;
 
 	for (attno = 1; attno <= natts; attno++)
 	{
@@ -654,7 +655,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 			cmd->subtype = AT_SetOptions;
 			cmd->name = attributeName;
 			cmd->def = (Node *) untransformRelOptions(options);
-			AlterTableInternal(chunk_oid, list_make1(cmd), false);
+			alter_cmds = lappend(alter_cmds, cmd);
 		}
 
 		/*
@@ -674,11 +675,17 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 				cmd->subtype = AT_SetStatistics;
 				cmd->name = attributeName;
 				cmd->def = (Node *) makeInteger(target);
-				AlterTableInternal(chunk_oid, list_make1(cmd), false);
+				alter_cmds = lappend(alter_cmds, cmd);
 			}
 		}
 
 		ReleaseSysCache(tuple);
+	}
+
+	if (alter_cmds != NIL)
+	{
+		ts_alter_table_with_event_trigger(chunk_oid, NULL, alter_cmds, false);
+		list_free_deep(alter_cmds);
 	}
 }
 
@@ -1141,7 +1148,7 @@ chunk_table_drop_inherit(const Chunk *chunk, Hypertable *ht)
 		.missing_ok = false
 	};
 
-	AlterTableInternal(chunk->table_id, list_make1(&drop_inh_cmd), false);
+	ts_alter_table_with_event_trigger(chunk->table_id, NULL, list_make1(&drop_inh_cmd), false);
 }
 
 /*

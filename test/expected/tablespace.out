@@ -199,13 +199,9 @@ ERROR:  permission denied for tablespace "tablespace1" by table owner "default_p
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 GRANT CREATE ON TABLESPACE tablespace1 TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
---should work fine now
-SELECT attach_tablespace('tablespace1', 'tspace_1dim');
- attach_tablespace 
--------------------
- 
-(1 row)
-
+--should work fine now. Test SELECT INTO utility statements to ensure
+--internal alter table function call works with event triggers.
+SELECT true INTO attached FROM attach_tablespace('tablespace1', 'tspace_1dim');
 SELECT attach_tablespace('tablespace2', 'tspace_1dim');
  attach_tablespace 
 -------------------
@@ -283,8 +279,9 @@ SELECT * FROM hypertable_tablespaces;
  tspace_2dim | tablespace1
 (2 rows)
 
-SELECT detach_tablespace('tablespace1');
+SELECT * INTO detached FROM detach_tablespace('tablespace1');
 NOTICE:  tablespace "tablespace1" remains attached to 1 hypertable(s) due to lack of permissions
+SELECT * FROM detached;
  detach_tablespace 
 -------------------
                  1
@@ -369,7 +366,8 @@ ERROR:  cannot revoke privilege while tablespace "tablespace2" is attached to hy
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 --set other user should make detach work
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT detach_tablespaces('tspace_2dim');
+SELECT * INTO detached_all FROM detach_tablespaces('tspace_2dim');
+SELECT * FROM detached_all;
  detach_tablespaces 
 --------------------
                   2
