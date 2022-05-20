@@ -2488,7 +2488,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	remove_old_and_new_rte_from_query(direct_query);
 	CAggTimebucketInfo timebucket_exprinfo = cagg_validate_query(direct_query, finalized);
 
-	mattablecolumninfo_init(&mattblinfo, (finalized ? NIL : copyObject(direct_query->groupClause)));
+	mattablecolumninfo_init(&mattblinfo, copyObject(direct_query->groupClause));
 	fqi.finalized = finalized;
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
