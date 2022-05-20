@@ -149,6 +149,37 @@ lock_result_ok_or_abort(TupleInfo *ti)
 }
 
 static ScanTupleResult
+dimension_vec_tuple_found_lite(TupleInfo *ti, void *data)
+{
+	List **slices = data;
+	DimensionSlice *slice;
+	MemoryContext old;
+
+	switch (ti->lockresult)
+	{
+		case TM_SelfModified:
+		case TM_Ok:
+			break;
+		case TM_Deleted:
+		case TM_Updated:
+			/* Treat as not found */
+			return SCAN_CONTINUE;
+		default:
+			elog(ERROR, "unexpected tuple lock status: %d", ti->lockresult);
+			pg_unreachable();
+			break;
+	}
+
+	old = MemoryContextSwitchTo(ti->mctx);
+	slice = dimension_slice_from_slot(ti->slot);
+	Assert(NULL != slice);
+	*slices = lappend(*slices, slice);
+	MemoryContextSwitchTo(old);
+
+	return SCAN_CONTINUE;
+}
+
+static ScanTupleResult
 dimension_vec_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionVec **slices = data;
@@ -278,7 +309,7 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 
 void
 ts_dimension_slice_scan_lite(int32 dimension_id,
-	int64 coordinate, DimensionVec *dest)
+	int64 coordinate, List **dest)
 {
 	coordinate = REMAP_LAST_COORDINATE(coordinate);
 
@@ -311,8 +342,8 @@ ts_dimension_slice_scan_lite(int32 dimension_id,
 	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 										scankey,
 										3,
-										dimension_vec_tuple_found,
-										&dest,
+										dimension_vec_tuple_found_lite,
+										dest,
 										/* limit = */ 0,
 										AccessShareLock,
 										&tuplock,

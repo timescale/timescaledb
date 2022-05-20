@@ -2042,19 +2042,20 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 	ctx.early_abort = true;
 
 	/* Scan all dimensions for slices enclosing the point */
-	DimensionVec *all_slices = ts_dimension_vec_create(ctx.space->num_dimensions);
+	List *all_slices = NIL;
 	for (int dimension_index = 0; dimension_index < ctx.space->num_dimensions; dimension_index++)
 	{
 		ts_dimension_slice_scan_lite(ctx.space->dimensions[dimension_index].fd.id,
 		   p->coordinates[dimension_index],
-		   all_slices);
+		   &all_slices);
 	}
 
 	/* Find constraints matching dimension slices. */
-	for (int slice_index = 0; slice_index < all_slices->num_slices; slice_index++)
+	ListCell *lc;
+	foreach (lc, all_slices)
 	{
 		chunk_id = ts_chunk_constraint_scan_by_dimension_slice_lite(
-			all_slices->slices[slice_index],
+			(DimensionSlice *) lfirst(lc),
 			&ctx, CurrentMemoryContext);
 
 		if (chunk_id != 0)
@@ -2070,7 +2071,8 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 		return NULL;
 	}
 
-	return ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ true);
+	/* The chunk might be dropped, so we don't fail if we haven't found it. */
+	return ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
 }
 
 Chunk *
