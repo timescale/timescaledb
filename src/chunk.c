@@ -1709,26 +1709,6 @@ dimension_slice_and_chunk_constraint_join(ChunkScanCtx *scanctx, const Dimension
 	}
 }
 
-static inline int
-dimension_slice_and_chunk_constraint_join_lite(ChunkScanCtx *scanctx, const DimensionVec *vec)
-{
-	for (int i = 0; i < vec->num_slices; i++)
-	{
-		/*
-		 * For each dimension slice, find matching constraints. These will be
-		 * saved in the scan context
-		 */
-		int found_chunk_id = ts_chunk_constraint_scan_by_dimension_slice_lite(vec->slices[i], scanctx, CurrentMemoryContext);
-
-		if (found_chunk_id != 0)
-		{
-			return found_chunk_id;
-		}
-	}
-
-	return 0;
-}
-
 /*
  * Scan for the chunk that encloses the given point.
  *
@@ -2040,23 +2020,6 @@ chunk_find(const Hypertable *ht, const Point *p, bool resurrect, bool lock_slice
 	return chunk;
 }
 
-static int
-compare_slices(const void *left, const void *right)
-{
-	const DimensionSlice *left_slice = *((DimensionSlice **) left);
-	const DimensionSlice *right_slice = *((DimensionSlice **) right);
-
-	int res = VALUE_CMP(left_slice->fd.id, right_slice->fd.id);
-
-	if (res == 0)
-		res = DIMENSION_SLICE_RANGE_START_CMP(left_slice, right_slice);
-
-	if (res == 0)
-		res = DIMENSION_SLICE_RANGE_END_CMP(left_slice, right_slice);
-
-	return res;
-}
-
 static Chunk *
 chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 {
@@ -2079,11 +2042,6 @@ chunk_find_lite(const Hypertable *ht, const Point *p, bool lock_slices)
 		   p->coordinates[dimension_index],
 		   all_slices);
 	}
-
-	/* Sort the dimensions before locking constraints to avoid deadlocks.
-	 * -- probably not needed. */
-	pg_qsort(all_slices->slices, all_slices->num_slices,
-		sizeof(all_slices->slices[0]), compare_slices);
 
 	/* Find constraints matching dimension slices. */
 	for (int slice_index = 0; slice_index < all_slices->num_slices; slice_index++)
@@ -2112,12 +2070,7 @@ Chunk *
 ts_chunk_find(const Hypertable *ht, const Point *p, bool lock_slices)
 {
 	Assert(lock_slices);
-
-	Chunk *res1 =  chunk_find(ht, p, false, lock_slices);
-
-	//Chunk *res2 = chunk_find_lite(ht, p, lock_slices);
-
-	return res1;
+	return chunk_find_lite(ht, p, lock_slices);
 }
 
 /*

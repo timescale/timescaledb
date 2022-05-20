@@ -216,30 +216,17 @@ chunk_constraint_insert(ChunkConstraint *constraint)
 ChunkConstraint *
 ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
 {
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-
 	bool nulls[Natts_chunk_constraint];
 	Datum values[Natts_chunk_constraint];
-
-	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-	ChunkConstraint *result = ts_chunk_constraints_add_from_values(ccs, values, nulls);
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return result;
-}
-
-ChunkConstraint *
-ts_chunk_constraints_add_from_values(ChunkConstraints *ccs, const Datum *values, const bool *nulls)
-{
 	ChunkConstraint *constraints;
 	int32 dimension_slice_id;
 	Name constraint_name;
 	Name hypertable_constraint_name;
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	MemoryContext oldcxt;
+
+	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	oldcxt = MemoryContextSwitchTo(ccs->mctx);
 
@@ -268,6 +255,9 @@ ts_chunk_constraints_add_from_values(ChunkConstraints *ccs, const Datum *values,
 							  NameStr(*hypertable_constraint_name));
 
 	MemoryContextSwitchTo(oldcxt);
+
+	if (should_free)
+		heap_freetuple(tuple);
 
 	return constraints;
 }
@@ -539,31 +529,11 @@ ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkSc
 			stub = ts_chunk_stub_create(chunk_id, hs->num_dimensions);
 			stub->cube = ts_hypercube_alloc(hs->num_dimensions);
 			entry->stub = stub;
-			entry->num_dimension_constraints = 0;
 		}
 		else
-		{
 			stub = entry->stub;
-		}
 
-		/*
-		 * We have only the dimension constraints here, because we're searching
-		 * by dimension slice id. See the assert above.
-		 */
-		entry->num_dimension_constraints++;
-
-		bool should_free;
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-
-		bool nulls[Natts_chunk_constraint];
-		Datum values[Natts_chunk_constraint];
-
-		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-		ts_chunk_constraints_add_from_values(stub->constraints, values, nulls);
-
-		if (should_free)
-			heap_freetuple(tuple);
+		ts_chunk_constraints_add_from_tuple(stub->constraints, ti);
 
 		ts_hypercube_add_slice(stub->cube, slice);
 
@@ -571,8 +541,6 @@ ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkSc
 		 * i.e., a complete hypercube */
 		if (chunk_stub_is_complete(stub, ctx->space))
 		{
-			Assert(entry->num_dimension_constraints == ctx->space->num_dimensions);
-
 			ctx->num_complete_chunks++;
 
 			if (ctx->early_abort)
@@ -580,10 +548,6 @@ ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkSc
 				ts_scan_iterator_close(&iterator);
 				break;
 			}
-		}
-		else
-		{
-			Assert(entry->num_dimension_constraints < ctx->space->num_dimensions);
 		}
 	}
 	return count;

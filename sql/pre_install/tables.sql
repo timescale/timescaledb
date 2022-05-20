@@ -120,16 +120,9 @@ CREATE TABLE _timescaledb_catalog.dimension_slice (
   dimension_id integer NOT NULL REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE,
   range_start bigint NOT NULL,
   range_end bigint NOT NULL,
-  CHECK (range_start <= range_end)
+  CHECK (range_start <= range_end),
+  UNIQUE (dimension_id, range_start, range_end)
 );
-
--- Use DESC direction for range start, so that a forward index scan works
--- efficiently for queries like
--- `WHERE dimension_id = ... and range_start <= point and point < range_end`.
-CREATE UNIQUE INDEX dimension_slice_dimension_id_range_start_range_end_key
-ON _timescaledb_catalog.dimension_slice
-USING btree(dimension_id, range_start DESC, range_end);
-
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_slice', '');
 

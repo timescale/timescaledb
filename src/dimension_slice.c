@@ -209,13 +209,21 @@ dimension_slice_scan_limit_internal(int indexid, ScanKeyData *scankey, int nkeys
 									LOCKMODE lockmode, const ScanTupLock *tuplock,
 									MemoryContext mctx)
 {
+	/*
+	 * We have =, <=, > ops for index columns, so backwards scan direction is
+	 * more appropriate. Forward direction wouldn't be able to use the second
+	 * column to find a starting point for the scan. Unfortunately we can't do
+	 * anything about the third column, we'll be checking for it with a
+	 * sequential scan over index pages. Ideally we need some other index type
+	 * than btree for this.
+	 */
 	return dimension_slice_scan_limit_direction_internal(indexid,
 														 scankey,
 														 nkeys,
 														 on_tuple_found,
 														 scandata,
 														 limit,
-														 ForwardScanDirection,
+														 BackwardScanDirection,
 														 lockmode,
 														 tuplock,
 														 mctx);
