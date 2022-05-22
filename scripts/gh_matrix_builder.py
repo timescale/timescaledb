@@ -143,7 +143,7 @@ if event_type != "pull_request":
   # add debug test for first supported PG13 version
   pg13_debug_earliest = {
     "pg": PG13_EARLIEST,
-    "installcheck_args": "IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_gapfill_pushdown-13 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback telemetry'"
+    "installcheck_args": "SKIPS='deadlock_recompress_chunk' IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_gapfill_pushdown-13 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback telemetry'"
   }
   m["include"].append(build_debug_config(pg13_debug_earliest))
 
