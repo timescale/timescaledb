@@ -172,14 +172,21 @@ validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
 Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
+	/* The function is not STRICT but we can't allow required args to be NULL
+	 * so we need to act like a strict function in those cases */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
 	NameData application_name;
 	NameData proc_name, proc_schema, owner;
 	int32 job_id;
 	Oid user_rel_oid = PG_GETARG_OID(0);
 	Datum compress_after_datum = PG_GETARG_DATUM(1);
-	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
-	Interval *default_schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
+	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
+	Interval *default_schedule_interval =
+		PG_ARGISNULL(3) ? DEFAULT_SCHEDULE_INTERVAL : PG_GETARG_INTERVAL_P(3);
 	Hypertable *hypertable;
 	Cache *hcache;
 	const Dimension *dim;
@@ -241,7 +248,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 		}
 	}
 
-	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)))
+	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
+		!user_defined_schedule_interval)
 	{
 		default_schedule_interval = DatumGetIntervalP(
 			ts_internal_to_interval_value(dim->fd.interval_length / 2, INTERVALOID));

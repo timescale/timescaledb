@@ -13,10 +13,11 @@
 CREATE OR REPLACE FUNCTION @extschema@.add_retention_policy(
        relation REGCLASS,
        drop_after "any",
-       if_not_exists BOOL = false
+       if_not_exists BOOL = false,
+       schedule_interval INTERVAL = NULL
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
-LANGUAGE C VOLATILE STRICT;
+LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.remove_retention_policy(
     relation REGCLASS,
@@ -35,10 +36,10 @@ AS '@MODULE_PATHNAME@', 'ts_policy_reorder_remove'
 LANGUAGE C VOLATILE STRICT;
 
 /* compression policy */
-CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL = false)
+CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(hypertable REGCLASS, compress_after "any", if_not_exists BOOL = false, schedule_interval INTERVAL = NULL)
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
-LANGUAGE C VOLATILE STRICT;
+LANGUAGE C VOLATILE; -- not strict because we need to set different default values for schedule_interval
 
 CREATE OR REPLACE FUNCTION @extschema@.remove_compression_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_remove'

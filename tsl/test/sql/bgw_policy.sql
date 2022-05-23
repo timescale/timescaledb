@@ -330,3 +330,36 @@ WHERE proc_name NOT LIKE '%telemetry%'
 GROUP BY proc_name;
 
 
+-- test that the behavior is strict when providing NULL required arguments
+create table test_strict (time timestamptz not null, a int, b int);
+select create_hypertable('test_strict', 'time');
+-- test retention with null arguments
+select add_retention_policy('test_strict', drop_after => NULL);
+select add_retention_policy(NULL, NULL);
+select add_retention_policy(NULL, drop_after => interval '2 days');
+-- this is an optional argument
+select add_retention_policy('test_strict', drop_after => interval '2 days', if_not_exists => NULL);
+select add_retention_policy('test_strict', interval '2 days', schedule_interval => NULL);
+-- test compression with null arguments
+alter table test_strict set (timescaledb.compress);
+select add_compression_policy('test_strict', compress_after => NULL);
+select add_compression_policy(NULL, compress_after => NULL);
+select add_compression_policy('test_strict', INTERVAL '2 weeks', if_not_exists => NULL);
+select add_compression_policy('test_strict', INTERVAL '2 weeks', schedule_interval => NULL);
+
+-- test that we get the default schedule_interval if nothing is specified
+create table test_missing_schedint (time timestamptz not null, a int, b int);
+select create_hypertable('test_missing_schedint', 'time', chunk_time_interval=> '31days'::interval);
+-- we expect shedule_interval to be 1 day
+select add_retention_policy('test_missing_schedint', interval '2 weeks') as retenion_id_missing_schedint \gset
+-- we expect schedule_interval to be chunk_time_interval/2 for timestamptz time
+alter table test_missing_schedint set (timescaledb.compress);
+select add_compression_policy('test_missing_schedint', interval '60 days') as compression_id_missing_schedint \gset
+-- we expect schedule_interval to be 1 day for int time
+create table test_missing_schedint_integer (time int not null, a int, b int);
+-- 10 days interval
+select create_hypertable('test_missing_schedint_integer', 'time', chunk_time_interval => 864000000);
+alter table test_missing_schedint_integer set (timescaledb.compress);
+select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
+
+select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
