@@ -16,6 +16,13 @@
 #include "guc.h"
 
 #define CHUNK_EXCL_FUNC_NAME "chunks_in"
+/*
+ * Constraints created during planning to improve chunk exclusion
+ * will be marked with this value as location so they can be easily
+ * identified and removed when they are no longer needed.
+ * Removal happens in timescaledb_set_rel_pathlist hook.
+ */
+#define PLANNER_LOCATION_MAGIC -29811
 
 typedef struct Chunk Chunk;
 typedef struct TsFdwRelInfo TsFdwRelInfo;
@@ -95,5 +102,6 @@ extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
+extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 
 #endif /* TIMESCALEDB_PLANNER_H */

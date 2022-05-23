@@ -130,6 +130,7 @@ static OpExpr *
 constify_now_expr(PlannerInfo *root, OpExpr *op)
 {
 	op = copyObject(op);
+	op->location = PLANNER_LOCATION_MAGIC;
 	if (IsA(lsecond(op->args), FuncExpr))
 	{
 		/*
@@ -162,6 +163,7 @@ constify_now_expr(PlannerInfo *root, OpExpr *op)
 		 */
 		lsecond(op->args) = estimate_expression_value(root, (Node *) op_inner);
 		Assert(IsA(lsecond(op->args), Const));
+		op->location = PLANNER_LOCATION_MAGIC;
 		return op;
 	}
 }
