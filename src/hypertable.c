@@ -1054,16 +1054,9 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 }
 
 static inline Chunk *
-hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not_exists,
-					 bool lock_chunk_slices, bool *created)
+hypertable_get_chunk(const Hypertable *h, const Point *point)
 {
-	if (created)
-	{
-		*created = false;
-	}
-
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
-
 	if (chunk != NULL)
 	{
 		//fprintf(stderr, "cache 2 match\n");
@@ -1072,29 +1065,10 @@ hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not
 
 	//fprintf(stderr, "cache 2 mismatch\n");
 
-	/*
-	 * ts_chunk_find() must execute on a per-tuple memory context since it
-	 * allocates a lot of transient data. We don't want this allocated on
-	 * the cache's memory context.
-	 */
-	chunk = ts_chunk_find(h, point, lock_chunk_slices);
-
-	if (NULL == chunk)
-	{
-		if (!create_if_not_exists)
-			return NULL;
-
-		chunk = ts_chunk_create_from_point(h,
-										   point,
-										   NameStr(h->fd.associated_schema_name),
-										   NameStr(h->fd.associated_table_prefix));
-		if (created)
-		{
-			*created = true;
-		}
-	}
-
-	Assert(chunk != NULL);
+	chunk = ts_chunk_get_or_create_from_point(h,
+									   point,
+									   NameStr(h->fd.associated_schema_name),
+									   NameStr(h->fd.associated_table_prefix));
 
 	/* Also add the chunk to the hypertable's chunk store */
 	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
@@ -1102,21 +1076,13 @@ hypertable_get_chunk(const Hypertable *h, const Point *point, bool create_if_not
 	return cached_chunk;
 }
 
-/* finds the chunk for a given point, returning NULL if none exists */
-Chunk *
-ts_hypertable_find_chunk_if_exists(const Hypertable *h, const Point *point)
-{
-	return hypertable_get_chunk(h, point, false, false, NULL);
-}
-
 /* gets the chunk for a given point, creating it if it does not exist. If an
  * existing chunk exists, all its dimension slices will be locked in FOR KEY
  * SHARE mode. */
 Chunk *
-ts_hypertable_get_or_create_chunk(const Hypertable *h, const Point *point,
-	bool *created)
+ts_hypertable_get_or_create_chunk(const Hypertable *h, const Point *point)
 {
-	return hypertable_get_chunk(h, point, true, true, created);
+	return hypertable_get_chunk(h, point);
 }
 
 bool

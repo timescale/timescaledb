@@ -39,7 +39,7 @@ extern TSDLLEXPORT ChunkConstraints *ts_chunk_constraints_alloc(int size_hint, M
 extern ChunkConstraints *ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size count_hint,
 															  MemoryContext mctx);
 extern ChunkConstraints *ts_chunk_constraints_copy(ChunkConstraints *constraints);
-extern int ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice,
+extern int ts_chunk_constraint_scan_by_dimension_slice_chunk_id(const DimensionSlice *slice,
 													   ChunkScanCtx *ctx, MemoryContext mctx);
 extern int ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice,
 													   ChunkScanCtx *ctx, MemoryContext mctx);

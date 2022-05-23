@@ -141,12 +141,12 @@ typedef struct DisplayKeyData
 } DisplayKeyData;
 
 extern void ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti);
-extern Chunk *ts_chunk_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
+extern Chunk *ts_chunk_get_or_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
 										 const char *prefix);
 
 extern TSDLLEXPORT Chunk *ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind);
 extern TSDLLEXPORT ChunkStub *ts_chunk_stub_create(int32 id, int16 num_constraints);
-extern Chunk *ts_chunk_find(const Hypertable *ht, const Point *p, bool lock_slices);
+extern Chunk *ts_chunk_point_find(const Hypertable *ht, const Point *p);
 extern TSDLLEXPORT Chunk *ts_chunk_copy(const Chunk *chunk);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_name_with_memory_context(const char *schema_name,
 																   const char *table_name,

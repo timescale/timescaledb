@@ -445,7 +445,7 @@ typedef struct ChunkConstraintScanData
 } ChunkConstraintScanData;
 
 int
-ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice, ChunkScanCtx *ctx,
+ts_chunk_constraint_scan_by_dimension_slice_chunk_id(const DimensionSlice *slice, ChunkScanCtx *ctx,
 											MemoryContext mctx)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, mctx);
@@ -483,11 +483,12 @@ ts_chunk_constraint_scan_by_dimension_slice_lite(const DimensionSlice *slice, Ch
 		 * i.e., a complete hypercube */
 		if(entry->num_dimension_constraints == ctx->space->num_dimensions)
 		{
-			Assert(ctx->early_abort);
 			ts_scan_iterator_close(&iterator);
 			return entry->chunk_id;
 		}
 	}
+
+	ts_scan_iterator_close(&iterator);
 
 	return 0;
 }

@@ -932,31 +932,6 @@ read_next_copy_row(RemoteCopyContext *context, CopyFromState cstate)
 	return true;
 }
 
-static Chunk *
-get_target_chunk(Hypertable *ht, Point *p, CopyConnectionState *state)
-{
-	bool created = false;
-	Chunk *chunk = ts_hypertable_get_or_create_chunk(ht, p, &created);
-
-//	if (created)
-//	{
-//		/* Here we need to create a new chunk.  However, any in-progress copy operations
-//		 * will be tying up the connection we need to create the chunk on a data node.  Since
-//		 * the data nodes for the new chunk aren't yet known, just close all in progress COPYs
-//		 * before creating the chunk. */
-//		reset_copy_connection_state(state);
-//	}
-
-//	fprintf(stderr, "point ");
-//	for (int i = 0; i < p->num_coords; i++)
-//	{
-//		fprintf(stderr, "%ld, ", p->coordinates[i]);
-//	}
-//	fprintf(stderr, "\n");
-
-	return chunk;
-}
-
 static bool
 send_copy_data(StringInfo row_data, const List *connections)
 {
@@ -1100,7 +1075,7 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 		const int index = indices[k];
 		Point *point = context->all_points[index];
 
-		Chunk *chunk = get_target_chunk(ht, point, &context->connection_state);
+		Chunk *chunk = ts_hypertable_get_or_create_chunk(ht, point);
 		//connections = get_connections_for_chunk(context, chunk->fd.id, chunk->data_nodes, GetUserId());
 
 		/*

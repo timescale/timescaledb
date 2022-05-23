@@ -149,7 +149,7 @@ lock_result_ok_or_abort(TupleInfo *ti)
 }
 
 static ScanTupleResult
-dimension_vec_tuple_found_lite(TupleInfo *ti, void *data)
+dimension_vec_tuple_found_list(TupleInfo *ti, void *data)
 {
 	List **slices = data;
 	DimensionSlice *slice;
@@ -308,7 +308,7 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 }
 
 void
-ts_dimension_slice_scan_lite(int32 dimension_id,
+ts_dimension_slice_scan_list(int32 dimension_id,
 	int64 coordinate, List **dest)
 {
 	coordinate = REMAP_LAST_COORDINATE(coordinate);
@@ -342,7 +342,7 @@ ts_dimension_slice_scan_lite(int32 dimension_id,
 	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
 										scankey,
 										3,
-										dimension_vec_tuple_found_lite,
+										dimension_vec_tuple_found_list,
 										dest,
 										/* limit = */ 0,
 										AccessShareLock,

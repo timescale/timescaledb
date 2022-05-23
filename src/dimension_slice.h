@@ -45,7 +45,7 @@ typedef struct Hypercube Hypercube;
 extern DimensionVec *ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 												   const ScanTupLock *tuplock);
 
-extern void ts_dimension_slice_scan_lite(int32 dimension_id,
+extern void ts_dimension_slice_scan_list(int32 dimension_id,
 	int64 coordinate, List **dest);
 
 extern DimensionVec *
