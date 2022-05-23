@@ -20,6 +20,11 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 :PREFIX SELECT FROM metrics WHERE time >= now() - '10m'::interval;
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval;
 
+-- test bitmapheapscan
+SET enable_indexscan TO false;
+:PREFIX SELECT FROM metrics WHERE time > now();
+RESET enable_indexscan;
+
 -- test multiple constraints
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND device_id = 2;
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);

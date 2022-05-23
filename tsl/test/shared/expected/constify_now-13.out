@@ -14,91 +14,111 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now();
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= now()) AND ("time" >= 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= now())
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= now()) AND ("time" >= 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= now())
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= now()) AND ("time" >= 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= now())
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now() - '24h'::interval;
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > (now() - '@ 24 hours'::interval)) AND ("time" > 'Sun Dec 31 00:00:00 1989 PST'::timestamp with time zone))
+         Index Cond: ("time" > (now() - '@ 24 hours'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > (now() - '@ 24 hours'::interval)) AND ("time" > 'Sun Dec 31 00:00:00 1989 PST'::timestamp with time zone))
+         Index Cond: ("time" > (now() - '@ 24 hours'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > (now() - '@ 24 hours'::interval)) AND ("time" > 'Sun Dec 31 00:00:00 1989 PST'::timestamp with time zone))
+         Index Cond: ("time" > (now() - '@ 24 hours'::interval))
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time > now() + '10m'::interval;
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > (now() + '@ 10 mins'::interval)) AND ("time" > 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > (now() + '@ 10 mins'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > (now() + '@ 10 mins'::interval)) AND ("time" > 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > (now() + '@ 10 mins'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > (now() + '@ 10 mins'::interval)) AND ("time" > 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > (now() + '@ 10 mins'::interval))
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() - '10m'::interval;
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval;
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
 (7 rows)
 
+-- test bitmapheapscan
+SET enable_indexscan TO false;
+:PREFIX SELECT FROM metrics WHERE time > now();
+QUERY PLAN
+ Append
+   ->  Bitmap Heap Scan on _hyper_X_X_chunk
+         Recheck Cond: ("time" > now())
+         ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
+               Index Cond: ("time" > now())
+   ->  Bitmap Heap Scan on _hyper_X_X_chunk
+         Recheck Cond: ("time" > now())
+         ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
+               Index Cond: ("time" > now())
+   ->  Bitmap Heap Scan on _hyper_X_X_chunk
+         Recheck Cond: ("time" > now())
+         ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_time_idx
+               Index Cond: ("time" > now())
+(13 rows)
+
+RESET enable_indexscan;
 -- test multiple constraints
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND device_id = 2;
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
-         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
-         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk
-         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ((device_id = 2) AND ("time" >= (now() + '@ 10 mins'::interval)))
 (7 rows)
 
 :PREFIX SELECT FROM metrics WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
 QUERY PLAN
  Append
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
          Filter: ((device_id = 2) OR (device_id = 3))
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
          Filter: ((device_id = 2) OR (device_id = 3))
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
          Filter: ((device_id = 2) OR (device_id = 3))
 (10 rows)
 
@@ -106,11 +126,11 @@ QUERY PLAN
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
+         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
+         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)) AND ("time" >= 'Mon Jan 01 00:10:00 1990 PST'::timestamp with time zone) AND ("time" >= 'Sun Dec 31 23:50:00 1989 PST'::timestamp with time zone))
+         Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
 (7 rows)
 
 -- variants we don't optimize
@@ -233,11 +253,11 @@ QUERY PLAN
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
 (7 rows)
 
 :PREFIX WITH q1 AS (
@@ -264,11 +284,11 @@ QUERY PLAN
    ->  Materialize
          ->  Append
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
 (13 rows)
 
 :PREFIX SELECT FROM metrics m1, metrics m2 WHERE m2.time > now();
@@ -281,11 +301,11 @@ QUERY PLAN
    ->  Materialize
          ->  Append
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
 (13 rows)
 
 :PREFIX SELECT FROM metrics m1, metrics m2 WHERE m1.time > now() AND m2.time > now();
@@ -293,19 +313,19 @@ QUERY PLAN
  Nested Loop
    ->  Append
          ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_1
-               Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+               Index Cond: ("time" > now())
          ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_2
-               Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+               Index Cond: ("time" > now())
          ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m1_3
-               Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+               Index Cond: ("time" > now())
    ->  Materialize
          ->  Append
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
 (16 rows)
 
 -- only top-level constraints in WHERE clause are constified
@@ -339,11 +359,11 @@ QUERY PLAN
    ->  Materialize
          ->  Append
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+                     Index Cond: ("time" > now())
 (16 rows)
 
 -- test UPDATE
@@ -357,11 +377,11 @@ QUERY PLAN
    ->  Seq Scan on metrics
          Filter: (("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone) AND ("time" > now()))
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_1
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_2
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_3
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
 (13 rows)
 
 -- test DELETE
@@ -375,11 +395,11 @@ QUERY PLAN
    ->  Seq Scan on metrics
          Filter: (("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone) AND ("time" > now()))
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_1
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_2
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk metrics_3
-         Index Cond: (("time" > now()) AND ("time" > 'Mon Jan 01 00:00:00 1990 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
 (13 rows)
 
 -- test chunks actually get excluded
@@ -396,7 +416,7 @@ SET timescaledb.current_timestamp_mock TO '2000-01-14';
 :PREFIX SELECT FROM metrics WHERE time > now();
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
-   Index Cond: (("time" > now()) AND ("time" > 'Fri Jan 14 00:00:00 2000 PST'::timestamp with time zone))
+   Index Cond: ("time" > now())
 (2 rows)
 
 CREATE TABLE const_now(time timestamptz, time2 timestamptz, value float);
@@ -446,9 +466,9 @@ PREPARE p1 AS SELECT FROM prep_const_now WHERE time > now();
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Thu Jan 01 00:00:00 3001 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Thu Jan 01 00:00:00 3001 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
 (5 rows)
 
 EXECUTE p1;
@@ -460,9 +480,9 @@ SET timescaledb.current_timestamp_mock TO '3002-01-01';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Thu Jan 01 00:00:00 3001 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: (("time" > now()) AND ("time" > 'Thu Jan 01 00:00:00 3001 PST'::timestamp with time zone))
+         Index Cond: ("time" > now())
 (5 rows)
 
 EXECUTE p1;
