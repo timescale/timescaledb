@@ -1059,16 +1059,16 @@ hypertable_get_chunk(const Hypertable *h, const Point *point)
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
 	if (chunk != NULL)
 	{
-		//fprintf(stderr, "cache 2 match\n");
+		// fprintf(stderr, "cache 2 match\n");
 		return chunk;
 	}
 
-	//fprintf(stderr, "cache 2 mismatch\n");
+	// fprintf(stderr, "cache 2 mismatch\n");
 
 	chunk = ts_chunk_get_or_create_from_point(h,
-									   point,
-									   NameStr(h->fd.associated_schema_name),
-									   NameStr(h->fd.associated_table_prefix));
+											  point,
+											  NameStr(h->fd.associated_schema_name),
+											  NameStr(h->fd.associated_table_prefix));
 
 	/* Also add the chunk to the hypertable's chunk store */
 	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);

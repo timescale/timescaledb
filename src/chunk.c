@@ -133,8 +133,7 @@ static Hypertable *find_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, 
 static Chunk *get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than,
 									   const char *caller_name, MemoryContext mctx,
 									   uint64 *num_chunks_returned, ScanTupLock *tuplock);
-static Chunk *
-chunk_resurrect(const Hypertable *ht, int chunk_id);
+static Chunk *chunk_resurrect(const Hypertable *ht, int chunk_id);
 
 /*
  * The chunk status field values are persisted in the database and must never be changed.
@@ -1441,7 +1440,7 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
  */
 Chunk *
 ts_chunk_get_or_create_from_point(const Hypertable *ht, const Point *p, const char *schema,
-						   const char *prefix)
+								  const char *prefix)
 {
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
 	if (chunk_id != 0)
@@ -1883,8 +1882,9 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 		HeapTuple new_tuple;
 
 		Assert(count == 0 && chunk == NULL);
-		chunk = ts_chunk_build_from_tuple_and_stub(/* chunkptr = */ NULL, ti,
-			/* stub = */ NULL);
+		chunk = ts_chunk_build_from_tuple_and_stub(/* chunkptr = */ NULL,
+												   ti,
+												   /* stub = */ NULL);
 		Assert(chunk->fd.dropped);
 
 		/* Create data table and related objects */
@@ -1967,17 +1967,18 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 	for (int dimension_index = 0; dimension_index < ctx.space->num_dimensions; dimension_index++)
 	{
 		ts_dimension_slice_scan_list(ctx.space->dimensions[dimension_index].fd.id,
-		   p->coordinates[dimension_index],
-		   &all_slices);
+									 p->coordinates[dimension_index],
+									 &all_slices);
 	}
 
 	/* Find constraints matching dimension slices. */
 	ListCell *lc;
 	foreach (lc, all_slices)
 	{
-		chunk_id = ts_chunk_constraint_scan_by_dimension_slice_chunk_id(
-			(DimensionSlice *) lfirst(lc),
-			&ctx, CurrentMemoryContext);
+		chunk_id =
+			ts_chunk_constraint_scan_by_dimension_slice_chunk_id((DimensionSlice *) lfirst(lc),
+																 &ctx,
+																 CurrentMemoryContext);
 
 		if (chunk_id != 0)
 		{

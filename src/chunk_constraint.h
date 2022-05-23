@@ -40,7 +40,8 @@ extern ChunkConstraints *ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Si
 															  MemoryContext mctx);
 extern ChunkConstraints *ts_chunk_constraints_copy(ChunkConstraints *constraints);
 extern int ts_chunk_constraint_scan_by_dimension_slice_chunk_id(const DimensionSlice *slice,
-													   ChunkScanCtx *ctx, MemoryContext mctx);
+																ChunkScanCtx *ctx,
+																MemoryContext mctx);
 extern int ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice,
 													   ChunkScanCtx *ctx, MemoryContext mctx);
 extern int ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSlice *slice,

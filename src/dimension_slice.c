@@ -308,8 +308,7 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 }
 
 void
-ts_dimension_slice_scan_list(int32 dimension_id,
-	int64 coordinate, List **dest)
+ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **dest)
 {
 	coordinate = REMAP_LAST_COORDINATE(coordinate);
 
