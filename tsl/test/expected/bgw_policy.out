@@ -621,3 +621,101 @@ GROUP BY proc_name;
  policy_retention |     2
 (2 rows)
 
+-- test that the behavior is strict when providing NULL required arguments
+create table test_strict (time timestamptz not null, a int, b int);
+select create_hypertable('test_strict', 'time');
+    create_hypertable     
+--------------------------
+ (6,public,test_strict,t)
+(1 row)
+
+-- test retention with null arguments
+select add_retention_policy('test_strict', drop_after => NULL);
+ add_retention_policy 
+----------------------
+                     
+(1 row)
+
+select add_retention_policy(NULL, NULL);
+ add_retention_policy 
+----------------------
+                     
+(1 row)
+
+select add_retention_policy(NULL, drop_after => interval '2 days');
+ add_retention_policy 
+----------------------
+                     
+(1 row)
+
+-- this is an optional argument
+select add_retention_policy('test_strict', drop_after => interval '2 days', if_not_exists => NULL);
+ add_retention_policy 
+----------------------
+                     
+(1 row)
+
+select add_retention_policy('test_strict', interval '2 days', schedule_interval => NULL);
+ add_retention_policy 
+----------------------
+                 1006
+(1 row)
+
+-- test compression with null arguments
+alter table test_strict set (timescaledb.compress);
+select add_compression_policy('test_strict', compress_after => NULL);
+ add_compression_policy 
+------------------------
+                       
+(1 row)
+
+select add_compression_policy(NULL, compress_after => NULL);
+ add_compression_policy 
+------------------------
+                       
+(1 row)
+
+select add_compression_policy('test_strict', INTERVAL '2 weeks', if_not_exists => NULL);
+ add_compression_policy 
+------------------------
+                       
+(1 row)
+
+select add_compression_policy('test_strict', INTERVAL '2 weeks', schedule_interval => NULL);
+ add_compression_policy 
+------------------------
+                   1007
+(1 row)
+
+-- test that we get the default schedule_interval if nothing is specified
+create table test_missing_schedint (time timestamptz not null, a int, b int);
+select create_hypertable('test_missing_schedint', 'time', chunk_time_interval=> '31days'::interval);
+         create_hypertable          
+------------------------------------
+ (8,public,test_missing_schedint,t)
+(1 row)
+
+-- we expect shedule_interval to be 1 day
+select add_retention_policy('test_missing_schedint', interval '2 weeks') as retenion_id_missing_schedint \gset
+-- we expect schedule_interval to be chunk_time_interval/2 for timestamptz time
+alter table test_missing_schedint set (timescaledb.compress);
+select add_compression_policy('test_missing_schedint', interval '60 days') as compression_id_missing_schedint \gset
+-- we expect schedule_interval to be 1 day for int time
+create table test_missing_schedint_integer (time int not null, a int, b int);
+-- 10 days interval
+select create_hypertable('test_missing_schedint_integer', 'time', chunk_time_interval => 864000000);
+              create_hypertable              
+---------------------------------------------
+ (10,public,test_missing_schedint_integer,t)
+(1 row)
+
+alter table test_missing_schedint_integer set (timescaledb.compress);
+select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
+select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
+  id  |     application_name      | schedule_interval  | max_runtime | max_retries | retry_period |      proc_schema      |     proc_name      |        owner        | scheduled | hypertable_id |                       config                        
+------+---------------------------+--------------------+-------------+-------------+--------------+-----------------------+--------------------+---------------------+-----------+---------------+-----------------------------------------------------
+ 1008 | Retention Policy [1008]   | @ 1 day            | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_internal | policy_retention   | default_perm_user_2 | t         |             8 | {"drop_after": "@ 14 days", "hypertable_id": 8}
+ 1009 | Compression Policy [1009] | @ 15 days 12 hours | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"}
+ 1010 | Compression Policy [1010] | @ 1 day            | @ 0         |          -1 | @ 1 hour     | _timescaledb_internal | policy_compression | default_perm_user_2 | t         |            10 | {"hypertable_id": 10, "compress_after": 600000}
+(3 rows)
+

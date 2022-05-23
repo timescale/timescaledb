@@ -29,6 +29,10 @@
 #define POLICY_RETENTION_PROC_NAME "policy_retention"
 #define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
 #define CONFIG_KEY_DROP_AFTER "drop_after"
+#define DEFAULT_SCHEDULE_INTERVAL                                                                  \
+	{                                                                                              \
+		.day = 1                                                                                   \
+	}
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)
@@ -135,12 +139,18 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 Datum
 policy_retention_add(PG_FUNCTION_ARGS)
 {
+	/* behave like a strict function */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
 	NameData application_name;
 	int32 job_id;
 	Oid ht_oid = PG_GETARG_OID(0);
 	Datum window_datum = PG_GETARG_DATUM(1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	Oid window_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Interval default_schedule_interval =
+		PG_ARGISNULL(3) ? (Interval) DEFAULT_SCHEDULE_INTERVAL : *PG_GETARG_INTERVAL_P(3);
 	Hypertable *hypertable;
 	Cache *hcache;
 
@@ -148,7 +158,6 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	Oid partitioning_type;
 	const Dimension *dim;
 	/* Default scheduled interval for drop_chunks jobs is currently 1 day (24 hours) */
-	Interval default_schedule_interval = { .day = 1 };
 	/* Default max runtime should not be very long. Right now set to 5 minutes */
 	Interval default_max_runtime = { .time = 5 * USECS_PER_MINUTE };
 	/* Default retry period is currently 5 minutes */
