@@ -239,16 +239,8 @@ UPDATE disttable SET temp = 3.7 WHERE device = 1;
    Update on public.disttable
    Foreign Update on _timescaledb_internal._dist_hyper_1_1_chunk disttable_1
      Remote SQL: UPDATE _timescaledb_internal._dist_hyper_1_1_chunk SET temp = $2 WHERE ctid = $1
-   Foreign Update on _timescaledb_internal._dist_hyper_1_2_chunk disttable_2
-     Remote SQL: UPDATE _timescaledb_internal._dist_hyper_1_2_chunk SET temp = $2 WHERE ctid = $1
-   Foreign Update on _timescaledb_internal._dist_hyper_1_3_chunk disttable_3
-     Remote SQL: UPDATE _timescaledb_internal._dist_hyper_1_3_chunk SET temp = $2 WHERE ctid = $1
-   Foreign Update on _timescaledb_internal._dist_hyper_1_4_chunk disttable_4
+   Foreign Update on _timescaledb_internal._dist_hyper_1_4_chunk disttable_2
      Remote SQL: UPDATE _timescaledb_internal._dist_hyper_1_4_chunk SET temp = $2 WHERE ctid = $1
-   Foreign Update on _timescaledb_internal._dist_hyper_1_5_chunk disttable_5
-     Remote SQL: UPDATE _timescaledb_internal._dist_hyper_1_5_chunk SET temp = $2 WHERE ctid = $1
-   Foreign Update on _timescaledb_internal._dist_hyper_1_6_chunk disttable_6
-     Remote SQL: UPDATE _timescaledb_internal._dist_hyper_1_6_chunk SET temp = $2 WHERE ctid = $1
    ->  Seq Scan on public.disttable
          Output: disttable."time", disttable.device, NULL::integer, '3.7'::double precision, disttable.ctid
          Filter: (disttable.device = 1)
@@ -256,27 +248,11 @@ UPDATE disttable SET temp = 3.7 WHERE device = 1;
          Output: disttable_1."time", disttable_1.device, '3.7'::double precision, disttable_1.ctid
          Data node: db_dist_hypertable_1
          Remote SQL: SELECT "time", device, ctid FROM _timescaledb_internal._dist_hyper_1_1_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_2_chunk disttable_2
+   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_4_chunk disttable_2
          Output: disttable_2."time", disttable_2.device, '3.7'::double precision, disttable_2.ctid
-         Data node: db_dist_hypertable_3
-         Remote SQL: SELECT "time", device, ctid FROM _timescaledb_internal._dist_hyper_1_2_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_3_chunk disttable_3
-         Output: disttable_3."time", disttable_3.device, '3.7'::double precision, disttable_3.ctid
-         Data node: db_dist_hypertable_2
-         Remote SQL: SELECT "time", device, ctid FROM _timescaledb_internal._dist_hyper_1_3_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_4_chunk disttable_4
-         Output: disttable_4."time", disttable_4.device, '3.7'::double precision, disttable_4.ctid
          Data node: db_dist_hypertable_1
          Remote SQL: SELECT "time", device, ctid FROM _timescaledb_internal._dist_hyper_1_4_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_5_chunk disttable_5
-         Output: disttable_5."time", disttable_5.device, '3.7'::double precision, disttable_5.ctid
-         Data node: db_dist_hypertable_2
-         Remote SQL: SELECT "time", device, ctid FROM _timescaledb_internal._dist_hyper_1_5_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_6_chunk disttable_6
-         Output: disttable_6."time", disttable_6.device, '3.7'::double precision, disttable_6.ctid
-         Data node: db_dist_hypertable_3
-         Remote SQL: SELECT "time", device, ctid FROM _timescaledb_internal._dist_hyper_1_6_chunk WHERE ((device = 1)) FOR UPDATE
-(41 rows)
+(17 rows)
 
 EXPLAIN (VERBOSE, COSTS FALSE)
 DELETE FROM disttable WHERE device = 1;
@@ -286,16 +262,8 @@ DELETE FROM disttable WHERE device = 1;
    Delete on public.disttable
    Foreign Delete on _timescaledb_internal._dist_hyper_1_1_chunk disttable_1
      Remote SQL: DELETE FROM _timescaledb_internal._dist_hyper_1_1_chunk WHERE ctid = $1
-   Foreign Delete on _timescaledb_internal._dist_hyper_1_2_chunk disttable_2
-     Remote SQL: DELETE FROM _timescaledb_internal._dist_hyper_1_2_chunk WHERE ctid = $1
-   Foreign Delete on _timescaledb_internal._dist_hyper_1_3_chunk disttable_3
-     Remote SQL: DELETE FROM _timescaledb_internal._dist_hyper_1_3_chunk WHERE ctid = $1
-   Foreign Delete on _timescaledb_internal._dist_hyper_1_4_chunk disttable_4
+   Foreign Delete on _timescaledb_internal._dist_hyper_1_4_chunk disttable_2
      Remote SQL: DELETE FROM _timescaledb_internal._dist_hyper_1_4_chunk WHERE ctid = $1
-   Foreign Delete on _timescaledb_internal._dist_hyper_1_5_chunk disttable_5
-     Remote SQL: DELETE FROM _timescaledb_internal._dist_hyper_1_5_chunk WHERE ctid = $1
-   Foreign Delete on _timescaledb_internal._dist_hyper_1_6_chunk disttable_6
-     Remote SQL: DELETE FROM _timescaledb_internal._dist_hyper_1_6_chunk WHERE ctid = $1
    ->  Seq Scan on public.disttable
          Output: disttable.ctid
          Filter: (disttable.device = 1)
@@ -303,27 +271,11 @@ DELETE FROM disttable WHERE device = 1;
          Output: disttable_1.ctid
          Data node: db_dist_hypertable_1
          Remote SQL: SELECT ctid FROM _timescaledb_internal._dist_hyper_1_1_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_2_chunk disttable_2
+   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_4_chunk disttable_2
          Output: disttable_2.ctid
-         Data node: db_dist_hypertable_3
-         Remote SQL: SELECT ctid FROM _timescaledb_internal._dist_hyper_1_2_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_3_chunk disttable_3
-         Output: disttable_3.ctid
-         Data node: db_dist_hypertable_2
-         Remote SQL: SELECT ctid FROM _timescaledb_internal._dist_hyper_1_3_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_4_chunk disttable_4
-         Output: disttable_4.ctid
          Data node: db_dist_hypertable_1
          Remote SQL: SELECT ctid FROM _timescaledb_internal._dist_hyper_1_4_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_5_chunk disttable_5
-         Output: disttable_5.ctid
-         Data node: db_dist_hypertable_2
-         Remote SQL: SELECT ctid FROM _timescaledb_internal._dist_hyper_1_5_chunk WHERE ((device = 1)) FOR UPDATE
-   ->  Foreign Scan on _timescaledb_internal._dist_hyper_1_6_chunk disttable_6
-         Output: disttable_6.ctid
-         Data node: db_dist_hypertable_3
-         Remote SQL: SELECT ctid FROM _timescaledb_internal._dist_hyper_1_6_chunk WHERE ((device = 1)) FOR UPDATE
-(41 rows)
+(17 rows)
 
 -- Test distributed ANALYZE.
 --

@@ -571,20 +571,15 @@ BEGIN;
 (6 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE time = '2000-01-01' AND device = '1';
-                                                                             QUERY PLAN                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
    ->  Delete on public.metrics_space (actual rows=0 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         Delete on _timescaledb_internal._hyper_7_8_chunk metrics_space_2
-         ->  Append (actual rows=1 loops=1)
-               ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1 loops=1)
-                     Output: metrics_space_1.tableoid, metrics_space_1.ctid
-                     Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
-               ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0 loops=1)
-                     Output: metrics_space_2.tableoid, metrics_space_2.ctid
-                     Index Cond: ((metrics_space_2.device = '1'::text) AND (metrics_space_2."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
-(11 rows)
+         ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1 loops=1)
+               Output: metrics_space_1.tableoid, metrics_space_1.ctid
+               Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
+(6 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE time = '2000-01-01';
                                                                           QUERY PLAN                                                                          
@@ -644,22 +639,17 @@ BEGIN;
 (8 rows)
 
 :PREFIX UPDATE metrics_space SET value = 0.6 WHERE time = '2000-01-01' AND device = '1';
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
    ->  Update on public.metrics_space (actual rows=0 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
-         Update on _timescaledb_internal._hyper_7_8_chunk metrics_space_2
          ->  Result (actual rows=1 loops=1)
-               Output: '0.6'::double precision, metrics_space.tableoid, metrics_space.ctid
-               ->  Append (actual rows=1 loops=1)
-                     ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1 loops=1)
-                           Output: metrics_space_1.tableoid, metrics_space_1.ctid
-                           Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
-                     ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0 loops=1)
-                           Output: metrics_space_2.tableoid, metrics_space_2.ctid
-                           Index Cond: ((metrics_space_2.device = '1'::text) AND (metrics_space_2."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
-(13 rows)
+               Output: '0.6'::double precision, metrics_space_1.tableoid, metrics_space_1.ctid
+               ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1 loops=1)
+                     Output: metrics_space_1.tableoid, metrics_space_1.ctid
+                     Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
+(8 rows)
 
 :PREFIX UPDATE metrics_space SET value = 0.6 WHERE time = '2000-01-01';
                                                                              QUERY PLAN                                                                             
