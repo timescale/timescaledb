@@ -56,22 +56,15 @@ typedef enum JobLockLifetime
 } JobLockLifetime;
 
 BackgroundWorkerHandle *
-ts_bgw_job_start(BgwJob *job, Oid user_uid)
+ts_bgw_job_start(BgwJob *job, Oid user_oid)
 {
-	int32 job_id = Int32GetDatum(job->fd.id);
-	StringInfo si = makeStringInfo();
-	BackgroundWorkerHandle *bgw_handle;
+	BgwParams bgw_params = {
+		.job_id = Int32GetDatum(job->fd.id),
+		.user_oid = user_oid,
+	};
+	strlcpy(bgw_params.bgw_main, job_entrypoint_function_name, sizeof(bgw_params.bgw_main));
 
-	/* Changing this requires changes to ts_bgw_job_entrypoint */
-	appendStringInfo(si, "%u %d", user_uid, job_id);
-
-	bgw_handle = ts_bgw_start_worker(job_entrypoint_function_name,
-									 NameStr(job->fd.application_name),
-									 si->data);
-
-	pfree(si->data);
-	pfree(si);
-	return bgw_handle;
+	return ts_bgw_start_worker(NameStr(job->fd.application_name), &bgw_params);
 }
 
 static BgwJob *
@@ -825,14 +818,13 @@ extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	Oid user_uid;
-	int32 job_id;
+	BgwParams params;
 	BgwJob *job;
 	JobResult res = JOB_FAILURE;
 	bool got_lock;
 
-	if (sscanf(MyBgworkerEntry->bgw_extra, "%u %d", &user_uid, &job_id) != 2)
-		elog(ERROR, "job entrypoint got invalid bgw_extra");
+	memcpy(&params, MyBgworkerEntry->bgw_extra, sizeof(BgwParams));
+	Assert(params.user_oid != 0 && params.job_id != 0);
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
@@ -844,16 +836,14 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
-	elog(DEBUG1, "started background job %d", job_id);
-
-	BackgroundWorkerInitializeConnectionByOid(db_oid, user_uid, 0);
+	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	ts_license_enable_module_loading();
 
 	StartTransactionCommand();
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
 	 * when the job process exits */
-	job = ts_bgw_job_find_with_lock(job_id,
+	job = ts_bgw_job_find_with_lock(params.job_id,
 									TopMemoryContext,
 									RowShareLock,
 									SESSION_LOCK,
@@ -862,7 +852,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	CommitTransactionCommand();
 
 	if (job == NULL)
-		elog(ERROR, "job %d not found when running the background worker", job_id);
+		elog(ERROR, "job %d not found when running the background worker", params.job_id);
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
 
@@ -906,7 +896,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * removed the session lock. Don't block and only record if the lock was actually
 		 * obtained.
 		 */
-		job = ts_bgw_job_find_with_lock(job_id,
+		job = ts_bgw_job_find_with_lock(params.job_id,
 										TopMemoryContext,
 										RowShareLock,
 										TXN_LOCK,
@@ -925,7 +915,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * the rethrow will log the error; but also log which job threw the
 		 * error
 		 */
-		elog(LOG, "job %d threw an error", job_id);
+		elog(LOG, "job %d threw an error", params.job_id);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
@@ -948,7 +938,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		job = NULL;
 	}
 
-	elog(DEBUG1, "exiting job %d with %s", job_id, (res == JOB_SUCCESS ? "success" : "failure"));
+	elog(DEBUG1,
+		 "exiting job %d with %s",
+		 params.job_id,
+		 (res == JOB_SUCCESS ? "success" : "failure"));
 
 	PG_RETURN_VOID();
 }
