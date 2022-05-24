@@ -39,6 +39,7 @@
 #include "scheduler.h"
 #include "timer.h"
 #include "version.h"
+#include "worker.h"
 
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 #define START_RETRY_MS (1 * INT64CONST(1000)) /* 1 seconds */
@@ -112,7 +113,7 @@ static void on_failure_to_start_job(ScheduledBgwJob *sjob);
 static volatile sig_atomic_t got_SIGHUP = false;
 
 BackgroundWorkerHandle *
-ts_bgw_start_worker(const char *function, const char *name, const char *extra)
+ts_bgw_start_worker(const char *name, const BgwParams *bgw_params)
 {
 	BackgroundWorker worker = {
 		.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION,
@@ -125,10 +126,9 @@ ts_bgw_start_worker(const char *function, const char *name, const char *extra)
 
 	strlcpy(worker.bgw_name, name, BGW_MAXLEN);
 	strlcpy(worker.bgw_library_name, ts_extension_get_so_name(), BGW_MAXLEN);
-	strlcpy(worker.bgw_function_name, function, BGW_MAXLEN);
+	strlcpy(worker.bgw_function_name, bgw_params->bgw_main, sizeof(worker.bgw_function_name));
 
-	Assert(strlen(extra) < BGW_EXTRALEN);
-	strlcpy(worker.bgw_extra, extra, BGW_EXTRALEN);
+	memcpy(worker.bgw_extra, bgw_params, sizeof(*bgw_params));
 
 	/* handle needs to be allocated in long-lived memory context */
 	MemoryContextSwitchTo(scheduler_mctx);
