@@ -55,62 +55,11 @@ static const char *test_job_type_names[_MAX_TEST_JOB_TYPE] = {
 	[TEST_JOB_TYPE_JOB_4] = "bgw_test_job_4",
 };
 
-static char *
-serialize_test_parameters(int32 ttl)
-{
-	JsonbValue *result;
-	JsonbValue ttl_value;
-	JsonbParseState *parse_state = NULL;
-	Jsonb *jb;
-	StringInfo jtext = makeStringInfo();
-	JsonbValue user_oid;
-
-	user_oid.type = jbvNumeric;
-	user_oid.val.numeric =
-		DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum((int32) GetUserId())));
-
-	ttl_value.type = jbvNumeric;
-	ttl_value.val.numeric = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(ttl)));
-
-	result = pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
-
-	result = pushJsonbValue(&parse_state, WJB_ELEM, &ttl_value);
-	result = pushJsonbValue(&parse_state, WJB_ELEM, &user_oid);
-
-	result = pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL);
-
-	jb = JsonbValueToJsonb(result);
-	(void) JsonbToCString(jtext, &jb->root, VARSIZE(jb));
-	TestAssertTrue(jtext->len < BGW_EXTRALEN);
-
-	return jtext->data;
-}
-
-static void
-deserialize_test_parameters(char *params, int32 *ttl, Oid *user_oid)
-{
-	Jsonb *jb = (Jsonb *) DatumGetPointer(DirectFunctionCall1(jsonb_in, CStringGetDatum(params)));
-	JsonbValue *ttl_v = getIthJsonbValueFromContainer(&jb->root, 0);
-	JsonbValue *user_v = getIthJsonbValueFromContainer(&jb->root, 1);
-	Numeric ttl_numeric;
-	Numeric user_numeric;
-
-	TestAssertTrue(ttl_v->type == jbvNumeric);
-	TestAssertTrue(user_v->type == jbvNumeric);
-
-	ttl_numeric = ttl_v->val.numeric;
-	user_numeric = user_v->val.numeric;
-	*ttl = DatumGetInt32(DirectFunctionCall1(numeric_int4, NumericGetDatum(ttl_numeric)));
-	*user_oid =
-		(Oid) DatumGetInt32(DirectFunctionCall1(numeric_int4, NumericGetDatum(user_numeric)));
-}
-
 extern Datum
 ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 {
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
-	int32 ttl;
-	Oid user_oid;
+	BgwParams bgw_params;
 
 	BackgroundWorkerBlockSignals();
 	/* Setup any signal handlers here */
@@ -118,12 +67,12 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 	BackgroundWorkerUnblockSignals();
 	ts_bgw_scheduler_setup_callbacks();
 
-	deserialize_test_parameters(MyBgworkerEntry->bgw_extra, &ttl, &user_oid);
+	memcpy(&bgw_params, MyBgworkerEntry->bgw_extra, sizeof(bgw_params));
 
-	elog(WARNING, "scheduler user id %u", user_oid);
-	elog(WARNING, "running a test in the background: db=%u ttl=%d", db_oid, ttl);
+	elog(WARNING, "scheduler user id %u", bgw_params.user_oid);
+	elog(WARNING, "running a test in the background: db=%u ttl=%d", db_oid, bgw_params.ttl);
 
-	BackgroundWorkerInitializeConnectionByOid(db_oid, user_oid, 0);
+	BackgroundWorkerInitializeConnectionByOid(db_oid, bgw_params.user_oid, 0);
 
 	StartTransactionCommand();
 	ts_params_get();
@@ -141,33 +90,36 @@ ts_bgw_db_scheduler_test_main(PG_FUNCTION_ARGS)
 
 	ts_bgw_scheduler_setup_mctx();
 
-	ts_bgw_scheduler_process(ttl, ts_timer_mock_register_bgw_handle);
+	ts_bgw_scheduler_process(bgw_params.ttl, ts_timer_mock_register_bgw_handle);
 
 	PG_RETURN_VOID();
 }
 
 static BackgroundWorkerHandle *
-start_test_scheduler(char *params)
+start_test_scheduler(int32 ttl, Oid user_oid)
 {
+	const BgwParams bgw_params = {
+		.bgw_main = "ts_bgw_db_scheduler_test_main",
+		.ttl = ttl,
+		.user_oid = user_oid,
+	};
+
 	/*
 	 * This is where we would increment the number of bgw used, if we
 	 * decide to do so
 	 */
 	ts_bgw_scheduler_setup_mctx();
 
-	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main",
-							   "ts_bgw_db_scheduler_test_main",
-							   params);
+	return ts_bgw_start_worker("ts_bgw_db_scheduler_test_main", &bgw_params);
 }
 
 extern Datum
 ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 {
-	char *params = serialize_test_parameters(PG_GETARG_INT32(0));
 	BackgroundWorkerHandle *worker_handle;
 	pid_t pid;
 
-	worker_handle = start_test_scheduler(params);
+	worker_handle = start_test_scheduler(PG_GETARG_INT32(0), GetUserId());
 
 	if (worker_handle != NULL)
 	{
@@ -190,13 +142,12 @@ static BackgroundWorkerHandle *current_handle = NULL;
 extern Datum
 ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 {
-	char *params = serialize_test_parameters(PG_GETARG_INT32(0));
 	pid_t pid;
 	MemoryContext old_ctx;
 	BgwHandleStatus status;
 
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
-	current_handle = start_test_scheduler(params);
+	current_handle = start_test_scheduler(PG_GETARG_INT32(0), GetUserId());
 	MemoryContextSwitchTo(old_ctx);
 
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);

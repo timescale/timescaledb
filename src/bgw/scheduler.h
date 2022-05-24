@@ -11,6 +11,7 @@
 #include <postmaster/bgworker.h>
 
 #include "timer.h"
+#include "worker.h"
 
 typedef struct ScheduledBgwJob ScheduledBgwJob;
 
@@ -33,7 +34,6 @@ extern void ts_bgw_job_cache_invalidate_callback(void);
 extern void ts_bgw_scheduler_register_signal_handlers(void);
 extern void ts_bgw_scheduler_setup_mctx(void);
 
-extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *function, const char *name,
-												   const char *extra);
+extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *name, const BgwParams *bgw_params);
 
 #endif /* BGW_SCHEDULER_H */
