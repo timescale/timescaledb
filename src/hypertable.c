@@ -1054,7 +1054,7 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 }
 
 static inline Chunk *
-hypertable_get_chunk(const Hypertable *h, const Point *point)
+hypertable_get_or_create_chunk(const Hypertable *h, const Point *point)
 {
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
 	if (chunk != NULL)
@@ -1082,7 +1082,7 @@ hypertable_get_chunk(const Hypertable *h, const Point *point)
 Chunk *
 ts_hypertable_get_or_create_chunk(const Hypertable *h, const Point *point)
 {
-	return hypertable_get_chunk(h, point);
+	return hypertable_get_or_create_chunk(h, point);
 }
 
 bool

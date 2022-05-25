@@ -348,11 +348,14 @@ flush_data_nodes(const CopyConnectionState *state)
 			TSConnection *conn = lfirst(lc);
 
 			TSConnectionStatus status = remote_connection_get_status(conn);
-			if (status == CONN_IDLE)
+			if (status != CONN_COPY_IN)
 			{
+				/*
+				 * This is also called when terminating with error, so some
+				 * connections might be in some error status, not CONN_COPY_IN.
+				 */
 				continue;
 			}
-			Assert(status == CONN_COPY_IN);
 
 			PGconn *pg_conn = remote_connection_get_pg_conn(conn);
 			Assert(PQisnonblocking(pg_conn));
@@ -433,8 +436,6 @@ flush_data_nodes(const CopyConnectionState *state)
 static void
 end_copy_on_data_nodes(const CopyConnectionState *state)
 {
-	flush_data_nodes(state);
-
 	/* Exit the copy subprotocol. */
 	TSConnectionError err;
 	bool failure = false;
@@ -1123,6 +1124,12 @@ remote_copy_process_and_send_data(RemoteCopyContext *context)
 	}
 
 	// reset_copy_connection_state(state);
+
+	/*
+	 * FIXME sort points again on chunk id here. Sorting just on point doesn't
+	 * cut it, because time is always different and we effectively don't sort
+	 * on the space dimension.
+	 */
 
 	MemoryContext old = MemoryContextSwitchTo(context->mctx);
 	ListCell *lc;
