@@ -1994,7 +1994,6 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 Chunk *
 ts_chunk_point_find(const Hypertable *ht, const Point *p)
 {
-	Assert(lock_slices);
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
 
 	/* The chunk might be dropped, so we don't fail if we haven't found it. */
