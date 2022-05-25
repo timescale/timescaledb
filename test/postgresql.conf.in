@@ -6,6 +6,7 @@ shared_preload_libraries=timescaledb
 max_worker_processes=24
 autovacuum=false
 random_page_cost=1.0
+statement_timeout=10s
 timescaledb.license='apache'
 @TELEMETRY_DEFAULT_SETTING@
 timescaledb.last_tuned='1971-02-03 04:05:06.789012 -0300'
