@@ -1344,7 +1344,7 @@ static void
 drop_data_node_database(const ForeignServer *server)
 {
 	ListCell *lc;
-	TSConnection *conn;
+	TSConnection *conn = NULL;
 	Oid userid = GetUserId();
 	TSConnectionId connid = {
 		.server_id = server->serverid,
