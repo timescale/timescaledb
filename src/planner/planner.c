@@ -1107,6 +1107,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			break;
 		case TS_REL_CHUNK:
 		case TS_REL_CHUNK_CHILD:
+			if (ts_guc_enable_optimizations)
+				ts_planner_constraint_cleanup(root, rel);
+
 			if (IS_UPDL_CMD(root->parse))
 			{
 				BaserelInfoEntry *chunk_cache_entry =

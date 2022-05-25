@@ -133,17 +133,17 @@ if event_type != "pull_request":
 
   # add debug test for first supported PG12 version
   # most of the IGNORES are the isolation tests because the output format has changed between versions
-  # chunk_utils is skipped because of a use after free bug in postgres 12.0 which one of our tests hit
+  # chunk_utils, telemetry and tablespace are skipped because of use after free bugs in postgres 12.0 which those tests hit
   pg12_debug_earliest = {
     "pg": PG12_EARLIEST,
-    "installcheck_args": "SKIPS='chunk_utils' IGNORES='cluster-12 compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht cagg_policy deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select debug_notice dist_gapfill_pushdown-12 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
+    "installcheck_args": "SKIPS='chunk_utils tablespace telemetry' IGNORES='cluster-12 compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht cagg_policy deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select debug_notice dist_gapfill_pushdown-12 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
   }
   m["include"].append(build_debug_config(pg12_debug_earliest))
 
   # add debug test for first supported PG13 version
   pg13_debug_earliest = {
     "pg": PG13_EARLIEST,
-    "installcheck_args": "IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_gapfill_pushdown-13 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback'"
+    "installcheck_args": "SKIPS='deadlock_recompress_chunk' IGNORES='compression_ddl cagg_concurrent_refresh cagg_concurrent_refresh_dist_ht cagg_drop_chunks cagg_insert cagg_multi cagg_multi_dist_ht deadlock_drop_chunks_compress deadlock_recompress_chunk concurrent_query_and_drop_chunks deadlock_dropchunks_select dist_gapfill_pushdown-13 dist_restore_point dropchunks_race insert_dropchunks_race isolation_nop multi_transaction_indexing read_committed_insert read_uncommitted_insert remote_create_chunk reorder_deadlock reorder_vs_insert reorder_vs_insert_other_chunk reorder_vs_select repeatable_read_insert serializable_insert serializable_insert_rollback telemetry'"
   }
   m["include"].append(build_debug_config(pg13_debug_earliest))
 

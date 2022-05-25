@@ -6,28 +6,61 @@ accidentally triggering the load of a previous DB version.**
 
 ## Unreleased
 
-If you use compression with a non-default collation on a segmentby-column you might have to recompress the affected hypertable.
+## 2.7.0 (2022-05-24)
+
+This release adds major new features since the 2.6.1 release.
+We deem it moderate priority for upgrading.
+
+This release includes these noteworthy features:
+
+* Optimize continuous aggregate query performance and storage
+* The following query clauses and functions can now be used in a continuous
+  aggregate: FILTER, DISTINCT, ORDER BY as well as [Ordered-Set Aggregate](https://www.postgresql.org/docs/current/functions-aggregate.html#FUNCTIONS-ORDEREDSET-TABLE)
+  and [Hypothetical-Set Aggregate](https://www.postgresql.org/docs/current/functions-aggregate.html#FUNCTIONS-HYPOTHETICAL-TABLE)
+* Optimize now() query planning time
+* Improve COPY insert performance
+* Improve performance of UPDATE/DELETE on PG14 by excluding chunks
+
+This release also includes several bug fixes.
+
+If you are upgrading from a previous version and were using compression
+with a non-default collation on a segmentby-column you should recompress
+those hypertables.
 
 **Features**
+* #4045 Custom origin's support in CAGGs
 * #4120 Add logging for retention policy
+* #4158 Allow ANALYZE command on a data node directly
 * #4169 Add support for chunk exclusion on DELETE to PG14
 * #4209 Add support for chunk exclusion on UPDATE to PG14
+* #4269 Continuous Aggregates finals form
 * #4301 Add support for bulk inserts in COPY operator
+* #4311 Support non-superuser move chunk operations
 * #4330 Add GUC "bgw_launcher_poll_time"
 * #4340 Enable now() usage in plan-time chunk exclusion
 
 **Bugfixes**
 * #3899 Fix segfault in Continuous Aggregates
 * #4225 Fix TRUNCATE error as non-owner on hypertable
-* #4259 Fix logic bug in extension update script
 * #4236 Fix potential wrong order of results for compressed hypertable with a non-default collation
+* #4249 Fix option "timescaledb.create_group_indexes"
+* #4251 Fix INSERT into compressed chunks with dropped columns
 * #4255 Fix option "timescaledb.create_group_indexes"
+* #4259 Fix logic bug in extension update script
 * #4269 Fix bad Continuous Aggregate view definition reported in #4233
+* #4289 Support moving compressed chunks between data nodes
 * #4300 Fix refresh window cap for cagg refresh policy
-* #4330 Add GUC "bgw_launcher_poll_time"
+* #4315 Fix memory leak in scheduler
+* #4323 Remove printouts from signal handlers
+* #4342 Fix move chunk cleanup logic
+* #4349 Fix crashes in functions using AlterTableInternal
+* #4358 Fix crash and other issues in telemetry reporter
 
 **Thanks**
+* @abrownsword for reporting a bug in the telemetry reporter and testing the fix
 * @jsoref for fixing various misspellings in code, comments and documentation
+* @yalon for reporting an error with ALTER TABLE RENAME on distributed hypertables
+* @zhuizhuhaomeng for reporting and fixing a memory leak in our scheduler
 
 ## 2.6.1 (2022-04-11)
 This release is patch release. We recommend that you upgrade at the next available opportunity.
@@ -48,7 +81,9 @@ This release is patch release. We recommend that you upgrade at the next availab
 
 **Thanks**
 * @abrownsword for reporting a crash in the telemetry reporter
+* @amalek215 for reporting a segmentation fault when running VACUUM FULL pg_class
 * @daydayup863 for reporting issue with remote explain
+* @krvajal for reporting an error with ADD COLUMN IF NOT EXISTS on compressed hypertables
 
 ## 2.6.0 (2022-02-16)
 This release is medium priority for upgrade. We recommend that you upgrade at the next available opportunity.

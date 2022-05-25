@@ -50,6 +50,7 @@
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/guc.h>
+#include <utils/hsearch.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 #include <utils/rls.h>
@@ -99,10 +100,18 @@ typedef struct TSCopyMultiInsertBuffer
  * Stores one or many TSCopyMultiInsertBuffers and details about the size and
  * number of tuples which are stored in them.  This allows multiple buffers to
  * exist at once when COPYing into a partitioned table.
+ *
+ * The HTAB is used to store the relationship between a chunk and a
+ * TSCopyMultiInsertBuffer beyond the lifetime of the ChunkInsertState.
+ *
+ * Chunks can be closed (e.g., due to timescaledb.max_open_chunks_per_insert).
+ * When ts_chunk_dispatch_get_chunk_insert_state is called again for a closed
+ * chunk, a new ChunkInsertState is returned.
  */
 typedef struct TSCopyMultiInsertInfo
 {
-	List *multiInsertBuffers; /* List of tracked TSCopyMultiInsertBuffers */
+	HTAB *multiInsertBuffers; /* Maps the chunk ids to the buffers (chunkid ->
+								 TSCopyMultiInsertBuffer) */
 	int bufferedTuples;		  /* number of tuples buffered over all buffers */
 	int bufferedBytes;		  /* number of bytes from all buffered tuples */
 	CopyChunkState *ccstate;  /* Copy chunk state for this TSCopyMultiInsertInfo */
@@ -111,6 +120,15 @@ typedef struct TSCopyMultiInsertInfo
 	int ti_options;			  /* table insert options */
 	Hypertable *ht;			  /* The hypertable for the inserts */
 } TSCopyMultiInsertInfo;
+
+/*
+ * The entry of the multiInsertBuffers HTAB.
+ */
+typedef struct MultiInsertBufferEntry
+{
+	int32 key;
+	TSCopyMultiInsertBuffer *buffer;
+} MultiInsertBufferEntry;
 
 /*
  * Represents the heap insert method to be used during COPY FROM.
@@ -177,20 +195,45 @@ TSCopyMultiInsertBufferInit(Point *point)
 }
 
 /*
- * Make a new buffer for this ResultRelInfo.
+ * Get the existing TSCopyMultiInsertBuffer for the chunk or create a new one.
  */
-static inline void
-TSCopyMultiInsertInfoSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis, Point *point)
+static inline TSCopyMultiInsertBuffer *
+TSCopyMultiInsertInfoGetOrSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis,
+									  Point *point)
 {
-	TSCopyMultiInsertBuffer *buffer;
+	bool found;
+	int32 chunk_id;
 
-	buffer = TSCopyMultiInsertBufferInit(point);
+	Assert(miinfo != NULL);
+	Assert(cis != NULL);
+	Assert(point != NULL);
 
-	/* Setup back-link so we can easily find this buffer again */
-	cis->copy_multi_insert_buffer = buffer;
+	chunk_id = cis->chunk_id;
+	MultiInsertBufferEntry *entry =
+		hash_search(miinfo->multiInsertBuffers, &chunk_id, HASH_ENTER, &found);
 
-	/* Record that we're tracking this buffer */
-	miinfo->multiInsertBuffers = lappend(miinfo->multiInsertBuffers, buffer);
+	/* No insert buffer for this chunk exists, create a new one */
+	if (!found)
+	{
+		entry->buffer = TSCopyMultiInsertBufferInit(point);
+	}
+
+	return entry->buffer;
+}
+
+/*
+ * Create a new HTAB that maps from the chunk_id to the multi-insert buffers.
+ */
+static HTAB *
+TSCopyCreateNewInsertBufferHashMap()
+{
+	struct HASHCTL hctl = {
+		.keysize = sizeof(int32),
+		.entrysize = sizeof(MultiInsertBufferEntry),
+		.hcxt = CurrentMemoryContext,
+	};
+
+	return hash_create("", 20, &hctl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 }
 
 /*
@@ -201,7 +244,7 @@ TSCopyMultiInsertInfoInit(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 						  CopyChunkState *ccstate, EState *estate, CommandId mycid, int ti_options,
 						  Hypertable *ht)
 {
-	miinfo->multiInsertBuffers = NIL;
+	miinfo->multiInsertBuffers = TSCopyCreateNewInsertBufferHashMap();
 	miinfo->bufferedTuples = 0;
 	miinfo->bufferedBytes = 0;
 	miinfo->ccstate = ccstate;
@@ -251,6 +294,9 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 {
 	MemoryContext oldcontext;
 	int i;
+
+	Assert(miinfo != NULL);
+	Assert(buffer != NULL);
 
 #if PG14_GE
 	uint64 save_cur_lineno;
@@ -402,9 +448,6 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 	result_relation_info = cis->result_relation_info;
 	Assert(result_relation_info != NULL);
 
-	/* Remove back-link to ourself */
-	cis->copy_multi_insert_buffer = NULL;
-
 	FreeBulkInsertState(buffer->bistate);
 
 	/* Since we only create slots on demand, just drop the non-null ones. */
@@ -417,52 +460,38 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 }
 
 /*
- * Write out all stored tuples in all buffers out to the tables.
- *
- * Once flushed we also trim the tracked buffers list down to size by removing
- * the buffers created earliest first.
- *
- * Callers should pass 'curr_rri' as the ResultRelInfo that's currently being
- * used.  When cleaning up old buffers we'll never remove the one for
- * 'curr_rri'.
+ * Write out all stored tuples of all buffers to the chunks. Also,
+ * cleanup the allocated buffers and free memory.
  */
 static inline void
-TSCopyMultiInsertInfoFlush(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *curr_rri)
+TSCopyMultiInsertInfoFlushAndCleanup(TSCopyMultiInsertInfo *miinfo)
 {
-	ListCell *lc;
+	HASH_SEQ_STATUS status;
+	MultiInsertBufferEntry *entry;
 
-	foreach (lc, miinfo->multiInsertBuffers)
+	hash_seq_init(&status, miinfo->multiInsertBuffers);
+
+	for (entry = hash_seq_search(&status); entry != NULL; entry = hash_seq_search(&status))
 	{
-		TSCopyMultiInsertBuffer *buffer = (TSCopyMultiInsertBuffer *) lfirst(lc);
-
+		TSCopyMultiInsertBuffer *buffer = entry->buffer;
 		TSCopyMultiInsertBufferFlush(miinfo, buffer);
 
 		/*
 		 * Cleanup the buffer and finish the bulk insert. The chunk could
-		 * be closed (e.g., timescaledb.max_open_chunks_per_insert) later
+		 * be closed (e.g., due to timescaledb.max_open_chunks_per_insert)
 		 * and the bulk insert must be finished first.
 		 */
 		TSCopyMultiInsertBufferCleanup(miinfo, buffer);
 	}
 
-	list_free(miinfo->multiInsertBuffers);
-	miinfo->multiInsertBuffers = NIL;
+	/* All existing buffers are flushed and the multi-insert states
+	 * are freed. So, delete old hash map and create a new one for further
+	 * inserts.
+	 */
+	hash_destroy(miinfo->multiInsertBuffers);
+	miinfo->multiInsertBuffers = TSCopyCreateNewInsertBufferHashMap();
 	miinfo->bufferedTuples = 0;
 	miinfo->bufferedBytes = 0;
-}
-
-/*
- * Cleanup allocated buffers and free memory.
- */
-static inline void
-TSCopyMultiInsertInfoCleanup(TSCopyMultiInsertInfo *miinfo)
-{
-	ListCell *lc;
-
-	foreach (lc, miinfo->multiInsertBuffers)
-		TSCopyMultiInsertBufferCleanup(miinfo, lfirst(lc));
-
-	list_free(miinfo->multiInsertBuffers);
 }
 
 /*
@@ -474,16 +503,17 @@ TSCopyMultiInsertInfoCleanup(TSCopyMultiInsertInfo *miinfo)
  * other functions in this area.
  */
 static inline TupleTableSlot *
-TSCopyMultiInsertInfoNextFreeSlot(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis)
+TSCopyMultiInsertInfoNextFreeSlot(TSCopyMultiInsertInfo *miinfo,
+								  ResultRelInfo *result_relation_info,
+								  TSCopyMultiInsertBuffer *buffer)
 {
-	TSCopyMultiInsertBuffer *buffer = cis->copy_multi_insert_buffer;
 	int nused = buffer->nused;
 
 	Assert(buffer != NULL);
 	Assert(nused < MAX_BUFFERED_TUPLES);
 
 	if (buffer->slots[nused] == NULL)
-		buffer->slots[nused] = table_slot_create(cis->result_relation_info->ri_RelationDesc, NULL);
+		buffer->slots[nused] = table_slot_create(result_relation_info->ri_RelationDesc, NULL);
 	return buffer->slots[nused];
 }
 
@@ -492,11 +522,10 @@ TSCopyMultiInsertInfoNextFreeSlot(TSCopyMultiInsertInfo *miinfo, ChunkInsertStat
  * TSCopyMultiInsertInfoNextFreeSlot as being consumed.
  */
 static inline void
-TSCopyMultiInsertInfoStore(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri, ChunkInsertState *cis,
-						   TupleTableSlot *slot, CopyFromState cstate)
+TSCopyMultiInsertInfoStore(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
+						   TSCopyMultiInsertBuffer *buffer, TupleTableSlot *slot,
+						   CopyFromState cstate)
 {
-	TSCopyMultiInsertBuffer *buffer = cis->copy_multi_insert_buffer;
-
 	Assert(buffer != NULL);
 	Assert(slot == buffer->slots[buffer->nused]);
 
@@ -831,10 +860,11 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 
 	for (;;)
 	{
-		TupleTableSlot *myslot;
+		TupleTableSlot *myslot = NULL;
 		bool skip_tuple;
-		Point *point;
-		ChunkInsertState *cis;
+		Point *point = NULL;
+		ChunkInsertState *cis = NULL;
+		TSCopyMultiInsertBuffer *buffer = NULL;
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -892,7 +922,9 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 			 * Flush pending inserts if this partition can't use
 			 * batching, so rows are visible to triggers etc.
 			 */
-			TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis->result_relation_info);
+			if (insertMethod == CIM_MULTI_CONDITIONAL)
+				TSCopyMultiInsertInfoFlushAndCleanup(&multiInsertInfo);
+
 			currentTupleInsertMethod = CIM_SINGLE;
 		}
 
@@ -905,13 +937,9 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 		else
 		{
 			/*
-			 * When a chunk is closed (e.g., due to timescaledb.max_open_chunks_per_insert)
-			 * a new cis is created during the lookup. This new CIS doesn't contain a reference
-			 * to the previously created copy_multi_insert_buffer. So, we can end up with
-			 * multiple buffers per chunk.
+			 * Get the multi-insert buffer for the chunk.
 			 */
-			if (cis->copy_multi_insert_buffer == NULL)
-				TSCopyMultiInsertInfoSetupBuffer(&multiInsertInfo, cis, point);
+			buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo, cis, point);
 
 			/*
 			 * Prepare to queue up tuple for later batch insert into
@@ -919,7 +947,9 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 			 */
 			TupleTableSlot *batchslot;
 
-			batchslot = TSCopyMultiInsertInfoNextFreeSlot(&multiInsertInfo, cis);
+			batchslot = TSCopyMultiInsertInfoNextFreeSlot(&multiInsertInfo,
+														  cis->result_relation_info,
+														  buffer);
 
 			if (NULL != cis->hyper_to_chunk_map)
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, batchslot);
@@ -1067,7 +1097,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 					/* Add this tuple to the tuple buffer */
 					TSCopyMultiInsertInfoStore(&multiInsertInfo,
 											   resultRelInfo,
-											   cis,
+											   buffer,
 											   myslot,
 											   ccstate->cstate);
 
@@ -1082,7 +1112,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 										multiInsertInfo.bufferedBytes,
 										multiInsertInfo.bufferedTuples)));
 
-						TSCopyMultiInsertInfoFlush(&multiInsertInfo, resultRelInfo);
+						TSCopyMultiInsertInfoFlushAndCleanup(&multiInsertInfo);
 					}
 				}
 			}
@@ -1111,7 +1141,9 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	if (insertMethod != CIM_SINGLE)
 	{
 		if (!TSCopyMultiInsertInfoIsEmpty(&multiInsertInfo))
-			TSCopyMultiInsertInfoFlush(&multiInsertInfo, NULL);
+			TSCopyMultiInsertInfoFlushAndCleanup(&multiInsertInfo);
+
+		hash_destroy(multiInsertInfo.multiInsertBuffers);
 	}
 
 	/* Done, clean up */
@@ -1129,10 +1161,6 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	AfterTriggerEndQuery(estate);
 
 	ExecResetTupleTable(estate->es_tupleTable, false);
-
-	/* Tear down the multi-insert buffer data */
-	if (insertMethod != CIM_SINGLE)
-		TSCopyMultiInsertInfoCleanup(&multiInsertInfo);
 
 #if PG14_LT
 	ExecCloseIndices(resultRelInfo);
